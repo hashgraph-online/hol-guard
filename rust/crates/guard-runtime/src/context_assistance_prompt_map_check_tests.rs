@@ -1,7 +1,7 @@
 //! The one test run a Claude Code note gives for a stub.
 use super::super::super::tests::{files, later, looking_for};
 use super::super::super::{map, Asked};
-use super::first_word;
+use super::{first_word, named_after};
 use std::path::PathBuf;
 
 const SOURCE: &str = "class Cache:\n    def get(self, key):\n        return key\n\n\n\
@@ -33,6 +33,7 @@ fn claude() -> Asked {
 
 /// The stub's tests sit in a base class; the file the runner collects is
 /// the one named after the stub's class, and only that one is run.
+#[cfg(not(windows))]
 #[test]
 fn a_stub_on_claude_code_names_its_test_file_once() {
     let text = note(&claude());
@@ -68,4 +69,22 @@ fn first_words_split_camel_case_and_underscores() {
     assert_eq!(first_word("SortedSet"), Some("Sorted"));
     assert_eq!(first_word("rr_cache"), Some("rr"));
     assert_eq!(first_word("popitem"), None);
+}
+
+/// A test file named after the whole stub, underscores and all, is matched
+/// even when no single part of the name is.
+#[test]
+fn a_test_file_named_after_the_whole_stub_matches() {
+    let names = ["x_axis".to_owned()];
+    assert!(named_after("tests/test_x_axis.py", &names));
+    assert!(named_after("tests/x_axis_test.py", &names));
+    assert!(!named_after("tests/test_y_axis.py", &names));
+    assert!(named_after("tests/test_tlru.py", &["tlru".to_owned()]));
+}
+
+/// On Windows the note gives no command: the quoting is for a POSIX shell.
+#[cfg(windows)]
+#[test]
+fn no_command_on_windows() {
+    assert!(!note(&claude()).contains("python -m pytest"));
 }

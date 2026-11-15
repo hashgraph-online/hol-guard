@@ -56,12 +56,7 @@ fn line(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<String> {
     }
     let tests: Vec<&str> = (files.iter())
         .filter(|test| test.kind == Kind::Test && plain(test.path))
-        .filter(|test| {
-            let name = test.path.rsplit('/').next().unwrap_or(test.path);
-            let stem = name.strip_suffix(".py").unwrap_or_default();
-            let key = (stem.strip_prefix("test_")).or_else(|| stem.strip_suffix("_test"));
-            key.is_some_and(|key| key.split('_').any(|part| names.iter().any(|n| n == part)))
-        })
+        .filter(|test| named_after(test.path, &names))
         .map(|test| test.path)
         .collect();
     if tests.is_empty() || tests.len() > MAX_FILES {
@@ -71,6 +66,17 @@ fn line(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<String> {
         "After the edit, run `cd '{root}' && python -m pytest -q {}` once to check it.",
         tests.join(" ")
     ))
+}
+
+/// A test file called after one of `names`: `test_x_axis.py` for `x_axis`
+/// whole, `test_tlru.py` for `tlru`, one part of its name.
+fn named_after(path: &str, names: &[String]) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let stem = name.strip_suffix(".py").unwrap_or_default();
+    let key = (stem.strip_prefix("test_")).or_else(|| stem.strip_suffix("_test"));
+    key.is_some_and(|key| {
+        names.iter().any(|n| n == key) || key.split('_').any(|part| names.iter().any(|n| n == part))
+    })
 }
 
 /// The first word of a name written in camel case or with underscores:
