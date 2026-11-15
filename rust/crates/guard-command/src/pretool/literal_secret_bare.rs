@@ -102,9 +102,23 @@ fn metadata_segment(segment: &str) -> bool {
     lower.starts_with("expir")
         || matches!(
             lower.as_str(),
-            "ttl" | "time" | "timestamp" | "stamp" | "issued" | "created"
-                | "updated" | "max" | "min" | "limit" | "count" | "size"
-                | "len" | "length" | "version" | "index" | "port"
+            "ttl"
+                | "time"
+                | "timestamp"
+                | "stamp"
+                | "issued"
+                | "created"
+                | "updated"
+                | "max"
+                | "min"
+                | "limit"
+                | "count"
+                | "size"
+                | "len"
+                | "length"
+                | "version"
+                | "index"
+                | "port"
         )
 }
 
@@ -124,9 +138,7 @@ fn metadata_name(name: &str) -> bool {
         previous = Some(current);
     }
     let last = &name[start..];
-    metadata_segment(last)
-        || last.eq_ignore_ascii_case("at")
-        || last.eq_ignore_ascii_case("id")
+    metadata_segment(last) || last.eq_ignore_ascii_case("at") || last.eq_ignore_ascii_case("id")
 }
 
 fn named_digit_secret(found: &Captures) -> bool {
