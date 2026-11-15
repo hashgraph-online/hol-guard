@@ -499,6 +499,7 @@
       "src/pretool/hook_neutering.rs",
       "src/pretool/hidden_listing_secret_leaf.rs",
       "src/pretool/home_hidden_listing.rs",
+      "src/pretool/home_program_metadata.rs",
       "src/pretool/hooks_path_writes.rs",
       "src/pretool/http_reads.rs",
       "src/pretool/inert_environment.rs",
