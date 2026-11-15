@@ -36952,6 +36952,57 @@
       "expect": "allow"
     },
     {
+      "id": "for-loop-gh-graphql-field-named-like-loop-variable",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for n in 7688 7519; do gh api graphql -f query='query($n:Int!){repository(owner:\"example\",name:\"app\"){pullRequest(number:$n){state}}}' -F n=$n; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "for-loop-echo-argument-named-like-loop-variable",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for n in alpha beta; do echo n=$n; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-for-loop-rebinds-variable-after-quoted-assignment",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for f in README.md; do x='a b' f=.env; cat $f; done"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-for-loop-if-reads-secret-files",
       "fix_area": "negative",
       "harnesses": [

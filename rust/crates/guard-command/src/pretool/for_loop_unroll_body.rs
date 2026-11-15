@@ -335,19 +335,9 @@ fn may_rebind(text: &str, name: &str, binding_word: bool) -> bool {
     names_a_target(text, name) && (assigns(text, name) || binding_word || text.contains("(("))
 }
 
-/// `NAME=`, `NAME+=` and `NAME[index]=` at the start of a word.
+/// `NAME=`, `NAME+=` and `NAME[index]=` where the shell reads an assignment.
 fn assigns(text: &str, name: &str) -> bool {
-    words(text).any(|word| {
-        word.strip_prefix(name).is_some_and(|rest| {
-            rest.starts_with('=') || rest.starts_with("+=") || rest.starts_with('[')
-        })
-    })
-}
-
-/// The item's words, split where the shell starts a new one.
-fn words(text: &str) -> impl Iterator<Item = &str> {
-    text.split(|c: char| c.is_whitespace() || matches!(c, ';' | '&' | '|' | '(' | ')' | '<' | '>'))
-        .filter(|word| !word.is_empty())
+    binding::assigns(text, name)
 }
 
 /// The word the shell builds once it removes the quoting, which is the text
