@@ -75,6 +75,9 @@ fn short_jq_and_template_aliases_match_their_long_forms() {
         vec!["-q", ".[] | \"\\(@sh \"x\")\""],
         vec!["-q", ".[] | \"\\(.a)@x \\(. | @sh)\""],
         vec!["-q", ".[] | \"\\(\"q\" | @text \"\\(.a)\")\""],
+        // A comment's `)` or quote is text to jq, so it cannot hide a format.
+        vec!["-q", ".[] | \"\\(.title # )\n | @sh)\""],
+        vec!["-q", ".a # \"\n| @sh \"x\""],
     ] {
         let mut arguments = vec![endpoint.to_owned()];
         arguments.extend(unsafe_filter.iter().map(|value| (*value).to_owned()));
@@ -103,6 +106,7 @@ fn short_jq_and_template_aliases_match_their_long_forms() {
     for (filter, read) in [
         (".[] | \"\\(.number)@\\(.author.login)\"", true),
         (".[] | \"\\(.number)@\\(. | @sh)\"", false),
+        (".[] | \"\\(. # )\n| @sh )\"", false),
     ] {
         let arguments: Vec<String> = ["pr", "list", "--json", "number,author", "--jq", filter]
             .into_iter()

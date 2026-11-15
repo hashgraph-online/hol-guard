@@ -86,6 +86,8 @@ pub(super) fn jq_formats_are_bare(value: &str) -> bool {
 
 /// The filter with each string literal's text removed. Quotes stay, and so
 /// does the code inside each `\(...)` interpolation, nested strings and all.
+/// A `#` in code opens a comment, where a quote or parenthesis is text that
+/// this scan would misread, so a filter with one is screened whole.
 fn outside_strings(value: &str) -> String {
     let mut code = String::with_capacity(value.len());
     // One entry per open interpolation: the parenthesis depth in its code.
@@ -113,6 +115,7 @@ fn outside_strings(value: &str) -> String {
         }
         match (character, interpolations.last_mut()) {
             ('"', _) => in_string = true,
+            ('#', _) => return value.to_owned(),
             ('(', Some(depth)) => *depth += 1,
             (')', Some(0)) => {
                 interpolations.pop();
