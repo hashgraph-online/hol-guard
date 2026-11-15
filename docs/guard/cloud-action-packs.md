@@ -141,9 +141,11 @@ absolute `https` URL on the same declared host as a direct one. A pack without t
 exactly as before. Adding a transport, or changing its toolkit, is a widening change in `diff`.
 
 The shipped packs that name a toolkit are Outlook (`outlook`), OneDrive (`one_drive`), Teams (`microsoft_teams`),
-Dropbox (`dropbox`), HubSpot (`hubspot`), Figma (`figma`), Discord (`discord`) and Linear (`linear`). A broker proxy
-refuses a host its toolkit does not serve, so a toolkit whose base URL differs from the pack's host fails closed: the
-call is refused, never sent elsewhere.
+Dropbox (`dropbox`), HubSpot (`hubspot`), Figma (`figma`), Discord (`discord`) and Linear (`linear`). The broker
+proxy refuses a host on a different registrable domain from its toolkit's, but may accept a sibling host on the same
+domain and attach the credential there. It is not the check that keeps a call on the right host: the gateway sends
+only to the exact host the pack declares, after the provider host check on the rendered URL, so a toolkit whose base
+URL is on another domain fails closed and a sibling host is never reached through a pack.
 
 ## Fixtures
 

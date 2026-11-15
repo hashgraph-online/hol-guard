@@ -194,10 +194,55 @@
               "method": "POST",
               "url": "https://api.linear.app/graphql"
             },
+            "response": "{\"data\":{\"team\":{\"issues\":{\"nodes\":[{\"id\":\"66666666-7777-4888-9999-aaaaaaaaaaaa\",\"identifier\":\"ENG-7\",\"title\":\"Ship the release notes\",\"url\":\"https://linear.app/example/issue/ENG-7\",\"state\":{\"name\":\"Todo\"},\"assignee\":{\"email\":\"a@example.test\"}}]}}}}",
+            "projection": {
+              "issues": [
+                {
+                  "id": "66666666-7777-4888-9999-aaaaaaaaaaaa",
+                  "identifier": "ENG-7",
+                  "title": "Ship the release notes",
+                  "url": "https://linear.app/example/issue/ENG-7",
+                  "state": "Todo"
+                }
+              ]
+            },
             "decisions": {
               "relaxed": "allow",
               "balanced": "allow",
               "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "keeps only the error text when the team cannot be read",
+          "kind": "safe",
+          "arguments": {
+            "team_id": "11111111-2222-4333-8444-555555555555"
+          },
+          "expect": {
+            "request": {
+              "body": "{\"query\":\"query ($team: String!) { team (id: $team) { issues (first: 50) { nodes { id identifier title url state { name } } } } }\",\"variables\":{\"team\":\"11111111-2222-4333-8444-555555555555\"}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.linear.app/graphql"
+            },
+            "response": "{\"data\":null,\"errors\":[{\"message\":\"Entity not found: Team\",\"extensions\":{\"code\":\"INPUT_ERROR\"}}]}",
+            "projection": {
+              "errors": [
+                {
+                  "message": "Entity not found: Team"
+                }
+              ]
             }
           }
         },
@@ -376,6 +421,13 @@
               "maxPages": 1,
               "method": "POST",
               "url": "https://api.linear.app/graphql"
+            },
+            "response": "{\"data\":{\"issueCreate\":{\"success\":true,\"issue\":{\"id\":\"66666666-7777-4888-9999-aaaaaaaaaaaa\",\"identifier\":\"ENG-8\",\"url\":\"https://linear.app/example/issue/ENG-8\"}}}}",
+            "projection": {
+              "success": true,
+              "id": "66666666-7777-4888-9999-aaaaaaaaaaaa",
+              "identifier": "ENG-8",
+              "url": "https://linear.app/example/issue/ENG-8"
             },
             "decisions": {
               "relaxed": "allow",
