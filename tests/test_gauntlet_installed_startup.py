@@ -33,6 +33,18 @@ def test_a_daemon_that_never_came_up_has_no_ready_offset(tmp_path: Path) -> None
     assert startup_timeline(tmp_path, since_ns=0) == {"events": [], "ready_ms": None}
 
 
+def test_a_ready_left_by_an_earlier_run_in_a_reused_home_is_not_this_runs_ready(tmp_path: Path) -> None:
+    journal = tmp_path / LIFECYCLE_DIRECTORY
+    started = 100_000_000_000
+    installed = started + 3_000_000_000
+    _event(journal, "a.json", {"event": "ready", "recorded_at_ns": started - 60_000_000_000})
+    _event(journal, "b.json", {"event": "ready", "recorded_at_ns": installed - 1_000_000_000})
+    timeline = startup_timeline(tmp_path, since_ns=installed, not_before_ns=started)
+    # The current daemon may be ready before install returns, so that offset stays negative.
+    assert timeline["ready_ms"] == -1000.0
+    assert timeline["events"] == [{"event": "ready", "ms_after_install": -1000.0}]
+
+
 def test_unreadable_and_oversized_journal_files_are_skipped(tmp_path: Path) -> None:
     journal = tmp_path / LIFECYCLE_DIRECTORY
     _event(journal, "a.json", ["not", "an", "event"])

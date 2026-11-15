@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import shlex
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -94,6 +95,22 @@ def install_harness(
         "payload": json_payload(completed),
         "stderr_tail": (completed.stderr or "").strip()[-600:],
     }
+
+
+def stop_daemon(runtime: InstalledRuntime, *, home: Path, guard_home: Path, timeout: float = 60.0) -> int | None:
+    """Stop the daemon an install started in a lane-owned home. Returns its exit code."""
+
+    environment = isolated_environment(home=home, guard_home=guard_home, native_runtime=runtime.native_runtime)
+    try:
+        completed = run_guard(
+            runtime,
+            ["daemon", "stop", "--home", str(home), "--guard-home", str(guard_home), "--json"],
+            environment=environment,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return None
+    return completed.returncode
 
 
 def _is_guard_command(value: object) -> bool:

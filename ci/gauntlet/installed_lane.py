@@ -23,6 +23,7 @@ from .installed_registration import (
     install_harness,
     load_contract,
     read_config,
+    stop_daemon,
 )
 from .installed_replay import argv_for_event, registered_argv, replay_harness
 from .installed_runtime import InstalledRuntime, InstalledRuntimeError, resolve_runtime
@@ -90,6 +91,7 @@ def harness_pass(
     home = build_home(root, f"home-{harness}")
     guard_home = home / ".hol-guard"
     workspace = build_workspace(root / harness)
+    install_started_ns = time.time_ns()
     install = install_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
     installed_ns = time.time_ns()
     registration = assess_harness(home, harness, expectation)
@@ -127,7 +129,7 @@ def harness_pass(
     elif not expectation.get("replay"):
         result["replay_gap"] = expectation.get("replay_gap")
     # Read after the replay, so a daemon the first hook outran still shows when it came up.
-    result["startup"] = startup_timeline(guard_home, since_ns=installed_ns)
+    result["startup"] = startup_timeline(guard_home, since_ns=installed_ns, not_before_ns=install_started_ns)
     if replay_started_ns is not None:
         result["startup"]["replay_started_ms"] = round((replay_started_ns - installed_ns) / 1_000_000, 1)
     result["failures"] = failures
@@ -195,13 +197,17 @@ def prewarm_probe(runtime: InstalledRuntime, harness: str, *, root: Path) -> dic
     home = build_home(root, f"prewarm-{harness}")
     guard_home = home / ".hol-guard"
     workspace = build_workspace(root / f"prewarm-{harness}")
+    install_started_ns = time.time_ns()
     install = install_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
     installed_ns = time.time_ns()
     deadline = time.monotonic() + PREWARM_WAIT_SECONDS
-    timeline = startup_timeline(guard_home, since_ns=installed_ns)
+    timeline = startup_timeline(guard_home, since_ns=installed_ns, not_before_ns=install_started_ns)
     while timeline["ready_ms"] is None and time.monotonic() < deadline:
         time.sleep(0.25)
-        timeline = startup_timeline(guard_home, since_ns=installed_ns)
+        timeline = startup_timeline(guard_home, since_ns=installed_ns, not_before_ns=install_started_ns)
+    # The probe's daemon would otherwise keep running beside the harness passes
+    # and skew their cold-start timings.
+    timeline["daemon_stop_exit_code"] = stop_daemon(runtime, home=home, guard_home=guard_home)
     timeline["harness"] = harness
     timeline["install_exit_code"] = install["exit_code"]
     timeline["waited_seconds"] = PREWARM_WAIT_SECONDS

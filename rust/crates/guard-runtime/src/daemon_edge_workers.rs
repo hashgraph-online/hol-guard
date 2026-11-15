@@ -103,6 +103,7 @@ const IDLE_HOLD: Duration = seconds(5);
 const HOST_READY_WAIT: Duration = seconds(15);
 
 /// What the heartbeat records for this daemon.
+#[derive(Clone)]
 pub(super) struct Registration {
     pub(super) session_id: String,
     pub(super) host: String,
@@ -111,13 +112,10 @@ pub(super) struct Registration {
     pub(super) guard_home: std::path::PathBuf,
 }
 
-/// Starts every job, the heartbeat and, when `idle_timeout` is set, the idle
-/// shutdown. Threads end with the process.
-pub(super) fn start(
-    reads: &Arc<NativeReads>,
-    registration: Registration,
-    idle_timeout: Option<Duration>,
-) {
+/// Starts every job, the heartbeat and the worker host. Threads end with the
+/// process. The idle shutdown starts separately, through `exit_when_idle`,
+/// once the rest of the start has finished.
+pub(super) fn start(reads: &Arc<NativeReads>, registration: Registration) {
     for job in &JOBS {
         let reads = Arc::clone(reads);
         let _ = thread::Builder::new()
@@ -125,11 +123,6 @@ pub(super) fn start(
             .spawn(move || run_job(&reads, job, thread::sleep));
     }
     let heartbeat_reads = Arc::clone(reads);
-    let lifecycle = (
-        registration.guard_home.clone(),
-        registration.session_id.clone(),
-        registration.port,
-    );
     let args = json!({
         "session_id": registration.session_id,
         "host": registration.host,
@@ -152,23 +145,39 @@ pub(super) fn start(
         // the worker host owns that publication now.
         let _ = host_ready.recv_timeout(HOST_READY_WAIT);
     }
-    if let Some(timeout) = idle_timeout {
-        let idle_reads = Arc::clone(reads);
-        let _ = thread::Builder::new()
-            .name("daemon-idle".into())
-            .spawn(move || {
-                watch_idle(&idle_reads, timeout, thread::sleep);
-                let (home, session_id, port) = &lifecycle;
-                super::super::lifecycle::record(
-                    home,
-                    "shutdown_requested",
-                    Some("idle_timeout"),
-                    Some(session_id),
-                    Some(*port),
-                );
-                std::process::exit(0);
-            });
-    }
+}
+
+/// Exits the process once it has been idle for `timeout`. Startup work such as
+/// the artifact reconcile holds no connection, so the daemon calls this only
+/// after that work is done; started earlier, a slow reconcile could outlast
+/// the timeout and the daemon would exit before it reported ready. The idle
+/// clock restarts here for the same reason: a start that took longer than the
+/// timeout is not idle time.
+pub(super) fn exit_when_idle(
+    reads: &Arc<NativeReads>,
+    registration: &Registration,
+    timeout: Duration,
+) {
+    reads.touch();
+    let idle_reads = Arc::clone(reads);
+    let (home, session_id, port) = (
+        registration.guard_home.clone(),
+        registration.session_id.clone(),
+        registration.port,
+    );
+    let _ = thread::Builder::new()
+        .name("daemon-idle".into())
+        .spawn(move || {
+            watch_idle(&idle_reads, timeout, thread::sleep);
+            super::super::lifecycle::record(
+                &home,
+                "shutdown_requested",
+                Some("idle_timeout"),
+                Some(&session_id),
+                Some(port),
+            );
+            std::process::exit(0);
+        });
 }
 
 fn run_job(reads: &NativeReads, job: &Job, mut sleep: impl FnMut(Duration)) -> ! {

@@ -295,23 +295,24 @@ pub(crate) fn run(args: &[String]) -> i32 {
         // Guard-owned hooks and launchers are brought in line with this
         // runtime before the daemon reports ready, as its start always did.
         let reconcile = workers::reconcile_beside(&reads, config.user_home.clone(), home.clone());
-        workers::start(
-            &reads,
-            workers::Registration {
-                session_id: session_id.clone(),
-                guard_home: home.clone(),
-                host: config.host.clone(),
-                port,
-                started_at: now_iso(),
-            },
-            config
-                .idle_timeout_seconds
-                .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
-                .map(std::time::Duration::from_secs_f64),
-        );
+        let registration = workers::Registration {
+            session_id: session_id.clone(),
+            guard_home: home.clone(),
+            host: config.host.clone(),
+            port,
+            started_at: now_iso(),
+        };
+        workers::start(&reads, registration.clone());
         super::lifecycle::record(&home, "workers_started", None, None, None);
         if let Some(reconcile) = reconcile {
             let _ = reconcile.join();
+        }
+        if let Some(timeout) = config
+            .idle_timeout_seconds
+            .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
+            .map(std::time::Duration::from_secs_f64)
+        {
+            workers::exit_when_idle(&reads, &registration, timeout);
         }
     }
     warm_hook_worker(&reads, port, pid);

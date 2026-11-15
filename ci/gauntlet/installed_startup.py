@@ -26,8 +26,13 @@ def _offset_ms(recorded_at_ns: int, since_ns: int) -> float:
     return round((recorded_at_ns - since_ns) / 1_000_000, 1)
 
 
-def startup_timeline(guard_home: Path, *, since_ns: int) -> dict[str, Any]:
+def startup_timeline(guard_home: Path, *, since_ns: int, not_before_ns: int | None = None) -> dict[str, Any]:
     """Lifecycle events recorded in ``guard_home``, as offsets from ``since_ns``.
+
+    Events recorded before ``not_before_ns`` belong to an earlier run that left
+    its journal in a reused home, so they are skipped. Pass the moment ``install``
+    started: the daemon it starts can report ready before ``install`` returns, so
+    ``since_ns`` itself is too late a cut-off.
 
     ``ready_ms`` is the offset of the first ``ready`` event, or ``None`` when the
     daemon never reported ready while the lane ran.
@@ -48,6 +53,8 @@ def startup_timeline(guard_home: Path, *, since_ns: int) -> dict[str, Any]:
             event = payload.get("event")
             recorded = payload.get("recorded_at_ns")
             if not isinstance(event, str) or type(recorded) is not int:
+                continue
+            if not_before_ns is not None and recorded < not_before_ns:
                 continue
             entry: dict[str, Any] = {"event": event, "ms_after_install": _offset_ms(recorded, since_ns)}
             reason = payload.get("reason")
