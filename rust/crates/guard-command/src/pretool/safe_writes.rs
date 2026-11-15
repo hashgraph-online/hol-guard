@@ -312,12 +312,11 @@ pub(super) fn absent_move_destination(value: &str, context: super::PathContext<'
 }
 
 #[cfg(unix)]
-fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
+pub(super) fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
     bounded_temporary_target(value, context, false)
 }
 
-/// `directory` is `mkdir`: an existing leaf must then be a real directory the
-/// user owns that nobody else may write to, which `mkdir -p` leaves as it is.
+/// For `mkdir -p` (`directory`), an existing leaf must be the user's own private directory.
 #[cfg(unix)]
 fn bounded_temporary_target(value: &str, context: super::PathContext<'_>, directory: bool) -> bool {
     use std::os::unix::fs::MetadataExt;
@@ -349,9 +348,8 @@ fn bounded_temporary_target(value: &str, context: super::PathContext<'_>, direct
         return false;
     };
     let roots = [Path::new("/tmp"), Path::new("/var/tmp")];
-    // macOS mktemp uses the user's configured Darwin temp root, outside /tmp.
-    // Admit only that exact root after proving private ownership, not the
-    // entire /var/folders tree or another user's temporary directories.
+    // macOS mktemp uses the user's own Darwin temp root, outside /tmp. Admit
+    // only that exact private root, not the rest of /var/folders.
     #[cfg(target_os = "macos")]
     let darwin_temp = std::fs::canonicalize(std::env::temp_dir())
         .ok()
@@ -378,12 +376,11 @@ fn bounded_temporary_target(value: &str, context: super::PathContext<'_>, direct
     // Do not follow a pre-existing leaf symlink or overwrite another user's
     // file (including a hard-link alias) in a shared temporary directory.
     match path.symlink_metadata() {
-        Ok(metadata) if directory => {
-            if !metadata.is_dir() || metadata.uid() != owner || metadata.mode() & 0o022 != 0 {
-                return false;
-            }
+        Ok(metadata) if metadata.uid() != owner => return false,
+        Ok(metadata) if directory && (!metadata.is_dir() || metadata.mode() & 0o022 != 0) => {
+            return false
         }
-        Ok(metadata) if !metadata.is_file() || metadata.uid() != owner || metadata.nlink() != 1 => {
+        Ok(metadata) if !directory && (!metadata.is_file() || metadata.nlink() != 1) => {
             return false
         }
         Ok(_) => {}
@@ -410,7 +407,7 @@ fn bounded_temporary_target(value: &str, context: super::PathContext<'_>, _: boo
 /// that tree, and the exact-spelling checks reject junctions, short names and
 /// case aliases on the way there.
 #[cfg(windows)]
-fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
+pub(super) fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
     use super::directory_targets::exact_drive_spelling;
     use super::read_paths::resolved_path_allowed_in_scope;
     use std::path::Path;
@@ -468,7 +465,10 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
 }
 
 #[cfg(all(not(unix), not(windows)))]
-fn bounded_temporary_copy_target(_value: &str, _context: super::PathContext<'_>) -> bool {
+pub(super) fn bounded_temporary_copy_target(
+    _value: &str,
+    _context: super::PathContext<'_>,
+) -> bool {
     false
 }
 

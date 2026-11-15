@@ -173,6 +173,7 @@ pub(super) fn safe_remove_arguments(arguments: &[String], context: super::PathCo
         operands += 1;
         if operands > 16
             || !(removable_regular_file(argument, context)
+                || removable_temporary_file(argument, context)
                 || super::directory_targets::sibling::removable_link(argument, context))
         {
             return false;
@@ -200,6 +201,16 @@ fn removable_regular_file(value: &str, context: super::PathContext<'_>) -> bool 
         .is_ok_and(|metadata| metadata.file_type().is_file())
         && existing_regular_read_target(value, context.home_dir, context.cwd)
         && bounded_file_write_target(value, context.home_dir, context.cwd)
+}
+
+/// A file the user owns, spelled absolutely in a temporary root or in a
+/// private directory below one, or a name that is not there: the screen `cp`
+/// clears to write the same path. `rm` then deletes only the user's own
+/// scratch file, or nothing. A link, a directory, a hard-linked file and
+/// another user's file keep their review.
+fn removable_temporary_file(value: &str, context: super::PathContext<'_>) -> bool {
+    std::path::Path::new(value).is_absolute()
+        && super::safe_writes::bounded_temporary_copy_target(value, context)
 }
 
 /// A session started in the home directory, or above it, has no workspace

@@ -292,6 +292,7 @@ pub mod pretool_rg_reincluded_hidden_file;
 pub mod pretool_rg_replace_reads;
 pub mod pretool_rg_sibling_bracket_search;
 pub mod pretool_ripgrep_config;
+pub mod pretool_rm_temporary_file;
 pub mod pretool_root_removal;
 pub mod pretool_rsync_local_copies;
 pub mod pretool_rust_version_probe;
