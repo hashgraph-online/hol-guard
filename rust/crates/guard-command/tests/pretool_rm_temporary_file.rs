@@ -48,6 +48,9 @@ fn fixture(name: &str) -> Fixture {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&scratch);
+    // A killed earlier run leaves the loose file behind. Removing a name never
+    // follows it, and the open below still refuses anything planted after.
+    let _ = std::fs::remove_file(&loose);
     directory(&scratch, 0o755);
     directory(&scratch.join("out"), 0o700);
     directory(&scratch.join("shared"), 0o777);
