@@ -170,8 +170,6 @@ def test_ordinary_install_restores_files_written_before_a_later_write_fails(tmp_
 
 
 def test_ordinary_install_raises_the_restore_failure_from_the_publication_failure(tmp_path: Path, monkeypatch):
-    from codex_plugin_scanner.guard import native_transition_files
-
     install = PreparedHarnessInstall((TransitionFile(tmp_path / "first.txt", None, b"new-first"),), {"ok": True})
     _unowned_publication(monkeypatch)
     answer = {
@@ -179,7 +177,6 @@ def test_ordinary_install_raises_the_restore_failure_from_the_publication_failur
         "restore_error": {"transition": "generation_changed"},
         "events": [{"written": 0}],
     }
-    monkeypatch.setattr(native_transition_files, "_package_files", lambda _plan: [])
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.native_runner_authority.native_runner_authority",
         lambda *_args, **_kwargs: answer,
