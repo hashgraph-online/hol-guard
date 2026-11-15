@@ -370,10 +370,10 @@ pub(super) fn map(
     if let Some((title, line)) = rewrite.and_then(|rewrite| rewrite.block(&tests, &asked.root)) {
         blocks.insert(0, (title, vec![Entry::plain(line)]));
     }
+    let tests = rename::check::with(tests, &files, &chosen, asked);
     blocks.push(("Tests:".to_owned(), tests));
-    // A function left to be written: what is defined beside it, for the
-    // helpers it can call, and where else it is named, with the text. A line
-    // inside a neighbor's code shown here is not listed again.
+    // A function left to be written: what is defined beside it (helpers it can
+    // call) and where else it is named; code shown here is not listed again.
     let near = (!asked.everywhere)
         .then(|| beside::beside(&files, &chosen, asked, &shown))
         .flatten();
