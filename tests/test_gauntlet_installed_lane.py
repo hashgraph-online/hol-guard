@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.gauntlet import installed_lane
 from ci.gauntlet.installed_lane import run_lane
 from ci.gauntlet.installed_registration import (
     GateBlockedError,
@@ -236,6 +237,8 @@ def _stub(path: Path, *, register: bool, verdicts: list[str], stale: bool = Fals
 @pytest.fixture(autouse=True)
 def _counter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("STUB_COUNTER", str(tmp_path / "counter"))
+    # A stub never starts a daemon, so the prewarm probe would wait out its whole window.
+    monkeypatch.setattr(installed_lane, "PREWARM_WAIT_SECONDS", 0.0)
 
 
 def _run(tmp_path: Path, runtime: Path, *, repeat: int = 4) -> dict:
