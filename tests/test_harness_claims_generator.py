@@ -131,3 +131,17 @@ def test_a_row_split_by_tool_names_its_tools_in_the_table_and_expiry_label() -> 
     assert generator.expired(contract, "2026-06-01T00:00:00Z") == [
         "codex PreToolUse [apply_patch] (native_hook) expired 2026-01-01T00:00:00Z"
     ]
+
+
+def test_each_cursor_surface_has_its_own_row_and_only_the_editor_enforces() -> None:
+    published = json.loads(_generator().JSON_OUTPUT.read_text(encoding="utf-8"))
+    cursor = [row for row in published["claims"] if row["harness"] == "cursor"]
+    surfaces = {row["surface"] for row in cursor}
+
+    assert {"editor", "cli", "cloud-agent", "terminal"} <= surfaces
+    for row in cursor:
+        if row["surface"] != "editor":
+            assert row["state"] == "unsupported"
+            assert row["mode"] == "unsupported"
+            assert row["known_blind_spots"]
+    assert any(row["surface"] == "editor" and row["failure_behavior"] == "fail_closed" for row in cursor)
