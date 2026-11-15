@@ -37,6 +37,7 @@ SEARCH = re.compile(r"^\s*(rg|grep|find|fd|ls|tree)\b|\|\s*(rg|grep)\b")
 READ = re.compile(r"\b(sed -n|cat|head|tail|nl|wc|less|bat)\b")
 EDIT = re.compile(r"apply_patch|<<\s*'?PY|python3? -c|perl -p?i|sed -i|\btee\b|>\s*[\w./-]+\.\w+\s*$")
 GIT = re.compile(r"\bgit\b")
+TEST_OUTPUT = re.compile(r"(?<!\d)\d+ (?:passed|failed|errors?)\b|no tests ran|\[\s*\d+%\]|test result: (?:ok|FAILED)")
 TOOL_KIND = {
     "read": "read", "Read": "read", "NotebookRead": "read",
     "grep": "search", "Grep": "search", "Glob": "search", "find": "search", "glob": "search", "ls": "search", "LS": "search",
@@ -165,11 +166,18 @@ def omp_calls(row, runs_dir):
             if e.get("type") == "tool_execution_start":
                 args = e.get("args") or {}
                 pending[e.get("toolCallId")] = len(calls)
-                calls.append([call_kind(e.get("toolName", ""), args.get("command", "")), False])
+                cmd = args.get("command", "")
+                kind = "wrapped" if "contained-workspace-sink" in cmd else call_kind(e.get("toolName", ""), cmd)
+                calls.append([kind, False])
             elif e.get("type") == "tool_execution_end":
                 i = pending.get(e.get("toolCallId"))
-                if i is not None and HOLD.search(text_of(e.get("result"))):
+                text = text_of(e.get("result"))
+                if i is not None and HOLD.search(text):
                     calls[i][1] = True
+                # Guard's omp extension runs bash through its own runner and the model's command is
+                # no longer in the log; a test runner's summary in the output marks a test run.
+                if i is not None and calls[i][0] == "wrapped":
+                    calls[i][0] = "test" if TEST_OUTPUT.search(text) else "other"
         out.append(calls)
     return out
 
