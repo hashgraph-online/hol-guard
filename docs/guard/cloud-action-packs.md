@@ -141,7 +141,9 @@ absolute `https` URL on the same declared host as a direct one. A pack without t
 exactly as before. Adding a transport, or changing its toolkit, is a widening change in `diff`.
 
 The shipped packs that name a toolkit are Outlook (`outlook`), OneDrive (`one_drive`), Teams (`microsoft_teams`),
-Dropbox (`dropbox`), HubSpot (`hubspot`), Figma (`figma`), Discord (`discordbot`) and Linear (`linear`). Discord
+Dropbox (`dropbox`), HubSpot (`hubspot`), Figma (`figma`), Discord (`discordbot`), Linear (`linear`), Airtable
+(`airtable`), monday.com (`monday`), Zoom (`zoom`), QuickBooks (`quickbooks`), Zendesk (`zendesk`), Intercom
+(`intercom`), Mailchimp (`mailchimp`), Trello (`trello`), ClickUp (`clickup`) and Calendly (`calendly`). Discord
 names the broker's bot toolkit because its actions post and delete messages with bot permissions, which a Discord
 user sign-in does not carry. The broker
 proxy refuses a host on a different registrable domain from its toolkit's, but may accept a sibling host on the same
@@ -358,23 +360,42 @@ GraphQL endpoint) and AWS (SigV4 request signing) are not packed.
 
 `quickbooks.json` and `monday.json` cover accounting and work management. QuickBooks Online reads an invoice, emails
 it to one named address, and voids or deletes it; deleting an invoice is permanent, so Relaxed and Balanced review
-it and Strict blocks it. monday.com creates and deletes items and deletes boards through fixed GraphQL mutations
+it and Strict blocks it. The QuickBooks company id is a connection value, so every call goes to the company the
+connection was made for. monday.com creates and deletes items and deletes boards through fixed GraphQL mutations
 whose ids travel only as variables, so an argument cannot add a second operation. A deleted board takes every item
 with it, so Balanced and Strict block it. `linear.json` covers Linear's GraphQL API the same way: it lists a team's
 first 50 issues, creates an issue and comments on one. Each operation is a fixed query whose team and issue ids must
 be UUIDs (an issue may also be named by its short id, such as `ENG-123`) and travel only as variables. Deleting an
 issue is not packed: Linear also moves the issue's sub-issues to the trash, so one call can change records the review
-never saw. Zendesk and Shopify (a host per account), Xero (a tenant header per call),
-Trello (credentials in the query string), and the Intercom and ClickUp REST APIs (OAuth without scopes) are not
-packed; Intercom's MCP server is, as described below.
+never saw. Shopify (a host per account and no broker that pins it) and Xero (a tenant header per call) are not
+packed.
+
+`zendesk.json`, `intercom.json`, `trello.json`, `clickup.json`, `mailchimp.json` and `calendly.json` cover support,
+task and audience tools. Each one reads a single record, and its writes touch one record per call:
+
+- Zendesk adds a private note to a ticket and moves a ticket between open, pending, on hold and solved; closing a
+  ticket for good is not packed. Its host is `{subdomain}.zendesk.com`, filled from the connection.
+- Intercom adds an internal note to a conversation and closes one. A closed conversation can be reopened.
+- Trello comments on a card and archives one. The broker adds Trello's key and token itself, so the rendered request
+  carries neither.
+- ClickUp comments on a task without notifying anyone and changes a task's status.
+- Mailchimp reads an audience and one member, named by the MD5 hash of the address, and archives a member, which can
+  be added back. Sending a campaign is not packed. Its host is `{dc}.api.mailchimp.com`, with the data centre filled
+  from the connection.
+- Calendly reads a scheduled event and cancels one with a reason. A cancel cannot be undone and tells the invitee,
+  so Relaxed and Balanced review it and Strict blocks it.
+
+Intercom, ClickUp, Mailchimp and Calendly sign-ins carry no scopes Guard can name: the sign-in can do whatever the
+person can, and the pack is the only limit on what an agent may do. Those packs use the scope `api` for the whole
+sign-in.
 
 `sendgrid.json`, `zoom.json`, `figma.json` and `discord.json` cover messaging and collaboration. SendGrid sends one
 plain-text message whose recipients come only from the `to` argument, so the recipient facts name every address.
 Zoom lists upcoming meetings, deletes a meeting, and moves a meeting's recordings to the trash or deletes them
 permanently as separate actions with different reversibility. Figma reads, adds and deletes file comments. Discord
 posts with every mention turned off, deletes one message, and bulk-deletes up to 100; a bulk delete of 100 needs a
-fresh approval in Balanced. Twilio, Mailchimp, DocuSign, Calendly and Zapier are not packed: their credentials carry
-no scopes Guard can name, or the action needs a per-account host.
+fresh approval in Balanced. Twilio, DocuSign and Zapier are not packed: their credentials carry no scopes Guard
+can name, or the action needs a per-account host.
 
 `stripe.json` covers the Stripe REST API for money movement the MCP server multiplexes: reading the balance,
 refunds, payouts, transfers to connected accounts and new prices, all with form bodies. Payouts, transfers and
