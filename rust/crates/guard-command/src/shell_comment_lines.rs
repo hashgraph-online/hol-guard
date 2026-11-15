@@ -26,15 +26,18 @@ pub(crate) fn mask_comments(raw: &str) -> String {
 /// comments.
 ///
 /// It stays out of the way when the text holds a heredoc (`<<`), whose body
-/// lines are data, when a quote or expansion never closes, and when a `case`
-/// pattern inside parentheses could unbalance them.
+/// lines are data, or legacy `$[...]` arithmetic, when a quote or expansion
+/// never closes, and when a `case` pattern inside parentheses could unbalance
+/// them.
 /// A line that a trailing backslash joins to the one before is not a fresh
 /// line, so a `#` at its start is not taken as a comment either. Only spaces
 /// and tabs may come before it, as in bash: a carriage return is a word.
 /// A comment later on a line (`git status # "`) makes the scan give up, since
 /// bash reads quotes in it as text and this scan would pair them.
 pub(crate) fn mask_comment_lines(text: &str) -> Option<String> {
-    if text.contains("<<") {
+    // In legacy `$[...]` arithmetic a line-initial `#` is still arithmetic,
+    // and a `$(...)` in it runs.
+    if text.contains("<<") || text.contains("$[") {
         return None;
     }
     let characters: Vec<char> = text.chars().collect();

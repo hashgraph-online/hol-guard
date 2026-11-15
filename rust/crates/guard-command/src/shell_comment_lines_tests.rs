@@ -87,6 +87,8 @@ fn a_comment_later_on_a_line_or_after_a_carriage_return_is_not_read() {
         // Bash ignores the inline comment quote and closing parenthesis;
         // a later apparent hash line actually executes the substitution.
         "( true # )\"\n);\"\n# $(touch /tmp/guard-review-probe) \" # \"",
+        // Bash reads this hash line as part of the `$[...]` arithmetic.
+        "echo $[\n# $(touch /tmp/guard-review-probe) 1]\ngh api user",
     ] {
         assert_eq!(masked(text), None, "{text:?}");
     }
