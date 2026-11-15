@@ -44,19 +44,19 @@ The lockfile change adds only the new local crate and its existing serde depende
 Run from this checkout's `rust/` directory. Exact command forms:
 
 ```sh
-env RUSTC=~/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/rustc RUSTDOC=~/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-msrv-target ~/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p guard-context-assistance
+env RUSTC=$HOME/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/rustc RUSTDOC=$HOME/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-msrv-target $HOME/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p guard-context-assistance
 ```
 
 Result: 10 passed, 0 failed. This covers the workspace's declared minimum Rust version.
 
 ```sh
-env RUSTC=~/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustc RUSTDOC=~/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target ~/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p guard-context-assistance
+env RUSTC=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustc RUSTDOC=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target $HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p guard-context-assistance
 ```
 
 Result: 10 passed, 0 failed.
 
 ```sh
-env PATH=~/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin:/usr/bin:/bin CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target ~/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo clippy --locked --offline -p guard-context-assistance --all-targets -- -D warnings
+env PATH=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin:/usr/bin:/bin CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target $HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo clippy --locked --offline -p guard-context-assistance --all-targets -- -D warnings
 ```
 
 Result: passed, no warnings. The new source files were formatted with Rust 1.92 rustfmt. Goal/log local links were checked. Full application/native ownership/integration checks remain for the production wiring.
@@ -134,7 +134,7 @@ For the next control API, reuse the existing native `managed_policy_load`, `mana
 Reproduce the installed native test from `rust/`:
 
 ```sh
-env RUSTC=~/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustc RUSTDOC=~/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target GUARD_CIGAR_TEST_SELECTION=/private/tmp/hol-guard-cigar-runtime-validation/selection.json GUARD_CIGAR_TEST_OLDER_PYTHON=<older-venv>/bin/python ~/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p guard-context-assistance installed_candidate_handshake_and_interpreter_refusal -- --ignored --nocapture
+env RUSTC=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustc RUSTDOC=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target GUARD_CIGAR_TEST_SELECTION=/private/tmp/hol-guard-cigar-runtime-validation/selection.json GUARD_CIGAR_TEST_OLDER_PYTHON=<older-venv>/bin/python $HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p guard-context-assistance installed_candidate_handshake_and_interpreter_refusal -- --ignored --nocapture
 ```
 
 ## Native enrollment and resident controls checkpoint — 2026-10-23
@@ -161,7 +161,7 @@ Next: connect the native controls to Protection setup/settings with truthful ava
 Reproduce the actual native control test from `rust/`:
 
 ```sh
-env CARGO_INCREMENTAL=0 RUSTC=~/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustc RUSTDOC=~/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target GUARD_CIGAR_TEST_SELECTION=/private/tmp/hol-guard-cigar-runtime-validation/selection.json GUARD_CIGAR_TEST_APPROVAL=/private/tmp/hol-guard-cigar-runtime-validation/approval.json ~/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p hol-guard-runtime --lib context_assistance -- --include-ignored --nocapture
+env CARGO_INCREMENTAL=0 RUSTC=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustc RUSTDOC=$HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/rustdoc CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-target GUARD_CIGAR_TEST_SELECTION=/private/tmp/hol-guard-cigar-runtime-validation/selection.json GUARD_CIGAR_TEST_APPROVAL=/private/tmp/hol-guard-cigar-runtime-validation/approval.json $HOME/.rustup/toolchains/1.92.0-aarch64-apple-darwin/bin/cargo test --locked --offline -p hol-guard-runtime --lib context_assistance -- --include-ignored --nocapture
 ```
 
 Native lifecycle implementation committed as `4a350799`. Native authority ownership passes against release base `35180b995cb27fdc9f92e1f68307a756c785f154`, checking 70 committed branch files.
