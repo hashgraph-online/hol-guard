@@ -9,10 +9,13 @@ use std::path::Path;
 
 /// Claude Code models tend to send one tool call per turn, and every turn
 /// re-sends the whole conversation, so the reads and edits a note makes
-/// possible cost least when they go out together.
+/// possible cost least when they go out together. They also run the whole
+/// suite and commit after the check a note names has passed, unasked; each is
+/// one more turn.
 const BATCHING: &str = "Each tool call re-sends this whole conversation. When you \
 already know several ranges to read or several edits to make, make those tool calls together in \
-one response, not one per turn.";
+one response, not one per turn. Once the check a note names passes, the change is done: a full \
+test run or a commit nobody asked for costs another turn each.";
 /// Codex models tend to read again lines a note already shows, then patch and
 /// test in separate turns; each turn re-sends the whole conversation. The
 /// edit and the test go out as two tool calls from one exec script: a shell

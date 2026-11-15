@@ -91,7 +91,7 @@ function ProtectionProof({ compatibility }: { compatibility: HarnessVersionCompa
             const name = repeated && item.transport ? `${base} (${item.transport})` : base;
             return (
               <li
-                key={`${base}:${item.transport ?? ""}`}
+                key={`${base}:${item.surface ?? ""}:${item.transport ?? ""}`}
                 className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2"
               >
                 <span className="font-mono text-xs text-brand-dark">{name}</span>

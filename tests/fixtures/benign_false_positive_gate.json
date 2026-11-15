@@ -13262,6 +13262,159 @@
       "expect": "allow"
     },
     {
+      "id": "mkdir-p-nested-new-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p /tmp/hg-gate-nested-run/logs/out"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "mkdir-parents-nested-new-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir --parents /tmp/hg-gate-nested-build/cache/a/b"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "mkdir-parents-existing-private-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p ${PRIVATE_TMP}"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "mkdir-parents-existing-folder-in-private-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p ${PRIVATE_TMP}/agent-script"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-mkdir-parents-existing-temporary-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p ${PRIVATE_TMP}/notes.txt"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "rm-own-file-in-private-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm ${PRIVATE_TMP}/notes.txt"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "rm-force-own-files-in-private-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm -f ${PRIVATE_TMP}/p8.ts ${PRIVATE_TMP}/resume-phase1.mjs"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "rm-force-absent-temporary-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm -f /tmp/hg-gate-absent-scratch-output.log"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-rm-folder-in-private-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm ${PRIVATE_TMP}/agent-script"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-mkdir-home-deliverables",
       "fix_area": "queue",
       "harnesses": [
@@ -14408,6 +14561,40 @@
         "command": "mkdir -p .git/hooks"
       },
       "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-mkdir-nested-temporary-parent-component",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p /tmp/hg-gate-nested-up/../hg-gate-nested-other/a"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-mkdir-nested-temporary-hidden-ssh",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p /tmp/hg-gate-nested-keys/a/.ssh/b"
+      },
+      "cwd": "org_app",
       "expect": "not_allow"
     },
     {
@@ -18386,6 +18573,86 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "grok-list-dir-worktree-folder",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "list_dir",
+      "tool_input": {
+        "target_directory": "${WORKTREE}/app"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grok-list-dir-system-folder",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "list_dir",
+      "tool_input": {
+        "target_directory": "/etc"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "grok-list-dir-relative-folder",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "list_dir",
+      "tool_input": {
+        "target_directory": "app"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grok-list-dir-home",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "list_dir",
+      "tool_input": {
+        "target_directory": "${HOME}"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grok-list-dir-ssh-store",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "list_dir",
+      "tool_input": {
+        "target_directory": "${HOME}/.ssh"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "grok-grep-worktree-name-glob-head-limit",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "benign_probe_marker",
+        "glob": "*.md",
+        "head_limit": 30
+      },
+      "cwd": "worktree",
+      "expect": "allow"
     },
     {
       "id": "gauntlet-grep-rln-checkout-from-parent-directory",
@@ -41076,6 +41343,54 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "redirect-tee-merged-stderr-private-temp-git-status",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short 2>&1 | tee ${PRIVATE_TMP}/status-merged.txt"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-tee-both-streams-private-temp-listing-tail",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la |& tee ${PRIVATE_TMP}/listing-merged.log | tail -5"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-redirect-tee-merged-stderr-shell-profile",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short 2>&1 | tee ${HOME}/.zshrc"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "redirect-tee-private-temp-git-log-head",

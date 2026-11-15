@@ -169,6 +169,43 @@ def prompt_answer_error(observation: dict[str, Any]) -> str | None:
     return None
 
 
+def stopped_prompt_reason(observations: object) -> str | None:
+    """The reason code of a well-formed Guard denial of the case prompt, or ``None``."""
+    if not isinstance(observations, list):
+        return None
+    for observation in observations:
+        if (
+            is_prompt_answer(observation)
+            and observation.get("decision") == "deny"
+            and prompt_answer_error({**observation, "decision": "allow"}) is None
+        ):
+            reason = observation.get("reason_code")
+            return reason if isinstance(reason, str) and reason else "unnamed"
+    return None
+
+
+def lifecycle_outcome(scenario: Any, case: dict[str, Any], calls: list[Any]) -> tuple[str, str] | None:
+    """The outcome of a host run that did not complete cleanly, or ``None``.
+
+    The Pi and Oh My Pi extensions exit nonzero when Guard stops a headless prompt. That one
+    nonzero exit is named as the stop; a timeout, setup error or failed cleanup still is not.
+    """
+    failed = "harness-error", "host process or owned daemon lifecycle did not complete"
+    if (
+        "execution_error" in case
+        or type(case.get("returncode")) is not int
+        or case.get("timed_out") is not False
+        or case.get("cleanup_ok") is not True
+    ):
+        return failed
+    if not calls and (stop := stopped_prompt_reason(case.get("guard_observations"))):
+        # A stopped prompt never reaches the tool call a protection case exists for, and on an
+        # ordinary case it is the false positive itself.
+        outcome = "false-positive" if scenario.expectation == "allow" else "not-exercised"
+        return outcome, f"Guard stopped the case prompt before any tool call ({stop})"
+    return failed if case["returncode"] != 0 else None
+
+
 def guard_inventory(
     calls: list[dict[str, Any]],
     observations: list[dict[str, Any]],

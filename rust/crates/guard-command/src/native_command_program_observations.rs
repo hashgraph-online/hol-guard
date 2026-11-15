@@ -72,12 +72,16 @@ impl NativeCommandProgram {
         // delete rule nor the destructive-shell rule: it loses no work. The
         // proof reads an exact single `rm`, so it also settles the
         // destructive-shell rule's uncertain match.
+        //
+        // The user's own scratch file in a temporary root loses no work
+        // either, so a proven temporary-file removal settles both rules the
+        // same way.
         let recoverable = crate::pretool::recoverable_removal::exact_safe_command(
             command,
             context,
             deadline,
             environment,
-        );
+        ) || crate::pretool::temporary_file_removal(command, context);
         if recoverable {
             compatibility
                 .rule_matches

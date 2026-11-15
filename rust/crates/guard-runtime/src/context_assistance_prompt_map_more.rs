@@ -1,7 +1,9 @@
 //! The rest of the prompt map: the test files that already test what the
 //! prompt names, where a new test goes; the doc sections about it; and the
 //! changelog section an entry for the change belongs in.
-use super::super::sections::{headed_sections, marked_test, members, written_name, Section};
+use super::super::sections::{
+    headed_sections, inheriting_test_class, marked_test, members, written_name, Section,
+};
 use super::super::seen::Span;
 use super::{
     docstring, Asked, Entry, File, Kind, Pick, LONG_SECTION, MAX_LINE_CHARS, MAX_MEMBERS_CHARS,
@@ -61,7 +63,6 @@ pub(super) fn member(file: &File, name: &str, names: &[(&str, bool)]) -> Option<
     )
 }
 
-/// Whether `path` is in a folder of examples or demos.
 /// The first top-level definitions of a file the prompt names, for a prompt
 /// that names nothing in it: a file name gives no search words, so its
 /// outline is what the map can point at.
@@ -71,6 +72,7 @@ pub(super) fn outline<'a>(file: &'a File) -> impl Iterator<Item = usize> + 'a {
         .take(MAX_OUTLINE)
 }
 
+/// Whether `path` is in a folder of examples or demos.
 pub(super) fn sample(path: &str) -> bool {
     (path.split('/').rev().skip(1)).any(|folder| {
         matches!(
@@ -143,9 +145,14 @@ pub(super) fn tests(
         let tests: Vec<usize> = (named.iter().copied())
             .filter(|&at| !above(at).any(|outer| test(outer) && !file.container(outer)))
             .collect();
-        // A test class counts by the tests inside it.
+        // A test class counts by its tests, or by its own body when it inherits
+        // them and is not inside a test; in file order, so the last is last.
         let holds: BTreeSet<usize> = tests.iter().flat_map(|&at| above(at)).collect();
-        for at in tests.iter().copied().filter(|at| !holds.contains(at)) {
+        let heir = |at: usize| {
+            !test(at) && !above(at).any(&test) && inheriting_test_class(file.opening(at))
+        };
+        let unheld = (0..file.sections.len()).filter(|&at| !holds.contains(&at));
+        for at in unheld.filter(|&at| tests.binary_search(&at).is_ok() || heir(at)) {
             let section = &file.sections[at];
             let body = file
                 .lines
@@ -162,11 +169,8 @@ pub(super) fn tests(
     let count = using.len() as f64;
     let rarity: Vec<f64> = (mentioned.iter())
         .map(|word| {
-            let holding = using
-                .iter()
-                .filter(|(_, _, used)| used.contains(&word))
-                .count();
-            ((count + 1.0) / holding.max(1) as f64).ln()
+            let holding = (using.iter()).filter(|(_, _, used)| used.contains(&word));
+            ((count + 1.0) / holding.count().max(1) as f64).ln()
         })
         .collect();
     let weight = |word: &String| {
@@ -182,11 +186,8 @@ pub(super) fn tests(
         let own: Vec<&(&File, usize, f64)> = (scored.iter())
             .filter(|(of, _, _)| std::ptr::eq(*of, file))
             .collect();
-        let Some(best) = own
-            .iter()
-            .map(|(_, _, score)| *score)
-            .max_by(f64::total_cmp)
-        else {
+        let scores = own.iter().map(|(_, _, score)| *score);
+        let Some(best) = scores.max_by(f64::total_cmp) else {
             continue;
         };
         let mut near: Vec<(&File, usize, f64)> = (own.iter().map(|test| **test))

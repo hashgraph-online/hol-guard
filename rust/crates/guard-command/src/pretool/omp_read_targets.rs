@@ -182,9 +182,7 @@ fn bounded_omp_directory_read_target_without_selector(
                 resolved_path_allowed_for_operation(&root, home_dir, cwd, false, true)
             });
     }
-    if path.contains([
-        '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
-    ]) {
+    if !tools::plain_path_spelling(path) {
         return false;
     }
     if path.starts_with('~') && expand_home_read_path(path, home_dir).is_none() {
