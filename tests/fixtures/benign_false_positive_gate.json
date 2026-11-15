@@ -30996,7 +30996,8 @@
         "command": "dig -f names.txt"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "omp-native-ln-sibling-modules-then-check",
