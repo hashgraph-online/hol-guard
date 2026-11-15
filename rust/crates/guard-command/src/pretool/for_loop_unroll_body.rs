@@ -4,6 +4,9 @@
 
 use super::{CONTROL_WORDS, MAX_BODY_BYTES};
 
+#[path = "for_loop_unroll_binding.rs"]
+mod binding;
+
 /// A parsed command list: its items with the separator that follows each, the
 /// keyword that closed the list, and the text after that keyword.
 pub(crate) type CommandList<'a> = (Vec<(String, &'static str)>, &'static str, &'a str);
@@ -317,17 +320,19 @@ pub(crate) fn rebinds(item: &str, name: &str) -> bool {
     // Quoting is how a rebinding hides: the shell builds one word out of
     // `o''pt=secret`, while the written text holds no run that spells the
     // name. Scanning both forms covers a name split across quotes and one
-    // that quoting would instead join to its neighbour.
-    may_rebind(item, name) || may_rebind(&unquoted(item), name)
+    // that quoting would instead join to its neighbour. A binding builtin is
+    // read from the words the shell builds, so `select` inside a quoted jq
+    // filter is text handed to jq, while `'re'ad n` is still `read`.
+    let binding_word = binding::holds_a_binding_word(item);
+    may_rebind(item, name, binding_word) || may_rebind(&unquoted(item), name, binding_word)
 }
 
 /// A bare `NAME` only binds where something in the same item can bind a name:
 /// the word is an assignment, a builtin that takes a name is there, or the
 /// item opens an arithmetic command, which assigns without an `=` sign. A
 /// name the item merely talks about, as in `echo "pkg: $pkg"`, binds nothing.
-fn may_rebind(text: &str, name: &str) -> bool {
-    names_a_target(text, name)
-        && (assigns(text, name) || holds_a_binding_word(text) || text.contains("(("))
+fn may_rebind(text: &str, name: &str, binding_word: bool) -> bool {
+    names_a_target(text, name) && (assigns(text, name) || binding_word || text.contains("(("))
 }
 
 /// `NAME=`, `NAME+=` and `NAME[index]=` at the start of a word.
@@ -336,59 +341,6 @@ fn assigns(text: &str, name: &str) -> bool {
         word.strip_prefix(name).is_some_and(|rest| {
             rest.starts_with('=') || rest.starts_with("+=") || rest.starts_with('[')
         })
-    })
-}
-
-/// The builtins and keywords that bind the name written beside them.
-/// `command` and `builtin` are here because they run the builtins that do,
-/// and `set` because ksh spells an array assignment `set -A name`. The list
-/// is a shell's, not one shell's: zsh stores output in a name with
-/// `print -v`, reads a line with `getln`, and parses options with
-/// `zparseopts`, `zstyle -s` and `zformat -a`, and bash 5.3 fills an array
-/// with `compgen -V`.
-const BINDING_WORDS: &[&str] = &[
-    ".",
-    "builtin",
-    "command",
-    "compgen",
-    "coproc",
-    "declare",
-    "eval",
-    "exec",
-    "export",
-    "float",
-    "for",
-    "getln",
-    "getopts",
-    "integer",
-    "let",
-    "local",
-    "mapfile",
-    "nameref",
-    "print",
-    "printf",
-    "read",
-    "readarray",
-    "readonly",
-    "select",
-    "set",
-    "source",
-    "typeset",
-    "unset",
-    "vared",
-    "wait",
-    "zformat",
-    "zparseopts",
-    "zstyle",
-];
-
-fn holds_a_binding_word(text: &str) -> bool {
-    words(text).any(|word| {
-        let bare: String = word
-            .chars()
-            .filter(|c| !matches!(c, '\'' | '"' | '\\'))
-            .collect();
-        BINDING_WORDS.contains(&bare.as_str())
     })
 }
 

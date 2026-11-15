@@ -261,3 +261,50 @@ fn shell_cleanup_removes_only_the_guard_block() {
         .filter(|other| other["path"] != change["path"])
         .all(|other| other["before"].is_null()));
 }
+
+/// Every tool the PreToolUse rows of the Codex protection contract name.
+fn contract_pre_tool_tools() -> Vec<String> {
+    let contract: Value = serde_json::from_str(include_str!(
+        "../../../../../../src/codex_plugin_scanner/guard/contracts/harness-protection-contracts.v1.json"
+    ))
+    .expect("contract parses");
+    let codex = contract["contracts"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["harness"] == "codex"))
+        .expect("codex contract");
+    codex["capability_events"]
+        .as_array()
+        .expect("rows")
+        .iter()
+        .filter(|row| row["event"] == "PreToolUse")
+        .flat_map(|row| row["tools"].as_array().cloned().unwrap_or_default())
+        .filter_map(|tool| tool.as_str().map(str::to_owned))
+        .collect()
+}
+
+#[test]
+fn every_codex_file_write_tool_is_a_contract_row_the_hook_matcher_sends() {
+    let matcher = regex::Regex::new(super::super::codex::TOOL_MATCHER).expect("matcher");
+    let tools = contract_pre_tool_tools();
+    for tool in ["apply_patch", "Write", "Edit", "MultiEdit"] {
+        assert!(tools.iter().any(|named| named == tool), "{tool} has no row");
+    }
+    for tool in &tools {
+        let sample = tool
+            .strip_suffix('*')
+            .map_or(tool.clone(), |prefix| format!("{prefix}server__tool"));
+        assert!(
+            matcher.is_match(&sample),
+            "{tool} is a row the matcher never sends"
+        );
+    }
+    // Every matcher branch has a row, so the matcher cannot widen silently.
+    for branch in super::super::codex::TOOL_MATCHER.split('|') {
+        let named = branch
+            .trim_start_matches('^')
+            .trim_end_matches('$')
+            .replace(".*", "*");
+        assert!(tools.contains(&named), "matcher branch {branch} has no row");
+    }
+    assert!(!matcher.is_match("apply_patch_preview"));
+}

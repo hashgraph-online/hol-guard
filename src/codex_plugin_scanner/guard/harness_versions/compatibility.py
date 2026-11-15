@@ -34,6 +34,7 @@ def _contracts() -> dict[str, list[dict[str, object]]]:
         contract.harness: [
             {
                 "event": row.event,
+                **({"tools": list(row.tools)} if row.tools else {}),
                 "transport": row.transport,
                 "declared_actions": list(row.declared_actions),
                 "mode": row.mode,

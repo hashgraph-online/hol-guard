@@ -29,6 +29,15 @@ fn checkout(label: &str) -> (PathBuf, FixtureCleanup) {
     std::fs::write(project.join("pkg/__init__.py"), "X = 1\n").unwrap();
     std::fs::write(project.join("pkg/remote.py"), "import requests\n").unwrap();
     std::fs::write(
+        project.join("pkg/stopper.py"),
+        "import os as proc\nproc.kill(4242, 15)\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(project.join("wide")).unwrap();
+    for index in 0..40 {
+        std::fs::write(project.join(format!("wide/m{index}.py")), "X = 1\n").unwrap();
+    }
+    std::fs::write(
         project.join("keys.py"),
         "print(open('/home/user/.aws/credentials').read())\n",
     )
@@ -79,6 +88,18 @@ fn a_probe_that_imports_modules_runs_in_the_workspace_sandbox() {
         // `coding` past the second line is not an encoding declaration.
         "python3 <<'EOF'\nimport json\nprint(open('pyproject.toml', encoding='utf-8').read())\nEOF",
         "python3 <<'EOF'\nimport json\nimport sys\n# decoding note\nsys.stdout.reconfigure(encoding='utf-8')\nEOF",
+        // Separators, method calls named like builtins and the shared
+        // temporary directory stay inside what the sandbox allows.
+        "python3 <<'EOF'\nimport json\nprint('/'.join(['a', 'b']), 'a/b'.split('/'))\nEOF",
+        "python3 <<'EOF'\nimport re\nprint(re.compile(r'a+').findall('aa'))\nEOF",
+        "python3 <<'EOF'\nimport json\nopen('/tmp/probe.json', 'w').write(json.dumps({}))\nEOF",
+        "python3 <<'EOF'\nimport json\nprint(open('.gitignore').read())\nEOF",
+        // Starting a program is bounded by the same sandbox.
+        "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['git', 'status'])\nEOF",
+        "python3 <<'EOF'\nimport signal\nsignal.signal(signal.SIGINT, signal.SIG_DFL)\nprint(1)\nEOF",
+        // Text that only mentions an import is not one.
+        "python3 <<'EOF'\nimport json\nprint(\"import psutil\")\nEOF",
+        "python3 <<'EOF'\nimport subprocess\nsubprocess.run(['git', 'config', '--get', 'user.name'])\nEOF",
     ] {
         let (action, reason) = outcome(&root, command);
         assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
@@ -126,6 +147,36 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 <<'EOF'\nfrom \\\n socket import create_connection\nEOF",
         "python3 <<'EOF'\nprint(1) #\\\nimport socket\nEOF",
         "python3 <<'EOF'\nmarker = \" #\"; print(open('/home/user/.aws/credentials').read())\nEOF",
+        // The sandbox still exposes the rest of the host: other processes,
+        // the clipboard and screen, system directories and the checkout's
+        // own Git configuration.
+        "python3 - <<'PYEOF'\nimport psutil\nfor proc in psutil.process_iter():\n    proc.kill()\nPYEOF",
+        "python3 - <<'PYEOF'\nimport pyperclip\nprint(pyperclip.paste())\nPYEOF",
+        "python3 - <<'PYEOF'\nfrom PIL import ImageGrab\nImageGrab.grab().save('shot.png')\nPYEOF",
+        "python3 - <<'PYEOF'\nimport os\nos.system('ls -a /app/')\nPYEOF",
+        "python3 - <<'PYEOF'\nimport json\nprint(eval(\"__import__('os').getcwd()\"))\nPYEOF",
+        "python3 - <<'PYEOF'\nimport glob\nprint(glob.glob('/app/*'))\nPYEOF",
+        "python3 - <<'PYEOF'\nimport os\nbase = \"/usr\"\nprint(open(os.path.join(base, \"../etc/passwd\")).read())\nPYEOF",
+        "python3 - <<'PYEOF'\nimport os\nprint(os.listdir('..'))\nPYEOF",
+        "python3 - <<'PY'\nfrom pathlib import Path\nPath('.git/config').write_text('[core]\\n\\thooksPath = /dev/null\\n')\nPY",
+        // The same reach through a command line, an alias or the root.
+        "python3 - <<'PY'\nimport os\nos.system('git config core.hooksPath /dev/null')\nPY",
+        "python3 - <<'PY'\nimport subprocess\nsubprocess.run(['kill', '-9', '1'])\nPY",
+        "python3 - <<'PY'\nimport os\nos.system('cat /etc/passwd /tmp/out')\nPY",
+        "python3 - <<'PY'\nimport os as proc\nproc.kill(4242, 15)\nPY",
+        "python3 - <<'PY'\nimport os\nprint(os.listdir('/'))\nPY",
+        // A local module the program imports counts too.
+        "python3 - <<'PY'\nimport pkg.stopper\nPY",
+        // Every command of a command line, past wrapper option values and
+        // nested shells, and paths spelled with escapes, joined literals or
+        // formatted strings.
+        "python3 - <<'PY'\nimport os\nos.system('true; pkill gdm')\nPY",
+        "python3 - <<'PY'\nprint(open(\"\\x2fetc/passwd\").read())\nPY",
+        "python3 - <<'PY'\nimport os\nprint(os.listdir('pkg/../..'))\nPY",
+        "python3 - <<'PY'\nimport os\nos.system('env -u DISPLAY kill -TERM 4242')\nPY",
+        "python3 - <<'PY'\nimport os\nos.system('sh -c \"kill 1\"')\nPY",
+        "python3 - <<'PY'\np = '/' 'etc/passwd'\nprint(open(p).read())\nPY",
+        "python3 - <<'PY'\npart = 'etc'\nprint(open(f'/{part}/passwd').read())\nPY",
     ] {
         let (action, _) = outcome(&root, command);
         assert!(
@@ -133,4 +184,18 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
             "{command}: {action}"
         );
     }
+}
+
+#[test]
+fn a_probe_whose_local_imports_are_not_all_read_keeps_its_review() {
+    let (root, _cleanup) = checkout("wide");
+    let imports: String = (0..40)
+        .map(|index| format!("import wide.m{index}\n"))
+        .collect();
+    let command = format!("python3 - <<'PY'\n{imports}print(1)\nPY");
+    let (action, _) = outcome(&root, &command);
+    assert!(
+        action != "allow" && action != "sandbox-required",
+        "{command}: {action}"
+    );
 }

@@ -20,6 +20,8 @@ export type ProtectionTone = "success" | "warning" | "neutral" | "danger";
 
 export type EventProtection = {
   event: string;
+  /** Tool names when the contract splits one hook event into rows by tool. */
+  tools: string[];
   transport: string | null;
   mode: string | null;
   state: ProtectionState;
@@ -68,14 +70,23 @@ export function normalizeEventStates(value: unknown): EventProtection[] {
     const entry = item as Record<string, unknown>;
     const event = optionalText(entry.event);
     if (!event || !isState(entry.state)) return [];
+    const tools = Array.isArray(entry.tools)
+      ? entry.tools.filter((tool): tool is string => typeof tool === "string" && tool.length > 0)
+      : [];
     return [{
       event,
+      tools,
       transport: optionalText(entry.transport),
       mode: optionalText(entry.mode),
       state: entry.state,
       reason: optionalText(entry.reason),
     }];
   });
+}
+
+/** The event name, with its tools when the event is split by tool. */
+export function eventProtectionName(item: EventProtection): string {
+  return item.tools.length > 0 ? `${item.event} [${item.tools.join(", ")}]` : item.event;
 }
 
 export function protectionStateLabel(state: ProtectionState | null): string {

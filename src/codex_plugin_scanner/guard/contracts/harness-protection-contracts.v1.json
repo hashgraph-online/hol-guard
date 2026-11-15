@@ -14,6 +14,7 @@
         "prompt",
         "mcp_tool",
         "file_read",
+        "file_write",
         "tool_result"
       ],
       "native_approval": true,
@@ -24,6 +25,11 @@
       "capability_events": [
         {
           "event": "PreToolUse",
+          "tools": [
+            "Bash",
+            "Read",
+            "mcp__*"
+          ],
           "transport": "native_hook",
           "mode": "blocking",
           "surface": "foreground",
@@ -42,6 +48,60 @@
             "A source declaration does not prove that a live Codex process honored a deny response."
           ],
           "source_reference": "src/codex_plugin_scanner/guard/adapters/codex.py:_managed_hook_groups"
+        },
+        {
+          "event": "PreToolUse",
+          "tools": [
+            "apply_patch"
+          ],
+          "transport": "native_hook",
+          "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Malformed payload, transport failure, or unavailable Guard authority fails closed before the file is written.",
+          "mandatory_compatibility": "Codex must send each apply_patch call to the Guard-managed native hook and honor its response before writing.",
+          "known_blind_spots": [
+            "Edits the model applies without an apply_patch tool call are not visible to Guard.",
+            "PostToolUse does not match apply_patch, so the written result is not observed.",
+            "A source declaration does not prove that a live Codex process honored a deny response."
+          ],
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/codex.rs:TOOL_MATCHER"
+        },
+        {
+          "event": "PreToolUse",
+          "tools": [
+            "Write",
+            "Edit",
+            "MultiEdit"
+          ],
+          "transport": "native_hook",
+          "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Malformed payload, transport failure, or unavailable Guard authority fails closed before the file is written.",
+          "mandatory_compatibility": "Codex must send each Write, Edit, or MultiEdit call to the Guard-managed native hook and honor its response before writing.",
+          "known_blind_spots": [
+            "Codex applies its own file edits through apply_patch; these names cover only tools that report them, and no live Codex run on record shows a version that emits them.",
+            "PostToolUse does not match these tools, so the written result is not observed.",
+            "A source declaration does not prove that a live Codex process honored a deny response."
+          ],
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/codex.rs:TOOL_MATCHER"
         },
         {
           "event": "PermissionRequest",
