@@ -272,7 +272,7 @@ def anatomy(tag, arm, rows):
             k = per[kind]
             k["steps"] += 1
             k["requests"] += requests or 0
-            held_keys, held_seen = set(), False
+            held_keys, held_seen, step_holds = set(), False, 0
             for c_kind, held, keys in step_calls:
                 k["calls"] += 1
                 k[c_kind] += 1
@@ -285,9 +285,10 @@ def anatomy(tag, arm, rows):
                 if held:
                     k["holds"] += 1
                     held_seen = True
+                    step_holds += 1
                     held_keys |= keys or frozenset()
             if requests:
-                step_usd[kind][held_seen].append(steps[i]["usd"])
+                step_usd[kind][held_seen].append((steps[i]["usd"], step_holds))
     print(f"\n== {tag} {arm}: {len(rows)} sessions, {sum(r['passed'] for r in rows.values())} passed")
     cols = ("steps", "requests", "calls") + KINDS + ("holds", "after_hold", "retries")
     print(f"{'kind':9}" + "".join(f"{c:>11}" for c in cols) + f"{'req/step':>10}{'holds/100':>10}")
@@ -301,26 +302,31 @@ def anatomy(tag, arm, rows):
         print(f"retries per hold (same command or same file again): {tot['retries'] / tot['holds']:.2f}")
         if tot["unmatched"]:
             print(f"  not checked: {tot['unmatched']} later call(s) ran through Guard's runner with no recorded command")
-        extra, held_steps = hold_cost(step_usd)
-        if held_steps:
+        extra, measured = hold_cost(step_usd)
+        if measured:
             print(
-                f"cost per hold: ${extra / tot['holds']:.4f} "
+                f"cost per hold: ${extra / measured:.4f} "
                 f"(held steps cost ${extra:.4f} more than the median same-kind step with no hold)"
             )
+        if measured < tot["holds"]:
+            unpriced = tot["holds"] - measured
+            print(f"  not priced: {unpriced} hold(s) in steps with no usage or no unheld step of that kind")
     return per
 
 
 def hold_cost(step_usd):
-    """Extra dollars in steps with a hold: each held step's cost minus the median
-    cost of the same kind's steps without one. Kinds with no unheld step are skipped."""
-    extra, held_steps = 0.0, 0
+    """Extra dollars in steps with a hold, and how many holds they cover: each held
+    step's cost minus the median cost of the same kind's steps without one. Kinds
+    with no unheld step are skipped, and so are their holds. Different tasks share
+    a kind, so this is an estimate of the hold's cost, not a paired measurement."""
+    extra, measured = 0.0, 0
     for clean, held in step_usd.values():
         if not clean or not held:
             continue
-        mid = statistics.median(clean)
-        extra += sum(usd - mid for usd in held)
-        held_steps += len(held)
-    return extra, held_steps
+        mid = statistics.median(usd for usd, _ in clean)
+        extra += sum(usd - mid for usd, _ in held)
+        measured += sum(n for _, n in held)
+    return extra, measured
 
 
 TOKEN_KEYS = ("input_tokens", "output_tokens")
