@@ -212,7 +212,7 @@ fn a_request_without_fields_gets_the_conservative_contract() {
 #[test]
 fn every_recorded_review_offers_both_choices_or_names_why_not() {
     let vectors = gunzip_json(VECTORS);
-    let (mut both, mut once_only, mut unavailable) = (0, 0, 0);
+    let (mut both, mut once_only, mut unavailable, mut unidentified) = (0, 0, 0, 0);
     let mut problems = Vec::new();
     let mut unnamed = std::collections::BTreeMap::<String, usize>::new();
     for (index, case) in vectors["cases"].as_array().unwrap().iter().enumerate() {
@@ -235,8 +235,23 @@ fn every_recorded_review_offers_both_choices_or_names_why_not() {
         let once_reason = contract["once_only_reason"].as_str();
         if allow.is_empty() {
             unavailable += 1;
-            if restrictions.is_empty() {
-                problems.push(format!("case {index}: no allow scope and no reason"));
+            let explained = once_reason.is_some()
+                || restrictions.iter().any(|reason| {
+                    reason
+                        .as_str()
+                        .is_some_and(|reason| UNAVAILABLE_REASONS.contains(&reason))
+                });
+            let no_identity = contract["allowed_scopes_by_action"]["block"]
+                .as_array()
+                .is_some_and(Vec::is_empty);
+            if !explained && no_identity {
+                // No usable artifact identity: neither Allow nor Block can be
+                // recorded, and no restriction says so. Pinned below.
+                unidentified += 1;
+            } else if !explained {
+                problems.push(format!(
+                    "case {index}: no allow scope and no reason ({restrictions:?})"
+                ));
             }
         } else if !allow.contains(&json!("artifact")) {
             problems.push(format!("case {index}: allow scopes without Allow once"));
@@ -261,6 +276,13 @@ fn every_recorded_review_offers_both_choices_or_names_why_not() {
         &problems[..problems.len().min(10)]
     );
     assert!(both > 500, "only {both} reviews offer both choices");
+    // Known gap: a recorded review without an artifact identity offers no
+    // choice and names no restriction. Lower this cap when the contract
+    // learns to name it; never raise it.
+    assert!(
+        unidentified <= UNIDENTIFIED_REVIEW_CAP,
+        "{unidentified} reviews have no identity and no reason (cap {UNIDENTIFIED_REVIEW_CAP})"
+    );
     assert!(
         once_only > 0 && unavailable > 0,
         "a branch of the invariant went unexercised"
@@ -268,26 +290,41 @@ fn every_recorded_review_offers_both_choices_or_names_why_not() {
     // Known gap, reported rather than hidden: these artifact types have no
     // exact-action binding, so they offer Allow once with neither Always allow
     // nor a named once-only reason (the card shows generic copy). A new type
-    // joining this set fails here.
-    let unnamed_types: Vec<&str> = unnamed.keys().map(String::as_str).collect();
-    assert!(
-        unnamed_types
+    // joining this set, or a known type gaining cases, fails here.
+    for (kind, count) in &unnamed {
+        let cap = UNBOUND_ONCE_ONLY_TYPES
             .iter()
-            .all(|kind| UNBOUND_ONCE_ONLY_TYPES.contains(kind)),
-        "Allow once without Always allow or a reason for {unnamed:?}"
-    );
+            .find(|(known, _)| known == kind)
+            .map(|(_, cap)| *cap);
+        assert!(
+            cap.is_some_and(|cap| *count <= cap),
+            "Allow once without Always allow or a reason grew for {kind}: {count} (cap {cap:?})"
+        );
+    }
 }
 
+const UNIDENTIFIED_REVIEW_CAP: usize = 204;
+
+/// Restrictions that explain why a review offers no allow scope. The generic
+/// entries every contract carries (`reusable_allow_is_action_bound`, the task
+/// capability code) do not.
+const UNAVAILABLE_REASONS: &[&str] = &[
+    "execution_binding_unavailable",
+    "current_action_not_overridable",
+    "provider_account_unverified_once_only",
+];
+
 /// Artifact types whose reviews may still offer Allow once without Always
-/// allow or a named reason. Shrink this list; never grow it.
-const UNBOUND_ONCE_ONLY_TYPES: &[&str] = &[
-    "file_read_request",
-    "mcp_server",
-    "mcp_tool_call",
-    "none",
-    "other",
+/// allow or a named reason, with the recorded case count for each. Lower a
+/// count when a type gains a binding; never raise one.
+const UNBOUND_ONCE_ONLY_TYPES: &[(&str, usize)] = &[
+    ("file_read_request", 130),
+    ("mcp_server", 267),
+    ("mcp_tool_call", 306),
+    ("none", 266),
+    ("other", 34),
     // A whitespace-padded type is not read as `tool_call`, so it has no binding.
-    "padded:tool_call",
-    "prompt_request",
-    "tool_action_request",
+    ("padded:tool_call", 44),
+    ("prompt_request", 123),
+    ("tool_action_request", 42),
 ];
