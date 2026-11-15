@@ -1089,7 +1089,6 @@
           "_require_hook_semantics_readback",
           "prepare_codex_hook_migration",
           "render_codex_managed_mcp",
-          "render_codex_alternate_cleanup",
           "prepare_codex_alternate_cleanup",
           "prepare_codex_shell_cleanup",
           "CodexHarnessAdapter._all_hook_paths",

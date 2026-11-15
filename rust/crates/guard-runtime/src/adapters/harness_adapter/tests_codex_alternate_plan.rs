@@ -55,3 +55,42 @@ fn a_config_without_guard_entries_stays_as_it_is() {
     assert_eq!(files.len(), 2, "{answer}");
     assert_eq!(files[0]["before"], files[0]["after"], "{answer}");
 }
+
+fn change_fields(home: &Home, text: &str, mode: u32) -> Value {
+    use std::os::unix::fs::PermissionsExt as _;
+    let mut request = fields(home, None);
+    let path = home.home().join("project/.codex/config.toml");
+    std::fs::write(&path, text).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+    let map = request.as_object_mut().unwrap();
+    map.insert("remove_hooks".into(), json!(true));
+    map.insert("managed_server_names".into(), json!(["guarded"]));
+    request
+}
+
+#[cfg(unix)]
+#[test]
+fn a_cleanup_without_guard_entries_keeps_bytes_and_mode() {
+    let home = Home::new();
+    let answer = home.ask(
+        "codex",
+        "alternate_change",
+        change_fields(&home, "model = \"o3\"\n", 0o644),
+    );
+    let file = &answer["file"];
+    assert_eq!(file["before"], file["after"], "{answer}");
+    assert_eq!(file["before_mode"], json!(0o644), "{answer}");
+    assert_eq!(file["after_mode"], json!(0o644), "{answer}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_cleanup_refuses_a_malformed_config() {
+    let home = Home::new();
+    let answer = home.ask(
+        "codex",
+        "alternate_change",
+        change_fields(&home, "model = 1\nmodel = 2\n", 0o600),
+    );
+    assert!(answer.get("file").is_none(), "{answer}");
+}

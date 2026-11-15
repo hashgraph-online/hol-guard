@@ -16,12 +16,14 @@
 use base64::Engine as _;
 use serde_json::{json, Map, Value};
 
-use super::codex::{scope_for, text};
+use super::codex::{compact, scope_for, text};
+use super::codex_files::existing;
 use super::codex_merge::{self, get};
-use super::codex_migration::{migration, owner_fields, render, strip_owned};
+use super::codex_migration::{migration, owner_fields, read_toml, render, strip_owned};
 use super::codex_servers::alternate_cleanup;
 use super::files::Change;
 use super::{Ctx, Failure, Step};
+use crate::codex_toml_read;
 use crate::pyjson::{self, PyVal};
 
 const PRIVATE_MODE: u32 = 0o600;
@@ -152,4 +154,57 @@ pub(super) fn expected_hooks(
         Ok(PyVal::Dict(_)) => format!("{{\"hooks\":{cleaned}}}"),
         _ => return Err(Failure::Invalid),
     })
+}
+
+/// `prepare_codex_alternate_cleanup`: one config without this install's
+/// legacy hooks (`remove_hooks`) and the named proxied servers, as a file
+/// change. Request fields: `config`, `remove_hooks`, `managed_server_names`
+/// and the owner fields. Answer: `{"file": <change>}`.
+pub(super) fn alternate_change(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    let given = std::path::Path::new(text(fields, "config")?);
+    let path = match (given.parent(), given.file_name()) {
+        (Some(parent), Some(name)) => ctx.resolved(parent).join(name),
+        _ => ctx.absolute(given),
+    };
+    let (before, mode) = existing(ctx, &path)?;
+    let entries = read_toml(before.as_deref(), &path, "Codex config file")?;
+    let (payload, tokens) = codex_toml_read::wire(&entries);
+    let mut cleanup = owner_fields(fields)?;
+    cleanup.insert("payload".into(), json!(compact(&payload, false)));
+    cleanup.insert("tokens".into(), json!(tokens));
+    cleanup.insert(
+        "remove_hooks".into(),
+        json!(fields.get("remove_hooks").and_then(Value::as_bool) == Some(true)),
+    );
+    cleanup.insert(
+        "managed_server_names".into(),
+        fields
+            .get("managed_server_names")
+            .cloned()
+            .ok_or(Failure::Invalid)?,
+    );
+    let cleaned = alternate_cleanup(&cleanup)?;
+    let flag = |key: &str| cleaned.get(key) == Some(&Value::Bool(true));
+    let after = if flag("changed") {
+        let rendered = cleaned
+            .get("rendered")
+            .and_then(Value::as_str)
+            .ok_or(Failure::Invalid)?;
+        Some(render(rendered, &tokens, before.as_deref())?.into_bytes())
+    } else {
+        before.clone()
+    };
+    let change = Change {
+        path,
+        before,
+        after,
+        before_mode: mode,
+        after_mode: if flag("hooks_changed") {
+            PRIVATE_MODE
+        } else {
+            mode
+        },
+        no_follow: true,
+    };
+    Ok(json!({ "file": change.wire() }))
 }

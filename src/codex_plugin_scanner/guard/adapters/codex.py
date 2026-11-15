@@ -481,28 +481,6 @@ def render_codex_managed_mcp(
     return rendered, tuple(str(name) for name in answer["migrated"])
 
 
-def _alternate_cleanup(
-    context: HarnessContext,
-    payload: dict[str, object],
-    *,
-    remove_hooks: bool,
-    managed_server_names: Sequence[str],
-) -> tuple[dict[str, object], bool, bool]:
-    """The cleaned payload, and whether it or its hook tables changed."""
-    wire = _Wire(payload)
-    request: dict[str, object] = {
-        "payload": wire.text(payload),
-        "remove_hooks": remove_hooks,
-        "managed_server_names": list(managed_server_names),
-        "tokens": wire.meanings,
-        **_legacy_fields(context),
-        **short_path_fields(),
-    }
-    answer = settle_short_paths(lambda: _codex("alternate_cleanup", context, **request), request, "alternate_cleanup")
-    rendered = wire.decode(_reply_text(answer, "rendered"))
-    return rendered, answer.get("changed") is True, answer.get("hooks_changed") is True
-
-
 def _main_plan(
     context: HarnessContext,
     config: Path,
@@ -573,20 +551,6 @@ def _alternate_plan(
     return planned_files({"files": answer.get("files")})
 
 
-def render_codex_alternate_cleanup(
-    context: HarnessContext,
-    payload: dict[str, object],
-    *,
-    remove_hooks: bool = True,
-    managed_server_names: Sequence[str] = (),
-) -> dict[str, object]:
-    """Render scoped alternate cleanup without publishing or changing its input."""
-    rendered, _changed, _hooks_changed = _alternate_cleanup(
-        context, payload, remove_hooks=remove_hooks, managed_server_names=managed_server_names
-    )
-    return rendered
-
-
 def prepare_codex_alternate_cleanup(
     context: HarnessContext,
     *,
@@ -595,24 +559,18 @@ def prepare_codex_alternate_cleanup(
     managed_server_names: Sequence[str] = (),
 ) -> TransitionFile:
     """Capture one cleanup segment; this is not a complete Codex install plan."""
-    from ..codex_hook_recovery import _snapshot
-    from ..runtime_transition import RuntimeTransition, TransitionFile
+    from ..runtime_transition import RuntimeTransition
 
-    config_path = config_path.parent.resolve(strict=False) / config_path.name
-    before = _snapshot(config_path)
-    payload = parse_toml_object(before, path=config_path, label="Codex config file")
-    mode = config_path.stat().st_mode & 0o777 if before is not None else 0o600
-    rendered, changed, hooks_changed = _alternate_cleanup(
-        context, payload, remove_hooks=remove_hooks, managed_server_names=managed_server_names
-    )
-    change = TransitionFile(
-        config_path,
-        before,
-        dump_toml(rendered, original=before).encode("utf-8") if changed else before,
-        before_mode=mode,
-        after_mode=0o600 if hooks_changed else mode,
-        no_follow=True,
-    )
+    request: dict[str, Any] = {
+        "config": str(config_path),
+        "remove_hooks": remove_hooks,
+        "managed_server_names": list(managed_server_names),
+        **_legacy_fields(context),
+        **install_fields(_runtime_guard_home(context), None),
+        **short_path_fields(),
+    }
+    answer = settle_short_paths(lambda: _codex("alternate_change", context, **request), request, "alternate_change")
+    change = _one_planned_file(answer)
     RuntimeTransition._compare({"files": [change.payload()]}, "before")
     return change
 

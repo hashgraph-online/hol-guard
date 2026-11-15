@@ -78,6 +78,7 @@ pub(super) fn dispatch(
         "migrate" | "readback" | "subset" => codex_merge::dispatch(op, fields),
         "alternate_cleanup" => codex_servers::alternate_cleanup(fields),
         "alternate_plan" => codex_alternate_plan::alternate_plan(ctx, fields),
+        "alternate_change" => codex_alternate_plan::alternate_change(ctx, fields),
         "main_plan" => codex_main_plan::main_plan(ctx, fields),
         "managed_mcp" => codex_servers::managed_mcp(fields),
         "uninstall_restore" => codex_uninstall::uninstall_restore(fields),

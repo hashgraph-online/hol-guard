@@ -14,7 +14,7 @@ use crate::pyjson::PyVal;
 
 const PRIVATE_MODE: u32 = 0o600;
 
-fn existing(ctx: &Ctx, path: &Path) -> Step<(Option<Vec<u8>>, u32)> {
+pub(super) fn existing(ctx: &Ctx, path: &Path) -> Step<(Option<Vec<u8>>, u32)> {
     let before = files::snapshot(ctx, path)?;
     let mode = match before {
         Some(_) => files::mode(ctx, path).unwrap_or(PRIVATE_MODE),
