@@ -55,7 +55,13 @@ def _user_json_hooks(
     from .codex import _strip_owned_hooks
 
     data = read_config_bytes(hooks_json_path) if hooks_json_path.is_file() else None
-    hooks = parse_json_object(data, path=hooks_json_path, label="Codex hooks file").get("hooks")
+    try:
+        payload = parse_json_object(data, path=hooks_json_path, label="Codex hooks file")
+    except RuntimeError:
+        # Codex cannot run hooks from a file it cannot parse, and uninstall
+        # leaves the file as it is, so it holds no hook that needs the feature.
+        return None
+    hooks = payload.get("hooks")
     return _strip_owned_hooks(context, hooks, owned_bindings) if isinstance(hooks, dict) else None
 
 
