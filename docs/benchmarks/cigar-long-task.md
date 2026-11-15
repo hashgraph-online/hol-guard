@@ -350,11 +350,14 @@ Gates:
 | Holds per 100 calls halved | Codex met (4.2 on 3.60.0a96, now 0.8). Oh My Pi (0.3 to 1.0) and Claude Code (0.4 to 0–0.9) were already near zero; their few holds are single sessions (one Claude Code step that wrote a scratch script and ran `git show` while debugging) |
 | Do-no-harm at most 10% | Met: 0.0–8.2% |
 | No step kind under 35% cost saved | Codex and Oh My Pi met. Claude Code missed on doc (25.7–29.2%) and, in run 2, stub |
-| No language under 40%, long set at least the short set, full Guard within 5 points of CIGAR only | Not measured: every rig project is Python and no long or workflow set exists yet |
+| Full Guard within 5 points of CIGAR only on cost | Codex met: CIGAR only (the prompt note, no other hook) saves 63.3%, full Guard 66.7%. Claude Code met: CIGAR only 62.6–64.0%, full Guard 60.6–62.1% (run 1) and 61.7–63.1% (run 2), 2.0 points apart at the low end. Oh My Pi not measured: Guard ships one Oh My Pi extension for the note and the checks, so there is no note-only build to compare |
+| No language under 40%, long set at least the short set | Not measured: every rig project is Python and no long or workflow set exists yet |
 
 Why Claude Code's doc steps stay under 35%: with Guard, 8 of 10 doc steps take Claude Code's minimum of read, edit and one test run (its Edit tool refuses a file the session has not read, so a note that shows the code cannot save the read). The no-Guard run often takes the same four requests, at the same fixed context per request (about 20k cached tokens of harness prompt and tool list), and the CIGAR note on a doc step is about 1.3k characters. There is no request left to remove. The run 2 stub figure comes from one session that spent 15 calls debugging `TLRUCache.popitem`; the other 11 stub steps took read, edit and one test run.
 
 Run-to-run spread on Claude Code is about ±3 points of tokens saved on the same build, so the two runs (70.4% at the midpoints, 68.9% at the low end of run 1) are one result.
+
+CIGAR-only runs on the same build and seeds (prompt note only, no enforcement hook), for the comparison above: Codex 63.3% cost and 70.7% tokens saved, passed 14 (no Guard 14), 2.58 requests per step; Claude Code 62.6–64.0% cost and 70.9–72.5% tokens saved, passed 15 (no Guard 14, 14), 4.97 requests per step.
 
 What holds cost, from `report.py` ("cost per hold": each held step's cost minus the median cost of the same kind's steps with no hold, summed over the run and divided by the holds in those steps; holds that cannot be priced are listed separately, and none were in these runs). Same 16 seeds; 3.60.0a96 is the first gate run, f11eecf8f1 is `main` above.
 
