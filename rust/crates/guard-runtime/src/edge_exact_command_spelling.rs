@@ -16,6 +16,10 @@ use std::collections::HashSet;
 
 use guard_command::{parse_command, CommandModelRequestV1, CommandSegmentV1, MAX_COMMAND_BYTES};
 
+#[path = "edge_exact_command_spelling_words.rs"]
+mod words;
+use words::words;
+
 /// Nesting followed through `bash -c` scripts and groups; deeper is not fully read.
 const MAX_DEPTH: usize = 8;
 const INLINE_SHELLS: &[&str] = &["bash", "sh", "zsh", "dash", "ash", "ksh"];
@@ -85,13 +89,8 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
                 visit(step, depth + 1, out, seen);
             }
             for segment in &model.segments {
-                // Bash reads a word that starts with an unquoted `#` as a comment.
-                let hash = words(&segment.text).iter().any(|w| w.starts_with('#'));
-                let cut = segment.arguments.iter().position(|w| w.starts_with('#'));
-                for end in [segment.arguments.len()]
-                    .into_iter()
-                    .chain(cut.filter(|_| hash))
-                {
+                let cut = words::comment_cut(&segment.text, &segment.arguments);
+                for end in [segment.arguments.len()].into_iter().chain(cut) {
                     for spelling in segment_spellings(segment, &segment.arguments[..end]) {
                         out.push(seen, spelling);
                     }
@@ -417,44 +416,6 @@ fn skip_heredoc_bodies(chars: &[char], start: usize, heredocs: &mut Vec<(String,
         }
     }
     i
-}
-
-/// The words of `text` split at whitespace outside quotes, quotes kept.
-fn words(text: &str) -> Vec<&str> {
-    let mut words = Vec::new();
-    let mut start: Option<usize> = None;
-    let mut quote: Option<char> = None;
-    let mut escaped = false;
-    for (index, c) in text.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        match (quote, c) {
-            (Some('\''), '\'') | (Some('"'), '"') => quote = None,
-            (Some('"') | None, '\\') => {
-                start.get_or_insert(index);
-                escaped = true;
-            }
-            (Some(_), _) => {}
-            (None, '\'' | '"') => {
-                start.get_or_insert(index);
-                quote = Some(c);
-            }
-            (None, c) if c.is_whitespace() => {
-                if let Some(begin) = start.take() {
-                    words.push(&text[begin..index]);
-                }
-            }
-            (None, _) => {
-                start.get_or_insert(index);
-            }
-        }
-    }
-    if let Some(begin) = start {
-        words.push(&text[begin..]);
-    }
-    words
 }
 
 fn bare_step(step: &str) -> String {

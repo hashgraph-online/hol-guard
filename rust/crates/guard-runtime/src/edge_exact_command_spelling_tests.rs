@@ -230,4 +230,7 @@ fn a_comment_after_an_exact_command_keeps_its_spellings() {
     for command in ["npm publish '#x'", "npm publish \"#x\"", "npm publish \\#x"] {
         assert!(!has(command, "npm publish"), "{command:?}");
     }
+    // With a real comment after it, the cut lands on the comment.
+    assert!(!has("npm publish '#a' #b", "npm publish"));
+    assert!(has("npm publish '#a' #b", "npm publish '#a'"));
 }
