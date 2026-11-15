@@ -378,7 +378,14 @@ fn an_event_may_be_split_into_rows_by_disjoint_tools() {
 
     let overlapping = with_tools(json!(["apply_patch", "Bash"]));
     let unnamed = blocking(json!({"state": "configured"}));
-    for rows in [vec![shell.clone(), overlapping], vec![write, unnamed]] {
+    let named_under_prefix = with_tools(json!(["mcp__server__tool"]));
+    let narrower_prefix = with_tools(json!(["mcp__s*"]));
+    for rows in [
+        vec![shell.clone(), overlapping],
+        vec![write, unnamed],
+        vec![shell.clone(), named_under_prefix],
+        vec![shell.clone(), narrower_prefix],
+    ] {
         let problems = split(rows);
         assert!(
             problems
@@ -386,6 +393,21 @@ fn an_event_may_be_split_into_rows_by_disjoint_tools() {
                 .any(|problem| problem.contains("declared twice")),
             "{problems:?}"
         );
+    }
+}
+
+#[test]
+fn tool_prefixes_overlap_the_names_they_cover() {
+    for (a, b, overlap) in [
+        ("mcp__*", "mcp__server__tool", true),
+        ("mcp__server__tool", "mcp__*", true),
+        ("mcp__*", "mcp__s*", true),
+        ("Bash", "Bash", true),
+        ("Bash", "BashOutput", false),
+        ("mcp__*", "apply_patch", false),
+        ("Write*", "Edit*", false),
+    ] {
+        assert_eq!(super::tools_overlap(a, b), overlap, "{a} {b}");
     }
 }
 

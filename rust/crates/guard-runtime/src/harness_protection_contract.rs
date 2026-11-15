@@ -327,6 +327,17 @@ fn check_event(event: &Event) -> Vec<String> {
     problems
 }
 
+/// Whether two tool entries can name the same tool. A trailing `*` matches
+/// any suffix, so `mcp__*` overlaps `mcp__server__tool` and `mcp__s*`.
+fn tools_overlap(a: &str, b: &str) -> bool {
+    match (a.strip_suffix('*'), b.strip_suffix('*')) {
+        (Some(p), Some(q)) => p.starts_with(q) || q.starts_with(p),
+        (Some(p), None) => b.starts_with(p),
+        (None, Some(q)) => a.starts_with(q),
+        (None, None) => a == b,
+    }
+}
+
 fn check_document(text: &str) -> (usize, Vec<String>) {
     let document: Document = match serde_json::from_str(text) {
         Ok(document) => document,
@@ -343,15 +354,24 @@ fn check_document(text: &str) -> (usize, Vec<String>) {
             rows += 1;
             if !seen.insert((&event.event, &event.transport, &event.surface)) {
                 // Rows for one event and surface may split it by tool, but
-                // only when each names its tools and no tool is in two rows.
-                let split = contract.capability_events.iter().filter(|other| {
-                    (&other.event, &other.transport, &other.surface)
-                        == (&event.event, &event.transport, &event.surface)
-                });
-                let mut tools = std::collections::BTreeSet::new();
-                let disjoint = split.into_iter().all(|other| {
-                    !other.tools.is_empty() && other.tools.iter().all(|tool| tools.insert(tool))
-                });
+                // only when each names its tools and no tool falls in two
+                // rows, counting `mcp__*` as covering every `mcp__` name.
+                let split: Vec<&Event> = contract
+                    .capability_events
+                    .iter()
+                    .filter(|other| {
+                        (&other.event, &other.transport, &other.surface)
+                            == (&event.event, &event.transport, &event.surface)
+                    })
+                    .collect();
+                let disjoint = split.iter().all(|row| !row.tools.is_empty())
+                    && split.iter().enumerate().all(|(index, row)| {
+                        split[index + 1..].iter().all(|other| {
+                            !row.tools.iter().any(|tool| {
+                                other.tools.iter().any(|theirs| tools_overlap(tool, theirs))
+                            })
+                        })
+                    });
                 if !disjoint {
                     problems.push(format!(
                         "{} {} ({}): declared twice for one surface",
