@@ -246,9 +246,7 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-linked-sources-grep-glob-over-escaping-link",
         "neg-rustflags-linker-prefix-cargo-test",
         "neg-pytest-addopts-plugin-prefix-venv-pytest",
-        # A Python filter after an export of its module path: the filter proof
-        # must refuse it, and a contained run imports nothing from outside the
-        # workspace and reaches no network.
+        # A Python filter after `export PYTHONPATH=.`; contained, it reaches nothing.
         "neg-python-filter-after-module-path-export",
         # A Python filter that reaches past its input: the program screen must
         # refuse it, and a contained run reaches no file outside the workspace,
