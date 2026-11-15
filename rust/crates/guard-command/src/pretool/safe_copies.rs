@@ -1,8 +1,9 @@
 //! Plain `cp` operands: one or more readable files copied to a bounded write
 //! target. `cp a b dir/` and `cp a dir/` place each file at `dir/<name>`, so
 //! every source and every resulting path gets the same screens a single
-//! file-to-file copy gets. Flags, recursive copies and directory sources are
-//! proven elsewhere or stay reviewed. A source such as `saved/src/*.ts` is
+//! file-to-file copy gets. A leading `-c`, `-p` or `-v` changes neither what
+//! is read nor where it lands. Other flags, recursive copies and directory
+//! sources are proven elsewhere or stay reviewed. A source such as `saved/src/*.ts` is
 //! expanded first, as the shell does, and each word it yields is screened as
 //! a source and as `dir/<name>` like a literal operand.
 
@@ -37,6 +38,10 @@ pub(in crate::pretool) fn safe_copy_arguments_into(
     context: PathContext<'_>,
     created: &[PathBuf],
 ) -> bool {
+    let arguments = match arguments {
+        [flag, rest @ ..] if attribute_flags(flag) => rest,
+        _ => arguments,
+    };
     let operands = match arguments {
         [separator, rest @ ..] if separator == "--" => rest,
         _ => arguments,
@@ -78,6 +83,36 @@ pub(in crate::pretool) fn safe_copy_arguments_into(
         };
         source_allowed(source, context) && target_allowed(&target, absolute, created, context)
     })
+}
+
+/// `-c` (a copy-on-write clone on macOS, SELinux context on GNU), `-p` (keep
+/// mode and times) and `-v` (name each copy), alone or joined in one word.
+fn attribute_flags(word: &str) -> bool {
+    word.strip_prefix('-').is_some_and(|letters| {
+        !letters.is_empty()
+            && letters
+                .chars()
+                .all(|letter| matches!(letter, 'c' | 'p' | 'v'))
+    })
+}
+
+/// Where `cp -R` may create a new tree outside the workspace: a path the
+/// user spelled absolutely that does not exist yet, directly in a temporary
+/// root or in a private directory below one. Plain `cp` places a new file
+/// there under the same screen.
+pub(in crate::pretool) fn new_temporary_tree_target(
+    spelled: &str,
+    target: &Path,
+    context: PathContext<'_>,
+) -> bool {
+    Path::new(spelled).is_absolute()
+        && matches!(
+            target.symlink_metadata(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        )
+        && target
+            .to_str()
+            .is_some_and(|text| bounded_temporary_copy_target(text, context))
 }
 
 /// The operands cp receives once the shell expands `*` and `?` sources.
