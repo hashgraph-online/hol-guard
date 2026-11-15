@@ -286,13 +286,42 @@ fn working_directory_clean(
 /// `json.py` the filter would import, and no wrapper or `PATH` change picks
 /// another program. The same screen `creates_nothing` applies.
 fn quiet_version_probe(other: &crate::CommandSegmentV1) -> bool {
-    let text = ["2>&1", "2>/dev/null", ">/dev/null"]
-        .iter()
-        .fold(other.text.clone(), |text, quiet| text.replace(quiet, ""));
-    !text.contains('>')
-        && other.wrapper_chain.is_empty()
+    other.wrapper_chain.is_empty()
         && !other.path_overridden
+        && redirects_only_to_null_or_stdout(&other.text)
         && super::version_probes::lone_probe_segment(other)
+}
+
+/// Accept the spaced and compact shell spellings of a discard redirect,
+/// but never strip a substring from a different filename: `>/dev/nulljson.py`
+/// is a file write, not a redirect to the null device. A Python version
+/// probe followed by such a write can shadow an imported module.
+fn redirects_only_to_null_or_stdout(text: &str) -> bool {
+    let mut rest = text;
+    while let Some(position) = rest.find('>') {
+        let before = &rest[..position];
+        let tail = rest[position + 1..].trim_start_matches([' ', '\t']);
+        let suffix = if let Some(suffix) = tail.strip_prefix("/dev/null") {
+            suffix
+        } else if before.ends_with('2')
+            && before[..before.len() - 1]
+                .chars()
+                .last()
+                .is_some_and(char::is_whitespace)
+        {
+            let Some(suffix) = tail.strip_prefix("&1") else {
+                return false;
+            };
+            suffix
+        } else {
+            return false;
+        };
+        if suffix.chars().next().is_some_and(|next| !next.is_whitespace()) {
+            return false;
+        }
+        rest = suffix;
+    }
+    true
 }
 
 /// A producer such as `gh pr list --json` or `curl -s URL` that carries its
