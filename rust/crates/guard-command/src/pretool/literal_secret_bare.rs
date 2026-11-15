@@ -43,7 +43,6 @@ patterns! {
     HEX = r"^[0-9a-f]+$";
     SEQUENTIAL = r"(?i)0123|1234|2345|3456|4567|5678|6789|9876|8765|7654|6543|5432|4321|abcd|bcde|cdef|qwer|asdf";
     WORD_THEN_DIGITS = r"^(?:[A-Za-z]+[0-9]+|[0-9]+[A-Za-z]+)$";
-    METADATA_NAME = r"(?i)expir|_at$|ttl|time|stamp|issued|created|updated|max|min|limit|count|size|len|version|index|port|_id$";
     HASH_PLUGIN = r"(?i)^(?:mysql_native_password|caching_sha2_password|sha256_password|mysql_old_password)$";
     FILLER = r"(?i)x{3,}|\*{3,}|change_?me|example|dummy|fake|placeholder|redacted|password|secret|your";
 }
@@ -96,8 +95,42 @@ fn digit_secret(value: &str) -> bool {
     !SEQUENTIAL.is_match(value) && distinct >= 5 && !timestamp_like(value)
 }
 
+/// Recognize metadata from whole snake_case/camelCase name segments, not
+/// substrings of credential names (account, admin, support, runtime).
+fn metadata_segment(segment: &str) -> bool {
+    let lower = segment.to_ascii_lowercase();
+    lower.starts_with("expir")
+        || matches!(
+            lower.as_str(),
+            "ttl" | "time" | "timestamp" | "stamp" | "issued" | "created"
+                | "updated" | "max" | "min" | "limit" | "count" | "size"
+                | "len" | "length" | "version" | "index" | "port"
+        )
+}
+
+fn metadata_name(name: &str) -> bool {
+    let mut start = 0;
+    let mut previous: Option<char> = None;
+    for (index, current) in name.char_indices() {
+        let boundary = current == '_'
+            || (current.is_ascii_uppercase()
+                && previous.is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+        if boundary {
+            if start < index && metadata_segment(&name[start..index]) {
+                return true;
+            }
+            start = if current == '_' { index + 1 } else { index };
+        }
+        previous = Some(current);
+    }
+    let last = &name[start..];
+    metadata_segment(last)
+        || last.eq_ignore_ascii_case("at")
+        || last.eq_ignore_ascii_case("id")
+}
+
 fn named_digit_secret(found: &Captures) -> bool {
-    !METADATA_NAME.is_match(&found["n"]) && digit_secret(&found["v"])
+    !metadata_name(&found["n"]) && digit_secret(&found["v"])
 }
 
 fn api_id(value: &str) -> bool {
