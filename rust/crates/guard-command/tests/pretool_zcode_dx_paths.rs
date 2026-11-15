@@ -27,10 +27,7 @@ fn decide(tool: &str, input: serde_json::Value, home: &Path, cwd: &Path) -> Stri
     // under the home directory inspected by Guard.
     let path = std::env::var("PATH").unwrap_or_default();
     let home_text = home.to_string_lossy().into_owned();
-    let environment = BTreeMap::from([
-        ("HOME", home_text.clone()),
-        ("PATH", path.clone()),
-    ]);
+    let environment = BTreeMap::from([("HOME", home_text.clone()), ("PATH", path.clone())]);
     let execution = guard_contracts::GuardExecutionEnvironmentV1 {
         path,
         environment_names: environment.keys().map(|name| (*name).to_owned()).collect(),
