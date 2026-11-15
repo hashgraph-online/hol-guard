@@ -13296,6 +13296,125 @@
       "expect": "allow"
     },
     {
+      "id": "mkdir-parents-existing-private-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p ${PRIVATE_TMP}"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "mkdir-parents-existing-folder-in-private-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p ${PRIVATE_TMP}/agent-script"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-mkdir-parents-existing-temporary-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p ${PRIVATE_TMP}/notes.txt"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "rm-own-file-in-private-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm ${PRIVATE_TMP}/notes.txt"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "rm-force-own-files-in-private-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm -f ${PRIVATE_TMP}/p8.ts ${PRIVATE_TMP}/resume-phase1.mjs"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "rm-force-absent-temporary-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm -f /tmp/hg-gate-absent-scratch-output.log"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-rm-folder-in-private-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm ${PRIVATE_TMP}/agent-script"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-mkdir-home-deliverables",
       "fix_area": "queue",
       "harnesses": [

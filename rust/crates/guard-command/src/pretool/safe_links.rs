@@ -173,8 +173,65 @@ pub(super) fn safe_remove_arguments(arguments: &[String], context: super::PathCo
         operands += 1;
         if operands > 16
             || !(removable_regular_file(argument, context)
+                || removable_temporary_file(argument, context)
                 || super::directory_targets::sibling::removable_link(argument, context))
         {
+            return false;
+        }
+    }
+    operands > 0
+}
+
+/// An exact `rm [-f] [--] FILE...` whose every operand is the user's own
+/// scratch file in a temporary root, or a name that is not there.
+///
+/// Removing it loses nothing the user keeps: the same screen already lets
+/// `cp` and `touch` write that path. So, like a removal Git can restore, it
+/// matches neither the recursive-delete rule nor the destructive-shell rule.
+/// A folder, a link, a hard-linked or foreign file, a recursive flag, any
+/// shell expansion and any path outside the temporary roots keep both.
+pub(crate) fn temporary_file_removal(
+    model: &crate::CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    model.dialect == "posix"
+        && model.confidence == "exact"
+        && !model.path_overridden
+        && model.wrapper_chain.is_empty()
+        && matches!(model.segments.as_slice(), [segment] if temporary_removal_segment(segment, context))
+}
+
+fn temporary_removal_segment(
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    if segment.executable.as_deref() != Some("rm")
+        || segment.path_overridden
+        || segment.pipeline_index != 0
+        || !segment.wrapper_chain.is_empty()
+        || !segment.environment_names.is_empty()
+        || segment.text.contains([
+            '>', '<', '$', '`', '|', '&', ';', '\n', '\r', '~', '*', '?', '[', '{',
+        ])
+    {
+        return false;
+    }
+    let mut options = true;
+    let mut operands = 0;
+    for argument in &segment.arguments {
+        if options && argument == "--" {
+            options = false;
+            continue;
+        }
+        if options && (argument == "-f" || argument == "--force") {
+            continue;
+        }
+        if argument.starts_with('-') {
+            return false;
+        }
+        options = false;
+        operands += 1;
+        if operands > 16 || !removable_temporary_file(argument, context) {
             return false;
         }
     }
@@ -200,6 +257,20 @@ fn removable_regular_file(value: &str, context: super::PathContext<'_>) -> bool 
         .is_ok_and(|metadata| metadata.file_type().is_file())
         && existing_regular_read_target(value, context.home_dir, context.cwd)
         && bounded_file_write_target(value, context.home_dir, context.cwd)
+}
+
+/// A file the user owns, spelled absolutely in a temporary root or in a
+/// private directory below one, or a name that is not there: the screen `cp`
+/// clears to write the same path. `rm` then deletes only the user's own
+/// scratch file, or nothing. A link, a directory, a hard-linked file and
+/// another user's file keep their review.
+///
+/// Unix only: the Windows temporary screen admits a different root, and this
+/// change leaves Windows removals as they were.
+fn removable_temporary_file(value: &str, context: super::PathContext<'_>) -> bool {
+    cfg!(unix)
+        && std::path::Path::new(value).is_absolute()
+        && super::safe_writes::bounded_temporary_copy_target(value, context)
 }
 
 /// A session started in the home directory, or above it, has no workspace

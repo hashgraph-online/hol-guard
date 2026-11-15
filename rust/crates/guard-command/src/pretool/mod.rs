@@ -232,6 +232,7 @@ pub(crate) use restricted_test_commands::{manager_local_bin_arguments, manager_s
 mod rust_toolchain;
 mod rustfmt_writes;
 mod safe_links;
+pub(crate) use safe_links::temporary_file_removal;
 pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
