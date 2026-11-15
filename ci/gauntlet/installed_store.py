@@ -29,6 +29,12 @@ CLAUDE_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 #: The subcommand that marker travels with in a previous build's registration.
 CLAUDE_HOOK_BRIDGE_COMMAND = "claude-hook-bridge"
 
+#: The status message every Codex hook Guard wrote before its manifest carried.
+#: Guard attributes a pre-manifest Codex handler to itself by this message, and
+#: leaves a handler without it alone as a third party's, so a seed missing it
+#: would demand a removal the product rightly refuses.
+CODEX_LEGACY_STATUS_MESSAGE = "HOL Guard checking Bash command"
+
 
 def age_home(home: Path) -> dict[str, Any]:
     """Write the artifacts a previous Guard version would have left behind."""
@@ -69,9 +75,16 @@ def age_home(home: Path) -> dict[str, Any]:
                 "hooks": {
                     "PreToolUse": [
                         {
+                            "matcher": "Bash",
                             "hooks": [
-                                {"type": "command", "command": STALE_COMMAND, "args": ["hook", "--harness", "codex"]}
-                            ]
+                                {
+                                    "type": "command",
+                                    "command": STALE_COMMAND,
+                                    "args": ["hook", "--harness", "codex"],
+                                    "timeoutSec": 30,
+                                    "statusMessage": CODEX_LEGACY_STATUS_MESSAGE,
+                                }
+                            ],
                         }
                     ]
                 }

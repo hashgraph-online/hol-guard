@@ -35,7 +35,7 @@ from ci.gauntlet.installed_runtime import (
     isolated_environment,
     resolve_runtime,
 )
-from ci.gauntlet.installed_store import STALE_COMMAND
+from ci.gauntlet.installed_store import STALE_COMMAND, age_home
 
 
 @pytest.mark.parametrize(
@@ -313,6 +313,24 @@ def test_the_replay_cap_outlasts_every_registered_hook_timeout() -> None:
     # Codex registers PreToolUse at 125 s and holds a reviewed call for approval until
     # then; the lane must hear that hook's own deny rather than score it as a hang.
     assert installed_replay._REPLAY_TIMEOUT > 125
+
+
+def test_the_aged_codex_handler_is_one_guard_attributes_to_itself(tmp_path: Path) -> None:
+    """The seed must be a handler an older Guard wrote, not an unattributable third party's.
+
+    Guard leaves a Codex handler it cannot attribute to itself in place, so a seed the
+    product rightly keeps would fail the lane for honouring that boundary.
+    """
+
+    from codex_plugin_scanner.guard.codex_hook_registration import remove_unlaunchable_guard_hook_events
+
+    age_home(tmp_path)
+    hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+    remaining, changed = remove_unlaunchable_guard_hook_events(
+        hooks, legacy_status_messages={"HOL Guard checking Bash command"}, windows=False
+    )
+    assert changed is True
+    assert STALE_COMMAND not in json.dumps(remaining)
 
 
 def test_a_console_script_cannot_stand_in_for_the_frozen_bundle(tmp_path: Path) -> None:
