@@ -169,6 +169,26 @@ def prompt_answer_error(observation: dict[str, Any]) -> str | None:
     return None
 
 
+def stopped_prompt_reason(observations: object) -> str | None:
+    """The reason code of a well-formed Guard answer that stopped the case prompt, or ``None``.
+
+    The Pi and Oh My Pi extensions exit nonzero when Guard stops a headless prompt, so a
+    stopped prompt also ends the host process with an error. Naming the stop keeps the
+    judge from reporting it as a host or daemon lifecycle failure.
+    """
+    if not isinstance(observations, list):
+        return None
+    for observation in observations:
+        if (
+            is_prompt_answer(observation)
+            and observation.get("decision") != "allow"
+            and prompt_answer_error({**observation, "decision": "allow"}) is None
+        ):
+            reason = observation.get("reason_code")
+            return reason if isinstance(reason, str) and reason else "unnamed"
+    return None
+
+
 def guard_inventory(
     calls: list[dict[str, Any]],
     observations: list[dict[str, Any]],
