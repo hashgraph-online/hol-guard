@@ -163,7 +163,7 @@ pub(super) fn safe_remove_arguments(arguments: &[String], context: super::PathCo
             options = false;
             continue;
         }
-        if options && argument == "-f" {
+        if options && (argument == "-f" || argument == "--force") {
             continue;
         }
         if argument.starts_with('-') {
@@ -182,35 +182,81 @@ pub(super) fn safe_remove_arguments(arguments: &[String], context: super::PathCo
     operands > 0
 }
 
-/// An exact `rm [-f] [--] FILE...` whose every operand is the user's own
-/// scratch file in a temporary root, or a name that is not there.
+/// The segments of a command that are each an exact `rm [-f] [--] FILE...`
+/// whose every operand is the user's own scratch file in a temporary root, or
+/// a name that is not there.
 ///
-/// Removing it loses nothing the user keeps: the same screen already lets
-/// `cp` and `touch` write that path. So, like a removal Git can restore, it
-/// matches neither the recursive-delete rule nor the destructive-shell rule.
-/// A folder, a link, a hard-linked or foreign file, a recursive flag, any
-/// shell expansion and any path outside the temporary roots keep both.
-pub(crate) fn temporary_file_removal(
+/// Removing such a file loses nothing the user keeps: the same screen already
+/// lets `cp` and `touch` write that path. So, like a removal Git can restore,
+/// the segment matches neither the recursive-delete rule nor the
+/// destructive-shell rule. The proof is per segment, so the other steps of a
+/// compound keep every rule they match. A folder, a link, a hard-linked or
+/// foreign file, a recursive flag, any shell expansion and any path outside
+/// the temporary roots keep both rules.
+///
+/// The one redirect a segment may carry is a trailing `2>/dev/null` or
+/// `>/dev/null`, which hides the message for a name that was already gone and
+/// writes nothing.
+pub(crate) fn temporary_removal_segments(
+    model: &crate::CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> Vec<usize> {
+    if !removal_model(model) {
+        return Vec::new();
+    }
+    model
+        .segments
+        .iter()
+        .enumerate()
+        .filter(|(_, segment)| temporary_removal_segment(segment, context))
+        .map(|(index, _)| index)
+        .collect()
+}
+
+/// Whether every `rm` step of a command passes the temporary-file removal
+/// proof. It stops at the first step that fails and checks only `rm` steps,
+/// and a command of more than 16 steps is not proven at all, so asking once
+/// per step of a chain stays a small, bounded number of file checks.
+pub(crate) fn every_removal_temporary(
     model: &crate::CanonicalCommandV1,
     context: super::PathContext<'_>,
 ) -> bool {
+    removal_model(model)
+        && model.segments.len() <= 16
+        && model
+            .segments
+            .iter()
+            .filter(|segment| segment.executable.as_deref() == Some("rm"))
+            .all(|segment| temporary_removal_segment(segment, context))
+}
+
+fn removal_model(model: &crate::CanonicalCommandV1) -> bool {
     model.dialect == "posix"
         && model.confidence == "exact"
         && !model.path_overridden
         && model.wrapper_chain.is_empty()
-        && matches!(model.segments.as_slice(), [segment] if temporary_removal_segment(segment, context))
 }
 
 fn temporary_removal_segment(
     segment: &crate::CommandSegmentV1,
     context: super::PathContext<'_>,
 ) -> bool {
+    let text = ["2>/dev/null", ">/dev/null"]
+        .iter()
+        .find_map(|redirect| {
+            segment
+                .text
+                .strip_suffix(redirect)
+                .and_then(|rest| rest.strip_suffix(' '))
+        })
+        .unwrap_or(&segment.text);
     if segment.executable.as_deref() != Some("rm")
         || segment.path_overridden
         || segment.pipeline_index != 0
+        || !segment.execution_context.starts_with("top:")
         || !segment.wrapper_chain.is_empty()
         || !segment.environment_names.is_empty()
-        || segment.text.contains([
+        || text.contains([
             '>', '<', '$', '`', '|', '&', ';', '\n', '\r', '~', '*', '?', '[', '{',
         ])
     {
