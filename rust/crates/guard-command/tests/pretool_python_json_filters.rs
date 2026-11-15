@@ -102,6 +102,11 @@ fn a_lookup_of_the_interpreter_may_precede_the_filter() {
         format!("command -v python3 && {FILTER}"),
         format!("type -p python3; {version}"),
         format!("python3 --version && {version}"),
+        format!("python3 --version >/dev/null; {version}"),
+        format!("python3 --version > /dev/null; {version}"),
+        format!("python3 --version 2>/dev/null; {version}"),
+        format!("python3 --version 2> /dev/null; {version}"),
+        format!("python3 --version 2>&1; {version}"),
     ] {
         assert_eq!(action(&root, &command), "allow", "{command}");
     }
@@ -119,6 +124,10 @@ fn a_lookup_of_the_interpreter_may_precede_the_filter() {
         format!("python3 --version >json.py && {FILTER}"),
         format!("uv --version > json.py; {FILTER}"),
         format!("which python3 > json.py; {FILTER}"),
+        format!("python3 --version >/dev/nulljson.py; {FILTER}"),
+        format!("python3 --version > /dev/nulljson.py; {FILTER}"),
+        format!("python3 --version 2> /dev/nulljson.py; {FILTER}"),
+        format!("python3 --version > /dev/null > json.py; {FILTER}"),
     ] {
         assert_ne!(action(&root, &command), "allow", "{command}");
     }
