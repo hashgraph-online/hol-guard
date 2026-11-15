@@ -71,14 +71,11 @@ pub(in crate::pretool) fn removal_chain(
     if model.segments.len() < 2 || !super::plain_chain(model, &["mkdir", "touch", "rm"]) {
         return false;
     }
-    let proven = crate::pretool::temporary_removal_segments(model, context);
-    let removal = |segment: &CommandSegmentV1| segment.executable.as_deref() == Some("rm");
-    model.segments.iter().any(removal)
-        && model
-            .segments
-            .iter()
-            .enumerate()
-            .all(|(index, segment)| !removal(segment) || proven.contains(&index))
+    model
+        .segments
+        .iter()
+        .any(|segment| segment.executable.as_deref() == Some("rm"))
+        && crate::pretool::every_removal_temporary(model, context)
 }
 
 /// Git subcommands that read the repository or update only refs and

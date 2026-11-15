@@ -114,6 +114,8 @@ fn rm_of_the_users_own_temporary_files_is_bounded() {
             format!("rm {scratch}/probe.patch {absent} 2>/dev/null"),
             format!("mkdir -p {scratch}/next && rm -f {absent} 2>/dev/null; ls {scratch}/next"),
             format!("rm -f {absent} >/dev/null && echo cleared"),
+            format!("rm --force {scratch}/probe.patch"),
+            format!("mkdir -p {scratch}/next && rm --force {absent} 2>/dev/null"),
         ] {
             assert_eq!(
                 action(&fixture, harness, &command),

@@ -163,7 +163,7 @@ pub(super) fn safe_remove_arguments(arguments: &[String], context: super::PathCo
             options = false;
             continue;
         }
-        if options && argument == "-f" {
+        if options && (argument == "-f" || argument == "--force") {
             continue;
         }
         if argument.starts_with('-') {
@@ -201,11 +201,7 @@ pub(crate) fn temporary_removal_segments(
     model: &crate::CanonicalCommandV1,
     context: super::PathContext<'_>,
 ) -> Vec<usize> {
-    if model.dialect != "posix"
-        || model.confidence != "exact"
-        || model.path_overridden
-        || !model.wrapper_chain.is_empty()
-    {
+    if !removal_model(model) {
         return Vec::new();
     }
     model
@@ -215,6 +211,30 @@ pub(crate) fn temporary_removal_segments(
         .filter(|(_, segment)| temporary_removal_segment(segment, context))
         .map(|(index, _)| index)
         .collect()
+}
+
+/// Whether every `rm` step of a command passes the temporary-file removal
+/// proof. It stops at the first step that fails and checks only `rm` steps,
+/// and a command of more than 16 steps is not proven at all, so asking once
+/// per step of a chain stays a small, bounded number of file checks.
+pub(crate) fn every_removal_temporary(
+    model: &crate::CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    removal_model(model)
+        && model.segments.len() <= 16
+        && model
+            .segments
+            .iter()
+            .filter(|segment| segment.executable.as_deref() == Some("rm"))
+            .all(|segment| temporary_removal_segment(segment, context))
+}
+
+fn removal_model(model: &crate::CanonicalCommandV1) -> bool {
+    model.dialect == "posix"
+        && model.confidence == "exact"
+        && !model.path_overridden
+        && model.wrapper_chain.is_empty()
 }
 
 fn temporary_removal_segment(
