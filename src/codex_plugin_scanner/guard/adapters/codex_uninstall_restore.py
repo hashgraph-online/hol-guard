@@ -46,7 +46,18 @@ def _snapshot(config_path: Path) -> bytes:
 
 
 def _json_bytes(hooks_json_path: Path) -> bytes | None:
-    return read_config_bytes(hooks_json_path) if hooks_json_path.is_file() else None
+    """The hooks file's bytes, None when it is absent, or a stop when it exists and cannot be read."""
+
+    if not hooks_json_path.exists():
+        return None
+    try:
+        return hooks_json_path.read_bytes()
+    except OSError as exc:
+        raise RuntimeError(
+            f"codex_uninstall_config_unreadable: Guard could not read the Codex hooks file at {hooks_json_path}, "
+            "so it left the config and the install backup in place. Repair the file's permissions and run "
+            "`hol-guard uninstall codex` again."
+        ) from exc
 
 
 def _user_json_hooks(
