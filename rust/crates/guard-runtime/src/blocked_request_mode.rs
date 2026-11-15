@@ -129,7 +129,8 @@ const SAFE_ALTERNATIVE_GUIDANCE: &str = "This action remains blocked. Continue w
      the task, explain the limitation.";
 /// `_APPROVAL_WAIT`.
 const APPROVAL_WAIT: &str = "It is waiting for the user to approve it in the HOL Guard inbox \
-     (`hol-guard approvals`). Do not retry the same action until it is approved; continue with \
+     (`hol-guard approvals`). Allow once lets this exact action run one time; Always allow keeps \
+     allowing it until the user removes that choice. Do not retry the same action until it is approved; continue with \
      other work meanwhile.";
 /// `_NOT_QUEUED`.
 const NOT_QUEUED: &str = "No approval is waiting in HOL Guard for this action. Do not retry the \
@@ -380,6 +381,28 @@ mod tests {
                 "HOL Guard requires review because this command could not be confirmed read-only."
             ));
             assert_eq!(text.contains("Approve it in the HOL Guard inbox"), offered);
+        }
+    }
+
+    #[test]
+    fn a_waiting_review_says_what_each_approval_choice_covers() {
+        let scope = "Allow once lets this exact action run one time; Always allow keeps allowing \
+             it until the user removes that choice.";
+        // The two choices are named only where a one-time approval lets the retry run.
+        for (queued, reuses, exact, named) in [
+            (true, true, false, true),
+            (true, false, true, false),
+            (true, false, false, false),
+            (false, true, true, false),
+        ] {
+            let text = safe_alternative_reason_with_retry(
+                "Needs review.",
+                Some("native_network_review"),
+                Some(queued),
+                reuses,
+                exact,
+            );
+            assert_eq!(text.contains(scope), named, "{text}");
         }
     }
 
