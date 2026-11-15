@@ -21,7 +21,10 @@
 /// lines are data, when a quote or expansion never closes, and when a `case`
 /// pattern inside parentheses could unbalance them.
 /// A line that a trailing backslash joins to the one before is not a fresh
-/// line, so a `#` at its start is not taken as a comment either.
+/// line, so a `#` at its start is not taken as a comment either. Only spaces
+/// and tabs may come before it, as in bash: a carriage return is a word.
+/// A comment later on a line (`git status # "`) makes the scan give up, since
+/// bash reads quotes in it as text and this scan would pair them.
 pub(crate) fn mask_comment_lines(text: &str) -> Option<String> {
     if text.contains("<<") {
         return None;
@@ -35,10 +38,15 @@ pub(crate) fn mask_comment_lines(text: &str) -> Option<String> {
     // and still expands any `$(...)` in it.
     let mut open: Vec<char> = Vec::new();
     let mut line_start = true;
+    // Whether a word starts here: after a blank, `;|&()<>` or a newline.
+    let mut boundary = true;
     let mut masked = false;
     let mut index = 0;
     while index < characters.len() {
         let character = characters[index];
+        if open.is_empty() && boundary && character == '#' && !line_start {
+            return None;
+        }
         if open.is_empty() && line_start && character == '#' {
             // The newline goes too: the splitter reads an empty line as an
             // empty step, and the next line is still a fresh one.
@@ -66,15 +74,19 @@ pub(crate) fn mask_comment_lines(text: &str) -> Option<String> {
                 index += 1;
             }
             line_start = false;
+            boundary = false;
             continue;
         }
         if open.is_empty() && character == '\n' {
             line_start = true;
+            boundary = true;
             continue;
         }
-        if !character.is_whitespace() {
-            line_start = false;
-        }
+        line_start &= matches!(character, ' ' | '\t');
+        boundary = matches!(
+            character,
+            ' ' | '\t' | ';' | '|' | '&' | '(' | ')' | '<' | '>'
+        );
         let next = characters.get(index).copied();
         match (open.last().copied(), character) {
             (Some('"'), '"')

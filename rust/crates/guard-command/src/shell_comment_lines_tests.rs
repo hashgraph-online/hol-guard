@@ -75,3 +75,16 @@ fn heredocs_continuations_and_open_quotes_are_not_read() {
         assert_eq!(masked(text), None, "{text:?}");
     }
 }
+
+#[test]
+fn a_comment_later_on_a_line_or_after_a_carriage_return_is_not_read() {
+    for text in [
+        // Bash reads the first comment's quote as text, so `$(...)` runs.
+        "echo ok # \"\necho \"\n# $(touch x)\necho \" # \"\necho done",
+        "# note\ngit status # a",
+        "# note\ntrue;# a",
+        "gh api user\n\r# note; rm -rf victim\ngh api user",
+    ] {
+        assert_eq!(masked(text), None, "{text:?}");
+    }
+}
