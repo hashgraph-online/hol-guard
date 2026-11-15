@@ -187,7 +187,7 @@ pub fn mask_shell_comments(command: &str) -> String {
                 continue;
             }
             '#' if word_start
-                && (statement_start || chars.get(index + 1).is_none_or(|c| c.is_whitespace())) =>
+                && (statement_start || chars.get(index + 1).is_none_or(|c| shell_blank(*c))) =>
             {
                 while chars.get(index).is_some_and(|value| *value != '\n') {
                     chars[index] = ' ';
@@ -207,14 +207,20 @@ pub fn mask_shell_comments(command: &str) -> String {
             }
             _ => {}
         }
-        word_start = ch.is_whitespace() || matches!(ch, ';' | '&' | '|');
-        statement_start = matches!(ch, ';' | '\n') || statement_start && ch.is_whitespace();
+        word_start = shell_blank(ch) || matches!(ch, ';' | '&' | '|');
+        statement_start = matches!(ch, ';' | '\n') || statement_start && shell_blank(ch);
         index += 1;
     }
     if closer.is_some() {
         return command.to_owned();
     }
     chars.into_iter().collect()
+}
+
+/// A blank that ends a shell word. A carriage return or a Unicode space
+/// (`\u{a0}`) is part of the word in `bash`, so it opens no comment.
+fn shell_blank(ch: char) -> bool {
+    matches!(ch, ' ' | '\t' | '\n')
 }
 
 /// Heredocs declared on the current line of a `$(` body, whose bodies start

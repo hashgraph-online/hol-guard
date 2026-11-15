@@ -422,6 +422,8 @@ fn a_hash_that_opens_no_comment_is_kept() {
         "echo a\\\n#x; rm y",
         "ls \\\n#x; rm y",
         "agi-memory delete #3 --hard",
+        "ls \u{a0}#; rm y",
+        "echo ok\r#; rm y",
         "echo 'a # b'; rm y",
         "echo \"a # b\"; rm y",
         "echo $'a\\'b # x'; rm y",
