@@ -10,6 +10,7 @@ a refusal.
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Literal
@@ -113,6 +114,31 @@ def repair_proof_matches(payload: Mapping[str, object], proof: Mapping[str, obje
     return matches
 
 
+def build_hook_manifest(
+    spec: Mapping[str, object],
+    hook_key: HookKey,
+    *,
+    previous_manifest: Mapping[str, object] | None,
+    package_roots: list[str],
+) -> dict[str, object]:
+    """The runtime builds the Codex hook manifest `spec` describes and signs it."""
+
+    request: dict[str, object] = {
+        "op": "manifest_build",
+        "key_home": os.path.abspath(hook_key.guard_home),
+        "key_id": hook_key.key_id,
+        "installation_id": hook_key.installation_id,
+        "spec": dict(spec),
+        "package_roots": package_roots,
+    }
+    if previous_manifest is not None:
+        request["manifest"] = dict(previous_manifest)
+    manifest = _call(request).get("manifest")
+    if not isinstance(manifest, dict):
+        raise AuthorityRecordRefusedError(RUNTIME_UNAVAILABLE)
+    return manifest
+
+
 def _ask(op: str, kind: RecordKind, hook_key: HookKey, request: dict[str, object]) -> dict[str, object]:
     return _call(
         {
@@ -160,6 +186,7 @@ def _call(request: dict[str, object]) -> dict[str, object]:
 __all__ = [
     "RUNTIME_UNAVAILABLE",
     "AuthorityRecordRefusedError",
+    "build_hook_manifest",
     "check_receipt_manifest",
     "hook_key_answer",
     "open_authority_record",

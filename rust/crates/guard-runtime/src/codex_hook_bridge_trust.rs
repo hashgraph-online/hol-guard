@@ -26,10 +26,9 @@ use super::{decode_config_argument, BRIDGE_COMMAND, STATE_FILE};
 use crate::codex_hook_key::read_matching;
 use crate::local_authority_integrity_op::verify;
 
-#[path = "codex_hook_bridge_trust_files.rs"]
-mod files;
-
-use files::{canonical, verify_executable, verify_regular};
+use crate::codex_hook_bridge_trust_files::{
+    self as files, canonical, verify_executable, verify_regular,
+};
 
 const UNAUTHENTICATED: &str = "codex_hook_launch_unauthenticated";
 const MANIFEST_SCHEMA_VERSION: i64 = 2;

@@ -1118,9 +1118,9 @@
    "verdict": "windows-equivalent",
    "note": "Windows has no POSIX owner or mode bits. The Python launcher this replaces skipped the same check off POSIX; the manifest still has to carry a valid HMAC from the owner-only key in the private Guard home.",
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_trust_files.rs",
-   "item": "pub(super) fn private_to_owner(_metadata: &fs::Metadata) -> Result<(), Private>",
+   "item": "pub(crate) fn private_to_owner(_metadata: &fs::Metadata) -> Result<(), Private>",
    "cfg": "not(unix)",
-   "body": "e0c626948f8e"
+   "body": "0e61ccd521a6"
   },
   {
    "verdict": "windows-equivalent",
@@ -1134,17 +1134,17 @@
    "verdict": "windows-equivalent",
    "note": "Windows has no numeric uid; the identity check skips the owner comparison exactly as the Python verifier did without `os.getuid`.",
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_trust_files.rs",
-   "item": "fn current_uid() -> Option<u32>",
+   "item": "pub(crate) fn current_uid() -> Option<u32>",
    "cfg": "not(unix)",
-   "body": "43e9f362db32"
+   "body": "e328c4c48e79"
   },
   {
    "verdict": "windows-equivalent",
    "note": "The group-write question is only asked for POSIX modes, so this arm is unreachable on Windows; it refuses if ever reached.",
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_trust_files.rs",
-   "item": "fn private_group(_question: &Value) -> bool",
+   "item": "pub(crate) fn private_group(_question: &Value) -> bool",
    "cfg": "not(unix)",
-   "body": "be784b5d0f44"
+   "body": "d6d23a5cd047"
   },
   {
    "verdict": "windows-equivalent",
@@ -1158,9 +1158,9 @@
    "verdict": "windows-equivalent",
    "note": "Windows has no execute bit; existence of the recorded invocation path matches Python's `os.access(X_OK)` result on Windows. The target file hash is still verified.",
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_trust_files.rs",
-   "item": "fn executable(path: &Path) -> bool",
+   "item": "pub(crate) fn executable(path: &Path) -> bool",
    "cfg": "not(unix)",
-   "body": "2d392d8ec24d"
+   "body": "83ab4ae09a42"
   },
   {
    "verdict": "windows-equivalent",
@@ -1217,6 +1217,38 @@
    "item": "fn sync_directory(_directory: &Path) -> io::Result<()>",
    "cfg": "not(unix)",
    "body": "e88822ef3716"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows files carry no POSIX owner or group, so the ownership and group-write rules are skipped exactly as `validate_regular_file` skips them off POSIX. The file is still opened once without following a reparse point, refused unless regular, and its size and SHA-256 are recorded and signed.",
+   "file": "rust/crates/guard-runtime/src/codex_hook_manifest_build.rs",
+   "item": "fn describe_regular -- cfg! expression",
+   "cfg": "unix",
+   "body": "f8ebf852709a"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no numeric owner; `describe_executable_file` skipped the same owner check off POSIX. The invocation must still exist, resolve to a regular file, and that target is described and hashed under the manifest signature.",
+   "file": "rust/crates/guard-runtime/src/codex_hook_manifest_build.rs",
+   "item": "fn describe_executable -- cfg! expression",
+   "cfg": "unix",
+   "body": "ff11c2ac4691"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Python's Windows `stat_result.st_uid` is 0, so the recorded owner stays byte-identical to manifests written by earlier releases; the verifier never compares it off POSIX.",
+   "file": "rust/crates/guard-runtime/src/codex_hook_manifest_build.rs",
+   "item": "fn invocation_owner(_metadata: &fs::Metadata) -> u32",
+   "cfg": "not(unix)",
+   "body": "91be86534be6"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Records the mode Python's `os.lstat` reports on Windows (read-only attribute plus execute bits for runnable extensions), the same spelling the file identity verifier compares.",
+   "file": "rust/crates/guard-runtime/src/codex_hook_manifest_build.rs",
+   "item": "fn invocation_mode(path: &Path, metadata: &fs::Metadata) -> u32",
+   "cfg": "not(unix)",
+   "body": "1d78b89be91d"
   },
   {
    "file": "rust/crates/guard-runtime/src/codex_thread_continue_op.rs",

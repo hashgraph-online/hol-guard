@@ -158,6 +158,8 @@ struct Request {
     now_monotonic: Option<f64>,
     proof: Option<Map<String, Value>>,
     manifest: Option<Map<String, Value>>,
+    spec: Option<Map<String, Value>>,
+    package_roots: Option<Vec<String>>,
 }
 
 struct Secret {
@@ -187,6 +189,16 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         "seal" => seal(&request)?,
         "open" => open(&request)?,
         "receipt_manifest" => receipt_manifest(&request)?,
+        "manifest_build" => match secret(&request)? {
+            Ok(held) => crate::codex_hook_manifest_build::answer(
+                request.spec.as_ref().ok_or_else(invalid)?,
+                request.manifest.as_ref(),
+                request.package_roots.as_deref().unwrap_or_default(),
+                &held.key,
+                (&held.key_id, &held.installation_id),
+            ),
+            Err(reason) => refused(reason),
+        },
         op @ ("key_identity" | "key_ensure" | "key_remove_if_unused") => {
             let guard_home = request.guard_home.as_deref().ok_or_else(invalid)?;
             codex_hook_key::answer(op, guard_home).ok_or_else(invalid)?

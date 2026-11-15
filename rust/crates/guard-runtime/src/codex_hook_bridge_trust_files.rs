@@ -9,14 +9,14 @@ use serde_json::Value;
 use crate::codex_hook_file_identity_op::{identity_answer, IdentityAsk};
 
 /// Why a file is not private to the current user.
-pub(super) enum Private {
+pub(crate) enum Private {
     Owner,
     Mode,
 }
 
 /// `Path.resolve(strict=False)`: links resolved in the longest existing
 /// prefix, the missing tail appended as written.
-pub(super) fn canonical(path: &Path) -> PathBuf {
+pub(crate) fn canonical(path: &Path) -> PathBuf {
     let mut existing = path;
     let mut tail = Vec::new();
     loop {
@@ -58,7 +58,7 @@ fn plain(path: PathBuf) -> PathBuf {
 
 /// A file only its owner may read or write, owned by the current user.
 #[cfg(unix)]
-pub(super) fn private_to_owner(metadata: &fs::Metadata) -> Result<(), Private> {
+pub(crate) fn private_to_owner(metadata: &fs::Metadata) -> Result<(), Private> {
     use std::os::unix::fs::MetadataExt;
     if metadata.uid() != nix::unistd::getuid().as_raw() {
         return Err(Private::Owner);
@@ -70,7 +70,7 @@ pub(super) fn private_to_owner(metadata: &fs::Metadata) -> Result<(), Private> {
 }
 
 #[cfg(not(unix))]
-pub(super) fn private_to_owner(_metadata: &fs::Metadata) -> Result<(), Private> {
+pub(crate) fn private_to_owner(_metadata: &fs::Metadata) -> Result<(), Private> {
     Ok(())
 }
 
@@ -84,17 +84,17 @@ fn ask_for(canonical_path: Option<&str>) -> IdentityAsk<'_> {
 }
 
 #[cfg(unix)]
-fn current_uid() -> Option<u32> {
+pub(crate) fn current_uid() -> Option<u32> {
     Some(nix::unistd::getuid().as_raw())
 }
 
 #[cfg(not(unix))]
-fn current_uid() -> Option<u32> {
+pub(crate) fn current_uid() -> Option<u32> {
     None
 }
 
 /// `verify_regular_file_identity`, reason codes included.
-pub(super) fn verify_regular(identity: &Value) -> Result<(), String> {
+pub(crate) fn verify_regular(identity: &Value) -> Result<(), String> {
     let spelled = identity
         .get("path")
         .and_then(Value::as_str)
@@ -116,7 +116,7 @@ pub(super) fn verify_regular(identity: &Value) -> Result<(), String> {
 /// is the owner's own: their primary group, named after them, and listing
 /// no one else.
 #[cfg(unix)]
-fn private_group(question: &Value) -> bool {
+pub(crate) fn private_group(question: &Value) -> bool {
     use nix::unistd::{Gid, Group, Uid, User};
     let number = |name: &str| {
         question
@@ -139,13 +139,13 @@ fn private_group(question: &Value) -> bool {
 }
 
 #[cfg(not(unix))]
-fn private_group(_question: &Value) -> bool {
+pub(crate) fn private_group(_question: &Value) -> bool {
     false
 }
 
 /// `verify_executable_file_identity`: the recorded invocation path, link and
 /// mode, and the regular file it resolves to.
-pub(super) fn verify_executable(identity: &Value) -> Result<(), String> {
+pub(crate) fn verify_executable(identity: &Value) -> Result<(), String> {
     let role = identity
         .get("role")
         .and_then(Value::as_str)
@@ -223,11 +223,11 @@ fn invocation_facts(
 }
 
 #[cfg(unix)]
-fn executable(path: &Path) -> bool {
+pub(crate) fn executable(path: &Path) -> bool {
     nix::unistd::access(path, nix::unistd::AccessFlags::X_OK).is_ok()
 }
 
 #[cfg(not(unix))]
-fn executable(path: &Path) -> bool {
+pub(crate) fn executable(path: &Path) -> bool {
     path.exists()
 }

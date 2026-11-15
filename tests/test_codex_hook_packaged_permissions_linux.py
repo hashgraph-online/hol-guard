@@ -149,13 +149,24 @@ def test_non_package_bridge_still_rejects_group_write_even_for_private_group(
     assert error.value.reason == "codex_hook_bridge_permissions_unsafe"
 
 
+def _owner_group_is_private() -> bool:
+    import grp
+    import pwd
+
+    user = pwd.getpwuid(os.getuid())
+    group = grp.getgrgid(user.pw_gid)
+    return group.gr_name == user.pw_name and all(member == user.pw_name for member in group.gr_mem)
+
+
 def test_manifest_build_accepts_private_group_pipx_style_packaged_files(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """The native builder trusts group write in a package root only when the
+    owner's primary group is private; it reads the real group database, so the
+    expectation follows the account running the test."""
     package_root = _package_root(tmp_path)
     _trust_package_root(monkeypatch, package_root)
-    monkeypatch.setattr(integrity, "_owner_is_only_group_member", lambda owner_uid, group_gid: True)
     home_dir = tmp_path / "home"
     guard_home = home_dir / ".hol-guard"
     config_path = home_dir / ".codex" / "config.toml"
@@ -187,21 +198,26 @@ def test_manifest_build_accepts_private_group_pipx_style_packaged_files(
         path.chmod(0o664)
         packaged_files.append((role, path))
 
-    manifest = build_authenticated_hook_manifest(
-        CodexHookManifestSpec(
-            guard_home=guard_home,
-            home_dir=home_dir,
-            runtime_guard_home=guard_home,
-            workspace_dir=None,
-            config_path=config_path,
-            interpreter_path=interpreter,
-            package_version="test",
-            packaged_file_paths=tuple(packaged_files),
-            fallback_argv=(str(interpreter), "-c", "pass"),
-            daemon_start_argv=(str(interpreter), "-c", "pass"),
-            event_bindings=(),
-        )
+    spec = CodexHookManifestSpec(
+        guard_home=guard_home,
+        home_dir=home_dir,
+        runtime_guard_home=guard_home,
+        workspace_dir=None,
+        config_path=config_path,
+        interpreter_path=interpreter,
+        package_version="test",
+        packaged_file_paths=tuple(packaged_files),
+        fallback_argv=(str(interpreter), "-c", "pass"),
+        daemon_start_argv=(str(interpreter), "-c", "pass"),
+        event_bindings=(),
     )
+
+    if not _owner_group_is_private():
+        with pytest.raises(CodexHookIntegrityError) as error:
+            build_authenticated_hook_manifest(spec)
+        assert error.value.reason == "codex_hook_bridge_permissions_unsafe"
+        return
+    manifest = build_authenticated_hook_manifest(spec)
 
     identities = manifest["packaged_files"]
     assert isinstance(identities, list)

@@ -11,22 +11,18 @@ import hashlib
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .codex_hook_compatibility import compatible_bridge_argv_hashes, retained_bridge_generations
+from . import codex_hook_file_integrity as file_integrity
 from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_file_integrity import (
     CodexHookIntegrityError,
     canonical_path,
     check_hook_validation_deadline,
-    describe_executable_file,
-    describe_regular_file,
     validate_regular_file,
 )
 from .codex_hook_integrity import (
-    HOOK_MANIFEST_SCHEMA_VERSION,
     authenticate_hook_manifest_text,
     canonical_manifest_bytes,
     hook_authority_receipt_path,
@@ -35,7 +31,6 @@ from .codex_hook_integrity import (
     load_authenticated_hook_manifest,
     load_hook_secret,
     load_or_create_hook_secret,
-    sign_hook_manifest,
 )
 from .codex_hook_package_identity import (
     assert_package_reauthentication_is_safe as assert_package_reauthentication_is_safe,
@@ -81,49 +76,47 @@ def build_authenticated_hook_manifest(
     previous_manifest: Mapping[str, object] | None = None,
     create_key: bool = True,
 ) -> dict[str, object]:
+    """The runtime describes every file of `spec` and signs the manifest."""
+    from .codex_hook_authority_record import AuthorityRecordRefusedError, build_hook_manifest
+
     secret = load_or_create_hook_secret(spec.guard_home) if create_key else load_hook_secret(spec.guard_home)
-    interpreter = describe_executable_file(spec.interpreter_path, role="interpreter")
-    packaged_files = [
-        describe_regular_file(path, role=role, executable_required=False) for role, path in spec.packaged_file_paths
-    ]
-    packaged_by_role = {
-        identity.get("role"): identity for identity in packaged_files if isinstance(identity.get("role"), str)
-    }
-    transport = {role: packaged_by_role.get(role) for role in _TRANSPORT_PACKAGE_ROLES}
-    if any(not isinstance(identity, dict) for identity in transport.values()) or len(packaged_by_role) != len(
-        spec.packaged_file_paths
-    ):
-        raise CodexHookIntegrityError(
-            "codex_hook_manifest_packaged_files_invalid",
-            "Guard cannot authenticate an incomplete Codex hook package identity.",
+    check_hook_validation_deadline()
+    try:
+        return build_hook_manifest(
+            _spec_payload(spec),
+            secret,
+            previous_manifest=previous_manifest,
+            package_roots=[str(root) for root in file_integrity._python_package_roots()],
         )
-    generated_at = datetime.now(timezone.utc).isoformat()
-    unsigned_manifest: dict[str, object] = {
-        "config": {"scope": "global", "target": canonical_path(spec.config_path)},
-        "compatible_bridge_argv_sha256": compatible_bridge_argv_hashes(previous_manifest),
-        "retained_bridge_generations": retained_bridge_generations(previous_manifest),
-        "context": _expected_context(spec),
-        "daemon_start": {
-            "argv": list(spec.daemon_start_argv),
-            "interpreter": interpreter,
-            "package_roles": ["daemon_entrypoint", "daemon_manager"],
-        },
-        "events": [dict(binding) for binding in spec.event_bindings],
-        "fallback": {
-            "argv": list(spec.fallback_argv),
-            "interpreter": interpreter,
-            "package_roles": ["fallback_entrypoint"],
-        },
-        "generated_at": generated_at,
-        "harness": "codex",
-        "installation_id": secret.installation_id,
-        "interpreter": interpreter,
+    except AuthorityRecordRefusedError as exc:
+        if exc.reason in {"runtime_unavailable", "invalid"}:
+            raise CodexHookIntegrityError(
+                "codex_hook_manifest_verification_unavailable",
+                "Guard's native runtime did not build the Codex hook manifest; run `hol-guard repair`.",
+            ) from exc
+        raise CodexHookIntegrityError(
+            exc.reason,
+            "Guard cannot authenticate the Codex hook installation; repair the installation.",
+        ) from exc
+
+
+def _spec_payload(spec: CodexHookManifestSpec) -> dict[str, object]:
+    def spelled(path: Path) -> str:
+        return str(path.expanduser())
+
+    return {
+        "guard_home": spelled(spec.guard_home),
+        "home_dir": spelled(spec.home_dir),
+        "runtime_guard_home": spelled(spec.runtime_guard_home),
+        "workspace_dir": spelled(spec.workspace_dir) if spec.workspace_dir is not None else None,
+        "config_path": spelled(spec.config_path),
+        "interpreter_path": str(spec.interpreter_path.expanduser().absolute()),
         "package_version": spec.package_version,
-        "packaged_files": packaged_files,
-        "schema_version": HOOK_MANIFEST_SCHEMA_VERSION,
-        "transport": {**transport, "wrapper": None},
+        "packaged_file_paths": [[role, spelled(path)] for role, path in spec.packaged_file_paths],
+        "fallback_argv": list(spec.fallback_argv),
+        "daemon_start_argv": list(spec.daemon_start_argv),
+        "event_bindings": [dict(binding) for binding in spec.event_bindings],
     }
-    return sign_hook_manifest(unsigned_manifest, secret)
 
 
 @dataclass(frozen=True, slots=True)
