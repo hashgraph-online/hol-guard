@@ -277,6 +277,8 @@ pub(crate) fn run(args: &[String]) -> i32 {
             return EXIT_STATE;
         }
     };
+    // Each start step is journaled, so a slow cold start names the step that spent it.
+    super::lifecycle::record(&home, "published", None, None, Some(port));
     let reads = Arc::new(NativeReads::new(None));
     reads.mark_standalone();
     if let Some(state) = crate::daemon_policy_authority::load_authenticated_daemon_state(&home) {
@@ -293,6 +295,7 @@ pub(crate) fn run(args: &[String]) -> i32 {
         // Guard-owned hooks and launchers are brought in line with this
         // runtime before the daemon reports ready, as its start always did.
         workers::reconcile_artifacts(&reads, config.user_home.as_deref());
+        super::lifecycle::record(&home, "reconciled", None, None, None);
         workers::start(
             &reads,
             workers::Registration {
@@ -308,7 +311,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
                 .map(std::time::Duration::from_secs_f64),
         );
     }
+    super::lifecycle::record(&home, "workers_started", None, None, None);
     warm_hook_worker(&reads, port, pid);
+    super::lifecycle::record(&home, "hook_worker_warmed", None, None, None);
     if config.workers {
         resident_prewarm::prewarm_resident(&home);
     }
