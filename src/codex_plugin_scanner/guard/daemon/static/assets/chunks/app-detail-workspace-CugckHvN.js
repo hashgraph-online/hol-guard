@@ -1,6 +1,6 @@
 import { r as reactExports, t as harnessDisplayName, cb as fetchSettings, ed as runHarnessAction, ee as GuardHarnessActionError, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, ef as HiMiniRocketLaunch, ae as HiMiniShieldCheck, k as HiMiniArrowPath, s as formatRelativeTime, ar as HiMiniExclamationTriangle, G as HiMiniCheckCircle, eg as HiMiniTrash, aY as ApprovalProofModal, by as isGuardDemoMode, eh as fetchGuardApi, ei as formatHarnessCommand, bd as HiMiniAdjustmentsHorizontal, aP as appModesNote, ej as appModes, ek as fetchApprovalPage, el as fetchPolicy, ag as guardActionDisposition, a6 as protectionHealthFor, a5 as useProtectionPresentationState, bO as HiMiniArrowLeft, q as HiMiniChevronRight, aT as GuardHero, aU as ProofStrip, em as appSetupTarget, bC as HiMiniHome, as as HiMiniBolt, en as guardActionPresentation, at as Badge, eo as DEFAULT_FILTER_STATE, ep as filterEvidence, eq as sortEvidence, er as computeMetrics, es as CommandActivityWorkspace, al as EmptyState, et as EvidenceFilterBar, eu as EvidenceInsightStrip, ev as EvidenceActionList, ew as EvidenceActionDetail, ap as useFocusTrap, ex as policyIdentityKey, an as HiMiniCloud, T as Tag, aS as HiMiniXCircle, ey as clearLabelForScope, ez as HiMiniChartBar } from "../guard-dashboard.js";
 import { s as setupActionErrorMessage } from "./harness-action-errors-7RhsXctt.js";
-import { u as useFleetAppPosture, c as versionCheckUnsupported, e as versionReasonCopy, H as HarnessVersionLabel, f as refreshVersionCompatibility, g as acknowledgeUntestedVersion, h as clearVersionAcknowledgement, p as protectionStateLabel, j as protectionStateTone, k as eventReasonCopy, a as useHarnessDetection, b as versionCompatibilityFor, l as isHarnessDetected } from "./harness-version-label-CWsRbpOF.js";
+import { u as useFleetAppPosture, c as versionCheckUnsupported, e as versionReasonCopy, H as HarnessVersionLabel, f as refreshVersionCompatibility, g as acknowledgeUntestedVersion, h as clearVersionAcknowledgement, p as protectionStateLabel, j as protectionStateTone, k as eventReasonCopy, l as eventProtectionName, a as useHarnessDetection, b as versionCompatibilityFor, m as isHarnessDetected } from "./harness-version-label-AB6tUYQg.js";
 import "./settings-save-proof-modal-D5T3JAnf.js";
 function HarnessSetupPanel(props) {
   const [setupState, setSetupState] = reactExports.useState({ kind: "idle" });
@@ -461,8 +461,9 @@ function ProtectionProof({ compatibility }) {
     ] }),
     compatibility.eventStates.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 divide-y divide-slate-100 rounded-lg border border-slate-100 text-sm", children: compatibility.eventStates.map((item) => {
       const why = eventReasonCopy(item.reason);
-      const repeated = compatibility.eventStates.filter((other) => other.event === item.event).length > 1;
-      const name = repeated && item.transport ? `${item.event} (${item.transport})` : item.event;
+      const base = eventProtectionName(item);
+      const repeated = compatibility.eventStates.filter((other) => eventProtectionName(other) === base).length > 1;
+      const name = repeated && item.transport ? `${base} (${item.transport})` : base;
       return /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "li",
         {
@@ -481,7 +482,7 @@ function ProtectionProof({ compatibility }) {
             ] })
           ]
         },
-        `${item.event}:${item.transport ?? ""}`
+        `${base}:${item.transport ?? ""}`
       );
     }) }) : null
   ] });

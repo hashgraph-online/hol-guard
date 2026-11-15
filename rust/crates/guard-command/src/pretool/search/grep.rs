@@ -366,6 +366,9 @@ fn scan_into(
             scan.targets.push(argument.clone());
             let proven = recursive
                 || proven_glob(argument, context)
+                // Without `-r` grep opens each match once, as `cat` would.
+                || ((!argument.starts_with('~') || context.shell_home_matches)
+                    && crate::pretool::safe_reads::glob_file_matches(argument, context).is_some())
                 || sibling::named_path(argument, context, absent.plain)
                 || (absent.plain && absent_target(argument, context));
             if !proven && unsafe_search_value(SearchValueRole::Path, argument, context) {
@@ -476,8 +479,7 @@ fn recursive_targets_proven(
 /// declared one, so a `~` root is proven absent only once `shell_home_matches`
 /// says the two name one directory. Without that, the search could open a tree
 /// that is there under the shell's home while the proof measured a name that
-/// is not there under the declared one. The recursive listing screen draws the
-/// same line.
+/// is not there under the declared one. The recursive listing screen agrees.
 pub(super) fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
     (!value.starts_with('~') || context.shell_home_matches)
         && crate::pretool::listing_reads::absent_listing_operand(value, context)

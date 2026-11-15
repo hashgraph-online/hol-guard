@@ -26,6 +26,15 @@ work from them instead of reading those lines again. When you can, make the edit
 in the same turn: one exec script can call apply_patch and then run the test command, as two tool \
 calls. Make edits with apply_patch, not with a shell or Python script that writes files.";
 
+/// Oh My Pi models open a todo list for most steps, often in a turn of its
+/// own, and read again lines a note already shows. Oh My Pi drops a note when
+/// the agent is busy, so Guard cannot tell whether an earlier one was shown,
+/// and this short hint goes with every note.
+const SKIP_THE_LIST: &str = "The code and diffs in this note are what the files hold now: \
+work from them instead of reading those lines again. For a fix that takes one or two edits, skip \
+the todo list and go straight to the edit and its check. Tool calls that do not depend on each \
+other can go out together in one response.";
+
 /// Ends a note Guard added to this prompt with how to spend fewer turns on
 /// it, worded for the harness; a prompt Guard added nothing to gets nothing.
 /// The first note of a session carries it, and the conversation keeps it, so
@@ -39,6 +48,7 @@ pub(super) fn end_note(
     let ending = match harness {
         "claude-code" => BATCHING,
         "codex" => ACT_ON_IT,
+        "omp" => SKIP_THE_LIST,
         _ => return,
     };
     let hint = seen::hint();

@@ -29,7 +29,8 @@
 //!   which is the one place the agent writes.
 //! * The resolved file still carries the basename the command spelled. An
 //!   installer's `bin` entry is routinely a link into the version it unpacked,
-//!   and that link keeps the program's name; a link that renames some other
+//!   and that link keeps the program's name, or that name with a version
+//!   suffix (`python3` to `python3.14`); a link that renames some other
 //!   program into `kubectl` does not.
 //!
 //! This proves only which file the word names. The basename still decides
@@ -91,7 +92,11 @@ pub(super) fn installed_program(
     let Ok(resolved) = std::fs::canonicalize(&named) else {
         return false;
     };
-    if !executable_file(&resolved) || resolved.file_name() != Some(program) {
+    if !executable_file(&resolved)
+        || !resolved
+            .file_name()
+            .is_some_and(|name| same_program(name, program))
+    {
         return false;
     }
     if !super::read_paths::resolved_location_allowed(
@@ -107,6 +112,25 @@ pub(super) fn installed_program(
     };
     let workspace = nearest_checkout(&cwd).unwrap_or(cwd);
     !binaries.starts_with(&workspace) && !resolved.starts_with(&workspace)
+}
+
+/// The resolved name is the spelled one, or the spelled one with a version
+/// suffix such as `python3` resolving to `python3.14`: Homebrew and framework
+/// installs link the short name to the versioned file of the same program.
+fn same_program(resolved: &std::ffi::OsStr, spelled: &std::ffi::OsStr) -> bool {
+    let (Some(resolved), Some(spelled)) = (resolved.to_str(), spelled.to_str()) else {
+        return resolved == spelled;
+    };
+    resolved == spelled
+        || resolved
+            .strip_prefix(spelled)
+            .and_then(|suffix| suffix.strip_prefix('.'))
+            .is_some_and(|version| {
+                version.split('.').count() <= 3
+                    && version
+                        .split('.')
+                        .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+            })
 }
 
 /// The checkout the command runs in, so a `bin` the session wrote beside its
