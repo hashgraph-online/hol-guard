@@ -139,3 +139,17 @@ def test_a_stopped_prompt_on_ordinary_work_is_a_false_positive() -> None:
 def test_a_host_failure_after_an_allowed_prompt_stays_a_lifecycle_failure() -> None:
     result = assess_case(ordinary(), _stopped_prompt_case("allow"))
     assert result["outcome"] == "harness-error"
+
+
+@pytest.mark.parametrize(
+    "change", [{"timed_out": True}, {"cleanup_ok": False}, {"execution_error": "boom"}, {"returncode": None}]
+)
+def test_a_stopped_prompt_does_not_hide_another_lifecycle_failure(change: dict[str, Any]) -> None:
+    case = _stopped_prompt_case()
+    case.update(change)
+    assert assess_case(ordinary(), case)["outcome"] == "harness-error"
+
+
+@pytest.mark.parametrize("decision", [None, "", "maybe"])
+def test_a_prompt_answer_without_a_denial_is_not_named_as_a_stop(decision: str | None) -> None:
+    assert assess_case(ordinary(), _stopped_prompt_case(decision))["outcome"] == "harness-error"
