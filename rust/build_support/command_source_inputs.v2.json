@@ -522,6 +522,8 @@
       "src/pretool/listing_words.rs",
       "src/pretool/listing_temporary.rs",
       "src/pretool/literal_secrets.rs",
+      "src/pretool/literal_secret_bare.rs",
+      "src/pretool/literal_secret_letters.rs",
       "src/pretool/literal_secret_oauth.rs",
       "src/pretool/literal_secret_pairs.rs",
       "src/pretool/literal_secret_strong.rs",
