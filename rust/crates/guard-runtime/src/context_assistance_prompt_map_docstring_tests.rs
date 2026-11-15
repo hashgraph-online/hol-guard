@@ -44,7 +44,8 @@ fn mapped_at(root: &Path, path: &str, text: &str, docstring: bool) -> String {
 }
 
 const RUN: &str = "\nRun just its doctest with `python -m pytest -q --doctest-modules ";
-const CHECK: &str = "If it fails, write the value it prints under `Got:` into the example. \
+const CHECK: &str =
+    "If an example you added fails, write the value it prints under `Got:` into that example. \
 That run is the check an added example needs, and the edit's own reply \
 confirms the edit, so the file need not be read again.";
 
