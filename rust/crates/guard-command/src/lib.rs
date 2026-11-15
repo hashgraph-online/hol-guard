@@ -62,6 +62,9 @@ pub mod cloud_catalog;
 pub mod cloud_pack;
 pub mod cloud_pack_artifact;
 pub mod cloud_pack_cli;
+pub mod cloud_pack_connection;
+#[cfg(test)]
+mod cloud_pack_connection_tests;
 #[cfg(test)]
 mod cloud_pack_corpus_tests;
 pub mod cloud_pack_diff;

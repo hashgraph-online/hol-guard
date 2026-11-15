@@ -36,7 +36,8 @@ pub const MAX_PAGES: u32 = 10;
 pub struct CloudActionPack {
     pub schema: String,
     pub provider: Provider,
-    /// Exact API host names; requests may reach no other host.
+    /// Exact API host names; requests may reach no other host. A host may
+    /// begin with one connection value label, as in `{subdomain}.example.com`.
     pub hosts: Vec<String>,
     pub auth: Auth,
     pub actions: Vec<PackAction>,
@@ -47,6 +48,13 @@ pub struct CloudActionPack {
         deserialize_with = "crate::cloud_pack_transport::present"
     )]
     pub transports: Option<crate::cloud_pack_transport::Transports>,
+    /// Values each connection supplies, such as a tenant subdomain. Absent means none.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::cloud_pack_connection::present"
+    )]
+    pub connection: Option<crate::cloud_pack_connection::Connection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
