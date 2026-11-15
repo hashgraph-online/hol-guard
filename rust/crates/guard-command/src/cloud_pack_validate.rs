@@ -395,6 +395,7 @@ fn validate_fixtures(action: &PackAction) -> Result<(), &'static str> {
             || !fixture.arguments.is_object()
             || (expect.request.is_some() && !http)
             || expect.response.is_some() != expect.projection.is_some()
+            || fixture.connection.values().any(|value| !value.is_string())
             || (expect.error.is_some()
                 && (expect.facts.is_some()
                     || expect.request.is_some()

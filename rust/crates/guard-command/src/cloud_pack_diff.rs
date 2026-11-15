@@ -10,7 +10,7 @@
 
 use crate::cloud_action_v2::effect_rank;
 use crate::cloud_pack::*;
-use crate::cloud_pack_connection::connection_labels;
+use crate::cloud_pack_connection::connection_values;
 use crate::cloud_pack_transport::partner_labels;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -111,13 +111,13 @@ pub fn diff(old: &CloudActionPack, new: &CloudActionPack) -> Result<PackDiff, Pa
         changes.push("transport_removed", Some(label), false);
     }
     // A connection value decides which tenant a request reaches, so any change to one is reviewed.
-    let old_values = connection_labels(old);
-    let new_values = connection_labels(new);
+    let old_values = connection_values(old);
+    let new_values = connection_values(new);
     for (name, bounds) in &new_values {
         match old_values.get(name) {
-            None => changes.push("connection_value_added", Some(name), true),
+            None => changes.push("connection_value_added", Some(*name), true),
             Some(old_bounds) if old_bounds != bounds => {
-                changes.push("connection_value_changed", Some(name), true);
+                changes.push("connection_value_changed", Some(*name), true);
             }
             Some(_) => {}
         }
@@ -126,7 +126,7 @@ pub fn diff(old: &CloudActionPack, new: &CloudActionPack) -> Result<PackDiff, Pa
         .keys()
         .filter(|name| !new_values.contains_key(*name))
     {
-        changes.push("connection_value_removed", Some(name), true);
+        changes.push("connection_value_removed", Some(*name), true);
     }
     let old_actions: BTreeMap<_, _> = old
         .actions

@@ -143,6 +143,14 @@ pub(crate) fn check_text(rule: Option<&TextRule>, value: &Value) -> Result<(), &
     Ok(())
 }
 
+/// Whether a request template names anything that is not an action argument.
+/// A validated pack only allows that for a connection value, so rendering it
+/// without the connection would drop the tenant from a query or body.
+fn uses_connection_values(action: &PackAction, request: &RequestTemplate) -> bool {
+    let hosts = std::collections::BTreeSet::from([request.host.as_str()]);
+    crate::cloud_pack_validate_request::validate_request(action, request, &hosts, None).is_err()
+}
+
 /// Render the exact request for checked arguments, for a pack that declares
 /// no connection values.
 pub fn render(action: &PackAction, args: &Value) -> Result<RenderedRequest, ArgumentError> {
@@ -162,6 +170,9 @@ pub fn render_connected(
         return Err(error("executor_not_renderable", None));
     };
     let checked = check_arguments(action, args)?;
+    if connection.is_none() && uses_connection_values(action, request) {
+        return Err(error("connection_value_missing", None));
+    }
     let (bound, host) =
         crate::cloud_pack_connection::bind(connection, &request.host, checked, values)
             .map_err(|(code, argument)| ArgumentError { code, argument })?;

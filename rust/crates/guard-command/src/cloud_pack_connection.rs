@@ -21,6 +21,8 @@ use std::collections::BTreeMap;
 /// Most values one pack may declare.
 pub const MAX_CONNECTION_VALUES: usize = 4;
 const MAX_VALUE_LENGTH: u32 = 128;
+/// Longest DNS name, the bound plain hosts already meet.
+const MAX_HOST_LENGTH: usize = 253;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -95,6 +97,8 @@ pub fn validate_connection(pack: &CloudActionPack) -> Result<(), PackError> {
             && !shadowed
             && crate::cloud_pack_validate::display_text(&value.title, 120)
             && (1..=MAX_VALUE_LENGTH).contains(&value.max_length)
+            && value.pattern.starts_with('^')
+            && value.pattern.ends_with('$')
             && crate::cloud_pack_validate::compile_whole(&value.pattern).is_some();
         if !ok {
             return Err(invalid(format!("/connection/values/{name}")));
@@ -170,10 +174,11 @@ pub(crate) fn bind<'a>(
     let host = match host_template(host) {
         Some((name, rest)) => {
             let label = bound.get(name).and_then(Value::as_str).unwrap_or_default();
-            if !dns_label(label) {
+            let host = format!("{label}.{rest}");
+            if !dns_label(label) || host.len() > MAX_HOST_LENGTH {
                 return Err(("connection_value_invalid", Some(name.to_owned())));
             }
-            format!("{label}.{rest}")
+            host
         }
         None => host.to_owned(),
     };
@@ -190,16 +195,12 @@ fn dns_label(label: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
-/// Each declared value with its bounds, for diffs.
-pub fn connection_labels(pack: &CloudActionPack) -> BTreeMap<String, String> {
+/// Each declared value with its bounds, for diffs. The bounds stay
+/// structured, so two different declarations never compare equal.
+pub fn connection_values(pack: &CloudActionPack) -> BTreeMap<&str, &ConnectionValue> {
     pack.connection
         .iter()
         .flat_map(|connection| connection.values.iter())
-        .map(|(name, value)| {
-            (
-                name.clone(),
-                format!("{}:{}:{}", value.title, value.pattern, value.max_length),
-            )
-        })
+        .map(|(name, value)| (name.as_str(), value))
         .collect()
 }

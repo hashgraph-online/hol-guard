@@ -211,6 +211,11 @@ fn connection_blocks_outside_the_closed_form_are_refused() {
             "Tenant",
             json!({"title": "T", "pattern": "^[a-z]+$", "maxLength": 8}),
         ),
+        // The stored pattern must carry its own anchors, as the schema requires.
+        (
+            "tenant",
+            json!({"title": "T", "pattern": "[a-z]+", "maxLength": 8}),
+        ),
         // `folder` is an argument of the list action; a value may not shadow it.
         (
             "folder",
@@ -371,4 +376,88 @@ fn the_render_op_takes_connection_values() {
         line(json!("acme"))["error"]["code"],
         json!("request_invalid")
     );
+}
+
+#[test]
+fn bounds_that_join_to_the_same_text_still_differ() {
+    let set = |title: &str, pattern: &str| {
+        let mut pack = pathed();
+        let value = pack
+            .connection
+            .as_mut()
+            .unwrap()
+            .values
+            .get_mut("tenant")
+            .unwrap();
+        value.title = title.into();
+        value.pattern = pattern.into();
+        pack
+    };
+    // Joined with `:` both read `Tenant:^x:^[a-z]{1,8}$`.
+    let old = set("Tenant", "^x:^[a-z]{1,8}$");
+    let new = set("Tenant:^x", "^[a-z]{1,8}$");
+    let changed = diff(&old, &new).unwrap();
+    assert!(changed.widening);
+    assert!(changed
+        .changes
+        .iter()
+        .any(|change| change.code == "connection_value_changed"));
+}
+
+#[test]
+fn a_filled_host_stays_within_the_dns_name_limit() {
+    // A 253-byte suffix is a valid host by itself; any label in front of it is not.
+    let suffix = format!(
+        "{}.{}.{}.{}.com",
+        "a".repeat(63),
+        "b".repeat(63),
+        "c".repeat(63),
+        "d".repeat(57)
+    );
+    assert_eq!(suffix.len(), 253);
+    let host = format!("{{tenant}}.{suffix}");
+    let mut pack = hosted_value();
+    pack["hosts"] = json!([host]);
+    for action in pack["actions"].as_array_mut().unwrap() {
+        action["executor"]["request"]["host"] = json!(host);
+    }
+    let pack = pack_from_value(pack).unwrap();
+    assert_eq!(
+        render_list(&pack, &values("a")),
+        Err("connection_value_invalid")
+    );
+}
+
+#[test]
+fn a_query_value_is_never_dropped_for_want_of_a_connection() {
+    let mut pack = outlook_value();
+    pack["connection"] = tenant();
+    let list = pack["actions"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|action| action["actionId"] == LIST)
+        .unwrap();
+    list["executor"]["request"]["query"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"name": "tenant", "value": {"arg": {"name": "tenant"}}}));
+    let pack = pack_from_value(pack).unwrap();
+    let url = render_list(&pack, &values("acme")).unwrap();
+    assert!(url.contains("tenant=acme"), "{url}");
+    let action = pack.action(LIST).unwrap();
+    assert_eq!(
+        render(action, &list_arguments()).unwrap_err().code,
+        "connection_value_missing"
+    );
+    // A pack with no connection values renders as before.
+    let plain = pack_from_value(outlook_value()).unwrap();
+    assert!(render(plain.action(LIST).unwrap(), &list_arguments()).is_ok());
+}
+
+#[test]
+fn a_fixture_connection_value_must_be_text() {
+    let mut pack = serde_json::to_value(pathed()).unwrap();
+    pack["actions"][0]["fixtures"][0]["connection"] = json!({"tenant": 42});
+    assert_eq!(refused(pack).0, "cloud_pack_fixtures_invalid");
 }
