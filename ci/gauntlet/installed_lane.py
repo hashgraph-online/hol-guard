@@ -180,6 +180,34 @@ def aged_pass(
     return assessment
 
 
+PREWARM_WAIT_SECONDS = 60.0
+
+
+def prewarm_probe(runtime: InstalledRuntime, harness: str, *, root: Path) -> dict[str, Any]:
+    """How long the install's own prewarm takes to bring the daemon up, with no hook in the way.
+
+    The harness passes replay straight after install, so their first hook races the
+    prewarm and may start a daemon of its own. This pass installs into a fresh home,
+    sends no hook and waits for the daemon's ``ready`` journal entry. It is evidence,
+    not a verdict: a slow or absent prewarm shows up in the harness passes already.
+    """
+
+    home = build_home(root, f"prewarm-{harness}")
+    guard_home = home / ".hol-guard"
+    workspace = build_workspace(root / f"prewarm-{harness}")
+    install = install_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
+    installed_ns = time.time_ns()
+    deadline = time.monotonic() + PREWARM_WAIT_SECONDS
+    timeline = startup_timeline(guard_home, since_ns=installed_ns)
+    while timeline["ready_ms"] is None and time.monotonic() < deadline:
+        time.sleep(0.25)
+        timeline = startup_timeline(guard_home, since_ns=installed_ns)
+    timeline["harness"] = harness
+    timeline["install_exit_code"] = install["exit_code"]
+    timeline["waited_seconds"] = PREWARM_WAIT_SECONDS
+    return timeline
+
+
 def run_lane(
     *,
     runtime_path: Path,
@@ -216,6 +244,7 @@ def run_lane(
     }
     failures: list[str] = []
     try:
+        evidence["prewarm_probe"] = prewarm_probe(runtime, harnesses[0], root=root)
         for harness in harnesses:
             result = harness_pass(
                 runtime,
@@ -256,6 +285,7 @@ __all__ = [
     "build_home",
     "build_workspace",
     "harness_pass",
+    "prewarm_probe",
     "run_lane",
     "undeclared_case_events",
 ]

@@ -40,3 +40,37 @@ def test_unreadable_and_oversized_journal_files_are_skipped(tmp_path: Path) -> N
     _event(journal, "c.json", {"event": "ready", "recorded_at_ns": 5, "pad": "x" * 4096})
     (journal / "d.json").write_text("{", encoding="utf-8")
     assert startup_timeline(tmp_path, since_ns=0) == {"events": [], "ready_ms": None}
+
+
+def test_the_lane_records_the_prewarm_probe_before_any_harness_pass(tmp_path: Path, monkeypatch) -> None:
+    from ci.gauntlet import installed_lane
+
+    calls: list[str] = []
+
+    def probe(runtime, harness, *, root):
+        calls.append(f"probe:{harness}")
+        return {"events": [], "ready_ms": None, "harness": harness}
+
+    def harness_pass(runtime, harness, expectation, contract, *, root, repeat):
+        calls.append(f"pass:{harness}")
+        return {"failures": [], "passed": True}
+
+    monkeypatch.setattr(installed_lane, "prewarm_probe", probe)
+    monkeypatch.setattr(installed_lane, "harness_pass", harness_pass)
+    monkeypatch.setattr(installed_lane, "resolve_runtime", lambda path, require_frozen: _Runtime())
+    evidence = installed_lane.run_lane(
+        runtime_path=tmp_path / "hol-guard",
+        harnesses=["claude-code", "codex"],
+        repeat=1,
+        require_frozen=False,
+        aged_store=False,
+        output=tmp_path / "evidence",
+        work_root=tmp_path / "work",
+    )
+    assert calls == ["probe:claude-code", "pass:claude-code", "pass:codex"]
+    assert evidence["prewarm_probe"]["harness"] == "claude-code"
+
+
+class _Runtime:
+    def as_evidence(self) -> dict[str, str]:
+        return {"kind": "stub"}
