@@ -21,6 +21,14 @@
       "https://graph.microsoft.com/Mail.Send"
     ]
   },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "outlook"
+      }
+    ]
+  },
   "actions": [
     {
       "actionId": "outlook.messages.list",
