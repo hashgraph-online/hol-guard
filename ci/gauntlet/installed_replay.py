@@ -207,6 +207,14 @@ def verdict(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
         reason = (completed.stderr or "").strip()[-200:]
     else:
         decision, reason = _decision_from(response)
+        if (
+            decision == "allow"
+            and completed.returncode
+            and _no_opinion(response, response.get("hookSpecificOutput"), None)
+        ):
+            # Harnesses read a non-zero exit (Codex and Claude Code block on 2) before an
+            # event-only envelope, so a hook that names its event and then fails is no allow.
+            decision, reason = "unknown", (completed.stderr or "").strip()[-200:]
     result = {"decision": decision, "reason": reason, "exit_code": completed.returncode}
     if response is not None and isinstance(response.get("reason_code"), str):
         result["reason_code"] = response["reason_code"]
