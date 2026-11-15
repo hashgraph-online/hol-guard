@@ -16,8 +16,7 @@ use std::collections::HashSet;
 
 use guard_command::{parse_command, CommandModelRequestV1, CommandSegmentV1, MAX_COMMAND_BYTES};
 
-/// Nesting followed through `bash -c` scripts and grouped steps. A line
-/// nested deeper than this is reported as not fully read.
+/// Nesting followed through `bash -c` scripts and groups; deeper is not fully read.
 const MAX_DEPTH: usize = 8;
 const INLINE_SHELLS: &[&str] = &["bash", "sh", "zsh", "dash", "ash", "ksh"];
 /// Words that start a step without being its program.
@@ -79,19 +78,20 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
     });
     match parsed {
         Ok(model) if model.confidence == "exact" && !model.segments.is_empty() => {
-            // The parser blanks a `#` comment, which a shell with comments off
-            // runs as text. Those steps are added when their quotes close.
-            if commented {
-                let (plain, closed) = steps(text, true, false);
-                for step in plain.iter().filter(|step| closed && *step != text.trim()) {
-                    out.push(seen, collapse(step));
-                    visit(step, depth + 1, out, seen);
-                }
+            // Comments off, bash runs `#` text line by line, even before a bad quote.
+            let plain = commented.then(|| steps(text, true, false).0);
+            for step in plain.iter().flatten().filter(|s| *s != text.trim()) {
+                out.push(seen, collapse(step));
+                visit(step, depth + 1, out, seen);
             }
             for segment in &model.segments {
-                // Bash reads a word that starts with `#` as a comment's start.
+                // Bash reads a word that starts with an unquoted `#` as a comment.
+                let hash = words(&segment.text).iter().any(|w| w.starts_with('#'));
                 let cut = segment.arguments.iter().position(|w| w.starts_with('#'));
-                for end in [segment.arguments.len()].into_iter().chain(cut) {
+                for end in [segment.arguments.len()]
+                    .into_iter()
+                    .chain(cut.filter(|_| hash))
+                {
                     for spelling in segment_spellings(segment, &segment.arguments[..end]) {
                         out.push(seen, spelling);
                     }

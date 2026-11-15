@@ -216,6 +216,8 @@ fn a_comment_after_an_exact_command_keeps_its_spellings() {
         "npm publish # note",
         "npm publish #note",
         "true # x; npm publish",
+        // Bash runs this first line before it meets the open quote below.
+        "true # x; npm publish\necho # it's fine",
     ] {
         assert!(has(command, "npm publish"), "{command:?}");
         assert!(spellings(command).complete, "{command:?}");
@@ -223,5 +225,9 @@ fn a_comment_after_an_exact_command_keeps_its_spellings() {
     // A shell with comments off would leave this quote open and run nothing.
     for command in ["git status # it's fine", "ls # don't recurse"] {
         assert!(spellings(command).complete, "{command:?}");
+    }
+    // A quoted or escaped `#` is text, so the step is not cut there.
+    for command in ["npm publish '#x'", "npm publish \"#x\"", "npm publish \\#x"] {
+        assert!(!has(command, "npm publish"), "{command:?}");
     }
 }
