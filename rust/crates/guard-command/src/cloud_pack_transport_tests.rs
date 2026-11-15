@@ -165,3 +165,17 @@ fn a_brokered_pack_renders_the_same_absolute_request_with_no_credential() {
         !["authorization", "cookie", "x-api-key"].contains(&name.as_str())
     }));
 }
+
+#[test]
+fn a_pack_with_a_non_http_action_cannot_be_brokered() {
+    let mut pack: Value = serde_json::from_str(include_str!(
+        "../../../../contributions/cloud-actions/box.json"
+    ))
+    .unwrap();
+    pack["transports"] = json!({"partner": [{"partner": "composio", "toolkit": "box"}]});
+    let error = pack_from_value(pack).unwrap_err();
+    assert_eq!(
+        (error.code, error.pointer.as_str()),
+        ("cloud_pack_transports_invalid", "/transports")
+    );
+}

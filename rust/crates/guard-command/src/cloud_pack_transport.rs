@@ -6,7 +6,7 @@
 //! when this block names that broker; everything else about the call (exact
 //! host, owner binding, headers, size) is enforced outside the engine.
 
-use crate::cloud_pack::{AuthMode, CloudActionPack, PackError};
+use crate::cloud_pack::{AuthMode, CloudActionPack, Executor, PackError};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -62,13 +62,19 @@ pub fn valid_toolkit(slug: &str) -> bool {
 }
 
 /// Check the optional `transports` block. A pack that signs in with nothing
-/// has no sign-in to broker, so it may not declare one.
+/// has no sign-in to broker, and a broker proxy carries only plain HTTP
+/// requests, so a pack with any non-HTTP action may not declare one.
 pub fn validate_transports(pack: &CloudActionPack) -> Result<(), PackError> {
     let Some(transports) = &pack.transports else {
         return Ok(());
     };
     let invalid = || PackError::new("cloud_pack_transports_invalid", "/transports");
+    let http_only = pack
+        .actions
+        .iter()
+        .all(|action| matches!(action.executor, Executor::DeclarativeHttp { .. }));
     if pack.auth.mode == AuthMode::None
+        || !http_only
         || transports.partner.is_empty()
         || transports.partner.len() > MAX_PARTNER_TRANSPORTS
     {

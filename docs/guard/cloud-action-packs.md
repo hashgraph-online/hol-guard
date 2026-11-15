@@ -133,7 +133,8 @@ whose sign-in a broker holds instead of the gateway itself
 
 `partner` comes from a closed list (today only `composio`), and `toolkit` is a lowercase slug of 2 to 64 letters,
 digits and underscores that starts with a letter. A pack names each partner once, at most four in total. A pack
-whose `auth.mode` is `none` has no sign-in to broker and cannot declare one.
+whose `auth.mode` is `none` has no sign-in to broker, and a broker proxy carries only plain HTTP requests, so
+neither that pack nor one with any `remote-mcp` or `broker` action can declare one.
 
 The block grants nothing by itself. It changes no fact, decision or rendered request: a brokered call sends the same
 absolute `https` URL on the same declared host as a direct one. A pack without the block serializes and digests
