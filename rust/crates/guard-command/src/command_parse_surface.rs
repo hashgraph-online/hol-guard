@@ -245,12 +245,12 @@ pub(crate) fn parse_posix_command(
     if raw.chars().count() > MAX_COMMAND_BYTES || raw.len() > MAX_COMMAND_BYTES {
         return Ok(uncertain(request, raw, "command_byte_limit_exceeded"));
     }
-    let masked = crate::shell_comment_lines::mask_comment_lines(raw);
-    let read = masked.as_deref().unwrap_or(raw); // comment lines blanked, same positions
-    let raw_segments = if let Some(value) = contained_compile_check_segments(read) {
+
+    let read = crate::shell_comment_lines::mask_comments(raw);
+    let raw_segments = if let Some(value) = contained_compile_check_segments(&read) {
         value
     } else {
-        match split_execution_segments(read, preserve_unquoted_backslash) {
+        match split_execution_segments(&read, preserve_unquoted_backslash) {
             Ok(value) => value,
             Err(reason) => return Ok(uncertain(request, raw, reason)),
         }

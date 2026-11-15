@@ -27,6 +27,8 @@ fn a_comment_line_adds_no_step_to_a_read_only_chain() {
         "# note\ngh api user --jq .login",
         "# check status; find threads; list intake\ngh pr checks 7 --repo o/r 2>&1 | head -80\ngh api user --jq .login",
         "gh pr checks 7 --repo o/r\n  # then who am I\ngh api user --jq .login",
+        // The general comment scan leaves text holding `${` or `$(` alone.
+        "# where; then who\necho \"${PWD:-.}\"\ngh api user --jq .login",
     ] {
         assert_eq!(action(command), "allow", "{command:?}");
     }

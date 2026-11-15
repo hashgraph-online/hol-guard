@@ -307,6 +307,7 @@ pub mod pretool_script_content;
 pub mod pretool_search_data;
 pub mod pretool_sed_stream_edits;
 pub mod pretool_sed_substitution_filters;
+pub mod pretool_shell_comments;
 pub mod pretool_sibling_absent_reads;
 pub mod pretool_sibling_glob_reads;
 pub mod pretool_sibling_glob_search;

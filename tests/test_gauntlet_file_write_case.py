@@ -24,6 +24,14 @@ CASES = {
     "omp-write-adds-a-postinstall-script": "package.json",
     "omp-write-sets-a-database-role-password": "deploy/db-setup.yml",
     "omp-write-spells-a-sql-password-holding-a-quote": "setup.sql",
+    "omp-write-lists-a-random-app-secret": "secrets.yaml",
+    "omp-write-spells-a-key-after-an-api-label": "SETUP.rst",
+    "omp-write-spells-a-digit-token-into-config": "twitter.rb",
+    "omp-write-account-token-not-metadata": "config.py",
+    "omp-write-admin-secret-not-metadata": "settings.py",
+    "omp-write-spells-an-api-id-into-settings": "settings.py",
+    "omp-write-spells-an-sql-auth-string": "seed.sql",
+    "omp-write-spells-a-short-secret-into-a-test": "test_vault.py",
     "omp-write-spells-an-oauth-key-into-a-test": "client_spec.rb",
 }
 

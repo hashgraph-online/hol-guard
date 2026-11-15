@@ -13,6 +13,14 @@
 //! starts with a `#` the shell would read as a comment is touched; a `#` in a
 //! quote, in a `${...}` expansion, or later on a line is left alone.
 
+/// `raw` with its comments blanked to spaces, positions kept. The general
+/// scan leaves text holding `$(`, `${` or a backtick alone; this module
+/// follows those and still blanks the whole-line comments in it.
+pub(crate) fn mask_comments(raw: &str) -> String {
+    let code = crate::data_flow::mask_shell_comments(raw);
+    mask_comment_lines(&code).unwrap_or(code)
+}
+
 /// `text` with every whole-line comment replaced by spaces, or `None` when
 /// there is none or this scan cannot be sure which lines bash reads as
 /// comments.
