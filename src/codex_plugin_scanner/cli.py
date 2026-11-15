@@ -482,7 +482,7 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:
                 print(str(exc), file=sys.stderr)
                 return 1
-        from .guard.cli.daemon_workers import is_daemon_workers_fast_path_argv, run_daemon_workers_cli
+        from .guard.cli.desktop_daemon_workers import is_daemon_workers_fast_path_argv, run_daemon_workers_cli
 
         if is_daemon_workers_fast_path_argv(requested_argv):
             # Fast path: the native daemon starts its worker host on every cold

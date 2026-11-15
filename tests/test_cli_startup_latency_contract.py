@@ -215,7 +215,7 @@ def test_hol_guard_daemon_serve_skips_command_surface(
 
 
 def test_daemon_workers_fast_path_argv_accepts_only_the_native_launch_shape() -> None:
-    from codex_plugin_scanner.guard.cli.daemon_workers import is_daemon_workers_fast_path_argv
+    from codex_plugin_scanner.guard.cli.desktop_daemon_workers import is_daemon_workers_fast_path_argv
 
     assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers", "--guard-home", "/g"]) is True
     assert is_daemon_workers_fast_path_argv(["guard", "desktop", "daemon-workers", "--guard-home", "/g"]) is True
@@ -234,14 +234,17 @@ def test_hol_guard_daemon_workers_skips_command_surface(
     from codex_plugin_scanner.guard import native_context
     from codex_plugin_scanner.guard.workers import host
 
-    hosted: list[Path] = []
-    bound: list[Path | None] = []
+    calls: list[tuple[str, Path | None]] = []
+
+    def fake_bind(guard_home: Path | None, *, remember: bool = True) -> None:
+        del remember
+        calls.append(("bind", guard_home))
 
     def fake_host(guard_home: Path) -> int:
-        hosted.append(guard_home)
-        bound.append(native_context.context_digest_guard_home())
+        calls.append(("host", guard_home))
         return 0
 
+    monkeypatch.setattr(native_context, "bind_context_digest_home", fake_bind)
     monkeypatch.setattr(host, "run_worker_host", fake_host)
     monkeypatch.delitem(sys.modules, _COMMANDS_HUB, raising=False)
     monkeypatch.delitem(sys.modules, _COMMANDS_PARSER, raising=False)
@@ -253,8 +256,8 @@ def test_hol_guard_daemon_workers_skips_command_surface(
     code, _ = _run_as_hol_guard(["desktop", "daemon-workers", "--guard-home", str(guard_home)])
 
     assert code == 0
-    assert hosted == [guard_home.resolve()]
-    assert bound == [guard_home.resolve()]
+    # The digest home is bound before the host starts, as the command router does.
+    assert calls == [("bind", guard_home.resolve()), ("host", guard_home.resolve())]
     assert _COMMANDS_HUB not in sys.modules
     assert _COMMANDS_PARSER not in sys.modules
     assert _COMMANDS_SUPPORT not in sys.modules
