@@ -127,7 +127,12 @@ def test_concurrent_first_loads_share_one_native_process(tmp_path: Path, monkeyp
     real_spawn = native_guard_config._spawn
 
     def slow_spawn(request_text: str, *args: object) -> dict[str, object]:
-        calls.append(request_text)
+        # Other background tests can also load Guard config while this
+        # process-wide function is patched. Count only this fixture's
+        # requests; the assertion below still requires exactly one native
+        # load for all eight concurrent calls for the same guard_home.
+        if json.loads(request_text).get("guard_home") == str(tmp_path):
+            calls.append(request_text)
         time.sleep(0.2)
         return real_spawn(request_text, *args)
 
