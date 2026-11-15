@@ -9,7 +9,9 @@ type (test, read, search, edit, git, other), holds, holds per 100 calls,
 calls made later in the same step after a hold, and retries: later calls in
 the step that repeat a held call (the same command, or the same tool on the
 same file; Oh My Pi patches name no file, so there the same patch). A rewritten
-command is a later call but not a retry. With --base it also prints cost
+command is a later call but not a retry. Oh My Pi commands that ran through
+Guard's runner leave no command text, so they are counted as not checked and
+retries there is a lower bound. With --base it also prints cost
 and tokens saved against the base arm, cost saved per step kind, and the
 do-no-harm rate (share of paired steps where the arm cost 20% more than the
 base). Steps a harness never reached are left out of every count. Give
@@ -76,16 +78,18 @@ def call_kind(name, text):
 PATCH_FILE = re.compile(r"\*\*\* (?:Update|Add|Delete) File: ([^\s\\\"]+)")
 
 
-def call_key(tool, cmd, path=""):
-    """What a retry repeats: the command text, or the same tool on the same file.
+def call_keys(tool, cmd, paths=()):
+    """What a retry repeats: the command text, or the same tool on any of the same files.
 
-    The tool is part of a file key so that reading a file after a held edit to
-    it is not counted as retrying the edit.
+    Commands keep their inner whitespace, which can change what they do. The
+    tool is part of a file key so that reading a file after a held edit to it
+    is not counted as retrying the edit. A multi-file patch gets one key per
+    file, so a later patch to any one of them matches.
     """
-    cmd = " ".join((cmd or "").split())
+    cmd = (cmd or "").strip()
     if cmd:
-        return cmd
-    return f"{tool}:{path}" if path else ""
+        return frozenset([cmd])
+    return frozenset(f"{tool}:{path}" for path in paths if path)
 
 
 def text_of(value):
@@ -131,7 +135,7 @@ def codex_calls(row):
                 pending[p.get("call_id")] = len(out[step])
                 patched = PATCH_FILE.findall(raw)
                 cmd = cmds[0].encode().decode("unicode_escape", "ignore") if cmds else ""
-                out[step].append([kind, False, call_key("apply_patch", cmd, " ".join(patched))])
+                out[step].append([kind, False, call_keys("apply_patch", cmd, patched)])
             elif t in ("custom_tool_call_output", "function_call_output"):
                 i = pending.get(p.get("call_id"))
                 text = text_of(p.get("output"))
@@ -181,13 +185,15 @@ def claude_calls(row):
                         continue
                     inp = b.get("input") or {}
                     pending[b.get("id")] = (step, len(out[step]))
-                    key = call_key(b.get("name", ""), inp.get("command", ""), inp.get("file_path") or inp.get("path") or "")
-                    out[step].append([call_kind(b.get("name", ""), inp.get("command", "")), False, key])
+                    keys = call_keys(b.get("name", ""), inp.get("command", ""), [inp.get("file_path") or inp.get("path")])
+                    kind = call_kind(b.get("name", ""), inp.get("command", ""))
+                    out[step].append([kind, False, keys, e.get("timestamp") or ""])
                 elif b.get("type") == "tool_result":
                     where = pending.get(b.get("tool_use_id"))
                     if where and HOLD.search(text_of(b.get("content"))):
                         out[where[0]][where[1]][1] = True
-    return out
+    # Subagent transcripts come after the main one; put each step's calls back in time order.
+    return [[call[:3] for call in sorted(step, key=lambda call: call[3])] for step in out]
 
 
 def omp_calls(row, runs_dir):
@@ -206,7 +212,12 @@ def omp_calls(row, runs_dir):
                 pending[e.get("toolCallId")] = len(calls)
                 cmd = args.get("command", "")
                 kind = "wrapped" if "contained-workspace-sink" in cmd else call_kind(e.get("toolName", ""), cmd)
-                calls.append([kind, False, call_key(e.get("toolName", ""), cmd, args.get("path") or str(args.get("input") or ""))])
+                # Guard's runner replaces a wrapped command with a one-off request file, so the
+                # model's command is not recorded and the call cannot be matched (keys None).
+                keys = None if kind == "wrapped" else call_keys(
+                    e.get("toolName", ""), cmd, [args.get("path") or str(args.get("input") or "")]
+                )
+                calls.append([kind, False, keys])
             elif e.get("type") == "tool_execution_end":
                 i = pending.get(e.get("toolCallId"))
                 text = text_of(e.get("result"))
@@ -259,17 +270,20 @@ def anatomy(tag, arm, rows):
             k = per[kind]
             k["steps"] += 1
             k["requests"] += requests or 0
-            held_keys = set()
-            for c_kind, held, key in step_calls:
+            held_keys, held_seen = set(), False
+            for c_kind, held, keys in step_calls:
                 k["calls"] += 1
                 k[c_kind] += 1
-                if held_keys:
+                if held_seen:
                     k["after_hold"] += 1
-                    if key and key in held_keys:
+                    if keys is None:
+                        k["unmatched"] += 1
+                    elif keys & held_keys:
                         k["retries"] += 1
                 if held:
                     k["holds"] += 1
-                    held_keys.add(key)
+                    held_seen = True
+                    held_keys |= keys or frozenset()
     print(f"\n== {tag} {arm}: {len(rows)} sessions, {sum(r['passed'] for r in rows.values())} passed")
     cols = ("steps", "requests", "calls") + KINDS + ("holds", "after_hold", "retries")
     print(f"{'kind':9}" + "".join(f"{c:>11}" for c in cols) + f"{'req/step':>10}{'holds/100':>10}")
@@ -281,6 +295,8 @@ def anatomy(tag, arm, rows):
     if tot["holds"]:
         print(f"calls after a hold, per hold: {tot['after_hold'] / tot['holds']:.2f}")
         print(f"retries per hold (same command or same file again): {tot['retries'] / tot['holds']:.2f}")
+        if tot["unmatched"]:
+            print(f"  not checked: {tot['unmatched']} later call(s) ran through Guard's runner with no recorded command")
     return per
 
 

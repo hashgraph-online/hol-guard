@@ -321,7 +321,7 @@ Four of the six remaining holds came from one session that gave `apply_patch` a 
 
 ### Efficiency gates on `main` at f11eecf8f1 (2026-11-15)
 
-Every Guard hook plus CIGAR against no Guard, same 16 random seeds as above, on a native wheel built locally from `main` at f11eecf8f1 (reports 3.59.0). Codex and Oh My Pi run gpt-6-luna at medium effort, Claude Code runs claude-haiku-4-5. Codex and Oh My Pi pair against one no-Guard run; Claude Code pairs against two and its savings are printed low–high. "Retries" are later calls in the same step that repeat a held call: the same command, or the same tool on the same file (for Oh My Pi, whose patches name no file, the same patch). A rewritten command counts as a later call, not a retry.
+Every Guard hook plus CIGAR against no Guard, same 16 random seeds as above, on a native wheel built locally from `main` at f11eecf8f1 (reports 3.59.0). Codex and Oh My Pi run gpt-6-luna at medium effort, Claude Code runs claude-haiku-4-5. Codex and Oh My Pi pair against one no-Guard run; Claude Code pairs against two and its savings are printed low–high. "Retries" are later calls in the same step that repeat a held call: the same command, or the same tool on the same file (for Oh My Pi, whose patches name no file, the same patch). A rewritten command counts as a later call, not a retry. Oh My Pi commands that ran through Guard's runner leave no command text, so its retry count is a lower bound (4 later calls were not checked in this run).
 
 | harness | tokens saved | cost saved | passed (no Guard) | requests per step | holds per 100 calls | retries per hold | do-no-harm |
 |---|---|---|---|---|---|---|---|
