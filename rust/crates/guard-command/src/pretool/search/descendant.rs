@@ -37,6 +37,13 @@ pub(in crate::pretool) const SECRET_EXTENSIONS: &[&str] = &[
     "pem", "p12", "pfx", "jks", "keystore", "asc", "gpg", "kdbx", "ppk",
 ];
 
+/// A key or certificate file (`server.pem`) by its extension.
+pub(in crate::pretool) fn key_file_name(name: &str) -> bool {
+    name.rsplit_once('.').is_some_and(|(_, extension)| {
+        SECRET_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+    })
+}
+
 pub(in crate::pretool::search) fn hidden_allowed(name: &str) -> bool {
     BENIGN_HIDDEN_NAMES.contains(&name.to_ascii_lowercase().as_str())
 }

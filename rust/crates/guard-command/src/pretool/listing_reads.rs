@@ -270,14 +270,13 @@ fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::pa
 /// Upper bound on the entries a leaf glob's directory may hold.
 const MAX_LEAF_ENTRIES: usize = 4096;
 
-/// `ls /tmp/pg-run/.s.PGSQL*`: a pattern in the last component only, below a
-/// literal directory that `ls` may list by name and that no other user can
-/// add an entry to. The screened glob expansion refuses
-/// hidden and socket matches, but a listing prints only their names, as
-/// listing the directory itself would. Every entry the pattern could match
-/// under any shell option (`dotglob`, `nocaseglob`) is screened: a directory
-/// match has its entries listed, so it needs the listing proof itself, and
-/// any other match must clear the sensitive-path and credential-name screens.
+/// `ls /tmp/pg-run/.s.PGSQL*`: a last-component pattern below a literal
+/// directory `ls` may list by name, that no other user can add entries to, and
+/// that is not home, whose every folder it would list. It prints only names,
+/// as listing the directory would. Every entry it could match under any shell
+/// option (`dotglob`, `nocaseglob`) is screened: a directory match has its
+/// entries listed, so it needs the listing proof, and any other match must
+/// clear the sensitive-path and credential-name screens.
 fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     // Windows spells the home path with `\`, so there it is a separator.
     let separator = |c: char| c == '/' || (c == '\\' && cfg!(windows));
@@ -327,7 +326,8 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     if pattern.starts_with(['.', '[']) && (candidate(".") || candidate("..")) {
         return false;
     }
-    let Some(base) = expanded_path(directory, context) else {
+    let home = context.home_dir.map(std::path::PathBuf::from);
+    let Some(base) = expanded_path(directory, context).filter(|b| home.as_ref() != Some(b)) else {
         return false;
     };
     // The shell expands after this screen, and anyone may plant a matching link
@@ -364,13 +364,13 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
         let Some(text) = path.to_str() else {
             return false;
         };
-        // A hidden directory (`.config`, `.cache`) may hold credentials whose
-        // names the listing would print, so a wildcard never reaches into one.
+        // Never a hidden directory (`.config`) or a key file (`server.pem`), as in `ls -R`.
         let listed = if std::fs::metadata(&path).is_ok_and(|metadata| metadata.is_dir()) {
             !name.starts_with('.')
                 && safe_reads::safe_listing_arguments(&[text.to_owned()], context)
         } else {
             !super::sensitive_read_path_argument(text)
+                && !search::key_file_name(&name)
                 && std::fs::canonicalize(&path).is_ok_and(|canonical| {
                     super::read_paths::resolved_location_allowed(
                         &canonical,
