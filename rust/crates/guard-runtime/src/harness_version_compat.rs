@@ -75,6 +75,9 @@ struct Observation {
 #[serde(deny_unknown_fields)]
 struct CapabilityRow {
     event: String,
+    /// Tool names when the contract splits one hook event into rows by tool.
+    #[serde(default)]
+    tools: Vec<String>,
     transport: String,
     declared_actions: Vec<String>,
     /// The contract row's mode; `observe` rows run after execution.

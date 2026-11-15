@@ -35,14 +35,19 @@ function normalizeEventStates(value) {
     const entry = item;
     const event = optionalText(entry.event);
     if (!event || !isState(entry.state)) return [];
+    const tools = Array.isArray(entry.tools) ? entry.tools.filter((tool) => typeof tool === "string" && tool.length > 0) : [];
     return [{
       event,
+      tools,
       transport: optionalText(entry.transport),
       mode: optionalText(entry.mode),
       state: entry.state,
       reason: optionalText(entry.reason)
     }];
   });
+}
+function eventProtectionName(item) {
+  return item.tools.length > 0 ? `${item.event} [${item.tools.join(", ")}]` : item.event;
 }
 function protectionStateLabel(state) {
   return state ? PROTECTION_STATE_COPY[state].label : UNKNOWN_PROTECTION_LABEL;
@@ -660,7 +665,8 @@ export {
   inactiveInstallNeedsRepair as i,
   protectionStateTone as j,
   eventReasonCopy as k,
-  isHarnessDetected as l,
+  eventProtectionName as l,
+  isHarnessDetected as m,
   protectionStateLabel as p,
   resolveDetectedAppStatus as r,
   setupStatusFor as s,
