@@ -200,7 +200,11 @@ fn shipped_packs_name_only_verified_broker_toolkits() {
     }
     brokered.sort();
     let expected = [
+        ("discord", "discordbot"),
         ("dropbox", "dropbox"),
+        ("figma", "figma"),
+        ("hubspot", "hubspot"),
+        ("linear", "linear"),
         ("onedrive", "one_drive"),
         ("outlook", "outlook"),
         ("teams", "microsoft_teams"),

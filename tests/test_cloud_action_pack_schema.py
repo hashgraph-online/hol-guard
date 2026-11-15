@@ -50,6 +50,7 @@ def test_the_shipped_packs_match_the_schema() -> None:
         "hubspot.json",
         "huggingface-mcp.json",
         "intercom-mcp.json",
+        "linear.json",
         "monday-mcp.json",
         "monday.json",
         "neon-mcp.json",
