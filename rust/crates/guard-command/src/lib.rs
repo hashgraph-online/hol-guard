@@ -90,6 +90,8 @@ mod cloud_pack_money;
 #[cfg(test)]
 mod cloud_pack_money_tests;
 pub mod cloud_pack_pattern;
+#[cfg(test)]
+mod cloud_pack_reconcile_tests;
 pub mod cloud_pack_request;
 pub mod cloud_pack_response;
 #[cfg(test)]
@@ -97,8 +99,6 @@ mod cloud_pack_review_tests;
 #[cfg(test)]
 mod cloud_pack_shape_tests;
 pub mod cloud_pack_simulate;
-#[cfg(test)]
-mod cloud_pack_reconcile_tests;
 #[cfg(test)]
 mod cloud_pack_simulate_tests;
 pub mod cloud_pack_sql;
