@@ -24,6 +24,7 @@ CASES = {
     "omp-write-adds-a-postinstall-script": "package.json",
     "omp-write-sets-a-database-role-password": "deploy/db-setup.yml",
     "omp-write-spells-a-sql-password-holding-a-quote": "setup.sql",
+    "omp-write-spells-an-oauth-key-into-a-test": "client_spec.rb",
 }
 
 

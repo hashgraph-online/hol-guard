@@ -62,6 +62,23 @@ patterns! {
     CONSONANTS = r"[bcdfghjklmnpqrstvwxz]+";
 }
 
+/// Shannon entropy of `value` in bits per character.
+pub(super) fn entropy(value: &str) -> f64 {
+    let mut counts = std::collections::HashMap::new();
+    let mut total = 0usize;
+    for ch in value.chars() {
+        *counts.entry(ch).or_insert(0usize) += 1;
+        total += 1;
+    }
+    counts
+        .values()
+        .map(|&count| {
+            let share = count as f64 / total as f64;
+            -share * share.log2()
+        })
+        .sum()
+}
+
 /// Mean English letter-pair log frequency of `letters` (lowercase `a`..`z`),
 /// counting the start and end of the word. Words score near -2.5; random
 /// letters fall below -3.9.
