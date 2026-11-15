@@ -140,6 +140,11 @@ The block grants nothing by itself. It changes no fact, decision or rendered req
 absolute `https` URL on the same declared host as a direct one. A pack without the block serializes and digests
 exactly as before. Adding a transport, or changing its toolkit, is a widening change in `diff`.
 
+The shipped packs that name a toolkit are Outlook (`outlook`), OneDrive (`one_drive`), Teams (`microsoft_teams`),
+Dropbox (`dropbox`), HubSpot (`hubspot`), Figma (`figma`), Discord (`discord`) and Linear (`linear`). A broker proxy
+refuses a host its toolkit does not serve, so a toolkit whose base URL differs from the pack's host fails closed: the
+call is refused, never sent elsewhere.
+
 ## Fixtures
 
 Every action in a source pack carries at least one `safe` and one `risky` fixture. A fixture states the arguments
@@ -288,8 +293,8 @@ arguments, so each tool is one action whose arguments are open but bounded in to
 constants: the class and object the tool works on, never a count it cannot prove. HubSpot is read-only. Stripe money
 movement (`send_money`, `transfer_money`, `convert_currency`) is class `pay` and adding a payout recipient is `admin`.
 Tools that multiplex several operations behind one name (Stripe `stripe_api_write`, Atlassian `executeRead`,
-`executeWrite` and `executeDestructive`, HubSpot `manage_*`) and Linear, whose tool names are not published, are not
-covered.
+`executeWrite` and `executeDestructive`, HubSpot `manage_*`) and Linear's MCP server, whose tool names are not published,
+are not covered; `linear.json` covers Linear's API instead, as described below.
 
 Fourteen more tool-level packs follow the same pattern for developer, operations and support servers:
 `github-mcp.json` (GitHub's hosted MCP server), `gitlab-mcp.json`, `azure-devops-mcp.json`, `buildkite-mcp.json`,
@@ -326,7 +331,11 @@ GraphQL endpoint) and AWS (SigV4 request signing) are not packed.
 it to one named address, and voids or deletes it; deleting an invoice is permanent, so Relaxed and Balanced review
 it and Strict blocks it. monday.com creates and deletes items and deletes boards through fixed GraphQL mutations
 whose ids travel only as variables, so an argument cannot add a second operation. A deleted board takes every item
-with it, so Balanced and Strict block it. Zendesk and Shopify (a host per account), Xero (a tenant header per call),
+with it, so Balanced and Strict block it. `linear.json` covers Linear's GraphQL API the same way: it lists a team's
+first 50 issues, creates an issue, comments on one, and moves one to the trash. Each operation is a fixed query whose
+team and issue ids must be UUIDs (an issue may also be named by its short id, such as `ENG-123`) and travel only as
+variables. The pack never sends `permanentlyDelete`, so a deleted issue stays in Linear's trash and Strict reviews
+the delete. Zendesk and Shopify (a host per account), Xero (a tenant header per call),
 Trello (credentials in the query string), and the Intercom and ClickUp REST APIs (OAuth without scopes) are not
 packed; Intercom's MCP server is, as described below.
 
