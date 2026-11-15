@@ -45,7 +45,9 @@ pub(super) fn safe(
                 && segment.pipeline_index == 0
                 // Inspect raw shell source: arithmetic expansion is normalized
                 // to a number by the parser before argument screening.
-                && !segment.text.contains('(program, &segment.arguments)
+                && !segment.text.as_bytes().contains(&36)
+                && !segment.text.as_bytes().contains(&96)
+                && dns_lookups::safe_lookup_arguments(program, &segment.arguments)
         }
         _ => safe_nc_segment(model, segment),
     }
