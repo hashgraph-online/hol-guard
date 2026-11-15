@@ -1083,7 +1083,7 @@ def test_changed_copilot_authority_prevents_any_transition_mutation(
 def test_authority_dependency_rejects_mutating_or_invalid_contracts(tmp_path, kwargs):
     fields = {"path": tmp_path / "authority", "before": None, "after": None, "no_follow": True, **kwargs}
     with pytest.raises(TransitionError, match="authority_dependency_invalid"):
-        TransitionFile(**fields).payload()
+        TransitionFile(**fields).checked()
 
 
 @pytest.mark.parametrize("previous_exists", [False, True])

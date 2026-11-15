@@ -68,7 +68,7 @@ def test_direct_writers_see_the_normalized_mode(tmp_path: Path) -> None:
 def test_new_group_writable_file_request_is_rejected_with_path(tmp_path: Path) -> None:
     target = tmp_path / "new"
     with pytest.raises(TransitionError, match="file_mode_invalid") as raised:
-        TransitionFile(target, None, b"b", after_mode=0o664).payload()
+        TransitionFile(target, None, b"b", after_mode=0o664).checked()
     assert str(target) in str(raised.value)
 
 
@@ -76,7 +76,7 @@ def test_new_group_writable_file_request_is_rejected_with_path(tmp_path: Path) -
 def test_special_mode_bits_are_still_rejected_with_path(tmp_path: Path, mode: int) -> None:
     target = tmp_path / "x"
     with pytest.raises(TransitionError) as raised:
-        TransitionFile(target, b"a", b"b", before_mode=0o644, after_mode=mode).payload()
+        TransitionFile(target, b"a", b"b", before_mode=0o644, after_mode=mode).checked()
     assert str(target) in str(raised.value)
 
 
@@ -86,7 +86,7 @@ def test_pinned_group_writable_dependency_is_still_rejected(tmp_path: Path) -> N
     target.write_bytes(b"secret")
     target.chmod(0o664)
     with pytest.raises(TransitionError) as raised:
-        TransitionFile.identity_dependency(target).payload()
+        TransitionFile.identity_dependency(target).checked()
     assert str(target.resolve()) in str(raised.value)
 
 

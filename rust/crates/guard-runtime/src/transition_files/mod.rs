@@ -71,7 +71,10 @@ impl Fault {
     fn to_json(&self) -> Value {
         match self {
             Self::Transition(reason) => json!({ "transition": reason }),
-            Self::Refused(reason, detail) => json!({ "transition": reason, "detail": detail }),
+            Self::Refused(reason, None) => json!({ "transition": reason }),
+            Self::Refused(reason, Some(detail)) => {
+                json!({ "transition": reason, "detail": detail })
+            }
             Self::Integrity(code, message) => json!({ "integrity": code, "message": message }),
             Self::Os(error) => json!({ "os": error.to_string(), "errno": error.raw_os_error() }),
             // Asked once a write has started, the question can no longer be
