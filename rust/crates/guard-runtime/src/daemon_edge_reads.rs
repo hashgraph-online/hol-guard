@@ -685,6 +685,7 @@ fn answer_request(
             config.dashboard_dir.as_deref(),
             &config.token,
             config.dashboard_build.as_deref(),
+            config.guard_home(),
         ) {
             return write_answer(client, &response, reads, stalled_write);
         }

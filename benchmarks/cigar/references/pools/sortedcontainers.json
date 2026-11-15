@@ -1,0 +1,423 @@
+{
+ "deselect": [],
+ "mutations": [
+  {
+   "path": "sortedcontainers/sorteddict.py",
+   "qual": "SortedDict.pop",
+   "line": 442,
+   "orig": "            if default is self.__not_given:\n",
+   "new": "            if default is not self.__not_given:\n",
+   "failing": [
+    "tests/test_coverage_sorteddict.py::test_pop",
+    "tests/test_coverage_sorteddict.py::test_pop2",
+    "tests/test_stress_sorteddict.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedset.py",
+   "qual": "SortedSet.discard",
+   "line": 420,
+   "orig": "        if value in _set:\n",
+   "new": "        if value not in _set:\n",
+   "failing": [
+    "tests/test_coverage_sortedset.py::test_difference_update",
+    "tests/test_coverage_sortedset.py::test_discard",
+    "tests/test_coverage_sortedset.py::test_isub"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedset.py",
+   "qual": "SortedSet.discard",
+   "line": 420,
+   "orig": "        if value in _set:\n",
+   "new": "        if value not in _set:\n",
+   "failing": [
+    "tests/test_coverage_sortedset.py::test_difference_update",
+    "tests/test_coverage_sortedset.py::test_discard",
+    "tests/test_coverage_sortedset.py::test_isub"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sorteddict.py",
+   "qual": "SortedDict.__repr__",
+   "line": 601,
+   "orig": "        key_arg = '' if _key is None else '{0!r}, '.format(_key)\n",
+   "new": "        key_arg = '' if _key is not None else '{0!r}, '.format(_key)\n",
+   "failing": [
+    "tests/test_coverage_sorteddict.py::test_itemsview",
+    "tests/test_coverage_sorteddict.py::test_keysview",
+    "tests/test_coverage_sorteddict.py::test_repr",
+    "tests/test_coverage_sorteddict.py::test_repr_recursion",
+    "tests/test_coverage_sorteddict.py::test_repr_subclass",
+    "tests/test_coverage_sorteddict.py::test_valuesview"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedset.py",
+   "qual": "SortedSet.count",
+   "line": 400,
+   "orig": "        return 1 if value in self._set else 0\n",
+   "new": "        return 1 if value not in self._set else 0\n",
+   "failing": [
+    "tests/test_coverage_sortedset.py::test_count",
+    "tests/test_stress_sortedset.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedset.py",
+   "qual": "SortedSet.__contains__",
+   "line": 209,
+   "orig": "        return value in self._set\n",
+   "new": "        return value not in self._set\n",
+   "failing": [
+    "tests/test_coverage_sortedset.py::test_contains",
+    "tests/test_stress_sortedset.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedlist.py",
+   "qual": "SortedList.count",
+   "line": 1270,
+   "orig": "        return right - left\n",
+   "new": "        return right + left\n",
+   "failing": [
+    "tests/test_coverage_sortedlist.py::test_count",
+    "tests/test_stress_sortedlist.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedset.py",
+   "qual": "SortedSet.__contains__",
+   "line": 209,
+   "orig": "        return value in self._set\n",
+   "new": "        return value not in self._set\n",
+   "failing": [
+    "tests/test_coverage_sortedset.py::test_contains",
+    "tests/test_stress_sortedset.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedset.py",
+   "qual": "SortedSet.__contains__",
+   "line": 209,
+   "orig": "        return value in self._set\n",
+   "new": "        return value not in self._set\n",
+   "failing": [
+    "tests/test_coverage_sortedset.py::test_contains",
+    "tests/test_stress_sortedset.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedset.py",
+   "qual": "SortedSet._check",
+   "line": 733,
+   "orig": "        assert all(value in _set for value in _list)\n",
+   "new": "        assert all(value not in _set for value in _list)\n",
+   "failing": [
+    "tests/test_coverage_sortedset.py::test_add",
+    "tests/test_coverage_sortedset.py::test_count",
+    "tests/test_coverage_sortedset.py::test_discard",
+    "tests/test_coverage_sortedset.py::test_init",
+    "tests/test_stress_sortedset.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedset.py",
+   "qual": "SortedSet.count",
+   "line": 400,
+   "orig": "        return 1 if value in self._set else 0\n",
+   "new": "        return 1 if value not in self._set else 0\n",
+   "failing": [
+    "tests/test_coverage_sortedset.py::test_count",
+    "tests/test_stress_sortedset.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedset.py",
+   "qual": "SortedSet._check",
+   "line": 732,
+   "orig": "        assert len(_set) == len(_list)\n",
+   "new": "        assert len(_set) != len(_list)\n",
+   "failing": [
+    "tests/test_coverage_sortedset.py::test_add",
+    "tests/test_coverage_sortedset.py::test_clear",
+    "tests/test_coverage_sortedset.py::test_count",
+    "tests/test_coverage_sortedset.py::test_discard",
+    "tests/test_coverage_sortedset.py::test_init",
+    "tests/test_stress_sortedset.py::test_init",
+    "tests/test_stress_sortedset.py::test_stress"
+   ]
+  }
+ ],
+ "stubs": [
+  {
+   "path": "sortedcontainers/sortedlist.py",
+   "qual": "SortedList.remove",
+   "body_start": 446,
+   "end": 462,
+   "body": "        _maxes = self._maxes\n\n        if not _maxes:\n            raise ValueError('{0!r} not in list'.format(value))\n\n        pos = bisect_left(_maxes, value)\n\n        if pos == len(_maxes):\n            raise ValueError('{0!r} not in list'.format(value))\n\n        _lists = self._lists\n        idx = bisect_left(_lists[pos], value)\n\n        if _lists[pos][idx] == value:\n            self._delete(pos, idx)\n        else:\n            raise ValueError('{0!r} not in list'.format(value))\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_coverage_sorteddict.py::test_delitem",
+    "tests/test_coverage_sorteddict.py::test_eq",
+    "tests/test_coverage_sorteddict.py::test_pop",
+    "tests/test_coverage_sortedlist.py::test_delete",
+    "tests/test_coverage_sortedlist.py::test_remove",
+    "tests/test_coverage_sortedlist.py::test_remove_valueerror1",
+    "tests/test_coverage_sortedlist.py::test_remove_valueerror2",
+    "tests/test_coverage_sortedlist.py::test_remove_valueerror3",
+    "tests/test_coverage_sortedset.py::test_difference_update",
+    "tests/test_coverage_sortedset.py::test_discard",
+    "tests/test_coverage_sortedset.py::test_isub",
+    "tests/test_coverage_sortedset.py::test_remove",
+    "tests/test_stress_sorteddict.py::test_stress",
+    "tests/test_stress_sortedlist.py::test_stress",
+    "tests/test_stress_sortedset.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sorteddict.py",
+   "qual": "SortedDict.setdefault",
+   "body_start": 538,
+   "end": 542,
+   "body": "        if key in self:\n            return self[key]\n        dict.__setitem__(self, key, default)\n        self._list_add(key)\n        return default\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_coverage_sorteddict.py::test_setdefault",
+    "tests/test_stress_sorteddict.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedlist.py",
+   "qual": "SortedKeyList.bisect_key_right",
+   "body_start": 2337,
+   "end": 2349,
+   "body": "        _maxes = self._maxes\n\n        if not _maxes:\n            return 0\n\n        pos = bisect_right(_maxes, key)\n\n        if pos == len(_maxes):\n            return self._len\n\n        idx = bisect_right(self._keys[pos], key)\n\n        return self._loc(pos, idx)\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_coverage_sorteddict.py::test_bisect_key",
+    "tests/test_coverage_sorteddict.py::test_bisect_key2",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_bisect",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_bisect_key",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_bisect_key_right",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_bisect_right",
+    "tests/test_coverage_sortedkeylist_negate.py::test_bisect",
+    "tests/test_coverage_sortedkeylist_negate.py::test_bisect_right",
+    "tests/test_coverage_sortedset.py::test_bisect_key",
+    "tests/test_stress_sortedkeylist.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedlist.py",
+   "qual": "SortedList.islice",
+   "body_start": 985,
+   "end": 1005,
+   "body": "        _len = self._len\n\n        if not _len:\n            return iter(())\n\n        start, stop, _ = slice(start, stop).indices(self._len)\n\n        if start >= stop:\n            return iter(())\n\n        _pos = self._pos\n\n        min_pos, min_idx = _pos(start)\n\n        if stop == _len:\n            max_pos = len(self._lists) - 1\n            max_idx = len(self._lists[-1])\n        else:\n            max_pos, max_idx = _pos(stop)\n\n        return self._islice(min_pos, min_idx, max_pos, max_idx, reverse)\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_coverage_sorteddict.py::test_islice",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_islice",
+    "tests/test_coverage_sortedlist.py::test_islice",
+    "tests/test_coverage_sortedset.py::test_islice",
+    "tests/test_stress_sortedlist.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedset.py",
+   "qual": "SortedSet.symmetric_difference_update",
+   "body_start": 633,
+   "end": 638,
+   "body": "        _set = self._set\n        _list = self._list\n        _set.symmetric_difference_update(other)\n        _list.clear()\n        _list.update(_set)\n        return self\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_coverage_sortedset.py::test_symmetric_difference_update",
+    "tests/test_stress_sortedset.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedlist.py",
+   "qual": "SortedKeyList.remove",
+   "body_start": 2022,
+   "end": 2051,
+   "body": "        _maxes = self._maxes\n\n        if not _maxes:\n            raise ValueError('{0!r} not in list'.format(value))\n\n        key = self._key(value)\n        pos = bisect_left(_maxes, key)\n\n        if pos == len(_maxes):\n            raise ValueError('{0!r} not in list'.format(value))\n\n        _lists = self._lists\n        _keys = self._keys\n        idx = bisect_left(_keys[pos], key)\n        len_keys = len(_keys)\n        len_sublist = len(_keys[pos])\n\n        while True:\n            if _keys[pos][idx] != key:\n                raise ValueError('{0!r} not in list'.format(value))\n            if _lists[pos][idx] == value:\n                self._delete(pos, idx)\n                return\n            idx += 1\n            if idx == len_sublist:\n                pos += 1\n                if pos == len_keys:\n                    raise ValueError('{0!r} not in list'.format(value))\n                len_sublist = len(_keys[pos])\n                idx = 0\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_coverage_sortedkeylist_modulo.py::test_delete",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_remove",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_remove_valueerror1",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_remove_valueerror2",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_remove_valueerror3",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_remove_valueerror4",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_remove_valueerror5",
+    "tests/test_coverage_sortedkeylist_negate.py::test_delete",
+    "tests/test_coverage_sortedkeylist_negate.py::test_remove",
+    "tests/test_coverage_sortedkeylist_negate.py::test_remove_valueerror1",
+    "tests/test_coverage_sortedkeylist_negate.py::test_remove_valueerror2",
+    "tests/test_coverage_sortedkeylist_negate.py::test_remove_valueerror3",
+    "tests/test_stress_sortedkeylist.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedlist.py",
+   "qual": "SortedList._islice",
+   "body_start": 1019,
+   "end": 1069,
+   "body": "        _lists = self._lists\n\n        if min_pos > max_pos:\n            return iter(())\n\n        if min_pos == max_pos:\n            if reverse:\n                indices = reversed(range(min_idx, max_idx))\n                return map(_lists[min_pos].__getitem__, indices)\n\n            indices = range(min_idx, max_idx)\n            return map(_lists[min_pos].__getitem__, indices)\n\n        next_pos = min_pos + 1\n\n        if next_pos == max_pos:\n            if reverse:\n                min_indices = range(min_idx, len(_lists[min_pos]))\n                max_indices = range(max_idx)\n                return chain(\n                    map(_lists[max_pos].__getitem__, reversed(max_indices)),\n                    map(_lists[min_pos].__getitem__, reversed(min_indices)),\n                )\n\n            min_indices = range(min_idx, len(_lists[min_pos]))\n            max_indices = range(max_idx)\n            return chain(\n                map(_lists[min_pos].__getitem__, min_indices),\n                map(_lists[max_pos].__getitem__, max_indices),\n            )\n\n        if reverse:\n            min_indices = range(min_idx, len(_lists[min_pos]))\n            sublist_indices = range(next_pos, max_pos)\n            sublists = map(_lists.__getitem__, reversed(sublist_indices))\n            max_indices = range(max_idx)\n            return chain(\n                map(_lists[max_pos].__getitem__, reversed(max_indices)),\n                chain.from_iterable(map(reversed, sublists)),\n                map(_lists[min_pos].__getitem__, reversed(min_indices)),\n            )\n\n        min_indices = range(min_idx, len(_lists[min_pos]))\n        sublist_indices = range(next_pos, max_pos)\n        sublists = map(_lists.__getitem__, sublist_indices)\n        max_indices = range(max_idx)\n        return chain(\n            map(_lists[min_pos].__getitem__, min_indices),\n            chain.from_iterable(sublists),\n            map(_lists[max_pos].__getitem__, max_indices),\n        )\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_coverage_sorteddict.py::test_irange",
+    "tests/test_coverage_sorteddict.py::test_irange_key",
+    "tests/test_coverage_sorteddict.py::test_islice",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_irange",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_irange_key",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_islice",
+    "tests/test_coverage_sortedkeylist_negate.py::test_irange",
+    "tests/test_coverage_sortedlist.py::test_irange",
+    "tests/test_coverage_sortedlist.py::test_islice",
+    "tests/test_coverage_sortedset.py::test_irange",
+    "tests/test_coverage_sortedset.py::test_irange_key",
+    "tests/test_coverage_sortedset.py::test_islice",
+    "tests/test_stress_sortedlist.py::test_stress"
+   ]
+  },
+  {
+   "path": "sortedcontainers/sortedlist.py",
+   "qual": "SortedKeyList.discard",
+   "body_start": 1969,
+   "end": 1998,
+   "body": "        _maxes = self._maxes\n\n        if not _maxes:\n            return\n\n        key = self._key(value)\n        pos = bisect_left(_maxes, key)\n\n        if pos == len(_maxes):\n            return\n\n        _lists = self._lists\n        _keys = self._keys\n        idx = bisect_left(_keys[pos], key)\n        len_keys = len(_keys)\n        len_sublist = len(_keys[pos])\n\n        while True:\n            if _keys[pos][idx] != key:\n                return\n            if _lists[pos][idx] == value:\n                self._delete(pos, idx)\n                return\n            idx += 1\n            if idx == len_sublist:\n                pos += 1\n                if pos == len_keys:\n                    return\n                len_sublist = len(_keys[pos])\n                idx = 0\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_coverage_sortedkeylist_modulo.py::test_discard",
+    "tests/test_coverage_sortedkeylist_modulo.py::test_remove",
+    "tests/test_coverage_sortedkeylist_negate.py::test_discard",
+    "tests/test_coverage_sortedkeylist_negate.py::test_remove",
+    "tests/test_stress_sortedkeylist.py::test_stress"
+   ]
+  }
+ ],
+ "renames": [
+  {
+   "old": "_reset",
+   "new": "_reset_impl",
+   "count": 231,
+   "files": [
+    "sortedcontainers/sortedlist.py",
+    "sortedcontainers/sortedset.py",
+    "sortedcontainers/sorteddict.py",
+    "tests/test_coverage_sorteddict.py",
+    "tests/benchmark.py",
+    "tests/test_coverage_sortedkeylist_modulo.py",
+    "tests/test_stress_sorteddict.py",
+    "tests/test_coverage_sortedset.py",
+    "tests/benchmark_sortedlist.py",
+    "tests/test_coverage_sortedkeylist_negate.py",
+    "tests/test_stress_sortedset.py",
+    "tests/test_stress_sortedlist.py",
+    "tests/issue_147.py",
+    "tests/test_coverage_sortedlist.py"
+   ],
+   "path": "sortedcontainers/sortedlist.py"
+  },
+  {
+   "old": "_build_index",
+   "new": "_build_index_impl",
+   "count": 9,
+   "files": [
+    "sortedcontainers/sortedlist.py",
+    "tests/test_coverage_sortedkeylist_modulo.py",
+    "tests/test_coverage_sortedlist.py"
+   ],
+   "path": "sortedcontainers/sortedlist.py"
+  },
+  {
+   "old": "_fromset",
+   "new": "_fromset_impl",
+   "count": 6,
+   "files": [
+    "sortedcontainers/sortedset.py"
+   ],
+   "path": "sortedcontainers/sortedset.py"
+  },
+  {
+   "old": "_view_delitem",
+   "new": "_view_delitem_impl",
+   "count": 4,
+   "files": [
+    "sortedcontainers/sorteddict.py"
+   ],
+   "path": "sortedcontainers/sorteddict.py"
+  },
+  {
+   "old": "_islice",
+   "new": "_islice_impl",
+   "count": 4,
+   "files": [
+    "sortedcontainers/sortedlist.py"
+   ],
+   "path": "sortedcontainers/sortedlist.py"
+  }
+ ],
+ "docs": [
+  {
+   "path": "sortedcontainers/sortedlist.py",
+   "module": "sortedcontainers.sortedlist",
+   "qual": "recursive_repr"
+  },
+  {
+   "path": "sortedcontainers/sortedlist.py",
+   "module": "sortedcontainers.sortedlist",
+   "qual": "identity"
+  }
+ ],
+ "questions": [
+  {
+   "sentence": "Return ``(key, value)`` pair at `index` in sorted dict.",
+   "path": "sortedcontainers/sorteddict.py",
+   "qual": "SortedDict.peekitem",
+   "name": "peekitem"
+  },
+  {
+   "sentence": "Build a positional index for indexing the sorted list.",
+   "path": "sortedcontainers/sortedlist.py",
+   "qual": "SortedList._build_index",
+   "name": "_build_index"
+  },
+  {
+   "sentence": "Lookup value at `index` in sorted list.",
+   "path": "sortedcontainers/sortedlist.py",
+   "qual": "SortedList.__getitem__",
+   "name": "__getitem__"
+  },
+  {
+   "sentence": "Return string representation of sorted set.",
+   "path": "sortedcontainers/sortedset.py",
+   "qual": "SortedSet.__repr__",
+   "name": "__repr__"
+  },
+  {
+   "sentence": "Remove value at `index` from sorted list.",
+   "path": "sortedcontainers/sortedlist.py",
+   "qual": "SortedList.__delitem__",
+   "name": "__delitem__"
+  },
+  {
+   "sentence": "Return the size of the sorted set.",
+   "path": "sortedcontainers/sortedset.py",
+   "qual": "SortedSet.__len__",
+   "name": "__len__"
+  },
+  {
+   "sentence": "Return an iterator that slices sorted list from `start` to `stop`.",
+   "path": "sortedcontainers/sortedlist.py",
+   "qual": "SortedList.islice",
+   "name": "islice"
+  },
+  {
+   "sentence": "Return string representation of sorted list.",
+   "path": "sortedcontainers/sortedlist.py",
+   "qual": "SortedList.__repr__",
+   "name": "__repr__"
+  }
+ ]
+}

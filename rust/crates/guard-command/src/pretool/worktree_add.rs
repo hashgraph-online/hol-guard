@@ -51,16 +51,19 @@ pub(super) fn exact_safe_command(
         .position(|segment| segment.executable.as_deref() == Some("cd"))
         .and_then(|cd_index| verified_worktree_cwd_context(model, cd_index, context));
     let proof_context = super::PathContext {
+        literal_words: &[],
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
         cargo_config_inert: context.cargo_config_inert,
         npm_config_inert: context.npm_config_inert,
         pip_config_inert: context.pip_config_inert,
+        python_environment_inert: context.python_environment_inert,
         shell_home_matches: context.shell_home_matches,
         ripgrep_config_absent: context.ripgrep_config_absent,
         gem_config_absent: context.gem_config_absent,
         http_config_absent: context.http_config_absent,
+        openssl_config_absent: context.openssl_config_absent,
         psql_environment: context.psql_environment,
         cwd: cwd_proof
             .as_ref()

@@ -165,6 +165,13 @@ fn system_executable<D: Directories>(directories: &D, parts: &[String]) -> Optio
     fold(&resolved).starts_with(&inside).then_some(resolved)
 }
 
+/// Windows PowerShell below the trusted System32, which runs Cline's `.ps1`
+/// hook launchers.
+pub(crate) fn windows_powershell() -> Option<String> {
+    let parts = ["WindowsPowerShell", "v1.0", "powershell.exe"].map(str::to_owned);
+    system_executable(&SystemDirectories, &parts)
+}
+
 fn is_separator(character: char) -> bool {
     character == '\\' || character == '/'
 }

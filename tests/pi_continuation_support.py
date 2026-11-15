@@ -17,6 +17,12 @@ _PI_SDK_PACKAGE_NAME = "@earendil-works/pi-coding-agent"
 _PI_SDK_PACKAGE_VERSION = "0.87.1"
 
 
+# The extracted handler slices call guardWatchPostureActive(), which lives
+# in the template header outside every slice. Fixtures default it to
+# enforcement (fail closed), matching Protected posture.
+WATCH_POSTURE_STUB = "function guardWatchPostureActive() { return false; }\n"
+
+
 def _node_executable() -> str | None:
     return shutil.which("node")
 

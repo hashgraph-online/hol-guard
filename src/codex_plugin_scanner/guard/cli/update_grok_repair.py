@@ -10,16 +10,12 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from ..adapters.base import HarnessContext
-from ..adapters.grok import GrokHarnessAdapter
-from ..adapters.grok_config import (
-    GROK_HOOK_INTERNAL_TIMEOUT_SECONDS,
-    GROK_PRETOOL_HOOK_TIMEOUT_SECONDS,
-    GUARD_HOOK_PRETOOL_FILE,
-)
+from ..adapters.native_harness import ask
 from ..stable_guard_cli import prune_safe_cli_executable
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 from .managed_install_context import managed_install_context as repair_context_from_managed_install
+from .native_install_checks import grok_protection
 
 
 def repair_grok_install(
@@ -59,9 +55,10 @@ def repair_grok_install(
 
 
 def _grok_hooks_are_current(context: HarnessContext) -> bool:
-    from ..adapters.cursor_hook_config import isolated_cursor_hook_python
+    from ..adapters.isolated_hook_python import isolated_cursor_hook_python
 
-    hook_path = GrokHarnessAdapter._hooks_dir(context) / GUARD_HOOK_PRETOOL_FILE
+    protection = grok_protection(context)
+    hook_path = Path(protection["pretool_hook_path"])
     if not hook_path.is_file():
         return False
     try:
@@ -70,22 +67,22 @@ def _grok_hooks_are_current(context: HarnessContext) -> bool:
         return False
     timeout = _pretool_timeout(payload)
     command = _pretool_command(payload)
-    if timeout != GROK_PRETOOL_HOOK_TIMEOUT_SECONDS:
+    if timeout != protection["pretool_timeout_seconds"]:
         return False
-    from ..adapters.grok_config import GUARD_HOOK_PROMPT_FILE, build_observe_hook_json
-
-    prompt_path = GrokHarnessAdapter._hooks_dir(context) / GUARD_HOOK_PROMPT_FILE
+    prompt_path = Path(protection["prompt_hook_path"])
     try:
         prompt_hooks = json.loads(prompt_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    if not _prompt_hook_entries_are_current(prompt_hooks, build_observe_hook_json(command)):
+    expected = json.loads(ask("observe_hook", context, harness="grok", command=command)["hook"])
+    if not _prompt_hook_entries_are_current(prompt_hooks, expected):
         return False
-    if _isolated_bounded_hook_is_current(command, context=context):
+    internal_timeout = protection["hook_internal_timeout_seconds"]
+    if _isolated_bounded_hook_is_current(command, context=context, timeout_seconds=internal_timeout):
         return True
     if _isolated_client_argv(command) is not None:
         return False
-    marker = f'"timeout_seconds":{GROK_HOOK_INTERNAL_TIMEOUT_SECONDS}'
+    marker = f'"timeout_seconds":{internal_timeout}'
     if marker not in command.replace(" ", ""):
         return False
     hook_config = _hook_config_from_command(command)
@@ -93,10 +90,12 @@ def _grok_hooks_are_current(context: HarnessContext) -> bool:
         return False
     if hook_config.get("frozen_launcher") and isolated_cursor_hook_python() is not None:
         from ..adapters.bounded_cli_hook_bridge import _FROZEN_BRIDGE_COMMAND
+        from ..adapters.bounded_cli_hook_native import native_bridge_executable
 
         argv = _split_hook_command(command, posix=True) or _split_hook_command(command, posix=False)
-        if _FROZEN_BRIDGE_COMMAND in argv:
-            # Plain frozen bridge: migrate to the lightweight client. Desktop proxies are preferred by the installer.
+        if _FROZEN_BRIDGE_COMMAND in argv and native_bridge_executable("grok", guard_home=context.guard_home):
+            # Plain frozen bridge: migrate to the lightweight client the runtime
+            # wraps. Desktop proxies are preferred by the installer.
             return False
     executable = hook_config.get("python_executable")
     cli_args = hook_config.get("cli_args")
@@ -138,9 +137,9 @@ def _prompt_hook_entries_are_current(payload: object, expected: dict[str, object
     return True
 
 
-def _isolated_bounded_hook_is_current(command: str, *, context: HarnessContext) -> bool:
+def _isolated_bounded_hook_is_current(command: str, *, context: HarnessContext, timeout_seconds: int) -> bool:
     from ..adapters.bounded_cli_hook_bridge import _render_bounded_hook_script, bounded_hook_script_path
-    from ..adapters.cursor_hook_config import isolated_cursor_hook_python
+    from ..adapters.isolated_hook_python import isolated_cursor_hook_python
     from .grok_hook_validation import is_grok_hook_command
 
     interpreter = isolated_cursor_hook_python()
@@ -150,7 +149,9 @@ def _isolated_bounded_hook_is_current(command: str, *, context: HarnessContext) 
     if not is_grok_hook_command(command, context=context):
         return False
     argv = _isolated_client_argv(command)
-    if argv is None:
+    if argv is None or not _runtime_wraps_client(command):
+        # A bare client fails every deciding hook closed and never looks for
+        # a runtime, so repair re-registers it.
         return False
     try:
         if Path(argv[0]).resolve() != Path(interpreter).resolve():
@@ -163,7 +164,7 @@ def _isolated_bounded_hook_is_current(command: str, *, context: HarnessContext) 
     return source == _render_bounded_hook_script(
         guard_home=context.guard_home,
         harness="grok",
-        timeout_seconds=GROK_HOOK_INTERNAL_TIMEOUT_SECONDS,
+        timeout_seconds=timeout_seconds,
     )
 
 
@@ -176,6 +177,16 @@ def _isolated_client_argv(command: str) -> list[str] | None:
         if len(argv) in {3, 4} and argv[1] == "-I":
             return argv
     return None
+
+
+def _runtime_wraps_client(command: str) -> bool:
+    from ..adapters.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND
+
+    for posix in (True, False):
+        argv = _split_hook_command(command, posix=posix)
+        if len(argv) > 2 and argv[1] == NATIVE_BOUNDED_HOOK_COMMAND:
+            return True
+    return False
 
 
 def _hook_config_from_command(command: str) -> dict[str, object] | None:

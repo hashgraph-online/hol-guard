@@ -30,6 +30,7 @@ use super::live_probe;
 use super::records::{self, int, text};
 use super::recover;
 use super::retire::{self, Deadline, Expected};
+use super::start_progress;
 
 const WAKE_FILE: &str = "daemon-wake-reservation.json";
 const CURRENT_FIELDS: [&str; 5] = [
@@ -121,7 +122,7 @@ pub(super) fn answer(
             json!({"tombstone": records::is_exact_tombstone(&records::state_path(home))})
         }
         "pending" => json!({"pending": records::load_pending(home)}),
-        "progress" => json!({"progress": ensure::load_progress(home)}),
+        "progress" => json!({"progress": start_progress::load_progress(home)}),
         "clear_pending_if" => match positive(args, "pid") {
             Some(pid) => json!({"done": records::clear_pending_if_current(
                 home,

@@ -37,15 +37,17 @@ CVE-2026-112940 exp:2027-01-01
 # account for every copy rather than the first one found. The action's
 # `pypi-attestations` lock carried its own 2.8.0 pin, installed by
 # `action/action.yml` and `plugin-release/action.yml` on every run regardless
-# of `install_cisco`; both pin Python 3.12, so that copy is bumped to 2.9.0
+# of `install_cisco`; both pin Python 3.12, so that copy is bumped to 2.9.2
 # here rather than silenced.
 #
-# What is left is `uv.lock`'s Python 3.10 resolve: 2.9.0 requires 3.11, so for
-# that interpreter alone there is no fixed release to pin. The lock already
-# takes 2.9.0 on 3.11 and above.
+# What is left is `uv.lock`'s Python 3.10 resolve: the 2.9 line requires 3.11,
+# so for that interpreter alone there is no fixed release to pin. The lock
+# already takes 2.9.2 on 3.11 and above. CVE-2026-128089 is a second denial of
+# service in the same resolver code and is held to the same reasoning.
 #
 # Revisit when the cisco pins move or the Python floor rises to 3.11, which
 # retires the dnspython entry outright.
 CVE-2026-114605 exp:2027-01-01
 CVE-2026-114612 exp:2027-01-01
 GHSA-g5ff-637f-6q2m exp:2027-01-01
+CVE-2026-128089 exp:2027-01-01

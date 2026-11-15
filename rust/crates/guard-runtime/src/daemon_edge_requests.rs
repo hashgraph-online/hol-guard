@@ -211,6 +211,13 @@ fn base64url_decode(text: &str) -> Option<Vec<u8>> {
 /// daemon. A wait asks the daemon to hold the read, so it goes there too, as
 /// does a row that may carry a temporary MCP or local tool grant offer, which
 /// only the daemon attaches.
+///
+/// When this process is the daemon there is no daemon behind it: anything
+/// left unanswered here ends on the replay `404`, and a waiting hook would
+/// never see its decision. A standalone edge therefore answers a wait at
+/// once, which the hook bridge treats as a daemon that ignores `wait_ms`,
+/// and answers a row with a grant offer or a connector-setup hint without
+/// the affordance it cannot attach.
 pub(super) fn detail(
     request_id: &str,
     query: &str,
@@ -219,7 +226,8 @@ pub(super) fn detail(
     config: &ReadConfig,
     reads: &NativeReads,
 ) -> Option<(u16, Value, bool)> {
-    if query_value(query, "wait_ms").ok()?.is_some() {
+    let standalone = reads.is_standalone();
+    if query_value(query, "wait_ms").ok()?.is_some() && !standalone {
         return None;
     }
     let cwd = config.daemon_cwd.as_deref()?;
@@ -239,11 +247,19 @@ pub(super) fn detail(
     let Value::Object(mut approval) = approval else {
         return None;
     };
-    if may_carry_grant_offer(&approval) {
+    if may_carry_grant_offer(&approval) && !standalone {
         return None;
     }
     if !hosted {
-        let approval = recommend::local_detail(approval, config, reads)?;
+        let fallback = standalone.then(|| approval.clone());
+        let approval = match recommend::local_detail(approval, config, reads) {
+            Some(approval) => approval,
+            None => {
+                let mut approval = fallback?;
+                approval.remove("extension_allow_hint");
+                approval
+            }
+        };
         return Some((200, Value::Object(approval), false));
     }
     approval.remove("extension_allow_hint");

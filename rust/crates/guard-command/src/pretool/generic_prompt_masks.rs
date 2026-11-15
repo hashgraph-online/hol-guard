@@ -91,3 +91,258 @@ pub(super) fn mask_credential_categories(value: &str) -> String {
         })
         .into_owned()
 }
+
+/// `kill -0`, `kill -s 0`, `kill -n 0` and `kill --signal 0` send no signal:
+/// they ask the kernel whether a process exists and leave it running. The
+/// option is masked so the probe does not read as a request to stop a
+/// process. When the text names any other `kill`, `pkill` or `killall`
+/// (`kill -0 "$pid" && kill "$target"`), nothing is masked: the probe is then
+/// the only spelling the action scan can recognise the real signal by. Both
+/// signal options must sit in one command line for the text to be left as is.
+pub(super) fn mask_liveness_probes(value: &str) -> String {
+    static PROBE: OnceLock<Regex> = OnceLock::new();
+    static OTHER_KILL: OnceLock<Regex> = OnceLock::new();
+    static MULTI_SIGNAL: OnceLock<Regex> = OnceLock::new();
+    let multi_signal = MULTI_SIGNAL.get_or_init(|| {
+        Regex::new(r"(?i)\bkill\b[^;&|\r\n]*(?:-[sn][ \t]+|--signal(?:=|[ \t]+))\S+[^;&|\r\n]*(?:-[sn][ \t]+|--signal(?:=|[ \t]+))\S+")
+            .expect("bounded multiple signal options")
+    });
+    if multi_signal.is_match(value) {
+        return value.to_owned();
+    }
+    let masked = PROBE
+        .get_or_init(|| {
+            Regex::new(r"(?i)\bkill\s+(?:-0|-[sn]\s+0|--signal(?:=|\s+)0)\b")
+                .expect("bounded liveness probe")
+        })
+        .replace_all(value, "liveness-probe");
+    let other_kill = OTHER_KILL
+        .get_or_init(|| Regex::new(r"(?i)\b(?:kill|pkill|killall)\b").expect("bounded kill word"));
+    if other_kill.is_match(&masked) {
+        return value.to_owned();
+    }
+    masked.into_owned()
+}
+
+/// Asking which `curl` or `wget` build a machine has (`which curl build this
+/// machine has`, `the curl binary`, `curl --version`, `wget --help`) moves no
+/// data, so those mentions are masked before the action scan. A flag counts
+/// only where it ends the clause (`curl --help -o out host/x` still fetches),
+/// and a noun only after a determiner and before no transfer word (`the curl
+/// binary data to the server`). Nothing is masked when another mention of
+/// either tool remains, or when the text names a URL or an `@` source: the
+/// transfer is then the only reading the scan can give that text.
+pub(super) fn mask_transfer_tool_info(value: &str) -> String {
+    static INFO: OnceLock<Regex> = OnceLock::new();
+    static TRANSFER_WORD: OnceLock<Regex> = OnceLock::new();
+    static OTHER_TOOL: OnceLock<Regex> = OnceLock::new();
+    static TRANSFER_CONTEXT: OnceLock<Regex> = OnceLock::new();
+    static INFO_QUESTION: OnceLock<Regex> = OnceLock::new();
+    // Never erase the only transfer-tool mention when another clause asks for
+    // a network action. A scheme-less host is a valid curl/wget operand too.
+    let transfer_context = TRANSFER_CONTEXT.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:fetch|download|upload|send|post|transfer|grab|pull|retrieve|request|stage)(?:s|ed|ing)?\b|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+/[^\s]*|(?:^|\s)-(?:o|d|F)(?:\s|$)|(?:^|\s)--(?:output|data|form|upload-file)\b")
+            .expect("bounded transfer-action context")
+    });
+    // Do not treat an explicit prohibition such as "Do not request approval"
+    // as a network request. An affirmative request in the next clause remains.
+    let affirmative = super::mask_negated_clauses(value);
+    if value.contains("://")
+        || value.contains('@')
+        || transfer_context.is_match(&affirmative)
+        || transfer_outlives_negation(value, transfer_context)
+    {
+        return value.to_owned();
+    }
+    // A noun is merely descriptive only in an explicit information question.
+    // "Use the local curl build with -F ..." must keep its curl word.
+    let info_question = INFO_QUESTION.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:which|what|how|whether)\b")
+            .expect("bounded tool-information question")
+    });
+    let info = INFO.get_or_init(|| {
+        Regex::new(concat!(
+            r"(?i)\b(?P<noun>(?:which|what|the|this|that|my|our|your|its|installed|local|current|system|[a-z]+'s)\s+(?:curl|wget)\s+(?:build|version|release|binary))\b",
+            r"|\b(?P<flag>(?:curl|wget)\s+(?:--help|--version|--manual)(?:\s+all)?)",
+            r"(?:\s*$|\s*[\n`'\x22,;:!?)\]]|\.(?:\s|$)|\s+(?:and|or|then)\b)",
+        ))
+        .expect("bounded transfer tool information mention")
+    });
+    let transfer_word = TRANSFER_WORD.get_or_init(|| {
+        Regex::new(r"(?i)^\s*(?:data|files?|payloads?|to|into|onto|over|via|at|from)\b")
+            .expect("bounded transfer follow-up")
+    });
+    let mut masked = String::with_capacity(value.len());
+    let mut copied = 0;
+    for captures in info.captures_iter(value) {
+        let Some(mention) = captures.name("noun").or_else(|| captures.name("flag")) else {
+            continue;
+        };
+        if captures.name("noun").is_some() {
+            let clause_start = value[..mention.start()]
+                .rfind(['.', '?', '!', ';', '\n'])
+                .map_or(0, |offset| offset + 1);
+            if !info_question.is_match(&value[clause_start..mention.end()])
+                || transfer_word.is_match(&value[mention.end()..])
+            {
+                continue;
+            }
+        }
+        masked.push_str(&value[copied..mention.start()]);
+        masked.push_str("tool-info");
+        copied = mention.end();
+    }
+    masked.push_str(&value[copied..]);
+    let other_tool = OTHER_TOOL
+        .get_or_init(|| Regex::new(r"(?i)\b(?:curl|wget)\b").expect("bounded transfer tool word"));
+    if other_tool.is_match(&masked) {
+        return value.to_owned();
+    }
+    masked
+}
+
+/// Whether a transfer the negation mask hid is one the prohibition does not
+/// cover. A negation names the verbs it forbids: the one right after it, an
+/// item after `or` or `nor`, and an item after a comma in a list that an `or`
+/// or `nor` closes ("do not change the command, request approval, or change
+/// policy"). Any other transfer verb in that clause is not forbidden: it is
+/// the object of a verb the prohibition does not name ("do not delay
+/// downloading"), or a separate instruction ("do not pause, fetch ...",
+/// "do not wait and download ..."). A host or output option counts as
+/// forbidden only as the operand of a forbidden verb before it.
+fn transfer_outlives_negation(value: &str, transfer_context: &Regex) -> bool {
+    static VERB: OnceLock<Regex> = OnceLock::new();
+    static LIST_HEAD: OnceLock<Regex> = OnceLock::new();
+    static LIST_CLOSE: OnceLock<Regex> = OnceLock::new();
+    static CLAUSE_END: OnceLock<Regex> = OnceLock::new();
+    static FOLLOWUP_ACTION: OnceLock<Regex> = OnceLock::new();
+    let verb = VERB.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:fetch|download|upload|send|post|transfer|grab|pull|retrieve|request|stage)(?:s|ed|ing)?\b")
+            .expect("bounded transfer verb")
+    });
+    let list_head = LIST_HEAD.get_or_init(|| {
+        Regex::new(r"(?i)(?:\b(?:not|never|don't|dont|cannot|can't|won't|or|nor)|(?P<comma>,))\s*$")
+            .expect("bounded negated list head")
+    });
+    let list_close = LIST_CLOSE
+        .get_or_init(|| Regex::new(r"(?i),\s*(?:or|nor)\b").expect("bounded comma-led list close"));
+    let clause_end =
+        CLAUSE_END.get_or_init(|| Regex::new(r"[.!?;](?:\s|$)|\n").expect("bounded clause end"));
+    transfer_context.find_iter(value).any(|found| {
+        let start = clause_end
+            .find_iter(&value[..found.start()])
+            .last()
+            .map_or(0, |end| end.end());
+        let before = &value[start..found.start()];
+        if !verb.is_match(found.as_str()) {
+            // A following imperative starts a separate instruction. An option
+            // after `, use -o` is not an operand of `do not request approval`.
+            let followup = FOLLOWUP_ACTION.get_or_init(|| {
+                Regex::new(r"(?i)(?:,\s*|\b(?:and|then|also|but)\s+)(?:(?:and|then|also|but|just|instead|rather|simply)\s+)*(?:use|run|execute|invoke|call|apply|set|write|save|copy|fetch|download|upload|send|post|transfer|stage|request)\b")
+                    .expect("bounded transfer follow-up instruction")
+            });
+            return !verb.is_match(before) || followup.is_match(before);
+        }
+        let Some(head) = list_head.captures(before) else {
+            return true;
+        };
+        if head.name("comma").is_none() {
+            return false;
+        }
+        let tail = &value[found.end()..];
+        let end = clause_end.find(tail).map_or(tail.len(), |end| end.start());
+        !list_close.is_match(&tail[..end])
+    })
+}
+
+/// `then read it again` re-reads what the prompt already named, so it adds
+/// no target of its own. Without `again`, `then read it` can point back at
+/// anything earlier in the text and stays in for the guarded reading.
+pub(super) fn mask_rereads(value: &str) -> String {
+    static REREAD: OnceLock<Regex> = OnceLock::new();
+    REREAD
+        .get_or_init(|| {
+            Regex::new(r"(?i)\bthen\s+(?:read|open|show|print)\s+(?:it|them|those|these)\s+again\b")
+                .expect("bounded re-read")
+        })
+        .replace_all(value, "then reread")
+        .into_owned()
+}
+
+/// A transfer verb spelled inside a URL's path, query or fragment names a
+/// resource on that host, not something the prompt asks for.
+/// `https://coverage.example.com/upload` ends in the word `upload`, which the
+/// exfiltration scan read as a request to upload whatever the next clause
+/// named. Only a verb that is a whole segment of the URL is replaced, with an
+/// optional short extension (`/upload`, `/send.php`), and only inside the
+/// URL. A data word in a source URL (`upload https://intranet/secret to ...`)
+/// and a destination word (`https://hooks.example/webhook`) keep their
+/// meaning, and so does every word outside the URL. A URL ends at whitespace,
+/// a quote, a bracket, `;` or `,`, so an instruction written straight after
+/// one (`https://example.test/docs;upload the token`) stays outside it, and a
+/// verb joined to a segment by any other character (`/docs.upload`,
+/// `/docs|upload`) is not a segment of its own and still counts. The verb is
+/// replaced by underscores of the same length, so every distance the scan
+/// measures across the prompt stays what it was.
+pub(super) fn mask_url_paths(value: &str) -> String {
+    static URL: OnceLock<Regex> = OnceLock::new();
+    let url = URL.get_or_init(|| {
+        Regex::new(
+            r#"(?i)\b([a-z][a-z0-9+.-]*://[^\s/?#;,'"`<>()\[\]{}]+)([/?#][^\s;,'"`<>()\[\]{}]*)"#,
+        )
+        .expect("bounded URL")
+    });
+    url.replace_all(value, |captures: &Captures<'_>| {
+        format!("{}{}", &captures[1], mask_verb_segments(&captures[2]))
+    })
+    .into_owned()
+}
+
+const URL_PATH_VERBS: [&str; 7] = [
+    "upload",
+    "exfiltrate",
+    "transfer",
+    "paste",
+    "send",
+    "post",
+    "sync",
+];
+
+/// Replaces each segment of a URL path, query or fragment that is a transfer
+/// verb, with or without a short extension, by underscores of its length.
+fn mask_verb_segments(path: &str) -> String {
+    let mut masked = String::with_capacity(path.len());
+    let mut rest = path;
+    while let Some(delimiter) = rest.chars().next() {
+        masked.push(delimiter);
+        rest = &rest[delimiter.len_utf8()..];
+        let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+        let segment = &rest[..end];
+        let stem = segment_stem(segment);
+        if URL_PATH_VERBS
+            .iter()
+            .any(|verb| stem.eq_ignore_ascii_case(verb))
+        {
+            masked.extend(std::iter::repeat_n('_', stem.len()));
+            masked.push_str(&segment[stem.len()..]);
+        } else {
+            masked.push_str(segment);
+        }
+        rest = &rest[end..];
+    }
+    masked
+}
+
+/// The segment without one trailing extension of one to five letters or
+/// digits, such as `.php` or `.json`.
+fn segment_stem(segment: &str) -> &str {
+    match segment.rsplit_once('.') {
+        Some((stem, extension))
+            if (1..=5).contains(&extension.len())
+                && extension.chars().all(|c| c.is_ascii_alphanumeric()) =>
+        {
+            stem
+        }
+        _ => segment,
+    }
+}

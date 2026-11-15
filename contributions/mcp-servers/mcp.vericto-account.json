@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.vericto-account",
+  "version": "1.0.0",
+  "name": "Vericto Account MCP",
+  "description": "Database guardrails for AI agents. Hosted Vericto account MCP server at https://mcp.vericto.com/mcp/account, connected over OAuth 2.1 and acting for the person who connected it, within the scopes they granted. Reads workspace setup, rules, configuration, reports and docs. check_sql spends the workspace's monthly check allowance and stores a report, open_support_ticket writes a ticket, and apply_config_change applies a change the person reviewed, which can only add protection. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "com.vericto",
+    "displayName": "Vericto",
+    "url": "https://vericto.com"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCloud",
+    "background": "#090B17"
+  },
+  "homepage": "https://vericto.com/docs/mcp#oauth",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://mcp.vericto.com/mcp/account",
+    "serverNames": [
+      "vericto-account"
+    ]
+  },
+  "riskClasses": [
+    "external-account-read",
+    "external-credit-spend",
+    "external-shared-state-write",
+    "external-message-egress",
+    "external-configuration-change"
+  ],
+  "tools": [
+    {
+      "name": "setup_status",
+      "state": "review"
+    },
+    {
+      "name": "diagnose_proxy",
+      "state": "review"
+    },
+    {
+      "name": "explain_block",
+      "state": "review"
+    },
+    {
+      "name": "search_docs",
+      "state": "review"
+    },
+    {
+      "name": "get_config",
+      "state": "review"
+    },
+    {
+      "name": "plan_config_change",
+      "state": "review"
+    },
+    {
+      "name": "config_approval_status",
+      "state": "review"
+    },
+    {
+      "name": "list_rules",
+      "state": "review"
+    },
+    {
+      "name": "show_rule",
+      "state": "review"
+    },
+    {
+      "name": "list_reports",
+      "state": "review"
+    },
+    {
+      "name": "show_report",
+      "state": "review"
+    },
+    {
+      "name": "whoami",
+      "state": "review"
+    },
+    {
+      "name": "check_sql",
+      "state": "review"
+    },
+    {
+      "name": "open_support_ticket",
+      "state": "review"
+    },
+    {
+      "name": "apply_config_change",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://vericto.com/docs/mcp#oauth",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=com.vericto/account"
+  ],
+  "saferAlternatives": [
+    "Grant only the OAuth scopes the task needs; a tool missing a scope names it, and the person adds it in Dashboard > MCP connections.",
+    "Review the diff from plan_config_change before approving apply_config_change; each planned change is single-use, expires after a few minutes, and changes that lower protection stay in the dashboard.",
+    "Show the final ticket text to the person before approving open_support_ticket.",
+    "Do not re-run check_sql on unchanged SQL while the ruleset_version reported by whoami is unchanged; each check spends allowance and stores a report."
+  ]
+}

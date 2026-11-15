@@ -25,9 +25,6 @@ from .native_policy_snapshot_harness_postures import binding_with_harness_postur
 from .native_policy_snapshot_publication import NativePolicySnapshotPublicationMixin
 from .native_policy_snapshot_publisher_inputs import NativePolicySnapshotPublisherInputs
 from .native_policy_snapshot_publisher_transport import (
-    _decode_ack_v3 as _decode_ack_v3,
-)
-from .native_policy_snapshot_publisher_transport import (
     _publish_snapshot_v3 as _publish_snapshot_v3,
 )
 from .native_policy_snapshot_resident_recovery import NativePolicySnapshotResidentRecoveryMixin

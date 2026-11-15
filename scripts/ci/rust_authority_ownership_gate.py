@@ -387,7 +387,7 @@ def _ordered_call_names(node: ast.AST) -> list[str]:
     return names
 
 
-_CONTAINMENT_ADAPTER = Path("src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py")
+_CONTAINMENT_ADAPTER = Path("src/codex_plugin_scanner/guard/contained_sink_command.py")
 _CONTAINMENT_DAEMON = Path("src/codex_plugin_scanner/guard/hook_review/hook_worker_native.py")
 _CONTAINMENT_TRANSPORT = Path("src/codex_plugin_scanner/guard/native_hook_containment_route.py")
 # The routing tables the resident's ``containment_route``/``containment_sink`` replaced.

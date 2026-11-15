@@ -1314,6 +1314,19 @@
       "rule_id": "command.rupa.force"
     },
     {
+      "command": "uvx rupa==1.0 --force -o out.html in.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.rupa"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "force-uvx-equality-pin",
+      "rule_id": "command.rupa.force"
+    },
+    {
       "command": "uv tool run rupa --force --to html -o notes.txt in.md",
       "disabled_permissions": [],
       "enabled_extensions": [

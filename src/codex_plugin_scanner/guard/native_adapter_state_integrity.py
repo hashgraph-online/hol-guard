@@ -4,15 +4,10 @@ Rust owns the MAC over an adapter's durable lifecycle state. That state names
 the configuration file Guard took over and the backup it will restore, so the
 MAC is what stands between an edited manifest and a file Guard overwrites
 during install, repair or uninstall. This module ships the manifest and the
-caller's copy of the adapter state key, binds the reply by ``request_id`` plus
-``request_sha256`` and hands the answer back. Nothing is signed, compared or
-digested here, so an unavailable resident can neither stamp a manifest nor
-accept one.
-
-The binding digest deliberately excludes the key: the wire carries the real
-``integrity_key_b64`` while both sides digest a copy whose value is null, so a
-reply, log or diagnostic quoting ``request_sha256`` reveals nothing about the
-secret.
+Guard home whose adapter state key the runtime reads, binds the reply by
+``request_id`` plus ``request_sha256`` and hands the answer back. Nothing is
+signed, compared or digested here, and no key material crosses the wire, so an
+unavailable resident can neither stamp a manifest nor accept one.
 """
 
 from __future__ import annotations
@@ -21,7 +16,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .native_context import _resolve_digest_home, ensure_resident_prerequisite
+from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_store_policy import _payload
 
@@ -44,8 +39,8 @@ def native_adapter_state_integrity(
     harness: str,
     payload: object,
     field: str | None = None,
-    integrity_key_b64: str | None,
-    integrity_key_id: str | None,
+    key_home: Path | None = None,
+    create_key: bool | None = None,
     guard_home: Path | None = None,
 ) -> dict[str, object]:
     """Authenticate, verify or read one adapter state manifest in the runtime.
@@ -53,7 +48,10 @@ def native_adapter_state_integrity(
     ``action`` is ``authenticate``, ``verify`` or ``authenticated_field``. The
     answer is the stamped manifest, ``{"authenticated": bool}``, or that plus
     ``value`` holding the requested field when the manifest authenticates and
-    the field holds a usable absolute path.
+    the field holds a usable absolute path. ``key_home`` names the Guard home
+    whose key the runtime signs with; ``create_key`` lets ``authenticate``
+    create that key. A key the runtime cannot use for ``authenticate`` raises
+    ``ValueError``.
     """
 
     home = Path(_resolve_digest_home(guard_home))
@@ -66,9 +64,15 @@ def native_adapter_state_integrity(
         "harness": harness,
         "payload": payload,
         "field": field,
-        "integrity_key_b64": integrity_key_b64,
-        "integrity_key_id": integrity_key_id,
+        "integrity_key_b64": None,
+        "integrity_key_id": None,
     }
+    # Both fields stay off the wire when unset, as the runtime leaves them out
+    # of the digest it binds the reply to.
+    if key_home is not None:
+        wire["key_home"] = str(Path(key_home).absolute())
+    if create_key is not None:
+        wire["create_key"] = create_key
     try:
         response = _resident_request(
             operation="adapter_state_integrity",
@@ -82,10 +86,24 @@ def native_adapter_state_integrity(
         )
     except (TypeError, ValueError, OSError, RuntimeError):
         raise AdapterStateIntegrityUnavailableError from None
-    answer = _payload(response, {**wire, "integrity_key_b64": None}, home)
+    answer = _payload(response, wire, home)
     if not isinstance(answer, dict):
+        if _bound_key_refusal(response, wire):
+            raise ValueError("adapter state key is unusable")
         raise AdapterStateIntegrityUnavailableError
     return answer
+
+
+def _bound_key_refusal(response: dict[str, object] | None, wire: dict[str, Any]) -> bool:
+    """Whether the resident itself answered that the adapter state key is unusable."""
+
+    if response is None or response.get("code") != "native_adapter_state_integrity_key_unavailable":
+        return False
+    try:
+        digest = "sha256:" + _canonical_request_sha256(wire)
+    except (TypeError, ValueError):
+        return False
+    return response.get("request_id") == wire["request_id"] and response.get("request_sha256") == digest
 
 
 _PROBE_HARNESS = "adapter-state-runtime-probe"
@@ -114,8 +132,6 @@ def adapter_state_runtime_available(guard_home: Path | None = None) -> bool:
             action="verify",
             harness=_PROBE_HARNESS,
             payload={},
-            integrity_key_b64=None,
-            integrity_key_id=None,
             guard_home=guard_home,
         )
     except AdapterStateIntegrityUnavailableError:

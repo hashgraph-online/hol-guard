@@ -3,8 +3,9 @@
 //! The walk judges each descendant by its name and metadata alone: it never
 //! opens a file to decide. A hidden entry must be on a short benign list,
 //! because recursion would otherwise reach `.env`, `.ssh` or `.git`. A
-//! credential-named file is refused unless it is source code or test data
-//! below a test-data directory inside the walk.
+//! credential-named file is refused unless it is source code, test data
+//! below a test-data directory inside the walk, or a document or raster image
+//! the repository tracks and the tracked-file proof clears.
 use std::path::Path;
 
 /// Hidden names that carry no credentials and are common in source trees.
@@ -78,7 +79,8 @@ pub(in crate::pretool::search) fn descendant_allowed(
     !SECRET_EXTENSIONS.contains(&extension.as_str())
         && (!guard_secure_fs::credential_named_path(relative)
             || synthetic_fixture(root, relative)
-            || crate::pretool::search_scope_tracked::names::committed_document(path))
+            || crate::pretool::search_scope_tracked::names::committed_document(path)
+            || crate::pretool::search_scope_tracked::names::committed_image(path))
 }
 
 /// Directories that hold a project's test data.

@@ -119,14 +119,27 @@ fn answer(request: &Request, host: &Host) -> Result<Value, String> {
                 .filter(|state| !state.is_empty());
             Ok(json!({ "state": state }))
         }
-        ("command", Some(pid)) if pid > 0 => {
-            let command = ps(host, &["-p", &pid.to_string(), "-o", "command="])
-                .map(|output| py_strip(&output).to_owned())
-                .filter(|command| !command.is_empty());
-            Ok(json!({ "command": command }))
-        }
+        ("command", Some(pid)) if pid > 0 => Ok(json!({ "command": command_of(host, pid) })),
         _ => Err(invalid()),
     }
+}
+
+/// The command line of `pid` from the trusted `ps` within `timeout`, as the
+/// `command` query answers it.
+pub(crate) fn command_line(pid: i64, timeout: Duration) -> Option<String> {
+    let host = Host {
+        ps: trusted_ps_path(),
+        proc_root: None,
+        timeout,
+        output_limit: OUTPUT_LIMIT_BYTES,
+    };
+    command_of(&host, pid)
+}
+
+fn command_of(host: &Host, pid: i64) -> Option<String> {
+    ps(host, &["-p", &pid.to_string(), "-o", "command="])
+        .map(|output| py_strip(&output).to_owned())
+        .filter(|command| !command.is_empty())
 }
 
 fn inventory(host: &Host) -> Value {

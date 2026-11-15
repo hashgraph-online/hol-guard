@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard import stable_guard_cli
-from codex_plugin_scanner.guard.adapters import claude_hook_argv, cline_mcp, copilot, hermes
-from codex_plugin_scanner.guard.adapters._modules.claude.claude_frozen_hook import FROZEN_CLAUDE_HOOK_COMMAND
+from codex_plugin_scanner.guard.adapters import claude_code, cline_runtime, cursor, hermes
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.hook_python import guard_cli_command
+from codex_plugin_scanner.guard.adapters.mcp_relay_native import mcp_proxy_launch
 from codex_plugin_scanner.guard.adapters.mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
@@ -72,19 +72,26 @@ def test_claude_frozen_hooks_use_the_stable_launcher(
 ) -> None:
     _, launcher = versioned_core
 
-    def no_native_bridge(_guard_home: Path) -> None:
+    def no_native_bridge(_feature: str, **_kwargs: object) -> None:
         return None
 
-    monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", no_native_bridge)
+    monkeypatch.setattr(claude_code, "native_hook_bridge_executable", no_native_bridge)
+    monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = _context(tmp_path)
+    adapter = claude_code.ClaudeCodeHarnessAdapter
 
-    hook = claude_hook_argv.guard_hook_command_parts(context)
-    daemon = claude_hook_argv.daemon_hook_command_parts(context, fallback_daemon_url="http://127.0.0.1:1")
-    session = claude_hook_argv._python_session_start_command_parts(context)  # pyright: ignore[reportPrivateUsage]
+    hook = adapter._hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
+    daemon = adapter._daemon_hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
+    session = adapter._session_start_command_parts(context)  # pyright: ignore[reportPrivateUsage]
 
     assert [hook[0], daemon[0], session[0]] == [launcher, launcher, launcher]
     assert hook[1] == "hook"
-    assert daemon[1] == session[1] == FROZEN_CLAUDE_HOOK_COMMAND
+    assert daemon[1] == session[1] == "__guard-claude-hook"
+
+
+def _hermes_launch_command(context: HarnessContext) -> object:
+    request = {"name": "fixture", "config_path": "", "command": "node", "args": [], "env": []}
+    return json.loads(hermes._launchers(context, [request]))["entries"][0]["command"]  # pyright: ignore[reportPrivateUsage]
 
 
 def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_core: tuple[Path, str]) -> None:
@@ -96,11 +103,10 @@ def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_co
 
     commands = [
         proxy_launcher_entry(proxy_command="cursor-mcp-proxy", context=context, server=server)["command"],
-        CursorHarnessAdapter()._proxy_server_entry(context, server)["command"],  # pyright: ignore[reportPrivateUsage]
-        CursorHarnessAdapter._refresh_guard_proxy_entry(stale)["command"],  # pyright: ignore[reportPrivateUsage]
-        copilot._refresh_guard_proxy_entry(stale, list(python_args), launcher_env={})["command"],  # pyright: ignore[reportPrivateUsage]
-        cline_mcp._proxy_entry(context, server)["command"],  # pyright: ignore[reportPrivateUsage]
-        hermes._overlay_servers(context=context, source_configs={"fixture": {"command": "node"}})["fixture"]["command"],  # pyright: ignore[reportPrivateUsage]
+        cursor._relaunch(stale["args"])[0],  # pyright: ignore[reportPrivateUsage]
+        mcp_proxy_launch(stable_guard_cli.guard_cli_launcher(), list(python_args))[0],
+        cline_runtime.proxy_entry(context, server)["command"],
+        _hermes_launch_command(context),
     ]
 
     assert commands == [launcher] * len(commands)

@@ -183,6 +183,93 @@ fn ask_with(home: &Path, op: &str, extra: Value) -> Value {
 }
 
 #[test]
+fn a_live_command_mismatch_preserves_state_and_prevents_replacement() {
+    use crate::daemon_edge::standalone::write_signed_record;
+    use crate::daemon_policy_authority::load_authenticated_daemon_identity;
+    use sha2::{Digest, Sha256};
+
+    struct Running(std::process::Child);
+    impl Drop for Running {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    for with_marker in [true, false] {
+        let home = private_home();
+        let mut child = Running(
+            std::process::Command::new("/bin/sleep")
+                .arg("60")
+                .spawn()
+                .unwrap(),
+        );
+        let pid = i64::from(child.0.id());
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let auth = "test-daemon-auth";
+        write_private(&home.path().join("daemon-auth-token"), auth);
+        let mut state = json!({
+            "pid": pid, "port": port, "guard_home": home.path(),
+            "process_start_marker": super::host::start_marker(pid).unwrap(),
+            "user": super::host::owner_marker(pid).unwrap(),
+            "state_id": "live-record", "auth_token_id": hex::encode(Sha256::digest(auth.as_bytes())),
+            "compatibility_version": 2, "package_version": "1.0.0",
+            "runtime_fingerprint": "old-runtime",
+        }).as_object().unwrap().clone();
+        if !with_marker {
+            state.remove("process_start_marker");
+        }
+        write_signed_record(home.path(), "daemon-state.json", state).unwrap();
+        assert!(load_authenticated_daemon_identity(home.path()).is_some());
+        let state_path = records::state_path(home.path());
+        let before = fs::read(&state_path).unwrap();
+        assert_eq!(ask(home.path(), "retire").unwrap(), json!({"retired": []}));
+        assert_eq!(fs::read(&state_path).unwrap(), before);
+        assert!(child.0.try_wait().unwrap().is_none());
+        assert_eq!(
+            ask(home.path(), "retirement_complete").unwrap(),
+            json!({"complete": false})
+        );
+
+        let core = home.path().join("replacement-core");
+        fs::write(&core, "#!/bin/sh\n: > launch-sentinel\n").unwrap();
+        fs::set_permissions(&core, fs::Permissions::from_mode(0o700)).unwrap();
+        let answer = ask_with(
+            home.path(),
+            "ensure",
+            json!({
+                "launch": {"state": {"package_version": "2.0.0", "runtime_fingerprint": "new-runtime"}},
+                "executable": core, "home_dir": home.path(), "launch_cwd": home.path(),
+                "preferred_port": port,
+            }),
+        );
+        assert_eq!(
+            answer,
+            json!({
+                "kind": "runtime", "error": "Stale Guard daemon could not be retired safely.",
+            })
+        );
+        assert_eq!(fs::read(&state_path).unwrap(), before);
+        assert!(!records::pending_path(home.path()).exists());
+        assert!(!home.path().join("launch-sentinel").exists());
+        assert!(child.0.try_wait().unwrap().is_none());
+
+        child.0.kill().unwrap();
+        child.0.wait().unwrap();
+        assert_eq!(
+            ask(home.path(), "retire").unwrap(),
+            json!({"retired": [pid]})
+        );
+        assert!(records::is_exact_tombstone(&state_path));
+        assert_eq!(
+            ask(home.path(), "retirement_complete").unwrap(),
+            json!({"complete": true})
+        );
+    }
+}
+
+#[test]
 fn recovery_posture_follows_watch_and_harness_overrides() {
     let home = private_home();
     assert_eq!(ask(home.path(), "posture").unwrap()["posture"], "on");
@@ -262,4 +349,152 @@ fn locator_publish_without_an_authenticated_state_writes_nothing() {
         serde_json::from_slice(&run_command(request.to_string().as_bytes()).unwrap()).unwrap();
     assert_eq!(answer["kind"], "runtime");
     assert!(!home.path().join("approval-center-locator.json").exists());
+}
+
+/// The heartbeat line the frozen entry point writes: its pid, the time, and
+/// the launch nonce it was given.
+const HEARTBEAT: &str = "$$ $(/bin/date +%s)000000000 $HOL_GUARD_DAEMON_LAUNCH_NONCE";
+
+fn progress_pid(home: &Path) -> Option<i64> {
+    super::start_progress::load_progress(home)
+        .and_then(|progress| progress.get("pid").and_then(Value::as_i64))
+}
+
+fn kill_now(pid: Option<i64>) {
+    if let Some(pid) = pid {
+        let _ = std::process::Command::new("/bin/kill")
+            .args(["-9", &pid.to_string()])
+            .status();
+    }
+}
+
+/// A stand-in for the frozen Core: `heartbeat` is the line it writes, as the
+/// entry point does, before it stays up without ever handing off.
+fn slow_core(dir: &Path, heartbeat: Option<&str>) -> std::path::PathBuf {
+    let path = dir.join("slow-core");
+    let write = heartbeat.map_or(String::new(), |line| {
+        format!(
+            "umask 077\n/bin/sleep 1\nprintf '%s' \"{line}\" > \"$HOL_GUARD_DAEMON_START_HEARTBEAT.t\"\n\
+             /bin/mv \"$HOL_GUARD_DAEMON_START_HEARTBEAT.t\" \"$HOL_GUARD_DAEMON_START_HEARTBEAT\"\n"
+        )
+    });
+    fs::write(&path, format!("#!/bin/sh\n{write}exec /bin/sleep 30\n")).unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+    path
+}
+
+fn ensure_slow_core(home: &Path, core: &Path) -> Value {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    ask_with(
+        home,
+        "ensure",
+        json!({
+            "budget_ms": 4000,
+            "launch": {"state": {
+                "package_version": "1.0.0",
+                "runtime_fingerprint": "slow-core-fingerprint",
+            }},
+            "executable": core,
+            "home_dir": home,
+            "launch_cwd": home,
+            "preferred_port": port,
+        }),
+    )
+}
+
+fn pid_exists(pid: i64) -> bool {
+    std::process::Command::new("/bin/kill")
+        .args(["-0", &pid.to_string()])
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+#[test]
+fn a_frozen_core_still_starting_at_the_deadline_is_left_running() {
+    let home = private_home();
+    let core = slow_core(home.path(), Some(HEARTBEAT));
+    let answer = ensure_slow_core(home.path(), &core);
+    let progress = super::start_progress::load_progress(home.path());
+    let pid = progress
+        .as_ref()
+        .and_then(|progress| progress.get("pid"))
+        .and_then(Value::as_i64);
+    let alive = pid.is_some_and(pid_exists);
+    if let Some(pid) = pid {
+        let _ = std::process::Command::new("/bin/kill")
+            .args(["-9", &pid.to_string()])
+            .status();
+    }
+    assert_eq!(answer["kind"], "timeout", "{answer}");
+    assert!(
+        answer["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("still starting")),
+        "{answer}"
+    );
+    assert!(alive, "the starting Core was killed: {progress:?}");
+}
+
+#[test]
+fn a_silent_core_at_the_deadline_is_still_terminated() {
+    let home = private_home();
+    let core = slow_core(home.path(), None);
+    let answer = ensure_slow_core(home.path(), &core);
+    assert_eq!(answer["kind"], "runtime", "{answer}");
+    assert!(super::start_progress::load_progress(home.path()).is_none());
+}
+
+#[test]
+fn a_heartbeat_from_outside_the_spawned_tree_does_not_count() {
+    let home = private_home();
+    let core = slow_core(
+        home.path(),
+        Some("1 $(/bin/date +%s)000000000 $HOL_GUARD_DAEMON_LAUNCH_NONCE"),
+    );
+    let answer = ensure_slow_core(home.path(), &core);
+    assert_eq!(answer["kind"], "runtime", "{answer}");
+    assert!(super::start_progress::load_progress(home.path()).is_none());
+}
+
+#[test]
+fn a_heartbeat_without_this_launchs_nonce_does_not_count() {
+    let home = private_home();
+    let other_nonce = "0".repeat(64);
+    let core = slow_core(
+        home.path(),
+        Some(&format!("$$ $(/bin/date +%s)000000000 {other_nonce}")),
+    );
+    let answer = ensure_slow_core(home.path(), &core);
+    assert_eq!(answer["kind"], "runtime", "{answer}");
+    assert!(super::start_progress::load_progress(home.path()).is_none());
+}
+
+/// The stand-in Core execs `/bin/sleep`, which is not a Guard daemon command,
+/// so its progress marker no longer counts as live, the same verdict an
+/// expired marker gets. The second start therefore takes the stalled-launch
+/// path: it settles that launch's receipt instead of refusing to start.
+#[test]
+fn a_still_starting_launch_that_never_hands_off_does_not_block_the_next_start() {
+    let home = private_home();
+    let core = slow_core(home.path(), Some(HEARTBEAT));
+    let first = ensure_slow_core(home.path(), &core);
+    let first_pid = progress_pid(home.path());
+    let second = ensure_slow_core(home.path(), &core);
+    let second_pid = progress_pid(home.path());
+    kill_now(first_pid);
+    kill_now(second_pid);
+    assert_eq!(first["kind"], "timeout", "{first}");
+    assert!(first_pid.is_some(), "the first launch recorded no progress");
+    let error = second["error"].as_str().unwrap_or_default();
+    assert!(
+        !error.contains("previous Guard daemon launch") && !error.contains("In-progress"),
+        "a stalled launch blocked the next start: {second}"
+    );
+    assert_eq!(second["kind"], "timeout", "{second}");
+    assert_ne!(second_pid, first_pid, "{second}");
 }

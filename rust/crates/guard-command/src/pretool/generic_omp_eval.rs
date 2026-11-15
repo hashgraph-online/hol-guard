@@ -4,7 +4,8 @@
 //! program, so the host hook sees only an opaque `eval`. This module accepts
 //! a deliberately tiny language: statements built from `tool.read`,
 //! `tool.grep`, `tool.glob` and `tool.bash` calls whose arguments are object
-//! literals of scalar literals, or the SDK's `await read(literal_path)` helper,
+//! literals of scalar literals, the SDK's `await read(literal_path)` helper, or
+//! the prelude's `await sh(literal_command)` shell helper,
 //! plus `display`/`log`, `const`/`let` bindings,
 //! `Promise.all`, `JSON.stringify`, `.text` and `.length`. Every extracted call is then
 //! evaluated as the equivalent standalone tool, through the same entry point
@@ -181,10 +182,15 @@ pub(super) fn evaluate(
     } else {
         parse_program(code)?
     };
-    let mut ran_shell = false;
+    let mut evaluated = Vec::with_capacity(calls.len());
+    let mut saw_unmodeled_call = false;
     for call in &calls {
-        let inner = standalone_payload(call, context)?;
-        ran_shell |= call.tool == "bash";
+        // A malformed sibling call cannot erase a protection verdict already
+        // established for a literal sh() command elsewhere in this eval.
+        let Some(inner) = standalone_payload(call, context) else {
+            saw_unmodeled_call = true;
+            continue;
+        };
         // The entry point a direct call takes, so the bridged call gets the
         // same `cwd` resolution and compound re-judging as that call.
         let result = crate::pretool::generic::evaluate_pre_tool_envelope_with_execution_context(
@@ -196,6 +202,25 @@ pub(super) fn evaluate(
             context.path,
             context.execution_environment,
         );
+        evaluated.push((call, result));
+    }
+    // Wherever an `sh()` call sits in the program, its protection verdict
+    // decides the whole program.
+    if let Some(stopped) = evaluated
+        .iter()
+        .filter(|(call, _)| call.shell_helper)
+        .find_map(|(_, result)| shell_helper_protection(result, context))
+    {
+        return Some(stopped);
+    }
+    // Unsupported calls still require an unknown-program review. Only an
+    // established sh() block may take precedence over that fallback.
+    if saw_unmodeled_call {
+        return None;
+    }
+    let mut ran_shell = false;
+    for (call, result) in evaluated {
+        ran_shell |= call.tool == "bash";
         if result.action.sensitive_target {
             return None;
         }
@@ -226,6 +251,38 @@ pub(super) fn evaluate(
     ))
 }
 
+/// What stops an `sh()` call outright. The eval shell bridge raises no hook
+/// of its own, so the eval is the only call Guard sees, and approving the
+/// eval would run whatever it holds. A command the direct call blocks stays
+/// blocked. One the direct call would only review because it reaches
+/// sensitive local data is blocked too, rather than offered as an approvable
+/// eval: the `bash` tool runs the same command under its own review, with
+/// Allow once and Always allow, so that is where the person decides.
+fn shell_helper_protection(
+    result: &PreToolResultV1,
+    context: &OmpContext<'_>,
+) -> Option<PreToolResultV1> {
+    if result.minimum_action == "block" {
+        return Some(result.clone());
+    }
+    if !result.action.sensitive_target || result.minimum_action == "allow" {
+        return None;
+    }
+    Some(generic_result(
+        generic_action(
+            context.harness,
+            context.event,
+            PreToolActionTypeV1::Command,
+            PreToolOperationV1::Execute,
+            true,
+            true,
+        ),
+        "block",
+        "native_secret_exfiltration",
+        "HOL Guard blocked an eval sh() command that reaches sensitive local data. sh() runs on the eval shell bridge, which Guard cannot review on its own; run the command with the bash tool instead, where Guard reviews it and you can approve it.",
+    ))
+}
+
 /// Whether a bridged `bash` call needs only the containment its standalone
 /// form would get. OMP wraps every tool the eval bridge reaches in its
 /// extension gate, so the bridged call raises its own `tool_call` hook and
@@ -233,7 +290,10 @@ pub(super) fn evaluate(
 /// calls `bash` directly. Anything that would be reviewed standalone, or a
 /// verdict with no containment profile, keeps the whole program reviewed.
 fn contained_bash(call: &Call, result: &PreToolResultV1) -> bool {
+    // `sh()` runs on the eval shell bridge, which raises no `bash` hook, so
+    // nothing would arrange the containment the verdict relies on.
     call.tool == "bash"
+        && !call.shell_helper
         && result.minimum_action == "sandbox-required"
         && result.policy_action == "sandbox-required"
         && crate::hook_responses::contained_execution_profile(&result.reason_code).is_some()

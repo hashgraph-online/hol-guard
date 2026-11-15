@@ -6,6 +6,8 @@ mod active_pack_security;
 #[path = "adapters/adapter_inventory.rs"]
 mod adapter_inventory;
 mod adapter_state_integrity_op;
+#[path = "adapters/adapter_state_key.rs"]
+mod adapter_state_key;
 #[cfg(all(test, unix))]
 #[path = "adapters/adapter_vectors_tests.rs"]
 mod adapter_vectors_tests;
@@ -95,6 +97,7 @@ mod business_document_compile;
 mod business_review_page;
 mod business_source_codec;
 mod catalog_provenance;
+mod cigar_apps;
 mod cisco_containment;
 mod cisco_evidence;
 mod cisco_plan;
@@ -189,6 +192,7 @@ mod codex_app_server_socket;
 #[path = "adapters/detection/codex_detect.rs"]
 mod codex_detect;
 mod codex_hook_artifacts;
+mod codex_hook_authority_record;
 mod codex_hook_bridge;
 mod codex_hook_bridge_direct;
 mod codex_hook_bridge_direct_resident;
@@ -204,6 +208,8 @@ mod codex_hooks;
 mod codex_hooks_parity_tests;
 mod codex_host_inventory;
 mod codex_identity;
+#[path = "adapters/codex_install_plan.rs"]
+mod codex_install_plan;
 mod codex_live_operation;
 mod codex_live_wait_build;
 mod codex_proxy;
@@ -225,6 +231,7 @@ mod command_envelope_op;
 mod command_expression_validate_op;
 mod command_policy_decide_op;
 mod command_policy_repair;
+mod command_risk_groups;
 mod composio_role_op;
 mod compound_git_args;
 mod compound_git_chain;
@@ -281,6 +288,7 @@ mod context_assistance_prompt;
 mod context_assistance_prompt_files;
 mod context_assistance_prompt_ignore;
 mod context_assistance_prompt_words;
+mod context_assistance_savings;
 mod context_assistance_service;
 mod context_digest;
 mod context_digest_json;
@@ -333,6 +341,11 @@ mod cursor_hook_config;
 #[cfg(test)]
 #[path = "adapters/cursor_hook_config_tests.rs"]
 mod cursor_hook_config_tests;
+#[path = "adapters/cursor_hook_rebind.rs"]
+mod cursor_hook_rebind;
+#[cfg(test)]
+#[path = "adapters/cursor_hook_rebind_tests.rs"]
+mod cursor_hook_rebind_tests;
 #[path = "adapters/cursor_hook_script.rs"]
 mod cursor_hook_script;
 #[path = "adapters/cursor_hook_state.rs"]
@@ -402,6 +415,7 @@ mod directory_trust;
 mod discovery_placement_op;
 mod durable_runtime_collapse;
 mod edge;
+mod edge_command_pattern_allow;
 mod edge_exact_command_allow;
 mod edge_exact_command_review;
 mod edge_exact_command_spelling;
@@ -478,6 +492,7 @@ mod guard_config_update_value;
 mod guard_home_resolve;
 mod guard_paths;
 mod guard_product_copy;
+mod guard_repair_report;
 mod guard_shim_profile;
 mod guard_store_advisory_cache;
 #[cfg(test)]
@@ -589,6 +604,8 @@ mod guard_store_outbox_reads;
 mod guard_store_outbox_reads_tests;
 mod guard_store_outbox_recover;
 mod guard_store_outbox_requeue;
+mod guard_store_policy_clear;
+mod guard_store_policy_import;
 mod guard_store_policy_source_context;
 #[cfg(test)]
 mod guard_store_policy_source_context_vectors_tests;
@@ -643,6 +660,13 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod guard_store_write_cache;
 mod hardening;
+#[path = "adapters/harness_adapter/mod.rs"]
+mod harness_adapter;
+#[path = "adapters/harness_backup_restore.rs"]
+mod harness_backup_restore;
+#[cfg(test)]
+#[path = "adapters/harness_backup_restore_tests.rs"]
+mod harness_backup_restore_tests;
 mod harness_coverage;
 mod harness_coverage_command;
 mod harness_diagnostics;
@@ -656,8 +680,11 @@ mod harness_mcp_discovery;
 #[cfg(test)]
 #[path = "adapters/harness_mcp_discovery_tests.rs"]
 mod harness_mcp_discovery_tests;
+mod harness_protection_contract;
 #[path = "adapters/harness_settings_file.rs"]
 mod harness_settings_file;
+#[path = "adapters/harness_shim_refresh.rs"]
+mod harness_shim_refresh;
 mod harness_version_compat;
 mod health_lease_contract;
 mod health_lease_state;
@@ -671,6 +698,8 @@ mod hermes_hook_config;
 #[path = "adapters/hermes_hook_config_tests.rs"]
 mod hermes_hook_config_tests;
 mod hermes_inspect;
+#[path = "adapters/hermes_install_plan.rs"]
+mod hermes_install_plan;
 mod hermes_printable;
 mod hermes_skills;
 mod hermes_text;
@@ -739,6 +768,7 @@ mod mcp_config_discovery_tests;
 mod muse_detect;
 mod pack_lifecycle;
 mod pack_preparation;
+mod swarm_op;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
 mod codex_hook_identity_op;
@@ -888,6 +918,7 @@ mod native_decision_receipt;
 mod native_exact_action_op;
 mod native_hook_receipt;
 mod native_install_verdict;
+mod native_readiness;
 mod native_review_link;
 mod native_runtime_admission;
 mod native_runtime_resilience;
@@ -1009,6 +1040,7 @@ mod policy_lookup_reuse;
 mod policy_runtime_saved;
 mod policy_runtime_saved_reuse;
 mod policy_snapshot_build;
+mod policy_snapshot_publish;
 mod policy_store;
 mod policy_verifier_key_provision;
 mod posix_processes;

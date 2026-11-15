@@ -481,3 +481,5 @@ fn a_hook_without_time_for_a_start_fails_closed_without_starting() {
 
 #[path = "codex_hook_bridge_client_tests.rs"]
 mod client_tests;
+#[path = "codex_hook_bridge_recovery_tests.rs"]
+mod recovery_tests;

@@ -8,6 +8,7 @@ calls hold only the Guard library work behind each route.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from typing import Any
@@ -15,6 +16,19 @@ from typing import Any
 from .store import GuardStore
 
 RouteCall = Callable[[GuardStore, Mapping[str, Any]], dict[str, object]]
+
+# Install refusals meant for the person at the keyboard lead with their reason
+# code (``codex_hook_owner_conflict: ...``) and carry the one edit that clears
+# them; the CLI prints them verbatim. Anything else stays behind the generic
+# repair reply so internal failure text never reaches the app.
+_USER_FACING_INSTALL_ERROR = re.compile(r"([a-z][a-z0-9_]{2,63}): (\S.*)", re.DOTALL)
+
+
+def _user_facing_install_error(error: RuntimeError) -> tuple[str, str] | None:
+    match = _USER_FACING_INSTALL_ERROR.fullmatch(str(error).strip())
+    if match is None:
+        return None
+    return match.group(1), match.group(2)
 
 
 def _now() -> str:
@@ -46,64 +60,6 @@ def _validated(kind: str, store: GuardStore, payload: Mapping[str, object]) -> A
     if decision.rejected:
         return _reply(decision.body, decision.status)
     return decision
-
-
-def policy_clear(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    from .approval_gate import ApprovalGateError, input_from_mapping, require_high_risk
-
-    payload = _payload(args)
-    verdict = _validated("policy_clear", store, payload)
-    if isinstance(verdict, dict):
-        return verdict
-    fields = verdict.fields
-    try:
-        grant = require_high_risk(
-            store.guard_home,
-            purpose="policy_clear",
-            approval_gate_input=input_from_mapping(payload),
-        )
-        cleared = store.clear_policy_decisions(
-            fields["harness"],
-            fields["source"],
-            scope=fields["scope"],
-            artifact_id=fields["artifact_id"],
-            artifact_hash=fields["artifact_hash"],
-            artifact_id_is_null=fields["artifact_id_is_null"],
-            artifact_hash_is_null=fields["artifact_hash_is_null"],
-            workspace=fields["workspace"],
-            publisher=fields["publisher"],
-            approval_gate_grant=grant,
-        )
-    except ApprovalGateError as error:
-        body = error.to_payload()
-        body["cleared"] = 0
-        return _reply(body, error.status)
-    return _reply({"cleared": cleared, **verdict.body})
-
-
-def policy_upsert(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    from .approval_gate import ApprovalGateError, input_from_mapping, require_high_risk
-    from .models import PolicyDecision
-
-    payload = _payload(args)
-    verdict = _validated("policy_upsert", store, payload)
-    if isinstance(verdict, dict):
-        return verdict
-    decision = PolicyDecision(**verdict.fields)
-    try:
-        grant = require_high_risk(
-            store.guard_home,
-            purpose="policy_write",
-            approval_gate_input=input_from_mapping(payload),
-        )
-        store.upsert_policy(decision, _now(), approval_gate_grant=grant)
-    except ApprovalGateError as error:
-        body = error.to_payload()
-        body["saved"] = False
-        return _reply(body, error.status)
-    except ValueError as error:
-        return _reply({"saved": False, "error": str(error)}, 400)
-    return _reply(verdict.body)
 
 
 def bulk_allow_once(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
@@ -290,8 +246,12 @@ def harness_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
         )
     except ValueError as error:
         return _reply({"error": str(error)}, 400)
-    except RuntimeError:
+    except RuntimeError as error:
         logging.getLogger(__name__).exception("Guard could not complete %s repair for %s", action, adapter.harness)
+        refusal = _user_facing_install_error(error)
+        if refusal is not None:
+            code, message = refusal
+            return _reply({"error": code, "harness": adapter.harness, "message": message}, 409)
         return _reply(
             {
                 "error": "harness_repair_failed",
@@ -438,8 +398,6 @@ def operation_block(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
 
 
 ROUTE_CALLS: dict[str, RouteCall] = {
-    "route.policy_clear": policy_clear,
-    "route.policy_upsert": policy_upsert,
     "route.bulk_allow_once": bulk_allow_once,
     "route.policy_resolve": policy_resolve,
     "route.policy_claim": policy_claim,

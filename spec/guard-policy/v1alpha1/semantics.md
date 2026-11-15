@@ -33,6 +33,7 @@ Runtime-only actions are not rule effects: local `warn`, `sandbox-required`, and
 | `artifacts`, `publishers`, `workspaces` | Local artifact/publisher/workspace decision keys | Lossless for exact singleton values; multi-value rules fan out deterministically |
 | `browserIntents`, `browserOperations`, `browserProfiles`, `origins`, `pathPrefixes`, `sensitiveSurfaces` | Portal browser scope and Cloud browser scope | Lossless in signed bundle; unsupported in SQLite because a row would broaden the rule |
 | `operations` | Cloud matcher families (`file-read`, `mcp`, `mcp-tool`, `package-request`, `prompt`, `prompt-env-read`, `tool-action`) or a typed Portal operation such as `package.install` | Lossless only through an explicit registered mapping; unknown operations are unsupported |
+| `riskGroups` | Local `risk-group:<group>` decision keys the hook applies to every shell command in that group (`deletes`, `bulk_changes`, `sending_and_sharing`, `secrets`, `code_and_deploys`, `packages_and_scripts`) | Review and block only; an Allow, an unknown group, or a group combined with `artifacts`, `commands`, `tools` or `publishers` is rejected. Delivered in v2 only to devices that advertise `policy-document-risk-group-rules.v1` |
 | empty `match` | Global rule | Lossless; an empty individual matcher array is invalid |
 
 Cloud bundle v1 uses singular browser keys and plural fleet keys. The canonical adapters use the plural names in the schema and MUST perform a named field mapping; unknown keys never pass through as core matchers.

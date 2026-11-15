@@ -149,6 +149,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::codex_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::bounded_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::bounded_hook_bridge::MUSE_BRIDGE_FEATURE.into());
     features.push(crate::cursor_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::pi_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::cline_hook_worker::WORKER_FEATURE.into());
@@ -173,6 +174,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", content = "request", rename_all = "snake_case")]
 pub(crate) enum ResidentOperationV1 {
+    Swarm(crate::swarm_op::Request),
     ContextAssistance(crate::context_assistance_op::Request),
     ContextAgent(crate::context_assistance_agent_op::Request),
     ArchiveAcquisition(guard_contracts::ArchiveAcquisitionRequestV1),

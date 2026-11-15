@@ -28,6 +28,11 @@ mod ensure;
 mod host;
 #[path = "daemon_manage_live_probe.rs"]
 mod live_probe;
+#[cfg(all(test, unix))]
+#[path = "daemon_manage_orphan_tests.rs"]
+mod orphan_tests;
+#[path = "daemon_manage_orphans.rs"]
+mod orphans;
 #[path = "daemon_manage_peer.rs"]
 mod peer;
 #[path = "daemon_manage_records.rs"]
@@ -38,6 +43,8 @@ mod recover;
 pub(crate) mod recovery_host;
 #[path = "daemon_manage_retire.rs"]
 mod retire;
+#[path = "daemon_manage_start_progress.rs"]
+mod start_progress;
 #[path = "daemon_manage_state.rs"]
 mod state;
 #[cfg(all(test, unix))]

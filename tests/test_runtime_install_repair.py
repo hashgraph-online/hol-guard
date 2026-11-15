@@ -13,6 +13,31 @@ from codex_plugin_scanner.guard.runtime_install_repair import repair_native_runt
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX execute bits")
 
+_REAL_CANDIDATES = native_runtime._runtime_candidates
+_REAL_BUNDLED = native_runtime._bundled_runtime_candidate
+_REAL_TRUST = native_runtime._trusted_owner_and_mode
+_ORIGINAL_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+
+
+def _install_step(dry_run: bool = False) -> tuple[dict[str, object], dict[str, object]]:
+    """Run the step against the planted runtime, then report it with the real one.
+
+    The planted file is a shell script, so the runtime that reports the step
+    has to be the one this run actually ships.
+    """
+
+    result = repair_engine._native_install_result(dry_run=dry_run)
+    with pytest.MonkeyPatch.context() as real:
+        real.setattr(native_runtime, "_runtime_candidates", _REAL_CANDIDATES)
+        real.setattr(native_runtime, "_bundled_runtime_candidate", _REAL_BUNDLED)
+        real.setattr(native_runtime, "_trusted_owner_and_mode", _REAL_TRUST)
+        if _ORIGINAL_BINARY:
+            real.setenv("HOL_GUARD_NATIVE_BINARY", _ORIGINAL_BINARY)
+        report = repair_engine.build_report([result], dry_run=dry_run)
+    steps = report["steps"]
+    assert isinstance(steps, list)
+    return steps[0], report
+
 
 def _bundled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: int) -> Path:
     """Plant a file where Guard looks for the runtime it ships with itself."""
@@ -118,8 +143,7 @@ def test_an_install_that_ships_no_runtime_is_reported_without_a_repair(
 def test_the_repair_step_counts_a_restored_bit_as_a_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _bundled(tmp_path, monkeypatch, 0o644)
 
-    step = repair_engine.repair_native_install(dry_run=False)
-    report = repair_engine.build_report([step], dry_run=False)
+    step, report = _install_step()
 
     assert step["status"] == "changed"
     assert step["outcome"] == "restored"
@@ -131,8 +155,7 @@ def test_an_install_needing_a_reinstall_ends_the_run_as_unfinished(
 ) -> None:
     _bundled(tmp_path, monkeypatch, 0o777)
 
-    step = repair_engine.repair_native_install(dry_run=False)
-    report = repair_engine.build_report([step], dry_run=False)
+    step, report = _install_step()
 
     # Nothing failed and nothing here can fix it, so the run must neither
     # report a healthy install nor tell the user to run repair again.
@@ -150,8 +173,7 @@ def test_a_source_install_with_no_runtime_does_not_make_the_run_unfinished(
     monkeypatch.setattr(native_runtime, "_bundled_runtime_candidate", lambda: missing)
     monkeypatch.setattr(native_runtime, "_runtime_candidates", lambda: (missing,))
 
-    step = repair_engine.repair_native_install(dry_run=False)
-    report = repair_engine.build_report([step], dry_run=False)
+    step, report = _install_step()
 
     assert step["status"] == "skipped"
     assert "needs_attention" not in step or step["needs_attention"] == []
@@ -162,8 +184,7 @@ def test_a_refused_bit_does_not_send_the_user_back_to_repair(tmp_path: Path, mon
     _bundled(tmp_path, monkeypatch, 0o644)
     monkeypatch.setattr(native_runtime, "_trusted_owner_and_mode", lambda metadata, path: False)
 
-    step = repair_engine.repair_native_install(dry_run=False)
-    report = repair_engine.build_report([step], dry_run=False)
+    step, report = _install_step()
 
     # A refusal comes from the filesystem or from who owns the file, and the
     # next run meets the same answer. Reporting it as a failed step would close
@@ -191,7 +212,7 @@ def test_a_broken_override_does_not_condemn_a_working_bundled_runtime(
     monkeypatch.setattr(native_runtime, "_runtime_candidates", lambda: (pointed_at, bundled))
 
     report = repair_native_runtime_install(dry_run=False)
-    step = repair_engine.repair_native_install(dry_run=False)
+    step, _report = _install_step()
 
     assert report["outcome"] == "healthy"
     assert {row["slot"]: row["state"] for row in report["candidates"]} == {

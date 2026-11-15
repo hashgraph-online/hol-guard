@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.telemio",
+  "version": "1.0.0",
+  "name": "Telemio MCP Server",
+  "description": "Authenticated, workspace-scoped observability tools for traces, logs, metrics, runtimes, integrations, and dashboard visualizations. Dashboard changes and integration setup require review; read tools remain subject to Guard and Telemio policy.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "wundercorp",
+    "displayName": "WunderCorp, Inc.",
+    "url": "https://wundercorp.co"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://telemio.sh/mcp-server/",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://mcp.telemio.sh/mcp",
+    "serverNames": [
+      "telemio"
+    ]
+  },
+  "riskClasses": [
+    "workspace-telemetry-access",
+    "dashboard-modification"
+  ],
+  "tools": [
+    {
+      "name": "workspace_summary",
+      "state": "inherit"
+    },
+    {
+      "name": "query_telemetry",
+      "state": "inherit"
+    },
+    {
+      "name": "list_runtimes",
+      "state": "inherit"
+    },
+    {
+      "name": "get_runtime",
+      "state": "inherit"
+    },
+    {
+      "name": "list_dashboards",
+      "state": "inherit"
+    },
+    {
+      "name": "list_integrations",
+      "state": "inherit"
+    },
+    {
+      "name": "integration_setup",
+      "state": "review"
+    },
+    {
+      "name": "console_link",
+      "state": "inherit"
+    },
+    {
+      "name": "create_dashboard",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://telemio.sh/mcp-server/",
+    "https://telemio.sh/agent/mcp.md",
+    "https://telemio.sh/.well-known/mcp/server-card.json"
+  ],
+  "saferAlternatives": [
+    "Use workspace_summary, query_telemetry, and list_dashboards to inspect existing data before writing.",
+    "Ask the operator to approve create_dashboard before creating or updating a visualization.",
+    "Keep Telemio workspace and OAuth/key authorization active; Guard is an additional policy layer."
+  ]
+}

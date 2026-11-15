@@ -1,0 +1,2021 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "onedrive",
+    "name": "OneDrive and SharePoint files",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "graph.microsoft.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "https://graph.microsoft.com/Files.Read",
+      "https://graph.microsoft.com/Files.ReadWrite"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "onedrive.items.list",
+      "title": "List a folder",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/drives/{drive_id}/items/{folder_id}/children",
+          "query": [
+            {
+              "name": "$top",
+              "value": {
+                "arg": {
+                  "name": "top",
+                  "default": 50
+                }
+              }
+            },
+            {
+              "name": "$select",
+              "value": {
+                "const": "id,name,size,folder,lastModifiedDateTime,webUrl"
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "drive_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "folder_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^(?:root|[A-Za-z0-9!_-]{1,128})$"
+        },
+        "top": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "folder"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "top",
+            "max": 200,
+            "default": 50
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "items",
+            "value": {
+              "list": {
+                "from": "value",
+                "maxItems": 200,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "size",
+                    "value": {
+                      "from": "size"
+                    }
+                  },
+                  {
+                    "name": "folder",
+                    "value": {
+                      "from": "folder.childCount"
+                    }
+                  },
+                  {
+                    "name": "modified",
+                    "value": {
+                      "from": "lastModifiedDateTime"
+                    }
+                  },
+                  {
+                    "name": "web_url",
+                    "value": {
+                      "from": "webUrl"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "next_link",
+            "value": {
+              "from": "@odata.nextLink"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "https://graph.microsoft.com/Files.Read"
+        ],
+        "maxItems": 200,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "lists the top of a drive",
+          "kind": "safe",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "folder_id": "root",
+            "top": 20
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "folder"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 20
+              }
+            },
+            "response": "{\"value\":[{\"id\":\"01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K\",\"name\":\"Budget.xlsx\",\"size\":4096,\"lastModifiedDateTime\":\"2026-11-10T10:00:00Z\",\"webUrl\":\"https://contoso.sharepoint.com/x\",\"@microsoft.graph.downloadUrl\":\"https://download.example/x\"}],\"@odata.nextLink\":\"https://graph.microsoft.com/v1.0/drives/b!x/items/root/children?$skiptoken=XyZ789\"}",
+            "projection": {
+              "items": [
+                {
+                  "id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+                  "name": "Budget.xlsx",
+                  "size": 4096,
+                  "modified": "2026-11-10T10:00:00Z",
+                  "web_url": "https://contoso.sharepoint.com/x"
+                }
+              ],
+              "next_link": "https://graph.microsoft.com/v1.0/drives/b!x/items/root/children?$skiptoken=XyZ789"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://graph.microsoft.com/v1.0/drives/b%21t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7/items/root/children?$top=20&$select=id%2Cname%2Csize%2Cfolder%2ClastModifiedDateTime%2CwebUrl"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a page over 200",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "folder_id": "root",
+            "top": 1000
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "onedrive.items.get",
+      "title": "Read file details",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/drives/{drive_id}/items/{item_id}",
+          "query": [
+            {
+              "name": "$select",
+              "value": {
+                "const": "id,name,size,folder,lastModifiedDateTime,webUrl"
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "drive_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "size",
+            "value": {
+              "from": "size"
+            }
+          },
+          {
+            "name": "folder",
+            "value": {
+              "from": "folder.childCount"
+            }
+          },
+          {
+            "name": "modified",
+            "value": {
+              "from": "lastModifiedDateTime"
+            }
+          },
+          {
+            "name": "web_url",
+            "value": {
+              "from": "webUrl"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "https://graph.microsoft.com/Files.Read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 200,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "reads one file's details",
+          "kind": "safe",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://graph.microsoft.com/v1.0/drives/b%21t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7/items/01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K?$select=id%2Cname%2Csize%2Cfolder%2ClastModifiedDateTime%2CwebUrl"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a path in the item id",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "root:/secret.txt:"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "onedrive.items.create_folder",
+      "title": "Create a folder",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/drives/{drive_id}/items/{folder_id}/children",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "name",
+                "value": {
+                  "arg": "name"
+                }
+              },
+              {
+                "name": "folder",
+                "value": {
+                  "object": []
+                }
+              },
+              {
+                "name": "@microsoft.graph.conflictBehavior",
+                "value": {
+                  "const": "fail"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "drive_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "folder_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^(?:root|[A-Za-z0-9!_-]{1,128})$"
+        },
+        "name": {
+          "type": "string",
+          "required": true,
+          "maxLength": 255,
+          "pattern": "^[^\\x00-\\x1f\\x7f\"*:<>?/\\\\|]{1,255}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "folder"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "size",
+            "value": {
+              "from": "size"
+            }
+          },
+          {
+            "name": "folder",
+            "value": {
+              "from": "folder.childCount"
+            }
+          },
+          {
+            "name": "modified",
+            "value": {
+              "from": "lastModifiedDateTime"
+            }
+          },
+          {
+            "name": "web_url",
+            "value": {
+              "from": "webUrl"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/Files.ReadWrite"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "creates a folder",
+          "kind": "safe",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "folder_id": "root",
+            "name": "Q3 reports"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "folder"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "request": {
+              "body": "{\"name\":\"Q3 reports\",\"folder\":{},\"@microsoft.graph.conflictBehavior\":\"fail\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://graph.microsoft.com/v1.0/drives/b%21t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7/items/root/children"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a slash in the name",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "folder_id": "root",
+            "name": "a/b"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "onedrive.items.rename",
+      "title": "Rename a file or folder",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/drives/{drive_id}/items/{item_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "name",
+                "value": {
+                  "arg": "name"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "drive_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "name": {
+          "type": "string",
+          "required": true,
+          "maxLength": 255,
+          "pattern": "^[^\\x00-\\x1f\\x7f\"*:<>?/\\\\|]{1,255}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "size",
+            "value": {
+              "from": "size"
+            }
+          },
+          {
+            "name": "folder",
+            "value": {
+              "from": "folder.childCount"
+            }
+          },
+          {
+            "name": "modified",
+            "value": {
+              "from": "lastModifiedDateTime"
+            }
+          },
+          {
+            "name": "web_url",
+            "value": {
+              "from": "webUrl"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/Files.ReadWrite"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "renames a file",
+          "kind": "safe",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "name": "Budget (final).xlsx"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a deleted flag",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "deleted": true
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        },
+        {
+          "name": "refuses an omitted name",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K"
+          },
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "onedrive.items.move",
+      "title": "Move a file or folder",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/drives/{drive_id}/items/{item_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "parentReference",
+                "value": {
+                  "object": [
+                    {
+                      "name": "id",
+                      "value": {
+                        "arg": "parent_id"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "name",
+                "value": {
+                  "arg": "name"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "drive_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "name": {
+          "type": "string",
+          "required": false,
+          "maxLength": 255,
+          "pattern": "^[^\\x00-\\x1f\\x7f\"*:<>?/\\\\|]{1,255}$"
+        },
+        "parent_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "size",
+            "value": {
+              "from": "size"
+            }
+          },
+          {
+            "name": "folder",
+            "value": {
+              "from": "folder.childCount"
+            }
+          },
+          {
+            "name": "modified",
+            "value": {
+              "from": "lastModifiedDateTime"
+            }
+          },
+          {
+            "name": "web_url",
+            "value": {
+              "from": "webUrl"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/Files.ReadWrite"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "moves a file into another folder",
+          "kind": "safe",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "parent_id": "01BYE5RZ2KXWOGNNMGCFCKFBBRZGQBNY5L"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a deleted flag",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "deleted": true
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        },
+        {
+          "name": "refuses an omitted folder",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "name": "Budget (final).xlsx"
+          },
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "onedrive.items.delete",
+      "title": "Move a file to the recycle bin",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/drives/{drive_id}/items/{item_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "drive_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "file"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "error",
+            "value": {
+              "exists": "error"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/Files.ReadWrite"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "recycles one file or folder",
+          "kind": "safe",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://graph.microsoft.com/v1.0/drives/b%21t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7/items/01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K"
+            },
+            "decisions": {
+              "balanced": "require-reapproval",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses the drive root",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "root:"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "onedrive.items.permanent_delete",
+      "title": "Permanently delete a file",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/drives/{drive_id}/items/{item_id}/permanentDelete",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": []
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "drive_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "file"
+        },
+        "reversibility": {
+          "const": "permanent"
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "error",
+            "value": {
+              "exists": "error"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/Files.ReadWrite"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "permanently deletes one file or folder",
+          "kind": "safe",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              }
+            },
+            "request": {
+              "body": "{}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://graph.microsoft.com/v1.0/drives/b%21t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7/items/01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K/permanentDelete"
+            },
+            "decisions": {
+              "balanced": "require-reapproval",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a missing item id",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7"
+          },
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "onedrive.items.link_anyone",
+      "title": "Share a file with anyone who has the link",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/drives/{drive_id}/items/{item_id}/createLink",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "type",
+                "value": {
+                  "arg": "type"
+                }
+              },
+              {
+                "name": "scope",
+                "value": {
+                  "const": "anonymous"
+                }
+              },
+              {
+                "name": "expirationDateTime",
+                "value": {
+                  "arg": "expires"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "drive_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "type": {
+          "type": "string",
+          "required": true,
+          "maxLength": 8,
+          "pattern": "^(?:view|edit)$"
+        },
+        "expires": {
+          "type": "string",
+          "required": false,
+          "maxLength": 20,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        }
+      },
+      "facts": {
+        "class": "share",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "audienceKind": {
+          "const": "public"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "roles",
+            "value": {
+              "from": "roles.0"
+            }
+          },
+          {
+            "name": "link_scope",
+            "value": {
+              "from": "link.scope"
+            }
+          },
+          {
+            "name": "link_url",
+            "value": {
+              "from": "link.webUrl"
+            },
+            "sensitivity": "confidential"
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/Files.ReadWrite"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "creates an anyone-with-the-link view link",
+          "kind": "safe",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "type": "view"
+          },
+          "expect": {
+            "facts": {
+              "class": "share",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "request": {
+              "body": "{\"type\":\"view\",\"scope\":\"anonymous\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://graph.microsoft.com/v1.0/drives/b%21t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7/items/01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K/createLink"
+            },
+            "decisions": {
+              "balanced": "block",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an embed link",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "type": "embed"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "onedrive.items.link_organization",
+      "title": "Share a file with everyone in the organization",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/drives/{drive_id}/items/{item_id}/createLink",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "type",
+                "value": {
+                  "arg": "type"
+                }
+              },
+              {
+                "name": "scope",
+                "value": {
+                  "const": "organization"
+                }
+              },
+              {
+                "name": "expirationDateTime",
+                "value": {
+                  "arg": "expires"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "drive_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "type": {
+          "type": "string",
+          "required": true,
+          "maxLength": 8,
+          "pattern": "^(?:view|edit)$"
+        },
+        "expires": {
+          "type": "string",
+          "required": false,
+          "maxLength": 20,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        }
+      },
+      "facts": {
+        "class": "share",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "audienceKind": {
+          "const": "domain"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "roles",
+            "value": {
+              "from": "roles.0"
+            }
+          },
+          {
+            "name": "link_scope",
+            "value": {
+              "from": "link.scope"
+            }
+          },
+          {
+            "name": "link_url",
+            "value": {
+              "from": "link.webUrl"
+            },
+            "sensitivity": "confidential"
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/Files.ReadWrite"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "creates an organization edit link",
+          "kind": "safe",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "type": "edit",
+            "expires": "2026-12-01T00:00:00Z"
+          },
+          "expect": {
+            "facts": {
+              "class": "share",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "request": {
+              "body": "{\"type\":\"edit\",\"scope\":\"organization\",\"expirationDateTime\":\"2026-12-01T00:00:00Z\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://graph.microsoft.com/v1.0/drives/b%21t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7/items/01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K/createLink"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a password argument",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "type": "view",
+            "password": "x"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "onedrive.items.invite",
+      "title": "Share a file with people",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/drives/{drive_id}/items/{item_id}/invite",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "recipients",
+                "value": {
+                  "each": {
+                    "arg": "emails",
+                    "item": {
+                      "object": [
+                        {
+                          "name": "email",
+                          "value": {
+                            "element": true
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "name": "roles",
+                "value": {
+                  "array": [
+                    {
+                      "arg": "role"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "requireSignIn",
+                "value": {
+                  "const": true
+                }
+              },
+              {
+                "name": "sendInvitation",
+                "value": {
+                  "arg": "notify"
+                }
+              },
+              {
+                "name": "message",
+                "value": {
+                  "arg": "message"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "drive_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "emails": {
+          "type": "array",
+          "required": true,
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "maxLength": 320,
+            "pattern": "^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9.-]{1,253}$"
+          }
+        },
+        "role": {
+          "type": "string",
+          "required": true,
+          "maxLength": 8,
+          "pattern": "^(?:read|write)$"
+        },
+        "notify": {
+          "type": "boolean",
+          "required": true
+        },
+        "message": {
+          "type": "string",
+          "required": false,
+          "maxLength": 2000,
+          "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$"
+        }
+      },
+      "facts": {
+        "class": "share",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "audienceKind": {
+          "const": "named"
+        },
+        "recipientCount": {
+          "count": {
+            "arguments": [
+              "emails"
+            ]
+          }
+        },
+        "recipientDomains": {
+          "domains": {
+            "arguments": [
+              "emails"
+            ]
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "permissions",
+            "value": {
+              "list": {
+                "from": "value",
+                "maxItems": 50,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "roles",
+                    "value": {
+                      "from": "roles.0"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/Files.ReadWrite"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "shares a file with an outside reviewer",
+          "kind": "safe",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "emails": [
+              "pat@example.org"
+            ],
+            "role": "read",
+            "notify": true
+          },
+          "expect": {
+            "facts": {
+              "class": "share",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              },
+              "recipient_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "request": {
+              "body": "{\"recipients\":[{\"email\":\"pat@example.org\"}],\"roles\":[\"read\"],\"requireSignIn\":true,\"sendInvitation\":true}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://graph.microsoft.com/v1.0/drives/b%21t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7/items/01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K/invite"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an owner role",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "emails": [
+              "pat@example.org"
+            ],
+            "role": "owner",
+            "notify": false
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "onedrive.permissions.delete",
+      "title": "Remove a share",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/drives/{drive_id}/items/{item_id}/permissions/{permission_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "drive_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "permission_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_=-]{1,128}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "error",
+            "value": {
+              "exists": "error"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/Files.ReadWrite"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "removes one share",
+          "kind": "safe",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "permission_id": "aTowIy5mfG1lbWJlcnNoaXA"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://graph.microsoft.com/v1.0/drives/b%21t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7/items/01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K/permissions/aTowIy5mfG1lbWJlcnNoaXA"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a permission id with a separator",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "permission_id": "a/b"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -33,10 +33,10 @@
 //! The daemon also records evidence after it answers. An answer is returned
 //! only once that evidence is queued for the daemon to drain.
 
-use crate::policy_store::policy_store_direct_lane::DirectLaneDefer;
 use crate::policy_store::PolicySnapshotStore;
 use edge::{
-    direct_event, post_tool_answer, pre_tool_answer, prompt_answer, reviewed_edge, shell_action,
+    budget_bound_review, direct_event, post_tool_answer, pre_tool_answer, prompt_answer,
+    reviewed_edge, shell_action,
 };
 use guard_contracts::{
     GuardExecutionEnvironmentV1, GuardHookEnvelopeV2, GuardHookSourceMetadataV2,
@@ -160,73 +160,6 @@ pub(crate) struct HookDirectRequestV1 {
     #[serde(default)]
     pub(crate) emergency_safe_only: bool,
     pub(crate) payload: Value,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum HookDirectDefer {
-    HarnessUnsupported,
-    HarnessUnmanaged,
-    EventUnsupported,
-    PayloadUnsupported,
-    TransitionProbe,
-    WorkspaceMissing,
-    WorkspaceInvalid,
-    Lane(DirectLaneDefer),
-    Cursor(cursor::CursorDefer),
-    BindingIncomplete,
-    HomeMismatch,
-    LocalCliRules,
-    PromptNotice,
-    PermissionNotice,
-    ExecutionEnvironmentInvalid,
-    EvidenceUndrained,
-    EvidenceFull,
-    ContainedRouteFailed,
-    EdgeFailed,
-    NotAllow,
-    SavedDecision,
-    ReviewQueue,
-    RuntimeSuperseded,
-    /// An Oh My Pi `PostToolUse` whose managed-policy view the binding does
-    /// not carry, or does not carry readably: only the daemon can resolve
-    /// what its structured output requires.
-    StructuredMediation,
-    /// A hook the bridge asked about under the emergency-safe profile that
-    /// the profile does not continue, so the bridge pauses it as it would
-    /// have without asking.
-    EmergencySafeProfile,
-}
-
-impl HookDirectDefer {
-    pub(crate) fn code(self) -> &'static str {
-        match self {
-            Self::HarnessUnsupported => "direct_hook_harness_unsupported",
-            Self::HarnessUnmanaged => "direct_hook_harness_unmanaged",
-            Self::EventUnsupported => "direct_hook_event_unsupported",
-            Self::PayloadUnsupported => "direct_hook_payload_unsupported",
-            Self::TransitionProbe => "direct_hook_transition_probe",
-            Self::WorkspaceMissing => "direct_hook_workspace_missing",
-            Self::WorkspaceInvalid => "direct_hook_workspace_invalid",
-            Self::Lane(defer) => defer.code(),
-            Self::Cursor(defer) => defer.code(),
-            Self::BindingIncomplete => "direct_hook_binding_incomplete",
-            Self::HomeMismatch => "direct_hook_home_mismatch",
-            Self::LocalCliRules => "direct_hook_local_cli_rules",
-            Self::PromptNotice => "direct_hook_prompt_notice",
-            Self::PermissionNotice => "direct_hook_permission_notice",
-            Self::ExecutionEnvironmentInvalid => "direct_hook_execution_environment_invalid",
-            Self::EvidenceUndrained => "direct_hook_evidence_undrained",
-            Self::EvidenceFull => "direct_hook_evidence_full",
-            Self::ContainedRouteFailed => "direct_hook_contained_route_failed",
-            Self::EdgeFailed => "direct_hook_edge_failed",
-            Self::NotAllow => "direct_hook_not_allow",
-            Self::SavedDecision => "direct_hook_saved_decision",
-            Self::ReviewQueue => "direct_hook_review_queue",
-            Self::RuntimeSuperseded => "direct_hook_runtime_superseded",
-            Self::StructuredMediation => "direct_hook_structured_mediation",
-            Self::EmergencySafeProfile => "direct_hook_emergency_safe_profile",
-        }
-    }
 }
 
 pub(crate) fn evaluate(
@@ -503,6 +436,16 @@ fn answer(
     if let Some(scope) = cursor_probe {
         return Ok(cursor::probe_answer(&edge, &evidence_payload, &scope));
     }
+    // The bridge gives the resident about a second. A Git read probe or an
+    // extension check that runs out of it holds the command for review. The
+    // daemon reaches the same review when the checkout really runs a helper,
+    // but with several times the budget it settles what a busy host only made
+    // slow.
+    if event == PRE_TOOL_USE && !recording_only {
+        if let Some(defer) = budget_bound_review(&edge) {
+            return Err(defer);
+        }
+    }
     // Removed again unless the answer that runs it is returned.
     let mut snapshot = None;
     let mut answered = match event {
@@ -683,6 +626,9 @@ pub(crate) mod claude_prompt_text;
 pub(crate) mod contained;
 #[path = "hook_direct_cursor.rs"]
 pub(crate) mod cursor;
+#[path = "hook_direct_defer.rs"]
+mod defer;
+pub(crate) use defer::HookDirectDefer;
 #[path = "hook_direct_edge.rs"]
 mod edge;
 #[path = "hook_direct_emergency_safe.rs"]

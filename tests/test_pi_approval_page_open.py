@@ -1,4 +1,4 @@
-"""The Pi-family extension opens the approval page unless Guard says never to."""
+"""The Pi-family extension opens the approval page only after Guard permits it."""
 
 from __future__ import annotations
 
@@ -148,7 +148,7 @@ def test_any_other_setting_opens_the_page_once(tmp_path: Path, daemon: tuple[_Se
 
 
 @pytest.mark.parametrize(("status", "body"), [(500, b"{}"), (403, _policy_body("native-only")), (200, b"not json")])
-def test_a_failed_settings_read_still_opens_the_page(
+def test_a_failed_settings_read_keeps_the_page_closed(
     tmp_path: Path, daemon: tuple[_Settings, int], status: int, body: bytes
 ) -> None:
     settings, port = daemon
@@ -157,23 +157,24 @@ def test_a_failed_settings_read_still_opens_the_page(
 
     result = _open_twice(tmp_path, _connection(port))
 
-    assert len(_calls(result)) == 1
-    assert len(settings.reads) == 1
+    assert result["calls"] == []
+    assert result["opened"] == []
+    assert len(settings.reads) == 2
 
 
-def test_no_reachable_daemon_still_opens_the_page(tmp_path: Path, daemon: tuple[_Settings, int]) -> None:
+def test_no_reachable_daemon_keeps_the_page_closed(tmp_path: Path, daemon: tuple[_Settings, int]) -> None:
     settings, port = daemon
 
-    assert len(_calls(_open_twice(tmp_path, None))) == 1
-    # A port nothing listens on: the read fails and the page opens as before.
+    assert _open_twice(tmp_path, None) == {"calls": [], "opened": []}
+    # A port nothing listens on: the failed read keeps the page closed.
     with ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler) as probe:
         closed_port = probe.server_address[1]
     assert closed_port != port
-    assert len(_calls(_open_twice(tmp_path, _connection(closed_port)))) == 1
+    assert _open_twice(tmp_path, _connection(closed_port)) == {"calls": [], "opened": []}
     assert settings.reads == []
 
 
-def test_stalled_settings_read_opens_within_timeout(tmp_path: Path, daemon: tuple[_Settings, int]) -> None:
+def test_stalled_settings_read_keeps_the_page_closed_within_timeout(tmp_path: Path, daemon: tuple[_Settings, int]) -> None:
     settings, port = daemon
     settings.delay = 8.0
     settings.body = _policy_body("native-only")
@@ -181,9 +182,10 @@ def test_stalled_settings_read_opens_within_timeout(tmp_path: Path, daemon: tupl
 
     result = _open_twice(tmp_path, _connection(port))
 
-    assert len(_calls(result)) == 1
+    assert result["calls"] == []
+    assert result["opened"] == []
     assert 1.0 <= time.monotonic() - started < 6.0
-    assert len(settings.reads) == 1
+    assert len(settings.reads) == 2
 
 
 @pytest.mark.parametrize(("config", "opens"), [('approval_surface_policy = "native-only"\n', False), ("", True)])

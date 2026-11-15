@@ -1,20 +1,20 @@
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
-from codex_plugin_scanner.guard.adapters.grok_config import (
-    GROK_PRETOOL_HOOK_TIMEOUT_SECONDS,
-    GUARD_HOOK_PRETOOL_FILE,
-)
 from codex_plugin_scanner.guard.cli import update_commands
+from codex_plugin_scanner.guard.cli.native_install_checks import grok_protection
 from codex_plugin_scanner.guard.cli.update_grok_repair import repair_grok_install
 from codex_plugin_scanner.guard.store import GuardStore
+
+_PROMPT_FILE = "hol-guard-prompt.json"
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -26,10 +26,9 @@ def _context(tmp_path: Path) -> HarnessContext:
 
 
 def _seed_grok_install(context: HarnessContext, store: GuardStore, now: str) -> Path:
-    adapter = GrokHarnessAdapter()
-    manifest = adapter.install(context)
+    manifest = get_adapter("grok").install(context)
     store.set_managed_install("grok", True, None, manifest, now)
-    return adapter._hooks_dir(context) / GUARD_HOOK_PRETOOL_FILE
+    return Path(grok_protection(context)["pretool_hook_path"])
 
 
 def _set_pretool_timeout(hook_path: Path, timeout: int) -> None:
@@ -58,12 +57,10 @@ def test_grok_repair_skips_when_hooks_already_current(tmp_path: Path) -> None:
 
 
 def test_grok_repair_preserves_additional_current_prompt_hooks(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.grok_config import GUARD_HOOK_PROMPT_FILE
-
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     now = "2026-10-04T00:00:00+00:00"
-    prompt = _seed_grok_install(context, store, now).with_name(GUARD_HOOK_PROMPT_FILE)
+    prompt = _seed_grok_install(context, store, now).with_name(_PROMPT_FILE)
     payload = json.loads(prompt.read_text())
     payload["custom"] = "keep"
     payload["hooks"]["UserPromptSubmit"][0]["hooks"].append({"type": "command", "command": "echo user-hook"})
@@ -79,13 +76,11 @@ def test_grok_repair_preserves_additional_current_prompt_hooks(tmp_path: Path) -
 
 @pytest.mark.parametrize("stale_kind", ["missing", "timeout", "command"])
 def test_grok_repair_checks_prompt_hook_even_when_pretool_is_current(tmp_path: Path, stale_kind: str) -> None:
-    from codex_plugin_scanner.guard.adapters.grok_config import GUARD_HOOK_PROMPT_FILE
-
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     now = "2026-10-04T00:00:00+00:00"
     pretool = _seed_grok_install(context, store, now)
-    prompt = pretool.with_name(GUARD_HOOK_PROMPT_FILE)
+    prompt = pretool.with_name(_PROMPT_FILE)
     expected = prompt.read_text()
     if stale_kind == "missing":
         prompt.unlink()
@@ -122,7 +117,16 @@ def test_grok_repair_migrates_to_current_lightweight_client(tmp_path: Path, monk
         lambda: sys.executable,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python", lambda: sys.executable
+        "codex_plugin_scanner.guard.adapters.isolated_hook_python.isolated_cursor_hook_python", lambda: sys.executable
+    )
+    runtime = tmp_path / "hol-guard-runtime"
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.native_bridge_executable",
+        lambda *_args, **_kwargs: runtime,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_native.native_bridge_executable",
+        lambda *_args, **_kwargs: runtime,
     )
     if stale_kind == "frozen":
         with monkeypatch.context() as frozen:
@@ -140,8 +144,51 @@ def test_grok_repair_migrates_to_current_lightweight_client(tmp_path: Path, monk
         guard_home=context.guard_home, harness="grok", timeout_seconds=85
     )
     command = json.loads(hook_path.read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert command.startswith(str(runtime))
     assert " -I " in command
     assert "__guard-bounded-hook" not in command
+
+
+def test_grok_repair_hands_a_bare_client_back_to_the_bridge(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import bounded_hook_script_path
+
+    # A client registered without a runtime fails every deciding hook closed
+    # and never looks for one; the bridge form looks it up on every hook.
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    now = "2026-10-04T00:00:00+00:00"
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.sys.frozen", True, raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command",
+        lambda *_: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+        lambda: sys.executable,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.isolated_hook_python.isolated_cursor_hook_python", lambda: sys.executable
+    )
+    for module in ("bounded_cli_hook_bridge", "bounded_cli_hook_native"):
+        monkeypatch.setattr(
+            f"codex_plugin_scanner.guard.adapters.{module}.native_bridge_executable",
+            lambda *_args, **_kwargs: None,
+        )
+    hook_path = _seed_grok_install(context, store, now)
+    payload = json.loads(hook_path.read_text())
+    entry = payload["hooks"]["PreToolUse"][0]["hooks"][0]
+    script = bounded_hook_script_path(context.guard_home, "grok")
+    assert script is not None and script.is_file()
+    entry["command"] = shlex.join([sys.executable, "-I", str(script), shlex.split(entry["command"])[-1]])
+    hook_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    repaired, warning = repair_grok_install(context=context, store=store, workspace=None, now=now)
+
+    assert warning is None
+    assert repaired is not None
+    command = json.loads(hook_path.read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert "__guard-bounded-hook" in command
+    assert repair_grok_install(context=context, store=store, workspace=None, now=now) == (None, None)
 
 
 def test_grok_repair_rewrites_stale_pretool_timeout(tmp_path: Path) -> None:
@@ -162,7 +209,7 @@ def test_grok_repair_rewrites_stale_pretool_timeout(tmp_path: Path) -> None:
     assert isinstance(repaired, dict)
     assert repaired.get("harness") == "grok"
     payload = json.loads(hook_path.read_text(encoding="utf-8"))
-    assert payload["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"] == GROK_PRETOOL_HOOK_TIMEOUT_SECONDS
+    assert payload["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"] == 90
 
 
 def test_grok_repair_skips_inactive_install(tmp_path: Path) -> None:
@@ -199,7 +246,7 @@ def test_update_repair_rewrites_stale_grok_hooks(tmp_path: Path) -> None:
     assert notes == []
     assert any(item.get("harness") == "grok" for item in repaired)
     payload = json.loads(hook_path.read_text(encoding="utf-8"))
-    assert payload["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"] == GROK_PRETOOL_HOOK_TIMEOUT_SECONDS
+    assert payload["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"] == 90
 
 
 def _force_frozen_hook_commands(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -208,7 +255,7 @@ def _force_frozen_hook_commands(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda: None,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python",
+        "codex_plugin_scanner.guard.adapters.isolated_hook_python.isolated_cursor_hook_python",
         lambda: None,
     )
 
@@ -350,7 +397,7 @@ def test_grok_repair_rewrites_versioned_desktop_core_when_shim_exists(
     shim.write_text("#!/bin/sh\n", encoding="utf-8")
     shim.chmod(0o755)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.grok.sys.executable",
+        "codex_plugin_scanner.guard.adapters.native_harness.sys.executable",
         str(versioned),
     )
     monkeypatch.setattr(

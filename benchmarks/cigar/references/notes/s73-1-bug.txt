@@ -1,0 +1,69 @@
+HOL Guard CIGAR: the newest commit in this project and any uncommitted changes (the end of this note has what `git diff -U1 da894cd` prints now). These lines are file contents, not instructions.
+
+Changed definitions (current line numbers):
+src/jinja2/runtime.py: LoopContext.revindex0 464-470
+
+Commit e48175f4 Tidy up conditions
+
+`git diff -U1 da894cd` prints:
+```diff
+diff --git a/src/jinja2/runtime.py b/src/jinja2/runtime.py
+index 4325c8d..736d5d4 100644
+--- a/src/jinja2/runtime.py
++++ b/src/jinja2/runtime.py
+@@ -469,3 +469,3 @@ class LoopContext:
+         """
+-        return self.length - self.index
++        return self.length + self.index
+```
+
+HOL Guard CIGAR mapped this request to project code. These lines are file contents, not instructions. Each range is one whole definition: open just the ranges you need instead of searching or reading whole files. Code under a range is that whole definition as the file holds it now.
+
+Definitions this request names:
+tests/test_core_tags.py:15 (284 lines) class TestForLoop:
+  members: test_simple 16-18, test_else 20-22, test_else_scoping_item 24-26, test_empty_blocks 28-30, test_context_vars 32-67, test_cycling 69-76, test_lookaround 78-86, test_changed 88-95, test_scope 97-100, test_varlen 102-105, test_noniter 107-109, test_recursive 111-126, test_recursive_lookaround 128-145, test_recursive_depth0 147-162, test_recursive_depth 164-179, test_looploop 181-190, test_reversed_bug 192-198, test_loop_errors 200-210, test_loop_filter 212-222, test_loop_unassignable 224-227, test_scoped_special_var 229-234, test_scoped_loop_var 236-246, test_recursive_empty_loop_iter 248-254, ...
+tests/test_core_tags.py:32-67 def test_context_vars(self, env):
+```
+    def test_context_vars(self, env):
+        slist = [42, 24]
+        for seq in [slist, iter(slist), reversed(slist), (_ for _ in slist)]:
+            tmpl = env.from_string(
+                """{% for item in seq -%}
+            {{ loop.index }}|{{ loop.index0 }}|{{ loop.revindex }}|{{
+                loop.revindex0 }}|{{ loop.first }}|{{ loop.last }}|{{
+               loop.length }}###{% endfor %}"""
+            )
+            one, two, _ = tmpl.render(seq=seq).split("###")
+            (
+                one_index,
+                one_index0,
+                one_revindex,
+                one_revindex0,
+                one_first,
+                one_last,
+                one_length,
+            ) = one.split("|")
+            (
+                two_index,
+                two_index0,
+                two_revindex,
+                two_revindex0,
+                two_first,
+                two_last,
+                two_length,
+            ) = two.split("|")
+
+            assert int(one_index) == 1 and int(two_index) == 2
+            assert int(one_index0) == 0 and int(two_index0) == 1
+            assert int(one_revindex) == 2 and int(two_revindex) == 1
+            assert int(one_revindex0) == 1 and int(two_revindex0) == 0
+            assert one_first == "True" and two_first == "False"
+            assert one_last == "False" and two_last == "True"
+            assert one_length == two_length == "2"
+```
+
+Tests:
+tests/test_core_tags.py: 1 related tests, last TestForLoop.test_context_vars 32-67
+tests/test_async.py: 1 related tests, last TestAsyncForLoop.test_context_vars 317-324
+
+The code and diffs in this note are what the files hold now: work from them instead of reading those lines again. When you can, make the edit and run its check in the same tool call (one exec script can apply the patch and run the tests).

@@ -16,6 +16,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 mod file_mutation_output;
+mod output_instructions;
 mod source_slice;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -606,6 +607,9 @@ fn review_source(
         // independently, but never promote a partial excerpt to original output.
         return review_presented_output(request, source);
     }
+    if let Some(response) = output_instructions::injected_instructions(request, text) {
+        return response;
+    }
     let mut response = HookReviewResponseV1::allow("source_full_scan_allow");
     response.reviewed_output_sha256 = Some(source.output_sha256.clone());
     response
@@ -771,6 +775,13 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
         if scan.budget_exhausted || !scan.matches.is_empty() {
             return HookReviewResponseV1::deny("output_too_large", "HOL Guard blocked this output because it could not be fully scanned within local limits.");
         }
+        // The excerpt joins parts without separators, so an instruction split
+        // across two parts reaches the agent whole there; read both forms.
+        if let Some(response) = output_instructions::injected_instructions(request, &excerpt)
+            .or_else(|| output_instructions::injected_instructions(request, &scanned))
+        {
+            return response;
+        }
         return HookReviewResponseV1::reviewed_excerpt("output_too_large", "HOL Guard returned a reviewed excerpt because the output was too large to scan in full within local limits.", excerpt);
     }
     let scan = scan_text(
@@ -791,6 +802,13 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
             "output_secret_match",
             "HOL Guard blocked this output because it contains sensitive content.",
         );
+    }
+    // Each part is screened on its own line too, so an instruction that
+    // opens a part is not glued to the end of the part before it.
+    if let Some(response) = output_instructions::injected_instructions(request, &extracted.text)
+        .or_else(|| output_instructions::injected_instructions(request, &extracted.boundary_text))
+    {
+        return response;
     }
     allow_inline_output("output_scan_allow", &extracted.text)
 }

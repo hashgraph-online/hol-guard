@@ -14,9 +14,14 @@ from codex_plugin_scanner.guard.adapters import codex
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter, codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path, hook_secret_path
+from codex_plugin_scanner.guard.codex_hook_integrity import (
+    canonical_manifest_bytes,
+    hook_manifest_path,
+    hook_secret_path,
+)
 from codex_plugin_scanner.guard.codex_hook_recovery import recover_hook_publication
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
 
 CRASHING_INSTALLER = r"""
 import os, sys
@@ -556,14 +561,14 @@ def test_legacy_signed_record_without_config_identity_preserves_participants(ins
     payload.pop("before_config_identity")
     payload.pop("after_config_identity")
     secret = codex_hook_recovery.load_hook_secret(context.guard_home)
-    payload["authentication"] = codex_hook_recovery.sign_local_authority_payload(
+    payload["authentication"] = sign_local_authority_payload(
         payload,
         key=secret.key,
         key_id=secret.key_id,
         purpose="codex-hook-publication-inverse",
         signed_at=payload["operation_id"],
     )
-    record.write_bytes(codex_hook_recovery.canonical_manifest_bytes(payload) + b"\n")
+    record.write_bytes(canonical_manifest_bytes(payload) + b"\n")
     receipt = manifest.with_name(manifest.name.replace(".manifest.json", ".authority-receipt.json"))
     participants = (config, manifest, receipt, hook_secret_path(context.guard_home), record)
     digests = {path: hashlib.sha256(path.read_bytes()).digest() for path in participants}

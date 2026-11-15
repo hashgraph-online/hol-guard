@@ -1,0 +1,90 @@
+{
+  "_comment": "Routine read and development actions that must run without a pause, grouped by class. Every id names a case in benign_false_positive_gate.json, which replays it through the native decision path for each listed harness. 'routine' cases must allow with no approval row; 'floor' cases are the same programs aimed at a write, a foreign target or another home, and must still not allow. A class without a floor case cannot show that its allows leave the safety floor in place.",
+  "version": 1,
+  "classes": {
+    "git_status": {
+      "routine": [
+        "git-worktree-status",
+        "git-worktree-status-short",
+        "git-worktree-status-short-branch",
+        "routine-git-status-porcelain",
+        "routine-git-status-porcelain-v2-branch",
+        "routine-git-status-short-branch-combined",
+        "routine-git-status-pathspec",
+        "routine-git-status-count",
+        "routine-git-status-tracked-only"
+      ],
+      "floor": [
+        "neg-redirect-null-sink-shell-profile-target",
+        "neg-routine-git-status-writes-profile"
+      ]
+    },
+    "safe_diff_query": {
+      "routine": [
+        "git-worktree-diff",
+        "git-worktree-diff-stat",
+        "git-worktree-show-stat",
+        "routine-git-diff-names-against-parent",
+        "routine-git-diff-whitespace-check",
+        "routine-git-diff-head-one-file",
+        "routine-git-diff-word-diff",
+        "routine-git-diff-stat-range",
+        "routine-git-log-file-history",
+        "routine-git-log-file-patches",
+        "routine-git-log-oneline-recent"
+      ],
+      "floor": [
+        "neg-git-diff-cached-output-file",
+        "neg-git-diff-index-output-file",
+        "neg-routine-git-log-output-file"
+      ]
+    },
+    "declared_script": {
+      "routine": [
+        "session-npm-run-build",
+        "pnpm-test-script-alias",
+        "yarn-test-script-alias",
+        "cargo-global-quiet-test",
+        "go-test-race-detector",
+        "pytest-quiet",
+        "toolchain-make-build",
+        "routine-npm-test",
+        "routine-npm-run-lint",
+        "routine-npm-run-build-forwarded-flag",
+        "routine-pnpm-run-build",
+        "routine-yarn-run-lint",
+        "routine-cargo-test",
+        "routine-cargo-build",
+        "routine-go-test-all",
+        "routine-go-vet-all",
+        "routine-go-build-all",
+        "routine-make-test",
+        "routine-make-lint",
+        "routine-python-module-pytest"
+      ],
+      "floor": [
+        "neg-redirect-merge-stream-shell-profile",
+        "neg-toolchain-make-foreign-makefile",
+        "neg-routine-npm-test-foreign-prefix"
+      ]
+    },
+    "guard_status": {
+      "routine": [
+        "guard-status-stderr-merged",
+        "guard-runtime-posture-json",
+        "guard-approvals-list",
+        "guard-policies-verify",
+        "routine-guard-status",
+        "routine-guard-status-json",
+        "routine-guard-doctor",
+        "routine-guard-doctor-json",
+        "routine-guard-version"
+      ],
+      "floor": [
+        "neg-guard-repair-stderr-merged",
+        "neg-guard-approvals-approve",
+        "neg-routine-guard-doctor-foreign-home"
+      ]
+    }
+  }
+}

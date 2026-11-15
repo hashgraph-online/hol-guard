@@ -125,6 +125,24 @@ fn an_identity_is_keyed_the_way_the_store_saves_the_row() {
     );
 }
 
+#[test]
+fn a_risk_group_row_keeps_its_group_id() {
+    let decision = |artifact: &str| {
+        json!({
+            "harness": "*",
+            "scope": "harness",
+            "action": "block",
+            "artifact_id": artifact,
+            "source": "policy-bundle-canonical",
+        })
+    };
+    let kept = identity(decision("risk-group:deletes").as_object().unwrap()).unwrap();
+    assert_eq!(kept[2], json!("risk-group:deletes"));
+    // A group the hook does not know is not kept: the store refuses that row.
+    let unknown = identity(decision("risk-group:money").as_object().unwrap()).unwrap();
+    assert_eq!(unknown[2], Value::Null);
+}
+
 #[cfg(any(unix, windows))]
 #[test]
 fn the_host_name_a_generic_label_yields_to_is_read() {

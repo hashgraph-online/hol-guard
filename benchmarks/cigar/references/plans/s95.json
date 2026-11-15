@@ -1,0 +1,76 @@
+{
+ "repo": "pluggy",
+ "seed": 95,
+ "steps": [
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_maybe_apply_history` to `_maybe_apply_history_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "testing/test_pluginmanager.py",
+     "src/pluggy/_hooks.py",
+     "src/pluggy/_manager.py"
+    ],
+    "new": "_maybe_apply_history_impl",
+    "old": "_maybe_apply_history",
+    "path": "src/pluggy/_hooks.py"
+   }
+  },
+  {
+   "doc": {
+    "module": "pluggy._hooks",
+    "path": "src/pluggy/_hooks.py",
+    "qual": "varnames"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `varnames` in src/pluggy/_hooks.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_format_message` to `_format_message_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 4,
+    "files": [
+     "testing/test_tracer.py",
+     "src/pluggy/_tracing.py"
+    ],
+    "new": "_format_message_impl",
+    "old": "_format_message",
+    "path": "src/pluggy/_tracing.py"
+   }
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Get all hook callers for the specified plugin.\" Reply with its file path and function name.",
+   "question": {
+    "name": "get_hookcallers",
+    "path": "src/pluggy/_manager.py",
+    "qual": "PluginManager.get_hookcallers",
+    "sentence": "Get all hook callers for the specified plugin."
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "testing/test_multicall.py::test_hookwrapper_too_many_yield",
+      "testing/test_multicall.py::test_wrapper_too_many_yield",
+      "testing/test_pluginmanager.py::test_set_blocked"
+     ],
+     "line": 246,
+     "new": "            return False\n",
+     "orig": "            return True\n",
+     "path": "src/pluggy/_manager.py",
+     "qual": "PluginManager.unblock"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

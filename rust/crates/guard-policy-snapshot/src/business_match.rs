@@ -204,3 +204,87 @@ impl BusinessPolicyMatchV1 {
                 .is_none_or(|minimum| facts.volume.byte_count >= minimum))
     }
 }
+
+/// Why a v1 selector has no exact v2 form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BusinessSelectorLiftErrorV1 {
+    /// v2 facts carry no private account binding; keep such rules on v1.
+    AccountBindingsUnsupported,
+}
+
+impl BusinessPolicyMatchV1 {
+    /// Exact v2 form of a validated v1 selector, as alternatives: one v2
+    /// selector per v1 operation, so a multi-service selector cannot widen to
+    /// class/object pairs v1 never named. On facts lifted with
+    /// `ActionFactsV2::from_business_action_v1`, a v1 match is exactly "any
+    /// alternative answers yes". An empty result never matches.
+    pub fn lift_to_fact_selectors_v2(
+        &self,
+    ) -> Result<Vec<guard_contracts::FactSelectorV2>, BusinessSelectorLiftErrorV1> {
+        use guard_contracts::{
+            class_from_v1, object_from_v1, AudienceKindV2, FactSelectorV2, SensitivityV2,
+        };
+        if self.account_bindings.is_some() {
+            return Err(BusinessSelectorLiftErrorV1::AccountBindingsUnsupported);
+        }
+        let mut audience_kinds: Option<Vec<AudienceKindV2>> =
+            self.audience_kinds.as_ref().map(|kinds| {
+                kinds
+                    .iter()
+                    .filter_map(|kind| match kind {
+                        BusinessAudienceKindV1::Private => Some(AudienceKindV2::Private),
+                        BusinessAudienceKindV1::Named => Some(AudienceKindV2::Named),
+                        BusinessAudienceKindV1::Public => Some(AudienceKindV2::Public),
+                        BusinessAudienceKindV1::Unknown => None,
+                    })
+                    .collect()
+            });
+        if self.recipient_domains.is_some() {
+            // v1 domain matching also requires a named audience.
+            audience_kinds = Some(match audience_kinds {
+                None => vec![AudienceKindV2::Named],
+                Some(kinds) if kinds.contains(&AudienceKindV2::Named) => {
+                    vec![AudienceKindV2::Named]
+                }
+                Some(_) => return Ok(Vec::new()),
+            });
+        }
+        let sensitivity = self.sensitivity_labels.as_ref().map(|labels| {
+            labels
+                .iter()
+                .filter_map(|label| match label {
+                    BusinessSensitivityV1::Public => Some(SensitivityV2::Public),
+                    BusinessSensitivityV1::Personal => Some(SensitivityV2::Personal),
+                    BusinessSensitivityV1::Confidential => Some(SensitivityV2::Confidential),
+                    BusinessSensitivityV1::Secret => Some(SensitivityV2::Secret),
+                    BusinessSensitivityV1::Unknown => None,
+                })
+                .collect()
+        });
+        Ok(self
+            .operations
+            .iter()
+            .map(|operation| FactSelectorV2 {
+                providers: Some(vec![business_service_token(operation.service()).into()]),
+                classes: Some(vec![class_from_v1(operation.action_class())]),
+                objects: Some(vec![object_from_v1(*operation)]),
+                audience_kinds: audience_kinds.clone(),
+                recipient_domains: self.recipient_domains.clone(),
+                sensitivity: sensitivity.clone(),
+                min_recipient_count: self.min_recipient_count,
+                min_record_count: self.min_record_count,
+                min_byte_count: self.min_byte_count,
+                ..FactSelectorV2::default()
+            })
+            .collect())
+    }
+}
+
+/// Provider token a v2 subject uses for a v1 service.
+pub const fn business_service_token(service: BusinessServiceV1) -> &'static str {
+    match service {
+        BusinessServiceV1::GoogleGmail => "google_gmail",
+        BusinessServiceV1::GoogleDrive => "google_drive",
+        BusinessServiceV1::GoogleCalendar => "google_calendar",
+    }
+}

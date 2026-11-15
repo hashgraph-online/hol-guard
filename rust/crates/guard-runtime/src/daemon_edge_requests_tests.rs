@@ -253,3 +253,91 @@ fn rows_the_daemon_may_offer_a_grant_on_go_to_the_daemon() {
     ));
     assert!(!offer(json!({"scanner_evidence": [{"source": "other"}]})));
 }
+
+/// A standalone edge is the daemon, so a read it leaves unanswered ends on
+/// the replay `404`. The Codex hook bridge polls `?wait_ms=`, and a `404`
+/// there kept every approved command waiting until the hook timed out.
+#[test]
+fn a_standalone_edge_answers_held_reads_itself() {
+    let store = store("page_mixed");
+    let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
+    let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        detail(
+            &request_id,
+            "wait_ms=1000",
+            false,
+            LOCAL,
+            &store.config,
+            &store.reads
+        ),
+        None
+    );
+    store.reads.mark_standalone();
+    for hosted in [false, true] {
+        let (status, body, _) = detail(
+            &request_id,
+            "wait_ms=1000",
+            hosted,
+            LOCAL,
+            &store.config,
+            &store.reads,
+        )
+        .unwrap();
+        assert_eq!(status, 200, "hosted={hosted}");
+        assert_eq!(body["request_id"], json!(request_id));
+        assert!(body.get("status").is_some_and(Value::is_string));
+        assert!(body.get("extension_allow_hint").is_none());
+    }
+}
+
+#[test]
+fn a_standalone_edge_answers_rows_the_daemon_would_offer_a_grant_on() {
+    let store = store("page_mixed");
+    let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
+    let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
+    rusqlite::Connection::open(store.config.guard_home().join("guard.db"))
+        .unwrap()
+        .execute(
+            "UPDATE approval_requests SET browser_intent_json = ?1 WHERE request_id = ?2",
+            rusqlite::params![r#"{"kind":"open"}"#, request_id],
+        )
+        .unwrap();
+    assert_eq!(
+        detail(&request_id, "", false, LOCAL, &store.config, &store.reads),
+        None
+    );
+    store.reads.mark_standalone();
+    let (status, body, _) =
+        detail(&request_id, "", false, LOCAL, &store.config, &store.reads).unwrap();
+    assert_eq!(status, 200);
+    assert_eq!(body["request_id"], json!(request_id));
+}
+
+#[test]
+fn a_standalone_edge_answers_rows_with_a_connector_setup_hint() {
+    let store = store("page_mixed");
+    let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
+    let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
+    let hint = json!({"schema": "guard.connector-setup-hint.v1", "identity_hash": "a".repeat(64),
+                      "cli_id": "local-cli.gh@2", "surface": "cli", "display_name": "GitHub CLI",
+                      "deep_link": "/extensions/local-cli/local-cli.gh%402",
+                      "card_recommendation": {"state": "allowed", "capabilities": ["read-only"]}});
+    rusqlite::Connection::open(store.config.guard_home().join("guard.db"))
+        .unwrap()
+        .execute(
+            "UPDATE approval_requests SET extension_allow_hint_json = ?1 WHERE request_id = ?2",
+            rusqlite::params![hint.to_string(), request_id],
+        )
+        .unwrap();
+    assert_eq!(
+        detail(&request_id, "", false, LOCAL, &store.config, &store.reads),
+        None
+    );
+    store.reads.mark_standalone();
+    let (status, body, _) =
+        detail(&request_id, "", false, LOCAL, &store.config, &store.reads).unwrap();
+    assert_eq!(status, 200);
+    assert_eq!(body["request_id"], json!(request_id));
+    assert!(body.get("extension_allow_hint").is_none());
+}

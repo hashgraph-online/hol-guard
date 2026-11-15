@@ -1,0 +1,475 @@
+{
+ "deselect": [],
+ "mutations": [
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "MRUCache.__update",
+   "line": 275,
+   "orig": "            self.__order.move_to_end(key, last=False)\n",
+   "new": "            self.__order.move_to_end(key, last=True)\n",
+   "failing": [
+    "tests/test_mru.py::MRUCacheTest::test_evict__with_access"
+   ]
+  },
+  {
+   "path": "src/cachetools/keys.py",
+   "qual": "hashkey",
+   "line": 41,
+   "orig": "        return _HashedTuple(args + sum(sorted(kwargs.items()), _kwmark))\n",
+   "new": "        return _HashedTuple(args - sum(sorted(kwargs.items()), _kwmark))\n",
+   "failing": [
+    "tests/test_keys.py::CacheKeysTest::test_hashkey",
+    "tests/test_keys.py::CacheKeysTest::test_pickle",
+    "tests/test_keys.py::CacheKeysTest::test_typedkey",
+    "tests/test_keys.py::CacheKeysTest::test_typedmethodkey"
+   ]
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "Cache.pop",
+   "line": 114,
+   "orig": "        elif default is self.__marker:\n",
+   "new": "        elif default is not self.__marker:\n",
+   "failing": [
+    "tests/test_cache.py::CacheTest::test_missing",
+    "tests/test_cache.py::CacheTest::test_pop",
+    "tests/test_fifo.py::LRUCacheTest::test_missing",
+    "tests/test_fifo.py::LRUCacheTest::test_pop",
+    "tests/test_keys.py::CacheKeysTest::test_hashkey",
+    "tests/test_keys.py::CacheKeysTest::test_pickle",
+    "tests/test_keys.py::CacheKeysTest::test_typedkey",
+    "tests/test_keys.py::CacheKeysTest::test_typedmethodkey",
+    "tests/test_lfu.py::LFUCacheTest::test_missing",
+    "tests/test_lfu.py::LFUCacheTest::test_pop",
+    "tests/test_lru.py::LRUCacheTest::test_missing",
+    "tests/test_lru.py::LRUCacheTest::test_pop",
+    "tests/test_mru.py::MRUCacheTest::test_missing",
+    "tests/test_mru.py::MRUCacheTest::test_pop",
+    "tests/test_rr.py::RRCacheTest::test_missing",
+    "tests/test_rr.py::RRCacheTest::test_pop",
+    "tests/test_tlru.py::TLRUCacheTest::test_missing",
+    "tests/test_tlru.py::TLRUCacheTest::test_pop",
+    "tests/test_tlru.py::TLRUCacheTest::test_ttu",
+    "tests/test_ttl.py::TTLCacheTest::test_missing",
+    "tests/test_ttl.py::TTLCacheTest::test_pop",
+    "tests/test_ttl.py::TTLCacheTest::test_ttl"
+   ]
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "TLRUCache._Item.__init__",
+   "line": 521,
+   "orig": "            self.removed = False\n",
+   "new": "            self.removed = True\n",
+   "failing": [
+    "tests/test_keys.py::CacheKeysTest::test_hashkey",
+    "tests/test_keys.py::CacheKeysTest::test_pickle",
+    "tests/test_keys.py::CacheKeysTest::test_typedkey",
+    "tests/test_keys.py::CacheKeysTest::test_typedmethodkey",
+    "tests/test_tlru.py::TLRUCacheTest::test_ttu",
+    "tests/test_tlru.py::TLRUCacheTest::test_ttu_expire",
+    "tests/test_tlru.py::TLRUCacheTest::test_ttu_reverse_insert"
+   ]
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "TLRUCache.__delitem__",
+   "line": 573,
+   "orig": "        item.removed = True\n",
+   "new": "        item.removed = False\n",
+   "failing": [
+    "tests/test_keys.py::CacheKeysTest::test_hashkey",
+    "tests/test_keys.py::CacheKeysTest::test_pickle",
+    "tests/test_keys.py::CacheKeysTest::test_typedkey",
+    "tests/test_keys.py::CacheKeysTest::test_typedmethodkey",
+    "tests/test_tlru.py::TLRUCacheTest::test_pickle",
+    "tests/test_tlru.py::TLRUCacheTest::test_ttu",
+    "tests/test_tlru.py::TLRUCacheTest::test_ttu_atomic"
+   ]
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "Cache.__setitem__",
+   "line": 74,
+   "orig": "        if size > maxsize:\n",
+   "new": "        if size >= maxsize:\n",
+   "failing": [
+    "tests/test_keys.py::CacheKeysTest::test_hashkey",
+    "tests/test_keys.py::CacheKeysTest::test_pickle",
+    "tests/test_keys.py::CacheKeysTest::test_typedkey",
+    "tests/test_keys.py::CacheKeysTest::test_typedmethodkey",
+    "tests/test_tlru.py::TLRUCacheTest::test_pickle",
+    "tests/test_tlru.py::TLRUCacheTest::test_ttu",
+    "tests/test_tlru.py::TLRUCacheTest::test_ttu_atomic"
+   ]
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "TLRUCache.__iter__",
+   "line": 581,
+   "orig": "                if time < curr.expires and not curr.removed:\n",
+   "new": "                if time <= curr.expires and not curr.removed:\n",
+   "failing": [
+    "tests/test_keys.py::CacheKeysTest::test_hashkey",
+    "tests/test_keys.py::CacheKeysTest::test_pickle",
+    "tests/test_keys.py::CacheKeysTest::test_typedkey",
+    "tests/test_keys.py::CacheKeysTest::test_typedmethodkey",
+    "tests/test_tlru.py::TLRUCacheTest::test_ttu_reverse_insert"
+   ]
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "Cache.__setitem__",
+   "line": 80,
+   "orig": "            diffsize = size - self.__size[key]\n",
+   "new": "            diffsize = size + self.__size[key]\n",
+   "failing": [
+    "tests/test_cache.py::CacheTest::test_getsizeof_param",
+    "tests/test_cache.py::CacheTest::test_getsizeof_subclass",
+    "tests/test_fifo.py::LRUCacheTest::test_getsizeof_param",
+    "tests/test_fifo.py::LRUCacheTest::test_getsizeof_subclass",
+    "tests/test_keys.py::CacheKeysTest::test_hashkey",
+    "tests/test_keys.py::CacheKeysTest::test_pickle",
+    "tests/test_keys.py::CacheKeysTest::test_typedkey",
+    "tests/test_keys.py::CacheKeysTest::test_typedmethodkey",
+    "tests/test_lfu.py::LFUCacheTest::test_getsizeof_param",
+    "tests/test_lfu.py::LFUCacheTest::test_getsizeof_subclass",
+    "tests/test_lru.py::LRUCacheTest::test_getsizeof_param",
+    "tests/test_lru.py::LRUCacheTest::test_getsizeof_subclass",
+    "tests/test_mru.py::MRUCacheTest::test_getsizeof_param",
+    "tests/test_mru.py::MRUCacheTest::test_getsizeof_subclass",
+    "tests/test_rr.py::RRCacheTest::test_getsizeof_param",
+    "tests/test_rr.py::RRCacheTest::test_getsizeof_subclass",
+    "tests/test_tlru.py::TLRUCacheTest::test_getsizeof_param",
+    "tests/test_tlru.py::TLRUCacheTest::test_getsizeof_subclass",
+    "tests/test_ttl.py::TTLCacheTest::test_getsizeof_param",
+    "tests/test_ttl.py::TTLCacheTest::test_getsizeof_subclass"
+   ]
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "TTLCache.__contains__",
+   "line": 408,
+   "orig": "            return self.timer() < link.expires\n",
+   "new": "            return self.timer() <= link.expires\n",
+   "failing": [
+    "tests/test_keys.py::CacheKeysTest::test_hashkey",
+    "tests/test_keys.py::CacheKeysTest::test_pickle",
+    "tests/test_keys.py::CacheKeysTest::test_typedkey",
+    "tests/test_keys.py::CacheKeysTest::test_typedmethodkey",
+    "tests/test_ttl.py::TTLCacheTest::test_ttl",
+    "tests/test_ttl.py::TTLCacheTest::test_ttl_tuple_key"
+   ]
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "TLRUCache.__getitem__",
+   "line": 546,
+   "orig": "            expired = not (self.timer() < item.expires)\n",
+   "new": "            expired = not (self.timer() <= item.expires)\n",
+   "failing": [
+    "tests/test_keys.py::CacheKeysTest::test_hashkey",
+    "tests/test_keys.py::CacheKeysTest::test_pickle",
+    "tests/test_keys.py::CacheKeysTest::test_typedkey",
+    "tests/test_keys.py::CacheKeysTest::test_typedmethodkey",
+    "tests/test_ttl.py::TTLCacheTest::test_ttl",
+    "tests/test_ttl.py::TTLCacheTest::test_ttl_tuple_key"
+   ]
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "TTLCache.__iter__",
+   "line": 447,
+   "orig": "        while curr is not root:\n",
+   "new": "        while curr is root:\n",
+   "failing": [
+    "tests/test_keys.py::CacheKeysTest::test_hashkey",
+    "tests/test_keys.py::CacheKeysTest::test_pickle",
+    "tests/test_keys.py::CacheKeysTest::test_typedkey",
+    "tests/test_keys.py::CacheKeysTest::test_typedmethodkey",
+    "tests/test_ttl.py::TTLCacheTest::test_pickle_maxsize",
+    "tests/test_ttl.py::TTLCacheTest::test_ttl",
+    "tests/test_ttl.py::TTLCacheTest::test_ttl_expire"
+   ]
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "cachedmethod.<locals>.decorator",
+   "line": 803,
+   "orig": "        if lock is None:\n",
+   "new": "        if lock is not None:\n",
+   "failing": [
+    "tests/test_cachedmethod.py::CachedMethodTest::test_clear",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_clear_locked",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_dict",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_locked_dict",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_locked_nospace",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_lru",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_nospace",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_typedmethod_dict",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_typedmethod_lru",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_unhashable",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_weakref",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_wrapped",
+    "tests/test_keys.py::CacheKeysTest::test_hashkey",
+    "tests/test_keys.py::CacheKeysTest::test_pickle",
+    "tests/test_keys.py::CacheKeysTest::test_typedkey",
+    "tests/test_keys.py::CacheKeysTest::test_typedmethodkey"
+   ]
+  }
+ ],
+ "stubs": [
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "RRCache.popitem",
+   "body_start": 294,
+   "end": 299,
+   "body": "        try:\n            key = self.__choice(list(self))\n        except IndexError:\n            raise KeyError(\"%s is empty\" % type(self).__name__) from None\n        else:\n            return (key, self.pop(key))\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_func.py::RRDecoratorTest::test_decorator_clear",
+    "tests/test_rr.py::RRCacheTest::test_getsizeof_param",
+    "tests/test_rr.py::RRCacheTest::test_getsizeof_subclass",
+    "tests/test_rr.py::RRCacheTest::test_insert",
+    "tests/test_rr.py::RRCacheTest::test_missing",
+    "tests/test_rr.py::RRCacheTest::test_missing_getsizeof",
+    "tests/test_rr.py::RRCacheTest::test_pickle",
+    "tests/test_rr.py::RRCacheTest::test_popitem",
+    "tests/test_rr.py::RRCacheTest::test_popitem_exception_context",
+    "tests/test_rr.py::RRCacheTest::test_rr"
+   ]
+  },
+  {
+   "path": "src/cachetools/func.py",
+   "qual": "rr_cache",
+   "body_start": 103,
+   "end": 108,
+   "body": "    if maxsize is None:\n        return _cache({}, None, typed)\n    elif callable(maxsize):\n        return _cache(RRCache(128, choice), 128, typed)(maxsize)\n    else:\n        return _cache(RRCache(maxsize, choice), maxsize, typed)\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_func.py::RRDecoratorTest::test_decorator",
+    "tests/test_func.py::RRDecoratorTest::test_decorator_clear",
+    "tests/test_func.py::RRDecoratorTest::test_decorator_needs_rlock",
+    "tests/test_func.py::RRDecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::RRDecoratorTest::test_decorator_typed",
+    "tests/test_func.py::RRDecoratorTest::test_decorator_unbound",
+    "tests/test_func.py::RRDecoratorTest::test_decorator_user_function"
+   ]
+  },
+  {
+   "path": "src/cachetools/func.py",
+   "qual": "mru_cache",
+   "body_start": 85,
+   "end": 94,
+   "body": "    from warnings import warn\n\n    warn(\"@mru_cache is deprecated\", DeprecationWarning, stacklevel=2)\n\n    if maxsize is None:\n        return _cache({}, None, typed)\n    elif callable(maxsize):\n        return _cache(MRUCache(128), 128, typed)(maxsize)\n    else:\n        return _cache(MRUCache(maxsize), maxsize, typed)\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_func.py::MRUDecoratorTest::test_decorator",
+    "tests/test_func.py::MRUDecoratorTest::test_decorator_clear",
+    "tests/test_func.py::MRUDecoratorTest::test_decorator_needs_rlock",
+    "tests/test_func.py::MRUDecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::MRUDecoratorTest::test_decorator_typed",
+    "tests/test_func.py::MRUDecoratorTest::test_decorator_unbound",
+    "tests/test_func.py::MRUDecoratorTest::test_decorator_user_function"
+   ]
+  },
+  {
+   "path": "src/cachetools/func.py",
+   "qual": "ttl_cache",
+   "body_start": 116,
+   "end": 121,
+   "body": "    if maxsize is None:\n        return _cache(_UnboundTTLCache(ttl, timer), None, typed)\n    elif callable(maxsize):\n        return _cache(TTLCache(128, ttl, timer), 128, typed)(maxsize)\n    else:\n        return _cache(TTLCache(maxsize, ttl, timer), maxsize, typed)\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_func.py::TTLDecoratorTest::test_decorator",
+    "tests/test_func.py::TTLDecoratorTest::test_decorator_clear",
+    "tests/test_func.py::TTLDecoratorTest::test_decorator_needs_rlock",
+    "tests/test_func.py::TTLDecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::TTLDecoratorTest::test_decorator_typed",
+    "tests/test_func.py::TTLDecoratorTest::test_decorator_unbound",
+    "tests/test_func.py::TTLDecoratorTest::test_decorator_user_function"
+   ]
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "LRUCache.popitem",
+   "body_start": 225,
+   "end": 230,
+   "body": "        try:\n            key = next(iter(self.__order))\n        except StopIteration:\n            raise KeyError(\"%s is empty\" % type(self).__name__) from None\n        else:\n            return (key, self.pop(key))\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_cachedmethod.py::CachedMethodTest::test_lru",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_typedmethod_dict",
+    "tests/test_cachedmethod.py::CachedMethodTest::test_typedmethod_lru",
+    "tests/test_func.py::LRUDecoratorTest::test_decorator_clear",
+    "tests/test_lru.py::LRUCacheTest::test_getsizeof_param",
+    "tests/test_lru.py::LRUCacheTest::test_getsizeof_subclass",
+    "tests/test_lru.py::LRUCacheTest::test_insert",
+    "tests/test_lru.py::LRUCacheTest::test_lru",
+    "tests/test_lru.py::LRUCacheTest::test_lru_getsizeof",
+    "tests/test_lru.py::LRUCacheTest::test_missing",
+    "tests/test_lru.py::LRUCacheTest::test_missing_getsizeof",
+    "tests/test_lru.py::LRUCacheTest::test_pickle",
+    "tests/test_lru.py::LRUCacheTest::test_popitem",
+    "tests/test_lru.py::LRUCacheTest::test_popitem_exception_context"
+   ]
+  },
+  {
+   "path": "src/cachetools/func.py",
+   "qual": "lru_cache",
+   "body_start": 72,
+   "end": 77,
+   "body": "    if maxsize is None:\n        return _cache({}, None, typed)\n    elif callable(maxsize):\n        return _cache(LRUCache(128), 128, typed)(maxsize)\n    else:\n        return _cache(LRUCache(maxsize), maxsize, typed)\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_func.py::LRUDecoratorTest::test_decorator",
+    "tests/test_func.py::LRUDecoratorTest::test_decorator_clear",
+    "tests/test_func.py::LRUDecoratorTest::test_decorator_needs_rlock",
+    "tests/test_func.py::LRUDecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::LRUDecoratorTest::test_decorator_typed",
+    "tests/test_func.py::LRUDecoratorTest::test_decorator_unbound",
+    "tests/test_func.py::LRUDecoratorTest::test_decorator_user_function"
+   ]
+  },
+  {
+   "path": "src/cachetools/func.py",
+   "qual": "fifo_cache",
+   "body_start": 44,
+   "end": 49,
+   "body": "    if maxsize is None:\n        return _cache({}, None, typed)\n    elif callable(maxsize):\n        return _cache(FIFOCache(128), 128, typed)(maxsize)\n    else:\n        return _cache(FIFOCache(maxsize), maxsize, typed)\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_func.py::FIFODecoratorTest::test_decorator",
+    "tests/test_func.py::FIFODecoratorTest::test_decorator_clear",
+    "tests/test_func.py::FIFODecoratorTest::test_decorator_needs_rlock",
+    "tests/test_func.py::FIFODecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::FIFODecoratorTest::test_decorator_typed",
+    "tests/test_func.py::FIFODecoratorTest::test_decorator_unbound",
+    "tests/test_func.py::FIFODecoratorTest::test_decorator_user_function"
+   ]
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "qual": "TLRUCache.popitem",
+   "body_start": 618,
+   "end": 625,
+   "body": "        with self.timer as time:\n            self.expire(time)\n            try:\n                key = next(iter(self.__items))\n            except StopIteration:\n                raise KeyError(\"%s is empty\" % self.__class__.__name__) from None\n            else:\n                return (key, self.pop(key))\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_tlru.py::TLRUCacheTest::test_getsizeof_param",
+    "tests/test_tlru.py::TLRUCacheTest::test_getsizeof_subclass",
+    "tests/test_tlru.py::TLRUCacheTest::test_insert",
+    "tests/test_tlru.py::TLRUCacheTest::test_missing",
+    "tests/test_tlru.py::TLRUCacheTest::test_missing_getsizeof",
+    "tests/test_tlru.py::TLRUCacheTest::test_pickle",
+    "tests/test_tlru.py::TLRUCacheTest::test_popitem",
+    "tests/test_tlru.py::TLRUCacheTest::test_popitem_exception_context",
+    "tests/test_tlru.py::TLRUCacheTest::test_ttu_atomic",
+    "tests/test_tlru.py::TLRUCacheTest::test_ttu_lru"
+   ]
+  }
+ ],
+ "renames": [
+  {
+   "old": "_cache",
+   "new": "_cache_impl",
+   "count": 19,
+   "files": [
+    "src/cachetools/func.py"
+   ],
+   "path": "src/cachetools/func.py"
+  }
+ ],
+ "docs": [
+  {
+   "path": "src/cachetools/func.py",
+   "module": "cachetools.func",
+   "qual": "mru_cache"
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "module": "cachetools",
+   "qual": "cachedmethod"
+  },
+  {
+   "path": "src/cachetools/func.py",
+   "module": "cachetools.func",
+   "qual": "lfu_cache"
+  },
+  {
+   "path": "src/cachetools/keys.py",
+   "module": "cachetools.keys",
+   "qual": "hashkey"
+  },
+  {
+   "path": "src/cachetools/keys.py",
+   "module": "cachetools.keys",
+   "qual": "typedmethodkey"
+  },
+  {
+   "path": "src/cachetools/func.py",
+   "module": "cachetools.func",
+   "qual": "ttl_cache"
+  },
+  {
+   "path": "src/cachetools/__init__.py",
+   "module": "cachetools",
+   "qual": "cached"
+  },
+  {
+   "path": "src/cachetools/keys.py",
+   "module": "cachetools.keys",
+   "qual": "typedkey"
+  }
+ ],
+ "questions": [
+  {
+   "sentence": "Decorator to wrap a function with a memoizing callable that saves up to `maxsize` results based on a Random Replacement (RR) algorithm.",
+   "path": "src/cachetools/func.py",
+   "qual": "rr_cache",
+   "name": "rr_cache"
+  },
+  {
+   "sentence": "Decorator to wrap a class or instance method with a memoizing callable that saves results in a cache.",
+   "path": "src/cachetools/__init__.py",
+   "qual": "cachedmethod",
+   "name": "cachedmethod"
+  },
+  {
+   "sentence": "Decorator to wrap a function with a memoizing callable that saves up to `maxsize` results based on a Least Recently Used (LRU) algorithm.",
+   "path": "src/cachetools/func.py",
+   "qual": "lru_cache",
+   "name": "lru_cache"
+  },
+  {
+   "sentence": "Remove and return the `(key, value)` pair least frequently used.",
+   "path": "src/cachetools/__init__.py",
+   "qual": "LFUCache.popitem",
+   "name": "popitem"
+  },
+  {
+   "sentence": "Decorator to wrap a function with a memoizing callable that saves up to `maxsize` results based on a Least Frequently Used (LFU) algorithm.",
+   "path": "src/cachetools/func.py",
+   "qual": "lfu_cache",
+   "name": "lfu_cache"
+  },
+  {
+   "sentence": "Remove and return a random `(key, value)` pair.",
+   "path": "src/cachetools/__init__.py",
+   "qual": "RRCache.popitem",
+   "name": "popitem"
+  },
+  {
+   "sentence": "Decorator to wrap a function with a memoizing callable that saves up to `maxsize` results based on a Most Recently Used (MRU) algorithm.",
+   "path": "src/cachetools/func.py",
+   "qual": "mru_cache",
+   "name": "mru_cache"
+  },
+  {
+   "sentence": "Return a cache key for the specified hashable arguments.",
+   "path": "src/cachetools/keys.py",
+   "qual": "hashkey",
+   "name": "hashkey"
+  }
+ ]
+}

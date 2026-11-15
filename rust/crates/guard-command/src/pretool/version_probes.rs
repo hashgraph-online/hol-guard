@@ -29,6 +29,13 @@
 //!   set, so the text can carry a configured credential. `help_probes`
 //!   leaves them out for the same reason.
 //!
+//! `perl` and `ruby` read their switches before anything else: `-v` and
+//! `--version` print the banner and exit inside that loop, before Perl reads
+//! `PERL5OPT` or `sitecustomize.pl` and before Ruby requires a `RUBYOPT`
+//! library or opens a script. Ruby's `-v` also turns on verbose mode, but
+//! with no script it exits once the banner is out. Perl's `-V` is absent: it
+//! loads `Config.pm` to print the build summary, so it runs library code.
+//!
 //! The transfer and client tools below print their banner and exit before
 //! they open a connection, read a transfer source or touch a destination, so
 //! a lone version flag on one of them names no host and no path. `-V` is
@@ -66,6 +73,7 @@ fn single_flag_probe(basename: &str, flag: &str) -> bool {
         "curl" | "wget" | "ssh" => long || flag == "-V",
         "scp" | "sftp" | "rsync" | "psql" | "redis-cli" | "cp" | "chown" => long,
         "git" => long || flag == "version",
+        "perl" | "ruby" => long || flag == "-v",
         "helm" => flag == "version",
         _ => false,
     }
@@ -110,6 +118,10 @@ mod tests {
             ("redis-cli", "--version"),
             ("cp", "--version"),
             ("chown", "--version"),
+            ("perl", "-v"),
+            ("perl", "--version"),
+            ("ruby", "-v"),
+            ("ruby", "--version"),
         ] {
             assert!(safe_version_probe(tool, &args(&[flag])), "{tool} {flag}");
         }
@@ -149,6 +161,11 @@ mod tests {
             // `-V` is a version banner on some builds and an operand on
             // others, so only the long form is read as the question.
             ("rsync", vec!["-V"]),
+            // Perl's `-V` loads `Config.pm`; a script after `-v` runs.
+            ("perl", vec!["-V"]),
+            ("perl", vec!["-v", "script.pl"]),
+            ("ruby", vec!["-v", "script.rb"]),
+            ("ruby", vec!["-V"]),
             ("psql", vec!["-V"]),
             ("cp", vec!["-v"]),
             // A version flag with an operand behind it is a transfer.

@@ -93,6 +93,9 @@ const CLAUDE_BUILTIN_HOOK_TOOL_NAMES: &[&str] = &[
     "webfetch",
     "websearch",
     "askuserquestion",
+    "agent",
+    "task",
+    "glob",
 ];
 
 /// `_claude_mcp_artifact_id` (`adapters/claude_code.py:73-74`).

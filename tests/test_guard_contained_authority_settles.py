@@ -260,6 +260,10 @@ def test_a_later_contained_receipt_waits_for_the_resident(tmp_path: Path, monkey
         # a kind mapping returned in its place reads as the command's words.
         if operation == "command_words":
             return str(fields["command_text"]).split()
+        # The sink asks again for the argv the plan runs; a Node test plan
+        # runs the argv it was routed for.
+        if operation == "planned_route_argv":
+            return list(fields["command"])
         return {
             "inline_eval": False,
             "node_test": True,

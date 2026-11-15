@@ -10,10 +10,15 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter, grok_runtime_hooks_verified
 from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_command
-from codex_plugin_scanner.guard.cli.native_install_checks import grok_hooks_protection_ready
+from codex_plugin_scanner.guard.cli.native_install_checks import (
+    grok_hooks_protection_ready,
+    grok_runtime_hooks_verified,
+)
+
+from .grok_test_support import grok_hook_command_parts, grok_paths
 
 
 def _context(tmp_path: Path, *, workspace: bool = True) -> HarnessContext:
@@ -43,9 +48,16 @@ def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPat
             lambda: sys.executable,
         )
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python",
+            "codex_plugin_scanner.guard.adapters.isolated_hook_python.isolated_cursor_hook_python",
             lambda: sys.executable,
         )
+        # Only a native runtime runs the isolated client; without one Grok registers the bridge.
+        runtime = context.guard_home.parent / "hol-guard-runtime"
+        for module in ("bounded_cli_hook_bridge", "bounded_cli_hook_native"):
+            monkeypatch.setattr(
+                f"codex_plugin_scanner.guard.adapters.{module}.native_bridge_executable",
+                lambda *_args, **_kwargs: runtime,
+            )
     if mode == "frozen":
         monkeypatch.setattr(sys, "frozen", True, raising=False)
         monkeypatch.setattr(
@@ -57,7 +69,7 @@ def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPat
             "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
             lambda: None,
         )
-    command = GrokHarnessAdapter._hook_command_parts(context)
+    command = grok_hook_command_parts(context)
     if mode != "desktop":
         return command
     from codex_plugin_scanner.guard.adapters import desktop_hook_proxy as proxy
@@ -105,7 +117,7 @@ def test_all_generated_forms_reject_paired_path_redirects(
 def test_workspace_boundaries_are_not_interchangeable(tmp_path: Path, pinned: bool) -> None:
     """A workspace-specific hook cannot claim machine-wide coverage, or vice versa."""
     context = _context(tmp_path, workspace=pinned)
-    command = _shell_command(GrokHarnessAdapter._hook_command_parts(context))
+    command = _shell_command(grok_hook_command_parts(context))
     assert is_grok_hook_command(command, context)
     assert not is_grok_hook_command(command, _context(tmp_path, workspace=not pinned))
 
@@ -114,7 +126,7 @@ def test_implicit_native_home_must_match_current_user(tmp_path: Path, monkeypatc
     """The generator may omit --home only when the process's home is the intended one."""
     context = _context(tmp_path, workspace=False)
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: context.home_dir))
-    command = _shell_command(GrokHarnessAdapter._hook_command_parts(context))
+    command = _shell_command(grok_hook_command_parts(context))
     assert is_grok_hook_command(command, context)
     assert not is_grok_hook_command(command, replace(context, home_dir=tmp_path / "other-home"))
 
@@ -127,13 +139,13 @@ def test_installed_readiness_rejects_consistent_path_redirects(
     """Both public readiness paths bind on-disk hook configuration to the supplied owner."""
     context = _context(tmp_path)
     monkeypatch.delenv("GROK_HOME", raising=False)
-    adapter = GrokHarnessAdapter()
+    adapter = get_adapter("grok")
     adapter.install(context)
     assert grok_runtime_hooks_verified(context)
     assert grok_hooks_protection_ready(context)
-    hook = adapter._hooks_dir(context) / "hol-guard-pretooluse.json"
+    hook = grok_paths(context)["pretool"]
     payload = json.loads(hook.read_text())
-    command = _redirect(adapter._hook_command_parts(context), tmp_path / "redirected", option)
+    command = _redirect(grok_hook_command_parts(context), tmp_path / "redirected", option)
     payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = _shell_command(command)
     hook.write_text(json.dumps(payload), encoding="utf-8")
     assert not grok_runtime_hooks_verified(context)

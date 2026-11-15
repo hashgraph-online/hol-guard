@@ -171,6 +171,11 @@ POLICY_EXACT_COMMAND_RULES_CAPABILITY = "policy-document-exact-commands.v1"
 # review row a v1 bundle materializes, so Guard Cloud may deliver review rules
 # in a v2 bundle to a device that advertises this.
 POLICY_DOCUMENT_REVIEW_RULES_CAPABILITY = "policy-document-review-rules.v1"
+# The hook applies a v2 bundle's command-pattern Allow rule to a simple command.
+POLICY_COMMAND_PATTERN_ALLOW_CAPABILITY = "policy-document-command-pattern-allow.v1"
+# The hook asks or blocks every command in a risk group a v2 bundle rule names
+# (``match.riskGroups``), such as every command that deletes files.
+POLICY_RISK_GROUP_RULES_CAPABILITY = "policy-document-risk-group-rules.v1"
 # Accepts Cloud exceptions signed into a v2 bundle (``cloudExceptions``).
 POLICY_BUNDLE_V2_CLOUD_EXCEPTIONS_CAPABILITY = "policy-bundle-v2-cloud-exceptions.v1"
 # Re-exported for the supply-chain services; the resident derives the endpoint.
@@ -1945,6 +1950,8 @@ def _local_guard_runtime_session(
         # which every device activates from a verified v2 bundle.
         POLICY_EXACT_COMMAND_RULES_CAPABILITY,
         POLICY_DOCUMENT_REVIEW_RULES_CAPABILITY,
+        POLICY_COMMAND_PATTERN_ALLOW_CAPABILITY,
+        POLICY_RISK_GROUP_RULES_CAPABILITY,
     ]
     session: dict[str, object] = {
         "harness": "hol-guard",

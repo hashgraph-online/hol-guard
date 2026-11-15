@@ -13,7 +13,6 @@ from typing import Any, TextIO
 
 from ..adapters.base import HarnessContext
 from ..adapters.bounded_cli_hook_failure import failure_payload
-from ..adapters.hermes_runtime_hooks import hermes_bridge_response
 from ..hook_deadline import RuntimeHookDeadline
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
 from ..hook_review.hook_availability_policy import (
@@ -25,7 +24,7 @@ from ..hook_review.hook_request_parsing import runtime_hook_event_name
 from ..hook_review.hook_worker import HookWorker
 from ..hook_review.hook_worker_structured import withhold_structured_destination, withholds_structured_destination
 from ..native_hook_evidence_writer import NativeHookEvidenceWriter
-from ..native_hook_render import native_cli_hook_emit
+from ..native_hook_render import native_cli_hook_emit, native_hermes_bridge
 from ..runtime_health.diagnostics import DaemonDiagnostics
 from ..store import GuardStore
 from .commands_support_runtime_resolution import _canonical_harness_name
@@ -40,6 +39,8 @@ _BRIDGE_RENDERED_HARNESSES = frozenset(
     {"cline", "copilot", "devin", "grok", "hermes", "kimi", "muse", "openclaw", "zcode"}
 )
 _RENDER_FAILURE_REASON = "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
+# What Hermes reads when the resident cannot render its reply.
+_HERMES_UNAVAILABLE_BLOCK: dict[str, object] = {"decision": "block", "reason": "HOL Guard blocked this action."}
 # What writing a finished answer is allowed to take when the review itself has
 # already used the hook's whole budget.
 _DELIVERY_BUDGET_SECONDS = 1.0
@@ -81,7 +82,10 @@ def _bridge_hook_output(
         return muse_bridge_response(response, event_name=event_name, guard_home=guard_home, deadline=deadline)
     if canonical == "hermes":
         # The Hermes bridge renders its daemon reply natively; so does the CLI.
-        return hermes_bridge_response(response, event_name=event_name, guard_home=guard_home, deadline=deadline)
+        # When the resident cannot answer, Hermes reads the fixed block document.
+        rendered_hermes = native_hermes_bridge(response, guard_home=guard_home, deadline=deadline)
+        payload, exit_code = rendered_hermes if rendered_hermes is not None else (_HERMES_UNAVAILABLE_BLOCK, 2)
+        return json.dumps(payload, ensure_ascii=True, separators=(",", ":")), "", exit_code
     rendered = native_cli_hook_emit(
         canonical, response, event_name=event_name, guard_home=guard_home, deadline=deadline
     )

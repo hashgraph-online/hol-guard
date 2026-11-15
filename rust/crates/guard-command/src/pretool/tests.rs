@@ -20,6 +20,13 @@ fn bounded_byte_inspection_preserves_secret_and_pipeline_floors() {
         "wc -c src/lib.rs && od -c src/lib.rs | tail -2",
         "cat src/lib.rs | od -An -tx1",
         "cat src/lib.rs | od -c -",
+        "od -An -tx1 -N 4 src/lib.rs",
+        "od -A x -t x1z -N 16 -j 0x10 src/lib.rs",
+        "wc -c src/lib.rs; od -An -tx1 -N4 src/lib.rs",
+        "od -t u2 -w8 src/lib.rs",
+        "cat src/lib.rs | od -An -t d4 -N 8",
+        "od -N 010 -j 0 src/lib.rs",
+        "od -t fF -t fD -t dL -t cz src/lib.rs",
     ] {
         let decision =
             evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
@@ -36,6 +43,17 @@ fn bounded_byte_inspection_preserves_secret_and_pipeline_floors() {
         "od -c",
         "od --unknown src/lib.rs",
         "od -c $(echo src/lib.rs)",
+        "od -An -tx1 -N 4 .env",
+        "od -N src/lib.rs src/lib.rs",
+        "od -An -tx1 -N",
+        "od -A src/lib.rs",
+        "od -t x1 -j 4k src/lib.rs",
+        "od --read-bytes=4 src/lib.rs",
+        "od -N 08 src/lib.rs",
+        "od -j 0x src/lib.rs",
+        "od -t z src/lib.rs",
+        "od -t q src/lib.rs",
+        "od -t x123 src/lib.rs",
     ] {
         let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
         assert!(
@@ -198,6 +216,7 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
         benign_command_segments(
             &model,
             PathContext {
+                literal_words: &[],
                 home_dir: Some("/tmp"),
                 cwd: Some("/tmp"),
                 cdpath_unset: false,
@@ -205,10 +224,12 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },
@@ -581,7 +602,7 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
         "cat //etc/passwd",
         "cat /proc//self/environ",
         "cat /var/../etc/passwd",
-        "head -n 10 README.md Cargo.toml",
+        "head -n 10 README.md .env",
         "ls /",
         "cat /root/secret",
         "cat /home/user/notes",

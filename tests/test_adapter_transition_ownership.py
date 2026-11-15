@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor_hook_config import isolated_cursor_hook_python
+from codex_plugin_scanner.guard.adapters.isolated_hook_python import isolated_cursor_hook_python
 from codex_plugin_scanner.guard.codex_install_transaction import require_codex_install_owner
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
@@ -127,8 +127,28 @@ def test_install_preparation_is_complete_or_explicitly_unavailable(tmp_path: Pat
     assert not ctx.guard_home.exists()
 
 
-@pytest.mark.parametrize("harness,expected", [("kimi", 4), ("grok", 11), ("zcode", 6), ("devin", 6)])
-def test_frozen_preparation_includes_helper_without_publishing(tmp_path, monkeypatch, harness, expected):
+def test_frozen_grok_preparation_includes_helper_without_publishing(tmp_path, monkeypatch):
+    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
+    from codex_plugin_scanner.guard.adapters import get_adapter
+
+    harness = "grok"
+    ctx = context(tmp_path)
+    monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: sys.executable)
+    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
+    prepared = get_adapter(harness).prepare_install(ctx)
+    assert len(prepared.files) == 11
+    helper = next(change for change in prepared.files if change.path.suffix == ".py")
+    assert helper.path == ctx.guard_home / f"managed/bounded-hooks/{harness}.py"
+    assert helper.no_follow
+    assert helper.before is None and helper.after is not None
+    assert helper.after_mode == 0o600
+    assert not ctx.guard_home.exists()
+
+
+@pytest.mark.parametrize("harness,expected", [("kimi", 3), ("zcode", 5), ("devin", 5)])
+def test_frozen_preparation_hands_the_hook_to_the_runtime(tmp_path, monkeypatch, harness, expected):
+    """A frozen Guard writes no helper script; its runtime's durable copy answers the hook."""
     from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.adapters import get_adapter
 
@@ -138,17 +158,13 @@ def test_frozen_preparation_includes_helper_without_publishing(tmp_path, monkeyp
     monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
     prepared = get_adapter(harness).prepare_install(ctx)
     assert len(prepared.files) == expected
-    helper = next(change for change in prepared.files if change.path.suffix == ".py")
-    assert helper.path == ctx.guard_home / f"managed/bounded-hooks/{harness}.py"
-    assert helper.no_follow
-    assert helper.before is None and helper.after is not None
-    assert helper.after_mode == 0o600
+    assert not any(change.path.suffix == ".py" for change in prepared.files)
     assert not ctx.guard_home.exists()
 
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_opencode_prepared_generation_matches_normal_install(tmp_path, previous_exists):
-    from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+    from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 
     ctx = context(tmp_path)
     config = ctx.home_dir / ".config/opencode/opencode.json"
@@ -168,7 +184,7 @@ def test_opencode_prepared_generation_matches_normal_install(tmp_path, previous_
 
 
 @pytest.mark.parametrize("workspace_enabled", [False, True])
-def test_frozen_copilot_preparation_plans_helper_without_publication(
+def test_frozen_copilot_preparation_plans_no_helper_and_publishes_nothing(
     tmp_path,
     monkeypatch,
     workspace_enabled,
@@ -189,12 +205,8 @@ def test_frozen_copilot_preparation_plans_helper_without_publication(
     monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: sys.executable)
     monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
     prepared = CopilotHarnessAdapter().prepare_install(ctx)
-    assert len(prepared.files) == (13 if workspace_enabled else 8)
-    helper = next(change for change in prepared.files if change.path.suffix == ".py")
-    assert helper.path == ctx.guard_home / "managed/bounded-hooks/copilot.py"
-    assert helper.no_follow and helper.after_mode == 0o600
-    assert helper.before is None and helper.after is not None
-    assert not helper.path.exists()
+    assert len(prepared.files) == (12 if workspace_enabled else 7)
+    assert not any(change.path.suffix == ".py" for change in prepared.files)
     assert not (ctx.guard_home / "bin").exists()
     assert not (ctx.home_dir / ".copilot").exists()
 
@@ -244,14 +256,14 @@ def test_copilot_preparation_preserves_and_distinguishes_invalid_authority(tmp_p
 @pytest.mark.parametrize("workspace_enabled", [False, True])
 def test_cursor_editor_prepared_generation_matches_normal_install(tmp_path, workspace_enabled):
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import ensure_cursor_hook_attestation_secret
+    from tests.cursor_test_support import enroll_cursor_hook_key
 
     ctx = HarnessContext(
         home_dir=tmp_path,
         guard_home=tmp_path / "guard",
         workspace_dir=tmp_path / "workspace" if workspace_enabled else None,
     )
-    ensure_cursor_hook_attestation_secret(ctx.guard_home)
+    enroll_cursor_hook_key(ctx.guard_home)
     adapter = CursorHarnessAdapter()
     prepared = adapter.prepare_install(ctx)
     assert len(prepared.files) == (14 if workspace_enabled else 9)
@@ -267,7 +279,7 @@ def test_cursor_editor_prepared_generation_matches_normal_install(tmp_path, work
 
 def test_cursor_preparation_rejects_invalid_authority_without_replacing_it(tmp_path):
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import cursor_hook_attestation_secret_path
+    from tests.cursor_test_support import cursor_hook_attestation_secret_path
 
     ctx = context(tmp_path)
     authority = cursor_hook_attestation_secret_path(ctx.guard_home)
@@ -287,11 +299,11 @@ def test_cursor_preparation_rejects_invalid_authority_without_replacing_it(tmp_p
 def test_cursor_cli_and_all_preparation_matches_normal_install(tmp_path, monkeypatch, surface):
     from codex_plugin_scanner.guard import shims
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import ensure_cursor_hook_attestation_secret
+    from tests.cursor_test_support import enroll_cursor_hook_key
 
     ctx = context(tmp_path)
     if surface == "all":
-        ensure_cursor_hook_attestation_secret(ctx.guard_home)
+        enroll_cursor_hook_key(ctx.guard_home)
     monkeypatch.setattr(shims, "_is_transient_path", lambda path: False)
     monkeypatch.setenv("SHELL", "/bin/zsh")
     adapter = CursorHarnessAdapter()

@@ -27,6 +27,8 @@ use super::reads::{dashboard_build_id, NativeReads, HANDSHAKE_SCHEMA};
 use super::{serve, MAX_ACTIVE_CONNECTIONS, STALLED_WRITE_TIMEOUT};
 use crate::daemon_policy_authority::{canonical_discovery_payload, hmac_sha256_raw};
 
+#[path = "daemon_edge_resident_prewarm.rs"]
+mod resident_prewarm;
 #[path = "daemon_edge_workers.rs"]
 mod workers;
 
@@ -241,6 +243,11 @@ pub(crate) fn run(args: &[String]) -> i32 {
         eprintln!("daemon-serve: the launch configuration names another daemon");
         return EXIT_USAGE;
     }
+    // Pin the dashboard before reporting ready: the launcher that unpacked it
+    // may exit, and remove it, once this daemon's state is published.
+    if let Some(dir) = config.dashboard_dir.as_deref() {
+        dashboard_build_id(Path::new(dir));
+    }
     if let Some(version) = config.state.get("package_version").and_then(Value::as_str) {
         super::set_package_version(version);
     }
@@ -302,6 +309,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
         );
     }
     warm_hook_worker(&reads, port, pid);
+    if config.workers {
+        resident_prewarm::prewarm_resident(&home);
+    }
     println!("{}", json!({"port": port, "pid": pid}));
     let _ = io::stdout().flush();
     super::lifecycle::record(&home, "ready", None, Some(&session_id), Some(port));

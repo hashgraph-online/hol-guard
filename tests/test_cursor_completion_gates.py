@@ -85,4 +85,4 @@ def test_cursor_contract_documents_unsupported_state() -> None:
     assert "unavailable" in text
     assert "unsupported" in text
     assert "must not offer a no-op repair" in text
-    assert CursorHarnessAdapter.harness == "cursor"
+    assert CursorHarnessAdapter().harness == "cursor"

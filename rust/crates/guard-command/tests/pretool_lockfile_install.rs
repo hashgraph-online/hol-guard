@@ -149,10 +149,12 @@ impl Lab {
                 cdpath_unset: true,
                 npm_config_inert: true,
                 pip_config_inert: true,
+                python_environment_inert: true,
                 shell_home_matches: true,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 ..PathContext::default()
             },

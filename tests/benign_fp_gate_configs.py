@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 from ci.gauntlet.extension_catalog_fixtures import CATALOG_PATH, CATALOG_SOURCE
@@ -40,15 +41,39 @@ PARENT_DOCUMENTS = {
     "README.md": "# Parent\n",
     CATALOG_PATH: CATALOG_SOURCE,
     "deploy/app-secrets.yaml": "apiVersion: v1\nkind: Secret\nmetadata:\n  name: app\ndata:\n  mode: cHJvZA==\n",
+    # Named for a feature, not a store: `auth-evidence/` is to auth what
+    # `auth-service/` is, and the document's own name carries the same word.
+    "docs/auth-evidence/phase-e-auth-schema.md": "# Phase E schema\n\nNotes on the account table.\n",
+}
+
+# A committed screenshot named for the screen it shows: a one-pixel PNG with a
+# density chunk, as a capture tool writes it. A recursive search reads pixels,
+# not text, so walking past it is not a credential read.
+PARENT_IMAGES = {
+    "docs/screens/auth-desktop-login.png": base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAABYlAAAWJQFJUiTwAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII="
+    ),
+}
+
+
+# A source directory holding more modules than Guard lists when it expands a
+# glob, as a large frontend's `src/` does. `rg pattern <dir>/*.ts` from a
+# sibling checkout reads no more than a recursive search of the directory.
+PARENT_WIDE_MODULES = {
+    f"console/src/module{index:03}.ts": f"export const moduleValue{index} = {index};\n" for index in range(300)
 }
 
 
 def write_parent_documents(parent: Path) -> None:
-    """Write the parent repository's committed top-level documents."""
-    for relative, text in PARENT_DOCUMENTS.items():
+    """Write the parent repository's committed top-level documents and images."""
+    for relative, text in {**PARENT_DOCUMENTS, **PARENT_WIDE_MODULES}.items():
         target = parent / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
+    for relative, data in PARENT_IMAGES.items():
+        target = parent / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
 
 
 def write_sibling_documents(sibling: Path) -> None:

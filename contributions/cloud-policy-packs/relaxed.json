@@ -1,0 +1,464 @@
+{
+  "schema": "guard.cloud-policy-pack.v1",
+  "preset": "relaxed",
+  "title": "Relaxed",
+  "summary": "Quiet for everyday work. Reviews permanent deletes, public shares and money out.",
+  "windows": [
+    {
+      "id": "recoverable_deletes_1h",
+      "seconds": 3600,
+      "counts": "Records deleted recoverably on one connection."
+    }
+  ],
+  "unclassified": {
+    "action": "review",
+    "destructive_name_action": "review"
+  },
+  "rules": [
+    {
+      "family": "base",
+      "summary": "Drafts are allowed. Reads are allowed by the read default.",
+      "rule": {
+        "rule_id": "relaxed.r00.draft",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "draft"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R1",
+      "summary": "Permanent delete.",
+      "rule": {
+        "rule_id": "relaxed.r01.permanent_delete",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "permanent"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R2",
+      "summary": "Recoverable delete or archive.",
+      "rule": {
+        "rule_id": "relaxed.r02.recoverable_delete",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "recoverable",
+            "reversible"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R3",
+      "summary": "Destroying or truncating a database or table.",
+      "rule": {
+        "rule_id": "relaxed.r03.database_delete",
+        "action": "require-reapproval",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete",
+            "admin"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R3",
+      "summary": "Destroying or truncating a database or table.",
+      "rule": {
+        "rule_id": "relaxed.r03.database_truncate",
+        "action": "require-reapproval",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "execute"
+          ],
+          "reversibility": [
+            "permanent"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R4",
+      "summary": "Updates, including bulk updates.",
+      "rule": {
+        "rule_id": "relaxed.r04.update",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R5/R6",
+      "summary": "Sending, to anyone.",
+      "rule": {
+        "rule_id": "relaxed.r05.send",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "send"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R7",
+      "summary": "Sharing publicly or with anyone who has the link.",
+      "rule": {
+        "rule_id": "relaxed.r07.public_share",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "share"
+          ],
+          "audience_kinds": [
+            "public"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R8",
+      "summary": "Sharing with named people or a domain.",
+      "rule": {
+        "rule_id": "relaxed.r08.share",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "share"
+          ],
+          "audience_kinds": [
+            "private",
+            "named",
+            "domain"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R9",
+      "summary": "Exports and bulk downloads.",
+      "rule": {
+        "rule_id": "relaxed.r09.export",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "export"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R10",
+      "summary": "Money out.",
+      "rule": {
+        "rule_id": "relaxed.r10.money_out",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "pay"
+          ],
+          "money_directions": [
+            "out"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R12",
+      "summary": "A secret in the arguments of an action that sends, shares, updates or runs.",
+      "rule": {
+        "rule_id": "relaxed.r12.secret_leaving",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "findings": [
+            "secret_in_arguments"
+          ],
+          "classes": [
+            "send",
+            "share",
+            "update",
+            "execute"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R13",
+      "summary": "The session read untrusted content and sensitive data, and this action can send data out.",
+      "rule": {
+        "rule_id": "relaxed.r13.trifecta",
+        "action": "warn",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "untrusted_content_seen",
+            "sensitive_data_seen",
+            "egress"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then a permanent delete.",
+      "rule": {
+        "rule_id": "relaxed.r14.injection_then_permanent_delete",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "permanent"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then a database or table change.",
+      "rule": {
+        "rule_id": "relaxed.r14.injection_then_database_change",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "delete",
+            "admin"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then a truncating execute.",
+      "rule": {
+        "rule_id": "relaxed.r14.injection_then_truncate",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "execute"
+          ],
+          "reversibility": [
+            "permanent"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then money out.",
+      "rule": {
+        "rule_id": "relaxed.r14.injection_then_money_out",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "pay"
+          ],
+          "money_directions": [
+            "out"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "A merge or push to a branch, or a repository change.",
+      "rule": {
+        "rule_id": "relaxed.r15.branch_change",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update",
+            "execute"
+          ],
+          "objects": [
+            "branch",
+            "repository"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "A production deployment. An unknown environment counts as production.",
+      "rule": {
+        "rule_id": "relaxed.r15.production_deploy",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "objects": [
+            "deployment"
+          ],
+          "environments": [
+            "production"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "Writing or sharing a secret.",
+      "rule": {
+        "rule_id": "relaxed.r15.secret_write",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update",
+            "share",
+            "execute",
+            "send"
+          ],
+          "objects": [
+            "secret"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "Deleting a branch.",
+      "rule": {
+        "rule_id": "relaxed.r15.branch_delete",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "objects": [
+            "branch"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "Rewriting branch history (a force push).",
+      "rule": {
+        "rule_id": "relaxed.r15.force_push",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update",
+            "execute"
+          ],
+          "objects": [
+            "branch"
+          ],
+          "reversibility": [
+            "permanent"
+          ]
+        }
+      }
+    }
+  ],
+  "workspace_rules": []
+}

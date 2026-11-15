@@ -1,7 +1,7 @@
 //! `runner_authority` kind `harness_mcp_discovery`: stdio MCP server grouping,
 //! identities, redacted launch labels, observation matching, managed server
-//! selection and Cloud server IDs. Python keeps the harness reads, env values
-//! and store writes; each op answers one request per discovery pass.
+//! selection, Cloud server IDs and the env a listing probe inherits. Python
+//! keeps the harness reads, env values and store writes.
 
 use std::collections::HashMap;
 
@@ -74,8 +74,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         Some("group") => group(map),
         Some("match") => matching(map),
         Some("upstream") => upstream::upstream(map),
-        Some("select") => select::select(map),
-        Some("server_id") => select::server_ids(map),
+        Some(op @ ("select" | "server_id" | "launch_env")) => select::dispatch(op, map),
         _ => Err(ERR_INVALID),
     }
 }

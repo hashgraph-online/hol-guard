@@ -236,7 +236,7 @@ fn utf8(data: &[u8]) -> Outcome<String> {
 }
 
 fn utf16(data: &[u8], big_endian: bool) -> Outcome<String> {
-    if data.len() % 2 != 0 {
+    if !data.len().is_multiple_of(2) {
         return Err(Abort);
     }
     let units = data.chunks_exact(2).map(|pair| {
@@ -253,7 +253,7 @@ fn utf16(data: &[u8], big_endian: bool) -> Outcome<String> {
 }
 
 fn utf32(data: &[u8], big_endian: bool) -> Outcome<String> {
-    if data.len() % 4 != 0 {
+    if !data.len().is_multiple_of(4) {
         return Err(Abort);
     }
     data.chunks_exact(4)

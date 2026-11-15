@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./app";
 import { installStaleBuildGuard } from "./dashboard-build";
+import { handOffRequestPageToDesktop } from "./desktop-request-handoff";
 import "./tailwind-root.css";
 import "./shell-navigation.css";
 import "./open-guard-cloud-action.css";
@@ -20,6 +21,7 @@ if (container === null) {
 }
 
 installStaleBuildGuard();
+handOffRequestPageToDesktop();
 
 createRoot(container).render(
   <StrictMode>

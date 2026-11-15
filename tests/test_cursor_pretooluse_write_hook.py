@@ -10,11 +10,18 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor_hook_config import _MANAGED_HOOK_EVENTS, _MANAGED_HOOK_TIMEOUT_SECONDS
-from codex_plugin_scanner.guard.adapters.cursor_hooks import (
-    cursor_native_hook_state,
-    install_cursor_hooks,
+from codex_plugin_scanner.guard.adapters.cursor import cursor_native_hook_state, install_cursor_hooks
+from tests.cursor_test_support import managed_cursor_hook_script
+
+_MANAGED_HOOK_EVENTS = (
+    "beforeShellExecution",
+    "beforeMCPExecution",
+    "beforeReadFile",
+    "preToolUse",
+    "afterShellExecution",
+    "afterMCPExecution",
 )
+_MANAGED_HOOK_TIMEOUT_SECONDS = 45
 
 _FILE_MATCHER = "^(Write|Edit|StrReplace|MultiEdit|Delete)$"
 # Outside Windows Shell also reaches preToolUse, for the contained-route probe.
@@ -48,13 +55,6 @@ def test_route_matcher_adds_only_shell() -> None:
         assert pattern.search(tool) is None
 
 
-def _stub_guard_cli(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-        lambda _context: ["hol-guard"],
-    )
-
-
 def _write_hooks(tmp_path: Path, hooks: dict[str, object]) -> Path:
     hooks_path = tmp_path / "home" / ".cursor" / "hooks.json"
     hooks_path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,21 +66,8 @@ def _script_path(tmp_path: Path) -> Path:
     return tmp_path / "home" / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
 
 
-def test_managed_hook_events_use_pretooluse_for_writes() -> None:
-    assert "beforeWriteFile" not in _MANAGED_HOOK_EVENTS
-    assert _MANAGED_HOOK_EVENTS == (
-        "beforeShellExecution",
-        "beforeMCPExecution",
-        "beforeReadFile",
-        "preToolUse",
-        "afterShellExecution",
-        "afterMCPExecution",
-    )
-
-
-def test_install_replaces_legacy_pretooluse_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_install_replaces_legacy_pretooluse_entry(tmp_path: Path) -> None:
     context = _context(tmp_path)
-    _stub_guard_cli(monkeypatch)
     other = {"command": "lean-ctx hook rewrite", "matcher": "Shell"}
     legacy = {"command": str(_script_path(tmp_path)), "failClosed": True, "matcher": "Shell|Read", "timeout": 35}
     hooks_path = _write_hooks(tmp_path, {"preToolUse": [other, legacy]})
@@ -97,11 +84,8 @@ def test_install_replaces_legacy_pretooluse_entry(tmp_path: Path, monkeypatch: p
 
 
 @pytest.mark.parametrize("event_name", ["beforeWriteFile", "beforeEditFile", "afterWriteFile"])
-def test_reinstall_removes_guard_entries_under_unsupported_events(
-    event_name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_reinstall_removes_guard_entries_under_unsupported_events(event_name: str, tmp_path: Path) -> None:
     context = _context(tmp_path)
-    _stub_guard_cli(monkeypatch)
     hooks_path = _write_hooks(tmp_path, {event_name: [{"command": str(_script_path(tmp_path)), "failClosed": True}]})
     install_cursor_hooks(context)
     hooks = json.loads(hooks_path.read_text(encoding="utf-8"))["hooks"]
@@ -111,11 +95,8 @@ def test_reinstall_removes_guard_entries_under_unsupported_events(
     assert managed["failClosed"] is True
 
 
-def test_install_refuses_third_party_entry_under_unsupported_event(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_install_refuses_third_party_entry_under_unsupported_event(tmp_path: Path) -> None:
     context = _context(tmp_path)
-    _stub_guard_cli(monkeypatch)
     other = {"command": "other-tool audit"}
     hooks_path = _write_hooks(
         tmp_path, {"beforeWriteFile": [other, {"command": str(_script_path(tmp_path)), "failClosed": True}]}
@@ -154,3 +135,20 @@ def test_install_from_the_file_only_matcher_adds_shell(tmp_path: Path) -> None:
     [reinstalled] = json.loads(hooks_path.read_text(encoding="utf-8"))["hooks"]["preToolUse"]
     assert reinstalled["matcher"] == _WRITE_MATCHER
     assert cursor_native_hook_state(context)["protection_active"] is True
+
+
+def test_install_retires_project_local_hooks_an_older_install_wrote(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    legacy_dir = tmp_path / "workspace" / ".cursor"
+    legacy_script = legacy_dir / "hooks" / "hol-guard-cursor-hook.py"
+    legacy_script.parent.mkdir(parents=True)
+    legacy_script.write_text(managed_cursor_hook_script(["hol-guard"]), encoding="utf-8")
+    legacy_hooks = legacy_dir / "hooks.json"
+    legacy_hooks.write_text(
+        json.dumps({"version": 1, "hooks": {"beforeShellExecution": [{"command": str(legacy_script.resolve())}]}}),
+        encoding="utf-8",
+    )
+    install_cursor_hooks(context)
+    assert not legacy_script.exists()
+    assert "hol-guard-cursor-hook.py" not in (legacy_hooks.read_text(encoding="utf-8") if legacy_hooks.exists() else "")
+    assert _script_path(tmp_path).is_file()

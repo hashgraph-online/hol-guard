@@ -1,7 +1,7 @@
 //! The daemon's approve-once retry for a reviewed `PreToolUse`.
 //!
 //! When no saved exact-action decision answers a review, the daemon spends a
-//! five-minute "allow once" the user gave the same request in the approval
+//! one-hour "allow once" the user gave the same request in the approval
 //! inbox: `native_review_settle` (`hook_native_review_binding.py`)
 //! with the review identity `native_review_binding`
 //! (`hook_native_exact_action.py`) derives and the launch target of

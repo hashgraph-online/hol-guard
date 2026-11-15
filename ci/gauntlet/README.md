@@ -419,6 +419,22 @@ time? Core cases end at the review card. A round trip needs a runner that answer
 tries again, which is what `approval_retry.ReviewApprover` does -- and `harness_case.py` builds
 one only for the `approved-retry` and bash-lifecycle oracles.
 
+The lane's `relayed-approval-link` case asks the opposite question: when nobody answers the card,
+can the user act on what the agent tells them? Guard holds one harmless command in `ask` mode, no
+approver is built, and the agent is told to stop and say what the user must do. The judge
+(`approval_retry_relay.py`) reads every Guard approval link in the agent's final message and fails
+the case when any link lacks its signed code, is one Guard does not accept (such as one cut short),
+or opens a request the run never queued, or when the message carries no signed link at all. A
+short `/requests/<id>/<code>` link is opened against the fixture's own daemon without following the
+redirect, and it counts only when the daemon sends it to a page signed for a queued request. The
+daemon undoes one character a model drops, adds or changes while copying the link, so the judge
+asks what the daemon opens, not whether the text is spelled exactly. A bare `/requests/<id>` link
+opens a browser tab with no local session, so a user who follows it cannot decide the request. The
+links are checked before redaction, and the evidence keeps only their verdicts. An installed
+daemon records its port in Guard's runtime state, which is where Guard takes the link's origin
+from. The fixture's daemon listens on a free port, so the runner records that port before the
+agent starts; otherwise the link would name Guard's default port, where nothing of the run answers.
+
 `connector-setup` shares the suite but not that question. Its eleven cases carry
 `connector-setup`, `connector-tool`, `blocked-read`, `blocked-command` and `commands` oracles,
 no approver is built for them, and nothing in the lane approves and retries. It proves what an
@@ -453,7 +469,7 @@ My Pi run as the cheap check beside it.
 point of it, so `--harness omp` refuses the profile and the lane runs through `claude-code`,
 `codex` or `cursor`.
 
-- The lane carries its own catalog, `ci/gauntlet/approval_retry.json` (14 cases), rather than
+- The lane carries its own catalog, `ci/gauntlet/approval_retry.json` (17 cases), rather than
   joining `core`. Every lane that reads the core catalog runs its scenarios, so adding these
   would make each of those lanes grow the new oracles and would move `catalog_sha256` and
   `expected_scenarios` in their evidence. The existing judges would

@@ -140,6 +140,7 @@ export function ReviewDecisionCard(props: {
     approvalPassword,
     approvalTotpCode,
     errorMessage,
+    freshCodeRequired,
     handleAllow,
     handleApprovalPasswordChange,
     handleApprovalTotpCodeChange,
@@ -487,6 +488,7 @@ export function ReviewDecisionCard(props: {
           onUseCooldownChange={handleUseCooldownChange}
           onSubmit={handleModalSubmit}
           busy={submitting !== null}
+          requireFreshTotp={freshCodeRequired}
           onCancel={handleModalCancel}
           submitLabel={pendingAction === "allow" ? resolvedAllowButtonLabel : resolvedBlockButtonLabel}
         />

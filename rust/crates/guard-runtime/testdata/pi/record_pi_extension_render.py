@@ -24,6 +24,7 @@ import difflib
 import hashlib
 import json
 import sys
+import unicodedata
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -203,8 +204,33 @@ def render_template(lines: list[str], harness: str, values: dict[str, str]) -> s
 
 
 def placeholder_values(args: dict[str, object]) -> dict[str, str]:
+    def display_name_fragment(value: str) -> str:
+        escaped: list[str] = []
+        for index, character in enumerate(value):
+            if character == "\\":
+                escaped.append("\\\\")
+            elif character == "'":
+                escaped.append("\\'")
+            elif character == '"':
+                escaped.append('\\"')
+            elif character == "`":
+                escaped.append("\\`")
+            elif character == "$" and value[index + 1 : index + 2] == "{":
+                escaped.append("\\$")
+            elif character == "\n":
+                escaped.append("\\n")
+            elif character == "\r":
+                escaped.append("\\r")
+            elif character == "\t":
+                escaped.append("\\t")
+            elif unicodedata.category(character) == "Cc":
+                escaped.append(f"\\u{ord(character):04x}")
+            else:
+                escaped.append(character)
+        return "".join(escaped)
+
     values = {
-        "display_name": str(args["display_name"]),
+        "display_name": display_name_fragment(str(args["display_name"])),
         "guard_args": json.dumps(args["guard_args"]),
         "guard_home": json.dumps(args["guard_home"]),
         "home_dir": json.dumps(args["home_dir"]),

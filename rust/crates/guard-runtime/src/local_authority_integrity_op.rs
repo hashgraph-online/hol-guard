@@ -101,7 +101,7 @@ fn invalid() -> String {
     "local_authority_integrity_request_invalid".to_owned()
 }
 
-fn verify(
+pub(crate) fn verify(
     payload: &Value,
     integrity: &Map<String, Value>,
     key: Option<&[u8]>,

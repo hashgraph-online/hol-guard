@@ -20,7 +20,8 @@ not reasons to classify arbitrary code as harmless.
 ## Native approval retries
 
 A resolved inbox row is not permanent command authorization. A verified
-harness Accept may authorize one matching retry for five minutes. Eligible
+harness Accept may authorize one matching retry for one hour, so an answer
+given after the agent stopped waiting still covers the user's "try again". Eligible
 retries are bound to the Rust-owned semantic request digest, workspace and
 native decision fields. The request digest excludes only root transport
 metadata such as event aliases and timestamps. Commands that can execute

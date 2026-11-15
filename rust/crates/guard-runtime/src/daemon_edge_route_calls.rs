@@ -1,5 +1,5 @@
 //! Control routes whose work is one Guard library call that also shapes the
-//! reply: policy writes and lookups, bulk allow-once and the resume retry.
+//! reply: policy lookups, bulk allow-once and the resume retry.
 //!
 //! The route, the caller check and the body read are the daemon's. The call
 //! answers `{"status", "body", "no_store"}` and the daemon writes exactly
@@ -13,8 +13,6 @@ use super::DROPPED;
 /// The library call that answers `POST path`, with its path arguments.
 pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<String, Value>)> {
     let name = match path {
-        "/v1/policy/clear" => "route.policy_clear",
-        "/v1/policy/decisions" => "route.policy_upsert",
         "/v1/policy/resolve" => "route.policy_resolve",
         "/v1/policy/claim" => "route.policy_claim",
         "/v1/requests/bulk-allow-once" => "route.bulk_allow_once",
@@ -46,10 +44,21 @@ pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<Str
 /// the resident after the request that started it.
 pub(in crate::daemon_edge) fn resident_route(
     path: &str,
+    user_home: Option<&str>,
 ) -> Option<(&'static str, Map<String, Value>)> {
     if path == "/v1/policy/sync" {
         // An accepted bundle republishes the resident's extension controls.
         return Some(("route.policy_sync", Map::new()));
+    }
+    if let ["v1", "requests", request_id, "live-decision"] =
+        crate::daemon_route_paths::segments(path).as_slice()
+    {
+        // The waiting Codex hook's decision is re-reviewed by the resident's
+        // hook worker before the store records it.
+        let mut args = Map::new();
+        args.insert("request_id".to_owned(), Value::from(*request_id));
+        args.insert("home_dir".to_owned(), user_home.into());
+        return Some(("hook.codex_live_decision", args));
     }
     if crate::daemon_route_paths::route_class(path) != "local_cli" {
         return None;
@@ -146,11 +155,13 @@ const WORKSPACE_ASSESSMENT_WRITES: [&str; 7] = [
     "/v1/supply-chain/workspace-assessments/resume",
 ];
 const FIX_PROPOSALS_PREFIX: &str = "/v1/supply-chain/workspace-fix-proposals/";
+const SWARM_WRITES: [&str; 3] = ["/v1/swarm/launch", "/v1/swarm/action", "/v1/swarm/events"];
 
 /// Whether `route.handler_post` runs the daemon's own handler for `path`
 /// (`routes/calls.py`).
 fn runs_handler(path: &str) -> bool {
-    if CONTEXT_ASSISTANCE_WRITES.contains(&path)
+    if SWARM_WRITES.contains(&path)
+        || CONTEXT_ASSISTANCE_WRITES.contains(&path)
         || HARNESS_VERSION_WRITES.contains(&path)
         || WORKSPACE_ASSESSMENT_WRITES.contains(&path)
     {

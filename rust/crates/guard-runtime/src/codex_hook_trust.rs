@@ -380,6 +380,10 @@ fn remap(request: &Request, prefixes: &[&str]) -> Option<Vec<Value>> {
     }
     let (was, was_guard) = coordinates(request, &request.before_events);
     let (now, now_guard) = coordinates(request, &request.events);
+    let was_handlers: BTreeSet<String> = handlers(&request.before_events)
+        .into_iter()
+        .map(|found| found.coordinate)
+        .collect();
     let mut kept: Vec<(String, Option<&str>)> = Vec::new();
     let mut moves: Vec<(String, Option<&str>)> = Vec::new();
     for (key, entry) in &request.state {
@@ -390,7 +394,16 @@ fn remap(request: &Request, prefixes: &[&str]) -> Option<Vec<Value>> {
         });
         let digest = found.and_then(|(_, coordinate)| was.get(coordinate));
         let (Some((prefix, coordinate)), Some(digest)) = (found, digest) else {
-            kept.push((key.clone(), Some(key.as_str())));
+            // An entry no handler owned before this install speaks for nobody.
+            // Left where it is, a Guard handler appended into its slot would
+            // inherit a dead handler's `enabled = false` and stale trust, and
+            // Codex would skip Guard with nothing on screen saying so.
+            let orphaned = found.is_some_and(|(_, coordinate)| {
+                !was_handlers.contains(coordinate) && now_guard.contains_key(coordinate)
+            });
+            if !orphaned {
+                kept.push((key.clone(), Some(key.as_str())));
+            }
             continue;
         };
         if now.get(coordinate) == Some(digest) {

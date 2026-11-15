@@ -14,6 +14,7 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
+from codex_plugin_scanner.guard.adapters import codex_install_plan as install_plan
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_config import dump_toml
@@ -52,9 +53,9 @@ def _install_codex(home_dir: Path, workspace_dir: Path, capsys: pytest.CaptureFi
 def _managed_shell_block(body: str) -> str:
     return "\n".join(
         (
-            codex_adapter._SHELL_GUARD_BEGIN,
+            install_plan.SHELL_GUARD_BEGIN,
             body,
-            codex_adapter._SHELL_GUARD_END,
+            install_plan.SHELL_GUARD_END,
         )
     )
 
@@ -97,15 +98,21 @@ def test_install_migrates_legacy_shell_controls_without_changing_user_bytes(tmp_
     )
 
 
-def test_legacy_shell_cleanup_preserves_crlf_non_utf8_and_unmatched_markers() -> None:
-    begin = codex_adapter._SHELL_GUARD_BEGIN.encode("ascii")
-    end = codex_adapter._SHELL_GUARD_END.encode("ascii")
-    original = b"\xffKEEP\r\n\r\n" + begin + b"\r\nlegacy\r\n" + end + b"\r\nAFTER\xfe\r\n"
-
-    assert codex_adapter._remove_managed_shell_guard_blocks(original) == b"\xffKEEP\r\nAFTER\xfe\r\n"
-    assert codex_adapter._remove_managed_shell_guard_blocks(b"KEEP\n" + begin + b"\nunterminated\n") == (
-        b"KEEP\n" + begin + b"\nunterminated\n"
+def test_legacy_shell_cleanup_preserves_crlf_non_utf8_and_unmatched_markers(tmp_path) -> None:
+    begin = install_plan.SHELL_GUARD_BEGIN.encode("ascii")
+    end = install_plan.SHELL_GUARD_END.encode("ascii")
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+    context.home_dir.mkdir()
+    unterminated = b"KEEP\n" + begin + b"\nunterminated\n"
+    (context.home_dir / ".zshenv").write_bytes(
+        b"\xffKEEP\r\n\r\n" + begin + b"\r\nlegacy\r\n" + end + b"\r\nAFTER\xfe\r\n"
     )
+    (context.home_dir / ".bashrc").write_bytes(unterminated)
+
+    planned = {change.path.name: change.after for change in codex_adapter.prepare_codex_shell_cleanup(context)}
+
+    assert planned[".zshenv"] == b"\xffKEEP\r\nAFTER\xfe\r\n"
+    assert planned[".bashrc"] == unterminated
 
 
 def test_codex_launch_fails_closed_without_authoritative_native_hooks(tmp_path):
