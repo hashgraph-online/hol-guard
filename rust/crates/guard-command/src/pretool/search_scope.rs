@@ -398,7 +398,9 @@ fn claude_grep_input(payload: &Value) -> Option<&Map<String, Value>> {
 /// the snake-case values and the input was not truncated.
 fn grep_input(payload: &Value, mirrored: bool) -> Option<&Map<String, Value>> {
     let root = payload.as_object()?;
-    if root.get("tool_name").and_then(Value::as_str) != Some("Grep") {
+    // Grok names its tool `grep`; Claude Code names it `Grep`.
+    let name = root.get("tool_name").and_then(Value::as_str);
+    if name != Some("Grep") && !(mirrored && name == Some("grep")) {
         return None;
     }
     let input = root.get("tool_input")?.as_object()?;

@@ -59,7 +59,7 @@ _SHELL_TOOL = {
 }
 _READ_TOOL = {"zcode": "Read", "claude-code": "Read", "omp": "read", "cursor": "Read"}
 _GLOB_TOOL = {"claude-code": "Glob", "omp": "glob"}
-_GREP_TOOL = {"claude-code": "Grep", "omp": "grep", "grok": "Grep"}
+_GREP_TOOL = {"claude-code": "Grep", "omp": "grep", "grok": "grep"}
 _WRITE_TOOL = {"zcode": "Write", "claude-code": "Write", "omp": "write", "cursor": "Write"}
 _FIXED_TOOLS = {
     "eval": "eval",
@@ -78,6 +78,8 @@ _FIXED_TOOLS = {
     "agent": "Agent",
     # Grok's keyword search over its configured integration (MCP) tools.
     "search_tool": "search_tool",
+    # Grok's folder listing: a tree of entry names below `target_directory`.
+    "list_dir": "list_dir",
     # Oh My Pi's hashline edit: one `input` patch plus the `path`/`paths` copies it derives.
     "edit": "edit",
 }

@@ -481,7 +481,7 @@ fn evaluate_envelope(
             ("claude-code", Some("Glob")) => {
                 super::search_scope::claude_glob_scope_proven(payload, home_dir, cwd)
             }
-            ("grok", Some("Grep")) => {
+            ("grok", Some("Grep" | "grep")) => {
                 super::search_scope::grok_grep_directory_scope_proven(payload, home_dir, cwd)
             }
             _ => false,
