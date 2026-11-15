@@ -15470,7 +15470,8 @@
         "command": "fd -H -L -t f . -d 2"
       },
       "cwd": "org_app",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-home-fd-hidden",
