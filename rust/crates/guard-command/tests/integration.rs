@@ -313,6 +313,7 @@ pub mod pretool_sibling_sequence_reads;
 pub mod pretool_skill_listings;
 pub mod pretool_skill_roots;
 pub mod pretool_stdin_filters;
+pub mod pretool_tee_merged_stderr;
 pub mod pretool_temp_checkout_search;
 pub mod pretool_temporary_writes;
 pub mod pretool_temporary_writes_windows;
