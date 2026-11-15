@@ -175,10 +175,10 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
         )
     )
     tokens = shlex.split(command)
-    bridge_config = json.loads(tokens[3])
+    bridge_config = json.loads(tokens[2])
 
-    assert tokens[1] == "-I"
-    assert Path(tokens[2]).name == "codex_daemon_hook_bridge.py"
+    assert len(tokens) == 3
+    assert tokens[1] == "codex-hook-bridge"
     assert bridge_config["state_path"] == str(guard_home / "daemon-state.json")
     assert bridge_config["manifest_path"].startswith(str(guard_home / "managed" / "codex"))
     assert bridge_config["query"].startswith("guard-home=")
@@ -463,23 +463,13 @@ def test_guard_codex_native_hook_state_detects_bridge_content_mode_and_symlink_c
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    bridge_path = tmp_path / "package" / "codex_daemon_hook_bridge.py"
+    # The hook runs the native runtime named here; its bytes are the
+    # authenticated "bridge" role.
+    bridge_path = tmp_path / "package" / "hol-guard-runtime"
     bridge_path.parent.mkdir(parents=True)
-    bridge_path.write_bytes(Path(codex_adapter.__file__).with_name("codex_daemon_hook_bridge.py").read_bytes())
+    bridge_path.write_bytes(b"#!/bin/sh\nexit 0\n")
     bridge_path.chmod(0o644)
-    original_command_parts = codex_adapter._hook_command_parts
-    original_packaged_paths = codex_adapter._hook_packaged_file_paths
-
-    def relocated_command_parts(hook_context: HarnessContext) -> tuple[str, ...]:
-        parts = list(original_command_parts(hook_context))
-        parts[1] = str(bridge_path)
-        return tuple(parts)
-
-    def relocated_packaged_paths() -> tuple[tuple[str, Path], ...]:
-        return tuple((role, bridge_path if role == "bridge" else path) for role, path in original_packaged_paths())
-
-    monkeypatch.setattr(codex_adapter, "_hook_command_parts", relocated_command_parts)
-    monkeypatch.setattr(codex_adapter, "_hook_packaged_file_paths", relocated_packaged_paths)
+    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda _guard_home: bridge_path)
     adapter = CodexHarnessAdapter()
     adapter.install(context)
 
@@ -512,23 +502,13 @@ def test_guard_codex_repair_refuses_to_authenticate_changed_same_version_bridge(
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    bridge_path = tmp_path / "package" / "codex_daemon_hook_bridge.py"
+    # The hook runs the native runtime named here; its bytes are the
+    # authenticated "bridge" role.
+    bridge_path = tmp_path / "package" / "hol-guard-runtime"
     bridge_path.parent.mkdir(parents=True)
-    bridge_path.write_bytes(Path(codex_adapter.__file__).with_name("codex_daemon_hook_bridge.py").read_bytes())
+    bridge_path.write_bytes(b"#!/bin/sh\nexit 0\n")
     bridge_path.chmod(0o644)
-    original_command_parts = codex_adapter._hook_command_parts
-    original_packaged_paths = codex_adapter._hook_packaged_file_paths
-
-    def relocated_command_parts(hook_context: HarnessContext) -> tuple[str, ...]:
-        parts = list(original_command_parts(hook_context))
-        parts[1] = str(bridge_path)
-        return tuple(parts)
-
-    def relocated_packaged_paths() -> tuple[tuple[str, Path], ...]:
-        return tuple((role, bridge_path if role == "bridge" else path) for role, path in original_packaged_paths())
-
-    monkeypatch.setattr(codex_adapter, "_hook_command_parts", relocated_command_parts)
-    monkeypatch.setattr(codex_adapter, "_hook_packaged_file_paths", relocated_packaged_paths)
+    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda _guard_home: bridge_path)
     adapter = CodexHarnessAdapter()
     adapter.install(context)
     valid_state = codex_adapter.codex_native_hook_state(context)

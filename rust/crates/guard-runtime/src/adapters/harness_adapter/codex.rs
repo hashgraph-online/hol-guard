@@ -31,8 +31,6 @@ const POST_TOOL_MATCHER: &str = "Bash|Read|mcp__.*";
 pub(super) const ENFORCEMENT_BOUNDARY: &str = "codex-native-hooks";
 const HOOK_UNAVAILABLE: &str = "codex_authoritative_hook_unavailable";
 const NATIVE_HOOK_COMMAND: &str = "codex-hook-bridge";
-/// `FROZEN_CODEX_BRIDGE_ARG` (`frozen_runtime_commands.py`).
-const FROZEN_BRIDGE_ARG: &str = "--_hol-guard-codex-bridge";
 
 /// `(event, matcher, status message, long timeout)` in registration order.
 const EVENTS: [(&str, Option<&str>, &str, bool); 4] = [
@@ -182,8 +180,8 @@ fn int(value: i64) -> PyVal {
 /// with the isolated fallback and daemon start commands it launches through.
 ///
 /// A frozen Guard (`frozen`) is its own interpreter: the fallback drops the
-/// `-c` bootstrap, the start command is its private recovery argument and the
-/// bridge runs behind its private bridge argument.
+/// `-c` bootstrap and the start command is its private recovery argument.
+/// The handler itself is always the native runtime's `codex-hook-bridge`.
 fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let home_is_current = flag(fields, "home_is_current")?;
     let runtime_home = PathBuf::from(text(fields, "runtime_guard_home")?);
@@ -204,6 +202,13 @@ fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     if let Some(workspace) = workspace {
         guard_args.extend(["--workspace".to_owned(), path_text(workspace)]);
     }
+    // Every hook runs in the native runtime. Without one there is nothing
+    // to review hooks with, so the install asks for a repair instead.
+    let Some(native) = fields.get("native_bridge").and_then(Value::as_str) else {
+        return Err(Failure::Runtime(
+            super::claude_argv::RUNTIME_MISSING.to_owned(),
+        ));
+    };
     let python = text(fields, "python")?;
     let frozen = flag(fields, "frozen")?;
     let (fallback, start) = if frozen {
@@ -254,19 +259,7 @@ fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     } else {
         config
     };
-    let mut argv = if frozen {
-        vec![python.to_owned(), FROZEN_BRIDGE_ARG.to_owned(), argument]
-    } else {
-        vec![
-            python.to_owned(),
-            "-I".to_owned(),
-            text(fields, "bridge")?.to_owned(),
-            argument,
-        ]
-    };
-    if let Some(native) = fields.get("native_bridge").and_then(Value::as_str) {
-        argv.splice(0..0, [native.to_owned(), NATIVE_HOOK_COMMAND.to_owned()]);
-    }
+    let argv = [native.to_owned(), NATIVE_HOOK_COMMAND.to_owned(), argument];
     Ok(json!({ "argv": argv, "fallback": fallback, "start": start }))
 }
 

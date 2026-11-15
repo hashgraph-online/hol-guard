@@ -12,7 +12,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
@@ -188,11 +187,6 @@ def _runtime_guard_home(context: HarnessContext) -> Path:
 
 
 def _native_bridge_executable(guard_home: Path) -> Path | None:
-    # HOL_GUARD_CODEX_HOOK_BRIDGE=python keeps the Python bridge argv. Contract
-    # tests set it so a subprocess install and the parent verifier agree. The
-    # Python bridge is the same fallback used when the native runtime is absent.
-    if os.environ.get("HOL_GUARD_CODEX_HOOK_BRIDGE") == "python":
-        return None
     return native_hook_bridge_executable(NATIVE_CODEX_HOOK_FEATURE, guard_home=guard_home)
 
 
@@ -206,8 +200,7 @@ def _launch(context: HarnessContext, *, home_is_current: bool, python_executable
     fields = _argv_fields(context, home_is_current=home_is_current)
     guard_home = Path(str(fields["runtime_guard_home"]))
     # The native runtime answers each hook from the daemon without starting
-    # Python and fails closed without one. It only reads the config the
-    # Python bridge argv carries.
+    # Python. Without one, the adapter refuses and asks for repair.
     native_bridge = _native_bridge_executable(guard_home)
     return _codex(
         "argv",
@@ -216,7 +209,6 @@ def _launch(context: HarnessContext, *, home_is_current: bool, python_executable
         python=python_executable,
         frozen=_frozen_contract(),
         package_root=str(Path(__file__).resolve().parents[3]),
-        bridge=str(Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()),
         native_bridge=None if native_bridge is None else str(native_bridge),
         manifest_path=str(hook_manifest_path(guard_home, CodexHarnessAdapter._hook_config_path(context))),
         long_timeout=_post_tool_hook_timeout_seconds(context),
@@ -293,11 +285,12 @@ def _manifest_event_bindings(context: HarnessContext) -> list[dict[str, object]]
     return json.loads(_hook_registration(context).bindings)
 
 
-def _hook_packaged_file_paths() -> tuple[tuple[str, Path], ...]:
+def _hook_packaged_file_paths(native_bridge: Path) -> tuple[tuple[str, Path], ...]:
+    """Each authenticated role's file; ``bridge`` is the native runtime the hook runs."""
     scanner_root = Path(__file__).resolve().parents[2]
     guard_root = Path(__file__).resolve().parents[1]
     return (
-        ("bridge", Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()),
+        ("bridge", native_bridge.resolve()),
         ("bridge_runtime", guard_root / "codex_hook_bridge_runtime.py"),
         ("hook_probe", guard_root / "runtime_transition_hook_probe.py"),
         ("native_receipt", guard_root / "native_decision_receipt.py"),
@@ -320,7 +313,7 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
         config_path=CodexHarnessAdapter._hook_config_path(context),
         interpreter_path=Path(_guard_python_executable()),
         package_version=__version__,
-        packaged_file_paths=_hook_packaged_file_paths(),
+        packaged_file_paths=_hook_packaged_file_paths(Path(str(launch["argv"][0]))),
         fallback_argv=tuple(str(part) for part in launch["fallback"]),
         daemon_start_argv=tuple(str(part) for part in launch["start"]),
         event_bindings=tuple(_manifest_event_bindings(context)),

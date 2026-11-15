@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .codex_hook_bridge_runtime import decode_bridge_config_argument
-from .codex_hook_compatibility import bridge_argv_sha256, python_bridge_argv
+from .codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND, bridge_argv_sha256, python_bridge_argv
 from .codex_hook_file_integrity import (
     active_hook_validation_deadline,
     canonical_path,
@@ -155,7 +155,6 @@ def validate_codex_hook_launch(
     )
     _verify_registered_bridge_argv(
         manifest,
-        interpreter=interpreter,
         bridge=packaged_by_role["bridge"],
         config_json=config_json,
     )
@@ -177,12 +176,14 @@ def _selected_launch_generation(manifest: dict[str, object], *, config_json: str
         for value in allowed
     ):
         raise ValueError("managed Codex hook bridge compatibility identity is invalid")
-    bridge_path = str(Path(__file__).with_name("adapters").joinpath("codex_daemon_hook_bridge.py").resolve())
     for candidate in [manifest, *reversed(retained)]:
         if not isinstance(candidate, dict):
             raise ValueError("managed Codex hook retained generation identity is invalid")
-        interpreter = _mapping(candidate.get("interpreter"), label="interpreter")
-        expected = [interpreter.get("invocation_path"), "-I", bridge_path, config_json]
+        bridge = _packaged_identity(candidate, "bridge")
+        if bridge is None:
+            # A generation from before the native launcher names a removed file.
+            continue
+        expected = _native_bridge_argv(bridge, config_json)
         events = candidate.get("events")
         if not isinstance(events, list) or not events:
             raise ValueError("managed Codex hook event identity is invalid")
@@ -245,13 +246,10 @@ def _verify_transport(
             runtime_path.with_name(filename).resolve()
         ):
             raise ValueError("managed Codex observation package path is invalid")
-    bridge_path = runtime_path.with_name("adapters").joinpath("codex_daemon_hook_bridge.py").resolve()
     bridge_runtime_path = runtime_path.with_name("codex_hook_bridge_runtime.py").resolve()
     launch_runtime_path = runtime_path.with_name("codex_hook_launch_runtime.py").resolve()
     runtime_trust_path = runtime_path.resolve()
     windows_job_path = runtime_path.with_name("codex_hook_windows_job.py").resolve()
-    if packaged_by_role["bridge"].get("path") != str(bridge_path):
-        raise ValueError("managed Codex hook bridge path is invalid")
     if packaged_by_role["bridge_runtime"].get("path") != str(bridge_runtime_path):
         raise ValueError("managed Codex hook bridge runtime path is invalid")
     if packaged_by_role["launch_runtime"].get("path") != str(launch_runtime_path):
@@ -289,7 +287,7 @@ def verify_captured_launch_generation(
     if not isinstance(events, list) or not events:
         raise ValueError("managed Codex hook captured events are invalid")
     argv = _string_list(_event_bridge_argv(events[0]), label="bridge argv")
-    if len(argv) not in (3, 4):
+    if len(argv) != 3 or argv[1] != NATIVE_CODEX_HOOK_COMMAND:
         raise ValueError("managed Codex hook captured argv is invalid")
     config_json = argv[-1]
     try:
@@ -313,7 +311,8 @@ def verify_captured_launch_generation(
         raise ValueError("managed Codex hook captured context changed")
     fallback = _string_list(config.get("fallback_command"), label="fallback command")
     start = _string_list(config.get("start_command"), label="start command")
-    if len(argv) == 4 and argv[1] == "-I":
+    target_path = _mapping(interpreter.get("target"), label="interpreter target").get("path")
+    if any(identity.get("path") != target_path for identity in packaged.values()):
         trust_path = packaged["runtime_trust"].get("path")
         if not isinstance(trust_path, str):
             raise ValueError("managed Codex hook captured trust path is invalid")
@@ -328,7 +327,6 @@ def verify_captured_launch_generation(
         )
         _verify_registered_bridge_argv(
             manifest,
-            interpreter=interpreter,
             bridge=packaged["bridge"],
             config_json=config_json,
         )
@@ -339,9 +337,6 @@ def verify_captured_launch_generation(
             _verify_frozen_transport,
         )
 
-        target_identity = _mapping(interpreter.get("target"), label="interpreter target")
-        if any(identity.get("path") != target_identity.get("path") for identity in packaged.values()):
-            raise ValueError("managed frozen Codex captured package is incomplete")
         _verify_frozen_transport(manifest, packaged)
         _verify_frozen_launch_contracts(
             manifest,
@@ -418,7 +413,6 @@ def _verify_launch_contracts(
 def _verify_registered_bridge_argv(
     manifest: Mapping[str, object],
     *,
-    interpreter: Mapping[str, object],
     bridge: Mapping[str, object],
     config_json: str,
 ) -> None:
@@ -428,11 +422,7 @@ def _verify_registered_bridge_argv(
         raise ValueError("managed Codex hook bridge config is malformed") from exc
     if not isinstance(config_payload, dict):
         raise ValueError("managed Codex hook bridge config is malformed")
-    interpreter_path = interpreter.get("invocation_path")
-    bridge_path = bridge.get("path")
-    if not isinstance(interpreter_path, str) or not isinstance(bridge_path, str):
-        raise ValueError("managed Codex hook bridge identity is invalid")
-    expected_argv = [interpreter_path, "-I", bridge_path, config_json]
+    expected_argv = _native_bridge_argv(bridge, config_json)
     events = manifest.get("events")
     if not isinstance(events, list) or not events:
         raise ValueError("managed Codex hook event identity is invalid")
@@ -448,6 +438,24 @@ def _verify_registered_bridge_argv(
         binding = _mapping(event, label="event")
         if not isinstance(binding.get("argv"), list):
             raise ValueError("managed Codex hook event identity is invalid")
+
+
+def _native_bridge_argv(bridge: Mapping[str, object], config_json: str) -> list[str]:
+    """The registered argv: the authenticated native runtime, its subcommand and config."""
+    path = bridge.get("path")
+    if not isinstance(path, str):
+        raise ValueError("managed Codex hook bridge identity is invalid")
+    return [path, NATIVE_CODEX_HOOK_COMMAND, config_json]
+
+
+def _packaged_identity(manifest: Mapping[str, object], role: str) -> Mapping[str, object] | None:
+    packaged = manifest.get("packaged_files")
+    if not isinstance(packaged, list):
+        raise ValueError("managed Codex hook packaged-file identity is invalid")
+    for identity in packaged:
+        if isinstance(identity, dict) and identity.get("role") == role:
+            return identity
+    return None
 
 
 def _event_bridge_argv(event: object) -> object:

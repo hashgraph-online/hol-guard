@@ -16,10 +16,7 @@ HEAVY_MODULES = (
 )
 
 
-BRIDGES = (
-    "codex_daemon_hook_bridge",
-    "bounded_cli_hook_bridge",
-)
+BRIDGES = ("bounded_cli_hook_bridge",)
 
 
 @pytest.mark.parametrize("bridge", BRIDGES)

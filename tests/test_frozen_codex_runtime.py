@@ -36,6 +36,13 @@ def frozen_codex_contract(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     marker_value = getattr(codex_adapter, "_HOL_GUARD_FROZEN_CODEX_RUNTIME", None)
     try:
         assert frozen_codex_runtime.install_frozen_codex_runtime(force=True) is True
+        # A frozen build runs hooks through the verified runtime copy it
+        # publishes under the Guard home; the install only names that path.
+        monkeypatch.setattr(
+            codex_adapter,
+            "_native_bridge_executable",
+            lambda home: home / "native-runtime" / ("a" * 64) / "hol-guard-runtime",
+        )
         yield
     finally:
         # Tests can patch functions installed by this fixture. Undo those
@@ -244,11 +251,11 @@ def test_frozen_codex_contract_binds_commands_and_roles_to_one_executable(
     bridge_config = json.loads(bridge_argv[2])
     fallback_argv = bridge_config["fallback_command"]
     daemon_argv = bridge_config["start_command"]
-    package_paths = codex_adapter._hook_packaged_file_paths()
+    package_paths = codex_adapter._hook_packaged_file_paths(Path(bridge_argv[0]))
     invocation = str(Path(sys.executable).expanduser().resolve(strict=True))
     executable_target = Path(sys.executable).expanduser().resolve(strict=True)
 
-    assert bridge_argv[:2] == (invocation, "--_hol-guard-codex-bridge")
+    assert bridge_argv[1] == "codex-hook-bridge"
     assert fallback_argv[:4] == [invocation, "hook", "--harness", "codex"]
     assert "guard" not in fallback_argv[:2]
     assert daemon_argv[:2] == [invocation, "--_hol-guard-codex-daemon-recover"]
@@ -305,9 +312,10 @@ def test_frozen_codex_install_and_runtime_trust_validate_without_source_files(
     bridge_config_json = bridge_argv[2]
     bridge_config = json.loads(bridge_config_json)
 
-    assert bridge_argv[0] == str(Path(sys.executable).resolve(strict=True))
-    assert bridge_config["fallback_command"][0] == bridge_argv[0]
-    assert bridge_config["start_command"][0] == bridge_argv[0]
+    invocation = str(Path(sys.executable).resolve(strict=True))
+    assert bridge_argv[1] == "codex-hook-bridge"
+    assert bridge_config["fallback_command"][0] == invocation
+    assert bridge_config["start_command"][0] == invocation
 
     trusted = codex_hook_runtime_trust.validate_codex_hook_launch(
         manifest_path=bridge_config["manifest_path"],
@@ -341,8 +349,9 @@ def test_frozen_codex_hook_runs_behind_the_durable_native_bridge(
     handler = codex_adapter._read_toml(codex_config)["hooks"]["PreToolUse"][-1]["hooks"][0]
     bridge_argv = shlex.split(handler["command"])
     invocation = str(Path(sys.executable).resolve(strict=True))
-    assert bridge_argv[:4] == [str(runtime), "codex-hook-bridge", invocation, "--_hol-guard-codex-bridge"]
-    bridge_config_json = bridge_argv[4]
+    assert bridge_argv[:2] == [str(runtime), "codex-hook-bridge"]
+    assert len(bridge_argv) == 3
+    bridge_config_json = bridge_argv[2]
     bridge_config = json.loads(bridge_config_json)
     assert bridge_config["start_command"][:2] == [invocation, "--_hol-guard-codex-daemon-recover"]
 
@@ -378,7 +387,9 @@ def test_retained_frozen_hook_can_be_validated_against_exact_transition_artifact
             role_patch.setattr(
                 codex_adapter,
                 "_hook_packaged_file_paths",
-                lambda: tuple((role, path) for role, path in roles() if role not in {"hook_probe", "native_receipt"}),
+                lambda native_bridge: tuple(
+                    (role, path) for role, path in roles(native_bridge) if role not in {"hook_probe", "native_receipt"}
+                ),
             )
         CodexHarnessAdapter().install(context)
     argv = codex_adapter._hook_command_parts(context)

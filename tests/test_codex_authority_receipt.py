@@ -1,6 +1,7 @@
 """A retained receipt supplies exact authenticated bytes, never a repair grant."""
 
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -257,7 +258,9 @@ def retained_installation(tmp_path, monkeypatch):
     monkeypatch.setenv("USERPROFILE", str(context.home_dir))
     source_root = Path(adapter.__file__).resolve().parents[3]
     adapter_relative = Path(adapter.__file__).relative_to(source_root)
-    sources = {path for _role, path in adapter._hook_packaged_file_paths()} | {Path(adapter.__file__)}
+    sources = {path for role, path in adapter._hook_packaged_file_paths(Path(sys.executable)) if role != "bridge"} | {
+        Path(adapter.__file__)
+    }
     bridges = []
     for number in range(9):
         root = tmp_path / f"immutable-generation-{number}"
@@ -268,7 +271,7 @@ def retained_installation(tmp_path, monkeypatch):
             destination.chmod(0o644)
         monkeypatch.setattr(adapter, "__file__", str(root / adapter_relative))
         adapter.CodexHarnessAdapter().install(context)
-        bridges.append(Path(adapter._hook_command_parts(context)[2]))
+        bridges.append(root / "codex_plugin_scanner/guard/codex_hook_runtime_trust.py")
     return context, bridges
 
 

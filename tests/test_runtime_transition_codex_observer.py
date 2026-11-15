@@ -3,13 +3,11 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard import runtime_transition_codex_observer as observer
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
@@ -90,68 +88,6 @@ def test_desktop_hook_proxy_context_is_explicit_and_minimal(monkeypatch, desktop
     assert "HOL_GUARD_DESKTOP_RUNTIME_OWNER" not in context
 
 
-def _desktop_lane(monkeypatch, tmp_path):
-    monkeypatch.setattr(codex_daemon_hook_bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(codex_daemon_hook_bridge.sys, "platform", "darwin")
-    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    monkeypatch.setattr(
-        codex_daemon_hook_bridge, "_native_bridge_executable", lambda _guard_home: tmp_path / "hol-guard-runtime"
-    )
-    runtime_argv = []
-
-    def run_runtime(command, **kwargs):
-        runtime_argv.append(tuple(command))
-        # The runtime answers on the hook's own stdio, probe or not.
-        assert "stdout" not in kwargs
-        assert "input" not in kwargs
-        return codex_daemon_hook_bridge.subprocess.CompletedProcess(command, 7)
-
-    monkeypatch.setattr(codex_daemon_hook_bridge.subprocess, "run", run_runtime)
-    return runtime_argv
-
-
-def _run_desktop_main(tmp_path, **overrides):
-    arguments = {
-        "state_path": tmp_path / "guard" / "daemon-state.json",
-        "fallback_command": ("fallback",),
-        "start_command": ("start",),
-        "query": "home=%2Ftmp%2Fhome",
-        "hook_timeouts": {"PreToolUse": 10},
-    }
-    arguments.update(overrides)
-    return codex_daemon_hook_bridge.main(**arguments)
-
-
-def test_desktop_lane_names_the_package_root_the_signed_probe_command_carries(monkeypatch, tmp_path) -> None:
-    runtime_argv = _desktop_lane(monkeypatch, tmp_path)
-
-    assert _run_desktop_main(tmp_path) == 7
-
-    package_root = Path(codex_daemon_hook_bridge.__file__).resolve().parents[3]
-    assert runtime_argv[0][1:3] == ("codex-hook-bridge", f"--guard-desktop-lane={package_root}")
-
-
-def test_a_failed_registration_is_passed_to_the_runtime_ahead_of_the_lane(monkeypatch, tmp_path) -> None:
-    """Only the runtime can tell a probe from any other hook, so it is told rather than skipped."""
-    runtime_argv = _desktop_lane(monkeypatch, tmp_path)
-    monkeypatch.setattr(
-        codex_daemon_hook_bridge, "_registration_failure", lambda **_kwargs: "codex_hook_manifest_mac_invalid"
-    )
-
-    assert _run_desktop_main(tmp_path) == 7
-
-    assert runtime_argv[0][1] == "codex-hook-bridge"
-    assert runtime_argv[0][2] == "--guard-registration-failure=codex_hook_manifest_mac_invalid"
-    assert runtime_argv[0][3].startswith("--guard-desktop-lane=")
-    monkeypatch.setattr(codex_daemon_hook_bridge.sys, "frozen", False)
-    assert _run_desktop_main(tmp_path) == 7
-    assert runtime_argv[1][1:3] == (
-        "codex-hook-bridge",
-        "--guard-registration-failure=codex_hook_manifest_mac_invalid",
-    )
-    assert not runtime_argv[1][3].startswith("--guard-")
-
-
 @pytest.mark.parametrize(
     "fault,reason",
     [
@@ -175,7 +111,9 @@ def test_legacy_observer_refuses_unverified_state_without_relaunch(
         role_patch.setattr(
             codex_adapter,
             "_hook_packaged_file_paths",
-            lambda: tuple((role, path) for role, path in paths() if role not in {"hook_probe", "native_receipt"}),
+            lambda native_bridge: tuple(
+                (role, path) for role, path in paths(native_bridge) if role not in {"hook_probe", "native_receipt"}
+            ),
         )
         context, workspace, store = installed_context(tmp_path)
     identity = NativeRuntimeIdentity(tmp_path / "fixture-native", 1, 1, "d" * 64)
@@ -322,7 +260,7 @@ def test_invalid_configuration_never_launches_a_child(tmp_path, monkeypatch, fau
     if fault == "disabled":
         config.write_text(config.read_text().replace("hooks = true", "hooks = false"))
     elif fault == "argv":
-        config.write_text(config.read_text().replace("codex_daemon_hook_bridge.py", "foreign_bridge.py"))
+        config.write_text(config.read_text().replace("codex-hook-bridge", "foreign-bridge"))
     elif fault == "missing_manifest":
         hook_manifest_path(context.guard_home, config).unlink()
     deadline = time.monotonic() + (5 if fault != "expired" else -1)

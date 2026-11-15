@@ -1,7 +1,6 @@
-//! Native Codex hook bridge: the fast path of `main` in
-//! `adapters/codex_daemon_hook_bridge.py`. Codex runs
-//! `guard-runtime codex-hook-bridge <python> -I <bridge.py> <config>` once
-//! per hook. The native bridge forwards the hook to the authenticated
+//! Native Codex hook bridge. Codex runs
+//! `guard-runtime codex-hook-bridge <config>` once per hook; older installs
+//! put a Python launcher argv before the config, which is ignored. The native bridge forwards the hook to the authenticated
 //! loopback Guard daemon and shapes its answer for Codex.
 //!
 //! A clean daemon answer is rendered here. A daemon that is down, does not
@@ -387,9 +386,8 @@ fn write_stdout(text: &str) {
         .and_then(|()| stdout.flush());
 }
 
-/// `guard-runtime codex-hook-bridge [lane flags] <python argv...> <config>`:
-/// the exit code Codex sees (see `desktop` for the flags the Python
-/// launcher adds).
+/// `guard-runtime codex-hook-bridge [lane flags] [legacy argv...] <config>`:
+/// the exit code Codex sees (see `desktop` for the lane flags).
 pub(crate) fn run(argv: &[String]) -> i32 {
     let (lane, python_argv) = desktop::split_lane(argv);
     let mut raw = Vec::new();

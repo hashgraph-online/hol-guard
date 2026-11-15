@@ -45,7 +45,7 @@ Begin with [Gemini and Antigravity](../../rust/crates/guard-runtime/src/adapters
 4. Add a contract to `src/codex_plugin_scanner/guard/contracts/harness-protection-contracts.v1.json`: installation aliases, observed config paths, event surfaces, smoke command, and **specific** known blind spots. Declare real event capabilities in its `capability_events` list. An aspirational hook is not a supported capability.
 5. Update [harness support](harness-support.md) with tested behavior and limits. If the host has version-specific coverage, follow [version coverage](harness-version-coverage.md) rather than claiming support for untested versions.
 
-Public adapter entrypoints are stable. When relocating an internal helper, update its imports and callers, source-path references, and ownership manifests together. Files bound by authenticated manifests, including `codex_daemon_hook_bridge.py`, stay at their established paths unless the complete identity and upgrade contract is migrated.
+Public adapter entrypoints are stable. When relocating an internal helper, update its imports and callers, source-path references, and ownership manifests together. Files bound by authenticated manifests stay at their established paths unless the complete identity and upgrade contract is migrated. Codex hooks run the native runtime directly, so no Python hook launcher is bound.
 
 ## 4. Implement protection safely
 

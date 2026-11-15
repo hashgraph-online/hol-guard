@@ -45,10 +45,6 @@
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.adapters.codex_daemon_hook_bridge",
-        "surface": "hook_http_and_cli_events"
-      },
-      {
         "module": "codex_plugin_scanner.guard.adapters.desktop_hook_proxy",
         "surface": "hook_http_and_cli_events"
       },

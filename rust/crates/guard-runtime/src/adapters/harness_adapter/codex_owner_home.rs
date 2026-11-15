@@ -3,8 +3,9 @@
 //! A bridge launcher names the Guard home it serves inside its config
 //! operand. Naming this home proves only that someone knew where Guard lives,
 //! so an entry is claimed only when its program also sits in a root Guard
-//! controls: the native bridge under the Guard home, or the bridge script in
-//! this install's package (`codex_hook_self_binding`).
+//! controls: the native bridge under the Guard home or in this install's
+//! package, or, for an earlier generation, the bridge script in this
+//! install's package (`codex_hook_self_binding`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -154,17 +155,24 @@ pub(super) fn binds(command: &str, home: &Home, syntax: &mut Syntax) -> bool {
             .is_some_and(|root| path_is_inside(candidate, root))
     };
     inside(&tokens[0], &home.guard_home)
+        || (native_config(&tokens).is_some() && inside(&tokens[0], &home.package_root))
         || launch(&tokens).is_some_and(|launch| inside(&launch[2], &home.package_root))
 }
 
 /// `codex_hook_guard_home`: the one Guard home a bridge launcher names.
 pub(super) fn guard_home(command: &str, cwd: &Cwd, syntax: &mut Syntax) -> Option<PathBuf> {
     let tokens = tokens(syntax, command);
-    let launch = launch(&tokens)?;
-    if launch[1] != "-I" || syntax.name(&launch[2]) != BRIDGE_SCRIPT {
-        return None;
-    }
-    let config = crate::codex_hook_bridge::decode_config_argument(&launch[3])?;
+    let operand = match native_config(&tokens) {
+        Some(operand) => operand,
+        None => {
+            let launch = launch(&tokens)?;
+            if launch[1] != "-I" || syntax.name(&launch[2]) != BRIDGE_SCRIPT {
+                return None;
+            }
+            &launch[3]
+        }
+    };
+    let config = crate::codex_hook_bridge::decode_config_argument(operand)?;
     let Ok(PyVal::Dict(payload)) = pyjson::parse(&config) else {
         return None;
     };
@@ -175,7 +183,17 @@ pub(super) fn guard_home(command: &str, cwd: &Cwd, syntax: &mut Syntax) -> Optio
     homes.pop_first().map(|(_, path)| path)
 }
 
-/// `_bridge_launch_tokens`: the interpreter argv once a native wrapper goes.
+/// The config operand of a handler that runs the native bridge alone,
+/// as Guard installs it now.
+fn native_config(tokens: &[String]) -> Option<&String> {
+    match tokens {
+        [_, command, config] if command == NATIVE_COMMAND => Some(config),
+        _ => None,
+    }
+}
+
+/// `_bridge_launch_tokens`: the interpreter argv of a handler an earlier
+/// Guard installed, once a native wrapper goes.
 fn launch(tokens: &[String]) -> Option<&[String]> {
     match tokens.len() {
         6 if tokens[1] == NATIVE_COMMAND => Some(&tokens[2..]),

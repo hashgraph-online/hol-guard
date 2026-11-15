@@ -96,7 +96,7 @@ def test_observation_package_identity_requires_complete_new_roles_and_preserves_
     from codex_plugin_scanner.guard import codex_hook_runtime_trust as trust
     from codex_plugin_scanner.guard.adapters.codex import _hook_packaged_file_paths
 
-    paths = dict(_hook_packaged_file_paths())
+    paths = dict(_hook_packaged_file_paths(Path("/opt/guard/hol-guard-runtime")))
     assert {"hook_probe", "native_receipt"} <= paths.keys()
     if layout == "legacy":
         paths.pop("hook_probe")

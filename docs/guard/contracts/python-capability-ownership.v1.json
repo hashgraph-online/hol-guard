@@ -1963,6 +1963,27 @@
     "rust/crates/guard-runtime/src/claude_hook_bridge_transport.rs",
     "rust/crates/guard-runtime/src/claude_hook_bridge_http.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",
+   "module": "codex_plugin_scanner.guard.adapters.codex_daemon_hook_bridge",
+   "source_sha256": "9f9c3aab117cce72e7cce4e7a062985ae77e22e4204d3ad843f02017b376a512",
+   "forbidden_symbols": [
+    "_FAIL_CLOSED_REASON",
+    "_LAUNCH_INTEGRITY_REASON",
+    "_write_transition_observation",
+    "_unavailable_response",
+    "_write_failure_causes",
+    "_launcher_integrity_response",
+    "_installed_hook_home",
+    "_bridge_output"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
+   ]
   }
  ],
  "retired_test_paths": [
@@ -2171,26 +2192,6 @@
    "native_replacements": [
     "rust/crates/guard-runtime/src/cli_runtime_support_op.rs",
     "rust/crates/guard-runtime/src/cli_copilot_resolution.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",
-   "source_sha256": "9f9c3aab117cce72e7cce4e7a062985ae77e22e4204d3ad843f02017b376a512",
-   "forbidden_symbols": [
-    "_FAIL_CLOSED_REASON",
-    "_LAUNCH_INTEGRITY_REASON",
-    "_write_transition_observation",
-    "_unavailable_response",
-    "_write_failure_causes",
-    "_launcher_integrity_response",
-    "_installed_hook_home",
-    "_bridge_output"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-runtime/src/codex_hook_bridge.rs",
-    "rust/crates/guard-runtime/src/codex_hook_bridge_transport.rs",
-    "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
-    "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
    ]
   },
   {

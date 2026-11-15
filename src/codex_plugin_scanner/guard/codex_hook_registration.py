@@ -135,10 +135,15 @@ _LIVE_OWNED_FALLBACK_REASONS = frozenset(
 
 
 def _native_bridge_payload(tokens: Sequence[str]) -> Sequence[str] | None:
-    """The Python bridge argv a native ``codex-hook-bridge`` launcher delegates to."""
-    if len(tokens) > 2 and tokens[1] == NATIVE_CODEX_HOOK_COMMAND:
+    """The legacy Python bridge argv an older native launcher delegated to."""
+    if len(tokens) > 3 and tokens[1] == NATIVE_CODEX_HOOK_COMMAND:
         return tokens[2:]
     return None
+
+
+def _native_only_hook(tokens: Sequence[str]) -> bool:
+    """Guard's current ``[runtime, codex-hook-bridge, config]`` registration."""
+    return len(tokens) == 3 and tokens[1] == NATIVE_CODEX_HOOK_COMMAND
 
 
 def _is_live_guard_codex_hook_command(command: str, *, windows: bool | None = None) -> bool:
@@ -148,6 +153,8 @@ def _is_live_guard_codex_hook_command(command: str, *, windows: bool | None = No
 def _live_guard_codex_hook_tokens(tokens: Sequence[str], *, windows: bool | None) -> bool:
     if not tokens:
         return False
+    if _native_only_hook(tokens):
+        return True
     native_payload = _native_bridge_payload(tokens)
     if native_payload is not None:
         return _live_guard_codex_hook_tokens(native_payload, windows=windows)

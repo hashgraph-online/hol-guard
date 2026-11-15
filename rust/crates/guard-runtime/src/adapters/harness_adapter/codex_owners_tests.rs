@@ -259,6 +259,29 @@ fn a_launcher_binds_only_its_one_home_and_an_owned_program() {
 
 #[cfg(unix)]
 #[test]
+fn a_native_only_launcher_binds_when_its_runtime_is_owned() {
+    let install = install();
+    let query = format!("guard-home={}", install.guard_home.display());
+    let one = json!({"query": query, "state_path": install.guard_home.join("daemon-state.json")});
+    let native_only =
+        |program: &std::path::Path| format!("{} codex-hook-bridge '{}'", program.display(), one);
+    let binds = |command: String| {
+        let answer = owners(&install, "binds", json!({"command": command}));
+        answer["binds"].as_bool().unwrap()
+    };
+    let packaged = install.package_root.join("_native/hol-guard-runtime");
+    assert!(binds(native_only(&install.native)));
+    assert!(binds(native_only(&packaged)));
+    assert!(!binds(native_only(std::path::Path::new(
+        "/usr/local/bin/hol-guard-runtime"
+    ))));
+    let command = native_only(&install.native);
+    let home = ask_ok(json!({"op": "guard_home", "command": command, "cwd": null}));
+    assert_eq!(home["home"], json!(install.guard_home));
+}
+
+#[cfg(unix)]
+#[test]
 fn self_bindings_claim_stale_generations_and_hold_recorded_commands() {
     let install = install();
     let script = install

@@ -238,13 +238,3 @@ def test_bounded_cli_cannot_finish_without_policy_action_denies_write(native_bri
     )
     assert invalid_code == 2
     assert json.loads(invalid_stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-def test_codex_unavailable_permission_request_denies_without_review() -> None:
-    from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-
-    permission = bridge._fail_closed("PermissionRequest", "review failed")
-    assert permission["hookSpecificOutput"]["decision"] == {
-        "behavior": "deny",
-        "message": "review failed",
-    }

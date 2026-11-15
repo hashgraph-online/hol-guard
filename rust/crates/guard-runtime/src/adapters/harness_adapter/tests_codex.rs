@@ -37,7 +37,6 @@ fn argv_fields(home: &Home, frozen: bool) -> Value {
         "python": "/py",
         "frozen": frozen,
         "package_root": "/opt/guard/site",
-        "bridge": "/g/bridge.py",
         "native_bridge": "/g/hol-guard-runtime",
         "manifest_path": "/g/manifest.json",
         "long_timeout": 85,
@@ -49,17 +48,12 @@ fn argv_wraps_the_bridge_and_derives_its_launch_commands() {
     let home = Home::new();
     let answer = ask(&home, "argv", argv_fields(&home, false));
     let argv = answer["argv"].as_array().unwrap();
+    assert_eq!(argv.len(), 3);
     assert_eq!(
-        argv[..5],
-        [
-            json!("/g/hol-guard-runtime"),
-            json!("codex-hook-bridge"),
-            json!("/py"),
-            json!("-I"),
-            json!("/g/bridge.py"),
-        ]
+        argv[..2],
+        [json!("/g/hol-guard-runtime"), json!("codex-hook-bridge")]
     );
-    let config: Value = serde_json::from_str(argv[5].as_str().unwrap()).unwrap();
+    let config: Value = serde_json::from_str(argv[2].as_str().unwrap()).unwrap();
     assert_eq!(config["hook_timeouts"]["PreToolUse"], 85);
     assert_eq!(config["hook_timeouts"]["PermissionRequest"], 30);
     let fallback = answer["fallback"].as_array().unwrap();
@@ -88,15 +82,29 @@ fn argv_wraps_the_bridge_and_derives_its_launch_commands() {
 }
 
 #[test]
+fn argv_without_a_native_runtime_asks_for_repair() {
+    let home = Home::new();
+    for frozen in [false, true] {
+        let mut fields = argv_fields(&home, frozen);
+        fields.as_object_mut().unwrap().remove("native_bridge");
+        let answer = ask(&home, "argv", fields);
+        assert_eq!(
+            answer["runtime_error"],
+            crate::harness_adapter::claude_argv::RUNTIME_MISSING
+        );
+    }
+}
+
+#[test]
 fn a_frozen_guard_is_its_own_interpreter_for_every_launch() {
     let home = Home::new();
     let answer = ask(&home, "argv", argv_fields(&home, true));
     let argv = answer["argv"].as_array().unwrap();
     assert_eq!(
-        argv[2..4],
-        [json!("/py"), json!("--_hol-guard-codex-bridge")]
+        argv[..2],
+        [json!("/g/hol-guard-runtime"), json!("codex-hook-bridge")]
     );
-    assert_eq!(argv.len(), 5);
+    assert_eq!(argv.len(), 3);
     let fallback = answer["fallback"].as_array().unwrap();
     assert_eq!(
         fallback[..4],

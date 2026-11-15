@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from .native_daemon_peer import DaemonArtifactBinding
 
 from .codex_hook_bridge_runtime import decode_bridge_config_argument
-from .codex_hook_compatibility import python_bridge_argv
+from .codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND
 from .frozen_runtime_commands import (
     FROZEN_CODEX_BRIDGE_ARG,
     FROZEN_DAEMON_RECOVER_ARG,
@@ -41,6 +41,7 @@ from .frozen_runtime_commands import (
 _FROZEN_BRIDGE_ARG = FROZEN_CODEX_BRIDGE_ARG
 _FROZEN_DAEMON_RECOVER_ARG = FROZEN_DAEMON_RECOVER_ARG
 _FROZEN_DAEMON_SERVE_ARG = FROZEN_DAEMON_SERVE_ARG
+_STALE_BRIDGE_HOOK = "HOL Guard's Codex hook is out of date. Run `hol-guard repair` to restore protection."
 
 
 def _decode_private_payload(raw: str, *, label: str) -> dict[str, object]:
@@ -72,11 +73,12 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
 
     source_packaged_paths = codex._hook_packaged_file_paths
 
-    def frozen_packaged_paths() -> tuple[tuple[str, Path], ...]:
+    def frozen_packaged_paths(native_bridge: Path) -> tuple[tuple[str, Path], ...]:
         executable = Path(sys.executable).expanduser().resolve(strict=True)
         # Preserve the existing role set but bind every role to the immutable
-        # frozen runtime bytes that actually implement those roles.
-        return tuple((role, executable) for role, _path in source_packaged_paths())
+        # frozen runtime bytes that actually implement those roles. The native
+        # runtime the hook runs is a verified copy of the one bundled here.
+        return tuple((role, executable) for role, _path in source_packaged_paths(native_bridge))
 
     def frozen_interpreter() -> str:
         # The authenticated roles and runtime validator identify these exact
@@ -107,19 +109,11 @@ def run_frozen_internal_command(
 
     operation, raw_payload = process_argv[1], process_argv[2]
     if operation == _FROZEN_BRIDGE_ARG:
-        from .adapters.codex_daemon_hook_bridge import _bridge_config_from_argv
-        from .adapters.codex_daemon_hook_bridge import main as bridge_main
-
-        config = _bridge_config_from_argv(("codex_daemon_hook_bridge", raw_payload))
-        return bridge_main(
-            state_path=config["state_path"],
-            manifest_path=config["manifest_path"],
-            fallback_command=config["fallback_command"],
-            start_command=config["start_command"],
-            query=config["query"],
-            hook_timeouts=config["hook_timeouts"],
-            config_json=config["config_json"],
-        )
+        # A hook written by an older frozen build names the removed Python
+        # launcher. Codex blocks the call on exit code 2 and shows the hint;
+        # repair rewrites the hook to the native runtime.
+        sys.stderr.write(_STALE_BRIDGE_HOOK + "\n")
+        return 2
 
     if operation == _FROZEN_DAEMON_RECOVER_ARG:
         return _schedule_frozen_daemon_recovery(raw_payload)
@@ -342,15 +336,19 @@ def _verify_frozen_bridge_contract(
         or config.get("start_command") != list(start_command)
     ):
         raise ValueError("managed frozen Codex hook bridge config is invalid")
-    expected_argv = [invocation_path, _FROZEN_BRIDGE_ARG, config_json]
     events = manifest.get("events")
     if not isinstance(events, list) or not events:
         raise ValueError("managed frozen Codex hook event identity is invalid")
     for event in events:
         argv = event.get("argv") if isinstance(event, dict) else None
-        # The native launcher prefix is not part of the bridge identity, as for
-        # source installs: it reads its config from this exact argv.
-        if not isinstance(argv, list) or python_bridge_argv(argv) != expected_argv:
+        # The native runtime is a verified copy of the bundled one, so only
+        # its command and the config it reads identify the bridge.
+        if (
+            not isinstance(argv, list)
+            or len(argv) != 3
+            or not isinstance(argv[0], str)
+            or argv[1:] != [NATIVE_CODEX_HOOK_COMMAND, config_json]
+        ):
             raise ValueError("managed frozen Codex hook bridge config changed after authentication")
 
 

@@ -4535,24 +4535,14 @@ args = ["workspace-skill.js", "--changed"]
         self, tmp_path, monkeypatch, capsys
     ):
         home_dir = tmp_path / "home"
-        bridge_path = tmp_path / "package" / "codex_daemon_hook_bridge.py"
+        # The hook runs the native runtime named here; its bytes are the
+        # authenticated "bridge" role.
+        bridge_path = tmp_path / "package" / "hol-guard-runtime"
         bridge_path.parent.mkdir(parents=True)
-        original_bridge = Path(codex_adapter_module.__file__).with_name("codex_daemon_hook_bridge.py").read_bytes()
+        original_bridge = b"#!/bin/sh\nexit 0\n"
         bridge_path.write_bytes(original_bridge)
         bridge_path.chmod(0o644)
-        original_command_parts = codex_adapter_module._hook_command_parts
-        original_packaged_paths = codex_adapter_module._hook_packaged_file_paths
-
-        def relocated_command_parts(hook_context: HarnessContext) -> tuple[str, ...]:
-            parts = list(original_command_parts(hook_context))
-            parts[1] = str(bridge_path)
-            return tuple(parts)
-
-        def relocated_packaged_paths() -> tuple[tuple[str, Path], ...]:
-            return tuple((role, bridge_path if role == "bridge" else path) for role, path in original_packaged_paths())
-
-        monkeypatch.setattr(codex_adapter_module, "_hook_command_parts", relocated_command_parts)
-        monkeypatch.setattr(codex_adapter_module, "_hook_packaged_file_paths", relocated_packaged_paths)
+        monkeypatch.setattr(codex_adapter_module, "_native_bridge_executable", lambda _guard_home: bridge_path)
         assert main(["guard", "install", "codex", "--home", str(home_dir), "--json"]) == 0
         json.loads(capsys.readouterr().out)
         context = HarnessContext(home_dir=home_dir, workspace_dir=Path.cwd(), guard_home=home_dir)

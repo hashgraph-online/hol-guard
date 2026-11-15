@@ -12,14 +12,14 @@ NATIVE_CODEX_HOOK_FEATURE = "codex-hook-bridge-v1"
 
 
 def python_bridge_argv(argv: Sequence[object]) -> list[object]:
-    """The Python bridge argv inside a native launcher prefix, else ``argv``.
+    """The legacy Python bridge argv inside a native launcher prefix, else ``argv``.
 
-    The native runtime answers a Codex hook itself and hands anything else to
-    the Python bridge argv that follows its subcommand, so a native and a
-    Python registration of one bridge share one identity.
+    Older installs wrapped a Python bridge argv in the native subcommand, so a
+    native and a Python registration of one bridge shared one identity. The
+    current ``[runtime, subcommand, config]`` registration is its own identity.
     """
     values = list(argv)
-    if len(values) > 2 and isinstance(values[0], str) and values[0] and values[1] == NATIVE_CODEX_HOOK_COMMAND:
+    if len(values) > 3 and isinstance(values[0], str) and values[0] and values[1] == NATIVE_CODEX_HOOK_COMMAND:
         return values[2:]
     return values
 

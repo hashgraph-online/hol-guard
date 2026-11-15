@@ -1,4 +1,4 @@
-"""Small dependency-light runtime boundary for the Codex daemon bridge."""
+"""Read and authenticate the config a managed Codex hook registration carries."""
 
 from __future__ import annotations
 
@@ -6,10 +6,12 @@ import base64
 import binascii
 import json
 import re
-import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol, TypedDict
+from typing import TYPE_CHECKING, TypedDict
+
+if TYPE_CHECKING:
+    from .codex_hook_runtime_trust import TrustedCodexHookLaunch
 
 _BASE64URL_ARGUMENT = re.compile(r"[A-Za-z0-9_-]+")
 
@@ -44,42 +46,6 @@ class BridgeConfig(TypedDict):
     config_json: str
 
 
-class TrustedHookLaunch(Protocol):
-    def run_start(
-        self,
-        command: Sequence[str],
-        *,
-        timeout_seconds: float,
-        failure_kind: str = "transport-failure",
-    ) -> bool: ...
-
-    def run_fallback(
-        self,
-        command: Sequence[str],
-        *,
-        data: str,
-        timeout_seconds: float,
-    ) -> str | None: ...
-
-
-def bounded_hook_input(limit: int) -> str | None:
-    # Codex sends UTF-8; text-mode stdin would decode it with the Windows code page.
-    stream = getattr(sys.stdin, "buffer", None)
-    if stream is None:
-        data = sys.stdin.read(limit + 1)
-        try:
-            encoded_size = len(data.encode("utf-8"))
-        except UnicodeError:
-            return None
-    else:
-        raw = stream.read(limit + 1)
-        encoded_size = len(raw)
-        data = raw.decode("utf-8-sig", errors="replace")
-    if encoded_size > limit:
-        return None
-    return data if data.strip() else "{}"
-
-
 def trusted_hook_launch(
     *,
     manifest_path: str | Path,
@@ -88,7 +54,7 @@ def trusted_hook_launch(
     start_command: Sequence[str],
     config_json: str,
     deadline_monotonic: float | None = None,
-) -> TrustedHookLaunch:
+) -> TrustedCodexHookLaunch:
     from .codex_hook_file_integrity import hook_validation_deadline
     from .codex_hook_runtime_trust import validate_codex_hook_launch
 
@@ -104,22 +70,22 @@ def trusted_hook_launch(
 
 def bridge_config_from_argv(argv: Sequence[str], *, timeout_grace_seconds: int) -> BridgeConfig:
     if len(argv) != 2:
-        raise SystemExit("codex_daemon_hook_bridge expects one JSON config argument")
+        raise SystemExit("Codex hook bridge expects one JSON config argument")
     try:
         payload = json.loads(decode_bridge_config_argument(argv[1]))
     except ValueError as exc:
-        raise SystemExit("codex_daemon_hook_bridge config must be a JSON object") from exc
+        raise SystemExit("Codex hook bridge config must be a JSON object") from exc
     if not isinstance(payload, dict):
-        raise SystemExit("codex_daemon_hook_bridge config must be a JSON object")
+        raise SystemExit("Codex hook bridge config must be a JSON object")
     state_path = payload.get("state_path")
     manifest_path = payload.get("manifest_path")
     query = payload.get("query")
     if not isinstance(state_path, str):
-        raise SystemExit("codex_daemon_hook_bridge config missing state_path")
+        raise SystemExit("Codex hook bridge config missing state_path")
     if not isinstance(manifest_path, str) or not manifest_path:
-        raise SystemExit("codex_daemon_hook_bridge config missing manifest_path")
+        raise SystemExit("Codex hook bridge config missing manifest_path")
     if not isinstance(query, str):
-        raise SystemExit("codex_daemon_hook_bridge config missing query")
+        raise SystemExit("Codex hook bridge config missing query")
     return BridgeConfig(
         state_path=state_path,
         manifest_path=manifest_path,
@@ -136,27 +102,25 @@ def bridge_config_from_argv(argv: Sequence[str], *, timeout_grace_seconds: int) 
 
 def _string_sequence(value: object, *, label: str) -> tuple[str, ...]:
     if not isinstance(value, list) or not value or not all(isinstance(item, str) for item in value):
-        raise SystemExit(f"codex_daemon_hook_bridge config missing {label}")
+        raise SystemExit(f"Codex hook bridge config missing {label}")
     return tuple(value)
 
 
 def _hook_timeout_mapping(value: object, *, timeout_grace_seconds: int) -> dict[str, int]:
     if not isinstance(value, dict):
-        raise SystemExit("codex_daemon_hook_bridge config missing hook_timeouts")
+        raise SystemExit("Codex hook bridge config missing hook_timeouts")
     timeouts = {
         str(key): timeout
         for key, timeout in value.items()
         if isinstance(key, str) and isinstance(timeout, int) and timeout > timeout_grace_seconds
     }
     if not timeouts:
-        raise SystemExit("codex_daemon_hook_bridge config has no valid hook_timeouts")
+        raise SystemExit("Codex hook bridge config has no valid hook_timeouts")
     return timeouts
 
 
 __all__ = [
     "BridgeConfig",
-    "TrustedHookLaunch",
-    "bounded_hook_input",
     "bridge_config_from_argv",
     "trusted_hook_launch",
 ]
