@@ -198,6 +198,7 @@ pub mod pretool_home_cd;
 pub mod pretool_home_dotdir_content_reads;
 pub mod pretool_home_dotdir_listing;
 pub mod pretool_home_layout_reads;
+pub mod pretool_home_program_metadata;
 pub mod pretool_home_redirect_reason;
 pub mod pretool_home_tool_find_reads;
 pub mod pretool_home_variable_directory_targets;

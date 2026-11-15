@@ -1926,10 +1926,17 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
 
 def _render_dashboard(console: Console, payload: dict[str, object]) -> None:
     body = Table.grid(padding=(0, 1))
-    body.add_row("Dashboard", str(payload.get("approval_center_url") or "unknown"))
-    if payload.get("opened") is not None:
-        body.add_row("Browser opened", _bool_label(bool(payload.get("opened"))))
-    console.print(Panel(body, title="HOL Guard dashboard", border_style="cyan"))
+    opened = bool(payload.get("opened"))
+    body.add_row("Dashboard", str(payload.get("approval_center_url") or "not running"))
+    if payload.get("port") is not None:
+        body.add_row("Port", str(payload.get("port")))
+    body.add_row("Browser", str(payload.get("browser") or ("opened" if opened else "not_attempted")))
+    body.add_row("Result", str(payload.get("reason") or ("opened" if opened else "daemon_unavailable")))
+    if payload.get("error"):
+        body.add_row("Error", str(payload.get("error")))
+    if payload.get("fallback"):
+        body.add_row("Next step", str(payload.get("fallback")))
+    console.print(Panel(body, title="HOL Guard dashboard", border_style="cyan" if opened else "yellow"))
 
 
 def _render_sync(console: Console, payload: dict[str, object]) -> None:

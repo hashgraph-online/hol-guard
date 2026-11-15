@@ -415,6 +415,30 @@ pub fn hidden_content_read_allowed(lowered: &[String]) -> bool {
         && !secret_bearing_file_name(name)
 }
 
+/// Whether a metadata read (`stat`, `file`) may name a program a tool
+/// installed below a hidden directory of home.
+///
+/// [`hidden_content_read_allowed`] sets these aside through
+/// [`program_directory`]: the bytes of `~/.cargo/bin/cargo` are a program, not
+/// content a task reads. A metadata read returns none of those bytes. `stat`
+/// prints size, owner and dates, and `file` prints a one-line type, the same
+/// answer a listing of that path gives. Every other screen of the content rule
+/// stands: one hidden directory directly below home, nothing hidden deeper,
+/// no tree a narrower rule owns, no credential store at any depth and no name
+/// a secret is written under.
+pub fn hidden_program_metadata_allowed(lowered: &[String]) -> bool {
+    let Some((name, parents)) = lowered.split_last() else {
+        return false;
+    };
+    program_directory(parents, name)
+        && parents.first().is_some_and(|first| first.starts_with('.'))
+        && !parents.iter().skip(1).any(|part| part.starts_with('.'))
+        && !name.starts_with('.')
+        && !curated_tree_owns(parents)
+        && !names_hold_credential_store(lowered)
+        && !secret_bearing_file_name(name)
+}
+
 /// Paths a narrower rule already answers, with bounds this screen cannot see.
 ///
 /// `sfrs_agent_guidance` in the command crate admits `sed -n '1,200p' ~/.hol-support/SAFETY.md`
