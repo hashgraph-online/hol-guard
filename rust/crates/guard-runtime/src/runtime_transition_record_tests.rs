@@ -359,3 +359,72 @@ fn a_daemon_step_outside_the_plan_is_refused() {
         "daemon_step_not_authorized"
     );
 }
+
+fn begin(home: &Home, op: &str, extra: Value) -> Value {
+    let mut plan = record(home);
+    plan["deadline_epoch"] = json!(1030.0);
+    let mut fields = json!({
+        "payload": plan,
+        "now": 10.0,
+        "now_epoch": 1000.0,
+        "owner": {"pid": 7, "start": "s"},
+        "installer_operation_id": "install-1",
+        "subject": "runtime:g1",
+        "approval_required": true,
+        "grant_expires_epoch": 1020.0,
+    });
+    for (key, value) in extra.as_object().expect("extra") {
+        fields[key] = value.clone();
+    }
+    ask(home, op, fields)
+}
+
+#[test]
+fn begin_writes_the_first_journal_until_the_earlier_expiry() {
+    let home = home();
+    assert_eq!(begin(&home, "begin_check", json!({}))["deadline"], 40.0);
+    let capped = json!({"deadline_monotonic": 25.0});
+    assert_eq!(begin(&home, "begin_check", capped)["deadline"], 25.0);
+    assert_eq!(begin(&home, "begin_commit", json!({}))["ok"], true);
+    let written = ask(&home, "read", json!({"operation_id": OPERATION}));
+    let payload = &written["payload"];
+    assert_eq!(payload["phase"], "AuthorizedForExactTransition");
+    assert_eq!(payload["forward_expires_epoch"], 1020.0);
+    assert_eq!(payload["forward_expires_monotonic"], 30.0);
+    assert_eq!(payload["deadline_monotonic"], 40.0);
+    assert_eq!(payload["installer_operation_id"], "install-1");
+    assert_eq!(payload["recovery_causes"], json!([]));
+    let again = begin(&home, "begin_check", json!({}));
+    assert_eq!(again["error"], "pending_transition");
+}
+
+#[test]
+fn begin_refuses_bad_deadlines_owners_and_reserved_targets() {
+    let home = home();
+    let late = json!({"now_epoch": 960.0});
+    assert_eq!(
+        begin(&home, "begin_check", late)["error"],
+        "deadline_invalid"
+    );
+    let passed = json!({"deadline_monotonic": 10.0});
+    assert_eq!(
+        begin(&home, "begin_check", passed)["error"],
+        "deadline_exceeded"
+    );
+    let nobody = json!({"owner": null});
+    assert_eq!(
+        begin(&home, "begin_commit", nobody)["error"],
+        "owner_identity_unavailable"
+    );
+    let mut plan = record(&home);
+    plan["deadline_epoch"] = json!(1030.0);
+    plan["files"][0]["path"] = json!(journal(&home).to_str());
+    let reserved = begin(&home, "begin_check", json!({"payload": plan}));
+    assert_eq!(reserved["error"], "authority_target_forbidden");
+    let mut elsewhere = record(&home);
+    elsewhere["deadline_epoch"] = json!(1030.0);
+    elsewhere["guard_home"] = json!("/elsewhere");
+    let other = begin(&home, "begin_check", json!({"payload": elsewhere}));
+    assert_eq!(other["error"], "plan_context_mismatch");
+    assert!(!journal(&home).exists());
+}

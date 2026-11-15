@@ -404,11 +404,14 @@ pub(super) fn commit(request: &Request) -> Result<Value, Refusal> {
             add_cause(&mut payload, request)?;
         }
         Some("finish_rollback") => {
+            // Two commits, so a crash between them leaves PreviousFunctional.
             let observation = rollback_checks(&payload, request)?;
-            payload.insert("phase".into(), json!(PREVIOUS));
-            payload.insert("rollback_functional_proof".into(), observation);
-            write_record(request, &payload)?;
-            payload.insert("phase".into(), json!(ROLLED_BACK));
+            if text(&payload, "phase") == Some(PREVIOUS) {
+                payload.insert("phase".into(), json!(ROLLED_BACK));
+            } else {
+                payload.insert("phase".into(), json!(PREVIOUS));
+                payload.insert("rollback_functional_proof".into(), observation);
+            }
         }
         _ => return Err(no("invalid")),
     }

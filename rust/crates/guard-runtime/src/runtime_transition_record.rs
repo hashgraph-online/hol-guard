@@ -25,6 +25,9 @@ mod shape;
 #[path = "runtime_transition_phase.rs"]
 mod phase;
 
+#[path = "runtime_transition_begin.rs"]
+mod begin;
+
 use crate::codex_hook_authority_record::python_json::{parse_python_json, python_canonical_json};
 use shape::{validate_record, Refusal};
 
@@ -63,6 +66,11 @@ struct Request {
     side: Option<String>,
     action: Option<String>,
     subject: Option<String>,
+    now_epoch: Option<f64>,
+    deadline_monotonic: Option<f64>,
+    grant_expires_epoch: Option<f64>,
+    approval_required: Option<bool>,
+    installer_operation_id: Option<String>,
 }
 
 struct Key {
@@ -100,6 +108,8 @@ fn answer(request: &Request) -> Value {
             .map(|()| json!({"ok": true})),
         "step_check" => phase::check(request),
         "step_commit" => phase::commit(request),
+        "begin_check" => begin::check(request),
+        "begin_commit" => begin::commit(request),
         "read" => read_record(request).map(|payload| json!({"payload": payload})),
         "retire" => retire(request).map(|()| json!({"ok": true})),
         "refusal_write" => write_refusal(request).map(|()| json!({"ok": true})),

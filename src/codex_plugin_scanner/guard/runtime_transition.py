@@ -678,44 +678,22 @@ class RuntimeTransition:
         from .cli.commands_lifecycle_gate import LifecycleGateRequirement, lifecycle_authority_home
 
         owner = require_codex_install_owner(self.home)
-        # A refused exact UUID cannot later be reused with another factor.
-        # Normal updates use a new operation and a new exact authorization.
-        try:
-            refused_path = self._refusal_path(plan.operation_id)
-        except TransitionError:
-            # Only canonical Desktop UUIDs have refusal receipts. Internal
-            # transaction identifiers keep their existing identifier scope.
-            refused_path = None
-        if refused_path is not None and (refused_path.exists() or refused_path.is_symlink()):
-            raise TransitionError("operation_previously_refused")
+        # The runtime refuses a refused operation, another home, a plan that
+        # touches the journal or its authority, a pending transition and a
+        # deadline outside the next minute, and answers the monotonic deadline.
+        if deadline_monotonic is not None and not math.isfinite(deadline_monotonic):
+            raise TransitionError("deadline_exceeded")
         payload = plan.payload()
-        if payload["guard_home"] != str(self.home):
-            raise TransitionError("plan_context_mismatch")
-        reserved = {
-            self.path,
-            self.path.with_name("runtime-transition.previous.json"),
-            self.home / "managed" / "codex" / "installation.lock",
+        request: dict[str, Any] = {
+            "payload": payload,
+            "now": time.monotonic(),
+            "now_epoch": time.time(),
+            "deadline_monotonic": deadline_monotonic,
         }
-        key_path = self.home / "managed" / "codex" / "hook-manifest.key"
-        for change in _record_files(payload):
-            target = Path(str(change["path"]))
-            # Authority may participate only as a validated digest dependency.
-            # No key bytes or replacement can enter the forward/inverse journal.
-            if target in reserved or (
-                target == key_path and ("expected_digest" not in change or "artifact_identity" in change)
-            ):
-                raise TransitionError("authority_target_forbidden")
-        if self.path.exists() or self.path.is_symlink():
-            raise TransitionError("pending_transition")
-        monotonic_now = time.monotonic()
-        now = time.time()
-        if not now < plan.deadline_epoch <= now + 60:
-            raise TransitionError("deadline_invalid")
-        deadline = monotonic_now + max(0, plan.deadline_epoch - now)
-        if deadline_monotonic is not None:
-            if not math.isfinite(deadline_monotonic) or deadline_monotonic <= monotonic_now:
-                raise TransitionError("deadline_exceeded")
-            deadline = min(deadline, deadline_monotonic)
+        answer = self._native("begin_check", None, deadline=deadline_monotonic, **request)
+        deadline = answer.get("deadline")
+        if not isinstance(deadline, int | float):
+            raise TransitionError("record_invalid")
         expected_authority_home = lifecycle_authority_home(
             self.home, requirement=LifecycleGateRequirement("runtime.transition", plan.subject())
         )
@@ -723,15 +701,7 @@ class RuntimeTransition:
             raise TransitionError("approval_authority_mismatch")
         approval_required = public_config(authority_home).enabled
         if approval_required:
-            validate_grant(
-                authority_home,
-                grant,
-                purpose="protection_lifecycle",
-                strict=True,
-                action="runtime.transition",
-                scope="local-protection",
-                subject=plan.subject(),
-            )
+            self._validate_begin_grant(authority_home, grant, plan)
         elif grant is not None:
             raise TransitionError("unexpected_grant")
         identity = current_process_identity()
@@ -739,41 +709,36 @@ class RuntimeTransition:
             raise TransitionError("owner_identity_unavailable")
         self._compare(payload, "before")
         self._compare_installs(payload, "before")
-        if time.monotonic() >= deadline:
-            raise TransitionError("deadline_exceeded")
         if grant is not None:
-            validate_grant(
-                authority_home,
-                grant,
-                purpose="protection_lifecycle",
-                strict=True,
-                action="runtime.transition",
-                scope="local-protection",
-                subject=plan.subject(),
-            )
-        forward_expires_epoch = min(
-            plan.deadline_epoch,
-            datetime.fromisoformat(grant.expires_at.replace("Z", "+00:00")).timestamp()
-            if grant is not None
-            else plan.deadline_epoch,
+            self._validate_begin_grant(authority_home, grant, plan)
+        self._native(
+            "begin_commit",
+            self._key(),
+            deadline=float(deadline),
+            owner=identity,
+            installer_operation_id=owner.operation_id,
+            subject=plan.subject(),
+            approval_required=approval_required,
+            grant_expires_epoch=(
+                datetime.fromisoformat(grant.expires_at.replace("Z", "+00:00")).timestamp()
+                if grant is not None
+                else None
+            ),
+            **request,
         )
-        payload.update(
-            {
-                "schema": _SCHEMA,
-                "phase": "AuthorizedForExactTransition",
-                "owner": identity,
-                "installer_operation_id": owner.operation_id,
-                "authorized_subject": plan.subject(),
-                "approval_required": approval_required,
-                "forward_expires_epoch": forward_expires_epoch,
-                "deadline_monotonic": deadline,
-                "forward_expires_monotonic": min(deadline, monotonic_now + max(0, forward_expires_epoch - now)),
-                "first_cause": None,
-                "recovery_causes": [],
-            }
-        )
-        self._write(payload, deadline=deadline)
         self._forward_grant = grant
+
+    @staticmethod
+    def _validate_begin_grant(authority_home: Path, grant: ApprovalGateGrant | None, plan: TransitionPlan) -> None:
+        validate_grant(
+            authority_home,
+            grant,
+            purpose="protection_lifecycle",
+            strict=True,
+            action="runtime.transition",
+            scope="local-protection",
+            subject=plan.subject(),
+        )
 
     def status(self, operation_id: str) -> TransitionStatus:
         payload = self._read(operation_id)
@@ -1033,7 +998,8 @@ class RuntimeTransition:
     def finish_rollback(self, operation_id: str, *, functional_proof: object) -> None:
         observation = self._observation(functional_proof)
         self._checked(operation_id, "finish_rollback", observation=observation)
-        self._commit(operation_id, "finish_rollback", observation=observation)
+        if self._commit(operation_id, "finish_rollback", observation=observation) == "PreviousFunctional":
+            self._commit(operation_id, "finish_rollback", observation=observation)
 
     def record_recovery_failure(self, operation_id: str, *, first_cause: str, error: Exception) -> None:
         """Persist failure of runtime retirement/start/admission after an inverse."""
