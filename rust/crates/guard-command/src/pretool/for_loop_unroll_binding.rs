@@ -7,8 +7,10 @@
 /// runs its quoted action in the current shell, as `eval` does. The list
 /// is a shell's, not one shell's: zsh stores output in a name with
 /// `print -v`, reads a line with `getln`, and parses options with
-/// `zparseopts`, `zstyle -s` and `zformat -a`, and bash 5.3 fills an array
-/// with `compgen -V`.
+/// `zparseopts`, `zstyle -s` and `zformat -a`, declares with `private`, and
+/// loops with `foreach` and `repeat`; bash 5.3 fills an array with
+/// `compgen -V`. `repeat N` runs the simple command after its count, so an
+/// assignment there binds in the current shell.
 const BINDING_WORDS: &[&str] = &[
     ".",
     "builtin",
@@ -21,6 +23,7 @@ const BINDING_WORDS: &[&str] = &[
     "export",
     "float",
     "for",
+    "foreach",
     "getln",
     "getopts",
     "integer",
@@ -29,10 +32,12 @@ const BINDING_WORDS: &[&str] = &[
     "mapfile",
     "nameref",
     "print",
+    "private",
     "printf",
     "read",
     "readarray",
     "readonly",
+    "repeat",
     "select",
     "set",
     "source",
@@ -119,9 +124,10 @@ fn shell_words(text: &str) -> (Vec<String>, bool) {
 
 /// Words that may stand in front of a command's assignments without becoming
 /// its command word: the reserved words that open or join a compound command,
-/// `!`, `time`, and zsh's `noglob` and `nocorrect` precommand modifiers.
+/// `!`, `time`, and zsh's `-`, `noglob` and `nocorrect` precommand modifiers.
 const TRANSPARENT_WORDS: &[&str] = &[
     "!",
+    "-",
     "[[",
     "{",
     "}",
@@ -371,6 +377,7 @@ mod tests {
             "time n=1",
             "time -p n=1",
             "! n=1",
+            "- n=1",
             "{ n=1; }",
             "if n=1; then :; fi",
             "(n=1)",
@@ -385,6 +392,29 @@ mod tests {
             "echo 'open n=1",
         ] {
             assert!(super::assigns(item, "n"), "{item}");
+        }
+    }
+
+    /// A loop whose body binds its variable where the shell reads it stays
+    /// folded, so the loop keeps its review.
+    #[test]
+    fn a_rebinding_the_shell_reads_keeps_the_loop_folded() {
+        for looped in [
+            "for f in README.md; do x='a b' f=/etc/passwd; cat $f; done",
+            "for f in README.md; do time f=/etc/passwd; cat $f; done",
+            "for f in README.md; do ! f=/etc/passwd; cat $f; done",
+            "for f in README.md; do { f=/etc/passwd; }; cat $f; done",
+            "for f in README.md; do echo ok # note\nf=/etc/passwd; cat $f; done",
+            "for f in README.md; do repeat 1 f=/etc/passwd; cat $f; done",
+            "for f in README.md; do private f=/etc/passwd; cat $f; done",
+            "for f in README.md; do - f=/etc/passwd; cat $f; done",
+            "for f in README.md; do foreach f (/etc/passwd) cat $f; end; done",
+        ] {
+            assert_eq!(
+                crate::pretool::for_loop_unroll::unroll(looped),
+                None,
+                "{looped}"
+            );
         }
     }
 
@@ -406,6 +436,9 @@ mod tests {
             "echo ${ read n; }",
             "trap 'read n < names.txt' DEBUG",
             "echo ok;select n in a; do :; done",
+            "repeat 2 n=1",
+            "private n=1",
+            "foreach n (a b) echo; end",
         ] {
             assert!(holds_a_binding_word(item), "{item}");
         }

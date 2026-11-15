@@ -226,12 +226,6 @@ fn unsupported_loops_fall_back_to_review() {
         "for f in README.md; do zparseopts -A f; cat $f; done",
         "for f in README.md; do zstyle -s :x key f; cat $f; done",
         "for f in README.md; do zformat -a f : one; cat $f; done",
-        // An assignment stays one wherever the shell reads it as one.
-        "for f in README.md; do x='a b' f=/etc/passwd; cat $f; done",
-        "for f in README.md; do time f=/etc/passwd; cat $f; done",
-        "for f in README.md; do ! f=/etc/passwd; cat $f; done",
-        "for f in README.md; do { f=/etc/passwd; }; cat $f; done",
-        "for f in README.md; do echo ok # note\nf=/etc/passwd; cat $f; done",
     ] {
         assert_eq!(decide(command).0, "review", "{command}");
     }
