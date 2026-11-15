@@ -169,7 +169,7 @@ fn spelled_folders_private(target: &Path, context: PathContext<'_>) -> bool {
             parent
                 .ancestors()
                 .take_while(|folder| *folder != root)
-                .all(|folder| private(folder))
+                .all(private)
         })
 }
 
