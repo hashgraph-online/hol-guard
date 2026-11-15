@@ -182,6 +182,7 @@ mod command_workspace_write_candidates;
 pub mod content_sensitivity;
 pub mod contributed_mcp_decision;
 mod contributed_mcp_url;
+mod shell_comment_lines;
 pub use contributed_mcp_url::normalized_remote_mcp_url;
 mod data_flow;
 pub mod dep_map;

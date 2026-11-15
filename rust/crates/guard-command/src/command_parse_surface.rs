@@ -246,11 +246,11 @@ pub(crate) fn parse_posix_command(
         return Ok(uncertain(request, raw, "command_byte_limit_exceeded"));
     }
 
-    let code = crate::data_flow::mask_shell_comments(raw);
-    let raw_segments = if let Some(value) = contained_compile_check_segments(&code) {
+    let read = crate::shell_comment_lines::mask_comments(raw);
+    let raw_segments = if let Some(value) = contained_compile_check_segments(&read) {
         value
     } else {
-        match split_execution_segments(&code, preserve_unquoted_backslash) {
+        match split_execution_segments(&read, preserve_unquoted_backslash) {
             Ok(value) => value,
             Err(reason) => return Ok(uncertain(request, raw, reason)),
         }
@@ -259,7 +259,7 @@ pub(crate) fn parse_posix_command(
         return Ok(uncertain(request, raw, "command_segment_limit_exceeded"));
     }
 
-    let chars: Vec<char> = code.chars().collect();
+    let chars: Vec<char> = read.chars().collect();
     let mut segments = Vec::with_capacity(raw_segments.len());
     let mut total_tokens = 0usize;
     for raw_segment in raw_segments {
