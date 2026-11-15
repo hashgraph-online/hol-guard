@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ from .installed_registration import (
 )
 from .installed_replay import argv_for_event, registered_argv, replay_harness
 from .installed_runtime import InstalledRuntime, InstalledRuntimeError, resolve_runtime
+from .installed_startup import startup_timeline
 from .installed_store import age_home, assess_aged
 
 EVIDENCE_VERSION = "hol-guard-installed-acceptance.v1"
@@ -89,12 +91,15 @@ def harness_pass(
     guard_home = home / ".hol-guard"
     workspace = build_workspace(root / harness)
     install = install_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
+    installed_ns = time.time_ns()
     registration = assess_harness(home, harness, expectation)
     result: dict[str, Any] = {"install": install, "registration": registration}
     failures = list(registration["failures"])
     if install["exit_code"] != 0:
         failures.append(f"{harness}: install exited {install['exit_code']}: {install['stderr_tail']}")
+    replay_started_ns: int | None = None
     if expectation.get("replay") and not failures:
+        replay_started_ns = time.time_ns()
         config = read_config(home / expectation["config"]) or {}
         argv = registered_argv(home, expectation, config)
         if argv is None:
@@ -121,6 +126,10 @@ def harness_pass(
             failures.extend(replay["failures"])
     elif not expectation.get("replay"):
         result["replay_gap"] = expectation.get("replay_gap")
+    # Read after the replay, so a daemon the first hook outran still shows when it came up.
+    result["startup"] = startup_timeline(guard_home, since_ns=installed_ns)
+    if replay_started_ns is not None:
+        result["startup"]["replay_started_ms"] = round((replay_started_ns - installed_ns) / 1_000_000, 1)
     result["failures"] = failures
     result["passed"] = not failures
     return result
