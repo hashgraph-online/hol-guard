@@ -228,14 +228,18 @@ def anatomy(tag, arm, rows):
         steps = row_steps(r, RUNS / tag)
         calls = row_calls(r, RUNS / tag)
         for i, kind in enumerate(r["kinds"]):
-            # A step the harness never reached (it stopped early) has no requests.
-            if i >= len(steps) or not steps[i]["requests"]:
+            step_calls = calls[i] if i < len(calls) else []
+            requests = steps[i]["requests"] if i < len(steps) else None
+            # A step the harness never reached (it stopped early) has neither
+            # requests nor calls. One that timed out or failed has calls but
+            # no result line, so its request count is unknown and counts 0.
+            if not requests and not step_calls:
                 continue
             k = per[kind]
             k["steps"] += 1
-            k["requests"] += steps[i]["requests"]
+            k["requests"] += requests or 0
             held_seen = False
-            for c_kind, held in calls[i] if i < len(calls) else []:
+            for c_kind, held in step_calls:
                 k["calls"] += 1
                 k[c_kind] += 1
                 if held_seen:
@@ -276,6 +280,8 @@ def paired(tag, arm, rows, base_arm, base_tags):
         per = collections.defaultdict(lambda: [0.0, 0.0])
         for s in seeds:
             for x, y in zip(row_steps(brows[s], RUNS / btag), row_steps(rows[s], RUNS / tag)):
+                # Cost comes from the same result line as requests: a step
+                # without one has no cost to compare.
                 if not x["requests"] or not y["requests"]:
                     continue
                 per[x["kind"]][0] += x["usd"]
