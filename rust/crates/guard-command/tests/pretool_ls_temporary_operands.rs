@@ -76,7 +76,15 @@ fn a_missing_name_below_a_temporary_directory_prints_only_an_error() {
 fn a_pattern_below_an_owned_temporary_directory_names_its_matches() {
     let world = world("pattern");
     let scratch = fixture::shell_word(&world.scratch);
-    for command in [format!("ls {scratch}/pg*"), format!("ls {scratch}/notes*")] {
+    for command in [
+        format!("ls {scratch}/pg*"),
+        format!("ls {scratch}/notes*"),
+        // A pattern that does not start with `.` never matches `.` or `..`.
+        format!("ls {scratch}/*"),
+        format!("ls -d {scratch}/*"),
+        format!("ls -ld {scratch}/*"),
+        format!("ls -d {scratch}/*-run"),
+    ] {
         assert_decision(&world.workspace, &world.home, &command, true);
     }
 }
@@ -97,9 +105,14 @@ fn the_home_tree_and_hidden_matches_keep_their_review() {
     ));
     std::fs::create_dir_all(hidden.join("inner")).unwrap();
     let _cleanup = fixture::FixtureCleanup(hidden.clone());
+    std::fs::create_dir_all(world.scratch.join(".cache/inner")).unwrap();
     let home = fixture::shell_word(&world.home);
     let root = fixture::shell_word(&world.root);
+    let scratch = fixture::shell_word(&world.scratch);
     for command in [
+        format!("ls -d {scratch}/*"),
+        format!("ls -d {scratch}/.*"),
+        format!("ls -d {scratch}/.?*"),
         format!("ls {root}*"),
         format!("ls -d {root}*"),
         format!("ls {}*", fixture::shell_word(&hidden)),

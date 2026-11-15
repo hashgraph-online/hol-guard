@@ -323,8 +323,8 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
             && name.starts_with(prefix)
             && name.ends_with(suffix)
     };
-    // `.*` can match `.` and `..`, which name the directory and its parent.
-    if candidate(".") || candidate("..") {
+    // A shell matches `.` and `..` (the directory, its parent) only by a `.`-led pattern.
+    if pattern.starts_with(['.', '[']) && (candidate(".") || candidate("..")) {
         return false;
     }
     let Some(base) = expanded_path(directory, context) else {
