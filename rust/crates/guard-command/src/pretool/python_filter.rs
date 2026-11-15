@@ -245,12 +245,13 @@ fn working_directory_clean(
     // The interpreter may write once it runs, but nothing it writes exists
     // before it looks up a module; every other step must create nothing,
     // and only a leading `cd`, already folded into `cwd`, may move. A lone
-    // version probe such as `python3 --version` writes nothing.
+    // version probe such as `python3 --version` writes nothing unless it is
+    // redirected.
     let peers_settled = model.segments.iter().enumerate().all(|(index, other)| {
         let basename = super::executable_basename(other.executable.as_deref().unwrap_or(""));
         other.span == segment.span
             || ((super::search::grep::creates_nothing(other)
-                || super::version_probes::lone_probe_segment(other)
+                || quiet_version_probe(other)
                 || peer_proven_read_only(model, other, basename, context))
                 && (index == 0 || !matches!(basename, "cd" | "pushd" | "popd")))
     });
@@ -278,6 +279,20 @@ fn working_directory_clean(
         }
     }
     true
+}
+
+/// A lone version probe such as `python3 --version` that writes nothing:
+/// its output goes to the terminal or `/dev/null`, never to a file such as
+/// `json.py` the filter would import, and no wrapper or `PATH` change picks
+/// another program. The same screen `creates_nothing` applies.
+fn quiet_version_probe(other: &crate::CommandSegmentV1) -> bool {
+    let text = ["2>&1", "2>/dev/null", ">/dev/null"]
+        .iter()
+        .fold(other.text.clone(), |text, quiet| text.replace(quiet, ""));
+    !text.contains('>')
+        && other.wrapper_chain.is_empty()
+        && !other.path_overridden
+        && super::version_probes::lone_probe_segment(other)
 }
 
 /// A producer such as `gh pr list --json` or `curl -s URL` that carries its

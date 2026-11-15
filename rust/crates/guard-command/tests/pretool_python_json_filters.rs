@@ -115,6 +115,10 @@ fn a_lookup_of_the_interpreter_may_precede_the_filter() {
         format!("eval which python3; {version}"),
         format!("which $PYTHON; {version}"),
         format!("echo PYTHONPATH; {version}"),
+        format!("python3 --version > json.py; {FILTER}"),
+        format!("python3 --version >json.py && {FILTER}"),
+        format!("uv --version > json.py; {FILTER}"),
+        format!("which python3 > json.py; {FILTER}"),
     ] {
         assert_ne!(action(&root, &command), "allow", "{command}");
     }
