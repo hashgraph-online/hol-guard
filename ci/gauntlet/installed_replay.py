@@ -64,7 +64,10 @@ NON_DECISION_REASONS = {
     "invalid_hook_payload_reference",
 }
 
-_REPLAY_TIMEOUT = 120.0
+#: Longer than any hook timeout Guard registers (Codex's PreToolUse is 125 s), so a
+#: hook that holds the call for an approval answers with its own deny before the lane
+#: gives up on it. A shorter cap scored Codex's bounded approval wait as a hang.
+_REPLAY_TIMEOUT = 150.0
 
 
 def registered_argv(home: Path, expectation: dict[str, Any], config: dict[str, Any]) -> list[str] | None:
@@ -134,6 +137,21 @@ def _decision_from(response: dict[str, Any]) -> tuple[str, str]:
     return "unknown", ""
 
 
+def envelope_shape(response: dict[str, Any]) -> list[str]:
+    """The field names of an envelope this lane could not read, never their values.
+
+    An ``unknown`` verdict says only that no decision field was found. The names show
+    whether the hook answered in a shape the harness itself treats as a quiet allow or
+    printed something else, without copying reasons or paths into the evidence.
+    """
+
+    shape = sorted(str(key) for key in response)
+    hook_output = response.get("hookSpecificOutput")
+    if isinstance(hook_output, dict):
+        shape.extend(sorted(f"hookSpecificOutput.{key}" for key in hook_output))
+    return shape
+
+
 def verdict(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
     """One run's verdict, in a shape two runs can be compared on."""
 
@@ -159,6 +177,8 @@ def verdict(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
     result = {"decision": decision, "reason": reason, "exit_code": completed.returncode}
     if response is not None and isinstance(response.get("reason_code"), str):
         result["reason_code"] = response["reason_code"]
+    if response is not None and decision == "unknown":
+        result["envelope_shape"] = envelope_shape(response)
     return result
 
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
 
@@ -24,7 +25,7 @@ from ci.gauntlet.installed_registration import (
     install_harness,
     load_contract,
 )
-from ci.gauntlet.installed_replay import NON_DECISION_REASONS, handler_argv, registered_argv, replay_case
+from ci.gauntlet.installed_replay import NON_DECISION_REASONS, handler_argv, registered_argv, replay_case, verdict
 from ci.gauntlet.installed_runtime import (
     FROZEN_ONEDIR,
     SCRIPT,
@@ -281,6 +282,37 @@ def test_a_verdict_split_across_identical_runs_fails(tmp_path: Path) -> None:
     assert any("disagreeing verdicts" in failure for failure in evidence["failures"])
     replay = evidence["harnesses"]["claude-code"]["replay"]
     assert replay["deterministic"] is False
+
+
+def test_an_unreadable_envelope_records_its_field_names_but_no_values() -> None:
+    completed = subprocess.CompletedProcess(
+        args=["hook"],
+        returncode=0,
+        stdout='{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}, "n": "/private/x"}\n',
+        stderr="",
+    )
+    result = verdict(completed)
+    assert result["decision"] == "unknown"
+    assert result["envelope_shape"] == ["continue", "hookSpecificOutput", "n", "hookSpecificOutput.hookEventName"]
+    assert "/private/x" not in json.dumps(result)
+
+
+def test_a_readable_envelope_carries_no_shape() -> None:
+    completed = subprocess.CompletedProcess(
+        args=["hook"],
+        returncode=0,
+        stdout='{"hookSpecificOutput": {"permissionDecision": "deny", "permissionDecisionReason": "r"}}\n',
+        stderr="",
+    )
+    assert "envelope_shape" not in verdict(completed)
+
+
+def test_the_replay_cap_outlasts_every_registered_hook_timeout() -> None:
+    from ci.gauntlet import installed_replay
+
+    # Codex registers PreToolUse at 125 s and holds a reviewed call for approval until
+    # then; the lane must hear that hook's own deny rather than score it as a hang.
+    assert installed_replay._REPLAY_TIMEOUT > 125
 
 
 def test_a_console_script_cannot_stand_in_for_the_frozen_bundle(tmp_path: Path) -> None:
