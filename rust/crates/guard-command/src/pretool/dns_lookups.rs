@@ -36,6 +36,7 @@ enum Word {
 /// Whether `program`'s `arguments` form a plain lookup of fixed names.
 pub(super) fn safe_lookup_arguments(program: &str, arguments: &[String]) -> bool {
     let mut operands = 0;
+    let mut dig_no_rc = false;
     let mut index = 0;
     while index < arguments.len() {
         let argument = arguments[index].as_str();
@@ -47,21 +48,30 @@ pub(super) fn safe_lookup_arguments(program: &str, arguments: &[String]) -> bool
             _ => None,
         };
         match word {
-            Some(Word::Flag | Word::Attached) => {}
+            Some(Word::Flag | Word::Attached) => {
+                if program == "dig" && argument == "-r" {
+                    dig_no_rc = true;
+                }
+            }
             Some(Word::Value) => {
                 let Some(value) = arguments.get(index) else {
                     return false;
                 };
                 index += 1;
-                if !value_screen(argument)(value) {
+                if is_zone_transfer(value) || !value_screen(argument)(value) {
                     return false;
                 }
             }
-            Some(Word::Operand) => operands += 1,
+            Some(Word::Operand) => {
+                if is_zone_transfer(argument) {
+                    return false;
+                }
+                operands += 1;
+            },
             None => return false,
         }
     }
-    program == "dig" || (1..=2).contains(&operands)
+    (program != "dig" || dig_no_rc) && (program == "dig" || (1..=2).contains(&operands))
 }
 
 fn dig_word(argument: &str) -> Option<Word> {
@@ -116,7 +126,8 @@ fn nslookup_word(argument: &str) -> Option<Word> {
         return Some(Word::Flag);
     }
     let (name, value) = option.split_once('=')?;
-    (VALUES.contains(&name) && plain_word(value)).then_some(Word::Attached)
+    (VALUES.contains(&name) && plain_word(value) && !is_zone_transfer(value))
+        .then_some(Word::Attached)
 }
 
 /// A single-letter option from `flags` or `values`, or a name operand.
@@ -136,7 +147,7 @@ fn short_option(argument: &str, flags: &str, values: &str) -> Option<Word> {
     if rest.is_empty() {
         return Some(Word::Value);
     }
-    value_screen(argument)(rest).then_some(Word::Attached)
+    (!is_zone_transfer(rest) && value_screen(argument)(rest)).then_some(Word::Attached)
 }
 
 /// How the value of a short option is screened: a reverse lookup (`-x`) or
@@ -157,6 +168,11 @@ fn query_option(option: &str) -> bool {
         && name.len() <= 24
         && name.bytes().all(|byte| byte.is_ascii_lowercase())
         && plain_word(value)
+}
+
+/// Zone transfers are deliberately outside the fixed-record lookup proof.
+fn is_zone_transfer(value: &str) -> bool {
+    value.eq_ignore_ascii_case("AXFR") || value.eq_ignore_ascii_case("IXFR")
 }
 
 /// A record type, a class, a count or a number of seconds.
