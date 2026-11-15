@@ -149,6 +149,31 @@ domain and attach the credential there. It is not the check that keeps a call on
 only to the exact host the pack declares, after the provider host check on the rendered URL, so a toolkit whose base
 URL is on another domain fails closed and a sibling host is never reached through a pack.
 
+## Connection values
+
+Some services address one customer's data by a value that belongs to the connection, not the call: a help desk's
+subdomain, an accounting company id, a cloud site id, the server a chat bot was added to. A pack declares each such
+value once, with bounds:
+
+```json
+"connection": {"values": {"subdomain": {"title": "Help desk subdomain", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$", "maxLength": 63}}}
+```
+
+A request template uses a value by name wherever it can use a required string argument: a path placeholder, a query
+value or a body field. A value may also be the leftmost label of a host, as in `{subdomain}.example.com`; the rest of
+that host must be an exact DNS name of two or more labels, and the value must then render as one lowercase DNS label.
+
+The host fills every value from the verified connection when it renders a request (`render_connected`, or the
+`connection` object of the CLI `render` operation and of a fixture). A caller can never supply one: a value may not
+share a name with any action argument, an argument with that name is `unknown_argument`, and rendering refuses a
+missing value (`connection_value_missing`), an undeclared one (`connection_value_unknown`) and one outside its
+bounds (`connection_value_invalid`). So no argument can move a request to another customer's tenant.
+
+A pack declares one to four values, each with a snake_case name, a display `title`, an anchored `pattern` and a
+`maxLength` of 1 to 128. As with transports, a pack whose `auth.mode` is `none`, or with any non-HTTP action, may not
+declare one. A pack without the block serializes and digests exactly as before. Adding, changing or removing a
+value is a widening change in `diff`, since each one changes which tenant a request can reach.
+
 ## Fixtures
 
 Every action in a source pack carries at least one `safe` and one `risky` fixture. A fixture states the arguments
@@ -182,7 +207,7 @@ activates an artifact.
 
 `diff` compares two packs or artifacts for the same provider and lists each change with a code. A change is
 widening when it lets a pack do more than before: a new host, scope or action, a looser argument, a weaker effect,
-a dropped capability, a new brokered transport, a new response field, a removed untrusted label, looser limits, a changed executor or
+a dropped capability, a new brokered transport, a changed connection value, a new response field, a removed untrusted label, looser limits, a changed executor or
 link, or any changed fact extractor. Any edit to a pattern or forbidden rule counts as widening, because whether a new pattern accepts less
 cannot be decided in general. A widening pack version needs fresh review.
 
@@ -201,7 +226,7 @@ Both read one JSON request per line on standard input and write one JSON result 
 | `test` | `pack` | fixture `report` |
 | `compile` | `pack` | `artifact` |
 | `diff` | `old`, `new` (pack or artifact) | `diff` |
-| `render` | `pack` or `artifact`, `actionId`, `arguments` | `request` |
+| `render` | `pack` or `artifact`, `actionId`, `arguments`, optional `connection` values | `request` |
 | `extract` | `pack` or `artifact`, `actionId`, `arguments` | `facts` |
 | `project` | `pack` or `artifact`, `actionId`, `response` | `projection` |
 | `policy` | `preset` name or `policyPack` | `preset`, `packDigest`, `factRules`, `unclassified` |

@@ -130,6 +130,34 @@ def _transports_with_broker_action(pack: dict) -> None:
     pack["transports"] = {"partner": [{"partner": "composio", "toolkit": "slack"}]}
 
 
+_TENANT = {"title": "Workspace subdomain", "pattern": "^[a-z0-9-]{1,30}$", "maxLength": 30}
+
+
+def _connection(connection: object):
+    def change(pack: dict) -> None:
+        pack["connection"] = connection
+
+    return change
+
+
+def _connection_without_sign_in(pack: dict) -> None:
+    pack["auth"] = {"mode": "none", "scopes": []}
+    pack["connection"] = {"values": {"tenant": _TENANT}}
+
+
+def _connection_with_broker_action(pack: dict) -> None:
+    _post(pack)["executor"] = {"kind": "broker"}
+    pack["connection"] = {"values": {"tenant": _TENANT}}
+
+
+def _templated_host(host: str):
+    def change(pack: dict) -> None:
+        pack["connection"] = {"values": {"tenant": _TENANT}}
+        pack["hosts"] = [host]
+
+    return change
+
+
 def _form_value(value: dict):
     def change(pack: dict) -> None:
         _post(pack)["executor"]["request"]["body"] = {"form": [{"name": "channel", "value": value}]}
@@ -165,6 +193,20 @@ def _form_value(value: dict):
         ),
         _transports_without_sign_in,
         _transports_with_broker_action,
+        _connection(None),
+        _connection({"values": {}}),
+        _connection({"values": {f"value_{index}": _TENANT for index in range(5)}}),
+        _connection({"values": {"tenant": {**_TENANT, "pattern": "[a-z]+"}}}),
+        _connection({"values": {"tenant": {**_TENANT, "maxLength": 0}}}),
+        _connection({"values": {"tenant": {**_TENANT, "maxLength": 129}}}),
+        _connection({"values": {"Tenant": _TENANT}}),
+        _connection({"values": {"tenant": {**_TENANT, "default": "acme"}}}),
+        _connection({"values": {"tenant": _TENANT}, "region": "eu"}),
+        _connection_without_sign_in,
+        _connection_with_broker_action,
+        _templated_host("{tenant}.slack.com/x"),
+        _templated_host("mail.{tenant}.slack.com"),
+        _templated_host("{Tenant}.slack.com"),
     ],
     ids=[
         "authorization-header",
@@ -190,6 +232,20 @@ def _form_value(value: dict):
         "repeated-partner",
         "transports-without-sign-in",
         "transports-with-broker-action",
+        "null-connection",
+        "empty-connection",
+        "five-connection-values",
+        "unanchored-connection-pattern",
+        "zero-connection-length",
+        "long-connection-length",
+        "uppercase-connection-name",
+        "connection-default",
+        "connection-extra-key",
+        "connection-without-sign-in",
+        "connection-with-broker-action",
+        "templated-host-with-path",
+        "templated-inner-label",
+        "uppercase-template-name",
     ],
 )
 def test_the_schema_refuses_unsafe_packs(change) -> None:
@@ -201,4 +257,14 @@ def test_the_schema_refuses_unsafe_packs(change) -> None:
 def test_the_schema_accepts_a_partner_transport() -> None:
     pack = copy.deepcopy(_slack())
     pack["transports"] = {"partner": [{"partner": "composio", "toolkit": "slack"}]}
+    assert list(_validator().iter_errors(pack)) == []
+
+
+def test_the_schema_accepts_connection_values_and_a_templated_host() -> None:
+    pack = copy.deepcopy(_slack())
+    _templated_host("{tenant}.slack.com")(pack)
+    for action in pack["actions"]:
+        if action["executor"]["kind"] == "declarative-http":
+            action["executor"]["request"]["host"] = "{tenant}.slack.com"
+    _post(pack)["fixtures"][0]["connection"] = {"tenant": "acme"}
     assert list(_validator().iter_errors(pack)) == []

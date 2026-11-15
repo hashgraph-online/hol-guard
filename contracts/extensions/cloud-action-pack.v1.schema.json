@@ -56,7 +56,7 @@
       "maxItems": 16,
       "uniqueItems": true,
       "items": {
-        "$ref": "#/$defs/host"
+        "$ref": "#/$defs/packHost"
       }
     },
     "auth": {
@@ -119,6 +119,46 @@
         }
       }
     },
+    "connection": {
+      "description": "Values that belong to the connection rather than the call, such as a tenant subdomain or a company id. The host fills each one from the verified connection; a caller can never supply one. Each is used by name like a required string argument, or as the leftmost label of a host. A pack whose auth mode is none, or with any action that is not declarative-http, may not declare one, and a value may not share a name with any action argument.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "values"
+      ],
+      "properties": {
+        "values": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 4,
+          "propertyNames": {
+            "pattern": "^[a-z_][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "title",
+              "pattern",
+              "maxLength"
+            ],
+            "properties": {
+              "title": {
+                "$ref": "#/$defs/displayText"
+              },
+              "pattern": {
+                "$ref": "#/$defs/pattern"
+              },
+              "maxLength": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 128
+              }
+            }
+          }
+        }
+      }
+    },
     "actions": {
       "type": "array",
       "minItems": 1,
@@ -161,6 +201,39 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "required": [
+          "connection"
+        ]
+      },
+      "then": {
+        "properties": {
+          "auth": {
+            "properties": {
+              "mode": {
+                "not": {
+                  "const": "none"
+                }
+              }
+            }
+          },
+          "actions": {
+            "items": {
+              "properties": {
+                "executor": {
+                  "properties": {
+                    "kind": {
+                      "const": "declarative-http"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -174,6 +247,19 @@
       "type": "string",
       "maxLength": 253,
       "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9-]*[a-z][a-z0-9-]*$"
+    },
+    "packHost": {
+      "description": "An exact host, or one whose leftmost label is a declared connection value (`{name}.example.com`), filled from the verified connection when a request is rendered.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/host"
+        },
+        {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^\\{[a-z_][a-z0-9_]{0,63}\\}\\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9-]*[a-z][a-z0-9-]*$"
+        }
+      ]
     },
     "scope": {
       "type": "string",
@@ -379,7 +465,7 @@
           ]
         },
         "host": {
-          "$ref": "#/$defs/host"
+          "$ref": "#/$defs/packHost"
         },
         "path": {
           "type": "string",
@@ -1365,6 +1451,18 @@
         },
         "arguments": {
           "type": "object"
+        },
+        "connection": {
+          "description": "Values of the connection the call is sent on, for a pack that declares them.",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z_][a-z0-9_]{0,63}$"
+          },
+          "maxProperties": 4,
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 128
+          }
         },
         "expect": {
           "type": "object",
