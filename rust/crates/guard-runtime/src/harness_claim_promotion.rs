@@ -2,10 +2,17 @@
 //!
 //! A receipt describes a run that exercised one capability row of the
 //! contract: which harness, event, transport and surface, on which Guard build,
-//! harness version and platform, and what Guard decided. Only a run against a
-//! real harness with live inference, checked by an independent verifier, can
-//! raise a claim above `configured`. Unit tests, fixtures, replays, probes and
-//! hand-written receipts never can, however complete they look.
+//! harness version and platform, and what Guard decided. Only a receipt that
+//! reports a run against a real harness with live inference, checked by an
+//! independent verifier, can raise a claim above `configured`. Receipts that
+//! report a unit test, fixture, replay or probe are always refused.
+//!
+//! The receipt is not authenticated. Its source, inference, verifier and
+//! witness fields are self-reported, so this check catches an inconsistent or
+//! honestly-labelled synthetic receipt; it cannot tell a forged receipt from a
+//! real one. The payload says so (`provenance: self_reported`), and the claim
+//! takes effect only through a reviewed contract change in which the reviewer
+//! confirms the run named by `evidence_reference`.
 //!
 //! A live block claim needs a native deny that landed before the action took
 //! effect, and a benign counterpart that the same row allowed, so a row that
@@ -24,6 +31,8 @@ const RECEIPT_SCHEMA: &str = "hol-guard.harness-claim-evidence.v1";
 const PAYLOAD_SCHEMA: &str = "hol-guard.harness-claim-promotion.v1";
 /// How long promoted evidence stands before the row shows `stale`.
 const VALID_DAYS: i64 = 30;
+/// Nothing authenticates a receipt yet; a reviewer confirms the referenced run.
+const PROVENANCE: &str = "self_reported";
 /// Where a promotion may come from. Everything else is synthetic.
 const LIVE_SOURCES: [&str; 2] = ["installed_harness", "gauntlet_lane"];
 const PROMOTABLE_STATES: [&str; 4] = [
@@ -284,6 +293,7 @@ pub(crate) fn promotion_payload(params: &Value) -> Result<Value, &'static str> {
         "refusals": refusals,
         "claim": claim,
         "valid_days": VALID_DAYS,
+        "provenance": PROVENANCE,
     }))
 }
 

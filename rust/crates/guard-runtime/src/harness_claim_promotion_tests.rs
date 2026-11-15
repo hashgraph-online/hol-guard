@@ -247,6 +247,8 @@ fn the_operation_needs_a_fixed_time_and_a_receipt() {
     .expect("answers");
     assert_eq!(payload["schema"], "hol-guard.harness-claim-promotion.v1");
     assert_eq!(payload["promotable"], true);
+    // Nothing authenticates the receipt, and the payload must not pretend otherwise.
+    assert_eq!(payload["provenance"], "self_reported");
     assert_eq!(payload["claim"]["expires_at"], "2026-12-14T12:00:00Z");
 }
 

@@ -4,10 +4,14 @@
 A receipt (schema ``hol-guard.harness-claim-evidence.v1``) records a run against a real harness:
 which capability row it exercised, the exact Guard build, harness version and platform, and the
 native decisions Guard returned. The native runtime's ``harness_claim_promotion`` operation decides
-whether the receipt may raise the row's claim. Unit, fixture, replay, probe and hand-written receipts
-are always refused, and a live block claim needs a native deny before the action ran plus a benign
-allow on the same event. This script only carries the receipt to the runtime, writes the claim the
-runtime returns into the contract, and regenerates the published claims.
+whether the receipt may raise the row's claim. Receipts that report a unit test, fixture, replay or
+probe are always refused, and a live block claim needs a native deny before the action ran plus a
+benign allow on the same event. This script only carries the receipt to the runtime, writes the claim
+the runtime returns into the contract, and regenerates the published claims.
+
+The receipt is not authenticated: its source, inference, verifier and witness fields are
+self-reported. A promoted claim is a proposed contract change, and the reviewer of that change must
+confirm the run named by ``evidence_reference`` before merging it.
 
     python scripts/promote_harness_claim.py receipt.json            # show the decision
     python scripts/promote_harness_claim.py receipt.json --write    # write the promoted claim
@@ -78,6 +82,12 @@ def main(argv: list[str] | None = None, decide: Decide = _native_decide) -> int:
         return 1
     claim = decision["claim"]
     print(json.dumps(claim, indent=2))
+    if decision.get("provenance") == "self_reported":
+        print(
+            "The receipt is self-reported. Confirm the run named by evidence_reference"
+            " when reviewing this contract change.",
+            file=sys.stderr,
+        )
     if not args.write:
         return 0
     contract = json.loads(text)
