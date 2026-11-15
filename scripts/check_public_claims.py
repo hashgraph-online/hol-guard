@@ -28,10 +28,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 CLAIM = re.compile(
     r"\banti-?virus\b"
-    r"|\buniversal (?:protection|coverage|prevention|interception|mediation|security)\b"
-    r"|\b(?:complete|total|full) (?:protection|coverage)\b"
-    r"|\b100\s?% (?:protection|coverage|protected)\b"
-    r"|\bprotects? (?:all|every|any) (?:agents?|harness(?:es)?|actions?|tools?)\b",
+    r"|\buniversal\s+(?:protection|coverage|prevention|interception|mediation|security)\b"
+    r"|\b(?:complete|total|full)\s+(?:protection|coverage)\b"
+    r"|\b100\s?%\s+(?:protection|coverage|protected)\b"
+    r"|\bprotects?\s+(?:all|every|any)\s+(?:agents?|harness(?:es)?|actions?|tools?)\b",
     re.IGNORECASE,
 )
 LIMIT = re.compile(
@@ -46,10 +46,17 @@ LIMIT = re.compile(
     r"|\bobserve[- ]only\b",
     re.IGNORECASE,
 )
-# A negation counts only when it governs the claim: "does not claim universal
-# protection", "never disable antivirus". "needs no account and provides
-# complete protection" is still a claim.
-NEGATED_CLAIM = re.compile(r"\b(?:not|never|no|nor)\s+(?:\w+\s+){0,2}$", re.IGNORECASE)
+# A negation counts only when it governs the claim: it sits right before the
+# claim ("no complete protection"), or negates a verb that takes the claim as
+# its object ("does not claim universal protection", "never disable
+# antivirus"). "needs no setup for complete protection" and "needs no account
+# and provides complete protection" are still claims.
+NEGATED_CLAIM = re.compile(
+    r"\b(?:(?:not|never|nor)\s+(?:(?:claim|provide|offer|promise|give|guarantee|disable|replace|a|an)s?\s+)?|no\s+)$",
+    re.IGNORECASE,
+)
+# "no blind spots" and "without limitations" deny a limit; they do not state one.
+NEGATED_LIMIT = re.compile(r"\b(?:no|without|zero|free\s+of)\s+(?:\w+\s+)?$", re.IGNORECASE)
 FOLLOWING_PROSE_BLOCKS = 2
 
 # Public pages that describe what Guard protects. Planning notes, research,
@@ -81,6 +88,7 @@ class Block:
     prose: bool
 
 
+_FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _BADGE_OR_IMAGE = re.compile(r"^\s*(?:\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)|!\[[^\]]*\]\([^)]*\))\s*$")
 
@@ -109,7 +117,7 @@ def _blocks(text: str) -> list[Block]:
     blocks: list[Block] = []
     current: list[str] = []
     start = 0
-    fenced = False
+    fence = ""
 
     def flush() -> None:
         if current:
@@ -119,11 +127,21 @@ def _blocks(text: str) -> list[Block]:
             current.clear()
 
     for number, line in enumerate(text.splitlines(), start=1):
-        if line.lstrip().startswith(("```", "~~~")):
-            flush()
-            fenced = not fenced
+        opener = _FENCE.match(line)
+        if fence:
+            # Only a run of the opening character at least as long as the
+            # opening fence, with nothing after it, closes the block.
+            if (
+                opener
+                and opener.group(1)[0] == fence[0]
+                and len(opener.group(1)) >= len(fence)
+                and not opener.group(2).strip()
+            ):
+                fence = ""
             continue
-        if fenced:
+        if opener and not (opener.group(1)[0] == "`" and "`" in opener.group(2)):
+            flush()
+            fence = opener.group(1)
             continue
         if not line.strip():
             flush()
@@ -151,6 +169,10 @@ def _claims(text: str) -> list[tuple[int, str]]:
     return found
 
 
+def _states_limit(text: str) -> bool:
+    return any(not NEGATED_LIMIT.search(text[: match.start()]) for match in LIMIT.finditer(text))
+
+
 def check_markdown(path: str, text: str) -> list[Finding]:
     findings: list[Finding] = []
     blocks = _blocks(text)
@@ -171,7 +193,7 @@ def check_markdown(path: str, text: str) -> list[Finding]:
                 window.append(following)
             if len(window) > FOLLOWING_PROSE_BLOCKS:
                 break
-        if any(LIMIT.search(candidate.text) for candidate in window):
+        if any(_states_limit(candidate.text) for candidate in window):
             continue
         findings.extend(Finding(path, block.line + offset, claim) for offset, claim in claims)
     return findings
@@ -195,7 +217,7 @@ def _description_line(text: str) -> int:
 def check_package_description(path: str, text: str) -> list[Finding]:
     project = _toml_loads(text).get("project")
     description = project.get("description") if isinstance(project, dict) else None
-    if not isinstance(description, str) or LIMIT.search(description):
+    if not isinstance(description, str) or _states_limit(description):
         return []
     line = _description_line(text)
     return [Finding(path, line, claim) for _, claim in _claims(description)]

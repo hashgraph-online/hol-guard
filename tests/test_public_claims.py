@@ -112,3 +112,37 @@ def test_an_unrelated_negation_does_not_hide_a_claim():
     text = "Guard needs no account and provides complete protection.\n"
 
     assert [f.claim for f in public_claims.check_markdown("synthetic.md", text)] == ["complete protection"]
+
+
+def test_a_claim_wrapped_across_lines_is_still_a_claim():
+    text = "Intro.\n\nGuard provides complete\nprotection for agents.\n"
+
+    findings = public_claims.check_markdown("synthetic.md", text)
+
+    assert [(finding.line, finding.claim) for finding in findings] == [(3, "complete\nprotection")]
+
+
+def test_denying_a_limit_is_not_a_limit():
+    markdown = "Guard provides full protection with no blind spots.\n\nIt has no known limitations.\n"
+    description = '[project]\ndescription = "Open-source antivirus for AI agents, without limitations."\n'
+
+    assert [f.claim for f in public_claims.check_markdown("synthetic.md", markdown)] == ["full protection"]
+    assert [f.claim for f in public_claims.check_package_description("pyproject.toml", description)] == ["antivirus"]
+
+
+def test_a_negation_must_govern_the_claim():
+    markdown = "Guard needs no setup for complete protection.\n"
+    description = '[project]\ndescription = "Needs no setup for complete protection."\n'
+
+    assert [f.claim for f in public_claims.check_markdown("synthetic.md", markdown)] == ["complete protection"]
+    assert [f.claim for f in public_claims.check_package_description("pyproject.toml", description)] == [
+        "complete protection"
+    ]
+
+
+def test_a_shorter_fence_inside_a_longer_one_does_not_close_it():
+    text = "````markdown\n```\nuniversal protection\n````\n\nGuard provides complete protection.\n"
+
+    findings = public_claims.check_markdown("synthetic.md", text)
+
+    assert [(finding.line, finding.claim) for finding in findings] == [(6, "complete protection")]
