@@ -11,12 +11,14 @@ fn oauth_credential_parameters_with_filled_values_are_secrets() {
     let token = joined(&["qk4h7", "tz2wm9", "rbx3p"]);
     let signature = joined(&["Hn7Rk2q", "Wm4xZt9", "Lp3Bv8%2", "BcY5Jd%3D"]);
     let consumer = joined(&["Rdimkh", "%2B", "Vqzwnt"]);
+    let short = joined(&["qk4h", "7tz2"]);
     for text in [
         format!("+ \"                oauth_token=\\\"{token}\\\",\\n\""),
         format!("Authorization: OAuth oauth_signature=\"{signature}\""),
         format!("expect(header).to match(/OAuth\\ oauth_consumer_key=\"{consumer}\",.*/)"),
         format!("params.put(\"oauth_nonce\", \"{token}\");"),
         format!("{{\"oauth_token_secret\": \"{token}\"}}"),
+        format!("params.put(\"oauth_token\", \"{short}\");"),
     ] {
         assert!(holds_oauth_credential(&text), "{text}");
     }
@@ -48,6 +50,12 @@ fn oauth_settings_names_templates_and_placeholders_are_not_secrets() {
         "params.put(\"oauth_signature_method\", \"HMAC-SHA1\");",
         "\"oauth_timestamp\": \"1318622958\"",
         "headers = { oauth_token: \"#{oauth_token}\" }",
+        "params.put(\"oauth_token\", \"sessionValue123${token}\");",
+        "params.put(\"oauth_token\", \"prefix9Kq#{token}\");",
+        "oauth_token=\"token12\"",
+        "oauth_token=\"token123\"",
+        "params.put(\"oauth_nonce\", \"abc12345\");",
+        "oauth_nonce=\"98765432\"",
         "oauth_token=\"${OAUTH_TOKEN_FROM_ENVIRONMENT}\"",
         "oauth_token=\"{{ oauth_token_value }}\"",
         "oauth_consumer_key=\"your_consumer_key_here\"",

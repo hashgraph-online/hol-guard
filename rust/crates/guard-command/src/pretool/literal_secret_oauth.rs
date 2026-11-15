@@ -22,7 +22,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::value::placeholder_within;
+use super::value::{entropy, placeholder_within};
 
 fn pattern(source: &str) -> Regex {
     Regex::new(source).expect("oauth literal secret pattern compiles")
@@ -37,41 +37,33 @@ macro_rules! patterns {
 patterns! {
     // `\b` after the name keeps `oauth_signature_method` and
     // `oauth_token_url` out: `_` is a word character.
-    PARAMETER = r#"\boauth_(?:signature|token|token_secret|nonce|consumer_key|consumer_secret|verifier)\b\\?["']?\s*(?:=>|[=:,])\s*\\?["'](?P<v>[A-Za-z0-9%+/=_.~\-]{12,200})"#;
+    PARAMETER = r#"\boauth_(?:signature|token|token_secret|nonce|consumer_key|consumer_secret|verifier)\b\\?["']?\s*(?:=>|[=:,])\s*\\?["'](?P<v>[^"'\\\s]{8,200})"#;
     BASE_STRING = r"\b(?:GET|POST|PUT|PATCH|DELETE|HEAD)&https?%3A%2F%2F[A-Za-z0-9._~%\-]+&";
     BASE_PARAMETER = r"oauth_(?:signature|token|nonce|consumer_key|verifier)%3D(?P<v>(?:[A-Za-z0-9._~\-]|%25[0-9A-Fa-f]{2}){8,200})";
     CIPHER_KEY = r#"\bnew\s+SecretKeySpec\(\s*"(?P<v>[^"\\\s]{12,200})""#;
     ESCAPE = r"%(?:25)?[0-9A-Fa-f]{2}";
     FILLER = r"(?i)\$\{|\{\{|#\{|%[sd]\b|<[^>]*>|x{4,}|\*{3,}|change_?me|example|dummy|fake|placeholder|redacted|your[_\-]?|insert|replace|\.\.\.";
+    VALUE_CHARACTERS = r"^[A-Za-z0-9%+/=_.~\-]+$";
+    WORD_THEN_DIGITS = r"^(?:[A-Za-z]+[0-9]+|[0-9]+[A-Za-z]+)$";
     SEQUENTIAL = r"(?i)0123|1234|2345|3456|4567|5678|6789|abcd|bcde|cdef|qwer|asdf";
 }
 
-/// Shannon entropy of `value` in bits per character.
-fn entropy(value: &str) -> f64 {
-    let mut counts = std::collections::HashMap::new();
-    let mut total = 0usize;
-    for ch in value.chars() {
-        *counts.entry(ch).or_insert(0usize) += 1;
-        total += 1;
-    }
-    counts
-        .values()
-        .map(|&count| {
-            let share = count as f64 / total as f64;
-            -share * share.log2()
-        })
-        .sum()
-}
-
 /// Whether a quoted OAuth parameter value is a credential rather than a
-/// word, a template or a placeholder.
+/// word, a template or a placeholder. The whole quoted value is read, so an
+/// interpolation anywhere inside it keeps the value out.
 fn parameter_value(raw: &str) -> bool {
-    if FILLER.is_match(raw) || placeholder_within(raw) {
+    if FILLER.is_match(raw) || placeholder_within(raw) || !VALUE_CHARACTERS.is_match(raw) {
         return false;
     }
     let encoded = ESCAPE.is_match(raw);
     let value = ESCAPE.replace_all(raw, "");
-    if value.chars().count() < 8 {
+    let length = value.chars().count();
+    if length < 8 {
+        return false;
+    }
+    // A short value needs letters and digits interleaved: `token123` or
+    // `abc12345` is a word or a counting run, not a credential.
+    if length < 12 && (SEQUENTIAL.is_match(&value) || WORD_THEN_DIGITS.is_match(&value)) {
         return false;
     }
     let lower = value.bytes().any(|byte| byte.is_ascii_lowercase());
@@ -80,8 +72,7 @@ fn parameter_value(raw: &str) -> bool {
     // Letters alone pass only when the value is long, or percent-encoded as
     // a signed value is; a camel-case word such as `AccessTokenValue` is
     // neither.
-    let mixed =
-        (digit && (lower || upper)) || (lower && upper && (value.chars().count() >= 20 || encoded));
+    let mixed = (digit && (lower || upper)) || (lower && upper && (length >= 20 || encoded));
     mixed && entropy(&value) >= 3.0
 }
 
