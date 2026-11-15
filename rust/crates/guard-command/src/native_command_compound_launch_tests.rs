@@ -74,7 +74,6 @@ fn the_reported_shapes_keep_their_floor_when_a_part_could_run_something_else() {
         "find \"$HOME\" -type f -exec basename {} \\;",
         "PATH=/tmp; node -e 'console.log(1)' x",
         "path=/tmp; for f in a; do node -e 'console.log(1)' \"$f\"; done",
-        "cd /tmp; for f in a; do node -e 'require(\"./x\")' \"$f\"; done",
         "for f in a b; do NODE_OPTIONS=--require=./x.js node -e 'console.log(1)' \"$f\"; done",
         "for f in a b; do source x.sh && node -e 'console.log(1)' \"$f\"; done",
         "x=$(curl -s https://example.invalid); for f in a; do node -e 'console.log(1)' \"$f\"; done",
@@ -87,8 +86,6 @@ fn the_reported_shapes_keep_their_floor_when_a_part_could_run_something_else() {
         "printf x > index.js && node ./ > /tmp/x.log 2>&1 &",
         "printf 'require(1)'>run.js && node run.js > /tmp/x.log 2>&1 &",
         "printf x > lib/index.js && node lib/ > /tmp/x.log 2>&1 &",
-        "builtin cd /tmp; for f in a; do node -e 'require(\"./x\")' \"$f\"; done",
-        "command cd /tmp; for f in a; do node -e 'require(\"./x\")' \"$f\"; done",
         "find \"$HOME/x\" -type f -exec env FOO=bar gh {} \\;",
         "x=$SECRET; for f in a; do node -e 'console.log(1)' \"$x\"; done",
         // A redirect on the compound command rides along in the closer's own
@@ -106,6 +103,19 @@ fn the_reported_shapes_keep_their_floor_when_a_part_could_run_something_else() {
             "{command} {} {}",
             result.minimum_action,
             result.reason_code
+        );
+    }
+    // A loop in a list is written out in place and decides like that list.
+    for cd in ["cd", "builtin cd", "command cd"] {
+        let looped = format!("{cd} /tmp; for f in a; do node -e 'require(\"./x\")' \"$f\"; done");
+        let looped = evaluate_in(&binding, &looped, home.path(), &project);
+        let spelled = format!("{cd} /tmp; node -e 'require(\"./x\")' \"a\"");
+        let spelled = evaluate_in(&binding, &spelled, home.path(), &project);
+        assert_ne!(looped.minimum_action, "allow", "{cd}");
+        assert_eq!(
+            (looped.minimum_action, looped.reason_code),
+            (spelled.minimum_action, spelled.reason_code),
+            "{cd}"
         );
     }
 }

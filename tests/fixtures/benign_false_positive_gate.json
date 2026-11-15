@@ -37066,7 +37066,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "echo start; for f in a b; do rm -f \"$f\"; done"
+        "command": "echo start; for f in a b; do rm -rf ~/\"$f\"; done"
       },
       "cwd": "worktree",
       "expect": "not_allow"

@@ -5,24 +5,25 @@ use guard_command::pretool::{evaluate_pre_tool_envelope_with_execution_context, 
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
-/// A home holding one project. The root stays below the target directory:
-/// `$TMPDIR` on macOS resolves under `/private/var`, which the sensitive-root
-/// screen rejects.
-fn home() -> PathBuf {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/pretool-for-loop-in-list")
-        .join(format!(
-            "home-{}-{}",
-            std::process::id(),
-            crate::unique_nanos::unique_nanos()
-        ));
-    let home = root.join("home");
+/// A home holding one project, removed when the guard drops. The root stays
+/// below the target directory: `$TMPDIR` on macOS resolves under
+/// `/private/var`, which the sensitive-root screen rejects.
+fn home() -> (tempfile::TempDir, PathBuf) {
+    let parent =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/pretool-for-loop-in-list");
+    std::fs::create_dir_all(&parent).unwrap();
+    let root = tempfile::Builder::new()
+        .prefix("home-")
+        .tempdir_in(parent)
+        .unwrap();
+    let home = root.path().join("home");
     let project = home.join("project");
     std::fs::create_dir_all(project.join(".git")).unwrap();
     std::fs::create_dir_all(project.join("src")).unwrap();
     std::fs::write(project.join("README.md"), "# Fixture\n").unwrap();
     std::fs::write(project.join("src/a.md"), "a\n").unwrap();
-    std::fs::canonicalize(home).unwrap()
+    let home = std::fs::canonicalize(home).unwrap();
+    (root, home)
 }
 
 fn action(home: &Path, command: &str) -> String {
@@ -51,7 +52,7 @@ fn action(home: &Path, command: &str) -> String {
 
 #[test]
 fn a_read_only_loop_inside_a_list_proceeds() {
-    let home = home();
+    let (_root, home) = home();
     for command in [
         "echo start; for n in 1 2; do echo $n; done",
         "for f in README.md src/a.md; do wc -l \"$f\"; done; echo done",
@@ -69,7 +70,7 @@ fn a_read_only_loop_inside_a_list_proceeds() {
 
 #[test]
 fn a_loop_inside_a_list_that_writes_or_escapes_keeps_its_review() {
-    let home = home();
+    let (_root, home) = home();
     for command in [
         "echo start; for f in README.md src/a.md; do rm -f \"$f\"; done",
         "echo start; for f in README.md; do echo x > \"$f\"; done",
