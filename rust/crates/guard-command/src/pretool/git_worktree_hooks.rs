@@ -158,5 +158,5 @@ pub(in crate::pretool) fn tree_names_any(
     arguments.extend(names);
     let (status, output) =
         git_query_with_args(&base, leading, &arguments, deadline, WORKTREE_PROBE_LIMIT)?;
-    status.success().then(|| !output.is_empty())
+    status.success().then_some(!output.is_empty())
 }
