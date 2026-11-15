@@ -843,7 +843,6 @@
       "src/shell_command_wrappers.rs",
       "src/shell_command_wrappers_paths.rs",
       "src/shell_comment_lines.rs",
-      "src/shell_comment_lines_tests.rs",
       "src/shell_execution_context.rs",
       "src/shell_execution_context_support.rs",
       "src/shell_interpreter_options.rs",

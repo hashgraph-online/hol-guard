@@ -386,8 +386,6 @@ pub use guard_hook_payload::{
 
 #[path = "../../guard-command/src/command_parse_surface.rs"]
 mod command_parse_surface;
-#[path = "../../guard-command/src/shell_comment_lines.rs"]
-mod shell_comment_lines;
 #[path = "../../guard-command/src/adapters/hook/hook_adapter_envelope_tables.rs"]
 mod hook_adapter_envelope_tables;
 #[path = "../../guard-command/src/adapters/hook/hook_adapter_envelope_text.rs"]
@@ -409,6 +407,8 @@ pub mod restricted_command;
 pub mod restricted_pytest;
 #[path = "../../guard-command/src/safe_decode/mod.rs"]
 pub mod safe_decode;
+#[path = "../../guard-command/src/shell_comment_lines.rs"]
+mod shell_comment_lines;
 #[path = "../../guard-command/src/shims/mod.rs"]
 pub mod shims;
 #[path = "../../guard-command/src/strict_json.rs"]
