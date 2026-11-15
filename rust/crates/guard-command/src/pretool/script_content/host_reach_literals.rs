@@ -125,10 +125,14 @@ fn field_end(chars: &mut Peekable<CharIndices<'_>>) -> Option<usize> {
     None
 }
 
-/// The fill character a replacement field's format spec pads with, as `/`
-/// in `{"etc":/>4}`. Only a spec at the field's top level counts: a `:`
-/// inside a string, brackets or a call belongs to the expression.
-pub(super) fn spec_fill(field: &str) -> Option<char> {
+/// The fill characters a replacement field's format spec may pad with: `/`
+/// for `{"etc":/>4}`, and when a nested field supplies the fill, as in
+/// `{"etc":{fill}>4}`, each character that can turn a relative path into
+/// one that reaches out (`/`, `.`, `~`). A nested width such as
+/// `{"Total":{width}}` names no fill. Only a spec at the field's top
+/// level counts: a `:` inside a string, brackets or a call belongs to the
+/// expression.
+pub(super) fn spec_fill(field: &str) -> Vec<char> {
     let mut depth = 0usize;
     let mut quote = None;
     let mut chars = field.char_indices();
@@ -146,15 +150,24 @@ pub(super) fn spec_fill(field: &str) -> Option<char> {
             '(' | '[' | '{' => depth += 1,
             ')' | ']' | '}' => depth = depth.saturating_sub(1),
             ':' if depth == 0 => {
-                let mut spec = field[index + 1..].chars();
-                let fill = spec.next()?;
-                return spec
-                    .next()
-                    .filter(|align| "<>^=".contains(*align))
-                    .map(|_| fill);
+                let spec = &field[index + 1..];
+                if let Some(nested) = spec.strip_prefix('{') {
+                    let after = nested.find('}').map_or("", |end| &nested[end + 1..]);
+                    let quoted = nested.contains(['\'', '"']);
+                    return if quoted || after.starts_with(['<', '>', '^', '=', '{']) {
+                        vec!['/', '.', '~']
+                    } else {
+                        Vec::new()
+                    };
+                }
+                let mut spec = spec.chars();
+                return match (spec.next(), spec.next()) {
+                    (Some(fill), Some(align)) if "<>^={".contains(align) => vec![fill],
+                    _ => Vec::new(),
+                };
             }
             _ => {}
         }
     }
-    None
+    Vec::new()
 }

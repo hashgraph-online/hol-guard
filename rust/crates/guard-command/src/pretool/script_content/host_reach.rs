@@ -269,21 +269,28 @@ const FIELD_READINGS: usize = 256;
 
 /// The values one replacement field may take: the string it stands for (its
 /// constant, or an unknown word), every string constant inside it, and each
-/// of those padded on either side when the field's format spec names a fill
-/// character.
+/// constant padded on either side with every fill character the field's
+/// format spec may name. An unknown word is never padded: it can already be
+/// any path, and `{name:{width}}` must not read as one.
 fn field_values(field: &str, reaches: &mut bool) -> Vec<String> {
     let mut nested = false;
     let constants = literals(field, &mut nested);
     *reaches |= nested || names_outside_path(field);
+    let mut known: Vec<String> = constants
+        .into_iter()
+        .filter_map(|constant| constant.value)
+        .collect();
+    let padded: Vec<String> = spec_fill(field)
+        .into_iter()
+        .flat_map(|fill| {
+            known
+                .iter()
+                .flat_map(move |value| [format!("{fill}{value}"), format!("{value}{fill}")])
+        })
+        .collect();
+    known.extend(padded);
     let mut values = vec![constant_field(field).unwrap_or_else(|| "x".to_owned())];
-    values.extend(constants.into_iter().filter_map(|constant| constant.value));
-    if let Some(fill) = spec_fill(field) {
-        let padded: Vec<String> = values
-            .iter()
-            .flat_map(|value| [format!("{fill}{value}"), format!("{value}{fill}")])
-            .collect();
-        values.extend(padded);
-    }
+    values.extend(known);
     values
 }
 
