@@ -39,7 +39,8 @@ def asks_for_approval(config: object) -> bool:
 
 _APPROVAL_WAIT = (
     "It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). "
-    "Do not retry the same action until it is approved; continue with other work meanwhile."
+    "Allow once lets this exact action run one time; Always allow keeps allowing it until the user removes "
+    "that choice. Do not retry the same action until it is approved; continue with other work meanwhile."
 )
 # A queued row whose retry cannot reuse a one-time approval (no retry binding):
 # telling the agent to wait for approval sends it into a retry that is blocked again.
