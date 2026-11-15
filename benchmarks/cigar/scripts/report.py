@@ -7,8 +7,8 @@ Usage:
 Per arm and step kind it prints: requests per step, tool calls per step and by
 type (test, read, search, edit, git, other), holds, holds per 100 calls,
 calls made later in the same step after a hold, and retries: later calls in
-the step that repeat a held call (the same command, or an edit to the same
-file; Oh My Pi patches name no file, so there the same patch). A rewritten
+the step that repeat a held call (the same command, or the same tool on the
+same file; Oh My Pi patches name no file, so there the same patch). A rewritten
 command is a later call but not a retry. With --base it also prints cost
 and tokens saved against the base arm, cost saved per step kind, and the
 do-no-harm rate (share of paired steps where the arm cost 20% more than the
@@ -76,9 +76,16 @@ def call_kind(name, text):
 PATCH_FILE = re.compile(r"\*\*\* (?:Update|Add|Delete) File: ([^\s\\\"]+)")
 
 
-def call_key(cmd, path=""):
-    """What a retry repeats: the command text, or the file an edit names."""
-    return " ".join((cmd or "").split()) or path or ""
+def call_key(tool, cmd, path=""):
+    """What a retry repeats: the command text, or the same tool on the same file.
+
+    The tool is part of a file key so that reading a file after a held edit to
+    it is not counted as retrying the edit.
+    """
+    cmd = " ".join((cmd or "").split())
+    if cmd:
+        return cmd
+    return f"{tool}:{path}" if path else ""
 
 
 def text_of(value):
@@ -124,7 +131,7 @@ def codex_calls(row):
                 pending[p.get("call_id")] = len(out[step])
                 patched = PATCH_FILE.findall(raw)
                 cmd = cmds[0].encode().decode("unicode_escape", "ignore") if cmds else ""
-                out[step].append([kind, False, call_key(cmd, " ".join(patched))])
+                out[step].append([kind, False, call_key("apply_patch", cmd, " ".join(patched))])
             elif t in ("custom_tool_call_output", "function_call_output"):
                 i = pending.get(p.get("call_id"))
                 text = text_of(p.get("output"))
@@ -174,7 +181,7 @@ def claude_calls(row):
                         continue
                     inp = b.get("input") or {}
                     pending[b.get("id")] = (step, len(out[step]))
-                    key = call_key(inp.get("command", ""), inp.get("file_path") or inp.get("path") or "")
+                    key = call_key(b.get("name", ""), inp.get("command", ""), inp.get("file_path") or inp.get("path") or "")
                     out[step].append([call_kind(b.get("name", ""), inp.get("command", "")), False, key])
                 elif b.get("type") == "tool_result":
                     where = pending.get(b.get("tool_use_id"))
@@ -199,7 +206,7 @@ def omp_calls(row, runs_dir):
                 pending[e.get("toolCallId")] = len(calls)
                 cmd = args.get("command", "")
                 kind = "wrapped" if "contained-workspace-sink" in cmd else call_kind(e.get("toolName", ""), cmd)
-                calls.append([kind, False, call_key(cmd, args.get("path") or str(args.get("input") or ""))])
+                calls.append([kind, False, call_key(e.get("toolName", ""), cmd, args.get("path") or str(args.get("input") or ""))])
             elif e.get("type") == "tool_execution_end":
                 i = pending.get(e.get("toolCallId"))
                 text = text_of(e.get("result"))
