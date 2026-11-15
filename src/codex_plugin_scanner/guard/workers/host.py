@@ -183,7 +183,7 @@ class WorkerHost:
         thread.start()
         self._threads.append(thread)
 
-    def start(self) -> None:
+    def start(self, on_phase: Callable[[str], None] | None = None) -> None:
         from ..browser_opener import open_browser_url
         from ..cloud_control.command_queue_worker import start_command_queue_worker
         from ..native_resident_watchdog import start_native_resident_watchdog
@@ -197,8 +197,11 @@ class WorkerHost:
         # Python daemon did at startup. A snapshot bound to packs an older
         # engine compiled is refused by the resident, so publishing first
         # would fail every hook closed until something else migrated it.
+        report = on_phase or (lambda _step: None)
         self._admit_installed_release()
+        report("admitted")
         self._start_policy_publication()
+        report("publishing")
         if not self._installed_authority_admitted:
             self._loop("installed-authority", self._admit_installed_release, _INSTALLED_AUTHORITY_RETRY_SECONDS)
         attention = ApprovalAttentionCoordinator(
@@ -327,6 +330,13 @@ class WorkerHost:
                 _LOGGER.exception("Guard worker host could not stop native policy publication")
 
 
+def _report_phase(step: str) -> None:
+    """Tells the daemon which start step just finished; it journals each one."""
+
+    _ = sys.stdout.write(f"phase {step}\n")
+    sys.stdout.flush()
+
+
 def run_worker_host(guard_home: Path) -> int:
     """Runs the workers until standard input closes."""
 
@@ -339,8 +349,10 @@ def run_worker_host(guard_home: Path) -> int:
     writer = BackgroundLogWriter(store.guard_home)
     try:
         install_sink(writer.error, notice=writer.notice)
+        _report_phase("launched")
         host = WorkerHost(store, home_dir=Path.home().expanduser().resolve(strict=False))
-        host.start()
+        host.start(on_phase=_report_phase)
+        _report_phase("started")
         host.wait_for_policy_publication()
         # The daemon announces itself only after this line, so its first hook
         # finds a published policy, as it did when the daemon's own hook worker
