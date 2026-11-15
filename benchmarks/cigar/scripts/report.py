@@ -6,9 +6,10 @@ Usage:
 
 Per arm and step kind it prints: requests per step, tool calls per step and by
 type (test, read, search, edit, git, other), holds, holds per 100 calls, and
-calls made later in the same step after a hold. With --base it also prints, per
-step kind, cost and tokens saved against the base arm and the do-no-harm rate
-(share of paired steps where the arm cost 20% more than the base). Give
+calls made later in the same step after a hold. With --base it also prints cost
+and tokens saved against the base arm, cost saved per step kind, and the
+do-no-harm rate (share of paired steps where the arm cost 20% more than the
+base). Steps a harness never reached are left out of every count. Give
 --base-tag more than once to pair against several no-Guard runs of the same
 seeds; savings are then printed as low-high over those runs.
 
@@ -17,6 +18,7 @@ CIGAR note is not a hold.
 """
 
 import argparse
+import bisect
 import collections
 import json
 import re
@@ -29,7 +31,7 @@ from steps import row_steps
 
 HOLD = re.compile(
     r"HOL Guard (?:could not match|requires|blocked|held|is holding|stopped|needs)"
-    r"|stays blocked|hol-guard approvals wait|Waiting for (?:a )?(?:Guard )?approval",
+    r"|HOL Guard withheld|stays blocked|hol-guard approvals wait|Waiting for (?:a )?(?:Guard )?approval",
     re.I,
 )
 TEST = re.compile(r"\b(pytest|unittest|doctest|tox|nox|cargo test|go test|vitest|jest|npm (?:run )?test|pnpm test)\b")
@@ -100,7 +102,12 @@ def codex_calls(row):
                     kind = "edit"
                 elif cmds:
                     kinds = [shell_kind(c.encode().decode("unicode_escape", "ignore")) for c in cmds]
-                    kind = "test" if "test" in kinds else ("edit" if "apply_patch" in raw else kinds[0])
+                    if "test" in kinds:
+                        kind = "test"
+                    elif "apply_patch" in raw:
+                        kind = "edit"
+                    else:
+                        kind = kinds[0]
                 else:
                     kind = call_kind(p.get("name", ""), raw)
                 pending[p.get("call_id")] = len(out[step])
@@ -114,15 +121,21 @@ def codex_calls(row):
 
 
 def claude_calls(row):
-    """Per step: [(kind, held)] from the Claude Code transcripts; a step starts at each typed prompt."""
+    """Per step: [(kind, held)] from the Claude Code transcripts.
+
+    In the main transcript a step starts at each typed prompt. A subagent's
+    transcript has prompts of its own, so its calls go to the step that was
+    running when they were made, by timestamp.
+    """
     n = len(row["kinds"])
     out = [[] for _ in range(n)]
-    step, pending = -1, {}
-    for path in row.get("ledger") or []:
+    starts, pending = [], {}
+    for index, path in enumerate(row.get("ledger") or []):
         try:
             lines = Path(path).read_text().splitlines()
         except OSError:
             continue
+        step = -1
         for line in lines:
             try:
                 e = json.loads(line)
@@ -130,9 +143,13 @@ def claude_calls(row):
                 continue
             msg = e.get("message") or {}
             content = msg.get("content")
-            if e.get("type") == "user" and isinstance(content, str) and not e.get("isMeta"):
+            if index == 0 and e.get("type") == "user" and isinstance(content, str) and not e.get("isMeta"):
                 step += 1
+                starts.append(e.get("timestamp") or "")
                 continue
+            if index > 0:
+                stamp = e.get("timestamp") or ""
+                step = bisect.bisect_right(starts, stamp) - 1
             if not 0 <= step < n or not isinstance(content, list):
                 continue
             for b in content:
@@ -178,6 +195,10 @@ def omp_calls(row, runs_dir):
                 # no longer in the log; a test runner's summary in the output marks a test run.
                 if i is not None and calls[i][0] == "wrapped":
                     calls[i][0] = "test" if TEST_OUTPUT.search(text) else "other"
+        # A step that ended mid-call leaves no output to sort the call by.
+        for call in calls:
+            if call[0] == "wrapped":
+                call[0] = "other"
         out.append(calls)
     return out
 
@@ -207,9 +228,12 @@ def anatomy(tag, arm, rows):
         steps = row_steps(r, RUNS / tag)
         calls = row_calls(r, RUNS / tag)
         for i, kind in enumerate(r["kinds"]):
+            # A step the harness never reached (it stopped early) has no requests.
+            if i >= len(steps) or not steps[i]["requests"]:
+                continue
             k = per[kind]
             k["steps"] += 1
-            k["requests"] += (steps[i]["requests"] or 0) if i < len(steps) else 0
+            k["requests"] += steps[i]["requests"]
             held_seen = False
             for c_kind, held in calls[i] if i < len(calls) else []:
                 k["calls"] += 1
@@ -252,6 +276,8 @@ def paired(tag, arm, rows, base_arm, base_tags):
         per = collections.defaultdict(lambda: [0.0, 0.0])
         for s in seeds:
             for x, y in zip(row_steps(brows[s], RUNS / btag), row_steps(rows[s], RUNS / tag)):
+                if not x["requests"] or not y["requests"]:
+                    continue
                 per[x["kind"]][0] += x["usd"]
                 per[x["kind"]][1] += y["usd"]
                 harm[1] += 1
