@@ -89,7 +89,11 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
                 visit(step, depth + 1, out, seen);
             }
             for segment in &model.segments {
-                let cut = words::comment_cut(&segment.text, &segment.arguments);
+                let cut =
+                    words::comment_cut(&segment.text, &segment.arguments).unwrap_or_else(|()| {
+                        out.complete = false;
+                        None
+                    });
                 for end in [segment.arguments.len()].into_iter().chain(cut) {
                     for spelling in segment_spellings(segment, &segment.arguments[..end]) {
                         out.push(seen, spelling);

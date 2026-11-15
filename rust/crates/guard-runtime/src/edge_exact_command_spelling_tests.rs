@@ -234,3 +234,14 @@ fn a_comment_after_an_exact_command_keeps_its_spellings() {
     assert!(!has("npm publish '#a' #b", "npm publish"));
     assert!(has("npm publish '#a' #b", "npm publish '#a'"));
 }
+
+#[test]
+fn a_comment_cut_reads_each_word_as_bash_unquotes_it() {
+    // `'$#release'` starts with `$`, so it is not counted as a `#` argument.
+    assert!(has("git show '$#release' #note", "git show '$#release'"));
+    assert!(spellings("git show '$#release' #note").complete);
+    // Empty quotes vanish, so `''#a` is the argument `#a` and not a comment.
+    assert!(has("npm publish ''#a #b", "npm publish '#a'"));
+    // An escape inside ANSI-C quotes can spell `#`; the line is not read through.
+    assert!(!spellings("npm publish $'\\x23a' #b").complete);
+}

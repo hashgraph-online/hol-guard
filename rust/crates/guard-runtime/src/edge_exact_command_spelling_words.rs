@@ -1,20 +1,64 @@
 //! Words of a shell step as written, quotes kept, and where a comment cuts it.
 
 /// The argument where bash's comment starts: the first word that begins
-/// with an unquoted `#`. A quoted or escaped `#` is text. The nth word that
-/// spells a leading `#` is the nth argument that starts with one once quotes
-/// are removed, so the cut lands on that argument.
-pub(super) fn comment_cut(text: &str, arguments: &[String]) -> Option<usize> {
-    let nth = words(text)
-        .into_iter()
-        .filter(|w| {
-            w.trim_start_matches(['\'', '"', '\\', '$'])
-                .starts_with('#')
-        })
-        .position(|w| w.starts_with('#'))?;
-    (0..arguments.len())
-        .filter(|&index| arguments[index].starts_with('#'))
-        .nth(nth)
+/// with an unquoted `#`. A quoted or escaped `#` is text. The nth earlier
+/// word whose first character is `#` once quotes are removed is the nth
+/// argument that starts with one, so the cut lands after them. `Err` means
+/// the words could not be lined up with the arguments.
+pub(super) fn comment_cut(text: &str, arguments: &[String]) -> Result<Option<usize>, ()> {
+    let words = words(text);
+    let Some(comment) = words.iter().position(|w| w.starts_with('#')) else {
+        return Ok(None);
+    };
+    let mut nth = 0;
+    for word in &words[..comment] {
+        nth += usize::from(lead(word)? == Some('#'));
+    }
+    let mut hashed = (0..arguments.len()).filter(|&index| arguments[index].starts_with('#'));
+    hashed.nth(nth).map(Some).ok_or(())
+}
+
+/// The first character of `word` once bash removes its quotes. `Err` when
+/// an escape decides it and the reading is not certain.
+fn lead(word: &str) -> Result<Option<char>, ()> {
+    let mut rest = word;
+    while let Some(next) = rest
+        .strip_prefix("''")
+        .or_else(|| rest.strip_prefix("\"\""))
+    {
+        rest = next;
+    }
+    let mut chars = rest.chars();
+    let first = match chars.next() {
+        Some('$') if rest[1..].starts_with('\'') => {
+            chars.next();
+            match chars.next() {
+                Some('\\') => return Err(()),
+                other => other,
+            }
+        }
+        Some('$') if rest[1..].starts_with('"') => {
+            chars.next();
+            double_quoted(chars.next(), chars.next())?
+        }
+        Some('\'') => chars.next(),
+        Some('"') => double_quoted(chars.next(), chars.next())?,
+        Some('\\') => match chars.next() {
+            Some('\n') => return Err(()),
+            other => other,
+        },
+        other => other,
+    };
+    Ok(first)
+}
+
+/// The first character inside double quotes, where `\` escapes only a few.
+fn double_quoted(first: Option<char>, second: Option<char>) -> Result<Option<char>, ()> {
+    match (first, second) {
+        (Some('\\'), Some('$' | '`' | '"' | '\\')) => Ok(second),
+        (Some('\\'), Some('\n')) => Err(()),
+        _ => Ok(first),
+    }
 }
 
 /// The words of `text` split at whitespace outside quotes, quotes kept.
