@@ -1,8 +1,8 @@
 //! Which harness `Read` tools get the names-only directory proof.
 //!
 //! Grok's `list_dir` returns a tree of entry names below its
-//! `target_directory`, so it takes the root screen a names-only `find` walk
-//! takes rather than the one-level listing screen.
+//! `target_directory`, so it takes the walk screen of `ls -R` rather than the
+//! one-level listing screen.
 
 use super::{
     bounded_omp_directory_read_target, bounded_omp_directory_read_target_without_selector,
@@ -30,13 +30,16 @@ pub(in crate::pretool) fn bounded_directory_read_tool_target(
     }
 }
 
-/// A Grok `list_dir` of a folder the `find` listing screen admits.
+/// A Grok `list_dir` of a folder whose whole tree `ls -R` may list.
 ///
 /// The tool prints names, never file contents, but it walks every level
-/// below the folder. A home store such as `~/.ssh` and any root that resolves
-/// to one keep their review, and so do home itself and the folders above it,
-/// whose walk would name every store at once. A `~`, a parent climb or a
-/// pattern is not modeled because the tool's own reading of each is not
+/// below the folder. Grok's own tool description says the listing leaves out
+/// dot-files and files `.gitignore` ignores, so every entry it can reach must
+/// clear the walk screen of a recursive listing that skips hidden names: a
+/// tree holding a key file or a link out of bounds keeps its review, and so
+/// does a folder outside the roots that screen admits. Home itself and the folders
+/// above it keep their review before any walk starts. A `~`, a parent climb or
+/// a pattern is not modeled because the tool's own reading of each is not
 /// known.
 fn grok_list_dir_target(value: &str, home_dir: Option<&str>, cwd: Option<&str>) -> bool {
     !value.is_empty()
@@ -50,6 +53,15 @@ fn grok_list_dir_target(value: &str, home_dir: Option<&str>, cwd: Option<&str>) 
         && literal_path(value)
         && super::super::bounded_read_target(value, home_dir, cwd, true)
         && walk_root(value, home_dir, cwd)
+        && crate::pretool::search::safe_recursive_listing_target(
+            value,
+            crate::pretool::PathContext {
+                home_dir,
+                cwd,
+                ..Default::default()
+            },
+            false,
+        )
 }
 
 /// The value names an existing directory, read against the working directory

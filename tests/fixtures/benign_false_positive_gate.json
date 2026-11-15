@@ -18207,10 +18207,23 @@
       ],
       "tool": "list_dir",
       "tool_input": {
-        "target_directory": "${WORKTREE}"
+        "target_directory": "${WORKTREE}/app"
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "neg-grok-list-dir-system-folder",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "list_dir",
+      "tool_input": {
+        "target_directory": "/etc"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "grok-list-dir-relative-folder",

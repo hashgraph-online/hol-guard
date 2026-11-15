@@ -27,6 +27,10 @@ fn fixture(name: &str) -> (PathBuf, PathBuf, PathBuf) {
         ("projects/tools/src/main.rs", "fn main() {}\n"),
         ("projects/tools/secrets.json", "{\"token\":\"canary\"}\n"),
         (".ssh/id_ed25519", "key\n"),
+        (".config/cloud/credentials", "[default]\n"),
+        ("projects/site/.git/HEAD", "ref: refs/heads/main\n"),
+        ("projects/site/index.md", "# Site\n"),
+        ("projects/site/pages/about.md", "About\n"),
     ] {
         let path = home.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -69,9 +73,12 @@ fn text(path: &Path) -> String {
 fn grok_lists_and_searches_project_folders_by_its_own_tool_names() {
     let (home, workspace, project) = fixture("allowed");
     for folder in [
-        text(&workspace),
-        text(&project),
+        // A checkout whose `.git` the listing leaves out, and folders inside
+        // checkouts.
+        text(&workspace.join("site")),
+        text(&workspace.join("site/pages")),
         text(&project.join("docs")),
+        text(&project.join("src")),
     ] {
         let decision = grok(
             "list_dir",
@@ -123,6 +130,13 @@ fn grok_listing_or_search_that_reaches_a_store_keeps_its_review() {
         "~/.ssh".to_owned(),
         format!("{}/../..", text(&project)),
         format!("{}/*", text(&workspace)),
+        // A hidden home folder whose tree names a credentials file.
+        text(&home.join(".config")),
+        // A tree that names a secrets file.
+        text(&workspace),
+        text(&project),
+        // A system folder.
+        "/etc".to_owned(),
     ] {
         let decision = grok(
             "list_dir",
