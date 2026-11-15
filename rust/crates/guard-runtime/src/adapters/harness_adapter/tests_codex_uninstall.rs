@@ -107,7 +107,11 @@ fn an_empty_server_table_install_wrote_goes_unless_the_backup_had_one() {
     assert_eq!(rendered(&created), json!({}));
     assert_eq!(created["delete"], true);
 
-    let kept = restore(&installed, Some(&json!({"mcp_servers": {}})), Some(&json!({})));
+    let kept = restore(
+        &installed,
+        Some(&json!({"mcp_servers": {}})),
+        Some(&json!({})),
+    );
     assert_eq!(rendered(&kept), json!({"mcp_servers": {}}));
     assert_eq!(kept["delete"], false);
 }
