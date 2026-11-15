@@ -7,7 +7,7 @@ its reason code and recovery commands, so it cannot be read as "no match".
 from __future__ import annotations
 
 from rich import box
-from rich.console import Console
+from rich.console import Console, RenderableType
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
@@ -32,6 +32,13 @@ def _coerce_string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if isinstance(item, str) and item]
+
+
+def _print(console: Console, renderable: RenderableType) -> None:
+    # The CLI console soft-wraps so long plain lines stay copyable, but a
+    # soft-wrapped panel crops its text to one line. A native block reason or
+    # a recovery step is several sentences, so these panels wrap.
+    console.print(renderable, soft_wrap=False)
 
 
 def render_command_inspection(console: Console, payload: dict[str, object]) -> None:
@@ -65,21 +72,21 @@ def render_command_inspection(console: Console, payload: dict[str, object]) -> N
     if risk_classes:
         summary.add_row("Risk classes", Text(", ".join(risk_classes)))
     summary.add_row("Policy", Text("Not evaluated; this inspection creates no approvals or receipts", style="dim"))
-    console.print(Panel(summary, title="HOL Guard command inspection", border_style=border_style))
-    console.print(Panel(Syntax(str(payload.get("command") or ""), "bash", word_wrap=True), title="Command"))
+    _print(console, Panel(summary, title="HOL Guard command inspection", border_style=border_style))
+    _print(console, Panel(Syntax(str(payload.get("command") or ""), "bash", word_wrap=True), title="Command"))
     reason = classification.get("reason")
     if isinstance(reason, str) and reason:
-        console.print(Panel(Text(reason), title="Why", border_style=border_style))
+        _print(console, Panel(Text(reason), title="Why", border_style=border_style))
     recovery = classification.get("recovery")
     if isinstance(recovery, str) and recovery:
-        console.print(Panel(Text(recovery), title="Next step", border_style=border_style))
+        _print(console, Panel(Text(recovery), title="Next step", border_style=border_style))
     recovery_commands = _command_inspection_recovery_commands(payload)
     if recovery_commands:
-        console.print(Panel("\n".join(recovery_commands), title="Recovery commands", border_style=border_style))
+        _print(console, Panel("\n".join(recovery_commands), title="Recovery commands", border_style=border_style))
     if extensions:
         alternatives = _coerce_string_list(extensions[0].get("safer_alternatives"))
         if alternatives:
-            console.print(Panel("\n".join(f"{bullet()} {item}" for item in alternatives), title="Safer approaches"))
+            _print(console, Panel("\n".join(f"{bullet()} {item}" for item in alternatives), title="Safer approaches"))
     if str(payload.get("mode") or "") == "explain":
         trace = _coerce_dict_list(payload.get("trace"))
         trace_table = Table(title="Evaluation trace", box=box.SIMPLE_HEAD, show_lines=False)
@@ -92,7 +99,7 @@ def render_command_inspection(console: Console, payload: dict[str, object]) -> N
                 str(item.get("result") or ""),
                 str(item.get("detail") or ""),
             )
-        console.print(trace_table)
+        _print(console, trace_table)
 
 
 def _shows_minimum_action(payload: PayloadDict) -> bool:
