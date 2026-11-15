@@ -290,7 +290,17 @@ pub(super) fn shell_word(word: &str, windows: bool) -> String {
     if plain {
         word.to_owned()
     } else if windows {
-        format!("'{}'", word.replace('\'', "''"))
+        // PowerShell ends a single-quoted string at the ASCII quote and at
+        // the typographic quotes U+2018 to U+201B, so each one is doubled.
+        let mut out = String::from("'");
+        for c in word.chars() {
+            if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+                out.push(c);
+            }
+            out.push(c);
+        }
+        out.push('\'');
+        out
     } else {
         format!("'{}'", word.replace('\'', "'\\''"))
     }

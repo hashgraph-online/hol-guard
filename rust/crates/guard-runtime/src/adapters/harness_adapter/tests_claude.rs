@@ -372,6 +372,10 @@ fn a_copied_undo_quotes_paths_for_the_shell_that_runs_it() {
     // path goes in single quotes, with a single quote doubled.
     assert_eq!(shell_word(r"C:\Guard $cache", true), r"'C:\Guard $cache'");
     assert_eq!(shell_word(r"C:\it's", true), r"'C:\it''s'");
+    assert_eq!(
+        shell_word("C:\\Users\\O\u{2019}Brien", true),
+        "'C:\\Users\\O\u{2019}\u{2019}Brien'"
+    );
     assert_eq!(shell_word(r"C:\Guard&State", true), r"'C:\Guard&State'");
     assert_eq!(shell_word(r"C:\Guard", false), r"'C:\Guard'");
 }

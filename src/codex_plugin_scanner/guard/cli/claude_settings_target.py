@@ -29,13 +29,16 @@ def claude_settings_target(context: HarnessContext) -> dict[str, object]:
 
 
 _POWERSHELL_PLAIN = re.compile(r"[A-Za-z0-9_./:\\-]+")
+# PowerShell ends a single-quoted string at the ASCII quote and at the
+# typographic quotes U+2018 to U+201B, so each one is doubled.
+_POWERSHELL_QUOTES = re.compile("(['\u2018\u2019\u201a\u201b])")
 
 
 def _powershell_word(word: str) -> str:
     """A PowerShell literal: only single quotes stop `$` and backtick expansion."""
     if _POWERSHELL_PLAIN.fullmatch(word):
         return word
-    return "'" + word.replace("'", "''") + "'"
+    return "'" + _POWERSHELL_QUOTES.sub(r"\1\1", word) + "'"
 
 
 def _command_text(words: list[str], *, windows: bool = os.name == "nt") -> str:

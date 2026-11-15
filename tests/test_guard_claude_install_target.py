@@ -101,4 +101,5 @@ def test_a_copied_undo_uses_powershell_literal_quotes_on_windows():
     assert _command_text(["--home", r"C:\Guard $cache"], windows=True) == r"--home 'C:\Guard $cache'"
     assert _command_text(["--home", r"C:\Guard&State"], windows=True) == r"--home 'C:\Guard&State'"
     assert _command_text(["--home", r"C:\it's"], windows=True) == r"--home 'C:\it''s'"
+    assert _command_text(["--home", "C:\\O\u2019Brien"], windows=True) == "--home 'C:\\O\u2019\u2019Brien'"
     assert _command_text(["--home", r"C:\Guard"], windows=True) == r"--home C:\Guard"
