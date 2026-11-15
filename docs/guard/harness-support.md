@@ -4,6 +4,11 @@ Local harness protection works without signing in to Guard Cloud. Cloud adds syn
 history, visibility, and team controls around the same adapters. See
 [Local Guard vs Guard Cloud](./local-vs-cloud.md).
 
+The per-event claims, including what happens when Guard cannot answer and what is
+not covered, are generated from the harness protection contract in
+[Harness protection claims](./harness-claims.md). Where this page and that one
+differ, the generated page is current.
+
 ## Hook verdict exit codes
 
 `guard/cli/native_hook_exit_code.py::native_hook_verdict_exit_code` is the

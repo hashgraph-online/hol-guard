@@ -977,6 +977,17 @@ jobs:
           echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
           echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
           echo "Computed $CHANNEL version: $VERSION"
+      - name: Require current harness protection claims
+        # Runs after the version step may have checked out a repaired release
+        # tag, so it checks the source the package is built from. An expired or
+        # malformed evidence claim fails the release instead of shipping. A
+        # source older than the generator has no published claims to check.
+        run: |
+          if [[ ! -f scripts/generate_harness_claims.py ]]; then
+            echo "::notice::Resolved source predates harness protection claims; nothing to check."
+            exit 0
+          fi
+          uv run --no-project python scripts/generate_harness_claims.py --check --as-of "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       - name: Require a green Cargo supply chain run for the resolved source
         # A stable repair resolves its source back to the release tag, which can
         # be an older commit than the one this run was dispatched from. The gate
