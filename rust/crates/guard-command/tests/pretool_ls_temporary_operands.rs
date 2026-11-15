@@ -87,6 +87,14 @@ fn a_pattern_below_an_owned_temporary_directory_names_its_matches() {
     ] {
         assert_decision(&world.workspace, &world.home, &command, true);
     }
+    // With bash globstar or zsh recursive globbing, ** can expand to deeper paths.
+    // This leaf-only proof must not allow it without inspecting every nested match.
+    for command in [
+        format!("ls -d {scratch}/**"),
+        format!("ls -ld {scratch}/**"),
+    ] {
+        assert_decision(&world.workspace, &world.home, &command, false);
+    }
 }
 
 /// Both shapes stop where the screens they lean on stop. The home tree keeps
