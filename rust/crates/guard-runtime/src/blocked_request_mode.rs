@@ -427,7 +427,10 @@ mod tests {
     #[test]
     fn the_hold_names_only_a_plain_rule_identifier() {
         let named = safe_alternative_reason("Held.", Some("native_network_review"), Some(true));
-        assert!(named.contains("Guard rule: `native_network_review`."), "{named}");
+        assert!(
+            named.contains("Guard rule: `native_network_review`."),
+            "{named}"
+        );
         let long = "x".repeat(65);
         for code in ["unknown", "", "Native-Rule", "a`b", long.as_str()] {
             let text = safe_alternative_reason("Held.", Some(code), Some(true));
