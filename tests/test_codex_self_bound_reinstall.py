@@ -11,7 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_hook_self_binding
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter, _unmanaged_migration_payload
+from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
 from codex_plugin_scanner.guard.codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND
 from codex_plugin_scanner.guard.codex_hook_self_binding import (
@@ -19,6 +19,8 @@ from codex_plugin_scanner.guard.codex_hook_self_binding import (
     codex_hook_guard_home,
     self_bound_hook_bindings,
 )
+
+from .test_codex_migration_preparation import migration_kept_hooks
 
 
 @pytest.fixture
@@ -151,6 +153,7 @@ _BRIDGE_PAYLOAD: dict[str, object] = {
     "query": "guard-home=/srv/guard&home=/home/dev",
     "fallback_command": ["python", "-m", "codex_plugin_scanner.cli", "--guard-home", "/srv/guard"],
 }
+
 
 def _bridge_launch(script: Path, guard_home: Path, *, program: str = "/usr/bin/python3") -> str:
     payload = {"state_path": str(guard_home / "daemon-state.json"), "query": f"guard-home={guard_home}"}
@@ -348,5 +351,5 @@ def test_the_json_migration_path_does_not_hold_back_a_recorded_command(tmp_path,
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=guard_home)
     recorded = [{"event": "PreToolUse", "group": {"matcher": "Bash", "hooks": [handler]}, "handler": dict(handler)}]
 
-    assert _unmanaged_migration_payload({"hooks": hooks}, context=context, owned_bindings=()) == {}
-    assert _unmanaged_migration_payload({"hooks": hooks}, context=context, owned_bindings=recorded) == {}
+    assert migration_kept_hooks(context, {"hooks": hooks}) == {}
+    assert migration_kept_hooks(context, {"hooks": hooks}, recorded) == {}

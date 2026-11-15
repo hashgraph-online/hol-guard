@@ -90,7 +90,7 @@ pub(super) fn alternate_plan(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Val
     };
 
     let scope = scope_for(ctx, std::path::Path::new(text(fields, "config")?));
-    let expected = expected_hooks(&base, decoded(hooks_file.get("before"))?.as_deref())?;
+    let expected = expected_hooks(&base, &[], decoded(hooks_file.get("before"))?.as_deref())?;
     let mut subset = Map::new();
     subset.insert("expected".into(), json!(expected));
     subset.insert("actual".into(), json!(rendered));
@@ -116,7 +116,7 @@ pub(super) fn alternate_plan(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Val
     Ok(json!({ "files": planned_files }))
 }
 
-fn decoded(value: Option<&Value>) -> Step<Option<Vec<u8>>> {
+pub(super) fn decoded(value: Option<&Value>) -> Step<Option<Vec<u8>>> {
     match value {
         Some(Value::String(encoded)) => base64::engine::general_purpose::STANDARD
             .decode(encoded)
@@ -129,7 +129,11 @@ fn decoded(value: Option<&Value>) -> Step<Option<Vec<u8>>> {
 
 /// `_unmanaged_migration_payload`: the `hooks.json` hooks the migration
 /// keeps, pruned by the same rule, as payload JSON text.
-fn expected_hooks(base: &Map<String, Value>, data: Option<&[u8]>) -> Step<String> {
+pub(super) fn expected_hooks(
+    base: &Map<String, Value>,
+    owned: &[PyVal],
+    data: Option<&[u8]>,
+) -> Step<String> {
     let entries = match data.map(std::str::from_utf8) {
         Some(Ok(text)) => match pyjson::parse_unique_naming(text) {
             Ok(PyVal::Dict(entries)) => entries,
@@ -142,7 +146,7 @@ fn expected_hooks(base: &Map<String, Value>, data: Option<&[u8]>) -> Step<String
         Some(hooks @ PyVal::Dict(_)) => hooks,
         _ => return Ok("{}".into()),
     };
-    let cleaned = strip_owned(base, hooks, &[], true, false)?;
+    let cleaned = strip_owned(base, hooks, owned, true, false)?;
     Ok(match pyjson::parse(&cleaned) {
         Ok(PyVal::Dict(entries)) if entries.is_empty() => "{}".into(),
         Ok(PyVal::Dict(_)) => format!("{{\"hooks\":{cleaned}}}"),

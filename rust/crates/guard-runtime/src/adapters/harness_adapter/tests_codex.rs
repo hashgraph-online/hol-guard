@@ -11,6 +11,8 @@ use super::{after, Home};
 mod alternate_plan;
 #[path = "tests_codex_config_hooks.rs"]
 mod config_hooks;
+#[path = "tests_codex_main_plan.rs"]
+mod main_plan;
 #[path = "tests_codex_migration.rs"]
 mod migration;
 #[path = "tests_codex_uninstall.rs"]

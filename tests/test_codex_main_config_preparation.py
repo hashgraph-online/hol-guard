@@ -14,6 +14,15 @@ from .test_codex_publication_preparation import _context, _tree
 from .test_runtime_transition import begin, transition  # noqa: F401 -- shared pytest fixture
 
 
+def _backup(context, *, original, migrated_payload=None):
+    content = (
+        {"migrated": dump_toml(migrated_payload, original=original)}
+        if migrated_payload is not None
+        else {"original": adapter._b64(original)}
+    )
+    return adapter._one_planned_file(adapter._codex("main_backup", context, **content))
+
+
 def _publish(change):
     payload = {"files": [change.payload()]}
     RuntimeTransition._compare(payload, "before")
@@ -28,7 +37,7 @@ def _publish(change):
 def test_backup_preparation_preserves_content_rule_without_writes(tmp_path, monkeypatch, original, migrated):
     context = _context(tmp_path, monkeypatch)
     before = _tree(tmp_path)
-    change = adapter.prepare_codex_main_backup(context, original=original, migrated_payload=migrated)
+    change = _backup(context, original=original, migrated_payload=migrated)
     assert _tree(tmp_path) == before
     assert change.before is None
     assert change.after == (
@@ -45,7 +54,7 @@ def test_existing_backup_retains_bytes_mode_and_inode(tmp_path, monkeypatch):
     path.write_bytes(b"prior backup generation")
     path.chmod(0o640)
     before = _tree(tmp_path)
-    change = adapter.prepare_codex_main_backup(context, original=b"new config")
+    change = _backup(context, original=b"new config")
     _publish(change)
     assert _tree(tmp_path) == before
     assert change.before == change.after == b"prior backup generation"
@@ -54,7 +63,7 @@ def test_existing_backup_retains_bytes_mode_and_inode(tmp_path, monkeypatch):
 
 def test_backup_foreign_generation_before_publication_is_preserved(tmp_path, monkeypatch):
     context = _context(tmp_path, monkeypatch)
-    change = adapter.prepare_codex_main_backup(context, original=b"original config")
+    change = _backup(context, original=b"original config")
     change.path.parent.mkdir(parents=True)
     change.path.write_bytes(b"foreign backup")
     with pytest.raises(TransitionError, match="generation_changed"):
@@ -117,7 +126,7 @@ def test_signed_backup_inverse_preserves_prior_generation(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"prior backup")
         path.chmod(0o640)
-    change = adapter.prepare_codex_main_backup(context, original=b"original config")
+    change = _backup(context, original=b"original config")
     plan = replace(plan, files=(*plan.files, change))
     begin(runtime, plan)
     runtime.publish(plan.operation_id, "AuthorizedForExactTransition")

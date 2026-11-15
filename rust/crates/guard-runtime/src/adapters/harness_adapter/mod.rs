@@ -45,6 +45,7 @@ mod codex_config_hooks;
 mod codex_detect_legacy;
 mod codex_files;
 mod codex_live_hooks;
+mod codex_main_plan;
 mod codex_merge;
 mod codex_migration;
 mod codex_owner_home;

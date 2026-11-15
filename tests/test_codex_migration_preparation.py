@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_hook_self_binding
 from codex_plugin_scanner.guard.adapters import codex as adapter
 from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
@@ -109,6 +110,25 @@ def test_migration_preserves_launchable_legacy_handlers(tmp_path, monkeypatch, h
     assert migrated["hooks"]["PreToolUse"][-1] == legacy_group
 
 
+def migration_kept_hooks(context, hooks_payload, owned_bindings=()):
+    """The hooks.json hooks a migration keeps: the native strip with the
+    unlaunchable prune and no recorded holdback."""
+    hooks = hooks_payload.get("hooks")
+    if not isinstance(hooks, dict):
+        return {}
+    answer = codex_hook_self_binding.ask_hook_owners(
+        "strip",
+        hooks=json.dumps(hooks),
+        owned=json.dumps(list(owned_bindings)),
+        unlaunchable=True,
+        hold_recorded=False,
+        **adapter._legacy_fields(context),
+        **codex_hook_self_binding.install_fields(adapter._runtime_guard_home(context), None),
+    )
+    cleaned = json.loads(codex_hook_self_binding.answer_text(answer, "hooks"))
+    return {"hooks": cleaned} if cleaned else {}
+
+
 def test_unmanaged_migration_payload_prunes_unlaunchable_legacy_handlers(tmp_path, monkeypatch):
     """Verification builds its expected identities from this payload, so it
     must apply the same prune the migration applies; otherwise a stale
@@ -131,7 +151,7 @@ def test_unmanaged_migration_payload_prunes_unlaunchable_legacy_handlers(tmp_pat
             ]
         }
     }
-    expected = adapter._unmanaged_migration_payload(payload, context=context, owned_bindings=())
+    expected = migration_kept_hooks(context, payload)
     assert expected == {
         "hooks": {
             "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 user_hook.py"}]}]

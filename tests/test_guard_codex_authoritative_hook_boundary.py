@@ -225,11 +225,13 @@ def test_codex_install_fails_closed_if_native_hook_reconciliation_is_unavailable
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
-    monkeypatch.setattr(
-        CodexHarnessAdapter,
-        "_install_config_hooks",
-        staticmethod(lambda _payload, _context, **_kwargs: None),
-    )
+    real_main_plan = codex_adapter._main_plan
+
+    def _without_hooks(*args, **kwargs):
+        payload, backup, files = real_main_plan(*args, **kwargs)
+        return {key: value for key, value in payload.items() if key != "hooks"}, backup, files
+
+    monkeypatch.setattr(codex_adapter, "_main_plan", _without_hooks)
 
     result = main(
         [
