@@ -291,7 +291,7 @@ pub(super) fn creatable_target(
 ) -> bool {
     bounded_write_target(value, context.home_dir, context.cwd, directory, true, false)
         || (std::path::Path::new(value).is_absolute()
-            && bounded_temporary_copy_target(value, context))
+            && bounded_temporary_target(value, context, directory))
 }
 
 pub(super) fn absent_move_destination(value: &str, context: super::PathContext<'_>) -> bool {
@@ -313,6 +313,13 @@ pub(super) fn absent_move_destination(value: &str, context: super::PathContext<'
 
 #[cfg(unix)]
 fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
+    bounded_temporary_target(value, context, false)
+}
+
+/// `directory` is `mkdir`: an existing leaf must then be a real directory the
+/// user owns that nobody else may write to, which `mkdir -p` leaves as it is.
+#[cfg(unix)]
+fn bounded_temporary_target(value: &str, context: super::PathContext<'_>, directory: bool) -> bool {
     use std::os::unix::fs::MetadataExt;
     use std::path::Path;
 
@@ -371,6 +378,11 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
     // Do not follow a pre-existing leaf symlink or overwrite another user's
     // file (including a hard-link alias) in a shared temporary directory.
     match path.symlink_metadata() {
+        Ok(metadata) if directory => {
+            if !metadata.is_dir() || metadata.uid() != owner || metadata.mode() & 0o022 != 0 {
+                return false;
+            }
+        }
         Ok(metadata) if !metadata.is_file() || metadata.uid() != owner || metadata.nlink() != 1 => {
             return false
         }
@@ -382,6 +394,11 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
         return false;
     };
     temporary_directories::temporary_target_allowed(&target, context)
+}
+
+#[cfg(not(unix))]
+fn bounded_temporary_target(value: &str, context: super::PathContext<'_>, _: bool) -> bool {
+    bounded_temporary_copy_target(value, context)
 }
 
 /// Windows `mktemp -d` (Git Bash `/tmp`) creates its directory in the user's
