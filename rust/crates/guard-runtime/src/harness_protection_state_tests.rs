@@ -158,3 +158,17 @@ fn an_event_split_by_tool_reports_each_row_with_its_tools() {
     assert_eq!(answered["event_states"][1]["tools"], json!(["apply_patch"]));
     assert_eq!(answered["event_states"][2]["tools"], json!([]));
 }
+
+#[test]
+fn an_event_split_by_surface_keeps_each_surface() {
+    let rows: Vec<CapabilityRow> = serde_json::from_value(json!([
+        { "event": "*", "surface": "cli", "transport": "none", "mode": "unsupported", "declared_actions": [] },
+        { "event": "*", "surface": "cloud_agent", "transport": "none", "mode": "unsupported", "declared_actions": [] },
+        { "event": "Stop", "transport": "native_hook", "mode": "observe", "declared_actions": ["observe"] },
+    ]))
+    .expect("rows");
+    let answered = with_event_states(json!({ "state": "tested", "reason": null }), Some(&rows));
+    assert_eq!(answered["event_states"][0]["surface"], "cli");
+    assert_eq!(answered["event_states"][1]["surface"], "cloud_agent");
+    assert_eq!(answered["event_states"][2]["surface"], Value::Null);
+}

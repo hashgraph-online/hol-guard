@@ -44,8 +44,11 @@ fn mapped_at(root: &Path, path: &str, text: &str, docstring: bool) -> String {
 }
 
 const RUN: &str = "\nRun just its doctest with `python -m pytest -q --doctest-modules ";
-const CHECK: &str = "That run is the check an added example needs, and the edit's own reply \
-confirms the edit, so the file need not be read again.";
+const CHECK: &str =
+    "If an example you added fails, write the value it prints under `Got:` into that example \
+and run it again: it stops at the first failure. A memory address such as `0x7f3a` in that \
+value changes every run, so show a value without one. A passing run is the check an added example \
+needs, and the edit's own reply confirms the edit, so the file need not be read again.";
 
 #[test]
 fn prompts_about_docstrings_or_doctests_are_told_apart_from_docs() {

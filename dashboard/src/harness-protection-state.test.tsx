@@ -51,6 +51,14 @@ const split = normalizeEventStates([
   { event: "PreToolUse", tools: ["apply_patch", 3, ""], transport: "native_hook", state: "configured" },
 ]);
 assert(eventProtectionName(split[0]) === "PreToolUse [apply_patch]", "a split event is named by its tools");
+const bySurface = normalizeEventStates([
+  { event: "*", surface: "cli", transport: "none", state: "unsupported" },
+  { event: "*", surface: "cloud_agent", transport: "none", state: "unsupported" },
+]);
+assert(
+  eventProtectionName(bySurface[0]) === "* · cli" && eventProtectionName(bySurface[1]) === "* · cloud_agent",
+  "a surface split keeps each surface in its name",
+);
 
 const compatibility = normalizeVersionCompatibility("claude-code", {
   schema: "hol-guard-harness-version-compatibility.v1",

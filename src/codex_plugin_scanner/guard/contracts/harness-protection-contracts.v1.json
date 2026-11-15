@@ -585,6 +585,64 @@
             "Prompt submission is not surfaced through the declared Cursor hooks."
           ],
           "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:cursor.known_blind_spots"
+        },
+        {
+          "event": "*",
+          "transport": "none",
+          "mode": "unsupported",
+          "surface": "cli",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
+          "declared_actions": [
+            "unavailable"
+          ],
+          "error_behavior": "The guard-cursor-agent and guard-cursor shims route a Cursor CLI launch through Guard; no per-action boundary inside the CLI agent is qualified.",
+          "mandatory_compatibility": "Publish Cursor CLI action coverage only after a live CLI session shows its hooks reaching Guard.",
+          "known_blind_spots": [
+            "Actions inside a Cursor CLI agent session are not claimed until a live CLI session shows Guard answering them.",
+            "Running cursor-agent directly instead of the Guard shim skips the launch check."
+          ],
+          "source_reference": "docs/guard/cursor-local-cloud-contract.md:Cursor CLI entry points"
+        },
+        {
+          "event": "*",
+          "transport": "none",
+          "mode": "unsupported",
+          "surface": "cloud-agent",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
+          "declared_actions": [
+            "unavailable"
+          ],
+          "error_behavior": "Cloud agents run on Cursor's machines, where no local Guard runtime answers the project hooks.",
+          "mandatory_compatibility": "Publish cloud-agent coverage only after a Guard runtime answers project hooks inside the cloud agent.",
+          "known_blind_spots": [
+            "Cloud agents load the project .cursor/hooks.json but not the user hooks file, and no Guard runtime answers them there."
+          ],
+          "source_reference": "docs/guard/cursor-local-cloud-contract.md:Known blind spots"
+        },
+        {
+          "event": "*",
+          "transport": "none",
+          "mode": "unsupported",
+          "surface": "terminal",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
+          "declared_actions": [
+            "unavailable"
+          ],
+          "error_behavior": "Commands typed into Cursor's built-in terminal outside the agent loop reach no hook.",
+          "mandatory_compatibility": "Guard installs no built-in terminal wrapper; publish terminal coverage only after its design and uninstall path are reviewed.",
+          "known_blind_spots": [
+            "Commands typed into Cursor's built-in terminal outside an agent session bypass Guard."
+          ],
+          "source_reference": "docs/guard/cursor-local-cloud-contract.md:Known blind spots"
         }
       ]
     },

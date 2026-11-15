@@ -13262,6 +13262,40 @@
       "expect": "allow"
     },
     {
+      "id": "mkdir-p-nested-new-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p /tmp/hg-gate-nested-run/logs/out"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "mkdir-parents-nested-new-temporary-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir --parents /tmp/hg-gate-nested-build/cache/a/b"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "queue-mkdir-home-deliverables",
       "fix_area": "queue",
       "harnesses": [
@@ -14289,6 +14323,40 @@
         "command": "mkdir -p .git/hooks"
       },
       "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-mkdir-nested-temporary-parent-component",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p /tmp/hg-gate-nested-up/../hg-gate-nested-other/a"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-mkdir-nested-temporary-hidden-ssh",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p /tmp/hg-gate-nested-keys/a/.ssh/b"
+      },
+      "cwd": "org_app",
       "expect": "not_allow"
     },
     {
@@ -18267,6 +18335,86 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "grok-list-dir-worktree-folder",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "list_dir",
+      "tool_input": {
+        "target_directory": "${WORKTREE}/app"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grok-list-dir-system-folder",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "list_dir",
+      "tool_input": {
+        "target_directory": "/etc"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "grok-list-dir-relative-folder",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "list_dir",
+      "tool_input": {
+        "target_directory": "app"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grok-list-dir-home",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "list_dir",
+      "tool_input": {
+        "target_directory": "${HOME}"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grok-list-dir-ssh-store",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "list_dir",
+      "tool_input": {
+        "target_directory": "${HOME}/.ssh"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "grok-grep-worktree-name-glob-head-limit",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "benign_probe_marker",
+        "glob": "*.md",
+        "head_limit": 30
+      },
+      "cwd": "worktree",
+      "expect": "allow"
     },
     {
       "id": "gauntlet-grep-rln-checkout-from-parent-directory",

@@ -59,6 +59,9 @@ The machine-readable copy is [`generated/harness-claims.v1.json`](generated/harn
 | `afterShellExecution` | editor | `native_hook` | `observe` | Records only | `observe_only` | n/a |
 | `afterMCPExecution` | editor | `native_hook` | `observe` | Records only | `observe_only` | n/a |
 | `UserPromptSubmit` | editor | `none` | `unsupported` | No enforcement | `unsupported` | n/a |
+| `*` | cli | `none` | `unsupported` | No enforcement | `unsupported` | n/a |
+| `*` | cloud-agent | `none` | `unsupported` | No enforcement | `unsupported` | n/a |
+| `*` | terminal | `none` | `unsupported` | No enforcement | `unsupported` | n/a |
 
 ## cline
 
@@ -195,6 +198,9 @@ Rows that do not stop the action when Guard fails, and the blind spots each row 
 | cursor | `afterShellExecution` | editor | Records only | Observation does not block or undo the completed shell command. |
 | cursor | `afterMCPExecution` | editor | Records only | Observation does not block or replace a result already returned by Cursor. |
 | cursor | `UserPromptSubmit` | editor | No enforcement | Prompt submission is not surfaced through the declared Cursor hooks. |
+| cursor | `*` | cli | No enforcement | Actions inside a Cursor CLI agent session are not claimed until a live CLI session shows Guard answering them. Running cursor-agent directly instead of the Guard shim skips the launch check. |
+| cursor | `*` | cloud-agent | No enforcement | Cloud agents load the project .cursor/hooks.json but not the user hooks file, and no Guard runtime answers them there. |
+| cursor | `*` | terminal | No enforcement | Commands typed into Cursor's built-in terminal outside an agent session bypass Guard. |
 | cline | `PreToolUse` | foreground | Stops the action | Emergency-safe inspection actions can continue during Guard authority failure. JetBrains protection remains unverified until a live pre-tool deny proof is observed. |
 | cline | `PreToolUse` | foreground | Stops the action | Plugin load and live pre-tool suppression still require an installed-host proof. |
 | cline | `PostToolUse` | foreground | Records only | Native Cline PostToolUse is observation-only and cannot provide model-visible replacement. |

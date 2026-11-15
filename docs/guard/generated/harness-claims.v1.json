@@ -370,6 +370,55 @@
       "evidence": {}
     },
     {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "transport": "none",
+      "mode": "unsupported",
+      "surface": "cli",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Actions inside a Cursor CLI agent session are not claimed until a live CLI session shows Guard answering them.",
+        "Running cursor-agent directly instead of the Guard shim skips the launch check."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "transport": "none",
+      "mode": "unsupported",
+      "surface": "cloud-agent",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Cloud agents load the project .cursor/hooks.json but not the user hooks file, and no Guard runtime answers them there."
+      ],
+      "evidence": {}
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "transport": "none",
+      "mode": "unsupported",
+      "surface": "terminal",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "expires_at": null,
+      "limitations": [],
+      "known_blind_spots": [
+        "Commands typed into Cursor's built-in terminal outside an agent session bypass Guard."
+      ],
+      "evidence": {}
+    },
+    {
       "harness": "cline",
       "event": "PreToolUse",
       "tools": [],
@@ -1319,6 +1368,43 @@
       "state": "unsupported",
       "known_blind_spots": [
         "Prompt submission is not surfaced through the declared Cursor hooks."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "surface": "cli",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Actions inside a Cursor CLI agent session are not claimed until a live CLI session shows Guard answering them.",
+        "Running cursor-agent directly instead of the Guard shim skips the launch check."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "surface": "cloud-agent",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Cloud agents load the project .cursor/hooks.json but not the user hooks file, and no Guard runtime answers them there."
+      ],
+      "limitations": []
+    },
+    {
+      "harness": "cursor",
+      "event": "*",
+      "tools": [],
+      "surface": "terminal",
+      "failure_behavior": "unsupported",
+      "state": "unsupported",
+      "known_blind_spots": [
+        "Commands typed into Cursor's built-in terminal outside an agent session bypass Guard."
       ],
       "limitations": []
     },

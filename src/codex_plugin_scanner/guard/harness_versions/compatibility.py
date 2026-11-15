@@ -35,6 +35,7 @@ def _contracts() -> dict[str, list[dict[str, object]]]:
             {
                 "event": row.event,
                 **({"tools": list(row.tools)} if row.tools else {}),
+                **({"surface": row.surface} if row.surface else {}),
                 "transport": row.transport,
                 "declared_actions": list(row.declared_actions),
                 "mode": row.mode,

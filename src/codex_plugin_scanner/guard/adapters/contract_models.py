@@ -62,6 +62,9 @@ class HarnessEventCapability:
     # Tool names (a trailing ``*`` matches any suffix) when one hook event is
     # split into rows by tool; empty when the row covers the whole event.
     tools: tuple[str, ...] = ()
+    # The product surface (for example ``cli`` or ``cloud_agent``) when one
+    # event is published as several rows by surface; ``None`` otherwise.
+    surface: str | None = None
     deployment_health: CapabilityDeploymentHealth = "unverified"
     evidence_level: CapabilityEvidenceLevel = "not_run"
     observed_at: str | None = None

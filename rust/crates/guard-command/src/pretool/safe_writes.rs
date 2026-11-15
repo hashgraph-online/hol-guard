@@ -8,6 +8,8 @@ mod hooks_path;
 mod plan_notes;
 #[path = "write_target_screens.rs"]
 mod screens;
+#[path = "temporary_directories.rs"]
+mod temporary_directories;
 use super::read_paths::{
     existing_regular_read_target, expand_home_read_path, resolved_location_allowed,
 };
@@ -252,7 +254,10 @@ pub(super) fn safe_file_mutation_arguments(
         }
         ("mkdir", [target]) => !target.starts_with('-') && creatable_target(target, context, true),
         ("mkdir", [flag, target]) if matches!(flag.as_str(), "-p" | "--parents" | "--") => {
-            !target.starts_with('-') && creatable_target(target, context, true)
+            !target.starts_with('-')
+                && (creatable_target(target, context, true)
+                    || (flag != "--"
+                        && temporary_directories::nested_temporary_directory(target, context)))
         }
         ("touch", [target]) => !target.starts_with('-') && creatable_target(target, context, false),
         ("touch", [flag, target]) if flag == "--" => {
@@ -308,7 +313,6 @@ pub(super) fn absent_move_destination(value: &str, context: super::PathContext<'
 
 #[cfg(unix)]
 fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
-    use super::read_paths::resolved_path_allowed_in_scope;
     use std::os::unix::fs::MetadataExt;
     use std::path::Path;
 
@@ -377,25 +381,7 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
     let Some(target) = path.file_name().map(|name| parent.join(name)) else {
         return false;
     };
-    // The temporary carve-out must never sidestep the ordinary home or
-    // workspace boundaries when either happens to live under a temporary
-    // root (ephemeral runners, tests, installer sandboxes).
-    let inside_home = context
-        .home_dir
-        .and_then(|home| std::fs::canonicalize(home).ok())
-        .is_some_and(|home| target.starts_with(home));
-    let inside_workspace = context
-        .cwd
-        .map(|cwd| expand_home_read_path(cwd, context.home_dir).unwrap_or_else(|| cwd.to_owned()))
-        .and_then(|cwd| std::fs::canonicalize(cwd).ok())
-        .is_some_and(|workspace| target.starts_with(workspace));
-    if inside_home || inside_workspace {
-        return false;
-    }
-    resolved_path_allowed_in_scope(&target, context.home_dir, context.cwd, true)
-        && guard_secure_fs::hidden_write_parts_allowed(&target)
-        && !autostart_write_target(&target)
-        && !hooks_path::configured_hooks_write(&target, context.home_dir, context.cwd)
+    temporary_directories::temporary_target_allowed(&target, context)
 }
 
 /// Windows `mktemp -d` (Git Bash `/tmp`) creates its directory in the user's

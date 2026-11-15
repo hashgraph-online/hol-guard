@@ -107,6 +107,7 @@ def _capability(harness: str, value: object) -> HarnessEventCapability:
         local_hosted=_local_hosted(row),
         event=_text(row, "event"),
         tools=_texts(row, "tools", required=False),
+        surface=_optional_text(row, "surface"),
         transport=_text(row, "transport"),
         mode=_text(row, "mode"),
         declared_actions=_texts(row, "declared_actions"),
