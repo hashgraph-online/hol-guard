@@ -57,6 +57,7 @@ pub mod cloud_action_serve;
 mod cloud_action_tests;
 pub mod cloud_action_v2;
 pub mod cloud_action_v2_consent;
+pub mod cloud_action_v2_unclassified;
 pub mod cloud_catalog;
 pub mod cloud_pack;
 pub mod cloud_pack_artifact;
@@ -98,6 +99,10 @@ mod cloud_pack_shape_tests;
 pub mod cloud_pack_simulate;
 #[cfg(test)]
 mod cloud_pack_simulate_tests;
+pub mod cloud_pack_sql;
+mod cloud_pack_sql_lex;
+#[cfg(test)]
+mod cloud_pack_sql_tests;
 #[cfg(test)]
 mod cloud_pack_tests;
 pub mod cloud_pack_validate;

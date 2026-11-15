@@ -304,3 +304,95 @@ fn a_pattern_narrowed_by_a_selector_the_hook_cannot_apply_refuses_the_bundle() {
     let found = patterns(&request(json!([scoped])))["ok"].clone();
     assert_eq!(found[0]["harnesses"], json!(["codex"]), "{found}");
 }
+
+fn group_rule(id: &str, effect: &str, matcher: Value) -> Value {
+    let mut group = rule(id, matcher);
+    group["effect"] = json!(effect);
+    group
+}
+
+#[test]
+fn a_risk_group_rule_reaches_the_device_as_one_row_per_group() {
+    let output = run(&request(json!([group_rule(
+        "ask-before-deletes",
+        "review",
+        json!({"riskGroups": ["deletes", "secrets"], "harnesses": ["codex"]}),
+    )])));
+    let rows = output["ok"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{output}"));
+    let ids: Vec<&str> = rows
+        .iter()
+        .map(|row| row["decision"]["artifact_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["risk-group:deletes", "risk-group:secrets"]);
+    for row in rows {
+        assert_eq!(row["decision"]["action"], "review");
+        assert_eq!(row["decision"]["scope"], "harness");
+        assert_eq!(row["decision"]["harness"], "codex");
+    }
+}
+
+#[test]
+fn a_risk_group_rule_limited_to_a_folder_is_saved_for_that_folder() {
+    let output = run(&request(json!([group_rule(
+        "block-deletes-here",
+        "block",
+        json!({"riskGroups": ["deletes"], "workspaces": ["/work/app"]}),
+    )])));
+    assert_eq!(
+        output["ok"][0]["decision"]["scope"], "workspace",
+        "{output}"
+    );
+    assert_eq!(output["ok"][0]["decision"]["workspace"], "/work/app");
+    assert_eq!(output["ok"][0]["decision"]["action"], "block");
+}
+
+#[test]
+fn a_risk_group_rule_never_allows() {
+    assert_eq!(
+        refusal(&request(json!([group_rule(
+            "allow-deletes",
+            "allow",
+            json!({"riskGroups": ["deletes"]}),
+        )])))["code"],
+        "unsupported_risk_group_effect"
+    );
+}
+
+#[test]
+fn a_risk_group_rule_names_only_groups_the_hook_reads() {
+    for group in ["other", "money", "Deletes", ""] {
+        assert_eq!(
+            refusal(&request(json!([group_rule(
+                "unknown-group",
+                "review",
+                json!({"riskGroups": [group]}),
+            )])))["code"],
+            if group.is_empty() {
+                "invalid_policy_match_selector"
+            } else {
+                "unsupported_risk_group"
+            },
+            "{group}"
+        );
+    }
+}
+
+#[test]
+fn a_risk_group_rule_cannot_be_narrowed_by_what_the_hook_would_drop() {
+    for extra in [
+        json!({"commands": ["rm -rf build"]}),
+        json!({"artifacts": ["skill:x"]}),
+        json!({"tools": ["shell"]}),
+        json!({"publishers": ["acme"]}),
+    ] {
+        let mut matcher = extra.clone();
+        matcher["riskGroups"] = json!(["deletes"]);
+        assert_eq!(
+            refusal(&request(json!([group_rule("narrowed", "review", matcher)])))["code"],
+            "unsupported_policy_match",
+            "{extra}"
+        );
+    }
+}

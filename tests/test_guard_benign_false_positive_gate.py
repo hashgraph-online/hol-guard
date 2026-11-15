@@ -78,6 +78,8 @@ _FIXED_TOOLS = {
     "agent": "Agent",
     # Grok's keyword search over its configured integration (MCP) tools.
     "search_tool": "search_tool",
+    # Oh My Pi's hashline edit: one `input` patch plus the `path`/`paths` copies it derives.
+    "edit": "edit",
 }
 # A pending marker names the open work that owns the case. "unassigned" still
 # prompts and has no owner yet. A merged PR is never a marker: once its fix
@@ -285,13 +287,14 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
     with outbound_network_attempts() as attempts:
         result = review_with_unavailable_retry(
             case.case_id,
-            lambda: worker.review_http_payload(
+            lambda deadline: worker.review_http_payload(
                 payload=payload,
                 params={},
                 default_harness=case.harness,
                 home_dir=fixture.home,
                 guard_home=fixture.guard_home,
                 workspace=fixture.cwd(case.cwd),
+                deadline=deadline,
             ),
             on_retry=approvals.mark_retry,
         )

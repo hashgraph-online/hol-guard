@@ -162,6 +162,7 @@ fn decide(packs: &[CloudActionPack], case: &Value) -> String {
         facts: &facts,
         session: flow.as_ref(),
         windows: Some(&windows),
+        unclassified: None,
     };
     shipped(Preset::Balanced).decide(&call).as_str().to_string()
 }

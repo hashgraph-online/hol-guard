@@ -9,7 +9,7 @@
 
 use crate::cloud_pack::{Extractor, PackAction};
 use guard_contracts::{
-    ActionFactsV2, AudienceKindV2, AudienceV2, Fact, ACTION_FACTS_V2_SCHEMA,
+    ActionClassV2, ActionFactsV2, AudienceKindV2, AudienceV2, Fact, ACTION_FACTS_V2_SCHEMA,
     ACTION_FACTS_V2_VERSION,
 };
 use serde::de::DeserializeOwned;
@@ -53,21 +53,30 @@ pub fn extract(action: &PackAction, args: &Map<String, Value>) -> ActionFactsV2 
             external: Fact::Unknown,
         };
         if facts.validate().is_err() {
-            return unknown_facts(action);
+            let mut facts = unknown_facts(action);
+            crate::cloud_pack_sql::apply(spec.sql.as_ref(), args, &mut facts);
+            return facts;
         }
     }
     if facts.audience.kind.known() == Some(&AudienceKindV2::Private) {
         facts.audience.external = Fact::Known(false);
     }
+    crate::cloud_pack_sql::apply(spec.sql.as_ref(), args, &mut facts);
     facts
 }
 
 /// Facts that claim nothing beyond the declared class.
 pub fn unknown_facts(action: &PackAction) -> ActionFactsV2 {
+    class_only_facts(action.facts.class)
+}
+
+/// Facts that claim nothing beyond `class`: what a call no pack describes is
+/// decided on, with the class the classifier proposed for it.
+pub fn class_only_facts(class: ActionClassV2) -> ActionFactsV2 {
     ActionFactsV2 {
         schema: ACTION_FACTS_V2_SCHEMA.into(),
         version: ACTION_FACTS_V2_VERSION,
-        class: action.facts.class,
+        class,
         object: Fact::Unknown,
         reversibility: Fact::Unknown,
         scope: Fact::Unknown,

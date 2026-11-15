@@ -1,0 +1,569 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "zoom",
+    "name": "Zoom",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.zoom.us"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "meeting:read",
+      "meeting:write",
+      "recording:write"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "zoom.meetings.list",
+      "title": "List upcoming meetings",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "api.zoom.us",
+          "path": "/v2/users/me/meetings",
+          "query": [
+            {
+              "name": "type",
+              "value": {
+                "const": "upcoming"
+              }
+            },
+            {
+              "name": "page_size",
+              "value": {
+                "arg": {
+                  "name": "page_size",
+                  "default": 30
+                }
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "page_size": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 300
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "event"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "page_size",
+            "max": 300,
+            "default": 30
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "meetings",
+            "value": {
+              "list": {
+                "from": "meetings",
+                "maxItems": 300,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "topic",
+                    "value": {
+                      "from": "topic"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "start_time",
+                    "value": {
+                      "from": "start_time"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "total_records",
+            "value": {
+              "from": "total_records"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "meeting:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "lists upcoming meetings",
+          "kind": "safe",
+          "arguments": {},
+          "expect": {
+            "facts": {
+              "class": "read",
+              "record_count": {
+                "state": "known",
+                "value": 30
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://api.zoom.us/v2/users/me/meetings?type=upcoming&page_size=30"
+            },
+            "response": "{\"meetings\":[{\"id\":85746065432,\"topic\":\"Weekly sync\",\"start_time\":\"2026-11-20T15:00:00Z\",\"join_url\":\"https://zoom.us/j/1\"}],\"total_records\":1}",
+            "projection": {
+              "meetings": [
+                {
+                  "id": 85746065432,
+                  "topic": "Weekly sync",
+                  "start_time": "2026-11-20T15:00:00Z"
+                }
+              ],
+              "total_records": 1
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a page size over 300",
+          "kind": "risky",
+          "arguments": {
+            "page_size": 301
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "zoom.meetings.delete",
+      "title": "Delete a meeting",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "api.zoom.us",
+          "path": "/v2/meetings/{meeting_id}",
+          "query": [
+            {
+              "name": "cancel_meeting_reminder",
+              "value": {
+                "arg": {
+                  "name": "notify_attendees"
+                }
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "meeting_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 12,
+          "pattern": "^[0-9]{9,12}$"
+        },
+        "notify_attendees": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "event"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "message",
+            "value": {
+              "from": "message"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "meeting:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "deletes one meeting",
+          "kind": "safe",
+          "arguments": {
+            "meeting_id": "85746065432"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "event"
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://api.zoom.us/v2/meetings/85746065432"
+            },
+            "response": "",
+            "projection": {},
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a meeting id with a path",
+          "kind": "risky",
+          "arguments": {
+            "meeting_id": "1/recordings"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "zoom.recordings.trash",
+      "title": "Move a meeting's recordings to trash",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "api.zoom.us",
+          "path": "/v2/meetings/{meeting_id}/recordings",
+          "query": [
+            {
+              "name": "action",
+              "value": {
+                "const": "trash"
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "meeting_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 12,
+          "pattern": "^[0-9]{9,12}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "message",
+            "value": {
+              "from": "message"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "recording:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "removes every recording of one meeting",
+          "kind": "safe",
+          "arguments": {
+            "meeting_id": "85746065432"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://api.zoom.us/v2/meetings/85746065432/recordings?action=trash"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "require-reapproval",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a meeting uuid",
+          "kind": "risky",
+          "arguments": {
+            "meeting_id": "aDYlohsHRtCd4ii1uC2+hA=="
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "zoom.recordings.delete",
+      "title": "Permanently delete a meeting's recordings",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "api.zoom.us",
+          "path": "/v2/meetings/{meeting_id}/recordings",
+          "query": [
+            {
+              "name": "action",
+              "value": {
+                "const": "delete"
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "meeting_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 12,
+          "pattern": "^[0-9]{9,12}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "reversibility": {
+          "const": "permanent"
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "message",
+            "value": {
+              "from": "message"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "recording:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "removes every recording of one meeting",
+          "kind": "risky",
+          "arguments": {
+            "meeting_id": "85746065432"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://api.zoom.us/v2/meetings/85746065432/recordings?action=delete"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "require-reapproval",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a meeting uuid",
+          "kind": "safe",
+          "arguments": {
+            "meeting_id": "aDYlohsHRtCd4ii1uC2+hA=="
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

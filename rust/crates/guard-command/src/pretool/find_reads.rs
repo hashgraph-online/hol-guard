@@ -66,6 +66,15 @@ pub(super) fn safe_find_listing_arguments(
                                 root,
                                 context.home_dir,
                                 context.cwd,
+                            ))
+                        && (!entries_only_bound(expression)
+                            || !selects_links(expression)
+                            || super::read_paths::hidden_listing::home_hidden_link_names(
+                                root,
+                                context.home_dir,
+                                context.cwd,
+                                walk_depth(expression),
+                                selects_ordinary_names,
                             ))))
         })
         && safe_expression(expression)
@@ -96,12 +105,25 @@ fn entries_only(expression: &[String]) -> bool {
     bounded
 }
 
-/// Whether `-type d` is all that bounds the expression, with no `-name`
-/// pattern to decide which paths may be printed.
+/// Whether `-type d` or `-type l` is all that bounds the expression, with no
+/// `-name` pattern to decide which paths may be printed.
+///
+/// `find` evaluates left to right, so a pattern only decides what is printed
+/// when it comes before the print: `find ~/.cache/tool -type l -print -name x`
+/// prints every link before the pattern is tested, and is bounded by the type
+/// alone.
 fn entries_only_bound(expression: &[String]) -> bool {
-    !expression
-        .iter()
-        .any(|token| matches!(token.as_str(), "-name" | "-iname"))
+    let mut index = 0;
+    while let Some(token) = expression.get(index) {
+        index += 1;
+        match token.as_str() {
+            "-name" | "-iname" => return false,
+            "-print" | "-print0" => return true,
+            "-type" | "-maxdepth" | "-mindepth" => index += 1,
+            _ => {}
+        }
+    }
+    true
 }
 
 /// Whether the expression prints only the paths a name pattern selects.
@@ -131,6 +153,11 @@ fn entries_only_bound(expression: &[String]) -> bool {
 /// below the root would otherwise have its own layout printed. A `-name`
 /// pattern in the same expression already decides what may be printed, so a
 /// walk carrying one keeps its existing proof.
+///
+/// `-type l` bounds it the same way: it prints link names and follows none.
+/// Each name it could print is read from the tree itself first, so a link
+/// with a hidden or secret-style name, or one inside a store, keeps the
+/// review.
 fn match_bounded(expression: &[String]) -> bool {
     let mut bounded = false;
     let mut index = 0;
@@ -156,7 +183,7 @@ fn match_bounded(expression: &[String]) -> bool {
             // `find ~/.codex -print -name run.sh` prints the whole tree.
             "-print" | "-print0" if !bounded => return false,
             "-type" => {
-                if expression.get(index).map(String::as_str) == Some("d") {
+                if matches!(expression.get(index).map(String::as_str), Some("d" | "l")) {
                     bounded = true;
                 }
                 index += 1;
@@ -166,6 +193,26 @@ fn match_bounded(expression: &[String]) -> bool {
         }
     }
     bounded
+}
+
+/// Whether the expression selects links. Without a `-name` pattern,
+/// `-type l` prints every link name the walk reaches, each of which
+/// [`super::read_paths::hidden_listing::home_hidden_link_names`] reads
+/// before the walk proceeds.
+fn selects_links(expression: &[String]) -> bool {
+    expression
+        .windows(2)
+        .any(|pair| pair[0] == "-type" && pair[1] == "l")
+}
+
+/// The deepest level the walk reaches: the largest `-maxdepth`, or `None`
+/// when none is given and `find` walks the whole tree.
+fn walk_depth(expression: &[String]) -> Option<usize> {
+    expression
+        .windows(2)
+        .filter(|pair| pair[0] == "-maxdepth")
+        .filter_map(|pair| pair[1].parse::<usize>().ok())
+        .max()
 }
 
 /// Names prose is written under. A pattern anchored to one of these ends
@@ -276,7 +323,20 @@ fn safe_expression(expression: &[String]) -> bool {
                 };
                 depth = next;
             }
-            "!" | "-not" | "-a" | "-and" | "-o" | "-or" | "-print" | "-print0" | "-prune" => {}
+            "!" | "-not" | "-a" | "-and" | "-o" | "-or" | "-print" | "-print0" | "-prune"
+            | "-empty" => {}
+            // Age and size tests compare each entry's own metadata with a
+            // number written in the command, so they only narrow which names
+            // are printed. `-newer FILE` is left out: it reads another path.
+            "-mtime" | "-mmin" | "-atime" | "-amin" | "-ctime" | "-cmin" | "-size" => {
+                let Some(value) = expression.get(index) else {
+                    return false;
+                };
+                if !metadata_test_value(value, token == "-size") {
+                    return false;
+                }
+                index += 1;
+            }
             "-name" | "-iname" | "-path" | "-ipath" | "-wholename" | "-iwholename" => {
                 let Some(pattern) = expression.get(index) else {
                     return false;
@@ -312,4 +372,15 @@ fn safe_expression(expression: &[String]) -> bool {
         }
     }
     depth == 0
+}
+
+/// A `find` age or size operand: an optional `+` or `-`, digits, and for
+/// `-size` one unit letter, as in `+1`, `-30` or `+10M`.
+fn metadata_test_value(value: &str, size: bool) -> bool {
+    let unsigned = value.strip_prefix(['+', '-']).unwrap_or(value);
+    let digits = match unsigned.strip_suffix(|unit: char| size && "bckwMGTP".contains(unit)) {
+        Some(digits) => digits,
+        None => unsigned,
+    };
+    !digits.is_empty() && digits.len() <= 12 && digits.bytes().all(|byte| byte.is_ascii_digit())
 }

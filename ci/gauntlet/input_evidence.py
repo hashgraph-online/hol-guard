@@ -151,6 +151,16 @@ def public_observations(rows: list[dict], replacements: dict[Redaction, str]) ->
     return result
 
 
+# Oh My Pi trims the whole header body, so padding may sit on either side of
+# the anchor hash: `[ notes.md#FB48 ]` opens notes.md just as `[notes.md#FB48]` does.
+EDIT_HEADER = re.compile(r"^\[([^\n]+)#[0-9A-Fa-f]{4}[ \t]*\]$", re.MULTILINE)
+
+
+def edit_headers(patch: str) -> list[str]:
+    """The trimmed path of every hashline header in one edit patch."""
+    return [header.strip(" \t") for header in EDIT_HEADER.findall(patch)]
+
+
 def input_matches(tool: str, executed: dict, reviewed: dict) -> bool:
     """Accept identity or the pinned OMP adapter's derived edit-path metadata."""
     expected = {key: value for key, value in executed.items() if key not in {"i", "intent"}}
@@ -162,7 +172,7 @@ def input_matches(tool: str, executed: dict, reviewed: dict) -> bool:
     target = expected.get("path", expected.get("file_path"))
     patch = expected.get("input")
     if isinstance(patch, str):
-        headers = [header.strip(" \t") for header in re.findall(r"^\[([^\n]+)#[0-9A-Fa-f]{4}\]$", patch, re.MULTILINE)]
+        headers = edit_headers(patch)
         if len(headers) != 1 or (target is not None and target != headers[0]):
             return False
         target = headers[0]

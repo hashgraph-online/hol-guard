@@ -19,7 +19,8 @@ fn only_a_note_guard_added_ends_with_the_harness_hint() {
     for (harness, ending) in [
         ("claude-code", Some(BATCHING)),
         ("codex", Some(ACT_ON_IT)),
-        ("omp", None),
+        ("omp", Some(SKIP_THE_LIST)),
+        ("pi", None),
     ] {
         let mut notice = json!({"hookSpecificOutput": {"additionalContext": "notice"}});
         let before = context_len(&notice);
@@ -62,4 +63,34 @@ fn a_session_gets_the_hint_once() {
         let other = session(harness, "hint-once-other");
         assert!(note(harness, &other, true).ends_with(ending), "{harness}");
     }
+}
+
+/// Guard holds a shell command that writes files and then runs tests: it
+/// cannot match that script to the project's controls. The Codex hint so asks
+/// for the edit and the test as two tool calls from one exec script, and
+/// never for one script that does both.
+#[test]
+fn the_codex_hint_asks_for_the_edit_and_the_test_as_two_tool_calls() {
+    assert!(ACT_ON_IT.contains("call apply_patch and then run the test command, as two tool calls"));
+    assert!(ACT_ON_IT.contains("not with a shell or Python script that writes files"));
+    assert!(!ACT_ON_IT.contains("apply the patch and run the tests)"));
+}
+
+/// Oh My Pi spends a turn on a todo list even for a one-line fix. Guard
+/// cannot tell whether Oh My Pi showed an earlier note, so every note it adds
+/// there ends with the hint, which asks to skip the list on small fixes.
+#[test]
+fn every_oh_my_pi_note_asks_to_skip_the_todo_list_on_a_small_fix() {
+    let session = session("omp", "every-note");
+    for _ in 0..2 {
+        let mut response = json!({"hookSpecificOutput": {"additionalContext": "notice"}});
+        let before = context_len(&response);
+        add_context(&mut response, "map");
+        end_note(&mut response, "omp", before, Some(&session));
+        assert_eq!(
+            response["hookSpecificOutput"]["additionalContext"],
+            format!("notice\n\nmap\n\n{SKIP_THE_LIST}")
+        );
+    }
+    assert!(SKIP_THE_LIST.contains("skip the todo list"));
 }

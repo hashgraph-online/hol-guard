@@ -34,6 +34,8 @@ fn owns_the_dashboard_routes_and_bundled_files_only() {
     for path in [
         "/",
         "/inbox",
+        // A reload or bookmark of the Swarm page gets the dashboard shell.
+        "/swarm",
         "/requests/abc",
         "/approvals/x",
         "/assets/a.js",

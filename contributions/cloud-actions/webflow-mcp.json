@@ -1,0 +1,1206 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "webflow-mcp",
+    "name": "Webflow MCP",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "mcp.webflow.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "sites:read",
+      "sites:write",
+      "cms:read",
+      "cms:write",
+      "pages:read",
+      "pages:write",
+      "custom_code:write"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "webflow-mcp.ask_webflow_ai",
+      "title": "Ask Webflow AI",
+      "link": {
+        "tool": "ask_webflow_ai"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "ask_webflow_ai"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "sites:read",
+          "sites:write",
+          "cms:read",
+          "cms:write",
+          "pages:read",
+          "pages:write",
+          "custom_code:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls ask_webflow_ai",
+          "kind": "safe",
+          "arguments": {
+            "message": "How do I add a CMS collection?"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "webflow-mcp.webflow_guide_tool",
+      "title": "Read Webflow tool guidance",
+      "link": {
+        "tool": "webflow_guide_tool"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "webflow_guide_tool"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "sites:read",
+          "sites:write",
+          "cms:read",
+          "cms:write",
+          "pages:read",
+          "pages:write",
+          "custom_code:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls webflow_guide_tool",
+          "kind": "safe",
+          "arguments": {},
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "webflow-mcp.data_sites_tool",
+      "title": "List, read or publish sites",
+      "link": {
+        "tool": "data_sites_tool"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "data_sites_tool"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "share",
+        "object": {
+          "const": "deployment"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "sites:read",
+          "sites:write",
+          "cms:read",
+          "cms:write",
+          "pages:read",
+          "pages:write",
+          "custom_code:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls data_sites_tool",
+          "kind": "safe",
+          "arguments": {
+            "actions": [
+              {
+                "list_sites": {}
+              }
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "share",
+              "object": {
+                "state": "known",
+                "value": "deployment"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "block",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "webflow-mcp.data_pages_tool",
+      "title": "Read or update pages",
+      "link": {
+        "tool": "data_pages_tool"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "data_pages_tool"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "sites:read",
+          "sites:write",
+          "cms:read",
+          "cms:write",
+          "pages:read",
+          "pages:write",
+          "custom_code:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls data_pages_tool",
+          "kind": "safe",
+          "arguments": {
+            "actions": [
+              {
+                "list_pages": {
+                  "site_id": "580e63e98c9a982ac9b8b741"
+                }
+              }
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "webflow-mcp.data_components_tool",
+      "title": "Read or update components",
+      "link": {
+        "tool": "data_components_tool"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "data_components_tool"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "sites:read",
+          "sites:write",
+          "cms:read",
+          "cms:write",
+          "pages:read",
+          "pages:write",
+          "custom_code:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls data_components_tool",
+          "kind": "safe",
+          "arguments": {
+            "actions": [
+              {
+                "list_components": {
+                  "site_id": "580e63e98c9a982ac9b8b741"
+                }
+              }
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "webflow-mcp.data_cms_tool",
+      "title": "Read, change, publish or delete CMS items",
+      "link": {
+        "tool": "data_cms_tool"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "data_cms_tool"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "enumerated"
+        },
+        "reversibility": {
+          "const": "permanent"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "sites:read",
+          "sites:write",
+          "cms:read",
+          "cms:write",
+          "pages:read",
+          "pages:write",
+          "custom_code:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls data_cms_tool",
+          "kind": "safe",
+          "arguments": {
+            "actions": [
+              {
+                "get_collection_list": {
+                  "site_id": "580e63e98c9a982ac9b8b741"
+                }
+              }
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "enumerated"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              }
+            },
+            "decisions": {
+              "balanced": "require-reapproval",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "webflow-mcp.data_scripts_tool",
+      "title": "Add or remove site and page scripts",
+      "link": {
+        "tool": "data_scripts_tool"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "data_scripts_tool"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "admin",
+        "object": {
+          "const": "deployment"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "admin",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "sites:read",
+          "sites:write",
+          "cms:read",
+          "cms:write",
+          "pages:read",
+          "pages:write",
+          "custom_code:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls data_scripts_tool",
+          "kind": "safe",
+          "arguments": {
+            "actions": [
+              {
+                "list_registered_scripts": {
+                  "site_id": "580e63e98c9a982ac9b8b741"
+                }
+              }
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "admin",
+              "object": {
+                "state": "known",
+                "value": "deployment"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "block",
+              "relaxed": "block",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "webflow-mcp.data_comments_tool",
+      "title": "Read comment threads",
+      "link": {
+        "tool": "data_comments_tool"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "data_comments_tool"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "sites:read",
+          "sites:write",
+          "cms:read",
+          "cms:write",
+          "pages:read",
+          "pages:write",
+          "custom_code:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls data_comments_tool",
+          "kind": "safe",
+          "arguments": {
+            "actions": [
+              {
+                "list_comment_threads": {
+                  "site_id": "580e63e98c9a982ac9b8b741"
+                }
+              }
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "message"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "webflow-mcp.data_enterprise_tool",
+      "title": "Manage robots.txt, well-known files and activity logs",
+      "link": {
+        "tool": "data_enterprise_tool"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "data_enterprise_tool"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "sites:read",
+          "sites:write",
+          "cms:read",
+          "cms:write",
+          "pages:read",
+          "pages:write",
+          "custom_code:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls data_enterprise_tool",
+          "kind": "safe",
+          "arguments": {
+            "actions": [
+              {
+                "get_robots_txt": {
+                  "site_id": "580e63e98c9a982ac9b8b741"
+                }
+              }
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "webflow-mcp.data_webhook_tool",
+      "title": "Manage webhooks",
+      "link": {
+        "tool": "data_webhook_tool"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "data_webhook_tool"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "admin",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "admin",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "sites:read",
+          "sites:write",
+          "cms:read",
+          "cms:write",
+          "pages:read",
+          "pages:write",
+          "custom_code:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls data_webhook_tool",
+          "kind": "safe",
+          "arguments": {
+            "actions": [
+              {
+                "list_webhooks": {
+                  "site_id": "580e63e98c9a982ac9b8b741"
+                }
+              }
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "admin",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "block",
+              "relaxed": "block",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "webflow-mcp.data_workflows_tool",
+      "title": "List or run workflows",
+      "link": {
+        "tool": "data_workflows_tool"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "data_workflows_tool"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "execute",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "sites:read",
+          "sites:write",
+          "cms:read",
+          "cms:write",
+          "pages:read",
+          "pages:write",
+          "custom_code:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls data_workflows_tool",
+          "kind": "safe",
+          "arguments": {
+            "actions": [
+              {
+                "list_workflows": {
+                  "site_id": "580e63e98c9a982ac9b8b741"
+                }
+              }
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "execute",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

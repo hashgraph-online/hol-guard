@@ -26,7 +26,7 @@ use crate::pyjson::{self, PyVal};
 use crate::runner_sync_url::urlencode;
 
 const HOOK_TIMEOUT_SECONDS: i64 = 30;
-const TOOL_MATCHER: &str = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*";
+pub(super) const TOOL_MATCHER: &str = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*";
 const POST_TOOL_MATCHER: &str = "Bash|Read|mcp__.*";
 pub(super) const ENFORCEMENT_BOUNDARY: &str = "codex-native-hooks";
 const HOOK_UNAVAILABLE: &str = "codex_authoritative_hook_unavailable";

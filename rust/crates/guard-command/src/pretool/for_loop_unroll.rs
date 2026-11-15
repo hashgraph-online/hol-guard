@@ -7,9 +7,11 @@
 
 #[path = "for_loop_unroll_body.rs"]
 pub(super) mod body;
+#[path = "for_loop_unroll_conditional.rs"]
+mod conditional;
 
 use body::{
-    body_items, rebinds, redirect_tail, references_are_quoted, references_stand_alone, substitute,
+    body_items, rebinds, redirect_tail, references_are_quoted, references_stand_alone,
     unquote_whole_references,
 };
 
@@ -39,7 +41,23 @@ const SHELL_SPECIAL_NAMES: &[&str] = &[
 /// The unrolled command text for a top-level `for NAME in WORD...; do BODY; done`
 /// over literal words and glob patterns, or `None` when the command is
 /// anything else.
+#[cfg(test)]
 pub(super) fn unroll(command: &str) -> Option<String> {
+    unroll_at(command, None)
+}
+
+/// [`unroll`], also reading a word spelled from the home directory.
+///
+/// The shell expands an unquoted `~/` at the start of a loop word before the
+/// loop runs, so `for d in ~/work/a` hands the body the absolute path. The
+/// unrolled text writes that path out, as the loop spelled with it is
+/// written, so a quoted reference in the body still names the home path and
+/// not a literal `./~`. Only a home made of plain path characters is written
+/// out; any other keeps the review.
+pub(super) fn unroll_at(command: &str, home_dir: Option<&str>) -> Option<String> {
+    let home = home_dir
+        .map(|home| home.trim_end_matches('/'))
+        .filter(|home| home.starts_with('/') && home.len() > 1 && safe_value(home));
     if command
         .chars()
         .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
@@ -53,14 +71,27 @@ pub(super) fn unroll(command: &str) -> Option<String> {
         return None;
     }
     let rest = keyword(rest, "in")?;
-    let (words, rest) = header_words(rest)?;
+    let (words, rest) = header_words(rest, home)?;
     if words.is_empty() || words.len() > MAX_WORDS {
         return None;
     }
     let rest = rest.trim_start_matches([' ', '\t', '\n', ';']);
     let rest = keyword(rest, "do")?;
     let (items, _, tail) = body_items(rest, name, &["done"])?;
-    let tail = redirect_tail(tail)?;
+    // A pipe into text filters after `done` reads the whole loop's output as
+    // one stream, which is the unrolled list in a brace group piped the same
+    // way. `piped_group` decides that group.
+    let piped = super::piped_group::filter_tail(tail);
+    // `cd DIR && for ...; done | FILTER` runs the filters in DIR, but the
+    // group would carry the `cd` inside it and the filters would be proved in
+    // the caller's directory, so that shape keeps its review.
+    if piped.is_some() && !prefix.is_empty() {
+        return None;
+    }
+    let tail = match piped {
+        Some(_) => String::new(),
+        None => redirect_tail(tail)?,
+    };
     if items.is_empty() || items.iter().any(|(text, _)| rebinds(text, name)) {
         return None;
     }
@@ -95,17 +126,12 @@ pub(super) fn unroll(command: &str) -> Option<String> {
     };
     let mut out = prefix;
     for word in &words {
-        for (text, separator) in &items {
-            // The unrolled list runs the items the loop ran. A leading `!`
-            // only inverts an item's exit status, so it is dropped wherever
-            // the separator after it shows nothing reads that outcome.
-            let step =
-                super::control_flow_flatten::unnegated_part(&substitute(text, word)?, separator);
+        // The unrolled list runs the items the loop ran. A leading `!` only
+        // inverts an item's exit status, so it is dropped wherever the
+        // separator after it shows nothing reads that outcome. An `if … fi`
+        // statement is written out whole as one step.
+        for (step, separator) in conditional::written_steps(&items, word, &tail)? {
             out.push_str(&step);
-            if !tail.is_empty() {
-                out.push(' ');
-                out.push_str(&tail);
-            }
             out.push_str(separator);
         }
         if out.len() > MAX_UNROLLED_BYTES {
@@ -113,7 +139,10 @@ pub(super) fn unroll(command: &str) -> Option<String> {
         }
     }
     let trimmed = out.trim_end_matches([' ', ';']);
-    Some(trimmed.to_owned())
+    Some(match piped {
+        Some(filters) => format!("{{ {trimmed}; }} | {filters}"),
+        None => trimmed.to_owned(),
+    })
 }
 
 /// An optional leading `cd DIR && ` with a literal directory. It is kept once
@@ -263,7 +292,7 @@ fn names_a_file_type(value: &str) -> bool {
 /// literal rule: writing it back out unquoted would otherwise hand the body a
 /// pattern the loop never expanded. Its text may hold the separators the
 /// quotes protect, which [`spaced_value`] admits.
-fn header_words(text: &str) -> Option<(Vec<String>, &str)> {
+fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, &'a str)> {
     let mut words: Vec<(String, bool)> = Vec::new();
     let mut current = String::new();
     let mut in_word = false;
@@ -316,6 +345,11 @@ fn header_words(text: &str) -> Option<(Vec<String>, &str)> {
                         other => current.push(other),
                     }
                 }
+            }
+            // An unquoted `~/` opening a word is the home directory.
+            '~' if !in_word && chars.peek().is_some_and(|(_, next)| *next == '/') => {
+                current.push_str(home?);
+                in_word = true;
             }
             '$' | '`' | '\\' | '(' | ')' | '{' | '}' | '~' | '&' | '|' | '<' | '>' | '#' | '!' => {
                 return None

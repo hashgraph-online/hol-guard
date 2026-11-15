@@ -115,6 +115,7 @@ pub(crate) mod directory_targets;
 pub(crate) mod workspace_git_config;
 pub(crate) mod workspace_git_environment;
 pub(crate) use directory_targets::safe_directory_target;
+mod archive_listing;
 mod awk_reads;
 mod base64_reads;
 mod brace_words;
@@ -192,8 +193,10 @@ mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
 mod npmrc_keys;
+mod path_lookup_program;
 mod path_word_reads;
 mod pip_reads;
+mod piped_group;
 mod pnpm_reads;
 mod postgres_reads;
 mod printf_words;
@@ -246,6 +249,7 @@ mod search_scope_budget;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
+mod search_scope_plain_skips;
 pub(crate) mod search_scope_tracked;
 mod search_scope_walk;
 mod secret_aliases;
@@ -262,6 +266,7 @@ mod stdin_filters;
 mod symlink_writes;
 mod tool_inventory_reads;
 mod tree_reads;
+mod tree_writers;
 pub(crate) mod version_probes;
 pub(crate) mod wget_reads;
 #[cfg(test)]
@@ -315,7 +320,9 @@ pub(crate) use script_content::{
     sole_program_sources, sourced_program_sources, sourcing_bounded_sources,
 };
 pub use search_scope_tracked::proven_project_document;
-pub(crate) use segment_proof::{benign_command_segments, leading_cd_segment, without_stderr_merge};
+pub(crate) use segment_proof::{
+    benign_command_segments, leading_cd_segment, segments_safe_alone, without_stderr_merge,
+};
 pub(crate) use worktree_add::entered_checkouts;
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
@@ -1019,7 +1026,13 @@ const MAX_REWRITE_ROUNDS: usize = 3;
 /// The command list a rewrite reads this text as, in the order the
 /// recognizers are tried.
 fn rewritten_command_list(command: &str) -> Option<String> {
-    for_loop_unroll::unroll(command)
+    rewritten_command_list_at(command, None)
+}
+
+/// [`rewritten_command_list`] for a submission whose home directory is known,
+/// so a loop over words spelled from it unrolls too.
+fn rewritten_command_list_at(command: &str, home_dir: Option<&str>) -> Option<String> {
+    for_loop_unroll::unroll_at(command, home_dir)
         .or_else(|| control_flow_flatten::flatten(command))
         .or_else(|| control_flow_chain::spliced(command))
         .or_else(|| list_wrapper::unwrapped(command))
@@ -1044,7 +1057,21 @@ fn evaluate_rewritten(
     // through the same proofs and replaces the construct's decision: an allow
     // there admits the construct, a block is never softened, and a review
     // carries the rewritten model so later layers judge modeled commands.
-    let Some(rewritten) = rewritten_command_list(&request.command) else {
+    if let Some(allowed) = piped_group::decision(
+        request,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+        round,
+    ) {
+        return Ok(allowed);
+    }
+    // A loop word spelled `~/` names the home the shell expands, so it is
+    // written out only when that is shown to be the declared home.
+    let loop_home =
+        home_dir.filter(|_| PathContext::shell_home_matches_for(home_dir, execution_environment));
+    let Some(rewritten) = rewritten_command_list_at(&request.command, loop_home) else {
         return Ok(ungrouped_decision(
             request,
             decision,
@@ -1376,7 +1403,10 @@ fn evaluate_single_command(
             "The Rust command authority proved this push sends the checked-out branch to a credential-free GitHub HTTPS origin through trusted Git, credential helpers and hooks.",
         ));
     }
-    if exact_safe_command_with_context(&model, false, context)
+    // A full path to the file the bare name finds on `PATH` is proven as that bare name.
+    if (exact_safe_command_with_context(&model, false, context)
+        || path_lookup_program::bare_name_model(&model, execution_environment)
+            .is_some_and(|bare| exact_safe_command_with_context(&bare, false, context)))
         && !bun_eval::inherited_preload_configured(&model, execution_environment)
     {
         let reason_code = docker_start::proven_reason_code(&model)

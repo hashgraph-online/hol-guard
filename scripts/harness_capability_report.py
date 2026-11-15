@@ -123,6 +123,12 @@ CAPABILITY_REPORT_SCHEMA: dict[str, object] = {
                     "items": {"type": "string", "minLength": 1, "maxLength": 2_000},
                 },
                 "source_reference": {"type": "string", "minLength": 1, "maxLength": 512},
+                "tools": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": True,
+                    "items": {"type": "string", "minLength": 1, "maxLength": 128},
+                },
                 "deployment_health": {"enum": ["unverified", "healthy", "degraded", "unavailable", "unknown"]},
                 "evidence_level": {
                     "enum": [

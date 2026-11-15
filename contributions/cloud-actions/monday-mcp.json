@@ -1,0 +1,1609 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "monday-mcp",
+    "name": "monday.com MCP",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "mcp.monday.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "boards:read",
+      "boards:write",
+      "users:read"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "monday-mcp.create_item",
+      "title": "Create an item",
+      "link": {
+        "tool": "create_item"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_item"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_item",
+          "kind": "safe",
+          "arguments": {
+            "boardId": 1234567890,
+            "name": "Follow up"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.delete_item",
+      "title": "Delete an item",
+      "link": {
+        "tool": "delete_item"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "delete_item"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls delete_item",
+          "kind": "safe",
+          "arguments": {
+            "itemId": 987654321
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.get_board_items_by_name",
+      "title": "Search a board's items",
+      "link": {
+        "tool": "get_board_items_by_name"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_board_items_by_name"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_board_items_by_name",
+          "kind": "safe",
+          "arguments": {
+            "boardId": 1234567890,
+            "term": "invoice"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.create_update",
+      "title": "Post an update on an item",
+      "link": {
+        "tool": "create_update"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_update"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "send",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_update",
+          "kind": "safe",
+          "arguments": {
+            "itemId": 987654321,
+            "body": "Shipped"
+          },
+          "expect": {
+            "facts": {
+              "class": "send",
+              "object": {
+                "state": "known",
+                "value": "message"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.change_item_column_values",
+      "title": "Change an item's column values",
+      "link": {
+        "tool": "change_item_column_values"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "change_item_column_values"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls change_item_column_values",
+          "kind": "safe",
+          "arguments": {
+            "boardId": 1234567890,
+            "itemId": 987654321
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.move_item_to_group",
+      "title": "Move an item to a group",
+      "link": {
+        "tool": "move_item_to_group"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "move_item_to_group"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls move_item_to_group",
+          "kind": "safe",
+          "arguments": {
+            "itemId": 987654321,
+            "groupId": "topics"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.create_board",
+      "title": "Create a board",
+      "link": {
+        "tool": "create_board"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_board"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "table"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_board",
+          "kind": "safe",
+          "arguments": {
+            "boardName": "Launch"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "table"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.get_board_schema",
+      "title": "Read a board's columns and groups",
+      "link": {
+        "tool": "get_board_schema"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_board_schema"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "table"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_board_schema",
+          "kind": "safe",
+          "arguments": {
+            "boardId": 1234567890
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "table"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.create_group",
+      "title": "Create a group",
+      "link": {
+        "tool": "create_group"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_group"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "table"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_group",
+          "kind": "safe",
+          "arguments": {
+            "boardId": 1234567890,
+            "groupName": "Next"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "table"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.create_column",
+      "title": "Add a column",
+      "link": {
+        "tool": "create_column"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_column"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "table"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_column",
+          "kind": "safe",
+          "arguments": {
+            "boardId": 1234567890,
+            "columnTitle": "Owner",
+            "columnType": "people"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "table"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.delete_column",
+      "title": "Delete a column and its values",
+      "link": {
+        "tool": "delete_column"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "delete_column"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "table"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls delete_column",
+          "kind": "safe",
+          "arguments": {
+            "boardId": 1234567890,
+            "columnId": "status"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "table"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "block",
+              "relaxed": "require-reapproval",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.list_users_and_teams",
+      "title": "Read users and teams",
+      "link": {
+        "tool": "list_users_and_teams"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "list_users_and_teams"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "user"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls list_users_and_teams",
+          "kind": "safe",
+          "arguments": {
+            "name": "Ana"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "user"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.create_form",
+      "title": "Create a form",
+      "link": {
+        "tool": "create_form"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_form"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_form",
+          "kind": "safe",
+          "arguments": {
+            "destination_workspace_id": 1
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.get_form",
+      "title": "Read a form",
+      "link": {
+        "tool": "get_form"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_form"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_form",
+          "kind": "safe",
+          "arguments": {
+            "formToken": "abc123"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.get_graphql_schema",
+      "title": "Read the GraphQL schema",
+      "link": {
+        "tool": "get_graphql_schema"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_graphql_schema"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_graphql_schema",
+          "kind": "safe",
+          "arguments": {},
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday-mcp.get_type_details",
+      "title": "Read a GraphQL type",
+      "link": {
+        "tool": "get_type_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_type_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "boards:read",
+          "boards:write",
+          "users:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_type_details",
+          "kind": "safe",
+          "arguments": {
+            "typeName": "Item"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

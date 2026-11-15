@@ -10,8 +10,9 @@
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
 use crate::context_assistance_engine::{project_context_on, quick_excerpts};
-use crate::context_assistance_prompt_files::{named, phrases, project_root, walk};
-use crate::context_assistance_prompt_words::marked_terms;
+use crate::context_assistance_prompt_files::{named, phrases, project_root, walk_exact};
+use crate::context_assistance_prompt_words::{marked_terms, spellings};
+use crate::context_assistance_savings as savings;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
 use lookup::{lookup, Miss, Request};
@@ -73,17 +74,6 @@ const MATCHED_HEADER: &str = "HOL Guard CIGAR matched these project files to thi
 best first. Open them for context:";
 const REPEATED_HEADER: &str = "HOL Guard CIGAR matched code it already added earlier in this \
 session. Open the files if those excerpts are no longer in view.";
-/// Claude Code models tend to send one tool call per turn, and every turn
-/// re-sends the whole conversation, so the reads and edits a note makes
-/// possible cost least when they go out together.
-const BATCHING: &str = "Each tool call re-sends this whole conversation. When you already know \
-several ranges to read or several edits to make, make those tool calls together in one response, \
-not one per turn.";
-/// Codex models tend to read again lines a note already shows, then patch and
-/// test in separate turns; each turn re-sends the whole conversation.
-const ACT_ON_IT: &str = "The code and diffs in this note are what the files hold now: work from \
-them instead of reading those lines again. When you can, make the edit and run its check in the \
-same tool call (one exec script can apply the patch and run the tests).";
 
 /// A prompt's context and the excerpts it shows.
 #[derive(Clone, Debug, PartialEq)]
@@ -125,7 +115,11 @@ pub(crate) fn harness_response(
     if let Some(store) = store.filter(|store| !cigar_off(store, workspace, harness)) {
         let slot = envelope.recording_only && open_slot(&mut response);
         let before = context_len(&response);
-        attach(&mut response, envelope, harness, store, started);
+        let mut shown = Vec::new();
+        attach(&mut response, envelope, harness, store, started, &mut shown);
+        let added = context_len(&response).saturating_sub(before);
+        let payload = &envelope.raw_payload;
+        savings::noted(store.guard_home(), payload, harness, added, shown);
         let session = prompt_session(envelope, harness, store);
         end_note(&mut response, harness, before, session.as_ref());
         if harness == "kimi" {
@@ -214,6 +208,7 @@ fn attach(
     harness: &str,
     store: &PolicySnapshotStore,
     started: Instant,
+    shown: &mut Vec<String>,
 ) {
     if !takes_context(harness, &envelope.raw_payload) || !allowed(response) {
         return;
@@ -277,10 +272,11 @@ fn attach(
         && !marked.iter().any(|(_, name)| *name)
     {
         let at = (store.guard_home(), &*root, harness, session.as_ref());
-        changes::used::add_tests(response, at, changed, &earlier, budget, context_on);
+        changes::used::add_tests(response, at, changed, &earlier, budget, context_on, shown);
         return;
     }
-    let searched = walk(&root, &words, &quoted, &named(prompt), budget);
+    let (names, exact) = (named(prompt), spellings(prompt));
+    let searched = walk_exact(&root, &words, &quoted, &names, &exact, budget);
     let found = searched.found(&words);
     let held = held_names(prompt, &words, &searched.spelled);
     if found.is_empty() {
@@ -315,9 +311,7 @@ fn attach(
         .map(|context| changes::removed::added(context, home, envelope, &root, harness, deadline))
         .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness));
     if let Some(context) = mapped {
-        if let Some(session) = &session {
-            seen::remember(session, &context.shown);
-        }
+        seen::keep(session.as_ref(), &context.shown, shown);
         add_context(response, &context.text);
         return;
     }
@@ -352,9 +346,7 @@ fn attach(
     let Some(context) = context else {
         return;
     };
-    if let Some(session) = &session {
-        seen::remember(session, &context.shown);
-    }
+    seen::keep(session.as_ref(), &context.shown, shown);
     add_context(response, &context.text);
 }
 

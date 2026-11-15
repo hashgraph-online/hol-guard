@@ -1,7 +1,12 @@
 //! `fd` prints matching names and never file contents. By default it skips
 //! hidden entries and ignored paths and does not follow links, so a names-only
-//! listing is proven when no option widens that scope or runs a command per
-//! match, and every search root clears the same screens as an `rg` root.
+//! listing is proven when no option runs a command per match or follows a
+//! link, and every search root clears the same screens as an `rg` root.
+//!
+//! `--hidden` and `--no-ignore` widen the walk to what `find` walks: dot
+//! entries and the paths an ignore file names. `find` already lists those
+//! names from any root its own screen admits, so a widened `fd` must clear
+//! both its own root screens and the one `find` uses.
 use super::options::unsafe_search_value;
 use super::{sibling, tree, ReadContext, SearchValueRole};
 
@@ -23,6 +28,29 @@ const FLAGS: &[&str] = &[
 ];
 
 const SHORT_FLAGS: &[char] = &['s', 'i', 'F', 'g', 'a', 'p', '0', '1', 'q'];
+
+/// Options that walk into hidden entries or past ignore files, as `find`
+/// does, and change nothing else. `-u` is `--unrestricted`, both at once.
+/// `--ignore-file` is absent: it reads a file the command never shows.
+const WIDENING_FLAGS: &[&str] = &[
+    "--hidden",
+    "--no-ignore",
+    "--no-ignore-vcs",
+    "--no-ignore-parent",
+    "--unrestricted",
+];
+
+const WIDENING_SHORT_FLAGS: &[char] = &['H', 'I', 'u'];
+
+/// A root a widened walk may start at: one the `find` listing screen admits,
+/// which never reaches a home dot-directory or follows a skill link above
+/// home. A `~` root counts only when the shell's `HOME` is the declared home,
+/// since the shell expands the word the screen resolves.
+fn widened_root(root: &str, context: ReadContext<'_>) -> bool {
+    (!root.starts_with('~') || context.shell_home_matches)
+        && !super::skill_link_resolves_over_home(root, context)
+        && super::super::read_paths::bounded_read_target(root, context.home_dir, context.cwd, true)
+}
 
 fn value_role(name: &str) -> Option<SearchValueRole> {
     match name {
@@ -93,8 +121,9 @@ fn unsafe_value(
 
 /// Whether a names-only `fd` search may start at a home dot-directory.
 ///
-/// `fd` refuses every option that would widen such a listing: `--hidden`,
-/// `--follow` and `--exec` are not among the options this screen accepts, so
+/// `fd` refuses every option that would widen such a listing: `--follow` and
+/// `--exec` are not among the options this screen accepts, and a root that
+/// reaches this screen keeps its review under `--hidden` or `--no-ignore`, so
 /// the search never prints a hidden entry, never leaves the tree through a
 /// link and never runs a program per match. What is left is a name walk whose
 /// output the pattern bounds, the same bound `find` carries where a depth
@@ -200,6 +229,8 @@ fn safe_fd_arguments_inner(arguments: &[String], context: ReadContext<'_>, absen
     let mut pattern: Option<&str> = None;
     let mut root_seen = false;
     let mut path_matching = false;
+    let mut widened = false;
+    let mut roots: Vec<&str> = Vec::new();
     // A root the ordinary screens refuse may still be a home dot-directory the
     // pattern bounds, which only the whole argument list can answer.
     let mut deferred: Vec<&str> = Vec::new();
@@ -207,6 +238,9 @@ fn safe_fd_arguments_inner(arguments: &[String], context: ReadContext<'_>, absen
         if let Some(role) = pending.take() {
             if unsafe_value(role, argument, context, absent) {
                 return false;
+            }
+            if matches!(role, SearchValueRole::Path) {
+                roots.push(argument.as_str());
             }
             continue;
         }
@@ -218,6 +252,10 @@ fn safe_fd_arguments_inner(arguments: &[String], context: ReadContext<'_>, absen
             let (name, attached) = argument.split_once('=').unwrap_or((argument.as_str(), ""));
             if FLAGS.contains(&name) && attached.is_empty() {
                 path_matching |= matches!(name, "--full-path" | "--absolute-path");
+                continue;
+            }
+            if WIDENING_FLAGS.contains(&name) && attached.is_empty() {
+                widened = true;
                 continue;
             }
             let Some(role) = value_role(name) else {
@@ -238,6 +276,8 @@ fn safe_fd_arguments_inner(arguments: &[String], context: ReadContext<'_>, absen
                 || unsafe_value(role, attached, context, absent)
             {
                 return false;
+            } else if matches!(role, SearchValueRole::Path) {
+                roots.push(attached);
             }
             continue;
         }
@@ -245,6 +285,10 @@ fn safe_fd_arguments_inner(arguments: &[String], context: ReadContext<'_>, absen
             for (offset, option) in argument[1..].char_indices() {
                 if SHORT_FLAGS.contains(&option) {
                     path_matching |= matches!(option, 'p' | 'a');
+                    continue;
+                }
+                if WIDENING_SHORT_FLAGS.contains(&option) {
+                    widened = true;
                     continue;
                 }
                 let Some(role) = short_value_role(option) else {
@@ -264,6 +308,7 @@ fn safe_fd_arguments_inner(arguments: &[String], context: ReadContext<'_>, absen
             if unsafe_root(argument, context, absent) {
                 deferred.push(argument.as_str());
             }
+            roots.push(argument.as_str());
             root_seen = true;
         } else {
             pattern = Some(argument.as_str());
@@ -271,8 +316,15 @@ fn safe_fd_arguments_inner(arguments: &[String], context: ReadContext<'_>, absen
     }
     // Without a root fd lists the cwd, the same listing as an explicit `.`
     // root, so both spellings get the same decision.
+    //
+    // A widened walk prints hidden names, so a home dot-directory root, which
+    // only a pattern that never matches a hidden entry bounds, keeps its
+    // review, and every root must also clear the `find` screen.
+    let walked = if roots.is_empty() { vec!["."] } else { roots };
     pending.is_none()
         && (root_seen || !unsafe_root(".", context, false))
+        && (!widened || deferred.is_empty())
+        && (!widened || walked.iter().all(|root| widened_root(root, context)))
         && deferred
             .iter()
             .all(|root| hidden_home_listing(pattern, path_matching, root, context))

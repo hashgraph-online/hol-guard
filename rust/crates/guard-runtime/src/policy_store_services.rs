@@ -2,6 +2,10 @@
 use super::PolicySnapshotStore;
 
 impl PolicySnapshotStore {
+    pub(crate) fn swarm(&self) -> &crate::swarm_op::ResidentSwarm {
+        &self.swarm
+    }
+
     pub(crate) fn context_assistance(&self) -> &crate::context_assistance_service::Service {
         &self.context_assistance
     }

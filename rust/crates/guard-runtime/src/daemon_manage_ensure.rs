@@ -24,6 +24,7 @@ use crate::daemon_policy_authority::{
 };
 
 use super::host::{self, Caller};
+use super::orphans;
 use super::records::{self, int, text};
 use super::retire::{self, Deadline};
 use super::start_progress::{self, clear_progress, load_progress, progress_is_live};
@@ -131,10 +132,12 @@ pub(super) fn ensure(
     let home = context.home().to_path_buf();
     let initial_pending = records::load_pending(&home);
     let initial_progress = load_progress(&home);
-    // Recorded start progress is settled under the start lock, where an
-    // expired launch is retired instead of blocking every later start.
+    // Recorded start progress and an abandoned launch receipt are settled
+    // under the start lock, where an expired launch, or a daemon holding the
+    // receipt open, is retired instead of blocking every later start.
     if initial_progress.is_none()
         && records::is_generation_bound(initial_pending.as_ref())
+        && !retire::pending_is_abandoned(initial_pending.as_ref())
         && !records::pending_is_resolved(&home)
         && !retire::resolve_abandoned(caller, initial_pending.as_ref())
     {
@@ -272,6 +275,9 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
     let pending_path = records::pending_path(&home);
     let pending = records::load_pending(&home);
     if pending_path.is_file() || pending.is_some() {
+        if !progress_live {
+            orphans::release_abandoned_receipt(caller, &home, pending.as_ref(), deadline);
+        }
         if records::is_generation_bound(pending.as_ref())
             && !records::pending_is_resolved(&home)
             && !retire::resolve_abandoned(caller, pending.as_ref())
@@ -289,6 +295,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
     if request.background_maintenance {
         retire::reap_orphaned_workers(caller, deadline);
     }
+    orphans::retire_unadopted(caller, deadline);
     for port in candidate_ports(context) {
         if deadline.passed() {
             break;

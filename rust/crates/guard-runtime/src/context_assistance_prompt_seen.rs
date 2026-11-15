@@ -71,6 +71,15 @@ pub(super) fn earlier(session: &Session) -> Vec<Span> {
         .unwrap_or_default()
 }
 
+/// Remembers what a prompt showed for its session and adds the files it
+/// showed to `files`, for the savings record.
+pub(super) fn keep(session: Option<&Session>, shown: &[Span], files: &mut Vec<String>) {
+    if let Some(session) = session {
+        remember(session, shown);
+    }
+    files.extend(shown.iter().map(|span| span.path.clone()));
+}
+
 /// Records what this prompt's context showed. The session moves to the back
 /// of the list, and the oldest session or excerpt goes once a bound is met.
 /// The once-per-session hint survives excerpt eviction within that session.

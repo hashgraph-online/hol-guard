@@ -46,7 +46,7 @@ pub const REQUEST_SCHEMA_V2: &str = "guard.cloud-action-evaluation.v2";
 pub const RESULT_SCHEMA_V2: &str = "guard.cloud-action-evaluation-result.v2";
 const PROVENANCE_DOMAIN_V2: &str = "guard.cloud-action-evaluation-provenance.v2";
 const FACTS_DOMAIN: &str = "guard.action-facts.v2";
-const FACT_RULES_DOMAIN: &str = "guard.cloud-action-fact-rules.v2";
+pub(crate) const FACT_RULES_DOMAIN: &str = "guard.cloud-action-fact-rules.v2";
 const INPUTS_DOMAIN: &str = "guard.cloud-action-flow-inputs.v2";
 
 #[derive(Debug, Deserialize)]
@@ -71,6 +71,9 @@ struct RequestV2 {
     session_flow: Option<SessionFlowV2>,
     saved_consents: Vec<SavedConsentV2>,
     activation: Option<SignedActivation>,
+    /// Present when no admitted pack describes the action (PRD R16).
+    #[serde(default)]
+    unclassified: Option<crate::cloud_action_v2_unclassified::UnclassifiedCall>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,6 +84,9 @@ struct PolicyV2 {
     pack_digest: Option<String>,
     rules: Vec<CloudPolicyRule>,
     fact_rules: Vec<CloudFactRule>,
+    /// The pack's decision for an action no admitted pack describes.
+    #[serde(default)]
+    unclassified: Option<crate::cloud_policy_pack::Unclassified>,
 }
 
 /// A policy rule that also selects on action facts.
@@ -156,10 +162,7 @@ fn input_digests(parsed: &Value) -> Result<InputDigests, &'static str> {
     let session = bytes(&parsed["session_flow"])?;
     Ok(InputDigests {
         facts: domain_digest(FACTS_DOMAIN, &[&facts]),
-        fact_rules: domain_digest(
-            FACT_RULES_DOMAIN,
-            &[&bytes(&parsed["policy"]["fact_rules"])?],
-        ),
+        fact_rules: crate::cloud_action_v2_unclassified::fact_rules_digest(parsed, bytes)?,
         flow: domain_digest(INPUTS_DOMAIN, &[&windows, &session]),
     })
 }
@@ -223,6 +226,11 @@ fn validate_v2(request: &RequestV2) -> Result<(), &'static str> {
     {
         return Err("invalid_request");
     }
+    crate::cloud_action_v2_unclassified::validate(
+        request.unclassified.as_ref(),
+        policy.unclassified.as_ref(),
+        &request.facts,
+    )?;
     request.saved_consents.iter().try_for_each(validate_consent)
 }
 
@@ -265,6 +273,7 @@ pub(crate) fn join_fact_rules<'r>(
     policy_subject: &PolicySubject<'_>,
     subject: &FactSubjectV2<'_>,
     policy: &PolicyOutcome,
+    unclassified: Option<GuardAction>,
 ) -> FactJoin<'r> {
     let mut join = FactJoin {
         action: policy.action,
@@ -298,8 +307,13 @@ pub(crate) fn join_fact_rules<'r>(
             .unwrap_or(base)
     };
     let sure = outcome(&definite);
-    let all: Vec<&CloudFactRule> = definite.iter().chain(&uncertain).copied().collect();
-    let worst = outcome(&all);
+    // R16: an unknown fact on an Unclassified call stands for the pack's
+    // Unclassified action, not a rule's strictest branch.
+    let considered: &[&CloudFactRule] = unclassified.map_or(&uncertain[..], |_| &[]);
+    let all: Vec<&CloudFactRule> = definite.iter().chain(considered).copied().collect();
+    let worst = std::cmp::max_by_key(outcome(&all), unclassified.unwrap_or(sure), |action| {
+        action.severity()
+    });
     join.action = if worst.severity() > sure.severity() {
         worst
     } else {
@@ -309,7 +323,8 @@ pub(crate) fn join_fact_rules<'r>(
         join.reason_codes.push("fact_rule");
     }
     if worst.severity() > sure.severity() {
-        join.reason_codes.push("fact_unknown");
+        join.reason_codes
+            .push(unclassified.map_or("fact_unknown", |_| "unclassified"));
     }
     join.matched = definite.iter().map(|rule| rule.rule_id.as_str()).collect();
     join.unknown = uncertain.iter().map(|rule| rule.rule_id.as_str()).collect();
@@ -366,6 +381,10 @@ fn decide_v2(
         &policy_subject,
         &subject,
         &policy,
+        crate::cloud_action_v2_unclassified::floor(
+            request.unclassified.as_ref(),
+            request.policy.unclassified.as_ref(),
+        ),
     );
     let mut action = join.action;
     reason_codes.extend(&join.reason_codes);

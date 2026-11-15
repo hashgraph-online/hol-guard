@@ -1,5 +1,3 @@
 {
-  "known_gaps": {
-    "omp-eval-sh-secret-copy": "Guard reviews the eval as an unknown program (native_pre_tool_unknown_review, with an approval request) instead of blocking the sh() secret copy. Passing needs literal sh() modelling and a protection verdict for the copy."
-  }
+  "known_gaps": {}
 }

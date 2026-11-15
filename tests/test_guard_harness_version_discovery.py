@@ -328,6 +328,9 @@ def test_enforcement_never_reads_version_compatibility() -> None:
         PROJECT_SRC / "routes" / "calls.py",
         PROJECT_SRC / "routes" / "reads.py",
         PROJECT_SRC / "control_route_calls.py",
+        # `doctor --harness` shows the per-event proof states. It reports them
+        # and never decides an action.
+        PROJECT_SRC / "cli" / "commands_dispatch_admin.py",
     }
     readers = {
         path

@@ -197,6 +197,7 @@ def _resident_request(
             "codex_request_resume",
             "daemon_route",
             "context_assistance",
+            "swarm",
             "context_agent",
             "daemon_handler",
             "extension_control",

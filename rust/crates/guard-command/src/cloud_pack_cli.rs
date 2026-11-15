@@ -16,7 +16,7 @@
 //! | `explain`  | `actionId`, `arguments`, optional pack | facts and preset decisions |
 //! | `policy`   | `preset` name or `policyPack`      | fact rules and pack digest |
 //! | `simulate` | `preset` or `policyPack`, stored `calls` | decision and matched rules per call |
-//! | `classify` | `name`, optional `inputSchema`, optional `preset` or `policyPack` | class proposal and unclassified action |
+//! | `classify` | `name`, optional `inputSchema`, `class`, `preset` or `policyPack` | class proposal, facts and unclassified action |
 //!
 //! Results are `{"ok":true,...}` or `{"ok":false,"error":{"code":..}}`. A
 //! request never reaches the network: rendering builds a request a host sends.
@@ -34,6 +34,7 @@ use crate::cloud_pack_request::{check_arguments, render, ArgumentError};
 use crate::cloud_pack_response::project;
 use crate::cloud_pack_simulate::simulate;
 use crate::cloud_policy_pack::{policy_pack_from_value, shipped, PolicyPack, Preset};
+use guard_contracts::ActionClassV2;
 use serde_json::{json, Map, Value};
 use std::io::{self, Write};
 
@@ -138,7 +139,16 @@ fn answer_op(op: &str, mut request: Map<String, Value>) -> Result<Value, Value> 
             };
             let schema = request.remove("inputSchema");
             let proposal = classify(&name, schema.as_ref());
-            let mut result = json!({ "proposal": proposal });
+            // The facts claim one class and nothing else, so every fact a rule
+            // could lower a decision on stays unknown. The class is the
+            // proposal's, or the one a workspace admin approved for the tool.
+            let class = match request.remove("class") {
+                None => proposal.class,
+                Some(value) => serde_json::from_value::<ActionClassV2>(value)
+                    .map_err(|_| refuse("request_invalid", Some("/class")))?,
+            };
+            let facts = crate::cloud_pack_facts::class_only_facts(class);
+            let mut result = json!({ "proposal": proposal, "facts": facts });
             if request.contains_key("policyPack") || request.contains_key("preset") {
                 let pack = policy(&mut request)?;
                 result["action"] = json!(pack.unclassified_action(&proposal));

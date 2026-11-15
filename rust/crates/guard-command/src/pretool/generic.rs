@@ -1384,6 +1384,10 @@ fn evaluate_envelope(
             execution_environment,
         );
     }
+    crate::native_command_controls::explain_expired_proof(
+        &mut result,
+        super::git_probe::probe_budget_spent(deadline),
+    );
     result
 }
 

@@ -256,3 +256,65 @@ Three setups per harness: no Guard, CIGAR only (the prompt note, no tool checks)
 Oh My Pi has no CIGAR-only setup: its Guard extension carries both.
 
 CIGAR alone halves the tokens on every harness and seed set without costing tasks; Claude Code with CIGAR passed two held-out tasks the run without Guard missed. With enforcement on, the gap to CIGAR only is commands Guard held for review and the turns the agent spent working around them: inline Python (`python -c`, heredocs), `perl -pi`, `find … -exec sed -i`, shell `for` loops and `git add … && git commit`. Not every enforcement failure is a hold: three Codex held-out misses (204, 207, 212) show no Guard message, and the two Claude Code random misses left a rename or a test unfinished. The Oh My Pi misses do trace to Guard: reads of its own `xd://` and `proc://` resources held for review, and a malformed edit sent for approval instead of back to the model.
+
+### Enforcement + CIGAR after the review-hold fixes
+
+The table above was run while Guard still held many of the agents' routine edit and probe commands for review. These runs repeat the enforcement + CIGAR setup, every Guard hook on, on wheels built locally from `main`. A local build reports the version in `pyproject.toml`, 3.59.0, so it is newer than the 3.60.0a75 pre-release above even though the number is lower. Codex, Oh My Pi and the random Claude Code seeds ran on builds of `main` from the morning of 2026-11-13. Claude Code on seeds 116–131 and 200–215 still saved only 47.3% of tokens on that build, so it was run again on 2026-11-14 on `main` at `0ba8d232`. By then Guard no longer held inline Python that only reads or reshapes data (#7685, #7709), `find … -exec sed -i` edits (#7679) or Git probes that ran past the hook's time budget (#7672, #7711).
+
+On seeds 116–131 and 200–215, the no-Guard runs are the same ones as in the table above. On the random seeds, the no-Guard runs were made again on 2026-11-13, and they came out heavier than the first ones: Codex 17.8M tokens against 16.6M, Claude Code 60.9M against 49.1M (and 14 of 16 passed against 16 of 16), Oh My Pi 22.0M against 18.3M. The same tasks without Guard vary this much from run to run, so for the random seeds the table gives the saving against both no-Guard runs. Same models, prices and token count (input plus output).
+
+| harness | seeds | no Guard cost | no Guard tokens | no Guard passed | enforcement + CIGAR cost | enforcement + CIGAR tokens | enforcement + CIGAR passed | cost saved | tokens saved |
+|---|---|---|---|---|---|---|---|---|---|
+| Codex | random 16, first no-Guard run | $0.29 | 16.6M | 16/16 | $0.16 | 8.4M | 16/16 | 44.8% | 49.7% |
+| Codex | random 16, second no-Guard run | $0.29 | 17.8M | 16/16 | $0.16 | 8.4M | 16/16 | 45.7% | 52.9% |
+| Codex | 116–131, 200–215 | $0.58 | 34.2M | 31/32 | $0.27 | 14.1M | 32/32 | 52.7% | 58.8% |
+| Claude Code | random 16, first no-Guard run | $7.50 | 49.1M | 16/16 | $3.96 | 22.4M | 16/16 | 47.2% | 54.4% |
+| Claude Code | random 16, second no-Guard run | $9.10 | 60.9M | 14/16 | $3.96 | 22.4M | 16/16 | 56.4% | 63.3% |
+| Claude Code | 116–131, 200–215 | $16.91 | 113.7M | 30/32 | $7.85 | 43.8M | 30/32 | 53.6% | 61.5% |
+| Oh My Pi | random 16, first no-Guard run | $0.32 | 18.3M | 16/16 | $0.21 | 10.0M | 16/16 | 34.7% | 45.2% |
+| Oh My Pi | random 16, second no-Guard run | $0.40 | 22.0M | 16/16 | $0.21 | 10.0M | 16/16 | 48.1% | 54.5% |
+| Oh My Pi | 116–131, 200–215 | $0.77 | 46.5M | 32/32 | $0.40 | 19.3M | 31/32 | 48.0% | 58.6% |
+
+On seeds 116–131 and 200–215, all three harnesses with every Guard hook on now use less than half the tokens they use without Guard. On the random seeds, Claude Code saves more than half against either no-Guard run, while Codex (49.7% and 52.9%) and Oh My Pi (45.2% and 54.5%) are near half, above or below depending on which no-Guard run they are compared with. Every run with Guard passed as many tasks as its paired run without Guard, or more, except one Oh My Pi seed. On Claude Code's benchmark and held-out seeds, the same setup saved 48.2% of tokens in the table above and 47.3% on the 2026-11-13 build. With those holds gone it saved 61.5%, with 30 of 32 passed in both runs (each missed a different seed: 204 without Guard, 212 with it).
+
+### Requests and Guard holds per step kind
+
+`benchmarks/cigar/scripts/report.py` reads each harness's own records and splits every step by kind: model requests, tool calls (test runs, reads, searches, edits, Git, other), calls Guard held, and calls made after a hold. These runs pair every Guard hook plus CIGAR against no Guard on the same 16 random seeds (581, 816, 2491, 3351, 3763, 4187, 4651, 4889, 5273, 5951, 7188, 7374, 7776, 7917, 7965, 9298), one no-Guard run each. Guard 3.60.0a96, 2026-11-14; Codex and Oh My Pi run gpt-6-luna at medium effort, Claude Code runs claude-haiku-4-5. A step counts once the harness reached it (92 of 96). "Do-no-harm" is the share of steps that cost at least 20% more with Guard than without.
+
+| harness | requests per step | tool calls | holds per 100 calls | calls after a hold, per hold | cost saved | tokens saved | passed (no Guard) | do-no-harm |
+|---|---|---|---|---|---|---|---|---|
+| Codex | 3.58 | 237 | 4.2 | 2.60 | 53.5% | 59.6% | 15 (14) | 3.3% |
+| Claude Code | 6.08 | 467 | 0.4 | 9.50 | 54.7% | 62.8% | 15 (14) | 10.9% |
+| Oh My Pi | 4.91 | 646 | 0.3 | 4.00 | 50.3% | 57.6% | 15 (13) | 1.1% |
+
+Cost saved by step kind:
+
+| harness | bug | two bugs | doc | question | rename | review | stub |
+|---|---|---|---|---|---|---|---|
+| Codex | 54.0% | 54.4% | 52.3% | 55.8% | 52.2% | 52.7% | 53.1% |
+| Claude Code | 65.8% | 41.1% | 0.6% | 53.6% | 81.5% | 66.9% | 10.8% |
+| Oh My Pi | 49.9% | 57.5% | 45.6% | 49.3% | 33.0% | 56.4% | 46.8% |
+
+What the split shows:
+
+- Codex: 7 of its 10 holds were one shell command that wrote a file with a heredoc and then ran the tests. CIGAR's own first-note hint asked for "one exec script" that patches and tests, which Codex read as one command.
+- Claude Code: holds are rare (2, both fair: a `for` loop over `git show` and a `git commit`). Its doc and stub steps save almost nothing: the agent writes a doctest example from memory, runs it, sees it fail and fixes it over several more turns.
+- Oh My Pi: about 260 of 646 calls are its own todo-list tool, so a large share of its requests go to keeping that list, not to the fix.
+
+#### After the Codex hint fix
+
+Same seeds and no-Guard run, Codex with every Guard hook on, on a native wheel built locally from the fix's head (a `main` build, so it reports 3.59.0):
+
+| | before | after |
+|---|---|---|
+| requests per step | 3.58 | 2.60 |
+| tool calls | 237 | 147 |
+| holds | 10 | 6 |
+| edit-then-test commands held | 7 | 0 |
+| calls after a hold, per hold | 2.60 | 1.17 |
+| cost saved | 53.5% | 65.3% |
+| tokens saved | 59.6% | 72.2% |
+| passed (no Guard 14) | 15 | 14 |
+| do-no-harm | 3.3% | 1.1% |
+
+Four of the six remaining holds came from one session that gave `apply_patch` a path outside the repository.

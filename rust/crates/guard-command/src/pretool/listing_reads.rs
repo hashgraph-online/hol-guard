@@ -134,6 +134,23 @@ pub(super) fn listable_glob(value: &str, context: super::PathContext<'_>) -> boo
         || leaf_glob_operand(value, context)
 }
 
+/// A file-test operand the shell may hand over as a pattern, as in a loop
+/// guard `[ -f tests/*.py ]`. The test reports one bit about whatever word
+/// arrives: the literal spelling when nothing matches, or a match. So the
+/// literal spelling must name nothing, which keeps a file called
+/// `tests/[ab].py` from standing in for the pattern, and every match must clear
+/// the read proof `cat` needs, or the pattern must match nothing. A quoted
+/// `~` stays literal and names `./~`, so a home spelling also needs the
+/// working directory to hold no `~` entry.
+pub(super) fn tested_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
+    value.contains(['*', '?', '['])
+        && (!value.starts_with('~') || no_literal_home_entry(context))
+        && expanded_path(value, context)
+            .is_some_and(|path| std::fs::symlink_metadata(path).is_err_and(|error| absent(&error)))
+        && (safe_reads::glob_file_matches(value, context).is_some()
+            || search::safe_unmatched_glob_operand(value, context, false))
+}
+
 /// `ls` of a path that does not exist prints only an error. Agents probe for
 /// optional directories this way (`ls ~/work/scripts 2>/dev/null`). The
 /// nearest existing ancestor must be a directory a listing may name, and the
@@ -228,6 +245,13 @@ fn absent(error: &std::io::Error) -> bool {
 /// A `~` is expanded here from the declared `home_dir`, which is the home the
 /// shell reports; where a caller needs the two to be one directory it screens
 /// `shell_home_matches` itself before admitting the operand.
+/// True when the working directory holds no entry named `~`.
+fn no_literal_home_entry(context: super::PathContext<'_>) -> bool {
+    expanded_path("./~", context)
+        .filter(|path| path.is_absolute())
+        .is_some_and(|path| std::fs::symlink_metadata(path).is_err_and(|error| absent(&error)))
+}
+
 fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::path::PathBuf> {
     if value.starts_with('~') {
         super::read_paths::expand_home_read_path(value, context.home_dir)
@@ -266,6 +290,9 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
         || value.contains(['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0'])
         || (value.contains('\\') && !cfg!(windows))
         || value.contains(['{', '}', '(', ')', '!'])
+        // zsh `EXTENDED_GLOB` reads `#`, `^` and `~` as operators, so
+        // `*fact#ory*` can match `.factory`; the glob path refuses them too.
+        || pattern.contains(['#', '^', '~'])
         // A trailing wildcard can always spell a credential name, so the
         // pattern only screens its fixed path; every match is screened below.
         || super::sensitive_path_argument(value)
@@ -273,12 +300,24 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     {
         return false;
     }
-    // A superset of every match: the literal text before the first wildcard
-    // and after the last one, compared without case.
+    // A superset of every match. A pattern of only `*` and `?` is matched
+    // as the shell matches it, without case, so `*pr7519*` is judged by the
+    // names it can expand to and not by every sibling, such as a hidden
+    // `.factory` beside it. That match is byte-wise, so a name that is not
+    // ASCII uses a looser match that holds under any locale. A bracket class
+    // falls back to the literal text before the first wildcard and after the
+    // last one.
     let lowered = pattern.to_ascii_lowercase();
     let prefix = &lowered[..lowered.find(['*', '?', '[']).unwrap_or(lowered.len())];
     let suffix = &lowered[lowered.rfind(['*', '?', ']']).map_or(0, |at| at + 1)..];
+    let bracketed = pattern.contains(['[', ']']);
     let candidate = |name: &str| {
+        if !bracketed && name.is_ascii() && pattern.is_ascii() {
+            return safe_reads::wildcard_matches(pattern.as_bytes(), name.as_bytes());
+        }
+        if !bracketed {
+            return safe_reads::wildcard_may_match(pattern, name);
+        }
         let name = name.to_ascii_lowercase();
         name.len() >= prefix.len() + suffix.len()
             && name.starts_with(prefix)

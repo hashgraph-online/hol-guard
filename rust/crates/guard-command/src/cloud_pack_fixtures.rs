@@ -174,6 +174,7 @@ fn check_decisions(
         facts,
         session: None,
         windows: None,
+        unclassified: None,
     };
     for (preset, want) in [
         (Preset::Relaxed, expected.relaxed),

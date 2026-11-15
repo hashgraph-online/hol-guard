@@ -4382,6 +4382,7 @@ clearer UX and an implementation plan with technical references.
                     "policy-document-exact-commands.v1",
                     "policy-document-review-rules.v1",
                     "policy-document-command-pattern-allow.v1",
+                    "policy-document-risk-group-rules.v1",
                 ],
                 "policy_bundle_versions": [
                     "guard-policy-bundle.v1",

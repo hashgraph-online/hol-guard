@@ -189,7 +189,10 @@ pub(super) fn detect_request(ctx: &Ctx, configs: &[(PathBuf, &str, String)], ski
 }
 
 pub(super) fn command_available(spec: &Spec, ctx: &Ctx) -> bool {
-    super::which::command_available(ctx, spec.executable, Some(&ctx.home), &[])
+    // OpenCode's installer puts the CLI in ~/.opencode/bin. A terminal PATH
+    // without it must not make an installed OpenCode look missing.
+    let installer = ctx.home.join(".opencode").join("bin");
+    super::which::command_available(ctx, spec.executable, Some(&ctx.home), &[installer])
 }
 
 /// `detect`: every readable, non-empty config as written. Python adds the
