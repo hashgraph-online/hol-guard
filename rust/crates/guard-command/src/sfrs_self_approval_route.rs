@@ -11,35 +11,54 @@ use regex::Regex;
 /// only where a shell word, quoted string or argument can start, so it never
 /// begins inside another URL's host or path (commas included). The path keeps
 /// every character a URL may hold and stops at whitespace, quoting and shell
-/// operators, so a URL inside `python -c "..."` or a JSON body is still found.
+/// operators. It never starts with `//`, so a scheme whose host is a command
+/// substitution is not read as a host named `http:`. A URL inside
+/// `python -c "..."` or a JSON body is still found.
 static URL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r#"(?i)(?:^|[\s'"`(<>=|;&{])(?:https?://)?([A-Za-z0-9._~%:@\[\]-]+)(/[^\s'"`<>|;&\\]*)"#,
+        r#"(?i)(?:^|[\s'"`()<>=|;&{])(?:https?://)?([A-Za-z0-9._~%:@\[\]${}-]+)(/(?:[^/\s'"`<>|;&\\][^\s'"`<>|;&\\]*)?)"#,
     )
     .expect("loopback URL pattern")
 });
 
+/// Client options that send the request somewhere other than the host the
+/// URL names, so the written host says nothing about where it lands.
+const REROUTING_OPTIONS: [&str; 4] = [
+    "--connect-to",
+    "--resolve",
+    "--unix-socket",
+    "--abstract-unix-socket",
+];
+
 /// Whether the text names a loopback URL whose path is one of the local
 /// Guard routes that resolve requests or save decisions. The raw text, the
 /// text with shell quoting removed, and each shell word are all checked, so
-/// `http://127.0.0.1:4781/v1/'requests'/x/approve` is found too.
+/// `http://127.0.0.1:4781/v1/'requests'/x/approve` is found too. When the
+/// connection is rerouted, or the host is a shell expansion, the route alone
+/// decides: the daemon does not check the Host header.
 pub(crate) fn names_guard_approval_route(command_text: &str, words: &[String]) -> bool {
     let unquoted: String = command_text
         .chars()
         .filter(|c| !matches!(c, '\'' | '"' | '\\'))
         .collect();
+    let rerouted = REROUTING_OPTIONS
+        .iter()
+        .any(|option| command_text.contains(option));
     std::iter::once(command_text)
         .chain(std::iter::once(unquoted.as_str()))
         .chain(words.iter().map(String::as_str))
-        .any(text_names_route)
+        .any(|text| text_names_route(text, rerouted))
 }
 
-fn text_names_route(text: &str) -> bool {
+fn text_names_route(text: &str, rerouted: bool) -> bool {
     URL.captures_iter(text).any(|captures| {
         let (Some(authority), Some(path)) = (captures.get(1), captures.get(2)) else {
             return false;
         };
-        is_loopback_authority(authority.as_str()) && path_names_route(path.as_str())
+        let authority = authority.as_str();
+        let indirect = authority.contains(['$', '{', '}']) || authority.starts_with(':');
+        (rerouted || indirect || is_loopback_authority(authority))
+            && path_names_route(path.as_str())
     })
 }
 

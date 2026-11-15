@@ -30,6 +30,12 @@ fn every_client_that_names_an_approval_route_is_self_authorization() {
         "curl -X POST http://guard.localhost:4781/v1/requests/0000aaaa/approve",
         "curl -X POST 'http://[0:0:0:0:0:0:0:1]:4781/v1/requests/0000aaaa/approve'",
         "curl -X POST 'http://127.0.0.1:4781/a,b/../v1/policy/clear'",
+        "curl --connect-to ::127.0.0.1:4781 -X POST http://guard.test/v1/requests/0000aaaa/approve",
+        "curl --resolve guard.test:4781:127.0.0.1 -X POST http://guard.test:4781/v1/policy/clear",
+        "H=127.0.0.1; curl -X POST http://$H:4781/v1/requests/0000aaaa/approve",
+        "curl -X POST \"http://${GUARD_HOST}:4781/v1/requests/0000aaaa/approve\"",
+        "curl -X POST http://`hostname`:4781/v1/requests/0000aaaa/approve",
+        "curl -X POST http://$(hostname):4781/v1/requests/0000aaaa/approve",
         "curl -X POST 'http://127.0.0.1:4781/a(b)/../v1/policy/clear'",
         "python3 -c \"import urllib.request as u; u.urlopen(u.Request(\\\"http://127.0.0.1:4781/v1/policy/clear\\\"))\"",
     ] {
