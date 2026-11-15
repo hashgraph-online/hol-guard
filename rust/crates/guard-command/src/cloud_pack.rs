@@ -40,6 +40,13 @@ pub struct CloudActionPack {
     pub hosts: Vec<String>,
     pub auth: Auth,
     pub actions: Vec<PackAction>,
+    /// Sign-in brokers that may carry this pack's requests. Absent means none.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::cloud_pack_transport::present"
+    )]
+    pub transports: Option<crate::cloud_pack_transport::Transports>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

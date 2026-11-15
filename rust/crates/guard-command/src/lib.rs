@@ -105,6 +105,9 @@ mod cloud_pack_sql_lex;
 mod cloud_pack_sql_tests;
 #[cfg(test)]
 mod cloud_pack_tests;
+pub mod cloud_pack_transport;
+#[cfg(test)]
+mod cloud_pack_transport_tests;
 pub mod cloud_pack_validate;
 mod cloud_pack_validate_facts;
 mod cloud_pack_validate_request;

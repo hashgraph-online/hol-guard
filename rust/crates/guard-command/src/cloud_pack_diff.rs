@@ -10,6 +10,7 @@
 
 use crate::cloud_action_v2::effect_rank;
 use crate::cloud_pack::*;
+use crate::cloud_pack_transport::partner_labels;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -100,6 +101,14 @@ pub fn diff(old: &CloudActionPack, new: &CloudActionPack) -> Result<PackDiff, Pa
         None,
         false,
     );
+    let old_transports = partner_labels(old);
+    let new_transports = partner_labels(new);
+    for label in new_transports.difference(&old_transports) {
+        changes.push("transport_added", Some(label), true);
+    }
+    for label in old_transports.difference(&new_transports) {
+        changes.push("transport_removed", Some(label), false);
+    }
     let old_actions: BTreeMap<_, _> = old
         .actions
         .iter()

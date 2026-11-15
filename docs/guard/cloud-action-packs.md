@@ -121,6 +121,25 @@ result. Turning `emptyOk` on is a widening change in `diff`. Size `maxBytes` for
 can send back, including any argument it echoes: GitHub returns the full issue or pull request body, so those
 actions allow 512 KiB.
 
+## Brokered sign-in
+
+A pack may name the sign-in brokers whose toolkits can carry its requests, so a hosted gateway can use a provider
+whose sign-in a broker holds instead of the gateway itself
+([ADR 0016](adr/0016-brokered-sign-in-transport.md)):
+
+```json
+"transports": {"partner": [{"partner": "composio", "toolkit": "outlook"}]}
+```
+
+`partner` comes from a closed list (today only `composio`), and `toolkit` is a lowercase slug of 2 to 64 letters,
+digits and underscores that starts with a letter. A pack names each partner once, at most four in total. A pack
+whose `auth.mode` is `none` has no sign-in to broker, and a broker proxy carries only plain HTTP requests, so
+neither that pack nor one with any `remote-mcp` or `broker` action can declare one.
+
+The block grants nothing by itself. It changes no fact, decision or rendered request: a brokered call sends the same
+absolute `https` URL on the same declared host as a direct one. A pack without the block serializes and digests
+exactly as before. Adding a transport, or changing its toolkit, is a widening change in `diff`.
+
 ## Fixtures
 
 Every action in a source pack carries at least one `safe` and one `risky` fixture. A fixture states the arguments
@@ -154,7 +173,7 @@ activates an artifact.
 
 `diff` compares two packs or artifacts for the same provider and lists each change with a code. A change is
 widening when it lets a pack do more than before: a new host, scope or action, a looser argument, a weaker effect,
-a dropped capability, a new response field, a removed untrusted label, looser limits, a changed executor or
+a dropped capability, a new brokered transport, a new response field, a removed untrusted label, looser limits, a changed executor or
 link, or any changed fact extractor. Any edit to a pattern or forbidden rule counts as widening, because whether a new pattern accepts less
 cannot be decided in general. A widening pack version needs fresh review.
 
