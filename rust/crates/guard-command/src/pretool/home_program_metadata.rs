@@ -15,7 +15,8 @@
 //! a listing of it would. A link is screened twice, as spelled and as
 //! resolved: `stat` and `file` report the link itself, while `stat -L` and
 //! `file -L` report what it points at. Both must sit below home and clear the
-//! screen, so a link cannot dress `~/.ssh/id_ed25519` as a program.
+//! screen, so a link cannot dress `~/.ssh/id_ed25519` as a program. A `~`
+//! spelling passes only while the shell's HOME is the home screened here.
 
 use crate::credential_store_names::{
     clears_store_screen, hidden_content_read_allowed, hidden_program_metadata_allowed,
@@ -32,6 +33,12 @@ pub(super) fn home_program_metadata(value: &str, context: super::PathContext<'_>
         || !super::read_paths::bounded_path_spelling(value)
         || !super::read_paths::verified_path_context(context.home_dir, context.cwd)
     {
+        return false;
+    }
+    // `~` is the shell's HOME. When the stamped shell HOME is not the home
+    // this check reads, `~/.cargo/bin/tool` names a different file for Bash
+    // than the one screened here.
+    if (value == "~" || value.starts_with("~/")) && !context.shell_home_matches {
         return false;
     }
     let Some(spelled) = spelled_path(value, home, cwd) else {

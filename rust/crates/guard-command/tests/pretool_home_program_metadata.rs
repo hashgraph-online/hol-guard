@@ -59,14 +59,15 @@ fn home() -> PathBuf {
     std::fs::canonicalize(home).unwrap()
 }
 
-/// The decision both shell harnesses reach, or "mixed" when they differ. The
-/// harness-stamped environment lets the Git configuration probe run.
-fn shell(home: &Path, command: &str) -> String {
+/// The decision each shell harness reaches when Guard's home is `home` and
+/// the stamped shell HOME is `shell_home`. The harness-stamped environment
+/// lets the Git configuration probe run.
+fn decisions(home: &Path, shell_home: &Path, command: &str) -> [(&'static str, String); 2] {
     let environment = guard_contracts::GuardExecutionEnvironmentV1 {
         path: std::env::var("PATH").unwrap(),
         environment_names: vec!["GIT_CONFIG_NOSYSTEM".into()],
         environment_digest: "0".repeat(64),
-        home: Some(home.to_str().unwrap().to_owned()),
+        home: Some(shell_home.to_str().unwrap().to_owned()),
         git_pager_disabled: false,
         pager_disabled: false,
         xdg_config_home: None,
@@ -74,8 +75,8 @@ fn shell(home: &Path, command: &str) -> String {
         ..Default::default()
     };
     let project = home.join("project");
-    let [omp, zcode] = ["omp", "zcode"].map(|harness| {
-        evaluate_pre_tool_envelope_with_execution_context(
+    ["omp", "zcode"].map(|harness| {
+        let action = evaluate_pre_tool_envelope_with_execution_context(
             harness,
             "PreToolUse",
             &json!({"tool_name": "bash", "tool_input": {"command": command}}),
@@ -101,12 +102,20 @@ fn shell(home: &Path, command: &str) -> String {
             },
             Some(&environment),
         )
-        .minimum_action
-    });
-    if omp == zcode {
-        omp
-    } else {
-        format!("mixed: omp {omp}, zcode {zcode}")
+        .minimum_action;
+        (harness, action)
+    })
+}
+
+fn assert_allowed(home: &Path, shell_home: &Path, command: &str) {
+    for (harness, action) in decisions(home, shell_home, command) {
+        assert_eq!(action, "allow", "{harness}: {command}");
+    }
+}
+
+fn assert_not_allowed(home: &Path, shell_home: &Path, command: &str) {
+    for (harness, action) in decisions(home, shell_home, command) {
+        assert_ne!(action, "allow", "{harness}: {command}");
     }
 }
 
@@ -126,7 +135,7 @@ fn installed_program_metadata_proceeds() {
         format!("stat ~/.cargo/bin/tool ~/{NODE}/bin/node"),
         format!("stat {}/.cargo/bin/tool", home.display()),
     ] {
-        assert_eq!(shell(&home, &command), "allow", "{command}");
+        assert_allowed(&home, &home, &command);
     }
 }
 
@@ -148,6 +157,33 @@ fn program_bytes_keys_and_links_into_stores_still_ask() {
         "stat ~/.cargo/bin/.hidden".to_owned(),
         "stat ~/.cargo/bin/*".to_owned(),
     ] {
-        assert_ne!(shell(&home, &command), "allow", "{command}");
+        assert_not_allowed(&home, &home, &command);
+    }
+}
+
+/// When the stamped shell HOME is another directory, Bash resolves `~` there,
+/// where `.cargo/bin/tool` may be a link to a key. A `~` spelling fails closed;
+/// an absolute path names the same file for Guard and the shell.
+#[test]
+fn a_tilde_path_under_another_shell_home_still_asks() {
+    let home = home();
+    let actual = home.parent().unwrap().join("actual");
+    write(actual.join(".ssh/id_ed25519"), "SYNTHETIC KEY\n");
+    std::fs::create_dir_all(actual.join(".cargo/bin")).unwrap();
+    symlink("../../.ssh/id_ed25519", actual.join(".cargo/bin/tool")).unwrap();
+    let actual = std::fs::canonicalize(actual).unwrap();
+    for command in [
+        "stat -L ~/.cargo/bin/tool",
+        "file -L ~/.cargo/bin/tool",
+        "stat ~/.cargo/bin/tool",
+        "file ~/.cargo/bin/tool",
+    ] {
+        assert_not_allowed(&home, &actual, command);
+    }
+    for command in [
+        format!("stat {}/.cargo/bin/tool", home.display()),
+        format!("file -b {}/.local/bin/script", home.display()),
+    ] {
+        assert_allowed(&home, &actual, &command);
     }
 }
