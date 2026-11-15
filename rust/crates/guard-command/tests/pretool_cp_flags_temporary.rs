@@ -120,6 +120,13 @@ fn copies_that_merge_escape_or_take_other_flags_keep_their_review() {
     for command in [
         // A folder anyone may write to.
         format!("cp -cR {s}/src {s}/shared/copy"),
+        // A new tree directly in the shared `/tmp`, where another user could
+        // create the folder first.
+        format!("cp -cR {s}/src /tmp/hg-cp-flags-new-{}", std::process::id()),
+        format!(
+            "cp -R {s}/src /var/tmp/hg-cp-flags-new-{}",
+            std::process::id()
+        ),
         // The tree would merge into an existing one.
         format!("cp -R {s}/src {s}/occupied"),
         // Into the source tree itself.

@@ -13720,6 +13720,23 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-cp-recursive-new-tree-directly-in-shared-tmp",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp -cR ${PRIVATE_TMP}/agent-script /tmp/hg-gate-shared-tree-copy"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-cp-tmp-into-git-hook",
       "fix_area": "negative",
       "harnesses": [

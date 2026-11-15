@@ -97,15 +97,21 @@ fn attribute_flags(word: &str) -> bool {
 }
 
 /// Where `cp -R` may create a new tree outside the workspace: a path the
-/// user spelled absolutely that does not exist yet, directly in a temporary
-/// root or in a private directory below one. Plain `cp` places a new file
-/// there under the same screen.
+/// user spelled absolutely that does not exist yet, in a private directory
+/// the user owns below a temporary root, or directly in the user's own macOS
+/// temporary folder. Plain `cp` places a new file there under the same screen.
+///
+/// Directly in the shared `/tmp` or `/var/tmp` the tree stays in review.
+/// Another local user can create the folder between this check and the copy
+/// and plant a link inside it, and `cp` would write through that link when it
+/// fills the folder. A private parent leaves no one else able to create it.
 pub(in crate::pretool) fn new_temporary_tree_target(
     spelled: &str,
     target: &Path,
     context: PathContext<'_>,
 ) -> bool {
     Path::new(spelled).is_absolute()
+        && !shared_temporary_parent(target)
         && matches!(
             target.symlink_metadata(),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound
@@ -113,6 +119,21 @@ pub(in crate::pretool) fn new_temporary_tree_target(
         && target
             .to_str()
             .is_some_and(|text| bounded_temporary_copy_target(text, context))
+}
+
+/// Whether the folder that would hold `target` is `/tmp` or `/var/tmp`
+/// itself, where every local user may create entries.
+fn shared_temporary_parent(target: &Path) -> bool {
+    let Some(parent) = target
+        .parent()
+        .and_then(|parent| std::fs::canonicalize(parent).ok())
+    else {
+        return true;
+    };
+    ["/tmp", "/var/tmp"]
+        .into_iter()
+        .filter_map(|root| std::fs::canonicalize(root).ok())
+        .any(|root| parent == root)
 }
 
 /// The operands cp receives once the shell expands `*` and `?` sources.
