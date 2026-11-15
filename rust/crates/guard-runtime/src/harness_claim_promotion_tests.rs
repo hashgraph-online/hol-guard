@@ -146,6 +146,20 @@ fn a_receipt_cannot_promote_a_row_that_does_not_enforce_or_does_not_exist() {
 }
 
 #[test]
+fn a_contract_with_an_unsupported_schema_is_refused() {
+    let mut contract: Value = serde_json::from_str(&contract()).expect("contract");
+    contract["schema"] = json!("hol-guard.harness-protection-contracts.v2");
+    let (refusals, claim) = promote(&contract.to_string(), &receipt(), NOW);
+    assert!(claim.is_none());
+    assert!(
+        refusals
+            .iter()
+            .any(|refusal| refusal.contains("contract schema")),
+        "{refusals:?}"
+    );
+}
+
+#[test]
 fn only_evidence_states_can_be_promoted_to() {
     for state in [
         "configured",

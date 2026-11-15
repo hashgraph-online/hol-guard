@@ -25,7 +25,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::{check_claim, check_event, utc_timestamp, Claim, Document, CONTRACT};
+use super::{check_claim, check_event, utc_timestamp, Claim, Document, CONTRACT, SCHEMA};
 
 const RECEIPT_SCHEMA: &str = "hol-guard.harness-claim-evidence.v1";
 const PAYLOAD_SCHEMA: &str = "hol-guard.harness-claim-promotion.v1";
@@ -219,6 +219,13 @@ fn promote(contract: &str, receipt: &Value, now: &str) -> (Vec<String>, Option<V
         Ok(document) => document,
         Err(error) => return (vec![format!("contract does not parse: {error}")], None),
     };
+    if document.schema != SCHEMA {
+        refusals.push(format!(
+            "contract schema {:?} is not supported",
+            document.schema
+        ));
+        return (refusals, None);
+    }
     let mut row = document
         .contracts
         .into_iter()

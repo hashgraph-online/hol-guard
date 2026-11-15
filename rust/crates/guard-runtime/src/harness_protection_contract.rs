@@ -20,7 +20,7 @@ use serde_json::{json, Value};
 const CONTRACT: &str = include_str!(
     "../../../../src/codex_plugin_scanner/guard/contracts/harness-protection-contracts.v1.json"
 );
-const SCHEMA: &str = "hol-guard.harness-protection-contracts.v1";
+pub(crate) const SCHEMA: &str = "hol-guard.harness-protection-contracts.v1";
 const PAYLOAD_SCHEMA: &str = "hol-guard.harness-protection-contract-check.v1";
 
 const SURFACES: [&str; 6] = [
