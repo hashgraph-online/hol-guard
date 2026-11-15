@@ -64,6 +64,25 @@ person's own paste, and the reply goes only to the person who asked. Grok has
 no field for a notice on a prompt it sends, so a flagged prompt there passes
 without one. The tool call it leads to is still reviewed.
 
+## Scope choices
+
+The review card preselects the narrowest choice: the exact reviewed action,
+allowed once. The Rust scope contract (`approval_scope_contract.rs`) sets that
+recommendation whenever the exact action is offered, and the dashboard follows
+it. Broader choices (this project, this source, this app, everywhere) stay
+available but are never preselected.
+
+Every choice states three things on the card:
+
+- **Applies to**: the action and the place the decision covers.
+- **Expires**: one identical retry for Allow once; for a saved decision, until
+  the user removes it or the action itself changes.
+- **Policy**: whether anything is saved, and where it applies.
+
+Choosing a broader scope does not widen what the decision approves. A saved
+allow at any scope still answers only the action whose hash it was saved
+against.
+
 ## What the hash covers
 
 When Guard can prove what a command runs, the approval token is the strong

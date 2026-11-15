@@ -13235,6 +13235,18 @@ function groupByCategory(receipts) {
   }
   return map;
 }
+const SAVED_EXPIRY = "Until you remove it, or until the action itself changes.";
+function scopeChoiceWithDuration(choice, persistExactAction) {
+  if (choice.value !== "artifact" || !persistExactAction) {
+    return choice;
+  }
+  return {
+    ...choice,
+    appliesTo: "This exact action.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved allow for this exact action. A changed command still asks."
+  };
+}
 function approvalDecisionSubjectKey(item) {
   return JSON.stringify([
     item.request_id,
@@ -13258,54 +13270,84 @@ const DEFAULT_SCOPE_CHOICES = [
   {
     value: "artifact",
     label: "Allow just this once",
-    description: "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved."
+    description: "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved.",
+    appliesTo: "This exact action, in this session.",
+    expiry: "Covers the agent's next identical retry, then ends. An unused approval lapses.",
+    policyImpact: "Nothing is saved. Guard's policy does not change."
   },
   {
     value: "workspace",
     label: "Allow and remember for this project",
-    description: "Save this exact action for the current project. Matching actions skip review here until the action changes."
+    description: "Save this exact action for the current project. Matching actions skip review here until the action changes.",
+    appliesTo: "This exact action, in this project only.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved allow for this project. Other projects still ask."
   },
   {
     value: "publisher",
     label: "This source",
-    description: "Save this decision for all actions from the same source. Matching actions skip review in any project."
+    description: "Save this decision for all actions from the same source. Matching actions skip review in any project.",
+    appliesTo: "Matching actions from this source, in every project.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved allow for this source on this machine."
   },
   {
     value: "harness",
     label: "This app",
-    description: "Save this decision for this AI app everywhere. Matching actions from this app skip review in all your projects."
+    description: "Save this decision for this AI app everywhere. Matching actions from this app skip review in all your projects.",
+    appliesTo: "This exact action from this AI app, in every project.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved allow for this app on this machine."
   },
   {
     value: "global",
     label: "Everywhere",
-    description: "Save this decision across all your projects on this machine. All matching actions skip review. Use only if you fully trust this."
+    description: "Save this decision across all your projects on this machine. All matching actions skip review. Use only if you fully trust this.",
+    appliesTo: "This exact action from any AI app, in every project.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved allow for every project and app on this machine."
   }
 ];
 const BLOCK_SCOPE_CHOICES = [
   {
     value: "artifact",
     label: "Block this action",
-    description: "Block only this exact action. Other actions still follow their current Guard policy."
+    description: "Block only this exact action. Other actions still follow their current Guard policy.",
+    appliesTo: "This exact action.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved block. Other actions keep their current policy."
   },
   {
     value: "workspace",
     label: "Block in project",
-    description: "Block matching actions in the current project."
+    description: "Block matching actions in the current project.",
+    appliesTo: "Matching actions in this project.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved block for this project."
   },
   {
     value: "publisher",
     label: "Block this source",
-    description: "Block matching actions from this source."
+    description: "Block matching actions from this source.",
+    appliesTo: "Matching actions from this source.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved block for this source on this machine."
   },
   {
     value: "harness",
     label: "Block in this app",
-    description: "Block matching actions from this AI app."
+    description: "Block matching actions from this AI app.",
+    appliesTo: "Matching actions from this AI app.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved block for this app on this machine."
   },
   {
     value: "global",
     label: "Block everywhere",
-    description: "Block matching actions across every project and AI app on this machine."
+    description: "Block matching actions across every project and AI app on this machine.",
+    appliesTo: "Matching actions everywhere on this machine.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a machine-wide saved block."
   }
 ];
 function hasScopeContractMetadata(item) {
@@ -32336,7 +32378,7 @@ function ReviewScopeControls(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Allow scope selection", children: props.commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       ScopeChoiceButton,
       {
-        choice,
+        choice: scopeChoiceWithDuration(choice, props.rememberExactAction && props.exactActionPersistenceEligible),
         checked: props.allowScope === choice.value,
         onScopeChange: props.onAllowScopeChange
       },
@@ -32455,10 +32497,24 @@ function ScopeChoiceButton(props) {
       className: `rounded-xl border px-4 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-brand-blue/20 ${props.checked ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200/70 bg-white hover:bg-slate-50"}`,
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: props.choice.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-muted-foreground", children: props.choice.description })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-muted-foreground", children: props.choice.description }),
+        showsScopeTerms(props.choice, props.checked) && /* @__PURE__ */ jsxRuntimeExports.jsx(ScopeTerms, { choice: props.choice })
       ]
     }
   );
+}
+function showsScopeTerms(choice, checked) {
+  return choice.value !== "artifact" || checked;
+}
+function ScopeTerms(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs text-brand-dark/70", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "font-semibold", children: "Applies to" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: props.choice.appliesTo }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "font-semibold", children: "Expires" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: props.choice.expiry }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "font-semibold", children: "Policy" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: props.choice.policyImpact })
+  ] });
 }
 function allowButtonLabel(scope, versionBoundScript = false, persistExactAction = false) {
   if (scope === "artifact") {

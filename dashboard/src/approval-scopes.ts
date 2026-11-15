@@ -8,7 +8,34 @@ export type ApprovalScopeChoice = {
   value: DecisionScope;
   label: string;
   description: string;
+  /** Where the decision applies, in plain words. */
+  appliesTo: string;
+  /** When the decision stops applying. */
+  expiry: string;
+  /** What changes in Guard's policy once the decision is saved. */
+  policyImpact: string;
 };
+
+const SAVED_EXPIRY = "Until you remove it, or until the action itself changes.";
+
+/**
+ * The exact-action choice becomes a saved decision when the user picks
+ * Always allow, so its terms follow that pick instead of the one-time copy.
+ */
+export function scopeChoiceWithDuration(
+  choice: ApprovalScopeChoice,
+  persistExactAction: boolean,
+): ApprovalScopeChoice {
+  if (choice.value !== "artifact" || !persistExactAction) {
+    return choice;
+  }
+  return {
+    ...choice,
+    appliesTo: "This exact action.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved allow for this exact action. A changed command still asks.",
+  };
+}
 
 export function approvalDecisionSubjectKey(item: GuardApprovalRequest): string {
   return JSON.stringify([
@@ -37,30 +64,45 @@ export const DEFAULT_SCOPE_CHOICES: ApprovalScopeChoice[] = [
     label: "Allow just this once",
     description:
       "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved.",
+    appliesTo: "This exact action, in this session.",
+    expiry: "Covers the agent's next identical retry, then ends. An unused approval lapses.",
+    policyImpact: "Nothing is saved. Guard's policy does not change.",
   },
   {
     value: "workspace",
     label: "Allow and remember for this project",
     description:
       "Save this exact action for the current project. Matching actions skip review here until the action changes.",
+    appliesTo: "This exact action, in this project only.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved allow for this project. Other projects still ask.",
   },
   {
     value: "publisher",
     label: "This source",
     description:
       "Save this decision for all actions from the same source. Matching actions skip review in any project.",
+    appliesTo: "Matching actions from this source, in every project.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved allow for this source on this machine.",
   },
   {
     value: "harness",
     label: "This app",
     description:
       "Save this decision for this AI app everywhere. Matching actions from this app skip review in all your projects.",
+    appliesTo: "This exact action from this AI app, in every project.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved allow for this app on this machine.",
   },
   {
     value: "global",
     label: "Everywhere",
     description:
       "Save this decision across all your projects on this machine. All matching actions skip review. Use only if you fully trust this.",
+    appliesTo: "This exact action from any AI app, in every project.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved allow for every project and app on this machine.",
   },
 ];
 
@@ -69,26 +111,41 @@ export const BLOCK_SCOPE_CHOICES: ApprovalScopeChoice[] = [
     value: "artifact",
     label: "Block this action",
     description: "Block only this exact action. Other actions still follow their current Guard policy.",
+    appliesTo: "This exact action.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved block. Other actions keep their current policy.",
   },
   {
     value: "workspace",
     label: "Block in project",
     description: "Block matching actions in the current project.",
+    appliesTo: "Matching actions in this project.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved block for this project.",
   },
   {
     value: "publisher",
     label: "Block this source",
     description: "Block matching actions from this source.",
+    appliesTo: "Matching actions from this source.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved block for this source on this machine.",
   },
   {
     value: "harness",
     label: "Block in this app",
     description: "Block matching actions from this AI app.",
+    appliesTo: "Matching actions from this AI app.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved block for this app on this machine.",
   },
   {
     value: "global",
     label: "Block everywhere",
     description: "Block matching actions across every project and AI app on this machine.",
+    appliesTo: "Matching actions everywhere on this machine.",
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a machine-wide saved block.",
   },
 ];
 

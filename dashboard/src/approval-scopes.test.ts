@@ -2,6 +2,7 @@ import {
   approvalDecisionContractKey,
   approvalDecisionSubjectKey,
   ADVANCED_SCOPE_VALUES,
+  BLOCK_SCOPE_CHOICES,
   DEFAULT_SCOPE_CHOICES,
   advancedScopeChoicesForRequest,
   buildDecisionPayload,
@@ -9,6 +10,7 @@ import {
   normalizeDecisionScope,
   recommendedScopeForAction,
   requestSupportsScope,
+  scopeChoiceWithDuration,
   scopeChoicesForRequest,
   standardScopeChoicesForRequest,
   onceOnlyReasonCopy,
@@ -16,7 +18,7 @@ import {
   willPersistExactAction,
 } from "./approval-scopes";
 import type { GuardApprovalRequest } from "./guard-types";
-import { ReviewScopeControls, allowButtonLabel } from "./review-scope-controls";
+import { ReviewScopeControls, allowButtonLabel, showsScopeTerms } from "./review-scope-controls";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -384,4 +386,59 @@ assert(
   DEFAULT_SCOPE_CHOICES.find((choice) => choice.value === "workspace")?.label ===
     "Allow and remember for this project",
   "T-AS-26: workspace choice copy matches the primary allow button",
+);
+
+for (const choice of [...DEFAULT_SCOPE_CHOICES, ...BLOCK_SCOPE_CHOICES]) {
+  assert(
+    choice.appliesTo.length > 0 && choice.expiry.length > 0 && choice.policyImpact.length > 0,
+    `T-AS-27: ${choice.value} choice states where it applies, when it expires and its policy impact`,
+  );
+}
+for (const choice of DEFAULT_SCOPE_CHOICES.filter((item) => item.value !== "artifact")) {
+  assert(
+    choice.expiry.includes("Until you remove it") && choice.policyImpact.startsWith("Adds a saved allow"),
+    `T-AS-28: broader ${choice.value} allow says it is saved until removed (got: '${choice.expiry}')`,
+  );
+}
+const exactOnce = DEFAULT_SCOPE_CHOICES.find((item) => item.value === "artifact");
+assert(
+  exactOnce !== undefined && exactOnce.policyImpact.startsWith("Nothing is saved"),
+  "T-AS-29: the exact-action default saves nothing",
+);
+assert(
+  exactOnce !== undefined && scopeChoiceWithDuration(exactOnce, false) === exactOnce,
+  "T-AS-30: the one-time exact action keeps its one-time terms",
+);
+assert(
+  exactOnce !== undefined &&
+    scopeChoiceWithDuration(exactOnce, true).expiry.includes("Until you remove it") &&
+    scopeChoiceWithDuration(exactOnce, true).policyImpact.startsWith("Adds a saved allow"),
+  "T-AS-31: Always allow on the exact action shows saved terms",
+);
+
+const broaderMarkup = renderToStaticMarkup(
+  createElement(ReviewScopeControls, {
+    commonScopeOptions: DEFAULT_SCOPE_CHOICES.filter((item) => item.value === "artifact"),
+    broaderScopeOptions: DEFAULT_SCOPE_CHOICES.filter((item) => item.value === "harness"),
+    advancedScopeOptions: [],
+    blockScopeOptions: [],
+    hasAllowScope: true,
+    taskCapabilityCopy: null,
+    exactActionPersistenceEligible: false,
+    rememberExactAction: false,
+    allowScope: "artifact",
+    blockScope: "artifact",
+    onAllowScopeChange: ignoreScopeChange,
+    onBlockScopeChange: ignoreScopeChange,
+    onRememberExactActionChange: ignoreScopeChange,
+  }),
+);
+assert(
+  broaderMarkup.split("Expires").length - 1 === 2 &&
+    broaderMarkup.includes("Adds a saved allow for this app on this machine."),
+  "T-AS-32: the picked exact action and every broader scope render their scope, expiry and policy impact",
+);
+assert(
+  !showsScopeTerms(DEFAULT_SCOPE_CHOICES[0], false) && showsScopeTerms(DEFAULT_SCOPE_CHOICES[1], false),
+  "T-AS-33: only an unpicked exact action hides its terms",
 );

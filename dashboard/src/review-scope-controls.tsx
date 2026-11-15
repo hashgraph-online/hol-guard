@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { SectionLabel } from "./approval-center-primitives";
-import type { ApprovalScopeChoice } from "./approval-scopes";
+import { scopeChoiceWithDuration, type ApprovalScopeChoice } from "./approval-scopes";
 import { retryWindowText } from "./approval-retry-guidance";
 import type { DecisionScope } from "./guard-types";
 
@@ -41,7 +41,7 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
         {props.commonScopeOptions.map((choice) => (
           <ScopeChoiceButton
             key={choice.value}
-            choice={choice}
+            choice={scopeChoiceWithDuration(choice, props.rememberExactAction && props.exactActionPersistenceEligible)}
             checked={props.allowScope === choice.value}
             onScopeChange={props.onAllowScopeChange}
           />
@@ -206,7 +206,26 @@ function ScopeChoiceButton(props: {
     >
       <p className="text-sm font-medium text-brand-dark">{props.choice.label}</p>
       <p className="mt-0.5 text-xs text-muted-foreground">{props.choice.description}</p>
+      {showsScopeTerms(props.choice, props.checked) && <ScopeTerms choice={props.choice} />}
     </button>
+  );
+}
+
+/** Broader scopes always state their terms; the exact-action default states them once picked. */
+export function showsScopeTerms(choice: ApprovalScopeChoice, checked: boolean): boolean {
+  return choice.value !== "artifact" || checked;
+}
+
+function ScopeTerms(props: { choice: ApprovalScopeChoice }) {
+  return (
+    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs text-brand-dark/70">
+      <dt className="font-semibold">Applies to</dt>
+      <dd>{props.choice.appliesTo}</dd>
+      <dt className="font-semibold">Expires</dt>
+      <dd>{props.choice.expiry}</dd>
+      <dt className="font-semibold">Policy</dt>
+      <dd>{props.choice.policyImpact}</dd>
+    </dl>
   );
 }
 
