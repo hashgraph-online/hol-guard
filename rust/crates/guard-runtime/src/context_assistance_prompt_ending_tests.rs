@@ -114,7 +114,7 @@ fn a_long_claude_code_note_is_cut_to_fit() {
     for harness in ["claude-code", "codex"] {
         let mut response = json!({"hookSpecificOutput": {"additionalContext": ""}});
         add_context(&mut response, &long);
-        fit_note(&mut response, harness, 0, None, &mut Vec::new());
+        fit_note(&mut response, harness, 0, (None, &[]), &mut Vec::new());
         end_note(&mut response, harness, 0, None);
         let text = response["hookSpecificOutput"]["additionalContext"]
             .as_str()
@@ -135,31 +135,44 @@ fn a_long_claude_code_note_is_cut_to_fit() {
 fn a_cut_inside_a_longer_fence_drops_the_whole_block() {
     let code = "x = '```'\n".repeat(2_000);
     let text = format!("intro\nsrc/a.py:1-2000\n````\n{code}````\n");
-    let (kept, gone) = cut(&text, 9_000).unwrap();
-    assert_eq!(kept, format!("intro\n{CUT}"));
-    assert!(gone.contains("src/a.py:1-2000"));
+    assert_eq!(cut(&text, 9_000).unwrap(), format!("intro\n{CUT}"));
 }
 
-/// Code cut from a note was never seen, so the session forgets it and a
-/// later prompt can show it again; code that stayed is still remembered.
+/// A cut right after a label leaves no label without its code.
+#[test]
+fn a_cut_before_a_block_drops_its_label() {
+    let filler = "y = 0\n".repeat(30);
+    let text = format!("{filler}src/b.py:1-2\n```\n{}```\n", "z\n".repeat(200));
+    let max = filler.len() + "src/b.py:1-2\n".len() + CUT.len() + 1;
+    let kept = cut(&text, max).unwrap();
+    assert!(!kept.contains("src/b.py"), "{kept}");
+}
+
+/// Code cut from a note was never seen, so when a note is cut the session
+/// forgets what this prompt showed, whatever its label, and keeps what
+/// earlier prompts showed.
 #[test]
 fn code_cut_from_a_note_is_forgotten() {
     let session = session("claude-code", "cut-forgets");
-    let kept_code = "def f():\n    return 1";
-    let cut_code = "def g():\n    return 2";
+    let older = seen::Span::new("src/old.py", 1, 2, "def h():\n    return 3");
+    seen::remember(&session, std::slice::from_ref(&older));
+    let seen_before = seen::earlier(&session);
     let shown = [
-        seen::Span::new("src/a.py", 1, 2, kept_code),
-        seen::Span::new("src/b.py", 1, 2, cut_code),
+        seen::Span::new("src/a.py", 1, 2, "def f():\n    return 1"),
+        seen::Span::new("src/b.py", 1, 1, "import os"),
     ];
     seen::remember(&session, &shown);
     let filler = "y = 0\n".repeat(1_700);
-    let note = format!(
-        "src/a.py:1-2\n```\n{kept_code}\n```\n{filler}src/b.py:1-2\n```\n{cut_code}\n```\n"
-    );
+    let note = format!("Imports in src/a.py:\n```\nimport os\n```\n{filler}src/b.py (lines 1-1)\n");
     let mut response = json!({"hookSpecificOutput": {"additionalContext": note}});
     let mut files = vec!["src/a.py".to_owned(), "src/b.py".to_owned()];
-    fit_note(&mut response, "claude-code", 0, Some(&session), &mut files);
-    let earlier = seen::earlier(&session);
-    assert!(earlier.contains(&shown[0]) && !earlier.contains(&shown[1]));
+    fit_note(
+        &mut response,
+        "claude-code",
+        0,
+        (Some(&session), &seen_before),
+        &mut files,
+    );
+    assert_eq!(seen::earlier(&session), [older]);
     assert_eq!(files, ["src/a.py"]);
 }

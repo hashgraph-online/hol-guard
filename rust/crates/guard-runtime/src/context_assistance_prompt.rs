@@ -115,14 +115,22 @@ pub(crate) fn harness_response(
     if let Some(store) = store.filter(|store| !cigar_off(store, workspace, harness)) {
         let slot = envelope.recording_only && open_slot(&mut response);
         let before = context_len(&response);
+        let session = prompt_session(envelope, harness, store);
+        let seen_before = session.as_ref().map(seen::earlier).unwrap_or_default();
         let mut shown = Vec::new();
         attach(&mut response, envelope, harness, store, started, &mut shown);
-        let session = prompt_session(envelope, harness, store);
-        fit_note(&mut response, harness, before, session.as_ref(), &mut shown);
+        let session = session.as_ref();
+        fit_note(
+            &mut response,
+            harness,
+            before,
+            (session, &seen_before),
+            &mut shown,
+        );
         let added = context_len(&response).saturating_sub(before);
         let payload = &envelope.raw_payload;
         savings::noted(store.guard_home(), payload, harness, added, shown);
-        end_note(&mut response, harness, before, session.as_ref());
+        end_note(&mut response, harness, before, session);
         if harness == "kimi" {
             kimi_message(&mut response);
         }
