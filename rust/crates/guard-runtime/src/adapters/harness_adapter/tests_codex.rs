@@ -7,6 +7,8 @@ use serde_json::{json, Value};
 
 use super::{after, Home};
 
+#[path = "tests_codex_alternate_plan.rs"]
+mod alternate_plan;
 #[path = "tests_codex_config_hooks.rs"]
 mod config_hooks;
 #[path = "tests_codex_migration.rs"]

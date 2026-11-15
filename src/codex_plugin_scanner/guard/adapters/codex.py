@@ -592,6 +592,35 @@ def _alternate_cleanup(
     return rendered, answer.get("changed") is True, answer.get("hooks_changed") is True
 
 
+def _alternate_plan(
+    context: HarnessContext,
+    config: Path,
+    hooks: Path,
+    contents: Mapping[Path, bytes | None],
+    managed_server_names: Sequence[str],
+    *,
+    require_owners: bool,
+) -> list[TransitionFile]:
+    """One alternate config's install files, as the native ``alternate_plan`` op plans them."""
+    from ..runtime_transition import TransitionError
+
+    request: dict[str, Any] = {
+        "config": str(config),
+        "hooks": str(hooks),
+        "before_config": _b64(contents[config]),
+        "before_hooks": _b64(contents[hooks]),
+        "managed_server_names": list(managed_server_names),
+        "require_owners": require_owners,
+        **_legacy_fields(context),
+        **install_fields(_runtime_guard_home(context), None),
+        **short_path_fields(),
+    }
+    answer = settle_short_paths(lambda: _codex("alternate_plan", context, **request), request, "alternate_plan")
+    if answer.get("conflict") is True:
+        raise TransitionError("adapter_preparation_generation_conflict")
+    return planned_files({"files": answer.get("files")})
+
+
 def render_codex_alternate_cleanup(
     context: HarnessContext,
     payload: dict[str, object],
@@ -893,24 +922,18 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         contents = {path: _snapshot(path) for pair in pairs for path in pair}
         detection = self.detect(context, config_contents=contents)
         managed_servers = managed_stdio_servers(detection)
-        migrations = {
-            config: prepare_codex_hook_migration(
-                context,
-                config_path=config,
-                hooks_path=hooks,
-                owned_bindings=bindings if config == spec.config_path else (),
-                require_owners=enroll,
-            )
-            for config, hooks in pairs
-        }
-        for config, hooks in pairs:
-            if (
-                migrations[config].files[0].before != contents[config]
-                or migrations[config].files[1].before != contents[hooks]
-            ):
-                raise TransitionError("adapter_preparation_generation_conflict")
-        payload = deepcopy(migrations[spec.config_path].config_payload)
-        target_migrated = migrations[spec.config_path].files[0].before != migrations[spec.config_path].files[0].after
+        main_hooks = next(hooks for config, hooks in pairs if config == spec.config_path)
+        main = prepare_codex_hook_migration(
+            context,
+            config_path=spec.config_path,
+            hooks_path=main_hooks,
+            owned_bindings=bindings,
+            require_owners=enroll,
+        )
+        if main.files[0].before != contents[spec.config_path] or main.files[1].before != contents[main_hooks]:
+            raise TransitionError("adapter_preparation_generation_conflict")
+        payload = deepcopy(main.config_payload)
+        target_migrated = main.files[0].before != main.files[0].after
         backup = prepare_codex_main_backup(
             context, original=contents[spec.config_path], migrated_payload=payload if target_migrated else None
         )
@@ -938,50 +961,19 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             raise TransitionError("adapter_preparation_generation_conflict")
         files = list(publication.files)
         files.append(backup)
+        source_hooks = parse_json_object(contents[main_hooks], path=main_hooks, label="Codex hooks file")
+        expected_payload = _unmanaged_migration_payload(source_hooks, context=context, owned_bindings=bindings)
+        _require_migrated_hooks(
+            context, expected_payload, payload, source_scope=self._scope_for(context, spec.config_path)
+        )
+        files.extend(main.files[1:])
+        migration_backups = [change.path for change in main.files[2:]]
         for config, hooks in pairs:
-            migration = migrations[config]
-            candidate = payload
             if config != spec.config_path:
-                before_change = migration.files[0]
-                migrated = before_change.before != before_change.after
-                # The cleanup is rendered onto the migrated payload, so a change
-                # either step made shows up against the file as it was read.
-                candidate, cleanup_changed, hooks_changed = _alternate_cleanup(
-                    context,
-                    migration.config_payload,
-                    remove_hooks=True,
-                    managed_server_names=tuple(
-                        server.name for server in managed_servers if Path(server.config_path) == config
-                    ),
-                )
-                changed = migrated or cleanup_changed
-                mode = 0o600 if migrated or hooks_changed else before_change.before_mode
-                files.append(
-                    TransitionFile(
-                        before_change.path,
-                        before_change.before,
-                        # An ordinary install writes the hook migration first and
-                        # then renders the cleanup onto that file, so render onto
-                        # the migrated text here too; otherwise the plan and the
-                        # install disagree over spacing the migration introduced.
-                        dump_toml(candidate, original=before_change.after if migrated else before_change.before).encode(
-                            "utf-8"
-                        )
-                        if changed
-                        else before_change.before,
-                        before_mode=before_change.before_mode,
-                        after_mode=mode,
-                        no_follow=True,
-                    )
-                )
-            source_hooks = parse_json_object(contents[hooks], path=hooks, label="Codex hooks file")
-            expected_payload = _unmanaged_migration_payload(
-                source_hooks,
-                context=context,
-                owned_bindings=bindings if config == spec.config_path else (),
-            )
-            _require_migrated_hooks(context, expected_payload, candidate, source_scope=self._scope_for(context, config))
-            files.extend(migration.files[1:])
+                names = tuple(server.name for server in managed_servers if Path(server.config_path) == config)
+                planned = _alternate_plan(context, config, hooks, contents, names, require_owners=enroll)
+                files.extend(planned)
+                migration_backups.extend(change.path for change in planned[2:])
         files.extend(prepare_codex_shell_cleanup(context))
         shim = prepare_guard_shim(self.harness, context)
         files.extend(shim.files)
@@ -1019,9 +1011,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             raise TransitionError("adapter_preparation_generation_conflict")
         RuntimeTransition._compare({"files": [change.payload() for change in files]}, "before")
         # The backups an install writes before its authenticated generation.
-        backups = frozenset(
-            {backup.path, *(change.path for migration in migrations.values() for change in migration.files[2:])}
-        )
+        backups = frozenset({backup.path, *migration_backups})
         return _CodexInstallPlan(prepared, publication, backups, shim.manifest, fields)
 
     def install(self, context: HarnessContext) -> dict[str, object]:

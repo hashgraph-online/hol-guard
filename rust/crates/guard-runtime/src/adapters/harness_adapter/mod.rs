@@ -40,6 +40,7 @@ mod cline_plugin;
 mod cline_run;
 mod cloud_identity;
 mod codex;
+mod codex_alternate_plan;
 mod codex_config_hooks;
 mod codex_detect_legacy;
 mod codex_files;
