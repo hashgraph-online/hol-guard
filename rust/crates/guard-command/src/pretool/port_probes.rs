@@ -60,9 +60,37 @@ pub(super) fn safe(
 fn no_digrc(context: super::PathContext<'_>) -> bool {
     context.shell_home_matches
         && context.home_dir.is_some_and(|home| {
-        std::fs::symlink_metadata(std::path::Path::new(home).join(".digrc"))
-            .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
-    })
+            std::fs::symlink_metadata(std::path::Path::new(home).join(".digrc"))
+                .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+        })
+}
+
+#[cfg(test)]
+mod digrc_home_tests {
+    use super::no_digrc;
+    use crate::pretool::PathContext;
+
+    #[test]
+    fn declared_home_is_proven_only_when_shell_home_matches() {
+        let root = tempfile::tempdir().expect("synthetic home");
+        let home = root.path().to_str().expect("UTF-8 synthetic home");
+        let matching = PathContext {
+            home_dir: Some(home),
+            shell_home_matches: true,
+            ..PathContext::default()
+        };
+        assert!(no_digrc(matching));
+
+        let mismatched = PathContext {
+            shell_home_matches: false,
+            ..matching
+        };
+        assert!(!no_digrc(mismatched));
+
+        std::fs::write(root.path().join(".digrc"), "-f synthetic-names.txt\n")
+            .expect("synthetic config");
+        assert!(!no_digrc(matching));
+    }
 }
 
 fn safe_nc_segment(model: &crate::CanonicalCommandV1, segment: &crate::CommandSegmentV1) -> bool {
