@@ -682,10 +682,7 @@ def _run_guard_dashboard_command(
         "dashboard",
         {
             "generated_at": _now(),
-            "approval_center_url": result.approval_center_url,
-            "browser_url": result.browser_url,
-            "opened": result.opened,
-            "reason": result.reason,
+            **{key: value for key, value in result.to_payload().items() if key != "error"},
             **({"error": result.error} if result.error else {}),
         },
         getattr(args, "json", False),
