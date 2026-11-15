@@ -56,7 +56,7 @@ pub(super) fn uninstall(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let config_argv = fields.get("config_argv").ok_or(Failure::Invalid)?;
     let workspace_argv = fields.get("workspace_argv").unwrap_or(&Value::Null);
     let (config_plan, workspace_plan) = plan_hooks(
-        fields,
+        ctx,
         (hooks.as_slice(), config_argv),
         workspace_payload
             .as_ref()

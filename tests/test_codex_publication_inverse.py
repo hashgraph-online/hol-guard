@@ -348,7 +348,7 @@ def test_signed_but_invalid_prior_inverse_never_authorizes_resumption(inverse, m
     secret = load_hook_secret(context.guard_home)
     record["authentication"] = sign_local_authority_payload(
         record,
-        key=secret.key,
+        key_home=str(secret.guard_home),
         key_id=secret.key_id,
         purpose=_PURPOSE,
         signed_at=marker["owner_operation_id"],

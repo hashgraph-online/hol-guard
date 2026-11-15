@@ -271,7 +271,6 @@
    "class": "python_transport",
    "paths": [
     "src/codex_plugin_scanner/guard/adapters/*bridge*.py",
-    "src/codex_plugin_scanner/guard/adapters/*script_template*.py",
     "src/codex_plugin_scanner/guard/adapters/hook_python*.py",
     "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
     "src/codex_plugin_scanner/guard/codex_hook_process_runtime.py",

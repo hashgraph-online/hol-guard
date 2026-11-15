@@ -450,7 +450,7 @@ fn normalized(payload: &Object, answer: &Value) -> Step<Vec<(String, PyVal)>> {
 /// in one `copilot_hook_config` call. The workspace answer is the plan with
 /// the normalized file whose `hooks` it edits.
 pub(super) fn plan_hooks(
-    fields: &Map<String, Value>,
+    ctx: &Ctx,
     config: (&[(String, PyVal)], &Value),
     workspace: Option<(&Object, &Value)>,
 ) -> Step<(HookPlan, Option<WorkspacePlan>)> {
@@ -467,8 +467,8 @@ pub(super) fn plan_hooks(
     }
     let request = json!({
         "op": "plan",
-        "interpreter": fields.get("interpreter").cloned().unwrap_or(Value::Null),
-        "script": fields.get("script").cloned().unwrap_or(Value::Null),
+        "interpreter": super::isolated_python::probed(),
+        "script": path_text(&ctx.guard_home.join("managed").join("bounded-hooks").join("copilot.py")),
         "jobs": jobs,
     });
     let answer = crate::copilot_hook_config::dispatch(&request).map_err(|_| unanswered())?;

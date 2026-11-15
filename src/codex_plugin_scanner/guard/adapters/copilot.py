@@ -3,9 +3,8 @@
 The kind owns Copilot's paths, detection, the lifecycle locks and signed
 state, which hook entries are Guard's, the MCP plan, the install file plan
 and the uninstall restores and rewrites. This module keeps what must run in
-the Guard process: the bounded hook argv and the hook script it stages, the
-isolated hook interpreter, the launcher environment, Guard's proxy argv for
-each server, the shim and the ``--help`` probe subprocess.
+the Guard process: the bounded hook argv, the launcher environment, Guard's
+proxy argv for each server, the shim and the ``--help`` probe subprocess.
 """
 
 from __future__ import annotations
@@ -51,9 +50,8 @@ def _ask(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
 
 
 def _hook_fields(context: HarnessContext) -> dict[str, object]:
-    """Guard's bounded hook argv for each hooks object, and the isolated bridge."""
-    from .bounded_cli_hook_bridge import bounded_cli_hook_command, bounded_hook_script_path
-    from .isolated_hook_python import isolated_cursor_hook_python
+    """Guard's bounded hook argv for each hooks object."""
+    from .bounded_cli_hook_bridge import bounded_cli_hook_command
 
     spec = _ask("hook_spec", context)
 
@@ -70,12 +68,9 @@ def _hook_fields(context: HarnessContext) -> dict[str, object]:
         )
 
     workspace = spec["workspace_cli_args"]
-    script = bounded_hook_script_path(context.guard_home, _HARNESS)
     return {
         "config_argv": argv(spec["cli_args"]),
         "workspace_argv": None if workspace is None else argv(workspace),
-        "interpreter": isolated_cursor_hook_python(),
-        "script": None if script is None else str(script),
     }
 
 

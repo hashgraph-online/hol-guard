@@ -113,7 +113,7 @@ class PendingCodexPublicationInverse:
         secret = load_hook_secret(plan.guard_home)
         authentication = sign_local_authority_payload(
             payload,
-            key=secret.key,
+            key_home=os.path.abspath(plan.guard_home),
             key_id=secret.key_id,
             purpose=_PURPOSE,
             signed_at=self.authorization.owner_operation_id,

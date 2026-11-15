@@ -286,7 +286,7 @@ def test_successful_publication_retains_exact_authority_receipt(installed):
         verify_local_authority_payload(
             payload,
             authentication,
-            key=secret.key,
+            key_home=str(secret.guard_home),
             key_id=secret.key_id,
             purpose="codex-hook-authority-receipt",
         ).status
@@ -296,7 +296,7 @@ def test_successful_publication_retains_exact_authority_receipt(installed):
         verify_local_authority_payload(
             payload,
             authentication,
-            key=secret.key,
+            key_home=str(secret.guard_home),
             key_id=secret.key_id,
             purpose="codex-hook-publication-inverse",
         ).status
@@ -593,7 +593,7 @@ def test_legacy_signed_record_without_config_identity_preserves_participants(ins
     secret = codex_hook_recovery.load_hook_secret(context.guard_home)
     payload["authentication"] = sign_local_authority_payload(
         payload,
-        key=secret.key,
+        key_home=str(secret.guard_home),
         key_id=secret.key_id,
         purpose="codex-hook-publication-inverse",
         signed_at=payload["operation_id"],

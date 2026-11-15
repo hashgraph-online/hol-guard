@@ -47,6 +47,17 @@ pub(super) fn dispatch(fields: &Map<String, Value>) -> Step<Value> {
     Ok(json!({ "interpreter": interpreter.map(path_text) }))
 }
 
+/// The probed interpreter for this process's own `SYSTEMROOT`, for an
+/// adapter that recognises the isolated hook client older releases wrote.
+pub(super) fn probed() -> Option<String> {
+    let system_root = std::env::var("SYSTEMROOT").ok();
+    CANDIDATES
+        .iter()
+        .map(Path::new)
+        .find(|path| usable(path, system_root.as_deref()))
+        .map(path_text)
+}
+
 /// `_isolated_python_is_usable`: a regular executable file nobody else can
 /// write, whose probe exits 0 in time.
 #[cfg(unix)]

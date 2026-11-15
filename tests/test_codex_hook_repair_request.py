@@ -46,7 +46,7 @@ def _resign(plan, path, payload, *, purpose="codex-authority-repair-request"):
     secret = load_hook_secret(plan.guard_home)
     payload["authentication"] = sign_local_authority_payload(
         payload,
-        key=secret.key,
+        key_home=str(secret.guard_home),
         key_id=secret.key_id,
         purpose=purpose,
         signed_at=plan.operation_id,

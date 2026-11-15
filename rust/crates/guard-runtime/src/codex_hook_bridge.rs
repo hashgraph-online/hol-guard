@@ -392,7 +392,7 @@ fn write_stdout(text: &str) {
 /// `guard-runtime codex-hook-bridge [lane flags] [legacy argv...] <config>`:
 /// the exit code Codex sees (see `desktop` for the lane flags).
 pub(crate) fn run(argv: &[String]) -> i32 {
-    let (lane, python_argv) = desktop::split_lane(argv);
+    let (mut lane, python_argv) = desktop::split_lane(argv);
     let mut raw = Vec::new();
     let read = io::stdin()
         .lock()
@@ -415,6 +415,11 @@ pub(crate) fn run(argv: &[String]) -> i32 {
         write_stdout(&fail_closed(PRE_TOOL_USE));
         return 0;
     };
+    if lane.unvouched() {
+        if let Some(reason) = trust::registration_failure(config_argument) {
+            lane.refuse(reason);
+        }
+    }
     let input_ready = Instant::now();
     if let Some(code) = desktop::settle(&lane, &config, &raw_data, input_ready) {
         return code;
@@ -468,6 +473,8 @@ mod observation;
 mod recovery;
 #[path = "codex_hook_bridge_restart.rs"]
 mod restart;
+#[path = "codex_hook_bridge_trust.rs"]
+mod trust;
 
 #[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_tests.rs"]

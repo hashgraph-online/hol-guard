@@ -17,7 +17,7 @@ pub(super) fn authenticated(
     let verification = local_authority_integrity_op::verify(
         &Value::Object(payload.clone()),
         &authentication,
-        Some(&secret.key),
+        Some(secret.key.as_slice()),
         Some(&secret.key_id),
         kind.purpose(),
     );

@@ -157,7 +157,11 @@ def _live_guard_codex_hook_tokens(tokens: Sequence[str], *, windows: bool | None
         return True
     native_payload = _native_bridge_payload(tokens)
     if native_payload is not None:
-        return _live_guard_codex_hook_tokens(native_payload, windows=windows)
+        # The current registration with arguments appended is still Guard's
+        # handler, altered; only a legacy Python bridge argv is judged inside.
+        return native_payload[0].lstrip().startswith("{") or _live_guard_codex_hook_tokens(
+            native_payload, windows=windows
+        )
     first_name = hook_token_name(tokens[0], windows=windows)
     first = first_name.lower()
     rest = tokens[1:]

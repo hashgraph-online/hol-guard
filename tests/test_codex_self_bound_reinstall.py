@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_hook_self_binding
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter, _unmanaged_migration_payload
 from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
@@ -16,9 +17,35 @@ from codex_plugin_scanner.guard.codex_hook_compatibility import NATIVE_CODEX_HOO
 from codex_plugin_scanner.guard.codex_hook_self_binding import (
     codex_hook_binds_guard_home,
     codex_hook_guard_home,
-    install_package_root,
     self_bound_hook_bindings,
 )
+
+
+@pytest.fixture
+def runtime_in_package(monkeypatch: pytest.MonkeyPatch, native_hook_force: Path) -> Path:
+    """Lay the install out as a wheel does: the native runtime inside its package.
+
+    A wheel ships ``hol-guard-runtime`` under the package's ``_native``
+    directory, so the handler program sits in a root this install controls.
+    The test runtime is a build output instead; name its directory's parent
+    as this install's package so containment sees the same shape.
+    """
+
+    root = native_hook_force.parent.parent
+    monkeypatch.setattr(codex_hook_self_binding, "install_package_root", lambda: root)
+    return root
+
+
+@pytest.fixture
+def packaged_bridge(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """The bridge script an earlier release kept inside this install's package."""
+
+    root = tmp_path / "package"
+    script = root / "guard" / "adapters" / "codex_daemon_hook_bridge.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("", encoding="utf-8")
+    monkeypatch.setattr(codex_hook_self_binding, "install_package_root", lambda: root)
+    return script
 
 
 def _install(home: Path, guard_home: Path) -> None:
@@ -51,7 +78,7 @@ def _rewrite_commands(home: Path, rewrite) -> None:
     _config_path(home).write_text(dump_toml(payload), encoding="utf-8")
 
 
-def test_reinstall_replaces_a_stale_generation_of_this_install(tmp_path):
+def test_reinstall_replaces_a_stale_generation_of_this_install(tmp_path, runtime_in_package):
     home = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     _install(home, guard_home)
@@ -69,7 +96,7 @@ def test_reinstall_replaces_a_stale_generation_of_this_install(tmp_path):
     assert [handler["command"] for handler in _handlers(home)] == before
 
 
-def test_reinstall_refuses_a_guard_handler_bound_to_another_guard_home(tmp_path):
+def test_reinstall_refuses_a_guard_handler_bound_to_another_guard_home(tmp_path, runtime_in_package):
     home = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     _install(home, guard_home)
@@ -83,7 +110,7 @@ def test_reinstall_refuses_a_guard_handler_bound_to_another_guard_home(tmp_path)
     assert read_toml_payload(_config_path(home)) == before
 
 
-def test_reinstall_keeps_a_foreign_handler_sharing_a_group_with_a_stale_one(tmp_path):
+def test_reinstall_keeps_a_foreign_handler_sharing_a_group_with_a_stale_one(tmp_path, runtime_in_package):
     home = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     _install(home, guard_home)
@@ -124,9 +151,6 @@ _BRIDGE_PAYLOAD: dict[str, object] = {
     "query": "guard-home=/srv/guard&home=/home/dev",
     "fallback_command": ["python", "-m", "codex_plugin_scanner.cli", "--guard-home", "/srv/guard"],
 }
-
-_PACKAGED_BRIDGE = install_package_root() / "guard" / "adapters" / "codex_daemon_hook_bridge.py"
-
 
 def _bridge_launch(script: Path, guard_home: Path, *, program: str = "/usr/bin/python3") -> str:
     payload = {"state_path": str(guard_home / "daemon-state.json"), "query": f"guard-home={guard_home}"}
@@ -178,10 +202,10 @@ def test_a_tampered_command_is_not_this_installations_own(command):
     assert codex_hook_guard_home(command) is None
 
 
-def test_the_packaged_bridge_script_is_this_installations_own(tmp_path):
+def test_the_packaged_bridge_script_is_this_installations_own(tmp_path, packaged_bridge):
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
-    assert codex_hook_binds_guard_home(_bridge_launch(_PACKAGED_BRIDGE, guard_home), guard_home)
+    assert codex_hook_binds_guard_home(_bridge_launch(packaged_bridge, guard_home), guard_home)
 
 
 def test_the_native_bridge_under_the_guard_home_is_this_installations_own(tmp_path):
@@ -211,7 +235,7 @@ def test_a_bridge_outside_this_installation_stays_unowned(tmp_path):
     assert not codex_hook_binds_guard_home(_bridge_launch(script, guard_home), guard_home)
 
 
-def test_a_symlink_out_of_the_guard_home_is_not_inside_it(tmp_path):
+def test_a_symlink_out_of_the_guard_home_is_not_inside_it(tmp_path, packaged_bridge):
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     target = tmp_path / "evil" / "hol-guard-runtime"
@@ -220,7 +244,7 @@ def test_a_symlink_out_of_the_guard_home_is_not_inside_it(tmp_path):
     link = guard_home / "hol-guard-runtime"
     link.symlink_to(target)
     assert not codex_hook_binds_guard_home(
-        _native_launch(str(link), _PACKAGED_BRIDGE.parent / "nowhere.py", guard_home), guard_home
+        _native_launch(str(link), packaged_bridge.parent / "nowhere.py", guard_home), guard_home
     )
 
 
@@ -264,16 +288,16 @@ def test_a_python_launcher_is_reported_rather_than_claimed(tmp_path):
     assert not codex_hook_binds_guard_home(command, guard_home)
 
 
-def test_self_bound_bindings_name_the_group_by_matcher_alone(tmp_path):
+def test_self_bound_bindings_name_the_group_by_matcher_alone(tmp_path, packaged_bridge):
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
-    handler = {"type": "command", "command": _bridge_launch(_PACKAGED_BRIDGE, guard_home)}
+    handler = {"type": "command", "command": _bridge_launch(packaged_bridge, guard_home)}
     hooks = {"PreToolUse": [{"matcher": "Bash", "hooks": [handler, {"type": "command", "command": "other"}]}]}
     bindings = self_bound_hook_bindings(hooks, guard_home=guard_home)
     assert bindings == [{"event": "PreToolUse", "group": {"matcher": "Bash"}, "handler": handler}]
 
 
-def test_a_handler_still_running_a_recorded_command_is_reported_not_claimed(tmp_path):
+def test_a_handler_still_running_a_recorded_command_is_reported_not_claimed(tmp_path, packaged_bridge):
     """An edit Guard did not make is surfaced, even inside a slot Guard owns.
 
     The command here is one the authenticated manifest records, so Guard wrote
@@ -283,14 +307,14 @@ def test_a_handler_still_running_a_recorded_command_is_reported_not_claimed(tmp_
     """
 
     guard_home = tmp_path / "guard-home"
-    command = _bridge_launch(_PACKAGED_BRIDGE, guard_home)
+    command = _bridge_launch(packaged_bridge, guard_home)
     hooks = {"PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": command}]}]}
 
     assert self_bound_hook_bindings(hooks, guard_home=guard_home)
     assert self_bound_hook_bindings(hooks, guard_home=guard_home, recorded_commands=[command]) == []
 
 
-def test_a_stale_generation_is_still_claimed_alongside_a_recorded_command(tmp_path):
+def test_a_stale_generation_is_still_claimed_alongside_a_recorded_command(tmp_path, packaged_bridge):
     """A recorded command holds back only the handler running it.
 
     An upgrade or a moved virtualenv changes the launcher, so a stale handler's
@@ -298,8 +322,8 @@ def test_a_stale_generation_is_still_claimed_alongside_a_recorded_command(tmp_pa
     """
 
     guard_home = tmp_path / "guard-home"
-    recorded = _bridge_launch(_PACKAGED_BRIDGE, guard_home)
-    stale = _bridge_launch(_PACKAGED_BRIDGE, guard_home, program="/opt/python3.12/bin/python3")
+    recorded = _bridge_launch(packaged_bridge, guard_home)
+    stale = _bridge_launch(packaged_bridge, guard_home, program="/opt/python3.12/bin/python3")
     hooks = {"PreToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": stale}]}]}
 
     claimed = self_bound_hook_bindings(hooks, guard_home=guard_home, recorded_commands=[recorded])
@@ -307,7 +331,7 @@ def test_a_stale_generation_is_still_claimed_alongside_a_recorded_command(tmp_pa
     assert [binding["handler"]["command"] for binding in claimed] == [stale]
 
 
-def test_the_json_migration_path_does_not_hold_back_a_recorded_command(tmp_path):
+def test_the_json_migration_path_does_not_hold_back_a_recorded_command(tmp_path, packaged_bridge):
     """The manifest authenticates the config entry, not one in hooks.json.
 
     A JSON handler that happens to run a recorded command is not Guard's
@@ -318,7 +342,7 @@ def test_the_json_migration_path_does_not_hold_back_a_recorded_command(tmp_path)
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
-    command = _bridge_launch(_PACKAGED_BRIDGE, guard_home)
+    command = _bridge_launch(packaged_bridge, guard_home)
     handler = {"type": "command", "command": command}
     hooks = {"PreToolUse": [{"matcher": "*", "hooks": [handler]}]}
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=guard_home)

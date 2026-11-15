@@ -37,6 +37,24 @@ pub(super) struct Lane {
     registration_failure: Option<String>,
 }
 
+impl Lane {
+    /// A direct registration: no launcher vouched for it or refused it, so
+    /// the bridge authenticates it itself.
+    pub(super) fn unvouched(&self) -> bool {
+        self.desktop.is_none() && self.registration_failure.is_none()
+    }
+
+    /// Fail this hook closed for `reason` before the daemon is asked.
+    pub(super) fn refuse(&mut self, reason: String) {
+        let reason = if reason_code(&reason) {
+            reason
+        } else {
+            "codex_hook_launch_unauthenticated".to_owned()
+        };
+        self.registration_failure = Some(reason);
+    }
+}
+
 /// A stable reason code: what `_write_failure_cause` may write.
 fn reason_code(text: &str) -> bool {
     !text.is_empty()

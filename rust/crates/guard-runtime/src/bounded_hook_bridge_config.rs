@@ -63,7 +63,9 @@ pub(super) fn frozen_launch(python_argv: &[String]) -> bool {
 fn config_names_frozen(argument: &str) -> bool {
     pyjson::parse_mapping_lone_surrogates(argument)
         .ok()
-        .is_some_and(|parsed| matches!(parsed.value.get("frozen_launcher"), Some(PyVal::Bool(true))))
+        .is_some_and(|parsed| {
+            matches!(parsed.value.get("frozen_launcher"), Some(PyVal::Bool(true)))
+        })
 }
 
 pub(crate) fn positive_seconds(value: Option<&PyVal>) -> Option<Duration> {

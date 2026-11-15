@@ -20,7 +20,6 @@ import pytest
 from ci.native_daemon_harness import NativeGuardDaemon as GuardDaemonServer
 from codex_plugin_scanner.guard import hook_deadline as runtime_hook_deadline_module
 from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
-from codex_plugin_scanner.guard.codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
 from codex_plugin_scanner.guard.store import GuardStore
@@ -30,6 +29,7 @@ from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
     _DaemonHandler,
     _write_authenticated_daemon_files,
+    signed_native_bridge_argv,
 )
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -135,13 +135,12 @@ def _native_bridge_response(
     event_name = str(payload.get("hook_event_name", "PreToolUse"))
     registered = {
         "state_path": str(config["state_path"]),
-        "manifest_path": str(guard_home / "managed" / "codex" / "hooks.manifest.json"),
         "fallback_command": list(config["fallback_command"]),
         "start_command": list(config["start_command"]),
         "query": query,
         "hook_timeouts": {event_name: timeout_seconds},
     }
-    argv = (str(runtime), NATIVE_CODEX_HOOK_COMMAND, json.dumps(registered, separators=(",", ":")))
+    argv = signed_native_bridge_argv(runtime, guard_home, registered)
     completed = subprocess.run(
         argv,
         input=stamp_hook_input_text(json.dumps(payload)),

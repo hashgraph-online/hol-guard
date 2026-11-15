@@ -252,7 +252,13 @@ def test_configured_native_inverse_restores_binding_store_and_selection(
         plan = replace(
             fixture_plan,
             operation_id=str(uuid.uuid4()),
-            files=(*prepared.files, selection, dependency),
+            # The handler runs the native runtime, so the prepared install may
+            # already pin it as a packaged file; name it once.
+            files=(
+                *prepared.files,
+                selection,
+                *((dependency,) if all(change.path != dependency.path for change in prepared.files) else ()),
+            ),
             managed_installs=(TransitionInstall("codex", before_row, after_row),),
             native_runtimes={"candidate": native, "predecessor": native},
             deadline_epoch=time.time() + 60,

@@ -42,6 +42,7 @@ mod python_json;
 use opening::*;
 use python_json::{parse_python_json, python_canonical_json};
 
+use crate::codex_hook_key;
 use crate::compound_git_paths;
 use crate::local_authority_integrity_op;
 
@@ -144,6 +145,7 @@ struct Request {
     op: String,
     kind: Option<String>,
     key_hex: Option<String>,
+    key_home: Option<String>,
     key_id: Option<String>,
     installation_id: Option<String>,
     payload: Option<Map<String, Value>>,
@@ -159,7 +161,7 @@ struct Request {
 }
 
 struct Secret {
-    key: Vec<u8>,
+    key: zeroize::Zeroizing<Vec<u8>>,
     key_id: String,
     installation_id: String,
 }
@@ -185,6 +187,10 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         "seal" => seal(&request)?,
         "open" => open(&request)?,
         "receipt_manifest" => receipt_manifest(&request)?,
+        op @ ("key_identity" | "key_ensure" | "key_remove_if_unused") => {
+            let guard_home = request.guard_home.as_deref().ok_or_else(invalid)?;
+            codex_hook_key::answer(op, guard_home).ok_or_else(invalid)?
+        }
         "repair_proof" => {
             let payload = request.payload.as_ref().ok_or_else(invalid)?;
             let proof = request.proof.as_ref().ok_or_else(invalid)?;
@@ -214,24 +220,38 @@ fn kind(request: &Request) -> Result<Kind, String> {
         .ok_or_else(invalid)
 }
 
-fn secret(request: &Request) -> Result<Secret, String> {
-    let key = match request.key_hex.as_deref() {
-        Some(text) if text.len() <= MAX_KEY_BYTES * 2 => {
-            hex::decode(text).map_err(|_| invalid())?
+/// The signing key: read from `key_home` by the runtime itself, or (for
+/// older callers) passed as `key_hex`. A key the runtime cannot read, or
+/// whose ids differ from the caller's, is a refusal with its reason.
+fn secret(request: &Request) -> Result<Result<Secret, &'static str>, String> {
+    let key_id = request.key_id.clone().ok_or_else(invalid)?;
+    let installation_id = request.installation_id.clone().ok_or_else(invalid)?;
+    let key = match (request.key_hex.as_deref(), request.key_home.as_deref()) {
+        (Some(text), None) if text.len() <= MAX_KEY_BYTES * 2 => {
+            zeroize::Zeroizing::new(hex::decode(text).map_err(|_| invalid())?)
+        }
+        (None, Some(home)) => {
+            match codex_hook_key::read_matching(home, Some(&key_id), Some(&installation_id)) {
+                Ok(held) => held.key,
+                Err(reason) => return Ok(Err(reason)),
+            }
         }
         _ => return Err(invalid()),
     };
-    Ok(Secret {
+    Ok(Ok(Secret {
         key,
-        key_id: request.key_id.clone().ok_or_else(invalid)?,
-        installation_id: request.installation_id.clone().ok_or_else(invalid)?,
-    })
+        key_id,
+        installation_id,
+    }))
 }
 
 /// Sign `payload` and answer the record's exact bytes.
 fn seal(request: &Request) -> Result<Value, String> {
     let kind = kind(request)?;
-    let secret = secret(request)?;
+    let secret = match secret(request)? {
+        Ok(secret) => secret,
+        Err(reason) => return Ok(refused(reason)),
+    };
     let mut payload = request.payload.clone().ok_or_else(invalid)?;
     if payload.contains_key("authentication")
         || text(payload.get("schema")) != Some(kind.schema())
@@ -294,7 +314,10 @@ fn seal(request: &Request) -> Result<Value, String> {
 /// Authenticate a record against the context the caller expects.
 fn open(request: &Request) -> Result<Value, String> {
     let kind = kind(request)?;
-    let secret = secret(request)?;
+    let secret = match secret(request)? {
+        Ok(secret) => secret,
+        Err(reason) => return Ok(refused(reason)),
+    };
     let raw = request.text.as_deref().ok_or_else(invalid)?;
     let guard_home = request.guard_home.as_deref().ok_or_else(invalid)?;
     let outcome = match kind {
