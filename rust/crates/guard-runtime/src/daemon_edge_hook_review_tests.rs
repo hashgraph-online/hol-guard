@@ -177,3 +177,84 @@ fn a_post_tool_event_without_a_native_decision_never_blocks() {
         }
     }
 }
+
+/// The shipped capability contract: every harness and the events it declares.
+const HARNESS_CONTRACTS: &str = include_str!(
+    "../../../../src/codex_plugin_scanner/guard/contracts/harness-protection-contracts.v1.json"
+);
+
+/// Whether a reply refuses the action in any harness's envelope shape.
+fn refuses(body: &Value) -> bool {
+    let output = &body["hookSpecificOutput"];
+    body["policy_action"] == "block"
+        || matches!(body["decision"].as_str(), Some("deny" | "block"))
+        || body["behavior"] == "deny"
+        || output["permissionDecision"] == "deny"
+        || output["decision"]["behavior"] == "deny"
+}
+
+/// Whether a reply lets the action through in any harness's envelope shape.
+fn permits(body: &Value) -> bool {
+    let output = &body["hookSpecificOutput"];
+    body["continue"] == true
+        || body["policy_action"] == "allow"
+        || matches!(body["decision"].as_str(), Some("allow" | "approve"))
+        || body["behavior"] == "allow"
+        || output["permissionDecision"] == "allow"
+        || output["decision"]["behavior"] == "allow"
+}
+
+/// Every blocking or approval event the contract declares for a harness that
+/// reaches Guard through a hook, extension or plugin.
+fn enforced_events() -> Vec<(String, String)> {
+    let contract: Value = serde_json::from_str(HARNESS_CONTRACTS).unwrap();
+    let mut events = Vec::new();
+    for row in contract["contracts"].as_array().unwrap() {
+        let harness = row["harness"].as_str().unwrap();
+        for event in row["capability_events"].as_array().into_iter().flatten() {
+            let mode = event["mode"].as_str().unwrap_or_default();
+            if matches!(mode, "blocking" | "approval") {
+                events.push((
+                    harness.to_owned(),
+                    event["event"].as_str().unwrap().to_owned(),
+                ));
+            }
+        }
+    }
+    events
+}
+
+#[test]
+fn no_adapter_turns_a_missing_native_decision_into_an_allow() {
+    let events = enforced_events();
+    // Guards against the contract shape drifting so the loop checks nothing.
+    assert!(events.len() >= 15, "only {} enforced events", events.len());
+    let harnesses: std::collections::BTreeSet<&str> =
+        events.iter().map(|(harness, _)| harness.as_str()).collect();
+    for expected in ["claude-code", "codex", "cursor", "grok", "pi", "omp"] {
+        assert!(
+            harnesses.contains(expected),
+            "{expected} declares no enforced event"
+        );
+    }
+    for (harness, event) in &events {
+        for code in NO_DECISION_CODES {
+            let body = fail_safe(harness, event, WORKER_UNAVAILABLE_REASON, code);
+            let context = format!("{harness} {event} {code}: {body}");
+            assert!(refuses(&body), "no refusal for {context}");
+            assert!(!permits(&body), "an allow for {context}");
+        }
+    }
+}
+
+#[test]
+fn every_enforced_event_name_resolves_to_a_refusing_envelope_family() {
+    let contract: Value = serde_json::from_str(ENVELOPES).unwrap();
+    for (harness, event) in enforced_events() {
+        let kind = event_kind(&contract, &event);
+        assert!(
+            matches!(kind.as_str(), "pre_tool" | "permission" | "prompt"),
+            "{harness} {event} falls into the {kind} family, which carries no verdict"
+        );
+    }
+}
