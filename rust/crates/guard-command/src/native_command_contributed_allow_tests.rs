@@ -346,6 +346,13 @@ fn a_permitted_action_the_entry_could_change_keeps_its_review() {
         // after the `cd` it names the checked-out file.
         "ollama rm README.md",
         "ollama rm --name=README.md",
+        // A case-insensitive file system opens `readme.md` as `README.md`,
+        // and Windows drops trailing dots and spaces.
+        "ollama rm readme.md",
+        "ollama rm README.md.",
+        // An attached value may follow any letter of a short cluster.
+        "ollama rm -vfREADME.md stale-model",
+        "ollama rm key=README.md",
     ] {
         let alone = evaluate_in(&home, &repository, &allowed, step);
         assert_eq!(

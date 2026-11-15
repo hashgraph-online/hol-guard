@@ -430,19 +430,36 @@ fn names_a_path(argument: &str) -> bool {
 
 /// The words of a permitted step that could name a file relative to the
 /// directory it runs in: each operand, the value of a `--name=value` option,
-/// and the attached value of a short option cluster.
+/// every suffix of a short option cluster (an attached value may follow any
+/// of its letters), and every part of a word split at `=`.
 pub(super) fn bare_names(later: &CommandSegmentV1) -> Vec<&str> {
-    later
-        .arguments
-        .iter()
-        .filter(|argument| !matches!(argument.as_str(), "2>&1" | "2>/dev/null" | ">/dev/null"))
-        .filter_map(|argument| match argument.strip_prefix("--") {
-            Some(option) => option.split_once('=').map(|(_, value)| value),
+    let mut names = Vec::new();
+    for argument in &later.arguments {
+        if matches!(argument.as_str(), "2>&1" | "2>/dev/null" | ">/dev/null") {
+            continue;
+        }
+        let words: Vec<&str> = match argument.strip_prefix("--") {
+            Some(option) => option
+                .split_once('=')
+                .map(|(_, value)| value)
+                .into_iter()
+                .collect(),
             None => match argument.strip_prefix('-') {
-                Some(cluster) => cluster.get(1..),
-                None => Some(argument.as_str()),
+                Some(cluster) => cluster
+                    .char_indices()
+                    .skip(1)
+                    .map(|(offset, _)| &cluster[offset..])
+                    .collect(),
+                None => vec![argument.as_str()],
             },
-        })
-        .filter(|name| !name.is_empty())
-        .collect()
+        };
+        for word in words {
+            names.push(word);
+            if word.contains('=') {
+                names.extend(word.split('='));
+            }
+        }
+    }
+    names.retain(|name| !name.is_empty());
+    names
 }

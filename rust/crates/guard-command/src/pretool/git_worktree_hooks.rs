@@ -132,9 +132,11 @@ pub(super) fn hooks_are_inert(
         .all(|hook| hook_file_inert(&path.join(hook), hook, husky_directory_reached))
 }
 
-/// Whether any of `names` is an entry at the root of the tree `reference`
-/// names, in the repository the add's directory belongs to. Pathspecs are
-/// read literally, so a name never widens into a pattern. `None` is doubt.
+/// Whether any of `names` may open an entry at the root of the tree
+/// `reference` names, in the repository the add's directory belongs to. A
+/// case-insensitive file system opens `readme.md` as `README.md`, and Windows
+/// drops trailing dots and spaces, so names are compared that way. `None` is
+/// doubt, including a root listing too large to read.
 pub(in crate::pretool) fn tree_names_any(
     executable: &str,
     leading: &[String],
@@ -143,20 +145,35 @@ pub(in crate::pretool) fn tree_names_any(
     context: super::super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Option<bool> {
+    const ROOT_LISTING_LIMIT: u64 = 256 * 1024;
     let (base, _, _, _) = super::prepared_git_command(executable, context, execution_environment)?;
     let deadline = Instant::now() + super::super::git_probe::PROBE_BUDGET;
-    let mut arguments = vec![
+    let arguments = [
         "--no-pager",
-        "--literal-pathspecs",
         "ls-tree",
         "-z",
         "--full-tree",
         "--name-only",
         reference,
-        "--",
     ];
-    arguments.extend(names);
     let (status, output) =
-        git_query_with_args(&base, leading, &arguments, deadline, WORKTREE_PROBE_LIMIT)?;
-    status.success().then_some(!output.is_empty())
+        git_query_with_args(&base, leading, &arguments, deadline, ROOT_LISTING_LIMIT)?;
+    if !status.success() {
+        return None;
+    }
+    Some(output.split(|byte| *byte == 0).any(|entry| {
+        !entry.is_empty()
+            && names
+                .iter()
+                .any(|name| opened(entry).eq_ignore_ascii_case(opened(name.as_bytes())))
+    }))
+}
+
+/// The name a Windows file system opens: trailing dots and spaces dropped.
+fn opened(name: &[u8]) -> &[u8] {
+    let end = name
+        .iter()
+        .rposition(|byte| !matches!(byte, b'.' | b' '))
+        .map_or(0, |last| last + 1);
+    &name[..end]
 }
