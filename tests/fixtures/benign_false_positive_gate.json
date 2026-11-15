@@ -14409,6 +14409,40 @@
       "expect": "allow"
     },
     {
+      "id": "home-fd-hidden-repo-listing",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd --hidden -t d . -d 2"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "home-fd-hidden-no-ignore-git-dirs",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd --hidden --no-ignore -t d '^\\.git$' ${ORG} -d 3 | head -40"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "home-fd-child-extension",
       "fix_area": "shell",
       "harnesses": [
@@ -15471,6 +15505,41 @@
       },
       "cwd": "org_app",
       "expect": "allow"
+    },
+    {
+      "id": "neg-home-fd-hidden-ssh-directory",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -H -d 2 . ${HOME}/.ssh"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-home-fd-hidden-follow-links",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -H -L -t f . -d 2"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-home-fd-hidden",

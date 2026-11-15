@@ -177,6 +177,9 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # build's programs inside the sandbox, so none of them comes from a
         # directory the case plants outside it.
         "neg-env-unset-path-npm-run-build",
+        # A hidden `fd` walk that follows links keeps its review; a contained run reads no
+        # link target outside the workspace and prints only names inside it.
+        "neg-home-fd-hidden-follow-links",
         # A `find` that is not limited to regular files hands a link to `grep`, which opens its
         # target; the contained run reaches nothing outside the workspace.
         "neg-find-exec-grep-l-edge-clone-without-type-f",
