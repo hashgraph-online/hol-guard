@@ -62,10 +62,14 @@ fn text_names_route(text: &str, rerouted: bool) -> bool {
     })
 }
 
-/// The path as captured, or without the closing parentheses and commas of
-/// the call or list it was written in.
+/// The path as captured, without the closing parentheses and commas of the
+/// call or list it was written in, or cut at the first of them, where the
+/// arguments after the URL begin. More candidates only add matches.
 fn path_names_route(path: &str) -> bool {
-    is_approval_write_path(path) || is_approval_write_path(path.trim_end_matches([')', ',']))
+    let before_delimiter = path.split([')', ',']).next().unwrap_or_default();
+    is_approval_write_path(path)
+        || is_approval_write_path(path.trim_end_matches([')', ',']))
+        || is_approval_write_path(before_delimiter)
 }
 
 /// `user@host:port`, where the host is a loopback or unspecified address in

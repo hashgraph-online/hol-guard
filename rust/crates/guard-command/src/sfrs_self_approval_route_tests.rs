@@ -38,6 +38,8 @@ fn every_client_that_names_an_approval_route_is_self_authorization() {
         "curl -X POST http://$(hostname):4781/v1/requests/0000aaaa/approve",
         "curl -X POST 'http://127.0.0.1:4781/a(b)/../v1/policy/clear'",
         "python3 -c \"import urllib.request as u; u.urlopen(u.Request(\\\"http://127.0.0.1:4781/v1/policy/clear\\\"))\"",
+        "python3 -c 'import urllib.request as u; u.urlopen(u.Request(\"http://127.0.0.1:4781/v1/pol\"\"icy/clear\",data=b\"\",method=\"POST\"))'",
+        "python3 -c 'import urllib.request as u; u.urlopen(u.Request(\"http://127.0.0.1:4781/v1/policy/clear\"),timeout=5)'",
     ] {
         assert!(is_guard_approval_mutation_command(command), "{command}");
     }
