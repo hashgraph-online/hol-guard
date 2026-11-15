@@ -17,8 +17,9 @@
 //!   take their backup values again. When the user's own hooks remain they
 //!   keep the feature on, so it is left as it is.
 //!
-//! Every other key keeps its current value. `delete` is true when the result
-//! is empty and the file did not exist before install.
+//! Every other key keeps its current value. When user hooks remain in
+//! `hooks.json` (`json_hooks`), the hook feature stays as it is too. `delete`
+//! is true when the result is empty and the file did not exist before install.
 
 use serde_json::{json, Map, Value};
 
@@ -39,16 +40,17 @@ pub(super) fn uninstall_restore(fields: &Map<String, Value>) -> Step<Value> {
         Entries::new()
     };
     let mut rendered = current.clone();
-    if let Some(raw) = fields.get("hooks").filter(|raw| !raw.is_null()) {
-        let raw = raw.as_str().ok_or(Failure::Invalid)?;
-        let cleaned = pyjson::parse(raw).map_err(|_| Failure::Invalid)?;
+    if let Some(cleaned) = optional_wire(fields, "hooks")? {
         if cleaned.as_dict().is_some_and(|hooks| !hooks.is_empty()) {
             set(&mut rendered, "hooks", cleaned);
         } else {
             pop(&mut rendered, "hooks");
         }
     }
-    if !registered(get(&rendered, "hooks")) {
+    // Uninstall leaves `hooks.json` as it is, so a user hook there still
+    // needs the feature on.
+    let json_hooks = optional_wire(fields, "json_hooks")?;
+    if !registered(get(&rendered, "hooks")) && !registered(json_hooks.as_ref()) {
         restore_hook_features(&mut rendered, &backup);
     }
     restore_proxied_servers(&mut rendered, &backup);
@@ -56,12 +58,22 @@ pub(super) fn uninstall_restore(fields: &Map<String, Value>) -> Step<Value> {
         &PyVal::Dict(rendered.clone()),
         &PyVal::Dict(current.clone()),
     );
-    let delete = rendered.is_empty() && (!backup_present || backup.is_empty());
+    // A present backup, even one with only comments, is put back, not deleted.
+    let delete = rendered.is_empty() && !backup_present;
     Ok(json!({
         "rendered": render(rendered),
         "changed": changed,
         "delete": delete,
     }))
+}
+
+/// A wire-JSON field that may be absent or null.
+fn optional_wire(fields: &Map<String, Value>, key: &str) -> Step<Option<PyVal>> {
+    let Some(raw) = fields.get(key).filter(|raw| !raw.is_null()) else {
+        return Ok(None);
+    };
+    let raw = raw.as_str().ok_or(Failure::Invalid)?;
+    pyjson::parse(raw).map(Some).map_err(|_| Failure::Invalid)
 }
 
 fn restore_hook_features(rendered: &mut Entries, backup: &Entries) {

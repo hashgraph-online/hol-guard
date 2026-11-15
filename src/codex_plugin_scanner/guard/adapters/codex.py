@@ -1500,7 +1500,13 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         if backup_path.is_file():
             original_text = backup_path.read_text(encoding="utf-8")
             if target_config_path.is_file():
-                restore_without_guard(context, target_config_path, original_text, owned_bindings)
+                restore_without_guard(
+                    context,
+                    target_config_path,
+                    original_text,
+                    owned_bindings,
+                    hooks_json_path=self._hooks_path(context),
+                )
             elif original_text:
                 atomic_write_text(target_config_path, original_text, mode=0o600)
             backup_path.unlink()

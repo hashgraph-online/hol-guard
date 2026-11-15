@@ -90,3 +90,17 @@ def test_guard_uninstall_codex_moves_the_trust_of_a_hook_the_user_added(tmp_path
     assert restored["model"] == "o3"
     assert restored["hooks"]["PreToolUse"] == [mine]
     assert restored["hooks"]["state"] == {f"{prefix}:0:0": trust}
+
+
+def test_guard_uninstall_codex_puts_back_a_config_that_held_only_comments(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    config_path = home_dir / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text("# Personal configuration\n", encoding="utf-8")
+
+    _guard(capsys, "install", "codex", "--home", str(home_dir), "--workspace", str(workspace_dir))
+    _guard(capsys, "uninstall", "codex", "--home", str(home_dir), "--workspace", str(workspace_dir))
+
+    assert config_path.read_text(encoding="utf-8") == "# Personal configuration\n"

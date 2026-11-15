@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..codex_config import dump_toml, read_config_bytes
 from ..codex_hook_integrity import atomic_write_text
-from ..codex_hook_sources import parse_toml_object
+from ..codex_hook_sources import parse_json_object, parse_toml_object
 from ..codex_hook_trust import remap_hook_state
 from .base import HarnessContext
 
@@ -32,17 +32,46 @@ def follow_hook_state(before: Mapping[str, object], cleaned: dict[str, object], 
         cleaned.pop("state")
 
 
+def _snapshot(config_path: Path) -> bytes:
+    """The config's bytes, or a stop: an unreadable file must not read as empty and be deleted."""
+
+    try:
+        return config_path.read_bytes()
+    except OSError as exc:
+        raise RuntimeError(
+            f"codex_uninstall_config_unreadable: Guard could not read the Codex config at {config_path}, "
+            "so it left the file and the install backup in place. Repair the file's permissions and run "
+            "`hol-guard uninstall codex` again."
+        ) from exc
+
+
+def _user_json_hooks(
+    context: HarnessContext,
+    hooks_json_path: Path,
+    owned_bindings: Sequence[Mapping[str, object]],
+) -> dict[str, object] | None:
+    """The hooks left in ``hooks.json``, which uninstall keeps, without any Guard handler."""
+
+    from .codex import _strip_owned_hooks
+
+    data = read_config_bytes(hooks_json_path) if hooks_json_path.is_file() else None
+    hooks = parse_json_object(data, path=hooks_json_path, label="Codex hooks file").get("hooks")
+    return _strip_owned_hooks(context, hooks, owned_bindings) if isinstance(hooks, dict) else None
+
+
 def restore_without_guard(
     context: HarnessContext,
     config_path: Path,
     original_text: str,
     owned_bindings: Sequence[Mapping[str, object]],
+    *,
+    hooks_json_path: Path,
 ) -> None:
     """Write the config back without what the install added, keeping every later edit."""
 
     from .codex import _codex, _reply_text, _strip_owned_hooks, _Wire
 
-    current_bytes = read_config_bytes(config_path)
+    current_bytes = _snapshot(config_path)
     current = parse_toml_object(current_bytes, path=config_path, label="Codex config file")
     backup = (
         parse_toml_object(original_text.encode("utf-8"), path=config_path, label="Codex config backup")
@@ -54,15 +83,24 @@ def restore_without_guard(
     if isinstance(hooks, dict):
         cleaned = _strip_owned_hooks(context, hooks, owned_bindings)
         follow_hook_state(hooks, cleaned, config_path)
-    wire = _Wire(current, *(part for part in (backup, cleaned) if part is not None))
+    json_hooks = _user_json_hooks(context, hooks_json_path, owned_bindings)
+    wire = _Wire(current, *(part for part in (backup, cleaned, json_hooks) if part is not None))
     answer = _codex(
         "uninstall_restore",
         context,
         payload=wire.text(current),
         backup=None if backup is None else wire.text(backup),
         hooks=None if cleaned is None else wire.text(cleaned),
+        json_hooks=None if json_hooks is None else wire.text(json_hooks),
         tokens=wire.meanings,
     )
+    # The answer describes the snapshot. An edit made meanwhile is not
+    # overwritten with it; the user runs uninstall again.
+    if read_config_bytes(config_path) != current_bytes:
+        raise RuntimeError(
+            f"codex_uninstall_config_changed: the Codex config at {config_path} changed while Guard was "
+            "uninstalling, so Guard left it and the install backup in place. Run `hol-guard uninstall codex` again."
+        )
     if answer.get("delete") is True:
         config_path.unlink()
     elif answer.get("changed") is True:

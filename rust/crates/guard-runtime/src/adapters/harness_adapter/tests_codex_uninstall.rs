@@ -83,8 +83,11 @@ fn a_proxy_with_no_backup_entry_is_removed_and_a_new_file_is_deleted() {
     assert_eq!(rendered(&answer), json!({}));
     assert_eq!(answer["delete"], true);
 
+    // A backup that parses empty, such as one holding only comments, is a
+    // file that existed: it is written back, not deleted.
     let empty_backup = restore(&installed, Some(&json!({})), Some(&json!({})));
-    assert_eq!(empty_backup["delete"], true);
+    assert_eq!(empty_backup["delete"], false);
+    assert_eq!(rendered(&empty_backup), json!({}));
 }
 
 #[test]
@@ -114,4 +117,25 @@ fn an_empty_server_table_install_wrote_goes_unless_the_backup_had_one() {
     );
     assert_eq!(rendered(&kept), json!({"mcp_servers": {}}));
     assert_eq!(kept["delete"], false);
+}
+
+#[test]
+fn user_hooks_left_in_hooks_json_keep_the_hook_feature_on() {
+    let backup = json!({"features": {"hooks": false}});
+    let installed = json!({
+        "features": {"hooks": true},
+        "hooks": {"PreToolUse": [group("guard", 30)]},
+    });
+    let home = Home::new();
+    let fields = json!({
+        "payload": installed.to_string(),
+        "backup": backup.to_string(),
+        "hooks": json!({}).to_string(),
+        "json_hooks": json!({"PreToolUse": [group("mine", 5)]}).to_string(),
+    });
+    let answer = home.ask("codex", "uninstall_restore", fields);
+    assert_eq!(rendered(&answer), json!({"features": {"hooks": true}}));
+
+    let without = restore(&installed, Some(&backup), Some(&json!({})));
+    assert_eq!(rendered(&without), json!({"features": {"hooks": false}}));
 }
