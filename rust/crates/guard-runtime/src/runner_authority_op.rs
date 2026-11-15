@@ -252,6 +252,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "transition_files" => crate::transition_files::dispatch(args),
         "command_probe" => crate::command_probe::dispatch(args),
         "desktop_hook_proxy" => crate::desktop_hook_proxy::dispatch(args),
+        "codex_toml_read" => crate::codex_toml_read::dispatch(args),
         "codex_toml_render" => crate::codex_toml_render::dispatch(args),
         "hermes_hook_config" => crate::hermes_hook_config::dispatch(args),
         "opencode_command_replace" => crate::opencode_command_replace::dispatch(args),

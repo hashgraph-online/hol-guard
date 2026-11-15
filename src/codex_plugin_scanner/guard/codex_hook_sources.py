@@ -2,23 +2,14 @@
 
 from __future__ import annotations
 
-import importlib
 import json
-import sys
 from pathlib import Path
-from typing import Any
 
 from .codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_SOURCE_DUPLICATE,
     CODEX_HOOK_INVENTORY_SOURCE_MALFORMED,
     CODEX_HOOK_INVENTORY_SOURCE_UNREADABLE,
 )
-
-tomllib: Any
-if sys.version_info >= (3, 11):
-    import tomllib as tomllib  # pyright: ignore[reportMissingImports]
-else:  # pragma: no cover - Python 3.10 runtime compatibility
-    tomllib = importlib.import_module("tomli")
 
 
 class _DuplicateJsonKeyError(ValueError):
@@ -107,12 +98,14 @@ def parse_toml_object(data: bytes | None, *, path: Path, label: str) -> dict[str
     """Parse the captured TOML bytes without reopening the config path."""
     if data is None:
         return {}
+    from .codex_config import TomlRefusedError, loads_toml
+
     try:
-        payload = tomllib.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        payload = loads_toml(data.decode("utf-8"))
+    except (UnicodeDecodeError, TomlRefusedError) as exc:
         reason = (
             CODEX_HOOK_INVENTORY_SOURCE_DUPLICATE
-            if "overwrite" in str(exc).lower()
+            if isinstance(exc, TomlRefusedError) and exc.reason == "duplicate_key"
             else CODEX_HOOK_INVENTORY_SOURCE_MALFORMED
         )
         raise RuntimeError(

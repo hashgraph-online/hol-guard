@@ -112,10 +112,10 @@ def grok_runtime_hooks_verified(context: HarnessContext) -> bool:
 
 def _grok_managed_config_is_active(managed_text: str, context: HarnessContext) -> bool:
     """Verify durable permission floors, compatibility, and catch-all backup hooks."""
-    from ..codex_config import tomllib
+    from ..codex_config import loads_toml
 
     try:
-        payload = tomllib.loads(managed_text)
+        payload = loads_toml(managed_text)
     except (ValueError, TypeError):
         return False
     permission = payload.get("permission")
@@ -164,10 +164,10 @@ def grok_hooks_protection_ready(context: HarnessContext) -> bool:
 
 
 def _grok_has_legacy_deny_rules(text: str, deny_rules: list[str]) -> bool:
-    from ..codex_config import tomllib
+    from ..codex_config import loads_toml
 
     try:
-        payload = tomllib.loads(text)
+        payload = loads_toml(text)
     except (ValueError, TypeError):
         return False
     permission = payload.get("permission")

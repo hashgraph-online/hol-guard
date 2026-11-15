@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .adapters.codex import _CODEX_GUARD_TOOL_MATCHER, _payload_has_hooks_feature_enabled
-from .codex_config import tomllib
+from .codex_config import loads_toml
 from .codex_hook_bridge_runtime import bridge_config_from_argv, trusted_hook_launch
 from .codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline, split_hook_command
 from .codex_hook_integrity import hook_manifest_path, load_authenticated_hook_manifest
@@ -151,7 +151,7 @@ def _observe_configured_codex_hook(
         raise TransitionError("admission_hook_authority_missing")
     try:
         manifest = load_authenticated_hook_manifest(guard_home, config_path)
-        config = tomllib.loads(before_config.decode("utf-8"))
+        config = loads_toml(before_config.decode("utf-8"))
         if not _payload_has_hooks_feature_enabled(config):
             raise ValueError("hooks disabled")
         events = manifest.get("events")

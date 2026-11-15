@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 import math
 from collections.abc import Mapping, Sequence
@@ -11,21 +10,72 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-tomllib = importlib.import_module("tomllib" if __import__("sys").version_info >= (3, 11) else "tomli")
-
 # Parsing and patching a large hand-written config is file-sized work.
 _RENDER_TIMEOUT_SECONDS = 10.0
+
+
+class TomlRefusedError(ValueError):
+    """The runtime refused a TOML file as ``tomllib`` refuses it."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"Codex config is not valid TOML: {reason}")
+        self.reason = reason
+
+
+def _meaning(meaning: object) -> object:
+    """The value one runtime wire token stands for."""
+
+    if not isinstance(meaning, dict):
+        raise ValueError("Codex config read answer is malformed")
+    kind, text = meaning.get("type"), meaning.get("value")
+    if not isinstance(text, str):
+        raise ValueError("Codex config read answer is malformed")
+    if kind == "float":
+        return float(text)
+    if kind == "datetime":
+        return datetime.fromisoformat(text)
+    if kind == "date":
+        return date.fromisoformat(text)
+    if kind == "time":
+        return time.fromisoformat(text)
+    raise ValueError("Codex config read answer is malformed")
+
+
+def _restore_native(value: object, tokens: Mapping[str, object]) -> object:
+    if isinstance(value, str):
+        return _meaning(tokens[value]) if value in tokens else value
+    if isinstance(value, list):
+        return [_restore_native(item, tokens) for item in value]
+    if isinstance(value, dict):
+        return {key: _restore_native(item, tokens) for key, item in value.items()}
+    return value
+
+
+def loads_toml(text: str) -> dict[str, object]:
+    """``tomllib.loads``, answered by the runtime's ``codex_toml_read`` kind."""
+
+    from .native_runner_authority import native_runner_authority
+
+    answer = native_runner_authority("codex_toml_read", {"text": text}, timeout_seconds=_RENDER_TIMEOUT_SECONDS)
+    error = answer.get("error")
+    if isinstance(error, str):
+        raise TomlRefusedError(error)
+    payload, tokens = answer.get("payload"), answer.get("tokens")
+    if not isinstance(payload, str) or not isinstance(tokens, dict):
+        raise ValueError("Codex config read answer is malformed")
+    restored = _restore_native(json.loads(payload), tokens)
+    if not isinstance(restored, dict):
+        raise ValueError("Codex config read answer is malformed")
+    return restored
 
 
 def read_toml_payload(path: Path) -> dict[str, object]:
     if not path.is_file():
         return {}
     try:
-        with path.open("rb") as handle:
-            payload = tomllib.load(handle)
-    except (OSError, tomllib.TOMLDecodeError):
+        return loads_toml(path.read_bytes().decode("utf-8"))
+    except (OSError, UnicodeDecodeError, TomlRefusedError):
         return {}
-    return payload if isinstance(payload, dict) else {}
 
 
 def read_config_bytes(path: Path) -> bytes | None:
