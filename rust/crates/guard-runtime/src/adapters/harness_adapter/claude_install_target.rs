@@ -148,11 +148,16 @@ fn rollback_command(ctx: &Ctx) -> Vec<String> {
         "uninstall".to_owned(),
         "claude-code".to_owned(),
     ];
-    if !ctx.default_home() {
+    // The CLI takes the Guard home from `--home` when one is given, and from
+    // the user's home otherwise, so name it whenever it differs from that.
+    let implied_guard_home = if ctx.default_home() {
+        ctx.user_home.join(".hol-guard")
+    } else {
         command.push("--home".to_owned());
         command.push(path_text(&ctx.home));
-    }
-    if ctx.resolved(&ctx.guard_home) != ctx.resolved(&ctx.user_home.join(".hol-guard")) {
+        ctx.home.clone()
+    };
+    if ctx.resolved(&ctx.guard_home) != ctx.resolved(&implied_guard_home) {
         command.push("--guard-home".to_owned());
         command.push(path_text(&ctx.guard_home));
     }
@@ -213,7 +218,7 @@ pub(super) fn notes(target: &Value) -> Vec<String> {
             words
                 .iter()
                 .filter_map(Value::as_str)
-                .map(shell_word)
+                .map(|word| shell_word(word, cfg!(windows)))
                 .collect::<Vec<_>>()
                 .join(" ")
         })
@@ -239,15 +244,20 @@ pub(super) fn notes(target: &Value) -> Vec<String> {
     notes
 }
 
-/// Quote a word for a POSIX shell when it holds anything beyond plain path
-/// characters, so a copied undo command keeps paths with spaces intact.
-fn shell_word(word: &str) -> String {
+/// Quote a word when it holds anything beyond plain path characters, so a
+/// copied undo command keeps paths with spaces intact. Windows shells do not
+/// treat single quotes as quotes, so there the word goes in double quotes; a
+/// Windows path cannot contain one.
+pub(super) fn shell_word(word: &str, windows: bool) -> String {
     let plain = !word.is_empty()
         && word
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "-_./:@%+=,".contains(c));
+            .all(|c| c.is_ascii_alphanumeric() || "-_./:@%+=,\\".contains(c))
+        && (windows || !word.contains('\\'));
     if plain {
         word.to_owned()
+    } else if windows {
+        format!("\"{}\"", word.replace('"', "\\\""))
     } else {
         format!("'{}'", word.replace('\'', "'\\''"))
     }

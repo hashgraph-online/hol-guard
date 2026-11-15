@@ -6,7 +6,9 @@ are shown literally: a directory named ``[red]`` must not become Rich markup.
 
 from __future__ import annotations
 
+import os
 import shlex
+import subprocess
 
 from rich.console import Console
 from rich.panel import Panel
@@ -24,6 +26,11 @@ def claude_settings_target(context: HarnessContext) -> dict[str, object]:
         return ask("install_target", context, harness="claude-code")
     except (NativeRunnerAuthorityError, OSError, ValueError) as error:
         return {"unavailable": True, "reason": str(error) or type(error).__name__}
+
+
+def _command_text(words: list[str], *, windows: bool = os.name == "nt") -> str:
+    """The command as the local shell would take it: cmd and PowerShell ignore single quotes."""
+    return subprocess.list2cmdline(words) if windows else shlex.join(words)
 
 
 def _lines(target: dict[str, object]) -> list[str]:
@@ -46,7 +53,7 @@ def _lines(target: dict[str, object]) -> list[str]:
     if isinstance(rollback, dict):
         command = rollback.get("command")
         if isinstance(command, list):
-            undo = shlex.join(str(part) for part in command)
+            undo = _command_text([str(part) for part in command])
             lines.append(f"Undo: {undo}. {rollback.get('effect', '')}".rstrip())
     overrides = target.get("hook_overrides")
     if isinstance(overrides, list):

@@ -338,9 +338,37 @@ fn install_target_undo_names_the_home_the_install_used() {
             "uninstall",
             "claude-code",
             "--home",
+            home.home(),
+            "--guard-home",
+            home.root.join("someone-else").join(".hol-guard")
+        ])
+    );
+    // With --home, the CLI already takes that directory as the Guard home.
+    context["guard_home"] = json!(home.home());
+    let implied =
+        dispatch(&json!({"harness": "claude-code", "op": "install_target", "context": context}))
+            .unwrap();
+    assert_eq!(
+        implied["rollback"]["command"],
+        json!([
+            "hol-guard",
+            "uninstall",
+            "claude-code",
+            "--home",
             home.home()
         ])
     );
+}
+
+#[test]
+fn a_copied_undo_quotes_paths_for_the_shell_that_runs_it() {
+    use super::super::claude_install_target::shell_word;
+    assert_eq!(shell_word("/tmp/plain", false), "/tmp/plain");
+    assert_eq!(shell_word("/tmp/Guard State", false), "'/tmp/Guard State'");
+    assert_eq!(shell_word("/tmp/it's", false), "'/tmp/it'\\''s'");
+    assert_eq!(shell_word(r"C:\Guard", true), r"C:\Guard");
+    assert_eq!(shell_word(r"C:\Guard State", true), r#""C:\Guard State""#);
+    assert_eq!(shell_word(r"C:\Guard", false), r"'C:\Guard'");
 }
 
 #[test]

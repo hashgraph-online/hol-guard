@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import io
+import os
 
 from rich.console import Console
 
 from codex_plugin_scanner.guard.adapters import native_harness
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import install_commands, render
+from codex_plugin_scanner.guard.cli.claude_settings_target import _command_text
 
 
 def _context(tmp_path):
@@ -87,5 +89,13 @@ def test_paths_render_literally_and_the_undo_is_shell_quoted():
     text = _text({"settings_target": target})
 
     assert "Writes: /synthetic/[red]home/.claude/settings.json" in text
-    assert "Undo: hol-guard uninstall claude-code --home '/synthetic/my home[/b]'." in text
+    quoted = '"/synthetic/my home[/b]"' if os.name == "nt" else "'/synthetic/my home[/b]'"
+    assert f"Undo: hol-guard uninstall claude-code --home {quoted}." in text
     assert "Warning: /synthetic/[/red] sets disableAllHooks." in text
+
+
+def test_a_copied_undo_uses_double_quotes_for_windows_shells():
+    words = ["hol-guard", "uninstall", "claude-code", "--home", r"C:\Guard State"]
+
+    assert _command_text(words, windows=True) == r'hol-guard uninstall claude-code --home "C:\Guard State"'
+    assert _command_text(words, windows=False) == "hol-guard uninstall claude-code --home 'C:\\Guard State'"
