@@ -309,7 +309,12 @@ pub(super) fn without_managed(
     if !managed {
         return Ok((Some(payload.clone()), false));
     }
-    if !others {
+    // Delete the file only when Guard's hooks were all it held. Any other
+    // top-level key is the user's and keeps the file, with an empty `hooks`.
+    let user_keys = top
+        .iter()
+        .any(|(key, _)| key != "hooks" && key != "version");
+    if !others && !user_keys {
         return Ok((None, true));
     }
     let mut doc = Doc(top.clone());

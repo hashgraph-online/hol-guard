@@ -257,3 +257,30 @@ fn cursor_uninstall_keeps_a_hook_the_user_added_after_install() {
         ]}})
     );
 }
+
+/// When Guard's entries are the only hooks, uninstall keeps the file for the
+/// user's other top-level keys instead of deleting it.
+#[test]
+fn cursor_uninstall_keeps_top_level_keys_when_guard_held_the_only_hooks() {
+    let home = Home::new();
+    let hooks = home.home().join(".cursor").join("hooks.json");
+    write(
+        &hooks,
+        r#"{"version": 1, "hooks": {}, "futureKey": "keep"}"#,
+    );
+    let answer = run(&home, "install", bridge()).unwrap();
+    for change in answer["files"].as_array().unwrap() {
+        if change["after"].is_string() {
+            write(Path::new(change["path"].as_str().unwrap()), &after(change));
+        }
+    }
+    let mut edited: Value = serde_json::from_str(&fs::read_to_string(&hooks).unwrap()).unwrap();
+    edited["addedLater"] = json!(true);
+    write(&hooks, &serde_json::to_string_pretty(&edited).unwrap());
+    run(&home, "uninstall", bridge()).unwrap();
+    let cleaned: Value = serde_json::from_str(&fs::read_to_string(&hooks).unwrap()).unwrap();
+    assert_eq!(
+        cleaned,
+        json!({"version": 1, "hooks": {}, "futureKey": "keep", "addedLater": true})
+    );
+}
