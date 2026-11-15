@@ -163,9 +163,21 @@ def _record_request(op: str, *, deadline: float | None = None, **fields: object)
         raise TransitionError(error.reason, error.detail) from error
 
 
-def check_transition_files(changes: Sequence[Mapping[str, object]]) -> None:
-    """The runtime refuses any planned change a transition may not record."""
-    _record_request("files_check", payload={"files": [dict(change) for change in changes]})
+def check_transition_files(changes: Sequence[Mapping[str, object]], *, each: bool = False) -> None:
+    """The runtime refuses any planned change a transition may not record.
+
+    ``each`` checks every change on its own; otherwise they form one record.
+    """
+    op = "files_check_each" if each else "files_check"
+    _record_request(op, payload={"files": [dict(change) for change in changes]})
+
+
+def checked_files(changes: Sequence[TransitionFile]) -> list[dict[str, object]]:
+    """Each change's payload, checked on its own in one runtime call."""
+    payloads = [change.payload() for change in changes]
+    if payloads:
+        check_transition_files(payloads, each=True)
+    return payloads
 
 
 def assert_transition_mutation_allowed(home: Path) -> None:
@@ -295,8 +307,12 @@ class TransitionFile:
         return payload
 
     def payload(self) -> dict[str, object]:
+        """The planned change; the runtime checks its shape where it is used."""
+        return self._raw()
+
+    def checked(self) -> dict[str, object]:
         payload = self._raw()
-        check_transition_files([payload])
+        check_transition_files([payload], each=True)
         return payload
 
 

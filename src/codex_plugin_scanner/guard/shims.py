@@ -215,7 +215,7 @@ def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardSh
     change = TransitionFile(
         profile_path.resolve(strict=False), before, after, before_mode=mode, after_mode=mode, no_follow=True
     )
-    change.payload()
+    change.checked()
     return PreparedGuardShim(
         (change,),
         {

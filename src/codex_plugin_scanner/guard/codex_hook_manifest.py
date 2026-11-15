@@ -264,7 +264,7 @@ class PreparedCodexHookRepair:
     verification_workspace: Path | None = None
 
     def payload(self) -> dict[str, object]:
-        from .runtime_transition import TransitionError
+        from .runtime_transition import TransitionError, checked_files
 
         try:
             if str(uuid.UUID(self.operation_id)) != self.operation_id:
@@ -300,7 +300,7 @@ class PreparedCodexHookRepair:
             "guard_home": str(home),
             "config_path": str(config),
             "operation_id": self.operation_id,
-            "files": [item.payload() for item in self.files],
+            "files": checked_files(self.files),
         }
         if self.native_runtime is not None or self.verification_workspace is not None:
             native, workspace = self.native_runtime, self.verification_workspace

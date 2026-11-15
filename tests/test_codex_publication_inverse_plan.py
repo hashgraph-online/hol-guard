@@ -199,7 +199,7 @@ def test_inverse_plan_forwards_original_deadline_to_artifact_comparison(installe
         ask = native_runner_authority.native_runner_authority
 
         def expires_in_the_resident(kind: str, request: dict[str, object], **kwargs: object) -> dict[str, object]:
-            if kind != "transition_files" or "budget" not in request:
+            if kind != "transition_files" or request.get("op") != "compare" or "budget" not in request:
                 return ask(kind, request, **kwargs)
             budget = request["budget"]
             assert isinstance(budget, dict)

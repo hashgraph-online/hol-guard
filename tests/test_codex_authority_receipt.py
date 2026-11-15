@@ -81,7 +81,7 @@ def test_expired_receipt_read_refuses_before_file_access(tmp_path: Path, monkeyp
     def forbidden(*_args, **_kwargs):
         raise AssertionError("expired read accessed an authority file")
 
-    monkeypatch.setattr(recovery, "read_private_regular_bytes", forbidden)
+    monkeypatch.setattr(recovery, "_publication", forbidden)
     with (
         pytest.raises(CodexHookIntegrityError, match="deadline"),
         hook_validation_deadline(time.monotonic() + 0.1),

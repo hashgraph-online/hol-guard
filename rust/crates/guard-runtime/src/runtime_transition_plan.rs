@@ -82,3 +82,23 @@ pub(super) fn files(request: &Request) -> Result<Value, Refusal> {
     record_files(payload)?;
     Ok(json!({"ok": true}))
 }
+
+/// One planned change, alone, as `TransitionFile.payload` checks it.
+pub(super) fn one(change: &Map<String, Value>) -> Result<(), Refusal> {
+    let mut wrapped = Map::new();
+    wrapped.insert(
+        "files".to_owned(),
+        Value::Array(vec![Value::Object(change.clone())]),
+    );
+    record_files(&wrapped).map(|_| ())
+}
+
+/// `files_check_each`: every planned change on its own, so two plans may
+/// name the same target.
+pub(super) fn each(request: &Request) -> Result<Value, Refusal> {
+    let payload = request.payload.as_ref().ok_or_else(|| no("invalid"))?;
+    for change in list(payload, "files") {
+        one(change.as_object().ok_or_else(|| no("files_invalid"))?)?;
+    }
+    Ok(json!({"ok": true}))
+}

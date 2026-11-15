@@ -62,7 +62,8 @@ def _exception(fault: object) -> BaseException:
     transition, integrity = fault.get("transition"), fault.get("integrity")
     message, os_message = fault.get("message"), fault.get("os")
     if isinstance(transition, str):
-        return TransitionError(transition)
+        detail = fault.get("detail")
+        return TransitionError(transition, detail) if isinstance(detail, str) else TransitionError(transition)
     if isinstance(integrity, str) and isinstance(message, str):
         return CodexHookIntegrityError(integrity, message)
     if isinstance(os_message, str):

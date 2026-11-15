@@ -73,7 +73,7 @@ def test_group_writable_package_does_not_gain_interpreter_exception(tmp_path):
 def test_group_writable_binding_remains_forbidden(tmp_path):
     change = module.TransitionFile(tmp_path / "binding", None, b"candidate", after_mode=0o775)
     with pytest.raises(module.TransitionError, match="file_mode_invalid"):
-        change.payload()
+        change.checked()
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX artifact permission policy")

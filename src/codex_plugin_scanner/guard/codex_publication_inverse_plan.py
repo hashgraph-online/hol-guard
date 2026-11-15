@@ -48,6 +48,7 @@ from .runtime_transition import (
     TransitionError,
     TransitionFile,
     assert_transition_mutation_allowed,
+    checked_files,
     inverse_recovery_budget,
     merge_transition_dependency,
 )
@@ -202,11 +203,11 @@ class PreparedCodexPublicationInverse:
             "resumed_inverse_operation_id": self.resumed_inverse_operation_id,
             "journal_sha256": self.journal_sha256,
             "journal_identity": list(self.journal_identity),
-            "files": [change.payload() for change in self.changes],
+            "files": checked_files(self.changes),
             "file_identities": [
                 list(identity) if identity is not None else None for identity in self.change_identities
             ],
-            "dependencies": [dependency.payload() for dependency in self.dependencies],
+            "dependencies": checked_files(self.dependencies),
             "native_runtime": None
             if self.native_runtime is None
             else {

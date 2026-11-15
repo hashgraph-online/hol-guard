@@ -26,7 +26,7 @@ fn facts(bridge: Option<&str>, frozen: bool) -> String {
     .to_string()
 }
 
-const RUNTIME: &str = "/g/hol-guard-runtime";
+pub(super) const RUNTIME: &str = "/g/hol-guard-runtime";
 
 #[test]
 fn install_without_a_native_runtime_asks_for_repair() {

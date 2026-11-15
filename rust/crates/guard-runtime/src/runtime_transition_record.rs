@@ -34,6 +34,11 @@ mod plan;
 use crate::codex_hook_authority_record::python_json::{parse_python_json, python_canonical_json};
 use shape::{validate_record, Refusal};
 
+/// `TransitionFile.payload`: one planned change a transition may record.
+pub(crate) fn check_change(change: &Map<String, Value>) -> Result<(), (String, Option<String>)> {
+    plan::one(change)
+}
+
 const SCHEMA: &str = "runtime-transition-record.v1";
 const RECORD_SCHEMA: &str = "hol-guard.runtime-transition.v1";
 const PURPOSE: &str = "guard-runtime-transition-inverse";
@@ -115,6 +120,7 @@ fn answer(request: &Request) -> Value {
         "begin_commit" => begin::commit(request),
         "plan_check" => plan::subject(request),
         "files_check" => plan::files(request),
+        "files_check_each" => plan::each(request),
         "read" => read_record(request).map(|payload| json!({"payload": payload})),
         "retire" => retire(request).map(|()| json!({"ok": true})),
         "refusal_write" => write_refusal(request).map(|()| json!({"ok": true})),

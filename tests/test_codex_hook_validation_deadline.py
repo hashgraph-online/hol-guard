@@ -81,15 +81,15 @@ def test_expiry_after_manifest_read_does_not_read_authority_key(tmp_path, monkey
     clock = [5.0]
     monkeypatch.setattr(files.time, "monotonic", lambda: clock[0])
 
-    def slow_read(*args, **kwargs):
+    from codex_plugin_scanner.guard import codex_hook_authority_record as authority
+
+    def slow_runtime(*args, **kwargs):
+        # The runtime reads the manifest and key in one call; an answer that
+        # arrives after the deadline is not trusted.
         clock[0] = 11.0
-        return "{}"
+        return {"harness": "codex"}
 
-    def forbidden(*args, **kwargs):
-        raise AssertionError("expired manifest validation read authority key")
-
-    monkeypatch.setattr(manifests, "read_private_regular_text", slow_read)
-    monkeypatch.setattr(manifests, "load_hook_secret", forbidden)
+    monkeypatch.setattr(authority, "authenticated_manifest", slow_runtime)
     with pytest.raises(files.CodexHookIntegrityError, match="exhausted"), files.hook_validation_deadline(10):
         manifests.load_authenticated_hook_manifest_path(tmp_path, path)
 

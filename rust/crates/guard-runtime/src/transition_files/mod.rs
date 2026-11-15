@@ -53,6 +53,8 @@ pub(crate) enum Fault {
     Transition(&'static str),
     /// `CodexHookIntegrityError(code, message)`.
     Integrity(String, String),
+    /// `TransitionError(reason, detail)` for a change no transition may record.
+    Refused(String, Option<String>),
     /// `OSError`, with its errno when the platform reported one.
     Os(std::io::Error),
     /// The private-group fact this answer needs.
@@ -69,6 +71,7 @@ impl Fault {
     fn to_json(&self) -> Value {
         match self {
             Self::Transition(reason) => json!({ "transition": reason }),
+            Self::Refused(reason, detail) => json!({ "transition": reason, "detail": detail }),
             Self::Integrity(code, message) => json!({ "integrity": code, "message": message }),
             Self::Os(error) => json!({ "os": error.to_string(), "errno": error.raw_os_error() }),
             // Asked once a write has started, the question can no longer be
@@ -227,6 +230,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     };
     match args.get("op").and_then(Value::as_str).ok_or(ERR_INVALID)? {
         "compare" => {
+            if let Err(fault) = checked(files()?) {
+                return Ok(settle(Err(fault)));
+            }
             let compared = compare(files()?, generation("generation")?, flag("inverse"), &ask);
             Ok(settle(compared.map(|()| Vec::new())))
         }
@@ -235,13 +241,33 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
                 .get("change")
                 .and_then(Value::as_object)
                 .ok_or(ERR_INVALID)?;
-            Ok(settle(write(change, generation("generation")?, &ask)))
+            let generation = generation("generation")?;
+            let written = checked([&Value::Object(change.clone())])
+                .and_then(|()| write(change, generation, &ask));
+            Ok(settle(written))
         }
-        "publish" => Ok(publish(files()?, flag("removals"), flag("rollback"), &ask)),
+        "publish" => {
+            if let Err(fault) = checked(files()?) {
+                return Ok(settle(Err(fault)));
+            }
+            Ok(publish(files()?, flag("removals"), flag("rollback"), &ask))
+        }
         "journal" => journal::dispatch(args),
         op @ ("lease_acquire" | "lease_release" | "lease_check") => lease::dispatch(op, args),
         op => publication_commit::dispatch(op, args, &ask.budget),
     }
+}
+
+/// Every change on its own meets the shape `TransitionFile.payload` checks.
+fn checked<'a>(files: impl IntoIterator<Item = &'a Value>) -> Step<()> {
+    for change in files {
+        let change = change
+            .as_object()
+            .ok_or(Fault::Transition("files_invalid"))?;
+        crate::runtime_transition_record::check_change(change)
+            .map_err(|(reason, detail)| Fault::Refused(reason, detail))?;
+    }
+    Ok(())
 }
 
 fn settle(step: Step<Vec<Value>>) -> Value {
