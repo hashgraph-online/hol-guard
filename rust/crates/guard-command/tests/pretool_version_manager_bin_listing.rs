@@ -165,6 +165,23 @@ fn tilde_bin_probe_is_not_allowed_when_shell_home_differs() {
     assert!(result.status.success());
     assert!(String::from_utf8_lossy(&result.stdout).contains("credentials.json"));
 
+    // The sibling node_modules/.bin metadata allowance reads exactly the
+    // same tilde operand and must obey the same verified HOME proof.
+    let shim = declared_home.join("work/project/node_modules/.bin/prettier");
+    write(shim.clone(), "synthetic safe executable");
+    let other_shim = shell_home.join("work/project/node_modules/.bin/prettier");
+    std::fs::create_dir_all(other_shim.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(&secret, &other_shim).unwrap();
+    let node_tilde = "ls -la ~/work/project/node_modules/.bin/prettier";
+    let other_result = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(node_tilde)
+        .env("HOME", &shell_home)
+        .output()
+        .unwrap();
+    assert!(other_result.status.success());
+    assert!(String::from_utf8_lossy(&other_result.stdout).contains("credentials.json"));
+
     for harness in HARNESSES {
         assert_ne!(
             decision_with_home_match(harness, tilde, &declared_home, false),
@@ -181,6 +198,22 @@ fn tilde_bin_probe_is_not_allowed_when_shell_home_differs() {
             decision_with_home_match(harness, &absolute, &declared_home, false),
             "allow",
             "{harness}: an absolute, safe bin path is independent of tilde"
+        );
+        assert_ne!(
+            decision_with_home_match(harness, node_tilde, &declared_home, false),
+            "allow",
+            "{harness}: a mismatched HOME must retain review of node_modules/.bin"
+        );
+        assert_eq!(
+            decision_with_home_match(harness, node_tilde, &declared_home, true),
+            "allow",
+            "{harness}: matching HOME keeps benign node_modules/.bin listing allowed"
+        );
+        let absolute_shim = format!("ls -la {}", shim.display());
+        assert_eq!(
+            decision_with_home_match(harness, &absolute_shim, &declared_home, false),
+            "allow",
+            "{harness}: the absolute node_modules/.bin path does not depend on tilde"
         );
     }
 }
