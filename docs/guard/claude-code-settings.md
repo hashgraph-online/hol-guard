@@ -23,10 +23,16 @@ claude-code --dry-run`) prints a **Claude Code settings** panel with:
 - the one file Guard writes and its scope (`user`);
 - with `--workspace`, a line saying the project's `.claude` directory is not written;
 - every settings file Claude Code reads, highest precedence first, with Guard's file marked;
-- that headless `claude -p` on this machine reads the same file, and remote or cloud sessions do not;
+- that headless `claude -p` and Remote Control sessions, which run on this machine, read the same file,
+  and that cloud sessions (Claude Code on the web) do not;
 - the undo command, `hol-guard uninstall claude-code`, and what it removes. When the install used `--home` or `--guard-home`, the printed command carries the same options, so it undoes this install and not another one;
 - a warning for each setting that would stop Claude Code running Guard's hooks (see
-  [Settings that turn Guard's hooks off](#settings-that-turn-guards-hooks-off)).
+  [Settings that turn Guard's hooks off](#settings-that-turn-guards-hooks-off)). Install reads only the
+  managed and user settings files, the project files when you pass `--workspace`, and its own
+  environment. It cannot warn about a setting passed when a session starts, such as
+  `claude --settings '{"disableAllHooks": true}'`. For `disableAllHooks` it reports the value from the
+  highest-precedence file that sets it, as Claude Code does;
+- on Windows, the undo command is quoted for PowerShell.
 
 The real install repeats the file, the undo command and any warning in its notes.
 
@@ -118,14 +124,15 @@ them together. Guard relies only on the user file. It does not raise its own pre
 
 Two settings can stop Claude from running Guard's handlers:
 
-- `disableAllHooks: true` in any settings file Claude reads;
+- `disableAllHooks: true` in the highest-precedence settings file that sets the key (a project `false`
+  overrides a user `true`);
 - `allowManagedHooksOnly: true` in managed settings, which lets only managed hooks run.
 
 Install reads, and never writes, the managed settings file (`/Library/Application Support/ClaudeCode/`
 on macOS, `/etc/claude-code/` on Linux, `%ProgramFiles%\ClaudeCode\` on Windows, each
 `managed-settings.json`), the user file, and, with `--workspace`, the project's `settings.json` and
-`settings.local.json`. It warns for each of these settings it finds. A file that is missing, unreadable
-or not JSON is not reported. Doctor does not run this check, so it can still report Guard's entries as
+`settings.local.json`. It warns for each of these settings that takes effect. A file that is missing, unreadable,
+not JSON, not a regular file or larger than 1 MiB is not reported. Doctor does not run this check, so it can still report Guard's entries as
 present while Claude ignores them. Treat a Claude Code protection state as proven only from a live block
 on the same machine.
 

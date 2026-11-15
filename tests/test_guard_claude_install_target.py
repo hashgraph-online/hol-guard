@@ -94,8 +94,11 @@ def test_paths_render_literally_and_the_undo_is_shell_quoted():
     assert "Warning: /synthetic/[/red] sets disableAllHooks." in text
 
 
-def test_a_copied_undo_uses_double_quotes_for_windows_shells():
+def test_a_copied_undo_uses_powershell_literal_quotes_on_windows():
     words = ["hol-guard", "uninstall", "claude-code", "--home", r"C:\Guard State"]
-
-    assert _command_text(words, windows=True) == r'hol-guard uninstall claude-code --home "C:\Guard State"'
+    assert _command_text(words, windows=True) == r"hol-guard uninstall claude-code --home 'C:\Guard State'"
     assert _command_text(words, windows=False) == "hol-guard uninstall claude-code --home 'C:\\Guard State'"
+    assert _command_text(["--home", r"C:\Guard $cache"], windows=True) == r"--home 'C:\Guard $cache'"
+    assert _command_text(["--home", r"C:\Guard&State"], windows=True) == r"--home 'C:\Guard&State'"
+    assert _command_text(["--home", r"C:\it's"], windows=True) == r"--home 'C:\it''s'"
+    assert _command_text(["--home", r"C:\Guard"], windows=True) == r"--home C:\Guard"

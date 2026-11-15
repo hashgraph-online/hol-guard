@@ -8,8 +8,11 @@
 //! remove Guard's entries, but `disableAllHooks` in any of those files, or
 //! `allowManagedHooksOnly` in managed settings, turns them off. Those
 //! overrides are read here, never written, so the install output can say so
-//! before anything is published.
+//! before anything is published. Only the files listed in [`layers`] and the
+//! install's own environment are read; a value passed later at launch (for
+//! example `--settings`) cannot be seen here.
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
@@ -17,10 +20,20 @@ use serde_json::{json, Value};
 use super::{path_text, Ctx};
 
 const CONFIG_DIR_ENV: &str = "CLAUDE_CONFIG_DIR";
+/// Settings files are small. A project can point `.claude/settings.json` at a
+/// device or a huge file, so reads stop here instead of running to EOF.
+const MAX_SETTINGS_BYTES: u64 = 1024 * 1024;
+#[cfg(test)]
+const TEST_MANAGED_SETTINGS_ENV: &str = "HOL_GUARD_TEST_CLAUDE_MANAGED_SETTINGS";
 
 /// Claude Code's managed settings file for this OS. Only the documented
 /// locations; anything else is not guessed.
 fn managed_settings(ctx: &Ctx) -> PathBuf {
+    // Tests must not read the host's real managed policy.
+    #[cfg(test)]
+    if let Some(path) = ctx.env.get(TEST_MANAGED_SETTINGS_ENV) {
+        return PathBuf::from(path);
+    }
     if ctx.windows {
         let program_files = ctx
             .env
@@ -38,14 +51,29 @@ fn managed_settings(ctx: &Ctx) -> PathBuf {
     PathBuf::from("/etc/claude-code/managed-settings.json")
 }
 
-/// `true` when the file is a JSON object whose `key` is `true`. Unreadable or
-/// malformed files are not overrides; Claude Code reports those itself.
-fn flag_set(ctx: &Ctx, path: &Path, key: &str) -> bool {
-    std::fs::read(ctx.absolute(path))
-        .ok()
+/// The bytes of a regular settings file no larger than
+/// [`MAX_SETTINGS_BYTES`]. Devices, FIFOs, directories and oversized files are
+/// not read.
+fn read_settings(path: &Path) -> Option<Vec<u8>> {
+    let metadata = std::fs::metadata(path).ok()?;
+    if !metadata.is_file() || metadata.len() > MAX_SETTINGS_BYTES {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .ok()?
+        .take(MAX_SETTINGS_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    (bytes.len() as u64 <= MAX_SETTINGS_BYTES).then_some(bytes)
+}
+
+/// The boolean `key` in the file, when it is a JSON object that sets one.
+/// Unreadable or malformed files set nothing; Claude Code reports those itself.
+fn flag(ctx: &Ctx, path: &Path, key: &str) -> Option<bool> {
+    read_settings(&ctx.absolute(path))
         .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
         .and_then(|value| value.get(key).and_then(Value::as_bool))
-        == Some(true)
 }
 
 struct Layer {
@@ -99,21 +127,24 @@ fn config_dir_override(ctx: &Ctx, settings: &Path) -> Option<String> {
 
 fn overrides(ctx: &Ctx, layers: &[Layer], settings: &Path) -> Vec<Value> {
     let mut found = Vec::new();
-    for layer in layers {
-        if flag_set(ctx, &layer.path, "disableAllHooks") {
-            found.push(json!({
-                "code": "disable_all_hooks",
-                "scope": layer.scope,
-                "path": path_text(&layer.path),
-                "message": format!(
-                    "{} sets disableAllHooks, so Claude Code runs none of Guard's hooks.",
-                    path_text(&layer.path)
-                ),
-            }));
-        }
+    // Claude Code uses the highest-precedence file that sets the key, so a
+    // project `false` re-enables hooks that user settings turned off.
+    let effective = layers
+        .iter()
+        .find_map(|layer| flag(ctx, &layer.path, "disableAllHooks").map(|value| (layer, value)));
+    if let Some((layer, true)) = effective {
+        found.push(json!({
+            "code": "disable_all_hooks",
+            "scope": layer.scope,
+            "path": path_text(&layer.path),
+            "message": format!(
+                "{} sets disableAllHooks, so Claude Code runs none of Guard's hooks.",
+                path_text(&layer.path)
+            ),
+        }));
     }
     let managed = &layers[0];
-    if flag_set(ctx, &managed.path, "allowManagedHooksOnly") {
+    if flag(ctx, &managed.path, "allowManagedHooksOnly") == Some(true) {
         found.push(json!({
             "code": "managed_hooks_only",
             "scope": managed.scope,
@@ -195,8 +226,9 @@ pub(super) fn target(ctx: &Ctx, settings: &Path) -> Value {
         "hooks_merge": "Claude Code runs the hooks from every settings file together; a project \
             file cannot remove Guard's user entries, but the overrides below can turn them off.",
         "hook_overrides": overrides,
-        "background": "Headless `claude -p` runs on this machine read the same user settings. \
-            Remote and cloud Claude Code sessions do not, and Guard does not cover them.",
+        "background": "Headless `claude -p` runs and Remote Control sessions continue on this \
+            machine and read the same user settings. Cloud sessions (Claude Code on the web) run \
+            elsewhere, do not read this file, and Guard does not cover them.",
         "rollback": {
             "command": rollback_command(ctx),
             "path": path_text(settings),
@@ -223,13 +255,14 @@ pub(super) fn notes(target: &Value) -> Vec<String> {
                 .join(" ")
         })
         .unwrap_or_else(|| "hol-guard uninstall claude-code".to_owned());
+    let shell = if cfg!(windows) { " in PowerShell" } else { "" };
     let mut notes = vec![
         format!(
             "Guard writes its hook entries to user settings at {}.",
             text("settings_path")
         ),
         format!(
-            "To undo, run `{undo}`; it removes only Guard's entries from {}.",
+            "To undo, run{shell} `{undo}`; it removes only Guard's entries from {}.",
             text("settings_path")
         ),
     ];
@@ -245,19 +278,19 @@ pub(super) fn notes(target: &Value) -> Vec<String> {
 }
 
 /// Quote a word when it holds anything beyond plain path characters, so a
-/// copied undo command keeps paths with spaces intact. Windows shells do not
-/// treat single quotes as quotes, so there the word goes in double quotes; a
-/// Windows path cannot contain one.
+/// copied undo command keeps the path literal. On Windows the command is for
+/// PowerShell, where only single quotes are literal (`$` and backtick expand
+/// inside double quotes) and a single quote is escaped by doubling it.
 pub(super) fn shell_word(word: &str, windows: bool) -> String {
+    let plain_chars = if windows { "-_./:\\" } else { "-_./:@%+=," };
     let plain = !word.is_empty()
         && word
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "-_./:@%+=,\\".contains(c))
-        && (windows || !word.contains('\\'));
+            .all(|c| c.is_ascii_alphanumeric() || plain_chars.contains(c));
     if plain {
         word.to_owned()
     } else if windows {
-        format!("\"{}\"", word.replace('"', "\\\""))
+        format!("'{}'", word.replace('\'', "''"))
     } else {
         format!("'{}'", word.replace('\'', "'\\''"))
     }

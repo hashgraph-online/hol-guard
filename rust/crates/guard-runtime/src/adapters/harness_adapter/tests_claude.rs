@@ -367,8 +367,58 @@ fn a_copied_undo_quotes_paths_for_the_shell_that_runs_it() {
     assert_eq!(shell_word("/tmp/Guard State", false), "'/tmp/Guard State'");
     assert_eq!(shell_word("/tmp/it's", false), "'/tmp/it'\\''s'");
     assert_eq!(shell_word(r"C:\Guard", true), r"C:\Guard");
-    assert_eq!(shell_word(r"C:\Guard State", true), r#""C:\Guard State""#);
+    assert_eq!(shell_word(r"C:\Guard State", true), r"'C:\Guard State'");
+    // PowerShell expands `$` and backticks inside double quotes, so a Windows
+    // path goes in single quotes, with a single quote doubled.
+    assert_eq!(shell_word(r"C:\Guard $cache", true), r"'C:\Guard $cache'");
+    assert_eq!(shell_word(r"C:\it's", true), r"'C:\it''s'");
+    assert_eq!(shell_word(r"C:\Guard&State", true), r"'C:\Guard&State'");
     assert_eq!(shell_word(r"C:\Guard", false), r"'C:\Guard'");
+}
+
+#[test]
+fn install_target_uses_the_highest_precedence_disable_all_hooks() {
+    let home = Home::new();
+    let workspace = home.root.join("project");
+    fs::create_dir_all(workspace.join(".claude")).unwrap();
+    fs::create_dir_all(home.home().join(".claude")).unwrap();
+    fs::write(settings(&home), r#"{"disableAllHooks": true}"#).unwrap();
+    fs::write(
+        workspace.join(".claude/settings.json"),
+        r#"{"disableAllHooks": false}"#,
+    )
+    .unwrap();
+    let answer = target(&home, Some(&workspace), json!({"PATH": ""}));
+    assert_eq!(answer["hook_overrides"], json!([]));
+    let user_only = target(&home, None, json!({"PATH": ""}));
+    assert_eq!(user_only["hook_overrides"][0]["scope"], "user");
+}
+
+#[test]
+fn install_target_reads_a_fixture_managed_policy_only() {
+    let home = Home::new();
+    fs::write(
+        home.root.join("managed-settings.json"),
+        r#"{"allowManagedHooksOnly": true}"#,
+    )
+    .unwrap();
+    let answer = target(&home, None, json!({"PATH": ""}));
+    assert_eq!(answer["hook_overrides"][0]["code"], "managed_hooks_only");
+}
+
+#[cfg(unix)]
+#[test]
+fn install_target_does_not_read_a_device_or_an_oversized_settings_file() {
+    let home = Home::new();
+    let workspace = home.root.join("project");
+    fs::create_dir_all(workspace.join(".claude")).unwrap();
+    std::os::unix::fs::symlink("/dev/zero", workspace.join(".claude/settings.json")).unwrap();
+    let mut big = br#"{"disableAllHooks": true, "pad": ""#.to_vec();
+    big.resize(2 * 1024 * 1024, b' ');
+    big.extend_from_slice(br#""}"#);
+    fs::write(workspace.join(".claude/settings.local.json"), big).unwrap();
+    let answer = target(&home, Some(&workspace), json!({"PATH": ""}));
+    assert_eq!(answer["hook_overrides"], json!([]));
 }
 
 #[test]
@@ -381,7 +431,22 @@ fn install_notes_name_the_settings_file_and_the_rollback() {
         &facts(None, false),
     );
     let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
-    let notes = manifest["notes"].to_string();
-    assert!(notes.contains(&format!("user settings at {}", settings(&home).display())));
-    assert!(notes.contains("hol-guard uninstall claude-code --guard-home"));
+    // Compare decoded strings: JSON text would escape Windows backslashes.
+    let notes: Vec<&str> = manifest["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    let written = format!("user settings at {}", settings(&home).display());
+    assert!(
+        notes.iter().any(|note| note.contains(&written)),
+        "{notes:?}"
+    );
+    assert!(
+        notes
+            .iter()
+            .any(|note| note.contains("hol-guard uninstall claude-code --guard-home")),
+        "{notes:?}"
+    );
 }

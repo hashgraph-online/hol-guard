@@ -7,8 +7,8 @@ are shown literally: a directory named ``[red]`` must not become Rich markup.
 from __future__ import annotations
 
 import os
+import re
 import shlex
-import subprocess
 
 from rich.console import Console
 from rich.panel import Panel
@@ -28,9 +28,19 @@ def claude_settings_target(context: HarnessContext) -> dict[str, object]:
         return {"unavailable": True, "reason": str(error) or type(error).__name__}
 
 
+_POWERSHELL_PLAIN = re.compile(r"[A-Za-z0-9_./:\\-]+")
+
+
+def _powershell_word(word: str) -> str:
+    """A PowerShell literal: only single quotes stop `$` and backtick expansion."""
+    if _POWERSHELL_PLAIN.fullmatch(word):
+        return word
+    return "'" + word.replace("'", "''") + "'"
+
+
 def _command_text(words: list[str], *, windows: bool = os.name == "nt") -> str:
-    """The command as the local shell would take it: cmd and PowerShell ignore single quotes."""
-    return subprocess.list2cmdline(words) if windows else shlex.join(words)
+    """The command for the shell that will run it: PowerShell on Windows, POSIX sh elsewhere."""
+    return " ".join(_powershell_word(word) for word in words) if windows else shlex.join(words)
 
 
 def _lines(target: dict[str, object]) -> list[str]:
@@ -54,7 +64,8 @@ def _lines(target: dict[str, object]) -> list[str]:
         command = rollback.get("command")
         if isinstance(command, list):
             undo = _command_text([str(part) for part in command])
-            lines.append(f"Undo: {undo}. {rollback.get('effect', '')}".rstrip())
+            label = "Undo (PowerShell)" if os.name == "nt" else "Undo"
+            lines.append(f"{label}: {undo}. {rollback.get('effect', '')}".rstrip())
     overrides = target.get("hook_overrides")
     if isinstance(overrides, list):
         lines.extend(f"Warning: {item.get('message')}" for item in overrides if isinstance(item, dict))
