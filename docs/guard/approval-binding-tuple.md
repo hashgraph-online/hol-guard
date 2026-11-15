@@ -16,7 +16,7 @@ decides whether it matches.
 | Installation | `installation_binding`, `device_binding` | The resident's own installation and device keys | `native_approval_binding_mismatch` |
 | Session | `request_digest` | `edge::request_identity`: the canonical payload (including the harness session ID), harness, event, policy identity and request source | `native_approval_binding_mismatch` |
 | Event | `request_digest`, plus the event gate | The authoritative event; only `PreToolUse` is approvable | `native_approval_event_not_approvable` |
-| Action | `action_digest`, `action_type`, `operation` | The reconstructed pre-tool action | `native_approval_binding_mismatch` |
+| Action | `request_digest`, `action_digest`, `action_type`, `operation` | The canonical request payload (the command and its arguments) and the reconstructed pre-tool action. `action_digest` covers the action category and policy decision, not the command text, so the exact command is bound through `request_digest` | `native_approval_binding_mismatch` |
 | Policy generation | `policy_generation`, `policy_digest`, `rule_digest` | The current signed policy snapshot | `native_approval_binding_mismatch`, or `native_approval_policy_context_mismatch` when the snapshot changed |
 | Request nonce | `nonce`, `request_id` | A fresh nonce issued with the challenge; claimed once | `native_approval_integrity_mismatch` when altered, `native_approval_replay` when reused |
 | Continuation | `resident_epoch`, and the claim-then-consume receipt | The running resident's epoch and its receipt ledger | `native_approval_binding_mismatch` for another epoch, `native_approval_receipt_not_claimed` or `native_approval_receipt_consumed` for an out-of-order or second use |
