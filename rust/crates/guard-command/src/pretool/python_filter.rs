@@ -198,6 +198,9 @@ fn environment_settled(
 /// carry no prefix assignment, wrapper, `=`, `$` or backtick, so
 /// `export PYTHONPATH=...` and `echo $PYTHONPATH` still count.
 fn names_python_inertly(other: &crate::CommandSegmentV1) -> bool {
+    // A parser-approved trailing stderr merge changes no shell variables.
+    let normalized = super::segment_proof::without_stderr_merge(other);
+    let other = normalized.as_ref().unwrap_or(other);
     let basename = super::executable_basename(other.executable.as_deref().unwrap_or(""));
     other.environment_names.is_empty()
         && other.wrapper_chain.is_empty()
@@ -286,10 +289,14 @@ fn working_directory_clean(
 /// `json.py` the filter would import, and no wrapper or `PATH` change picks
 /// another program. The same screen `creates_nothing` applies.
 fn quiet_version_probe(other: &crate::CommandSegmentV1) -> bool {
+    // Normalize only the parser-verified stderr merge. Check the original
+    // text for file redirects so a write to json.py cannot become an allow.
+    let normalized = super::segment_proof::without_stderr_merge(other);
+    let probe = normalized.as_ref().unwrap_or(other);
     other.wrapper_chain.is_empty()
         && !other.path_overridden
         && redirects_only_to_null_or_stdout(&other.text)
-        && super::version_probes::lone_probe_segment(other)
+        && super::version_probes::lone_probe_segment(probe)
 }
 
 /// Accept the spaced and compact shell spellings of a discard redirect,
@@ -316,7 +323,11 @@ fn redirects_only_to_null_or_stdout(text: &str) -> bool {
         } else {
             return false;
         };
-        if suffix.chars().next().is_some_and(|next| !next.is_whitespace()) {
+        if suffix
+            .chars()
+            .next()
+            .is_some_and(|next| !next.is_whitespace())
+        {
             return false;
         }
         rest = suffix;
