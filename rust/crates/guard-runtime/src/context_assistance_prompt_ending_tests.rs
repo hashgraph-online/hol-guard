@@ -76,6 +76,15 @@ fn the_codex_hint_asks_for_the_edit_and_the_test_as_two_tool_calls() {
     assert!(!ACT_ON_IT.contains("apply the patch and run the tests)"));
 }
 
+/// Claude Code ran the whole suite and committed after the doctest or test a
+/// note named had passed, a turn each. The hint says that check finishes the
+/// change.
+#[test]
+fn the_claude_code_hint_says_the_named_check_finishes_the_change() {
+    assert!(BATCHING.contains("Once the check a note names passes, the change is done"));
+    assert!(BATCHING.contains("a full test run or a commit nobody asked for"));
+}
+
 /// Oh My Pi spends a turn on a todo list even for a one-line fix. Guard
 /// cannot tell whether Oh My Pi showed an earlier note, so every note it adds
 /// there ends with the hint, which asks to skip the list on small fixes.
