@@ -13244,11 +13244,21 @@ function scopeChoiceWithDuration(choice, persistExactAction) {
   }
   return {
     ...choice,
-    label: "Always allow exact action",
-    description: "Save this exact action. Guard skips review for it until the command changes.",
+    label: "Save this exact action",
+    description: "Guard skips review for this exact action until the command changes.",
     appliesTo: "This exact action.",
     expiry: SAVED_EXPIRY,
     policyImpact: "Adds a saved allow for this exact action. A changed command still asks."
+  };
+}
+function blockScopeChoiceWithDuration(choice, persistExactBlock) {
+  if (choice.value !== "artifact" || !persistExactBlock) {
+    return choice;
+  }
+  return {
+    ...choice,
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved block for this exact action. Other actions keep their current policy."
   };
 }
 function approvalDecisionSubjectKey(item) {
@@ -13318,7 +13328,7 @@ const BLOCK_SCOPE_CHOICES = [
     label: "Block this action",
     description: "Block only this exact action. Other actions still follow their current Guard policy.",
     appliesTo: "This exact action.",
-    expiry: `${ONCE_MINUTES} minutes for this exact action. After that, Guard asks again.`,
+    expiry: `Ends within ${ONCE_MINUTES} minutes. After that, Guard asks again.`,
     policyImpact: "Nothing is saved. Guard's policy does not change."
   },
   {
@@ -32434,7 +32444,7 @@ function ReviewScopeControls(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Block scope selection", children: props.blockScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         ScopeChoiceButton,
         {
-          choice,
+          choice: blockScopeChoiceWithDuration(choice, props.persistExactBlock === true),
           checked: props.blockScope === choice.value,
           onScopeChange: props.onBlockScopeChange
         },
@@ -35250,6 +35260,7 @@ function ReviewDecisionCard(props) {
           exactActionPersistenceEligible: item.exact_action_persistence_eligible === true,
           versionBoundScript,
           rememberExactAction,
+          persistExactBlock,
           oneTimeRetryBlocked: retryCannotReuseApproval(item),
           retryWindowMinutes: oneTimeRetryWindowMinutes(item),
           allowScope,

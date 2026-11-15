@@ -34,11 +34,29 @@ export function scopeChoiceWithDuration(
   }
   return {
     ...choice,
-    label: "Always allow exact action",
-    description: "Save this exact action. Guard skips review for it until the command changes.",
+    label: "Save this exact action",
+    description: "Guard skips review for this exact action until the command changes.",
     appliesTo: "This exact action.",
     expiry: SAVED_EXPIRY,
     policyImpact: "Adds a saved allow for this exact action. A changed command still asks.",
+  };
+}
+
+/**
+ * A block on the exact action is saved when the user asks Guard to stop it
+ * next time (Watch-only findings), so its terms follow that pick.
+ */
+export function blockScopeChoiceWithDuration(
+  choice: ApprovalScopeChoice,
+  persistExactBlock: boolean,
+): ApprovalScopeChoice {
+  if (choice.value !== "artifact" || !persistExactBlock) {
+    return choice;
+  }
+  return {
+    ...choice,
+    expiry: SAVED_EXPIRY,
+    policyImpact: "Adds a saved block for this exact action. Other actions keep their current policy.",
   };
 }
 
@@ -117,7 +135,7 @@ export const BLOCK_SCOPE_CHOICES: ApprovalScopeChoice[] = [
     label: "Block this action",
     description: "Block only this exact action. Other actions still follow their current Guard policy.",
     appliesTo: "This exact action.",
-    expiry: `${ONCE_MINUTES} minutes for this exact action. After that, Guard asks again.`,
+    expiry: `Ends within ${ONCE_MINUTES} minutes. After that, Guard asks again.`,
     policyImpact: "Nothing is saved. Guard's policy does not change.",
   },
   {

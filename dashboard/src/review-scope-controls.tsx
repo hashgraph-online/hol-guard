@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { SectionLabel } from "./approval-center-primitives";
-import { scopeChoiceWithDuration, type ApprovalScopeChoice } from "./approval-scopes";
+import { blockScopeChoiceWithDuration, scopeChoiceWithDuration, type ApprovalScopeChoice } from "./approval-scopes";
 import { retryWindowText } from "./approval-retry-guidance";
 import type { DecisionScope } from "./guard-types";
 
@@ -15,6 +15,8 @@ type ReviewScopeControlsProps = {
   exactActionPersistenceEligible: boolean;
   versionBoundScript?: boolean;
   rememberExactAction: boolean;
+  /** The exact-action block will be saved rather than lapse. */
+  persistExactBlock?: boolean;
   /** One-time approvals of this request never let the agent's next call through. */
   oneTimeRetryBlocked?: boolean;
   /** Minutes a one-time approval stays usable for a retry. */
@@ -114,7 +116,7 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
             {props.blockScopeOptions.map((choice) => (
               <ScopeChoiceButton
                 key={choice.value}
-                choice={choice}
+                choice={blockScopeChoiceWithDuration(choice, props.persistExactBlock === true)}
                 checked={props.blockScope === choice.value}
                 onScopeChange={props.onBlockScopeChange}
               />

@@ -11,6 +11,7 @@ import {
   recommendedScopeForAction,
   requestSupportsScope,
   scopeChoiceWithDuration,
+  blockScopeChoiceWithDuration,
   scopeChoicesForRequest,
   standardScopeChoicesForRequest,
   onceOnlyReasonCopy,
@@ -417,16 +418,23 @@ assert(
 );
 assert(
   exactOnce !== undefined &&
-    scopeChoiceWithDuration(exactOnce, true).label === "Always allow exact action" &&
+    scopeChoiceWithDuration(exactOnce, true).label === "Save this exact action" &&
     !scopeChoiceWithDuration(exactOnce, true).description.includes("Nothing is saved"),
   "T-AS-34: Always allow on the exact action relabels the choice and drops the one-time description",
 );
 const exactBlock = BLOCK_SCOPE_CHOICES.find((item) => item.value === "artifact");
 assert(
   exactBlock !== undefined &&
-    exactBlock.expiry.startsWith("15 minutes") &&
+    exactBlock.expiry.includes("15 minutes") &&
     exactBlock.policyImpact.startsWith("Nothing is saved"),
   "T-AS-35: blocking the exact action lasts 15 minutes and saves nothing",
+);
+assert(
+  exactBlock !== undefined &&
+    blockScopeChoiceWithDuration(exactBlock, false) === exactBlock &&
+    blockScopeChoiceWithDuration(exactBlock, true).expiry.includes("Until you remove it") &&
+    blockScopeChoiceWithDuration(exactBlock, true).policyImpact.startsWith("Adds a saved block"),
+  "T-AS-37: a block that will be saved shows saved terms",
 );
 for (const choice of [...DEFAULT_SCOPE_CHOICES, ...BLOCK_SCOPE_CHOICES].filter((item) => item.value === "publisher")) {
   assert(
