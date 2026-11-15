@@ -53,6 +53,25 @@ def test_worker_host_migrates_installed_release_before_first_publication(tmp_pat
     assert store.calls == ["migrate", "publish"]
 
 
+def test_worker_host_reports_each_start_step_it_finishes(tmp_path, monkeypatch):
+    from codex_plugin_scanner.guard.runtime import approval_attention
+
+    store = _Store(tmp_path)
+    steps: list[str] = []
+
+    def attention(**_kwargs):
+        raise _StopError
+
+    monkeypatch.setattr(worker_host.WorkerHost, "_start_policy_publication", lambda self: steps.append("<publish>"))
+    monkeypatch.setattr(approval_attention, "ApprovalAttentionCoordinator", attention)
+    host = worker_host.WorkerHost(store, home_dir=tmp_path)  # pyright: ignore[reportArgumentType]
+
+    with pytest.raises(_StopError):
+        host.start(on_phase=steps.append)
+
+    assert steps == ["admitted", "<publish>", "publishing"]
+
+
 def test_worker_host_retries_a_failed_migration_until_it_lands(tmp_path, monkeypatch):
     from codex_plugin_scanner.guard.runtime import approval_attention
 

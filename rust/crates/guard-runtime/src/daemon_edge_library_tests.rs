@@ -23,3 +23,45 @@ fn worker_host_arguments_name_the_guard_home() {
         ["desktop", "daemon-workers", "--guard-home", "/h"].map(str::to_owned)
     );
 }
+
+fn journaled(home: &std::path::Path) -> Vec<String> {
+    let (events, _) = super::super::lifecycle::load_events(home, 64, false);
+    events
+        .iter()
+        .filter_map(|event| {
+            event
+                .get("event")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
+        .collect()
+}
+
+#[test]
+fn worker_host_start_steps_are_journaled_before_ready() {
+    let home = tempfile::tempdir().unwrap();
+    let (sender, receiver) = mpsc::channel();
+    let mut lines = &b"phase launched\nphase admitted\nready\nphase late\n"[..];
+    read_host_start(&mut lines, home.path(), Some(sender));
+    assert!(receiver.try_recv().is_ok());
+    assert_eq!(journaled(home.path()), ["host_launched", "host_admitted"]);
+}
+
+#[test]
+fn a_host_that_says_anything_else_is_not_ready() {
+    let home = tempfile::tempdir().unwrap();
+    for output in [
+        &b"phase launched\nnot ready\nready\n"[..],
+        b"phase launched\n",
+        b"",
+    ] {
+        let (sender, receiver) = mpsc::channel();
+        let mut lines = output;
+        read_host_start(&mut lines, home.path(), Some(sender));
+        assert!(receiver.try_recv().is_err());
+    }
+    let (sender, receiver) = mpsc::channel();
+    let flood = "phase step\n".repeat(MAX_HOST_PHASES + 1) + "ready\n";
+    read_host_start(&mut flood.as_bytes(), home.path(), Some(sender));
+    assert!(receiver.try_recv().is_err());
+}
