@@ -15,7 +15,7 @@ use crate::local_mcp_grant_identity::shlex_split;
 pub(crate) const HOOK_SCRIPT_NAME: &str = "hol-guard-cursor-hook.py";
 const FROZEN_COMMAND: &str = "__guard-cursor-hook";
 const NATIVE_COMMAND: &str = "cursor-hook-bridge";
-const FROZEN_LAUNCHERS: &[&str] = &[
+pub(crate) const FROZEN_LAUNCHERS: &[&str] = &[
     "current-hol-guard",
     "current-hol-guard.cmd",
     "current-hol-guard.exe",

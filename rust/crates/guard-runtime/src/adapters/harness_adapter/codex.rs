@@ -415,7 +415,7 @@ fn hook_state(fields: &Map<String, Value>) -> Step<Value> {
 }
 
 /// The doctor's final setup status once the hook warnings are in.
-fn doctor_status(fields: &Map<String, Value>) -> Step<Value> {
+pub(super) fn doctor_status(fields: &Map<String, Value>) -> Step<Value> {
     let warnings = strings(fields.get("warnings"))?;
     let warnings: Vec<&str> = warnings.iter().map(String::as_str).collect();
     let status = fields.get("status").cloned().unwrap_or(Value::Null);

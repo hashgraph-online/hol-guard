@@ -17,7 +17,7 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
-from .codex_hook_registration import _is_live_guard_codex_hook_command
+from .codex_hook_registration import is_live_guard_codex_hook_command
 from .mdm.runtime_request import runtime_answer
 
 CODEX_HOOK_TRUST_WARNING = (
@@ -162,7 +162,7 @@ def _guard_commands(hooks: Mapping[str, object]) -> set[str]:
             handlers = group.get("hooks") if isinstance(group, Mapping) else None
             for handler in handlers if isinstance(handlers, list) else []:
                 command = handler.get("command") if isinstance(handler, Mapping) else None
-                if isinstance(command, str) and _is_live_guard_codex_hook_command(command):
+                if isinstance(command, str) and is_live_guard_codex_hook_command(command):
                     found.add(str(command))
     return found
 

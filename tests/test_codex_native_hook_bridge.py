@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.codex_hook_compatibility import (
     python_bridge_argv,
 )
 from codex_plugin_scanner.guard.codex_hook_registration import (
-    _is_live_guard_codex_hook_command,
+    is_live_guard_codex_hook_command,
     missing_guard_hook_program,
 )
 
@@ -108,13 +108,13 @@ def test_native_hook_command_is_a_live_guard_hook(tmp_path: Path) -> None:
     runtime = tmp_path / "hol-guard-runtime"
     command = f"{runtime} {NATIVE_CODEX_HOOK_COMMAND} {sys.executable} -I {bridge_path} cfg"
 
-    assert _is_live_guard_codex_hook_command(command, windows=False)
+    assert is_live_guard_codex_hook_command(command, windows=False)
     assert missing_guard_hook_program(command, windows=False) == str(runtime)
     runtime.write_text("", encoding="utf-8")
     assert missing_guard_hook_program(command, windows=False) is None
     bridge_path.unlink()
     assert missing_guard_hook_program(command, windows=False) == str(bridge_path)
-    assert not _is_live_guard_codex_hook_command(f"{runtime} {NATIVE_CODEX_HOOK_COMMAND}", windows=False)
+    assert not is_live_guard_codex_hook_command(f"{runtime} {NATIVE_CODEX_HOOK_COMMAND}", windows=False)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX hook command syntax")
@@ -122,7 +122,7 @@ def test_native_only_hook_command_is_a_live_guard_hook(tmp_path: Path) -> None:
     runtime = tmp_path / "hol-guard-runtime"
     command = f"{runtime} {NATIVE_CODEX_HOOK_COMMAND} cfg"
 
-    assert _is_live_guard_codex_hook_command(command, windows=False)
+    assert is_live_guard_codex_hook_command(command, windows=False)
     assert missing_guard_hook_program(command, windows=False) == str(runtime)
     runtime.write_text("", encoding="utf-8")
     assert missing_guard_hook_program(command, windows=False) is None

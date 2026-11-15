@@ -24,7 +24,7 @@ use serde_json::{json, Map, Value};
 use super::codex::{compact, dict, flag, text};
 use super::codex_merge::{get, pop, py_eq, set, Entries};
 use super::codex_owner_home::{self as home, Cwd, Home};
-use super::codex_preactivation;
+use super::{codex_live_hooks, codex_preactivation};
 use super::{Failure, Step};
 use crate::cursor_hook_command::{py_space, Syntax};
 use crate::pyjson::{self, PyVal};
@@ -60,7 +60,7 @@ fn op_fields(op: &str) -> Option<Vec<&'static str>> {
             &["unlaunchable", "hold_recorded"],
         ]
         .concat(),
-        _ => return None,
+        _ => return codex_live_hooks::fields(op),
     };
     Some(fields)
 }
@@ -93,6 +93,9 @@ pub(super) fn dispatch(fields: &Map<String, Value>) -> Step<Value> {
 }
 
 fn run(op: &str, fields: &Map<String, Value>, syntax: &mut Syntax) -> Step<Value> {
+    if codex_live_hooks::fields(op).is_some() {
+        return codex_live_hooks::run(op, fields, syntax);
+    }
     match op {
         "guard_home" => {
             let found = home::guard_home(text(fields, "command")?, &Cwd::parse(fields)?, syntax);

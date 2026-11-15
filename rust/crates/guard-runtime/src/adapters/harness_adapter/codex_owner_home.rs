@@ -23,7 +23,7 @@ use crate::pyjson::{self, PyVal};
 use crate::runner_sync_url::parse_qsl;
 
 const NATIVE_COMMAND: &str = "codex-hook-bridge";
-const BRIDGE_SCRIPT: &str = "codex_daemon_hook_bridge.py";
+pub(super) const BRIDGE_SCRIPT: &str = "codex_daemon_hook_bridge.py";
 const STATE_NAME: &str = "daemon-state.json";
 const OPTION: &str = "--guard-home";
 

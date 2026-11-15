@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import codex_hook_command_line, codex_hook_registration
+from codex_plugin_scanner.guard import codex_hook_command_line
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_bridge_runtime import bridge_config_from_argv, decode_bridge_config_argument
@@ -22,14 +22,12 @@ from codex_plugin_scanner.guard.codex_hook_file_integrity import split_hook_comm
 from codex_plugin_scanner.guard.codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS
 from codex_plugin_scanner.guard.codex_hook_registration import (
     exact_legacy_hook_bindings,
+    is_live_guard_codex_hook_command,
     live_guard_codex_hooks_intercept,
     live_owned_codex_event_matches,
     require_codex_hook_owner,
 )
-from codex_plugin_scanner.guard.frozen_runtime_commands import (
-    FROZEN_CODEX_BRIDGE_ARG,
-    frozen_codex_bridge_tokens_are_live,
-)
+from codex_plugin_scanner.guard.frozen_runtime_commands import FROZEN_CODEX_BRIDGE_ARG
 
 _PYTHON = r"C:\Users\tester\.venv\Scripts\python.exe"
 _SPACED_PYTHON = r"C:\Program Files\HOL Guard's\.venv\Scripts\python.exe"
@@ -71,6 +69,19 @@ def _argv(*, windows: bool) -> list[str]:
     if windows:
         return [_PYTHON, "-I", _BRIDGE, _config_json(windows=True)]
     return [_POSIX_PYTHON, "-I", _POSIX_BRIDGE, _config_json(windows=False)]
+
+
+def _launchable_argv(tmp_path: Path, *, windows: bool) -> list[str]:
+    """The rendered argv, with programs that exist when the form is this host's own."""
+
+    argv = _argv(windows=windows)
+    if windows != (os.name == "nt"):
+        return argv
+    programs = [tmp_path / "venv" / "python3", tmp_path / "site" / "codex_daemon_hook_bridge.py"]
+    for program in programs:
+        program.parent.mkdir(parents=True, exist_ok=True)
+        program.touch()
+    return [str(programs[0]), "-I", str(programs[1]), argv[-1]]
 
 
 def _legacy_argv() -> list[str]:
@@ -199,17 +210,14 @@ def test_windows_treats_legacy_posix_entries_as_guard_but_not_launchable() -> No
 
 
 @pytest.mark.parametrize("windows", [False, True])
-def test_health_and_ownership_recognise_rendered_guard_hooks(windows: bool, monkeypatch: pytest.MonkeyPatch) -> None:
-    # The fixture paths are illustrative; this test covers command-line recognition only.
-    monkeypatch.setattr(codex_hook_registration, "missing_guard_hook_program", lambda *_args, **_kwargs: None)
-    hooks = _hooks(_rendered(_argv(windows=windows), windows=windows))
+def test_health_and_ownership_recognise_rendered_guard_hooks(windows: bool, tmp_path: Path) -> None:
+    argv = _launchable_argv(tmp_path, windows=windows)
+    hooks = _hooks(_rendered(argv, windows=windows))
 
     assert live_guard_codex_hooks_intercept(hooks, windows=windows)
     assert all(live_owned_codex_event_matches(hooks, windows=windows).values())
     with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
-        require_codex_hook_owner(
-            _rendered(_argv(windows=windows), windows=windows), ownership="unmanaged", windows=windows
-        )
+        require_codex_hook_owner(_rendered(argv, windows=windows), ownership="unmanaged", windows=windows)
 
 
 def test_windows_health_fails_while_legacy_posix_hooks_cannot_launch() -> None:
@@ -260,5 +268,8 @@ def test_installed_posix_hook_command_is_byte_identical(tmp_path: Path) -> None:
 def test_frozen_bridge_tokens_accept_the_platform_config_form(windows: bool) -> None:
     argument = encode_hook_config_argument(json.dumps(_CONFIG), windows=windows)
 
-    assert frozen_codex_bridge_tokens_are_live(["hol-guard.exe", FROZEN_CODEX_BRIDGE_ARG, argument])
-    assert not frozen_codex_bridge_tokens_are_live(["hol-guard.exe", FROZEN_CODEX_BRIDGE_ARG, "not-json!"])
+    def command(config: str) -> str:
+        return _rendered(["hol-guard.exe", FROZEN_CODEX_BRIDGE_ARG, config], windows=windows)
+
+    assert is_live_guard_codex_hook_command(command(argument), windows=windows)
+    assert not is_live_guard_codex_hook_command(command("not-json!"), windows=windows)

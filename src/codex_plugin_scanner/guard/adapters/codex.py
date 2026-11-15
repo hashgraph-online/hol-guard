@@ -56,8 +56,7 @@ from ..codex_hook_recovery import (
     recover_hook_publication,
 )
 from ..codex_hook_registration import (
-    finalize_codex_doctor_setup_status,
-    finalize_codex_doctor_warnings,
+    codex_doctor_result,
     install_managed_codex_hook_groups,
     legacy_binding_fields,
     overlay_live_owned_event_matches,
@@ -1328,17 +1327,10 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         hook_state = codex_native_hook_state(context)
         warning_items = payload.get("warnings")
         items = warning_items if isinstance(warning_items, list) else []
-        warnings = finalize_codex_doctor_warnings([str(item) for item in items if isinstance(item, str)], hook_state)
-        payload["warnings"] = warnings
-        base_status = payload.get("setup_status")
-        answer = _codex(
-            "doctor_status",
-            context,
-            warnings=warnings,
-            status=finalize_codex_doctor_setup_status(base_status, hook_state, warnings),
-            base_status=base_status,
+        warnings, setup_status = codex_doctor_result(
+            [str(item) for item in items if isinstance(item, str)], hook_state, payload.get("setup_status")
         )
-        setup_status = answer["status"]
+        payload["warnings"] = warnings
         payload["setup_status"] = setup_status
         apply_codex_hook_trust_doctor(payload, hook_state)
         payload["native_hook_state"] = hook_state
