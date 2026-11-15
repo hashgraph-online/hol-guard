@@ -520,6 +520,7 @@
       "src/pretool/listing_words.rs",
       "src/pretool/listing_temporary.rs",
       "src/pretool/literal_secrets.rs",
+      "src/pretool/literal_secret_oauth.rs",
       "src/pretool/literal_secret_pairs.rs",
       "src/pretool/literal_secret_strong.rs",
       "src/pretool/literal_secret_value.rs",
