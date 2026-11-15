@@ -21,7 +21,7 @@
     "partner": [
       {
         "partner": "composio",
-        "toolkit": "discord"
+        "toolkit": "discordbot"
       }
     ]
   },
