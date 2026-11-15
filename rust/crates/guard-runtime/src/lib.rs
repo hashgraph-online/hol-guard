@@ -202,6 +202,7 @@ mod codex_hook_bridge_trust_files;
 mod codex_hook_file_identity_op;
 mod codex_hook_identity;
 mod codex_hook_key;
+mod codex_hook_manifest_auth;
 mod codex_hook_manifest_build;
 mod codex_hook_manifest_iso_time;
 mod codex_hook_manifest_verify_op;

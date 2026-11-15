@@ -23,6 +23,11 @@ mod journal;
 mod lease;
 mod lock_files;
 mod output;
+mod publication;
+mod publication_commit;
+mod publication_files;
+mod publication_io;
+mod publication_receipt;
 #[cfg(test)]
 mod tests;
 
@@ -234,7 +239,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "publish" => Ok(publish(files()?, flag("removals"), flag("rollback"), &ask)),
         "journal" => journal::dispatch(args),
         op @ ("lease_acquire" | "lease_release" | "lease_check") => lease::dispatch(op, args),
-        _ => Err(ERR_INVALID),
+        op => publication_commit::dispatch(op, args, &ask.budget),
     }
 }
 

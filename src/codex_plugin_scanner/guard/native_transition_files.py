@@ -106,7 +106,7 @@ def _ask(
     plan: Sequence[object],
     files: Sequence[TransitionFile] | None = None,
     on_write: Callable[[TransitionFile], None] | None = None,
-) -> None:
+) -> Mapping[str, object]:
     from .codex_hook_file_integrity import _owner_is_only_group_member
     from .native_runner_authority import native_runner_authority
     from .runtime_transition import TransitionError
@@ -136,8 +136,17 @@ def _ask(
             raise _exception(error)
         if answer.get("ok") is not True:
             raise TransitionError(_INVALID)
-        return
+        return answer
     raise TransitionError("artifact_permissions_invalid")
+
+
+def publication(op: str, home: Path, **fields: object) -> object:
+    """One ``publication_*`` op on the home's Codex publication record."""
+
+    import os
+
+    request: dict[str, object] = {"op": f"publication_{op}", "home": os.path.abspath(home), **fields}
+    return _ask(request, plan=[]).get("value")
 
 
 def compare_files(files: list[object], generation: str, *, inverse: bool = False) -> None:

@@ -27,12 +27,9 @@
 use std::io::Read;
 use std::path::Path;
 
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
 use guard_policy_snapshot::local_authority_integrity::sign_local_authority_payload;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 
 #[path = "codex_hook_authority_open.rs"]
 mod opening;
@@ -43,6 +40,7 @@ use opening::*;
 use python_json::{parse_python_json, python_canonical_json};
 
 use crate::codex_hook_key;
+use crate::codex_hook_manifest_auth;
 use crate::compound_git_paths;
 use crate::local_authority_integrity_op;
 
@@ -151,6 +149,7 @@ struct Request {
     payload: Option<Map<String, Value>>,
     signed_at: Option<String>,
     text: Option<String>,
+    path: Option<String>,
     guard_home: Option<String>,
     config_path: Option<String>,
     #[serde(default)]
@@ -182,14 +181,23 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         return Err("codex_hook_authority_record_request_too_large".to_owned());
     }
     let request: Request = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    Ok(answer(&request)?.to_string().into_bytes())
+}
+
+/// One request from inside the runtime, as `run_command` would read it.
+pub(crate) fn ask(request: Value) -> Result<Value, String> {
+    answer(&serde_json::from_value(request).map_err(|_| invalid())?)
+}
+
+fn answer(request: &Request) -> Result<Value, String> {
     if request.schema != SCHEMA {
         return Err(invalid());
     }
-    let answer = match request.op.as_str() {
-        "seal" => seal(&request)?,
-        "open" => open(&request)?,
-        "receipt_manifest" => receipt_manifest(&request)?,
-        "manifest_build" => match secret(&request)? {
+    Ok(match request.op.as_str() {
+        "seal" => seal(request)?,
+        "open" => open(request)?,
+        "receipt_manifest" => receipt_manifest(request)?,
+        "manifest_build" => match secret(request)? {
             Ok(held) => crate::codex_hook_manifest_build::answer(
                 request.spec.as_ref().ok_or_else(invalid)?,
                 request.manifest.as_ref(),
@@ -199,6 +207,7 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
             ),
             Err(reason) => refused(reason),
         },
+        "manifest_load" | "manifest_authenticate" => manifest_answer(request)?,
         op @ ("key_identity" | "key_ensure" | "key_remove_if_unused") => {
             let guard_home = request.guard_home.as_deref().ok_or_else(invalid)?;
             codex_hook_key::answer(op, guard_home).ok_or_else(invalid)?
@@ -212,8 +221,29 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
             }
         }
         _ => return Err(invalid()),
+    })
+}
+
+/// `load_authenticated_hook_manifest_path` (`path`) or
+/// `authenticate_hook_manifest_text` (`text`, optionally under one key).
+fn manifest_answer(request: &Request) -> Result<Value, String> {
+    let guard_home = request.guard_home.as_deref().ok_or_else(invalid)?;
+    let manifest = if request.op == "manifest_load" {
+        let path = request.path.as_deref().ok_or_else(invalid)?;
+        codex_hook_manifest_auth::load_path(guard_home, Path::new(path))
+    } else {
+        let text = request.text.as_deref().ok_or_else(invalid)?;
+        codex_hook_manifest_auth::authenticate_text(
+            guard_home,
+            text,
+            request.key_id.as_deref(),
+            request.installation_id.as_deref(),
+        )
     };
-    Ok(answer.to_string().into_bytes())
+    Ok(match manifest {
+        Ok(manifest) => json!({"manifest": manifest}),
+        Err(reason) => refused(reason),
+    })
 }
 
 fn invalid() -> String {
@@ -451,47 +481,6 @@ fn repair_proof_matches(
             && text(evidence.get("manifest_sha256")) == Some(sha256_hex(&manifest).as_str())
             && observed >= published,
     )
-}
-
-fn text(value: Option<&Value>) -> Option<&str> {
-    value.and_then(Value::as_str)
-}
-
-fn is_int(value: Option<&Value>) -> bool {
-    value.is_some_and(|value| value.is_i64() || value.is_u64())
-}
-
-/// A finite JSON number; booleans are not numbers here as they are in Python.
-fn real(value: Option<&Value>) -> Option<f64> {
-    value
-        .and_then(Value::as_f64)
-        .filter(|number| number.is_finite())
-}
-
-fn keys_are(object: &Map<String, Value>, keys: &[&str]) -> bool {
-    object.len() == keys.len() && keys.iter().all(|key| object.contains_key(*key))
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    hex::encode(Sha256::digest(bytes))
-}
-
-/// A snapshot field: null, or base64 of at most the snapshot limit.
-fn decode(value: Option<&Value>) -> Result<Option<Vec<u8>>, &'static str> {
-    match value {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::String(text)) => {
-            if text.len() > 4 * MAX_SNAPSHOT.div_ceil(3) {
-                return Err("snapshot_invalid");
-            }
-            let bytes = STANDARD.decode(text).map_err(|_| "snapshot_invalid")?;
-            if bytes.len() > MAX_SNAPSHOT {
-                return Err("snapshot_too_large");
-            }
-            Ok(Some(bytes))
-        }
-        Some(_) => Err("snapshot_invalid"),
-    }
 }
 
 #[cfg(test)]

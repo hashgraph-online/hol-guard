@@ -16,8 +16,7 @@ use sha2::{Digest, Sha256};
 use super::files::{self, Doc};
 use super::{
     codex_files, codex_merge, codex_servers, codex_uninstall, common, hook_render, path_answer,
-    path_text, Ctx,
-    Failure, Spec, Step,
+    path_text, Ctx, Failure, Spec, Step,
 };
 use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 use crate::harness_diagnostics::setup_failures_besides_missing_command;

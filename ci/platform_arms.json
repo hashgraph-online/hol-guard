@@ -2747,6 +2747,22 @@
    "body": "26581df47aa1"
   },
   {
+   "verdict": "posix-primitive",
+   "note": "Fsyncing a directory to make a removed record's name change durable is a POSIX primitive with no Windows counterpart; NTFS orders the delete with its own metadata journal. The Codex publication record has the same arm in `codex_hook_key.rs`.",
+   "file": "rust/crates/guard-runtime/src/transition_files/publication_commit.rs",
+   "item": "fn sync_directory(_directory: &Path) -> std::io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "1fba077ff521"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Owner uid and mode bits do not exist on Windows; the arm checks only the file kind, as `private_file_io.read_private_regular_bytes` did on Windows, where the Guard home's ACL is what keeps the receipt and records private.",
+   "file": "rust/crates/guard-runtime/src/transition_files/publication_io.rs",
+   "item": "fn private_metadata(metadata: &fs::Metadata, directory: bool) -> bool",
+   "cfg": "not(unix)",
+   "body": "17b843631b58"
+  },
+  {
    "verdict": "other-platform",
    "note": "Test fixture helper: modes are not compared on Windows, so the fixture leaves them alone.",
    "file": "rust/crates/guard-runtime/src/transition_files/tests.rs",

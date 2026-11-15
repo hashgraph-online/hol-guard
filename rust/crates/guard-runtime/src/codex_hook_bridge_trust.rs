@@ -15,26 +15,18 @@
 //! The answer is a stable reason code; the bridge then fails the hook closed
 //! and writes that code to stderr. It renders no verdict about the call.
 
-use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::{decode_config_argument, BRIDGE_COMMAND, STATE_FILE};
-use crate::codex_hook_key::read_matching;
-use crate::local_authority_integrity_op::verify;
+use crate::codex_hook_manifest_auth as manifest_auth;
 
-use crate::codex_hook_bridge_trust_files::{
-    self as files, canonical, verify_executable, verify_regular,
-};
+use crate::codex_hook_bridge_trust_files::{canonical, verify_executable, verify_regular};
 
 const UNAUTHENTICATED: &str = "codex_hook_launch_unauthenticated";
 const MANIFEST_SCHEMA_VERSION: i64 = 2;
-const MAC_ALGORITHM: &str = "hmac-sha256";
-const PURPOSE: &str = "codex-managed-hook-manifest";
-const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 const MAX_GENERATIONS: usize = 8;
 
 type Checked<T> = Result<T, &'static str>;
@@ -91,58 +83,8 @@ fn managed_paths(state: &Path, manifest: &Path) -> Checked<(PathBuf, PathBuf)> {
 
 /// `load_authenticated_hook_manifest_path`.
 fn authenticated_manifest(guard_home: &Path, path: &Path) -> Checked<Map<String, Value>> {
-    let Ok(metadata) = fs::symlink_metadata(path) else {
-        return Err("codex_hook_manifest_missing");
-    };
-    if !metadata.file_type().is_file() {
-        return Err("codex_hook_manifest_not_regular");
-    }
-    files::private_to_owner(&metadata).map_err(|kind| match kind {
-        files::Private::Owner => "codex_hook_manifest_owner_mismatch",
-        files::Private::Mode => "codex_hook_manifest_permissions_unsafe",
-    })?;
-    let mut raw = String::new();
-    fs::File::open(path)
-        .and_then(|file| file.take(MAX_MANIFEST_BYTES + 1).read_to_string(&mut raw))
-        .map_err(|_| "codex_hook_manifest_invalid")?;
-    if raw.len() as u64 > MAX_MANIFEST_BYTES {
-        return Err("codex_hook_manifest_invalid");
-    }
-    let Ok(Value::Object(mut manifest)) = serde_json::from_str::<Value>(&raw) else {
-        return Err("codex_hook_manifest_invalid");
-    };
-    let Some(Value::Object(authentication)) = manifest.remove("authentication") else {
-        return Err("codex_hook_manifest_authentication_missing");
-    };
-    if authentication.get("algorithm").and_then(Value::as_str) != Some(MAC_ALGORITHM) {
-        return Err("codex_hook_manifest_authentication_invalid");
-    }
     let home = guard_home.to_str().ok_or(UNAUTHENTICATED)?;
-    let key = read_matching(home, None, None)?;
-    let unsigned = Value::Object(manifest);
-    let answer = verify(
-        &unsigned,
-        &authentication,
-        Some(key.key.as_slice()),
-        Some(&key.key_id),
-        PURPOSE,
-    );
-    match answer.get("status").and_then(Value::as_str) {
-        Some("valid") => {}
-        Some("missing_integrity") => return Err("codex_hook_manifest_authentication_invalid"),
-        Some("unknown_key") => return Err("codex_hook_manifest_key_mismatch"),
-        _ => return Err("codex_hook_manifest_mac_invalid"),
-    }
-    let Value::Object(manifest) = unsigned else {
-        return Err(UNAUTHENTICATED);
-    };
-    if manifest.get("installation_id").and_then(Value::as_str) != Some(&key.installation_id) {
-        return Err("codex_hook_manifest_installation_mismatch");
-    }
-    if authentication.get("signed_at") != manifest.get("generated_at") {
-        return Err("codex_hook_manifest_authentication_invalid");
-    }
-    Ok(manifest)
+    manifest_auth::load_path(home, path).map(manifest_auth::unsigned)
 }
 
 /// `_verify_manifest_context`: this home's Codex manifest, at the path its

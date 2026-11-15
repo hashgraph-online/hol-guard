@@ -133,26 +133,32 @@ fn opened_file_refused(file: &fs::File, metadata: &fs::Metadata) -> bool {
 
 /// The identity `(st_dev, st_ino)` both a path and an open file report.
 #[cfg(unix)]
-fn path_identity(path: &Path) -> std::io::Result<(u64, u128)> {
+pub(super) fn path_identity(path: &Path) -> std::io::Result<(u64, u128)> {
     use std::os::unix::fs::MetadataExt;
     let metadata = fs::symlink_metadata(path)?;
     Ok((metadata.dev(), u128::from(metadata.ino())))
 }
 
 #[cfg(unix)]
-fn file_identity(_file: &fs::File, metadata: &fs::Metadata) -> std::io::Result<(u64, u128)> {
+pub(super) fn file_identity(
+    _file: &fs::File,
+    metadata: &fs::Metadata,
+) -> std::io::Result<(u64, u128)> {
     use std::os::unix::fs::MetadataExt;
     Ok((metadata.dev(), u128::from(metadata.ino())))
 }
 
 #[cfg(windows)]
-fn path_identity(path: &Path) -> std::io::Result<(u64, u128)> {
+pub(super) fn path_identity(path: &Path) -> std::io::Result<(u64, u128)> {
     let stat = guard_runtime_windows_process::link_stat(path)?;
     Ok((stat.volume_serial, stat.file_index))
 }
 
 #[cfg(windows)]
-fn file_identity(file: &fs::File, _metadata: &fs::Metadata) -> std::io::Result<(u64, u128)> {
+pub(super) fn file_identity(
+    file: &fs::File,
+    _metadata: &fs::Metadata,
+) -> std::io::Result<(u64, u128)> {
     let hex = guard_runtime_windows_process::handle_file_id(file)?.to_hex();
     let (volume, id) = hex.split_once('-').unwrap_or_default();
     let volume = u64::from_str_radix(volume, 16).unwrap_or_default();

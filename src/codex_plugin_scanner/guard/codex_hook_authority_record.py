@@ -139,6 +139,29 @@ def build_hook_manifest(
     return manifest
 
 
+def authenticated_manifest(
+    guard_home: str,
+    *,
+    path: str | None = None,
+    text: str | None = None,
+    key_id: str | None = None,
+    installation_id: str | None = None,
+) -> dict[str, object]:
+    """The runtime authenticates the manifest at `path`, or captured `text`."""
+
+    request: dict[str, object] = {"guard_home": guard_home}
+    if path is not None:
+        request.update(op="manifest_load", path=path)
+    else:
+        request.update(op="manifest_authenticate", text=text)
+        if key_id is not None:
+            request.update(key_id=key_id, installation_id=installation_id)
+    manifest = _call(request).get("manifest")
+    if not isinstance(manifest, dict):
+        raise AuthorityRecordRefusedError(RUNTIME_UNAVAILABLE)
+    return manifest
+
+
 def _ask(op: str, kind: RecordKind, hook_key: HookKey, request: dict[str, object]) -> dict[str, object]:
     return _call(
         {
@@ -186,6 +209,7 @@ def _call(request: dict[str, object]) -> dict[str, object]:
 __all__ = [
     "RUNTIME_UNAVAILABLE",
     "AuthorityRecordRefusedError",
+    "authenticated_manifest",
     "build_hook_manifest",
     "check_receipt_manifest",
     "hook_key_answer",

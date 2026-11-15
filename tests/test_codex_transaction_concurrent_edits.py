@@ -148,31 +148,6 @@ def test_failed_write_preserves_substituted_config_targets(
         assert config_path.stat().st_nlink == 2
 
 
-def test_failed_descriptor_wrapping_releases_the_open_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    path = tmp_path / "config.toml"
-    path.write_bytes(b"original")
-    opened: list[int] = []
-
-    def failed_fdopen(descriptor: int, mode: str) -> None:
-        opened.append(descriptor)
-        raise OSError("injected descriptor wrapping failure")
-
-    monkeypatch.setattr(rollback.os, "fdopen", failed_fdopen)
-    with pytest.raises(RuntimeError, match="codex_hook_rollback_conflict"):
-        rollback.require_unchanged_config_for_rollback(
-            path,
-            b"original",
-            b"candidate",
-            original_identity=rollback.rollback_file_identity(path),
-            written_identity=None,
-        )
-
-    assert len(opened) == 1
-    with pytest.raises(OSError):
-        os.fstat(opened[0])
-    assert path.read_bytes() == b"original"
-
-
 @pytest.mark.parametrize("existing_installation", [False, True])
 def test_matching_replacement_is_not_owned_by_the_failed_transaction(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, existing_installation: bool

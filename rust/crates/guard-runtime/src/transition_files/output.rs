@@ -150,7 +150,12 @@ pub(crate) fn managed_write(path: &Path, payload: &[u8], mode: u32) -> Step<Valu
 }
 
 /// `restore_private_file(path, None)`.
-pub(super) fn restore_absent(path: &Path) -> Step<Value> {
+pub(crate) fn restore_absent(path: &Path) -> Step<Value> {
+    managed_remove(path, "restore_absent")
+}
+
+/// Unlink one managed file and journal it as `kind`; absent is not an error.
+pub(crate) fn managed_remove(path: &Path, kind: &str) -> Step<Value> {
     if fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink()) {
         return Err(not_regular(
             "Guard refused to replace a symlink in place of the Codex hook manifest.".to_owned(),
@@ -164,7 +169,7 @@ pub(super) fn restore_absent(path: &Path) -> Step<Value> {
     if let Some(parent) = path.parent().filter(|parent| parent.exists()) {
         sync_directory(parent)?;
     }
-    Ok(mutation("restore_absent", path, before.as_deref(), None))
+    Ok(mutation(kind, path, before.as_deref(), None))
 }
 
 #[cfg(unix)]
