@@ -1,5 +1,6 @@
 #![cfg(unix)]
-//! `mkdir -p` of a nested path below a private temporary directory.
+//! `mkdir -p` of a nested path below a private temporary directory, and
+//! `mkdir` with several targets.
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
@@ -118,6 +119,63 @@ fn a_nested_directory_outside_a_private_temporary_parent_keeps_its_review() {
         // A hidden component deeper down keeps the review the single-level
         // form gives it.
         format!("mkdir -p {scratch}/a/.ssh/b"),
+    ] {
+        for harness in ["claude-code", "codex", "cursor", "zcode"] {
+            assert_ne!(
+                action(&fixture, harness, &command),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+    }
+}
+
+#[test]
+fn several_targets_pass_when_each_passes_alone() {
+    let fixture = fixture("several");
+    let scratch = fixture.scratch.display();
+    let fresh = format!("/tmp/hg-mkdir-several-fresh-{}", std::process::id());
+    for harness in ["claude-code", "codex", "cursor", "zcode"] {
+        for command in [
+            format!("mkdir -p {fresh}/a {fresh}/b"),
+            format!("mkdir --parents {scratch}/build/out {scratch}/private/logs"),
+            format!("mkdir -p -- {fresh}/x {fresh}/y/z"),
+            format!("mkdir {scratch}/one {scratch}/two"),
+            "mkdir -p src/notes docs/notes".to_owned(),
+            format!("mkdir -p notes/a {fresh}/c"),
+            format!("mkdir -p src/x && mkdir -p {fresh}/d {fresh}/e"),
+        ] {
+            assert_eq!(
+                action(&fixture, harness, &command),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+    }
+}
+
+#[test]
+fn one_failing_target_keeps_several_in_review() {
+    let fixture = fixture("several-refused");
+    let scratch = fixture.scratch.display();
+    let home = fixture.home.display();
+    let fresh = format!("/tmp/hg-mkdir-several-refused-{}", std::process::id());
+    let many = (0..17)
+        .map(|index| format!("{fresh}/n{index}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    for command in [
+        format!("mkdir -p {fresh}/a {home}/.ssh/b"),
+        format!("mkdir -p {fresh}/a /etc/hg-mkdir-several"),
+        format!("mkdir -p {fresh}/a {scratch}/shared/b/c"),
+        format!("mkdir -p {fresh}/a {scratch}/keys/b"),
+        // An option after a target is refused, wherever it sits.
+        format!("mkdir {fresh}/a -p {fresh}/b/c"),
+        format!("mkdir -p {fresh}/a --mode=777 {fresh}/b"),
+        // Only `-p` admits a nested new temporary path.
+        format!("mkdir -- {fresh}/a/b {fresh}/c"),
+        // A hard cap on how many targets one command may name.
+        format!("mkdir -p {many}"),
     ] {
         for harness in ["claude-code", "codex", "cursor", "zcode"] {
             assert_ne!(

@@ -4,6 +4,8 @@ mod checkout_floor;
 mod copies;
 #[path = "hooks_path_writes.rs"]
 mod hooks_path;
+#[path = "mkdir_targets.rs"]
+mod mkdir_targets;
 #[path = "plan_note_writes.rs"]
 mod plan_notes;
 #[path = "write_target_screens.rs"]
@@ -252,13 +254,7 @@ pub(super) fn safe_file_mutation_arguments(
         ("mktemp", [flag]) if flag == "-d" => {
             super::safe_reads::verified_path_context(context.home_dir, context.cwd)
         }
-        ("mkdir", [target]) => !target.starts_with('-') && creatable_target(target, context, true),
-        ("mkdir", [flag, target]) if matches!(flag.as_str(), "-p" | "--parents" | "--") => {
-            !target.starts_with('-')
-                && (creatable_target(target, context, true)
-                    || (flag != "--"
-                        && temporary_directories::nested_temporary_directory(target, context)))
-        }
+        ("mkdir", operands) => mkdir_targets::mkdir_arguments(operands, context),
         ("touch", [target]) => !target.starts_with('-') && creatable_target(target, context, false),
         ("touch", [flag, target]) if flag == "--" => {
             !target.starts_with('-') && creatable_target(target, context, false)
