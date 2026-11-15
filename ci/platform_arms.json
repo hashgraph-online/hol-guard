@@ -428,6 +428,14 @@
   },
   {
    "verdict": "windows-unsupported",
+   "note": "Off Unix the temporary-file removal proof is never offered: owner, link-count and folder-mode checks need Unix metadata, so every `rm` keeps its review on Windows exactly as before. The rm admission tests are #![cfg(unix)].",
+   "file": "rust/crates/guard-command/src/pretool/safe_links.rs",
+   "item": "fn removable_temporary_file -- cfg! expression",
+   "cfg": "unix",
+   "body": "5dea09afba8f"
+  },
+  {
+   "verdict": "windows-unsupported",
    "note": "Off Unix an existing leaf must still be the user's own file, as the Windows temp-folder check requires for a copy, so `mkdir -p` of a temporary folder that already exists keeps its review there. Only absent leaves are admitted, as before.",
    "file": "rust/crates/guard-command/src/pretool/safe_writes.rs",
    "item": "fn bounded_temporary_target(value: &str, context: super::PathContext<'_>, _: bool) -> bool",
