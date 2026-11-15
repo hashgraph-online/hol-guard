@@ -1498,10 +1498,10 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         backup_path = self._backup_path(context)
         if backup_path.is_file():
             original_text = backup_path.read_text(encoding="utf-8")
-            if original_text:
+            if target_config_path.is_file():
+                self._restore_without_guard(context, target_config_path, original_text, owned_bindings)
+            elif original_text:
                 atomic_write_text(target_config_path, original_text, mode=0o600)
-            elif target_config_path.is_file():
-                target_config_path.unlink()
             backup_path.unlink()
         elif target_config_path.is_file() and owned_bindings:
             target_payload = read_toml_payload(target_config_path)
@@ -1533,6 +1533,44 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         return _install_manifest(
             context, "uninstall", shim_manifest, hooks_path=str(hooks_path), backup_path=str(backup_path)
         )
+
+    @staticmethod
+    def _restore_without_guard(
+        context: HarnessContext,
+        config_path: Path,
+        original_text: str,
+        owned_bindings: Sequence[Mapping[str, object]],
+    ) -> None:
+        """Undo the install's changes to the config and keep the user's later ones.
+
+        The native runtime decides what to put back; this reads and writes.
+        """
+
+        current_bytes = read_config_bytes(config_path)
+        current = parse_toml_object(current_bytes, path=config_path, label="Codex config file")
+        backup = (
+            parse_toml_object(original_text.encode("utf-8"), path=config_path, label="Codex config backup")
+            if original_text
+            else None
+        )
+        hooks = current.get("hooks")
+        cleaned = _strip_owned_hooks(context, hooks, owned_bindings) if isinstance(hooks, dict) else None
+        wire = _Wire(current, *(part for part in (backup, cleaned) if part is not None))
+        answer = _codex(
+            "uninstall_restore",
+            context,
+            payload=wire.text(current),
+            backup=None if backup is None else wire.text(backup),
+            hooks=None if cleaned is None else wire.text(cleaned),
+            tokens=wire.meanings,
+        )
+        if answer.get("delete") is True:
+            config_path.unlink()
+        elif answer.get("changed") is True:
+            rendered = wire.decode(_reply_text(answer, "rendered"))
+            # Nothing changed since install: put back the user's exact bytes.
+            text = original_text if rendered == backup else dump_toml(rendered, original=current_bytes)
+            atomic_write_text(config_path, text, mode=0o600)
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         payload = super().diagnostics(context)

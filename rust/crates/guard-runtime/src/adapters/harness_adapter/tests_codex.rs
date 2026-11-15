@@ -7,6 +7,9 @@ use serde_json::{json, Value};
 
 use super::{after, Home};
 
+#[path = "tests_codex_uninstall.rs"]
+mod uninstall;
+
 const SHELL_BEGIN: &str = "# >>> HOL Guard Codex shell guard >>>";
 const SHELL_END: &str = "# <<< HOL Guard Codex shell guard <<<";
 const PROXY_ARGS: [&str; 5] = [
