@@ -13,8 +13,7 @@ import json
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.hook_input_reader import read_stdin_text
-from codex_plugin_scanner.guard.cli.commands_support_hook_payload_loader import load_hook_payload
+from codex_plugin_scanner.guard.cli.commands_support_hook_payload_loader import load_hook_payload, read_stdin_text
 
 _PAYLOAD = {"hook_event_name": "PreToolUse", "tool_input": {"file_path": "C:/Users/zoë/café.txt"}}
 

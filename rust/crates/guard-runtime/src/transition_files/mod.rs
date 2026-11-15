@@ -17,6 +17,7 @@
 //! enumerating the account database, so an answer that turns on it asks
 //! back with `reply.private_group` before anything is written.
 
+mod digest_cache;
 mod inspect;
 mod journal;
 mod lease;

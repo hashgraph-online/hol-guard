@@ -2,6 +2,7 @@
 //! `_invocation_generation` and the `validate_regular_file` rules they apply.
 
 use super::*;
+use crate::transition_files::digest_cache;
 
 /// What `_invocation_generation` compares before and after its checks.
 #[cfg(unix)]
@@ -227,6 +228,12 @@ pub(crate) fn artifact_digest(
     }
     #[cfg(not(unix))]
     let _ = mode;
+    let started = std::time::SystemTime::now();
+    let opened_print = descriptor_fingerprint(target, &opened).map_err(unavailable)?;
+    if let Some(recorded) = digest_cache::recorded(target, &opened_print) {
+        budget.forward()?;
+        return Ok(recorded);
+    }
     let mut digest = Sha256::new();
     let mut count = 0_u64;
     let mut buffer = vec![0_u8; 64 * 1024];
@@ -253,7 +260,21 @@ pub(crate) fn artifact_digest(
         return Err(changed());
     }
     budget.forward()?;
-    Ok(format!("{:x}", digest.finalize()))
+    let hex = format!("{:x}", digest.finalize());
+    let settled_print = descriptor_fingerprint(target, &last).map_err(unavailable)?;
+    digest_cache::record(target, settled_print, changed_ns(&last), started, &hex);
+    Ok(hex)
+}
+
+#[cfg(unix)]
+fn changed_ns(meta: &fs::Metadata) -> Option<i128> {
+    use std::os::unix::fs::MetadataExt;
+    Some(i128::from(meta.ctime()) * 1_000_000_000 + i128::from(meta.ctime_nsec()))
+}
+
+#[cfg(not(unix))]
+fn changed_ns(_meta: &fs::Metadata) -> Option<i128> {
+    None
 }
 
 #[cfg(windows)]

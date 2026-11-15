@@ -2532,6 +2532,30 @@
   },
   {
    "verdict": "windows-equivalent",
+   "note": "Windows has no change time a writer cannot set, so it reports none and the digest cache never records a Windows file. Every compare hashes the file, which is the slower but exact behaviour.",
+   "file": "rust/crates/guard-runtime/src/transition_files/artifact.rs",
+   "item": "fn changed_ns(_meta: &fs::Metadata) -> Option<i128>",
+   "cfg": "not(unix)",
+   "body": "17494ebdfe0d"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows never reuses a recorded digest because a writer can reset the last-write time. Every compare hashes the file again, so the check stays exact and only the speed-up is Unix-only.",
+   "file": "rust/crates/guard-runtime/src/transition_files/digest_cache.rs",
+   "item": "fn recorded -- cfg! expression",
+   "cfg": "unix",
+   "body": "2f823df4191c"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows never records a digest, for the same reason `recorded` never reads one: the last-write time can be set by a writer. Hashing every time is exact.",
+   "file": "rust/crates/guard-runtime/src/transition_files/digest_cache.rs",
+   "item": "fn record -- cfg! expression",
+   "cfg": "unix",
+   "body": "924baa998dfe"
+  },
+  {
+   "verdict": "windows-equivalent",
    "note": "Mode bits are compared only under cfg!(unix), as Python compares st_mode only when os.name != 'nt'; this value is never read on Windows.",
    "file": "rust/crates/guard-runtime/src/transition_files/inspect.rs",
    "item": "fn permission_bits(_metadata: &fs::Metadata) -> u32",

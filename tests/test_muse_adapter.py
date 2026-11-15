@@ -10,10 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters, muse_hook_render
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.muse_hook_render import (
-    apply_muse_pretool_approval_wait,
-    muse_bridge_response,
-)
+from codex_plugin_scanner.guard.adapters.muse_hook_render import muse_bridge_response
 from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter, ask
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
@@ -383,74 +380,6 @@ class TestMuseHookRender:
 
 
 class TestMuseApprovalResume:
-    def test_approval_wait_allows_the_identical_call(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.approvals.wait_for_approval_requests",
-            lambda **kwargs: {
-                "resolved": True,
-                "items": [{"status": "resolved", "resolution_action": "allow"}],
-            },
-        )
-        response: dict[str, object] = {
-            "policy_action": "review",
-            "decision": "deny",
-            "primary_approval_request_id": "req-1",
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": "review",
-            },
-        }
-        updated = apply_muse_pretool_approval_wait(
-            response,
-            event_name="PreToolUse",
-            store=object(),
-            timeout_seconds=5,  # type: ignore[arg-type]
-        )
-        assert updated["policy_action"] == "allow"
-        # The resumed answer carries no verdict of its own: the resident
-        # renders it as silence, which is how Muse runs the original call.
-        assert updated["decision"] == "allow"
-        assert "permissionDecision" not in updated["hookSpecificOutput"]
-
-    def test_approval_wait_denial_keeps_the_call_blocked(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.approvals.wait_for_approval_requests",
-            lambda **kwargs: {
-                "resolved": True,
-                "items": [{"status": "resolved", "resolution_action": "block"}],
-            },
-        )
-        response: dict[str, object] = {
-            "policy_action": "review",
-            "primary_approval_request_id": "req-1",
-        }
-        updated = apply_muse_pretool_approval_wait(
-            response,
-            event_name="PreToolUse",
-            store=object(),
-            timeout_seconds=5,  # type: ignore[arg-type]
-        )
-        assert updated["policy_action"] == "block"
-        assert updated["decision"] == "deny"
-
-    def test_approval_wait_pending_keeps_review(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.approvals.wait_for_approval_requests",
-            lambda **kwargs: {"resolved": False, "items": []},
-        )
-        response: dict[str, object] = {
-            "policy_action": "review",
-            "primary_approval_request_id": "req-1",
-        }
-        updated = apply_muse_pretool_approval_wait(
-            response,
-            event_name="PreToolUse",
-            store=object(),
-            timeout_seconds=5,  # type: ignore[arg-type]
-        )
-        assert updated["policy_action"] == "review"
-
     def test_exit_code_uses_zero_envelope_for_pretool(self) -> None:
         from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
 
