@@ -91,6 +91,8 @@ fn programs_that_reach_the_host_are_held() {
         "import os\nos.system('2> err.txt kill 1')\n",
         "import os\nos.system('if true; then kill -TERM 4242; fi')\n",
         "import os\nos.system('if true; then git config core.hooksPath x; fi')\n",
+        "print(open(f'{\"etc\":/>4}/passwd').read())\n",
+        "a = b = True\nopen(f'{\".\" if a else \"\"}{\"git\" if b else \"\"}/config', 'w').write('')\n",
     ] {
         assert!(python_reaches_host(source), "{source}");
     }
@@ -140,6 +142,7 @@ fn workspace_programs_stay_contained() {
         "import json\nprint('the kill switch is off')\n",
         "import os\nos.system('if true; then git status; fi')\n",
         "import os\nos.system('>/tmp/out.txt git log -1')\n",
+        "import json\nprint(f'{\"Name\":<20}{\"Size\":>10}', f'{title:-^40}')\n",
     ] {
         assert!(!python_reaches_host(source), "{source}");
     }

@@ -36,8 +36,9 @@
 //! with `+` or written next to each other are also read as the one string
 //! they make. A formatted string is read with a field that is one string
 //! constant standing for that string and any other field for an unknown
-//! word, its expression scanned on its own, and again with each field
-//! replaced by every string constant inside it.
+//! word, its expression scanned on its own. Fields that make one word
+//! together are also read with every combination of the string constants
+//! inside them, padded as their format spec pads them.
 //!
 //! Starting a program (`subprocess`, `os.system`) is not itself a reason to
 //! hold: the program runs in the same sandbox, and the command line it is
@@ -55,7 +56,7 @@ mod shell;
 
 use super::system_files::lexical;
 use super::{code_lines, Language};
-use literals::{format_template, literal_value};
+use literals::{format_template, literal_value, spec_fill};
 use shell::{command_reaches, git_config_reads, unquote};
 
 const HOST_MODULES: &str = "psutil|pyperclip|pynput|pyautogui|mss|ctypes|PIL|keyboard|mouse|Xlib|Quartz|AppKit|win32api|win32gui|win32con|winreg";
@@ -262,45 +263,83 @@ fn constant_field(field: &str) -> Option<String> {
     alone.then(|| only.value.clone()).flatten()
 }
 
+/// The most readings of one word of a formatted string the scan tries
+/// before it keeps the review instead.
+const FIELD_READINGS: usize = 256;
+
+/// The values one replacement field may take: the string it stands for (its
+/// constant, or an unknown word), every string constant inside it, and each
+/// of those padded on either side when the field's format spec names a fill
+/// character.
+fn field_values(field: &str, reaches: &mut bool) -> Vec<String> {
+    let mut nested = false;
+    let constants = literals(field, &mut nested);
+    *reaches |= nested || names_outside_path(field);
+    let mut values = vec![constant_field(field).unwrap_or_else(|| "x".to_owned())];
+    values.extend(constants.into_iter().filter_map(|constant| constant.value));
+    if let Some(fill) = spec_fill(field) {
+        let padded: Vec<String> = values
+            .iter()
+            .flat_map(|value| [format!("{fill}{value}"), format!("{value}{fill}")])
+            .collect();
+        values.extend(padded);
+    }
+    values
+}
+
 /// The value of a formatted string. A field whose expression is one string
 /// constant stands for that string; any other field stands for an unknown
-/// word, with its expression scanned as code of its own. The string is also
-/// read with each such field in turn replaced by every string constant its
-/// expression holds, so `f'{"/" if a else ""}etc/passwd'` is read as the
-/// path it can make. `reaches` records what any of these finds.
+/// word, with its expression scanned as code of its own. Fields written
+/// next to each other with no white space between them make one word, and
+/// that word is also read with its fields set to every combination of the
+/// values they may take, so `f'{"." if a else ""}{"git"}/config'` is read as
+/// `.git/config`. A word with more readings than the scan tries keeps the
+/// review. `reaches` records what any reading finds.
 fn formatted_value(body: &str, raw: bool, reaches: &mut bool) -> Option<String> {
     let (pieces, fields) = format_template(body)?;
     let pieces: Vec<String> = pieces
         .iter()
         .map(|piece| literal_value(piece, raw))
         .collect::<Option<_>>()?;
-    let defaults: Vec<String> = fields
+    let values: Vec<Vec<String>> = fields
         .iter()
-        .map(|field| constant_field(field).unwrap_or_else(|| "x".to_owned()))
+        .map(|field| field_values(field, reaches))
         .collect();
-    let fill = |at: usize, value: &str| {
+    let fill = |choice: &[usize]| {
         let mut text = pieces[0].clone();
         for (index, piece) in pieces[1..].iter().enumerate() {
-            text.push_str(if index == at {
-                value
-            } else {
-                defaults[index].as_str()
-            });
+            text.push_str(&values[index][choice[index]]);
             text.push_str(piece);
         }
         text
     };
-    for (index, field) in fields.iter().enumerate() {
-        let mut nested = false;
-        let constants = literals(field, &mut nested);
-        *reaches |= nested
-            || names_outside_path(field)
-            || constants
-                .iter()
-                .filter_map(|constant| constant.value.as_deref())
-                .any(|constant| literal_reaches(&fill(index, constant)));
+    let mut first = 0;
+    while first < fields.len() {
+        let mut end = first + 1;
+        while end < fields.len() && !pieces[end].contains(char::is_whitespace) {
+            end += 1;
+        }
+        let readings = values[first..end]
+            .iter()
+            .try_fold(1usize, |count, field| count.checked_mul(field.len()))
+            .filter(|count| *count <= FIELD_READINGS);
+        let Some(readings) = readings else {
+            *reaches = true;
+            return None;
+        };
+        let mut choice = vec![0; fields.len()];
+        for mut reading in 0..readings {
+            for (offset, field) in values[first..end].iter().enumerate() {
+                choice[first + offset] = reading % field.len();
+                reading /= field.len();
+            }
+            if literal_reaches(&fill(&choice)) {
+                *reaches = true;
+            }
+        }
+        first = end;
     }
-    Some(fill(usize::MAX, ""))
+    Some(fill(&vec![0; fields.len()]))
 }
 
 /// The string literals in `code`, read as the values Python gives them. A

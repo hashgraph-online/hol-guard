@@ -124,3 +124,37 @@ fn field_end(chars: &mut Peekable<CharIndices<'_>>) -> Option<usize> {
     }
     None
 }
+
+/// The fill character a replacement field's format spec pads with, as `/`
+/// in `{"etc":/>4}`. Only a spec at the field's top level counts: a `:`
+/// inside a string, brackets or a call belongs to the expression.
+pub(super) fn spec_fill(field: &str) -> Option<char> {
+    let mut depth = 0usize;
+    let mut quote = None;
+    let mut chars = field.char_indices();
+    while let Some((index, c)) = chars.next() {
+        if let Some(open) = quote {
+            if c == '\\' {
+                chars.next();
+            } else if c == open {
+                quote = None;
+            }
+            continue;
+        }
+        match c {
+            '\'' | '"' => quote = Some(c),
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            ':' if depth == 0 => {
+                let mut spec = field[index + 1..].chars();
+                let fill = spec.next()?;
+                return spec
+                    .next()
+                    .filter(|align| "<>^=".contains(*align))
+                    .map(|_| fill);
+            }
+            _ => {}
+        }
+    }
+    None
+}
