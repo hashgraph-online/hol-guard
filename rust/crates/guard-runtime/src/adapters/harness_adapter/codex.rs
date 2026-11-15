@@ -15,8 +15,8 @@ use sha2::{Digest, Sha256};
 
 use super::files::{self, Doc};
 use super::{
-    codex_files, codex_merge, codex_servers, codex_uninstall, common, hook_render, path_answer,
-    path_text, Ctx, Failure, Spec, Step,
+    codex_files, codex_merge, codex_migration, codex_servers, codex_uninstall, common, hook_render,
+    path_answer, path_text, Ctx, Failure, Spec, Step,
 };
 use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 use crate::harness_diagnostics::setup_failures_besides_missing_command;
@@ -69,6 +69,7 @@ pub(super) fn dispatch(
         "hook_state" => hook_state(fields),
         "doctor_status" => doctor_status(fields),
         "migration_backup" => codex_files::migration_backup(ctx, fields),
+        "hook_migration" => codex_migration::migration(ctx, fields),
         "main_backup" => codex_files::main_backup(ctx, fields),
         "shell_cleanup" => codex_files::shell_cleanup(ctx),
         "manifest" => codex_files::manifest(spec, ctx, fields),

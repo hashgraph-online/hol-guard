@@ -26,7 +26,7 @@ from ..aibom_detection import (
     extend_detection_with_workspace_aibom,
     native_adapter_detection_payload,
 )
-from ..codex_config import _Wire, dump_toml, read_toml_payload
+from ..codex_config import _restore_native, _Wire, dump_toml, read_toml_payload
 from ..codex_hook_command_line import short_path_facts
 from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
 from ..codex_hook_file_integrity import validate_regular_file
@@ -60,7 +60,6 @@ from ..codex_hook_registration import (
     install_managed_codex_hook_groups,
     legacy_binding_fields,
     overlay_live_owned_event_matches,
-    require_codex_hook_owner,
 )
 from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
@@ -382,28 +381,6 @@ def _strip_owned_hooks(
     return wire.decode(answer_text(answer, "hooks"))
 
 
-def _migrate_hooks_json_into_config(
-    config_payload: dict[str, object],
-    hooks_payload: dict[str, object],
-    *,
-    context: HarnessContext,
-    source_scope: str,
-    owned_bindings: Sequence[Mapping[str, object]] = (),
-) -> bool:
-    json_hooks = hooks_payload.get("hooks")
-    if not isinstance(json_hooks, dict):
-        return False
-    cleaned = _strip_owned_hooks(context, json_hooks, owned_bindings)
-    wire = _Wire(config_payload, cleaned)
-    config_text = wire.text(config_payload)
-    hooks_text = wire.text(cleaned)
-    answer = _codex("migrate", context, config=config_text, hooks=hooks_text, tokens=wire.meanings, scope=source_scope)
-    migrated = wire.decode(_reply_text(answer, "config"))
-    config_payload.clear()
-    config_payload.update(migrated)
-    return answer.get("changed") is True
-
-
 def _hook_tables(payload: Mapping[str, object]) -> dict[str, object]:
     """The part of a config the hook comparisons read: its hooks and their feature flag.
 
@@ -483,15 +460,6 @@ def _b64(data: bytes | None) -> str | None:
     return None if data is None else base64.b64encode(data).decode("ascii")
 
 
-def _prepare_hook_migration_backup(
-    context: HarnessContext,
-    *,
-    config_path: Path,
-    before_config: bytes | None,
-) -> TransitionFile:
-    return _one_planned_file(_codex("migration_backup", context, config=str(config_path), before=_b64(before_config)))
-
-
 @dataclass(frozen=True, slots=True)
 class PreparedCodexHookMigration:
     """Captured JSON migration segment; publication requires the complete install."""
@@ -540,58 +508,30 @@ def prepare_codex_hook_migration(
     config_path: Path,
     hooks_path: Path,
     owned_bindings: Sequence[Mapping[str, object]] = (),
-    expected_config_payload: Mapping[str, object] | None = None,
-    expected_hooks_payload: Mapping[str, object] | None = None,
     require_owners: bool = False,
 ) -> PreparedCodexHookMigration:
-    from ..codex_hook_recovery import _snapshot
-    from ..runtime_transition import RuntimeTransition, TransitionFile
+    """Fold one ``hooks.json`` into its ``config.toml``, as the native
+    ``hook_migration`` op plans it: the config rewrite, the retired JSON
+    source and a backup of the config it replaces."""
+    from ..runtime_transition import RuntimeTransition
 
-    scope = CodexHarnessAdapter._scope_for(context, config_path)
-    config_path = config_path.parent.resolve(strict=False) / config_path.name
-    hooks_path = hooks_path.parent.resolve(strict=False) / hooks_path.name
-    before_config = _snapshot(config_path)
-    before_hooks = _snapshot(hooks_path)
-    config = parse_toml_object(before_config, path=config_path, label="Codex config file")
-    hooks = parse_json_object(before_hooks, path=hooks_path, label="Codex hooks file")
-    if (expected_config_payload is not None and config != expected_config_payload) or (
-        expected_hooks_payload is not None and hooks != expected_hooks_payload
-    ):
-        raise RuntimeError("codex_hook_inventory_source_changed: Codex migration sources changed after inventory.")
-    enabled = _payload_has_hooks_feature_enabled(config)
-    for payload, path, source_format, bindings in (
-        (config, config_path, "toml", owned_bindings),
-        (hooks, hooks_path, "json", ()),
-    ):
-        owners = _preactivation_owners(
-            payload,
-            source_path=path,
-            source_scope=scope,
-            source_format=source_format,
-            source_hooks_enabled=enabled,
-            context=context,
-            authenticated_bindings=bindings,
-        )
-        if require_owners:
-            _require_preactivation_owners(owners, path)
-    changed = _migrate_hooks_json_into_config(
-        config, hooks, context=context, source_scope=scope, owned_bindings=owned_bindings
-    )
-    config_mode = config_path.stat().st_mode & 0o777 if before_config is not None else 0o600
-    hook_mode = hooks_path.stat().st_mode & 0o777 if before_hooks is not None else 0o600
-    files = [
-        TransitionFile(
-            config_path,
-            before_config,
-            dump_toml(config, original=before_config).encode("utf-8") if changed else before_config,
-            before_mode=config_mode,
-            after_mode=0o600 if changed else config_mode,
-            no_follow=True,
-        ),
-        TransitionFile(hooks_path, before_hooks, None, before_mode=hook_mode, after_mode=hook_mode, no_follow=True),
-    ]
-    if changed:
-        files.append(_prepare_hook_migration_backup(context, config_path=config_path, before_config=before_config))
+    request: dict[str, Any] = {
+        "config": str(config_path),
+        "hooks": str(hooks_path),
+        "owned": json.dumps(list(owned_bindings), separators=(",", ":")),
+        "require_owners": require_owners,
+        **_legacy_fields(context),
+        **install_fields(_runtime_guard_home(context), None),
+        **short_path_fields(),
+    }
+    answer = settle_short_paths(lambda: _codex("hook_migration", context, **request), request, "hook_migration")
+    tokens = answer.get("tokens")
+    if not isinstance(tokens, dict):
+        raise ValueError("Harness adapter answer is malformed")
+    config = _restore_native(json.loads(_reply_text(answer, "config")), tokens)
+    if not isinstance(config, dict):
+        raise ValueError("Harness adapter answer is malformed")
+    files = planned_files({"files": answer.get("files")})
     RuntimeTransition._compare({"files": [change.payload() for change in files]}, "before")
     return PreparedCodexHookMigration(config, tuple(files))
 
@@ -718,59 +658,6 @@ def prepare_codex_alternate_cleanup(
     )
     RuntimeTransition._compare({"files": [change.payload()]}, "before")
     return change
-
-
-def _preactivation_owners(
-    payload: Mapping[str, object],
-    *,
-    source_path: Path,
-    source_scope: str,
-    source_format: str,
-    source_hooks_enabled: bool,
-    context: HarnessContext,
-    authenticated_bindings: Sequence[Mapping[str, object]] = (),
-) -> list[dict[str, str]]:
-    """Every active handler with a command in one source, once nothing refuses it.
-
-    The native ``preactivation`` op walks the source with this install's
-    legacy and self bindings and refuses as a complete preactivation inventory
-    must: the first issue, then unmanaged executable hooks a disabled source
-    would switch on.
-    """
-
-    hooks = payload.get("hooks")
-    owned = list(authenticated_bindings)
-    wire = _Wire(hooks, owned)
-    answer = ask_hook_owners(
-        "preactivation",
-        hooks=wire.text(hooks),
-        owned=wire.text(owned),
-        tokens=wire.meanings,
-        source_path=str(source_path),
-        scope=source_scope,
-        format="json" if source_format == "json" else "toml",
-        hooks_enabled=source_hooks_enabled,
-        **_legacy_fields(context),
-        **install_fields(_runtime_guard_home(context), None),
-    )
-    if "runtime_error" in answer:
-        raise RuntimeError(str(answer["runtime_error"]))
-    owners = answer.get("owners")
-    if not isinstance(owners, list):
-        raise RuntimeError("codex_hook_owners answered without owners")
-    return [{key: str(owner[key]) for key in ("command", "ownership", "coordinate")} for owner in owners]
-
-
-def _require_preactivation_owners(owners: Sequence[Mapping[str, str]], source_path: Path) -> None:
-    """Active commands need a verified owner before install enables the feature."""
-
-    for owner in owners:
-        require_codex_hook_owner(
-            owner["command"],
-            ownership=owner["ownership"],
-            coordinate=owner["coordinate"],
-            source_path=str(source_path),
-        )
 
 
 def _payload_has_hooks_feature_enabled(config_payload: Mapping[str, object]) -> bool:

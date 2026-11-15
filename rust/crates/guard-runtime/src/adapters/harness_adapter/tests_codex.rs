@@ -7,6 +7,8 @@ use serde_json::{json, Value};
 
 use super::{after, Home};
 
+#[path = "tests_codex_migration.rs"]
+mod migration;
 #[path = "tests_codex_uninstall.rs"]
 mod uninstall;
 

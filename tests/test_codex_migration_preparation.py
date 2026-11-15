@@ -209,32 +209,17 @@ def test_invalid_toml_cannot_retire_json_source(tmp_path, monkeypatch):
     assert _tree(tmp_path) == before
 
 
-def test_changed_source_after_inventory_never_publishes_migration(tmp_path, monkeypatch):
-    context, config, hooks = _sources(tmp_path, monkeypatch)
-    expected_hooks = json.loads(hooks.read_text())
-    config.write_text('model = "user-modified"\n')
-    before = _tree(tmp_path)
-    with pytest.raises(RuntimeError, match="codex_hook_inventory_source_changed"):
-        adapter.prepare_codex_hook_migration(
-            context,
-            config_path=config,
-            hooks_path=hooks,
-            expected_config_payload={"model": "fixture"},
-            expected_hooks_payload=expected_hooks,
-        )
-    assert _tree(tmp_path) == before
-
-
 def test_foreign_json_generation_during_render_is_preserved(tmp_path, monkeypatch):
     context, config, hooks = _sources(tmp_path, monkeypatch)
-    original = adapter._migrate_hooks_json_into_config
+    original = adapter._codex
 
-    def foreign_write(*args, **kwargs):
-        result = original(*args, **kwargs)
-        hooks.write_text('{"foreign":"generation"}')
+    def foreign_write(op, *args, **kwargs):
+        result = original(op, *args, **kwargs)
+        if op == "hook_migration":
+            hooks.write_text('{"foreign":"generation"}')
         return result
 
-    monkeypatch.setattr(adapter, "_migrate_hooks_json_into_config", foreign_write)
+    monkeypatch.setattr(adapter, "_codex", foreign_write)
     with pytest.raises(TransitionError, match="generation_changed"):
         adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
     assert json.loads(hooks.read_text()) == {"foreign": "generation"}

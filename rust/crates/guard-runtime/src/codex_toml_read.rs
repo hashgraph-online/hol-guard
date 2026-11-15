@@ -157,7 +157,16 @@ fn moment_of(moment: &Datetime) -> TomlVal {
 
 /// The payload as order-preserving JSON, with the tokens it uses.
 pub(crate) fn wire(entries: &[(String, TomlVal)]) -> (PyVal, Map<String, Value>) {
-    let mut strings = Vec::new();
+    wire_avoiding(entries, &[])
+}
+
+/// [`wire`], with a prefix no string in `avoid` starts with either, for a
+/// payload compared with values read from elsewhere.
+pub(crate) fn wire_avoiding(
+    entries: &[(String, TomlVal)],
+    avoid: &[&str],
+) -> (PyVal, Map<String, Value>) {
+    let mut strings: Vec<&str> = avoid.to_vec();
     for (key, value) in entries {
         strings.push(key.as_str());
         collect_strings(value, &mut strings);

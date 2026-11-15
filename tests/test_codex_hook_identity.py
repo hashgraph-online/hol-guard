@@ -278,34 +278,31 @@ def test_hash_diff_and_approval_identity_survive_json_to_toml_format_change(tmp_
 
 def test_migration_deduplicates_only_canonical_equivalents_and_surfaces_conflicts(tmp_path: Path) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
+    config_path = tmp_path / "home" / ".codex" / "config.toml"
+    hooks_path = config_path.with_name("hooks.json")
+    config_path.parent.mkdir(parents=True)
     config_payload: dict[str, object] = {
         "features": {"hooks": True},
         "hooks": {"PreToolUse": [_group("python3 hook.py", timeout=12)]},
     }
+    config_path.write_text(dump_toml(config_payload), encoding="utf-8")
     equivalent: dict[str, object] = {"hooks": {"PreToolUse": [_group("python3   hook.py", timeout=12.0)]}}
+    hooks_path.write_text(json.dumps(equivalent), encoding="utf-8")
 
-    changed = codex_adapter._migrate_hooks_json_into_config(
-        config_payload,
-        equivalent,
-        context=context,
-        source_scope="global",
-    )
+    prepared = codex_adapter.prepare_codex_hook_migration(context, config_path=config_path, hooks_path=hooks_path)
 
-    assert changed is False
-    config_hooks = config_payload["hooks"]
+    config_change = prepared.files[0]
+    assert config_change.after == config_change.before
+    config_hooks = prepared.config_payload["hooks"]
     assert isinstance(config_hooks, dict)
     pre_tool_use = config_hooks["PreToolUse"]
     assert isinstance(pre_tool_use, list)
     assert len(pre_tool_use) == 1
 
     conflicting: dict[str, object] = {"hooks": {"PreToolUse": [_group("python3 hook.py", timeout=13)]}}
+    hooks_path.write_text(json.dumps(conflicting), encoding="utf-8")
     with pytest.raises(RuntimeError, match="codex_hook_migration_conflict"):
-        codex_adapter._migrate_hooks_json_into_config(
-            config_payload,
-            conflicting,
-            context=context,
-            source_scope="global",
-        )
+        codex_adapter.prepare_codex_hook_migration(context, config_path=config_path, hooks_path=hooks_path)
 
 
 def test_readback_failure_preserves_original_toml_and_legacy_json(
