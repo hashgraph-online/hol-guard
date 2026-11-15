@@ -180,3 +180,26 @@ def test_a_user_owned_hook_group_keeps_its_comments_through_install_and_uninstal
     assert 'command = "echo mine"   # keep this spelling' in removed
     groups = read_toml_payload(config_path)["hooks"]["PreToolUse"]
     assert [group["matcher"] for group in groups] == ["Bash"]
+
+
+def test_uninstall_keeps_settings_the_user_added_after_install(tmp_path: Path, monkeypatch) -> None:
+    context = _context(tmp_path, monkeypatch)
+    harness = adapter.CodexHarnessAdapter()
+    config_path = harness._target_config_path(context)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(_HAND_WRITTEN, encoding="utf-8")
+
+    harness.install(context)
+    edited = config_path.read_text(encoding="utf-8") + (
+        '\n# Added after install.\n[mcp_servers.later]\ncommand = "uvx"\nargs = ["later-server"]\n'
+    )
+    config_path.write_text(edited, encoding="utf-8")
+
+    harness.uninstall(context)
+    removed = config_path.read_text(encoding="utf-8")
+    payload = read_toml_payload(config_path)
+    assert "# Added after install." in removed
+    assert payload["mcp_servers"]["later"] == {"command": "uvx", "args": ["later-server"]}
+    assert payload["mcp_servers"]["fixture"]["command"] == "node"
+    assert payload["model"] == "fixture"
+    assert "hooks" not in payload

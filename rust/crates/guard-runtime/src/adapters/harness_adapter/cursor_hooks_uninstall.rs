@@ -21,13 +21,15 @@ pub(super) fn uninstall(ask: &Ask) -> Step<Doc> {
     let state = cursor::digest_path(ctx, &hooks, "hooks-", "state");
     within_root(ctx, &ctx.guard_home, &backup, "Cursor hook backup")?;
     within_root(ctx, &ctx.guard_home, &state, "Cursor hook state")?;
-    let mut restored = restore(ctx, &backup, &hooks, "The Cursor hooks backup")?;
+    // Strip Guard's own entries first: the file may hold hooks the user added
+    // after install, which a restore of the pre-install backup would discard.
+    // The backup is the fallback when Guard's entries cannot be found.
+    let mut restored = ctx.absolute(&hooks).is_file() && remove_managed(ask, &hooks, &script)?;
+    if !restored {
+        restored = restore(ctx, &backup, &hooks, "The Cursor hooks backup")?;
+    }
     if restored {
         unlink_file(ctx, &backup)?;
-        unlink_file(ctx, &state)?;
-    }
-    if !restored && ctx.absolute(&hooks).is_file() && remove_managed(ask, &hooks, &script)? {
-        restored = true;
         unlink_file(ctx, &state)?;
     }
     if ctx.absolute(&script).is_file() {

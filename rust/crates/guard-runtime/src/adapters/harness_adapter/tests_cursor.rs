@@ -195,3 +195,65 @@ fn cursor_rejects_a_missing_hook_script() {
     let answer = ask(&home, "frozen_hook_script", &fields).unwrap();
     assert_eq!(answer["accepted"], false);
 }
+
+#[test]
+fn cursor_install_then_uninstall_returns_the_users_hooks_file() {
+    let home = Home::new();
+    let hooks = home.home().join(".cursor").join("hooks.json");
+    let original = json!({
+        "version": 1,
+        "hooks": {
+            "stop": [{"command": "./other-tool.sh"}],
+            "beforeShellExecution": [{"command": "./audit.sh", "timeout": 5}]
+        },
+        "futureKey": {"nested": ["kept", 1, true, null]},
+        "unicode": "caf\u{e9} \u{2014} \u{1f512}"
+    });
+    write(&hooks, &serde_json::to_string_pretty(&original).unwrap());
+    let answer = run(&home, "install", bridge()).unwrap();
+    for change in answer["files"].as_array().unwrap() {
+        let path = Path::new(change["path"].as_str().unwrap());
+        if change["after"].is_string() {
+            write(path, &after(change));
+        }
+    }
+    let installed = fs::read_to_string(&hooks).unwrap();
+    assert!(
+        installed.contains("hol-guard-cursor-hook.py"),
+        "install added nothing"
+    );
+    run(&home, "uninstall", bridge()).unwrap();
+    let cleaned: Value = serde_json::from_str(&fs::read_to_string(&hooks).unwrap()).unwrap();
+    assert_eq!(cleaned, original);
+}
+
+#[test]
+fn cursor_uninstall_keeps_a_hook_the_user_added_after_install() {
+    let home = Home::new();
+    let hooks = home.home().join(".cursor").join("hooks.json");
+    write(
+        &hooks,
+        r#"{"version": 1, "hooks": {"stop": [{"command": "./other-tool.sh"}]}}"#,
+    );
+    let answer = run(&home, "install", bridge()).unwrap();
+    for change in answer["files"].as_array().unwrap() {
+        if change["after"].is_string() {
+            write(Path::new(change["path"].as_str().unwrap()), &after(change));
+        }
+    }
+    let mut edited: Value = serde_json::from_str(&fs::read_to_string(&hooks).unwrap()).unwrap();
+    edited["hooks"]["stop"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"command": "./added-later.sh"}));
+    write(&hooks, &serde_json::to_string_pretty(&edited).unwrap());
+    run(&home, "uninstall", bridge()).unwrap();
+    let cleaned: Value = serde_json::from_str(&fs::read_to_string(&hooks).unwrap()).unwrap();
+    assert_eq!(
+        cleaned,
+        json!({"version": 1, "hooks": {"stop": [
+            {"command": "./other-tool.sh"},
+            {"command": "./added-later.sh"}
+        ]}})
+    );
+}

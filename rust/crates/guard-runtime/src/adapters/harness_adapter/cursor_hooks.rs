@@ -194,7 +194,12 @@ pub(super) fn merge(
         }
         hooks.push((event.clone(), PyVal::List(merged)));
     }
-    let mut doc = Doc::default();
+    // Keep the user's other top-level keys in a nested config; a legacy flat
+    // config holds only events at the top level, so it has none to keep.
+    let mut doc = match nested {
+        Some(_) => Doc(payload.to_vec()),
+        None => Doc::default(),
+    };
     doc.set("version", version).set("hooks", PyVal::Dict(hooks));
     Ok(doc.value())
 }
