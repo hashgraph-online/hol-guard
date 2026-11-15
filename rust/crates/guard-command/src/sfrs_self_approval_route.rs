@@ -7,13 +7,14 @@ use std::sync::LazyLock;
 use percent_encoding::percent_decode_str;
 use regex::Regex;
 
-/// An authority followed by a path, with or without a scheme. The leading
-/// class keeps a match from starting inside another host or path, and the
-/// path stops at shell, quoting and argument punctuation so a URL inside
-/// `python -c "..."` or a JSON body is still found.
+/// An authority followed by a path, with or without a scheme. A match starts
+/// only where a shell word, quoted string or argument can start, so it never
+/// begins inside another URL's host or path (commas included). The path keeps
+/// every character a URL may hold and stops at whitespace, quoting and shell
+/// operators, so a URL inside `python -c "..."` or a JSON body is still found.
 static URL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r#"(?i)(?:^|[^A-Za-z0-9._~%/:\[\]-])(?:https?://)?([A-Za-z0-9._~%:@\[\]-]+)(/[^\s'"`<>|;&()\\,]*)"#,
+        r#"(?i)(?:^|[\s'"`(<>=|;&{])(?:https?://)?([A-Za-z0-9._~%:@\[\]-]+)(/[^\s'"`<>|;&\\]*)"#,
     )
     .expect("loopback URL pattern")
 });
@@ -38,8 +39,14 @@ fn text_names_route(text: &str) -> bool {
         let (Some(authority), Some(path)) = (captures.get(1), captures.get(2)) else {
             return false;
         };
-        is_loopback_authority(authority.as_str()) && is_approval_write_path(path.as_str())
+        is_loopback_authority(authority.as_str()) && path_names_route(path.as_str())
     })
+}
+
+/// The path as captured, or without the closing parentheses and commas of
+/// the call or list it was written in.
+fn path_names_route(path: &str) -> bool {
+    is_approval_write_path(path) || is_approval_write_path(path.trim_end_matches([')', ',']))
 }
 
 /// `user@host:port`, where the host is a loopback or unspecified address in

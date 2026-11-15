@@ -29,6 +29,9 @@ fn every_client_that_names_an_approval_route_is_self_authorization() {
         "curl -X POST http://localhost.:4781/v1/requests/0000aaaa/approve",
         "curl -X POST http://guard.localhost:4781/v1/requests/0000aaaa/approve",
         "curl -X POST 'http://[0:0:0:0:0:0:0:1]:4781/v1/requests/0000aaaa/approve'",
+        "curl -X POST 'http://127.0.0.1:4781/a,b/../v1/policy/clear'",
+        "curl -X POST 'http://127.0.0.1:4781/a(b)/../v1/policy/clear'",
+        "python3 -c \"import urllib.request as u; u.urlopen(u.Request(\\\"http://127.0.0.1:4781/v1/policy/clear\\\"))\"",
     ] {
         assert!(is_guard_approval_mutation_command(command), "{command}");
     }
@@ -48,6 +51,8 @@ fn reads_other_hosts_and_other_routes_are_not_self_authorization() {
         "curl -X POST https://api.example.com/127.0.0.1/v1/requests/0000aaaa/approve",
         "curl -X POST http://notlocalhost:4781/v1/requests/0000aaaa/approve",
         "curl -X POST http://128.0.0.1:4781/v1/requests/0000aaaa/approve",
+        "curl -X POST https://api.example.com/a,localhost:4781/v1/policy/clear",
+        "curl -X POST 'https://api.example.com/a(localhost:4781/v1/policy/clear'",
         "cat docs/v1/requests/0000aaaa/approve",
         "echo approve",
     ] {
