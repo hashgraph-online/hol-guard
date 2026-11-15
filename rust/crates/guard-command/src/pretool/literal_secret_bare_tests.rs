@@ -11,6 +11,7 @@ fn a_random_token_alone_on_a_list_line_is_a_secret() {
         format!("- {}\n", joined(&["qzvtx", "kmbrw", "plhsn"])),
         format!("secrets:\n  - {}\n", joined(&["hjqwt", "zrkvn", "bmxlp4"])),
         format!("1. {}\n", joined(&["wjtdq", "xgnfk", "rwzvb"])),
+        format!("- {}\r\n- next\r\n", joined(&["qzvtx", "kmbrw", "plhsn"])),
     ] {
         assert!(holds_bare_secret(&text), "{text}");
     }
@@ -24,6 +25,7 @@ fn words_digests_and_inline_tokens_on_list_lines_are_not_secrets() {
         format!("- {}\n", joined(&["9e107d9d372bb682", "6bd81d3542a419d6"])),
         format!("see {} for details\n", joined(&["qzvtx", "kmbrw", "plhsn"])),
         format!("- {} and more\n", joined(&["qzvtx", "kmbrw", "plhsn"])),
+        "- xxxxxxxxxxxxxxx\n".to_string(),
     ] {
         assert!(!holds_bare_secret(&text), "{text}");
     }
@@ -71,6 +73,9 @@ fn counting_runs_and_round_numbers_are_not_secrets() {
         "api_key = '1234567890'\n",
         "token_ttl = '987654321'\n",
         "key = 837291046\n",
+        "token_expires_at = '1739528604'\n",
+        "refresh_token = '1704067200'\n",
+        "secret_rotation_time = '384029175'\n",
     ] {
         assert!(!holds_bare_secret(text), "{text}");
     }
@@ -95,6 +100,12 @@ fn other_ids_and_word_values_are_not_api_secrets() {
         ),
         "GOOGLE_API_ID = 'project123'\n".to_string(),
         "API_VERSION_ID = 'stable'\n".to_string(),
+        format!(
+            "API_SCHEMA_ID = '{}'\n",
+            joined(&["9e107d9d372bb682", "6bd81d3542a419d6"])
+        ),
+        "API_CLIENT_ID = 'xxxx1234xxxx'\n".to_string(),
+        "API_CLIENT_ID = 'your9api8id'\n".to_string(),
     ] {
         assert!(!holds_bare_secret(&text), "{text}");
     }
@@ -108,7 +119,7 @@ fn an_sql_auth_string_is_a_secret() {
     );
     assert!(holds_bare_secret(&text), "{text}");
     let short = format!(
-        "CREATE USER u IDENTIFIED WITH 'auth_socket' AS '*{}';",
+        "CREATE USER u IDENTIFIED WITH 'mysql_native_password' AS '*{}';",
         joined(&["qvz", "kt"])
     );
     assert!(holds_bare_secret(&short), "{short}");
@@ -122,6 +133,9 @@ fn placeholder_sql_auth_strings_are_not_secrets() {
         "CREATE USER u IDENTIFIED WITH 'caching_sha2_password' AS '<hash>';",
         "CREATE USER u IDENTIFIED WITH 'mysql_native_password' AS '${PASSWORD_HASH}';",
         "SELECT name AS 'alias' FROM t;",
+        "CREATE USER 'app'@'localhost' IDENTIFIED WITH auth_socket AS 'nginx';",
+        "CREATE USER app IDENTIFIED WITH 'auth_socket' AS 'deploy';",
+        "CREATE USER u IDENTIFIED WITH authentication_ldap_simple AS 'uid=u9x2,ou=people';",
     ] {
         assert!(!holds_bare_secret(text), "{text}");
     }

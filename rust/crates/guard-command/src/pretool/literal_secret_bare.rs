@@ -9,8 +9,8 @@
 //! - an `API:` label followed by a short key that mixes letters and digits;
 //! - a token, secret or key name assigned a quoted run of nine or ten digits;
 //! - an `…_API_…_ID` name assigned a value that mixes letters and digits;
-//! - an SQL `IDENTIFIED … AS '…'` clause, which writes a stored password
-//!   hash;
+//! - an SQL `IDENTIFIED … AS '…'` clause under a password plugin, which
+//!   writes a stored password hash;
 //! - a `"secret"` field given a short random lowercase value.
 //!
 //! Each screen is held to words, counting runs, hex digests and placeholders
@@ -19,7 +19,7 @@
 
 use std::sync::LazyLock;
 
-use regex::Regex;
+use regex::{Captures, Regex};
 
 use super::letters::english_score;
 
@@ -34,15 +34,17 @@ macro_rules! patterns {
 }
 
 patterns! {
-    LIST_TOKEN = r"(?m)^[ \t]*(?:[-*]|[0-9]+\.)[ \t]+(?P<v>[a-z0-9]{15,32})[ \t]*$";
+    LIST_TOKEN = r"(?m)^[ \t]*(?:[-*]|[0-9]+\.)[ \t]+(?P<v>[a-z0-9]{15,32})[ \t\r]*$";
     API_LABEL = r"\bAPI:[ \t]+(?P<v>[A-Za-z0-9]{8,12})\b";
-    NUMERIC_NAMED = r#"(?i)\b\w*(?:token|secret|key)\w*\s*=\s*['"](?P<v>[0-9]{9,10})['"]"#;
+    NUMERIC_NAMED = r#"(?i)\b(?P<n>\w*(?:token|secret|key)\w*)\s*=\s*['"](?P<v>[0-9]{9,10})['"]"#;
     API_ID = r#"\b(?:\w+_)?API_(?:\w+_)?ID\s*=\s*['"](?P<v>[A-Za-z0-9]{8,40})['"]"#;
-    SQL_AUTH_STRING = r"(?i)\bIDENTIFIED\s+(?:WITH\s+'?\w+'?\s+)?AS\s+'(?P<v>[A-Za-z0-9*$./+=]{5,})'";
+    SQL_AUTH_STRING = r"(?i)\bIDENTIFIED\s+(?:WITH\s+'?(?P<p>\w+)'?\s+)?AS\s+'(?P<v>[A-Za-z0-9*$./+=]{5,})'";
     SECRET_FIELD = r#"["']secret["']\]?\s*(?:==|[:=])\s*["'](?P<v>[a-z]{6,10})["']"#;
     HEX = r"^[0-9a-f]+$";
     SEQUENTIAL = r"(?i)0123|1234|2345|3456|4567|5678|6789|9876|8765|7654|6543|5432|4321|abcd|bcde|cdef|qwer|asdf";
     WORD_THEN_DIGITS = r"^(?:[A-Za-z]+[0-9]+|[0-9]+[A-Za-z]+)$";
+    METADATA_NAME = r"(?i)expir|_at$|ttl|time|stamp|issued|created|updated|max|min|limit|count|size|len|version|index|port|_id$";
+    HASH_PLUGIN = r"(?i)^(?:mysql_native_password|caching_sha2_password|sha256_password|mysql_old_password)$";
     FILLER = r"(?i)x{3,}|\*{3,}|change_?me|example|dummy|fake|placeholder|redacted|password|secret|your";
 }
 
@@ -66,6 +68,7 @@ fn vowel_share(value: &str) -> f64 {
 
 fn random_list_token(value: &str) -> bool {
     !HEX.is_match(value)
+        && !FILLER.is_match(value)
         && count(value, u8::is_ascii_alphabetic) >= 10
         && english_score(value) <= RANDOM_TOKEN
         && vowel_share(value) <= 0.40
@@ -77,6 +80,12 @@ fn mixed_key(value: &str) -> bool {
         && !SEQUENTIAL.is_match(value)
         && !WORD_THEN_DIGITS.is_match(value)
         && !HEX.is_match(&value.to_ascii_lowercase())
+        && !FILLER.is_match(value)
+}
+
+/// Unix seconds from 2001 to 2033 are ten digits that start with `1`.
+fn timestamp_like(value: &str) -> bool {
+    value.len() == 10 && value.starts_with('1')
 }
 
 fn digit_secret(value: &str) -> bool {
@@ -84,7 +93,11 @@ fn digit_secret(value: &str) -> bool {
         .bytes()
         .collect::<std::collections::HashSet<_>>()
         .len();
-    !SEQUENTIAL.is_match(value) && distinct >= 5
+    !SEQUENTIAL.is_match(value) && distinct >= 5 && !timestamp_like(value)
+}
+
+fn named_digit_secret(found: &Captures) -> bool {
+    !METADATA_NAME.is_match(&found["n"]) && digit_secret(&found["v"])
 }
 
 fn api_id(value: &str) -> bool {
@@ -92,10 +105,21 @@ fn api_id(value: &str) -> bool {
         && value.bytes().any(|byte| byte.is_ascii_alphabetic())
         && !SEQUENTIAL.is_match(value)
         && !WORD_THEN_DIGITS.is_match(value)
+        && !HEX.is_match(&value.to_ascii_lowercase())
+        && !FILLER.is_match(value)
 }
 
 fn auth_string(value: &str) -> bool {
     !SEQUENTIAL.is_match(value) && !FILLER.is_match(value)
+}
+
+/// Only password plugins store a hash after `AS`; `auth_socket` and the
+/// directory plugins name an operating-system user or a directory entry.
+fn hashed_auth_string(found: &Captures) -> bool {
+    found
+        .name("p")
+        .is_none_or(|plugin| HASH_PLUGIN.is_match(plugin.as_str()))
+        && auth_string(&found["v"])
 }
 
 fn short_secret(value: &str) -> bool {
@@ -110,9 +134,13 @@ fn any_value(shape: &Regex, text: &str, keep: fn(&str) -> bool) -> bool {
 pub(super) fn holds_bare_secret(text: &str) -> bool {
     any_value(&LIST_TOKEN, text, random_list_token)
         || (text.contains("API:") && any_value(&API_LABEL, text, mixed_key))
-        || any_value(&NUMERIC_NAMED, text, digit_secret)
+        || NUMERIC_NAMED
+            .captures_iter(text)
+            .any(|found| named_digit_secret(&found))
         || (text.contains("API_") && any_value(&API_ID, text, api_id))
-        || any_value(&SQL_AUTH_STRING, text, auth_string)
+        || SQL_AUTH_STRING
+            .captures_iter(text)
+            .any(|found| hashed_auth_string(&found))
         || (text.contains("secret") && any_value(&SECRET_FIELD, text, short_secret))
 }
 
