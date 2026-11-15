@@ -169,7 +169,8 @@ fn path_outside_workspace(executable: &str, cwd: Option<&str>) -> bool {
 }
 
 /// No variable the interpreter reads can add a module path or startup code:
-/// none is inherited, none prefixes this step, and no other step names one.
+/// none is inherited, none prefixes this step, and no other step names one
+/// beyond a lookup or version probe of the interpreter.
 fn environment_settled(
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
@@ -184,7 +185,25 @@ fn environment_settled(
             .segments
             .iter()
             .filter(|other| other.span != segment.span)
-            .all(|other| !other.text.to_ascii_uppercase().contains("PYTHON"))
+            .all(|other| {
+                !other.text.to_ascii_uppercase().contains("PYTHON") || names_python_inertly(other)
+            })
+}
+
+/// A step that names Python without being able to bind a variable for the
+/// shell: a lookup such as `which python3`, `command -v python3` or
+/// `type python3`, or a version probe such as `python3 --version`. A lookup
+/// only prints where a name resolves and a probe runs as its own process, so
+/// neither can set `PYTHONPATH` for the filter that follows. The step must
+/// carry no prefix assignment, wrapper, `=`, `$` or backtick, so
+/// `export PYTHONPATH=...` and `echo $PYTHONPATH` still count.
+fn names_python_inertly(other: &crate::CommandSegmentV1) -> bool {
+    let basename = super::executable_basename(other.executable.as_deref().unwrap_or(""));
+    other.environment_names.is_empty()
+        && other.wrapper_chain.is_empty()
+        && !other.text.contains(['=', '$', '`'])
+        && (super::lookup_reads::safe_path_lookup(basename, &other.arguments)
+            || super::version_probes::lone_probe_segment(other))
 }
 
 /// Whether an inherited environment leaves the interpreter's module path and
@@ -225,11 +244,13 @@ fn working_directory_clean(
     };
     // The interpreter may write once it runs, but nothing it writes exists
     // before it looks up a module; every other step must create nothing,
-    // and only a leading `cd`, already folded into `cwd`, may move.
+    // and only a leading `cd`, already folded into `cwd`, may move. A lone
+    // version probe such as `python3 --version` writes nothing.
     let peers_settled = model.segments.iter().enumerate().all(|(index, other)| {
         let basename = super::executable_basename(other.executable.as_deref().unwrap_or(""));
         other.span == segment.span
             || ((super::search::grep::creates_nothing(other)
+                || super::version_probes::lone_probe_segment(other)
                 || peer_proven_read_only(model, other, basename, context))
                 && (index == 0 || !matches!(basename, "cd" | "pushd" | "popd")))
     });

@@ -89,6 +89,37 @@ fn a_program_that_reaches_past_its_input_keeps_its_review() {
     }
 }
 
+/// A step that only looks the interpreter up, or asks its version, names
+/// Python without being able to set a variable the filter would read.
+#[test]
+fn a_lookup_of_the_interpreter_may_precede_the_filter() {
+    let (root, _cleanup) = checkout("lookup", &[]);
+    let version = "python3 -c 'import sys; print(sys.version)'";
+    for command in [
+        format!("which python3; {version}"),
+        format!("which python3 2>/dev/null; {version}"),
+        format!("which -a python3 jq; {version}"),
+        format!("command -v python3 && {FILTER}"),
+        format!("type -p python3; {version}"),
+        format!("python3 --version && {version}"),
+    ] {
+        assert_eq!(action(&root, &command), "allow", "{command}");
+    }
+    for command in [
+        format!("export PYTHONPATH=.; {version}"),
+        format!("declare -x PYTHONPATH=.; {version}"),
+        format!("read PYTHONPATH; {version}"),
+        format!("printf -v PYTHONPATH .; {version}"),
+        format!("PYTHONPATH=. which python3; {version}"),
+        format!("which python3 && PYTHONSTARTUP=x.py {version}"),
+        format!("eval which python3; {version}"),
+        format!("which $PYTHON; {version}"),
+        format!("echo PYTHONPATH; {version}"),
+    ] {
+        assert_ne!(action(&root, &command), "allow", "{command}");
+    }
+}
+
 /// A workspace interpreter runs its environment's `.pth` startup files, so it
 /// needs `-S` however its path is spelled: through a `..` step or a link that
 /// stands outside the working directory.

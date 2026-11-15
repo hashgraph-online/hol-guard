@@ -4924,6 +4924,41 @@
       "expect": "allow"
     },
     {
+      "id": "python-version-filter-after-interpreter-lookup",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "which python3; python3 -c 'import sys; print(sys.version)'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-python-filter-after-module-path-export",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "which python3; export PYTHONPATH=.; python3 -c 'import sys; print(sys.version)'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
       "id": "python-json-filter-lists-directory",
       "fix_area": "shell",
       "harnesses": [
