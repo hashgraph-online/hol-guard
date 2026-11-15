@@ -6,6 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 struct Fixture {
+    root: PathBuf,
     home: PathBuf,
     workspace: PathBuf,
     scratch: PathBuf,
@@ -14,6 +15,7 @@ struct Fixture {
 impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.scratch);
+        let _ = std::fs::remove_dir_all(&self.root);
     }
 }
 
@@ -26,13 +28,21 @@ fn fixture(name: &str) -> Fixture {
         .join(format!("{name}-{}", std::process::id()));
     let home = root.join("home");
     let workspace = home.join("project");
-    std::fs::create_dir_all(&workspace).unwrap();
-    std::fs::create_dir_all(home.join(".ssh")).unwrap();
     let scratch = PathBuf::from(format!(
         "/tmp/hg-mkdir-nested-{name}-{}",
         std::process::id()
     ));
+    let _ = std::fs::remove_dir_all(&root);
     let _ = std::fs::remove_dir_all(&scratch);
+    // Owns both trees from here on, so a failed setup step cleans up too.
+    let mut fixture = Fixture {
+        root: root.clone(),
+        home: PathBuf::new(),
+        workspace: PathBuf::new(),
+        scratch: scratch.clone(),
+    };
+    std::fs::create_dir_all(&workspace).unwrap();
+    std::fs::create_dir_all(home.join(".ssh")).unwrap();
     std::fs::create_dir(&scratch).unwrap();
     std::fs::set_permissions(&scratch, std::fs::Permissions::from_mode(0o755)).unwrap();
     std::fs::create_dir(scratch.join("private")).unwrap();
@@ -48,11 +58,9 @@ fn fixture(name: &str) -> Fixture {
     )
     .unwrap();
     std::os::unix::fs::symlink(home.join(".ssh"), scratch.join("keys")).unwrap();
-    Fixture {
-        home: std::fs::canonicalize(home).unwrap(),
-        workspace: std::fs::canonicalize(workspace).unwrap(),
-        scratch,
-    }
+    fixture.home = std::fs::canonicalize(home).unwrap();
+    fixture.workspace = std::fs::canonicalize(workspace).unwrap();
+    fixture
 }
 
 fn action(fixture: &Fixture, harness: &str, command: &str) -> String {
