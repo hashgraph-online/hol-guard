@@ -84,6 +84,9 @@ fn a_comment_later_on_a_line_or_after_a_carriage_return_is_not_read() {
         "# note\ngit status # a",
         "# note\ntrue;# a",
         "gh api user\n\r# note; rm -rf victim\ngh api user",
+        // Bash ignores the inline comment quote and closing parenthesis;
+        // a later apparent hash line actually executes the substitution.
+        "( true # )\"\n);\"\n# $(touch /tmp/guard-review-probe) \" # \"",
     ] {
         assert_eq!(masked(text), None, "{text:?}");
     }
