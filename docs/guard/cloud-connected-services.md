@@ -36,6 +36,7 @@ instead. They can't be connected until an admin turns partner sign-in back on.
 | Outlook, OneDrive, Microsoft Teams | |
 | Dropbox, HubSpot, Figma, Linear | |
 | Trello, Airtable, monday.com, Zoom | |
+| Discord | Composio connects a bot to your server, and Guard's Discord actions post and delete messages as that bot. |
 | Intercom, ClickUp, Calendly | These services offer no narrower sign-in, so Composio holds access to everything the account can do. Guard still sends only the actions it lists, after checking each one. The connect button says so before you sign in. |
 | Zendesk, Mailchimp, QuickBooks | Each account lives at its own address. After connecting, you add one detail: the Zendesk subdomain, the Mailchimp data centre, or the QuickBooks company ID. |
 
@@ -66,7 +67,7 @@ For services labelled **Protected · via Composio**:
 
 - **The sign-in.** Composio keeps the sign-in for your account with that service. Guard stores Composio's reference
   to the account, never the sign-in itself.
-- **The request and the reply.** Composio sees the exact request Guard wrote, which it signs and sends, and the
+- **The request and the reply.** Composio sees the exact request Guard wrote, which it adds the sign-in to and sends, and the
   service's reply. Whether it keeps a copy depends on its retention settings, and we disclose those for each service
   before switching it on.
 - **Opaque IDs only.** Guard sends Composio random IDs for the connection and its owner. It does not send workspace
@@ -105,8 +106,7 @@ Services labelled **Protected** and **Checked** aren't affected.
 
 ## Costs
 
-Connecting through Composio and each action sent through it cost credits, because Composio charges per connection
-and per call. The connect button shows the cost before you sign in, and the billing page lists partner use by
+Connecting through Composio and each action sent through it cost Guard Cloud credits. The connect button shows the cost before you sign in, and the billing page lists partner use by
 service. Plans include a partner allowance, and you can buy more credits if you need them.
 
 ## Related docs
