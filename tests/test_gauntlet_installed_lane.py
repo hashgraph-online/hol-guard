@@ -297,6 +297,15 @@ def test_an_unreadable_envelope_records_its_field_names_but_no_values() -> None:
     assert "/private/x" not in json.dumps(result)
 
 
+def test_a_warn_envelope_records_its_field_names() -> None:
+    completed = subprocess.CompletedProcess(
+        args=["hook"], returncode=0, stdout='{"policy_action": "warn", "reason_code": "c"}\n', stderr=""
+    )
+    result = verdict(completed)
+    assert result["decision"] == "warn"
+    assert result["envelope_shape"] == ["policy_action", "reason_code"]
+
+
 def test_a_readable_envelope_carries_no_shape() -> None:
     completed = subprocess.CompletedProcess(
         args=["hook"],

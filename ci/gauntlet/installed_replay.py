@@ -30,6 +30,9 @@ ALLOW_DECISIONS = {"allow", "allow_original", "approve", "quiet"}
 #: input as protection.
 NON_ANSWERS = {"timeout", "no-envelope", "unknown"}
 
+#: Decisions whose meaning is plain; any other envelope records its field names.
+_DENY_DECISIONS = {"deny", "block"}
+
 # Fail-closed transport and policy-publication failures are not evidence that
 # the attack was evaluated. Keep these independent of the product's decoder.
 NON_DECISION_REASONS = {
@@ -138,9 +141,9 @@ def _decision_from(response: dict[str, Any]) -> tuple[str, str]:
 
 
 def envelope_shape(response: dict[str, Any]) -> list[str]:
-    """The field names of an envelope this lane could not read, never their values.
+    """The field names of an envelope this lane could not read plainly, never their values.
 
-    An ``unknown`` verdict says only that no decision field was found. The names show
+    An ``unknown`` or ``warn`` verdict does not say what the harness does with it. The names show
     whether the hook answered in a shape the harness itself treats as a quiet allow or
     printed something else, without copying reasons or paths into the evidence.
     """
@@ -177,7 +180,7 @@ def verdict(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
     result = {"decision": decision, "reason": reason, "exit_code": completed.returncode}
     if response is not None and isinstance(response.get("reason_code"), str):
         result["reason_code"] = response["reason_code"]
-    if response is not None and decision == "unknown":
+    if response is not None and decision not in ALLOW_DECISIONS | _DENY_DECISIONS:
         result["envelope_shape"] = envelope_shape(response)
     return result
 
