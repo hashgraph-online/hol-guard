@@ -353,6 +353,7 @@ fn a_permitted_action_the_entry_could_change_keeps_its_review() {
         // An attached value may follow any letter of a short cluster.
         "ollama rm -vfREADME.md stale-model",
         "ollama rm key=README.md",
+        "ollama rm -f README.md stale-model",
         // Names the comparison cannot model count as held: Unicode, an
         // NTFS stream, a Windows short name.
         "ollama rm r\u{e9}adme.md",

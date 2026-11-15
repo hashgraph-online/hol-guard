@@ -429,37 +429,15 @@ fn names_a_path(argument: &str) -> bool {
 }
 
 /// The words of a permitted step that could name a file relative to the
-/// directory it runs in: each operand, the value of a `--name=value` option,
-/// every suffix of a short option cluster (an attached value may follow any
-/// of its letters), and every part of a word split at `=`.
+/// directory it runs in: every argument, since an option's value may be the
+/// next word (`-F --config`) or attached to it (`-vFconfig`, `--name=value`).
+/// `git_worktree::tree_names_any` matches an entry at the end of a word or of
+/// any `=` part, so attached values need no expansion here.
 pub(super) fn bare_names(later: &CommandSegmentV1) -> Vec<&str> {
-    let mut names = Vec::new();
-    for argument in &later.arguments {
-        if matches!(argument.as_str(), "2>&1" | "2>/dev/null" | ">/dev/null") {
-            continue;
-        }
-        let words: Vec<&str> = match argument.strip_prefix("--") {
-            Some(option) => option
-                .split_once('=')
-                .map(|(_, value)| value)
-                .into_iter()
-                .collect(),
-            None => match argument.strip_prefix('-') {
-                Some(cluster) => cluster
-                    .char_indices()
-                    .skip(1)
-                    .map(|(offset, _)| &cluster[offset..])
-                    .collect(),
-                None => vec![argument.as_str()],
-            },
-        };
-        for word in words {
-            names.push(word);
-            if word.contains('=') {
-                names.extend(word.split('='));
-            }
-        }
-    }
-    names.retain(|name| !name.is_empty());
-    names
+    later
+        .arguments
+        .iter()
+        .map(String::as_str)
+        .filter(|argument| !matches!(*argument, "2>&1" | "2>/dev/null" | ">/dev/null"))
+        .collect()
 }

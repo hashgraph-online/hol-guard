@@ -132,8 +132,10 @@ pub(super) fn hooks_are_inert(
         .all(|hook| hook_file_inert(&path.join(hook), hook, husky_directory_reached))
 }
 
-/// Whether any of `names` may open an entry at the root of the tree
-/// `reference` names, in the repository the add's directory belongs to. A
+/// Whether any of the words a step takes may open an entry at the root of
+/// the tree `reference` names, in the repository the add's directory belongs
+/// to. An entry counts when it ends a word or one of its `=` parts, which
+/// covers operands and option values given apart or attached. A
 /// case-insensitive file system opens `readme.md` as `README.md`, and Windows
 /// drops trailing dots and spaces, so names are compared that way. `None` is
 /// doubt, including a root listing too large to read.
@@ -170,12 +172,27 @@ pub(in crate::pretool) fn tree_names_any(
     {
         return Some(true);
     }
+    // Each word and each of its `=` parts, within a budget past which the
+    // step is doubt rather than a long comparison.
+    const WORD_BUDGET: usize = 256;
+    let mut words = Vec::new();
+    for name in names {
+        words.push(opened(name.as_bytes()));
+        if name.contains('=') {
+            words.extend(name.split('=').map(|part| opened(part.as_bytes())));
+        }
+        if words.len() > WORD_BUDGET {
+            return None;
+        }
+    }
     Some(output.split(|byte| *byte == 0).any(|entry| {
+        let entry = opened(entry);
         !entry.is_empty()
             && (!entry.is_ascii()
-                || names
-                    .iter()
-                    .any(|name| opened(entry).eq_ignore_ascii_case(opened(name.as_bytes()))))
+                || words.iter().any(|word| {
+                    word.len() >= entry.len()
+                        && word[word.len() - entry.len()..].eq_ignore_ascii_case(entry)
+                }))
     }))
 }
 
