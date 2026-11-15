@@ -226,7 +226,7 @@ fn hooks_enabled(entries: &[(String, PyVal)]) -> bool {
     }
 }
 
-fn owner_fields(fields: &Map<String, Value>) -> Step<Map<String, Value>> {
+pub(super) fn owner_fields(fields: &Map<String, Value>) -> Step<Map<String, Value>> {
     OWNER_FIELDS
         .iter()
         .map(|key| {
@@ -237,14 +237,18 @@ fn owner_fields(fields: &Map<String, Value>) -> Step<Map<String, Value>> {
 }
 
 /// One `codex_hook_owners` op over the shared owner fields.
-fn owners_op(base: &Map<String, Value>, op: &str, extra: Map<String, Value>) -> Step<Value> {
+pub(super) fn owners_op(
+    base: &Map<String, Value>,
+    op: &str,
+    extra: Map<String, Value>,
+) -> Step<Value> {
     let mut request = base.clone();
     request.insert("op".into(), json!(op));
     request.extend(extra);
     codex_owners::dispatch(&request)
 }
 
-fn without_legacy(base: &Map<String, Value>) -> Map<String, Value> {
+pub(super) fn without_legacy(base: &Map<String, Value>) -> Map<String, Value> {
     let mut request = base.clone();
     for key in [
         "cwd",
@@ -310,14 +314,25 @@ fn require_owner(base: &Map<String, Value>, owner: &Map<String, Value>, path: &P
 
 /// `_strip_owned_hooks(..., unlaunchable=True, hold_recorded=False)`.
 fn strip(base: &Map<String, Value>, hooks: &PyVal, owned: &[PyVal]) -> Step<String> {
+    strip_owned(base, hooks, owned, true, false)
+}
+
+/// `_strip_owned_hooks`: the hooks, as JSON text, once Guard's own are gone.
+pub(super) fn strip_owned(
+    base: &Map<String, Value>,
+    hooks: &PyVal,
+    owned: &[PyVal],
+    unlaunchable: bool,
+    hold_recorded: bool,
+) -> Step<String> {
     let mut extra = Map::new();
     extra.insert("hooks".into(), json!(compact(hooks, false)));
     extra.insert(
         "owned".into(),
         json!(compact(&PyVal::List(owned.to_vec()), false)),
     );
-    extra.insert("unlaunchable".into(), json!(true));
-    extra.insert("hold_recorded".into(), json!(false));
+    extra.insert("unlaunchable".into(), json!(unlaunchable));
+    extra.insert("hold_recorded".into(), json!(hold_recorded));
     let answer = owners_op(base, "strip", extra)?;
     answer
         .get("hooks")

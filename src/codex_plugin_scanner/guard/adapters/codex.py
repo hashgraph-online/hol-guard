@@ -57,7 +57,6 @@ from ..codex_hook_recovery import (
 )
 from ..codex_hook_registration import (
     codex_doctor_result,
-    install_managed_codex_hook_groups,
     legacy_binding_fields,
     overlay_live_owned_event_matches,
 )
@@ -78,8 +77,6 @@ from ..codex_hook_sources import strict_toml_object as _strict_toml_object
 from ..codex_hook_trust import (
     apply_codex_hook_trust_doctor,
     codex_hook_trust_stale,
-    record_guard_hook_trust,
-    remap_hook_state,
 )
 from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
@@ -938,12 +935,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         backup = prepare_codex_main_backup(
             context, original=contents[spec.config_path], migrated_payload=payload if target_migrated else None
         )
-        features = payload.get("features")
-        if not isinstance(features, dict):
-            features = {}
-        features.pop("codex_hooks", None)
-        features["hooks"] = True
-        payload["features"] = features
         self._install_config_hooks(payload, context, config_path=spec.config_path, owned_bindings=bindings)
         workspace_path = context.workspace_dir / ".codex/config.toml" if context.workspace_dir is not None else None
         workspace_payload = (
@@ -1262,26 +1253,27 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         config_path: Path,
         owned_bindings: Sequence[Mapping[str, object]] = (),
     ) -> None:
-        hooks = payload.get("hooks")
-        if not isinstance(hooks, dict):
-            hooks = {}
-        before = deepcopy(hooks)
-        cleaned_hooks = _strip_owned_hooks(context, hooks, owned_bindings, unlaunchable=False, hold_recorded=True)
-        install_managed_codex_hook_groups(
-            cleaned_hooks,
-            _managed_hook_groups(context),
-            current_guard_home=_runtime_guard_home(context),
-        )
-        # Hook state is keyed by position, so the groups just rewritten moved
-        # the keys of the hooks Guard leaves alone. Each one follows its
-        # handler before trust is read, or another hook's disabled choice
-        # lands on a Guard hook and switches it off unseen.
-        remap_hook_state(before, cleaned_hooks, config_path)
-        payload["hooks"] = cleaned_hooks
-        # Codex skips a hook it has no trusted hash for, and says nothing while
-        # it does, so an install that stops here leaves the machine unprotected
-        # and looks installed. Trust is recorded for the handlers just written.
-        record_guard_hook_trust(payload, config_path)
+        # Codex hooks are switched on, Guard's earlier handlers go, the managed
+        # groups are written, each hook's state follows its handler and the
+        # Guard handlers just written are trusted, all in the native runtime.
+        # Codex skips a hook it has no trusted hash for, so an install that
+        # cannot record trust refuses.
+        owned = list(owned_bindings)
+        wire = _Wire(payload, owned)
+        request: dict[str, object] = {
+            "payload": wire.text(payload),
+            "tokens": wire.meanings,
+            "owned": wire.text(owned),
+            "managed": _hook_registration(context).groups,
+            "config": str(config_path),
+            **_legacy_fields(context),
+            **install_fields(_runtime_guard_home(context), None),
+            **short_path_fields(),
+        }
+        answer = settle_short_paths(lambda: _codex("config_hooks", context, **request), request, "config_hooks")
+        installed = wire.decode(_reply_text(answer, "payload"))
+        payload.clear()
+        payload.update(installed)
 
     @staticmethod
     def _write_authenticated_hook_config(
