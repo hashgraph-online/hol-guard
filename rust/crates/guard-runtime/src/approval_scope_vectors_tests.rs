@@ -202,3 +202,92 @@ fn a_request_without_fields_gets_the_conservative_contract() {
     assert_eq!(item["exact_action_persistence_eligible"], json!(false));
     assert_eq!(item["exact_context_token"], Value::Null);
 }
+
+/// The approval invariant over every recorded review: a review that offers
+/// any allow scope offers Allow once (the exact action) and either Always
+/// allow (a saved exact action or saved broader scope) or a named once-only
+/// reason; a review that offers no allow scope
+/// names the restriction that explains why, so the card can show recovery
+/// instead of a button that cannot run the reviewed action.
+#[test]
+fn every_recorded_review_offers_both_choices_or_names_why_not() {
+    let vectors = gunzip_json(VECTORS);
+    let (mut both, mut once_only, mut unavailable) = (0, 0, 0);
+    let mut problems = Vec::new();
+    let mut unnamed = std::collections::BTreeMap::<String, usize>::new();
+    for (index, case) in vectors["cases"].as_array().unwrap().iter().enumerate() {
+        let request = &case["request"];
+        if !matches!(
+            request["policy_action"].as_str(),
+            Some("review" | "require-reapproval")
+        ) {
+            continue;
+        }
+        let item = item_for(request, &case["expected"]["workspace_target"]);
+        let contract = evaluate_one(item);
+        let allow = contract["allowed_scopes_by_action"]["allow"]
+            .as_array()
+            .unwrap();
+        let restrictions = contract["scope_restrictions"].as_array().unwrap();
+        // Always allow is a saved exact action or any saved broader scope.
+        let persists = contract["exact_action_persistence_eligible"] == json!(true)
+            || allow.iter().any(|scope| scope != "artifact");
+        let once_reason = contract["once_only_reason"].as_str();
+        if allow.is_empty() {
+            unavailable += 1;
+            if restrictions.is_empty() {
+                problems.push(format!("case {index}: no allow scope and no reason"));
+            }
+        } else if !allow.contains(&json!("artifact")) {
+            problems.push(format!("case {index}: allow scopes without Allow once"));
+        } else if persists {
+            both += 1;
+        } else if once_reason.is_some() {
+            once_only += 1;
+        } else {
+            let raw = request["artifact_type"].as_str().unwrap_or_default();
+            let kind = match raw.trim() {
+                "" => "none".to_owned(),
+                trimmed if trimmed != raw => format!("padded:{trimmed}"),
+                trimmed => trimmed.to_owned(),
+            };
+            *unnamed.entry(kind).or_insert(0) += 1;
+        }
+    }
+    assert!(
+        problems.is_empty(),
+        "{} violations: {:?}",
+        problems.len(),
+        &problems[..problems.len().min(10)]
+    );
+    assert!(both > 500, "only {both} reviews offer both choices");
+    assert!(
+        once_only > 0 && unavailable > 0,
+        "a branch of the invariant went unexercised"
+    );
+    // Known gap, reported rather than hidden: these artifact types have no
+    // exact-action binding, so they offer Allow once with neither Always allow
+    // nor a named once-only reason (the card shows generic copy). A new type
+    // joining this set fails here.
+    let unnamed_types: Vec<&str> = unnamed.keys().map(String::as_str).collect();
+    assert!(
+        unnamed_types
+            .iter()
+            .all(|kind| UNBOUND_ONCE_ONLY_TYPES.contains(kind)),
+        "Allow once without Always allow or a reason for {unnamed:?}"
+    );
+}
+
+/// Artifact types whose reviews may still offer Allow once without Always
+/// allow or a named reason. Shrink this list; never grow it.
+const UNBOUND_ONCE_ONLY_TYPES: &[&str] = &[
+    "file_read_request",
+    "mcp_server",
+    "mcp_tool_call",
+    "none",
+    "other",
+    // A whitespace-padded type is not read as `tool_call`, so it has no binding.
+    "padded:tool_call",
+    "prompt_request",
+    "tool_action_request",
+];
