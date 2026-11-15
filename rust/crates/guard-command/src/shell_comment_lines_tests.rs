@@ -89,6 +89,8 @@ fn a_comment_later_on_a_line_or_after_a_carriage_return_is_not_read() {
         "( true # )\"\n);\"\n# $(touch /tmp/guard-review-probe) \" # \"",
         // Bash reads this hash line as part of the `$[...]` arithmetic.
         "echo $[\n# $(touch /tmp/guard-review-probe) 1]\ngh api user",
+        "echo $\\\n[\n# $(touch /tmp/guard-review-probe) 1]\ngh api user",
+        "cat <\\\n<EOF\n# $(touch /tmp/guard-review-probe)\nEOF",
     ] {
         assert_eq!(masked(text), None, "{text:?}");
     }

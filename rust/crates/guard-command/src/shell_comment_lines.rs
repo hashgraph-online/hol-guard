@@ -36,8 +36,10 @@ pub(crate) fn mask_comments(raw: &str) -> String {
 /// bash reads quotes in it as text and this scan would pair them.
 pub(crate) fn mask_comment_lines(text: &str) -> Option<String> {
     // In legacy `$[...]` arithmetic a line-initial `#` is still arithmetic,
-    // and a `$(...)` in it runs.
-    if text.contains("<<") || text.contains("$[") {
+    // and a `$(...)` in it runs. Bash drops a backslash-newline before it
+    // reads either token, so `$\<newline>[` opens one too.
+    let joined = text.replace("\\\n", "");
+    if joined.contains("<<") || joined.contains("$[") {
         return None;
     }
     let characters: Vec<char> = text.chars().collect();
