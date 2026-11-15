@@ -195,8 +195,6 @@ def prewarm_probe(runtime: InstalledRuntime, harness: str, *, root: Path) -> dic
     home = build_home(root, f"prewarm-{harness}")
     guard_home = home / ".hol-guard"
     workspace = build_workspace(root / f"prewarm-{harness}")
-    guard_home.mkdir(parents=True, mode=0o700, exist_ok=True)  # DIAG-PROFILE
-    (guard_home / "host-profile.request").write_text("1")  # DIAG-PROFILE
     install = install_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
     installed_ns = time.time_ns()
     deadline = time.monotonic() + PREWARM_WAIT_SECONDS
@@ -207,13 +205,6 @@ def prewarm_probe(runtime: InstalledRuntime, harness: str, *, root: Path) -> dic
     timeline["harness"] = harness
     timeline["install_exit_code"] = install["exit_code"]
     timeline["waited_seconds"] = PREWARM_WAIT_SECONDS
-    time.sleep(2)  # DIAG-PROFILE
-    profile = guard_home / "host-profile.txt"  # DIAG-PROFILE
-    if profile.is_file():  # DIAG-PROFILE
-        import re  # DIAG-PROFILE
-
-        text = re.sub(r"/[^\s:]*/", "", profile.read_text(encoding="utf-8"))  # DIAG-PROFILE
-        timeline["host_profile"] = text[:12000]  # DIAG-PROFILE
     return timeline
 
 

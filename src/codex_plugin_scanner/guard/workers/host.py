@@ -350,22 +350,8 @@ def run_worker_host(guard_home: Path) -> int:
     try:
         install_sink(writer.error, notice=writer.notice)
         _report_phase("launched")
-        profiler = None  # DIAG-PROFILE
-        if (store.guard_home / "host-profile.request").is_file():  # DIAG-PROFILE
-            import cProfile  # DIAG-PROFILE
-
-            profiler = cProfile.Profile()  # DIAG-PROFILE
-            profiler.enable()  # DIAG-PROFILE
         host = WorkerHost(store, home_dir=Path.home().expanduser().resolve(strict=False))
         host.start(on_phase=_report_phase)
-        if profiler is not None:  # DIAG-PROFILE
-            import io  # DIAG-PROFILE
-            import pstats  # DIAG-PROFILE
-
-            profiler.disable()  # DIAG-PROFILE
-            buffer = io.StringIO()  # DIAG-PROFILE
-            pstats.Stats(profiler, stream=buffer).sort_stats("cumulative").print_stats(45)  # DIAG-PROFILE
-            (store.guard_home / "host-profile.txt").write_text(buffer.getvalue())  # DIAG-PROFILE
         _report_phase("started")
         host.wait_for_policy_publication()
         # The daemon announces itself only after this line, so its first hook
