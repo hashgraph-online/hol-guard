@@ -58,7 +58,8 @@ pub(super) fn safe(
 
 /// Whether the session's home holds no `.digrc` for `dig` to read.
 fn no_digrc(context: super::PathContext<'_>) -> bool {
-    context.home_dir.is_some_and(|home| {
+    context.shell_home_matches
+        && context.home_dir.is_some_and(|home| {
         std::fs::symlink_metadata(std::path::Path::new(home).join(".digrc"))
             .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
     })
