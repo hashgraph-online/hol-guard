@@ -198,6 +198,34 @@ pub(super) fn reconcile_artifacts(reads: &NativeReads, user_home: Option<&str>) 
     );
 }
 
+/// Starts `reconcile_artifacts` on its own thread, so it runs while the
+/// worker host starts and a cold start pays for the slower of the two rather
+/// than both. The daemon joins the handle before it reports ready. Without a
+/// thread the reconcile runs here and `None` is returned.
+pub(super) fn reconcile_beside(
+    reads: &Arc<NativeReads>,
+    user_home: Option<String>,
+    guard_home: std::path::PathBuf,
+) -> Option<thread::JoinHandle<()>> {
+    let (worker_reads, worker_user, worker_home) =
+        (Arc::clone(reads), user_home.clone(), guard_home.clone());
+    let spawned = thread::Builder::new()
+        .name("daemon-reconcile".into())
+        .spawn(move || reconciled(&worker_reads, worker_user.as_deref(), &worker_home));
+    match spawned {
+        Ok(handle) => Some(handle),
+        Err(_) => {
+            reconciled(reads, user_home.as_deref(), &guard_home);
+            None
+        }
+    }
+}
+
+fn reconciled(reads: &NativeReads, user_home: Option<&str>, guard_home: &std::path::Path) {
+    reconcile_artifacts(reads, user_home);
+    super::super::lifecycle::record(guard_home, "reconciled", None, None, None);
+}
+
 fn pass(reads: &NativeReads, call: &str, args: Value) -> Option<Value> {
     let config = reads.config()?;
     if let Some(answer) = ticks::native(reads, &config, call, &args) {

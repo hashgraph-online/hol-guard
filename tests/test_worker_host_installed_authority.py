@@ -199,7 +199,7 @@ def test_the_writer_thread_appends_each_batch_itself(tmp_path, monkeypatch):
 
 
 def test_a_host_that_fails_to_start_still_writes_and_releases_its_log(tmp_path, monkeypatch):
-    def start(self):
+    def start(self, on_phase=None):
         background_diagnostics.record_background_event("worker_host_start_failed", "error=RuntimeError")
         raise _StopError
 

@@ -294,23 +294,7 @@ pub(crate) fn run(args: &[String]) -> i32 {
     if config.workers {
         // Guard-owned hooks and launchers are brought in line with this
         // runtime before the daemon reports ready, as its start always did.
-        // The reconcile runs while the worker host starts, so a cold start
-        // pays for the slower of the two rather than both.
-        let reconcile = {
-            let reads = Arc::clone(&reads);
-            let user_home = config.user_home.clone();
-            let home = home.clone();
-            std::thread::Builder::new()
-                .name("daemon-reconcile".into())
-                .spawn(move || {
-                    workers::reconcile_artifacts(&reads, user_home.as_deref());
-                    super::lifecycle::record(&home, "reconciled", None, None, None);
-                })
-        };
-        if reconcile.is_err() {
-            workers::reconcile_artifacts(&reads, config.user_home.as_deref());
-            super::lifecycle::record(&home, "reconciled", None, None, None);
-        }
+        let reconcile = workers::reconcile_beside(&reads, config.user_home.clone(), home.clone());
         workers::start(
             &reads,
             workers::Registration {
@@ -326,12 +310,12 @@ pub(crate) fn run(args: &[String]) -> i32 {
                 .map(std::time::Duration::from_secs_f64),
         );
         super::lifecycle::record(&home, "workers_started", None, None, None);
-        if let Ok(reconcile) = reconcile {
+        if let Some(reconcile) = reconcile {
             let _ = reconcile.join();
         }
     }
     warm_hook_worker(&reads, port, pid);
-    super::lifecycle::record(&home, "hook_worker_warmed", None, None, None);
+    super::lifecycle::record(&home, "hook_worker_warming", None, None, None);
     if config.workers {
         resident_prewarm::prewarm_resident(&home);
     }
