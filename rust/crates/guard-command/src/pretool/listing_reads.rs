@@ -325,9 +325,10 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     let Ok(canonical_base) = std::fs::canonicalize(&base) else {
         return false;
     };
-    if context.home_dir.is_some_and(|h| {
-        !std::fs::canonicalize(h).is_ok_and(|home| home != canonical_base)
-    }) {
+    if context
+        .home_dir
+        .is_some_and(|h| !std::fs::canonicalize(h).is_ok_and(|home| home != canonical_base))
+    {
         return false;
     }
     // Shell expansion races are unsafe in world-writable directories.
@@ -369,14 +370,16 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
             !super::sensitive_read_path_argument(text)
                 && !search::key_file_name(&name)
                 && std::fs::canonicalize(&path).is_ok_and(|canonical| {
-                    canonical.file_name().and_then(|n| n.to_str())
+                    canonical
+                        .file_name()
+                        .and_then(|n| n.to_str())
                         .is_some_and(|name| !search::key_file_name(name))
                         && super::read_paths::resolved_location_allowed(
-                        &canonical,
-                        context.home_dir,
-                        context.cwd,
-                        false,
-                    )
+                            &canonical,
+                            context.home_dir,
+                            context.cwd,
+                            false,
+                        )
                 })
         };
         if !listed {
