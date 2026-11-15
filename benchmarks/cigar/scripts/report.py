@@ -6,7 +6,7 @@ Usage:
 
 Per arm and step kind it prints: requests per step, tool calls per step and by
 type (test, read, search, edit, git, other), holds, holds per 100 calls,
-calls made later in the same step after a hold, and retries: later calls in
+calls made later in the same step after a hold, dollar cost per hold, and retries: later calls in
 the step that repeat a held call (the same command, or the same tool on the
 same file; Oh My Pi patches name no file, so there the same patch). A rewritten
 command is a later call but not a retry. Oh My Pi commands that ran through
@@ -27,6 +27,7 @@ import bisect
 import collections
 import json
 import re
+import statistics
 import sys
 from pathlib import Path
 
@@ -256,6 +257,7 @@ def load(tag, arm):
 
 def anatomy(tag, arm, rows):
     per = collections.defaultdict(collections.Counter)
+    step_usd = collections.defaultdict(lambda: ([], []))
     for r in rows.values():
         steps = row_steps(r, RUNS / tag)
         calls = row_calls(r, RUNS / tag)
@@ -284,6 +286,8 @@ def anatomy(tag, arm, rows):
                     k["holds"] += 1
                     held_seen = True
                     held_keys |= keys or frozenset()
+            if requests:
+                step_usd[kind][held_seen].append(steps[i]["usd"])
     print(f"\n== {tag} {arm}: {len(rows)} sessions, {sum(r['passed'] for r in rows.values())} passed")
     cols = ("steps", "requests", "calls") + KINDS + ("holds", "after_hold", "retries")
     print(f"{'kind':9}" + "".join(f"{c:>11}" for c in cols) + f"{'req/step':>10}{'holds/100':>10}")
@@ -297,7 +301,26 @@ def anatomy(tag, arm, rows):
         print(f"retries per hold (same command or same file again): {tot['retries'] / tot['holds']:.2f}")
         if tot["unmatched"]:
             print(f"  not checked: {tot['unmatched']} later call(s) ran through Guard's runner with no recorded command")
+        extra, held_steps = hold_cost(step_usd)
+        if held_steps:
+            print(
+                f"cost per hold: ${extra / tot['holds']:.4f} "
+                f"(held steps cost ${extra:.4f} more than the median same-kind step with no hold)"
+            )
     return per
+
+
+def hold_cost(step_usd):
+    """Extra dollars in steps with a hold: each held step's cost minus the median
+    cost of the same kind's steps without one. Kinds with no unheld step are skipped."""
+    extra, held_steps = 0.0, 0
+    for clean, held in step_usd.values():
+        if not clean or not held:
+            continue
+        mid = statistics.median(clean)
+        extra += sum(usd - mid for usd in held)
+        held_steps += len(held)
+    return extra, held_steps
 
 
 TOKEN_KEYS = ("input_tokens", "output_tokens")

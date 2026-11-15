@@ -355,3 +355,17 @@ Gates:
 Why Claude Code's doc steps stay under 35%: with Guard, 8 of 10 doc steps take Claude Code's minimum of read, edit and one test run (its Edit tool refuses a file the session has not read, so a note that shows the code cannot save the read). The no-Guard run often takes the same four requests, at the same fixed context per request (about 20k cached tokens of harness prompt and tool list), and the CIGAR note on a doc step is about 1.3k characters. There is no request left to remove. The run 2 stub figure comes from one session that spent 15 calls debugging `TLRUCache.popitem`; the other 11 stub steps took read, edit and one test run.
 
 Run-to-run spread on Claude Code is about ±3 points of tokens saved on the same build, so the two runs (70.4% at the midpoints, 68.9% at the low end of run 1) are one result.
+
+What holds cost, from `report.py` ("cost per hold": each held step's cost minus the median cost of the same kind's steps with no hold, summed over the run and divided by the number of holds). Same 16 seeds; 3.60.0a96 is the first gate run, f11eecf8f1 is `main` above.
+
+| harness | build | calls | holds | holds per 100 calls | retries per hold | cost per hold | held-step extra as share of the run's cost |
+|---|---|---|---|---|---|---|---|
+| Codex | 3.60.0a96 | 237 | 10 | 4.2 | 0.00 | $0.0009 | 7.1% |
+| Codex | f11eecf8f1 | 123 | 1 | 0.8 | 0.00 | $0.0003 | 0.3% |
+| Oh My Pi | 3.60.0a96 | 646 | 2 | 0.3 | 0.00 | $0.0004 | 0.5% |
+| Oh My Pi | f11eecf8f1 | 308 | 3 | 1.0 | 0.00 | $0.0005 | 1.4% |
+| Claude Code | 3.60.0a96 | 467 | 2 | 0.4 | 0.00 | $0.0437 | 2.3% |
+| Claude Code, run 1 | f11eecf8f1 | 360 | 0 | 0.0 | — | — | 0.0% |
+| Claude Code, run 2 | f11eecf8f1 | 352 | 3 | 0.9 | 0.00 | $0.0796 | 7.5% |
+
+Codex holds now cost almost nothing. On Claude Code the cost sits in one session: the three holds in run 2 are all in seed 7188, in the stub step that spent 15 calls debugging `TLRUCache.popitem`, so the extra is mostly that debugging, not the holds themselves. Oh My Pi's 2 and 3 holds are too few to show a change in either direction.
