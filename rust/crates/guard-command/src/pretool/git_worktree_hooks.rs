@@ -161,11 +161,21 @@ pub(in crate::pretool) fn tree_names_any(
     if !status.success() {
         return None;
     }
+    // Unicode case and normalization, NTFS streams (`name:stream`) and
+    // Windows short names (`README~1.MD`) fold further than this comparison
+    // models, so such a name, or a non-ASCII entry, counts as held.
+    if names
+        .iter()
+        .any(|name| !name.is_ascii() || name.contains([':', '~']))
+    {
+        return Some(true);
+    }
     Some(output.split(|byte| *byte == 0).any(|entry| {
         !entry.is_empty()
-            && names
-                .iter()
-                .any(|name| opened(entry).eq_ignore_ascii_case(opened(name.as_bytes())))
+            && (!entry.is_ascii()
+                || names
+                    .iter()
+                    .any(|name| opened(entry).eq_ignore_ascii_case(opened(name.as_bytes()))))
     }))
 }
 
