@@ -304,3 +304,15 @@ fn plain(path: &str) -> bool {
 fn relative(file: &File) -> bool {
     (file.lines.iter()).any(|line| line.trim_start().starts_with("from ."))
 }
+
+/// Whether a named definition is shown whole after another was. Claude Code
+/// reads a file before editing it, so there only the first is, and a
+/// constructor, whose fields the other methods use.
+pub(super) fn whole_here(asked: &Asked, shown_any: bool, code: &str) -> bool {
+    let head = code.lines().next().unwrap_or_default();
+    let builds = ["__init__(", "__new__(", "constructor(", "fn new("];
+    !shown_any
+        || asked.lookup
+        || !asked.reads_first
+        || builds.iter().any(|name| head.contains(name))
+}

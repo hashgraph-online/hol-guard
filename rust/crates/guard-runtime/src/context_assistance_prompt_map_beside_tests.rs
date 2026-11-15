@@ -358,3 +358,22 @@ fn claude_code_gets_only_the_first_named_definition_whole() {
         "{one}"
     );
 }
+
+/// A constructor stays whole in Claude Code: it holds the fields a method the
+/// agent writes uses.
+#[test]
+fn claude_code_still_gets_a_named_constructor_whole() {
+    let code = "class Box:\n    def __init__(self, size):\n        self.__size = size\n\n    \
+def fill(self, x):\n        return x\n\n    def empty(self):\n        raise NotImplementedError\n";
+    let list = files(&[("src/pkg/box.py", code)]);
+    let terms = looking_for(&[("fill", true, 1), ("init", true, 1)]);
+    let claude = Asked {
+        reads_first: true,
+        ..Asked::default()
+    };
+    let text = map(&list, &terms, &claude, later()).unwrap().text;
+    assert!(
+        text.contains("```\n    def __init__(self, size):"),
+        "{text}"
+    );
+}

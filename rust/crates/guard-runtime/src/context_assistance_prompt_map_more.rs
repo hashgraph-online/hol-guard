@@ -118,9 +118,8 @@ pub(super) fn changelog_file(path: &str) -> bool {
 /// close matches and the last of its best ones, where a new test fits. A test
 /// scores the rarity of the words it uses, so the few tests that use a rare
 /// word outrank the many that say "option". The best file's short close
-/// tests are shown whole, as a named function is, since an agent fixing or
-/// writing the code reads them next; not for a rename, a review or a question, nor when
-/// `earlier` holds them, shown by an earlier prompt or above.
+/// tests are shown whole, as a named function is, since an agent fixing or writing
+/// the code reads them next; not for a rename, review, question, or when shown earlier.
 pub(super) fn tests(
     files: &[File],
     mentioned: &[String],
@@ -462,7 +461,7 @@ pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entr
         let mut item = Entry::plain(entry(files, pick));
         let code = (pick.whole).then(|| docstring::shown(&files[pick.file], pick.at, asked, said));
         if let Some((span, code, note)) = code.flatten() {
-            let first = !shown_any || asked.lookup || !asked.reads_first;
+            let first = docstring::whole_here(asked, shown_any, &code);
             if first && code.len() <= room && !asked.earlier.contains(&span) {
                 said = said.and(&note);
                 room -= code.len();
