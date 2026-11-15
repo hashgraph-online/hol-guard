@@ -59,14 +59,18 @@ def test_package_hint_names_the_frozen_install_without_promising_it() -> None:
     # pnpmfile runs inside the pnpm process, so `--ignore-scripts` alone does not
     # make a pnpm install script-free and the runtime will not prove that form.
     assert "`pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile`" in text
-    assert "If this was already that form" in text
+    assert "if this was already that form" in text
     assert "Use `--ignore-scripts`" not in text
+    # The lockfile-only forms exist only for npm, pnpm and bun; a pip, uv or cargo install
+    # must not read as if one of them would pass.
+    assert "For npm, pnpm and bun, an install" in text
+    assert "Other package managers, such as pip, uv or cargo, have no form Guard passes" in text
 
 
 def test_package_hint_leaves_the_approval_step_to_the_queue_state() -> None:
     # Without an inbox row, the hint must not send the agent to ask for an approval that cannot be given.
     text = safe_alternative_reason("Blocked.", reason_code="native_package_review", approval_queued=False)
-    assert "If this was already that form" in text
+    assert "if this was already that form" in text
     assert "approve this install" not in text
     assert "No approval is waiting in HOL Guard" in text
 

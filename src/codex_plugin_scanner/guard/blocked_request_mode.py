@@ -109,12 +109,13 @@ _REASON_CODE_HINTS = {
         "or target one specific path."
     ),
     "native_package_review": (
-        "Package installs download code from a registry, so Guard reviews them. An install that "
-        "only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile "
-        "--ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile` "
-        "or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and "
-        "settings. If this "
-        "was already that form, reuse dependencies that are already installed where you can."
+        "Package installs download code from a registry, so Guard reviews them. For npm, pnpm and bun, "
+        "an install that only restores the committed lockfile and runs no scripts (`bun install "
+        "--frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts "
+        "--ignore-pnpmfile` or `npm ci --ignore-scripts`) can proceed once Guard has checked the "
+        "lockfile and settings; if this was already that form, reuse dependencies that are already "
+        "installed where you can. Other package managers, such as pip, uv or cargo, have no form "
+        "Guard passes without review."
     ),
     # Cloud gave no verdict, so the lockfile-only advice above would be paused the same way.
     "native_package_cloud_unavailable": (
