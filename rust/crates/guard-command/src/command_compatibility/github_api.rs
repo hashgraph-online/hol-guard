@@ -56,8 +56,13 @@ pub(super) fn jq_is_static(value: &str) -> bool {
 /// A `--jq` filter may render with a format string such as `@tsv`; in jq `@`
 /// only names a formatter, never a file the way a typed `-F` value does. A
 /// `$` may only name a variable the filter binds itself.
+///
+/// A filter may span lines, since jq reads a newline as a space. A `#` opens a
+/// comment that a newline closes, so a quote inside one would mislead the
+/// string-aware format check below; a multi-line filter must carry none.
 fn jq_filter_is_static(value: &str) -> bool {
-    !value.contains(['`', '\0', '\n', '\r'])
+    !value.contains(['`', '\0', '\r'])
+        && !(value.contains('\n') && value.contains('#'))
         && (!value.contains('$') || crate::pretool::safe_reads::jq_variables_bound(value))
         && jq_is_static(value)
         && jq_formats_are_bare(value)
