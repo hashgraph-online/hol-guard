@@ -119,6 +119,16 @@ def _transports(transports: object):
     return change
 
 
+def _transports_without_sign_in(pack: dict) -> None:
+    pack["auth"] = {"mode": "none", "scopes": []}
+    pack["transports"] = {"partner": [{"partner": "composio", "toolkit": "slack"}]}
+
+
+def _transports_with_broker_action(pack: dict) -> None:
+    _post(pack)["executor"] = {"kind": "broker"}
+    pack["transports"] = {"partner": [{"partner": "composio", "toolkit": "slack"}]}
+
+
 def _form_value(value: dict):
     def change(pack: dict) -> None:
         _post(pack)["executor"]["request"]["body"] = {"form": [{"name": "channel", "value": value}]}
@@ -148,6 +158,12 @@ def _form_value(value: dict):
         _transports({"partner": [{"partner": "composio", "toolkit": "Slack"}]}),
         _transports({"partner": [{"partner": "composio", "toolkit": "slack", "url": "https://x.test"}]}),
         _transports({"partner": []}),
+        _transports({"partner": [{"partner": "composio", "toolkit": "slack\n"}]}),
+        _transports(
+            {"partner": [{"partner": "composio", "toolkit": "slack"}, {"partner": "composio", "toolkit": "slackbot"}]}
+        ),
+        _transports_without_sign_in,
+        _transports_with_broker_action,
     ],
     ids=[
         "authorization-header",
@@ -169,6 +185,10 @@ def _form_value(value: dict):
         "uppercase-toolkit",
         "transport-url",
         "empty-transports",
+        "toolkit-trailing-newline",
+        "repeated-partner",
+        "transports-without-sign-in",
+        "transports-with-broker-action",
     ],
 )
 def test_the_schema_refuses_unsafe_packs(change) -> None:
