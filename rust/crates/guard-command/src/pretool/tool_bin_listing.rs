@@ -189,6 +189,9 @@ pub(super) fn tool_bin_listing_operand(value: &str, context: super::PathContext<
         || value.starts_with('-')
         || value.contains(['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '\\'])
         || value.contains(['*', '?', '[', ']', '{', '}'])
+        // A tilde operand is expanded by the shell, not by Guard. Never
+        // prove a different home tree than the one the shell will list.
+        || (value.starts_with("~/") && !context.shell_home_matches)
         || !super::safe_reads::verified_path_context(context.home_dir, context.cwd)
     {
         return false;
