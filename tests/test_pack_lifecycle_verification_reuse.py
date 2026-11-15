@@ -73,3 +73,24 @@ def test_missing_runtime_files_are_verified_every_time(package):
     run()
     run()
     assert len(verifications) == 2
+
+
+def test_source_compiler_calls_share_one_verification_while_the_package_is_unchanged(package, monkeypatch):
+    native, verifications = package
+    monkeypatch.delenv("HOL_GUARD_NATIVE_SOURCE_COMPILER", raising=False)
+    monkeypatch.delenv("HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER", raising=False)
+    spawned = []
+
+    def bounded(arguments, payload, *, timeout, limit=None):
+        spawned.append(arguments[0])
+        return 0, b'{"schema": "ok"}', b""
+
+    monkeypatch.setattr(transport, "_run_bounded", bounded)
+    assert transport.run_source_compiler("schema") == {"schema": "ok"}
+    assert transport.run_source_compiler("schema") == {"schema": "ok"}
+    assert len(verifications) == 1
+    assert spawned[0] == spawned[1]
+
+    (native / transport._MANIFEST_NAME).write_text('{"changed": true}')
+    transport.run_source_compiler("schema")
+    assert len(verifications) == 2
