@@ -112,6 +112,13 @@ def _both_links(pack: dict) -> None:
     _post(pack)["link"] = {"tool": "a", "permissionId": "b"}
 
 
+def _transports(transports: object):
+    def change(pack: dict) -> None:
+        pack["transports"] = transports
+
+    return change
+
+
 def _form_value(value: dict):
     def change(pack: dict) -> None:
         _post(pack)["executor"]["request"]["body"] = {"form": [{"name": "channel", "value": value}]}
@@ -137,6 +144,10 @@ def _form_value(value: dict):
         _form_value({"object": []}),
         _form_value({"const": {}}),
         _form_value({"const": 1.5}),
+        _transports({"partner": [{"partner": "nango", "toolkit": "slack"}]}),
+        _transports({"partner": [{"partner": "composio", "toolkit": "Slack"}]}),
+        _transports({"partner": [{"partner": "composio", "toolkit": "slack", "url": "https://x.test"}]}),
+        _transports({"partner": []}),
     ],
     ids=[
         "authorization-header",
@@ -154,9 +165,19 @@ def _form_value(value: dict):
         "nested-form-value",
         "object-form-constant",
         "fractional-form-constant",
+        "unknown-partner",
+        "uppercase-toolkit",
+        "transport-url",
+        "empty-transports",
     ],
 )
 def test_the_schema_refuses_unsafe_packs(change) -> None:
     pack = copy.deepcopy(_slack())
     change(pack)
     assert list(_validator().iter_errors(pack)) != []
+
+
+def test_the_schema_accepts_a_partner_transport() -> None:
+    pack = copy.deepcopy(_slack())
+    pack["transports"] = {"partner": [{"partner": "composio", "toolkit": "slack"}]}
+    assert list(_validator().iter_errors(pack)) == []

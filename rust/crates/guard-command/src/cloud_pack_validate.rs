@@ -87,6 +87,7 @@ fn validate_form(pack: &CloudActionPack, source: bool) -> Check {
     {
         return fail("cloud_pack_auth_invalid", "/auth");
     }
+    crate::cloud_pack_transport::validate_transports(pack)?;
     if pack.actions.is_empty() || pack.actions.len() > MAX_ACTIONS {
         return fail("cloud_pack_actions_invalid", "/actions");
     }

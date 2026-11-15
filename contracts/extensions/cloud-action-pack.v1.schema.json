@@ -85,6 +85,40 @@
         }
       }
     },
+    "transports": {
+      "description": "Sign-in brokers whose toolkits may carry this pack's requests. Grants nothing by itself; a pack whose auth mode is none may not declare one.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "partner"
+      ],
+      "properties": {
+        "partner": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "partner",
+              "toolkit"
+            ],
+            "properties": {
+              "partner": {
+                "enum": [
+                  "composio"
+                ]
+              },
+              "toolkit": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{1,63}$"
+              }
+            }
+          }
+        }
+      }
+    },
     "actions": {
       "type": "array",
       "minItems": 1,
