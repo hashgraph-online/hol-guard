@@ -184,11 +184,16 @@ const HARNESS_CONTRACTS: &str = include_str!(
 );
 
 /// Whether a reply carries the denial field this harness itself reads for
-/// this event family. `policy_action` is Guard's own field and no host acts
-/// on it, so it never counts, and another harness's shape never counts.
+/// this event family; another harness's shape never counts. `policy_action`
+/// counts only for Cursor, whose bridge renders Cursor's `permission` key
+/// from it (`cursor_hook_bridge_response::rendered`).
 fn natively_refuses(harness: &str, family: &str, body: &Value) -> bool {
     let output = &body["hookSpecificOutput"];
     match (family, harness) {
+        (_, "cursor") => matches!(
+            body["policy_action"].as_str(),
+            Some("block" | "sandbox-required")
+        ),
         ("pre_tool" | "permission", "grok" | "omp" | "pi" | "openclaw") => {
             body["decision"] == "deny"
         }
