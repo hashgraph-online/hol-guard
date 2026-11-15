@@ -248,8 +248,9 @@ class TransitionFile:
         identity: Mapping[str, object],
         *,
         invocation: Mapping[str, object] | None = None,
+        compared: bool = True,
     ) -> TransitionFile:
-        """Pin the exact authenticated artifact without journaling its bytes."""
+        """Pin the exact artifact without journaling its bytes; batch callers compare later."""
         path, mode, digest = identity.get("path"), identity.get("mode"), identity.get("sha256")
         if (
             not isinstance(path, str)
@@ -283,7 +284,8 @@ class TransitionFile:
             },
             invocation_identity=invocation_identity,
         )
-        RuntimeTransition._compare({"files": [change.payload()]}, "before")
+        if compared:
+            RuntimeTransition._compare({"files": [change.payload()]}, "before")
         return change
 
     def _raw(self) -> dict[str, object]:

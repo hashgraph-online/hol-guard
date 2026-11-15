@@ -113,21 +113,32 @@ pub(super) fn build(call: &mut Call<'_>) -> Step<Value> {
         decode(call.args.get("config_bytes"))?.ok_or(Fault::Transition("files_invalid"))?;
     let manifest_bytes =
         decode(call.args.get("manifest_bytes"))?.ok_or(Fault::Transition("files_invalid"))?;
+    seal(call, &home, &config, &config_bytes, &manifest_bytes)
+}
+
+/// The receipt text for `config` at `config_bytes`, retaining `manifest_bytes`.
+pub(super) fn seal(
+    call: &Call<'_>,
+    home: &std::path::Path,
+    config: &std::path::Path,
+    config_bytes: &[u8],
+    manifest_bytes: &[u8],
+) -> Step<Value> {
     let mut payload = Map::new();
     payload.insert("schema".to_owned(), json!(RECEIPT_SCHEMA));
-    payload.insert("guard_home".to_owned(), json!(call.canonical(&home)?));
-    payload.insert("config_path".to_owned(), json!(call.canonical(&config)?));
+    payload.insert("guard_home".to_owned(), json!(call.canonical(home)?));
+    payload.insert("config_path".to_owned(), json!(call.canonical(config)?));
     payload.insert(
         "installation_id".to_owned(),
-        json!(Call::installation_id(&home)?),
+        json!(Call::installation_id(home)?),
     );
-    payload.insert("config_sha256".to_owned(), json!(sha256_hex(&config_bytes)));
-    payload.insert("manifest".to_owned(), encode(Some(&manifest_bytes))?);
+    payload.insert("config_sha256".to_owned(), json!(sha256_hex(config_bytes)));
+    payload.insert("manifest".to_owned(), encode(Some(manifest_bytes))?);
     let mut sealed = Map::new();
     sealed.insert("op".to_owned(), json!("seal"));
     sealed.insert("kind".to_owned(), json!("receipt"));
     sealed.insert("payload".to_owned(), Value::Object(payload));
-    let answer = Call::authority(&home, sealed)?;
+    let answer = Call::authority(home, sealed)?;
     answer
         .get("text")
         .filter(|text| text.is_string())

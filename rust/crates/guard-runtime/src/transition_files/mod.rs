@@ -25,6 +25,7 @@ mod publication;
 mod publication_baseline;
 mod publication_commit;
 mod publication_files;
+mod publication_generation;
 mod publication_io;
 mod publication_receipt;
 #[cfg(test)]
@@ -82,6 +83,7 @@ impl Fault {
 pub(crate) type Step<T> = Result<T, Fault>;
 
 /// The deadlines the caller's context carried, as remaining milliseconds.
+#[derive(Clone, Copy)]
 pub(crate) struct Budget {
     inverse: Option<Instant>,
     forward: Option<Instant>,

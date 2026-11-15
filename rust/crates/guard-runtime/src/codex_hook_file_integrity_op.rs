@@ -133,7 +133,7 @@ pub(crate) fn admit(
 }
 
 /// The status wording `codex_hook_file_integrity` gives each refusal.
-fn message(reason: &str) -> String {
+pub(crate) fn message(reason: &str) -> String {
     if reason == "codex_hook_file_identity_invalid" {
         return format!("The Codex hook manifest has an invalid packaged-file identity; {REPAIR}");
     }

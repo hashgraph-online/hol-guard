@@ -759,7 +759,6 @@
           "src/codex_plugin_scanner/guard/codex_hook_file_integrity.py",
           "src/codex_plugin_scanner/guard/codex_hook_integrity.py",
           "src/codex_plugin_scanner/guard/codex_hook_manifest.py",
-          "src/codex_plugin_scanner/guard/codex_hook_package_identity.py",
           "src/codex_plugin_scanner/guard/codex_install_transaction.py",
           "src/codex_plugin_scanner/guard/local_authority_integrity.py"
         ],

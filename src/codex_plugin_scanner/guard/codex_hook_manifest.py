@@ -9,18 +9,16 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from . import codex_hook_file_integrity as file_integrity
 from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_file_integrity import (
     CodexHookIntegrityError,
     canonical_path,
     check_hook_validation_deadline,
-    validate_regular_file,
 )
 from .codex_hook_integrity import (
     _MANIFEST_MESSAGES,
@@ -30,11 +28,6 @@ from .codex_hook_integrity import (
     hook_manifest_path,
     hook_secret_path,
     load_authenticated_hook_manifest,
-    load_hook_secret,
-    load_or_create_hook_secret,
-)
-from .codex_hook_package_identity import (
-    assert_package_reauthentication_is_safe as assert_package_reauthentication_is_safe,
 )
 from .native_codex_hook_manifest_verify import native_codex_hook_manifest_verify
 
@@ -69,36 +62,6 @@ class CodexHookManifestSpec:
     daemon_start_argv: tuple[str, ...]
     event_bindings: tuple[Mapping[str, object], ...]
     workspace_rebinding_allowed: bool = False
-
-
-def build_authenticated_hook_manifest(
-    spec: CodexHookManifestSpec,
-    *,
-    previous_manifest: Mapping[str, object] | None = None,
-    create_key: bool = True,
-) -> dict[str, object]:
-    """The runtime describes every file of `spec` and signs the manifest."""
-    from .codex_hook_authority_record import AuthorityRecordRefusedError, build_hook_manifest
-
-    secret = load_or_create_hook_secret(spec.guard_home) if create_key else load_hook_secret(spec.guard_home)
-    check_hook_validation_deadline()
-    try:
-        return build_hook_manifest(
-            _spec_payload(spec),
-            secret,
-            previous_manifest=previous_manifest,
-            package_roots=[str(root) for root in file_integrity._python_package_roots()],
-        )
-    except AuthorityRecordRefusedError as exc:
-        if exc.reason in {"runtime_unavailable", "invalid"}:
-            raise CodexHookIntegrityError(
-                "codex_hook_manifest_verification_unavailable",
-                "Guard's native runtime did not build the Codex hook manifest; run `hol-guard repair`.",
-            ) from exc
-        raise CodexHookIntegrityError(
-            exc.reason,
-            "Guard cannot authenticate the Codex hook installation; repair the installation.",
-        ) from exc
 
 
 def _spec_payload(spec: CodexHookManifestSpec) -> dict[str, object]:
@@ -142,76 +105,80 @@ def prepare_authenticated_hook_publication(
     rendered_config: str,
     previous_manifest: Mapping[str, object] | None = None,
     create_key: bool = False,
-    _manifest_builder: Callable[..., dict[str, object]] | None = None,
 ) -> PreparedCodexHookPublication:
-    """Capture a signed config/manifest generation without enrolling by default."""
-    from .codex_hook_recovery import _snapshot, build_hook_authority_receipt
+    """Capture a signed config/manifest generation without enrolling by default.
+
+    The native runtime authenticates the baseline, signs the manifest and
+    captures every file; see
+    ``rust/crates/guard-runtime/src/transition_files/publication_generation.rs``.
+    Enrollment runs under the install owner, which also guards the key."""
+    import base64
+    import json
+    import os
+
+    from .codex_hook_integrity import _ordinary_hook_writer
+    from .native_transition_files import publication
     from .runtime_transition import RuntimeTransition, TransitionError, TransitionFile
 
-    # Enrollment runs under the normal install owner's previously validated
-    # baseline. A read-only runtime plan must authenticate that baseline itself.
-    baseline = previous_manifest if create_key else load_hook_manifest_baseline(spec)
-    if baseline != previous_manifest:
-        raise TransitionError("adapter_preparation_generation_conflict")
-    config_path = spec.config_path.parent.resolve(strict=False) / spec.config_path.name
-    manifest_path = hook_manifest_path(spec.guard_home, spec.config_path)
-    before_config = _snapshot(config_path)
-    before_manifest = _snapshot(manifest_path)
-    receipt_path = hook_authority_receipt_path(spec.guard_home, spec.config_path)
-    before_receipt = _snapshot(receipt_path)
-    if before_config is not None:
-        validate_regular_file(config_path, role="config_target", executable_required=False)
-        before_config.decode("utf-8")
-    config_mode = config_path.stat().st_mode & 0o777 if before_config is not None else 0o600
-    manifest_mode = manifest_path.stat().st_mode & 0o777 if before_manifest is not None else 0o600
-    receipt_mode = receipt_path.stat().st_mode & 0o777 if before_receipt is not None else 0o600
-    secret_path = hook_secret_path(spec.guard_home)
-    authority_before = (
-        TransitionFile.identity_dependency(secret_path) if secret_path.exists() or secret_path.is_symlink() else None
+    def spelled(path: Path) -> str:
+        return os.path.abspath(path.expanduser())
+
+    request: dict[str, object] = {
+        "config": spelled(spec.config_path),
+        "guard_home": spelled(spec.guard_home),
+        "home_dir": spelled(spec.home_dir),
+        "runtime_guard_home": spelled(spec.runtime_guard_home),
+        "workspace_dir": spelled(spec.workspace_dir) if spec.workspace_dir is not None else None,
+        "workspace_rebinding_allowed": spec.workspace_rebinding_allowed,
+        "spec": _spec_payload(spec),
+        "rendered_config": rendered_config,
+        "previous_manifest": None if previous_manifest is None else dict(previous_manifest),
+        "create_key": create_key,
+    }
+    check_hook_validation_deadline()
+    if create_key:
+        with _ordinary_hook_writer(spec.guard_home, hook_secret_path(spec.guard_home), actor="codex.authority-key"):
+            answer = publication("generation", spec.guard_home, **request)
+    else:
+        answer = publication("generation", spec.guard_home, **request)
+    changes = answer.get("files") if isinstance(answer, dict) else None
+    if not isinstance(changes, list) or len(changes) != 4:
+        raise TransitionError("native_transition_invalid")
+    # The prior bytes come in a second answer, which keeps each under the
+    # resident's response cap; the runtime refuses any that changed since.
+    named = [change for change in changes if "before_sha256" in change]
+    prior = publication(
+        "generation_before",
+        spec.guard_home,
+        files=[{"path": change["path"], "sha256": change["before_sha256"]} for change in named],
     )
-    manifest = (_manifest_builder or build_authenticated_hook_manifest)(
-        spec, previous_manifest=baseline, create_key=create_key
+    befores = prior.get("before") if isinstance(prior, dict) else None
+    if not isinstance(befores, list) or len(befores) != len(named):
+        raise TransitionError("native_transition_invalid")
+    for change, before in zip(named, befores, strict=True):
+        change["before"] = before
+    check_hook_validation_deadline()
+
+    def decoded(value: object) -> bytes | None:
+        return None if value is None else base64.b64decode(str(value))
+
+    config_change, manifest_change, authority, receipt_change = (
+        TransitionFile(
+            Path(change["path"]),
+            decoded(change["before"]),
+            decoded(change["after"]),
+            before_mode=change["before_mode"],
+            after_mode=change["after_mode"],
+            no_follow=True,
+            expected_digest=change.get("expected_digest"),
+        )
+        for change in changes
     )
-    assert_package_reauthentication_is_safe(baseline, manifest)
-    authority_dependency = (
-        authority_before if authority_before is not None else TransitionFile.identity_dependency(secret_path)
-    )
-    # Recheck the captured key before signing another object with it. A
-    # replacement during manifest construction remains a generation conflict.
-    RuntimeTransition._compare({"files": [authority_dependency.payload()]}, "before")
+    manifest = json.loads(manifest_change.after or b"null")
+    if not isinstance(manifest, dict):
+        raise TransitionError("native_transition_invalid")
     prepared = PreparedCodexHookPublication(
-        manifest,
-        rendered_config,
-        TransitionFile(
-            config_path,
-            before_config,
-            rendered_config.encode("utf-8"),
-            before_mode=config_mode,
-            after_mode=0o600,
-            no_follow=True,
-        ),
-        TransitionFile(
-            manifest_path,
-            before_manifest,
-            canonical_manifest_bytes(manifest) + b"\n",
-            before_mode=manifest_mode,
-            after_mode=0o600,
-            no_follow=True,
-        ),
-        authority_dependency,
-        TransitionFile(
-            receipt_path,
-            before_receipt,
-            build_hook_authority_receipt(
-                spec.guard_home,
-                config_path,
-                config_bytes=rendered_config.encode("utf-8"),
-                manifest_bytes=canonical_manifest_bytes(manifest) + b"\n",
-            ),
-            before_mode=receipt_mode,
-            after_mode=0o600,
-            no_follow=True,
-        ),
+        manifest, rendered_config, config_change, manifest_change, authority, receipt_change
     )
     RuntimeTransition._compare({"files": [change.payload() for change in prepared.files]}, "before")
     return prepared
@@ -494,8 +461,6 @@ __all__ = [
     "MANAGED_CODEX_HOOK_EVENTS",
     "CodexHookManifestSpec",
     "PreparedCodexHookPublication",
-    "assert_package_reauthentication_is_safe",
-    "build_authenticated_hook_manifest",
     "load_hook_manifest_baseline",
     "manifest_bindings",
     "prepare_authenticated_hook_publication",

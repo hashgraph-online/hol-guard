@@ -246,7 +246,7 @@ if actor == "A":
                 raise TimeoutError("fixture synchronization expired")
             time.sleep(0.01)
         raise OSError("injected publication failure")
-    codex.build_authenticated_hook_manifest = fail_publish
+    codex.prepare_authenticated_hook_publication = fail_publish
 try:
     codex.CodexHarnessAdapter().install(context)
 except RuntimeError as error:

@@ -39,7 +39,6 @@ from ..codex_hook_integrity import (
 )
 from ..codex_hook_manifest import (
     CodexHookManifestSpec,
-    build_authenticated_hook_manifest,
     load_hook_manifest_baseline,
     prepare_authenticated_hook_publication,
     verify_live_hook_manifest,
@@ -103,7 +102,7 @@ if TYPE_CHECKING:
     from ..codex_hook_manifest import PreparedCodexHookPublication
     from ..runtime_transition import TransitionFile
 
-__all__ = ("_command_available", "atomic_write_text", "build_authenticated_hook_manifest", "sys")
+__all__ = ("_command_available", "atomic_write_text", "sys")
 
 _read_toml = read_toml_payload
 
@@ -853,7 +852,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             rendered_config=dump_toml(payload, original=contents[spec.config_path]),
             previous_manifest=previous_manifest,
             create_key=enroll,
-            _manifest_builder=build_authenticated_hook_manifest if enroll else None,
         )
         if publication.config_change.before != contents[spec.config_path]:
             raise TransitionError("adapter_preparation_generation_conflict")
@@ -874,15 +872,17 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         interpreter = publication.manifest.get("interpreter")
         if not isinstance(identities, list) or not isinstance(interpreter, dict):
             raise TransitionError("adapter_preparation_generation_conflict")
+        dependencies = []
         for identity in identities:
             if not isinstance(identity, dict) or not isinstance(identity.get("path"), str):
                 raise TransitionError("adapter_preparation_generation_conflict")
-            dependency = TransitionFile.artifact_dependency(identity)
-            files.append(dependency)
+            dependencies.append(TransitionFile.artifact_dependency(identity, compared=False))
         target_identity = interpreter.get("target")
         if not isinstance(target_identity, dict):
             raise TransitionError("adapter_preparation_generation_conflict")
-        files.append(TransitionFile.artifact_dependency(target_identity, invocation=interpreter))
+        dependencies.append(TransitionFile.artifact_dependency(target_identity, invocation=interpreter, compared=False))
+        RuntimeTransition._compare({"files": [dependency.payload() for dependency in dependencies]}, "before")
+        files.extend(dependencies)
         unique_files = {}
         for change in files:
             previous = unique_files.get(change.path)
@@ -1214,7 +1214,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                         rendered_config=dump_toml(payload, original=original_config),
                         previous_manifest=previous_manifest,
                         create_key=True,
-                        _manifest_builder=build_authenticated_hook_manifest,
                     ),
                     (),
                 )
