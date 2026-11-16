@@ -435,6 +435,14 @@ daemon records its port in Guard's runtime state, which is where Guard takes the
 from. The fixture's daemon listens on a free port, so the runner records that port before the
 agent starts; otherwise the link would name Guard's default port, where nothing of the run answers.
 
+`relayed-desktop-approval-link-held-command` runs the same hold on a machine where HOL Guard
+Desktop handles request links. The runner writes the `desktop-deep-link.json` marker Desktop
+leaves in the Guard home it manages, naming an app bundle that exists, before the daemon starts.
+The prompt is the same as the browser case's and says nothing about Desktop, so only Guard's own
+hold can offer the link. The judge then also requires a `hol-guard-desktop://requests/<id>` link
+for a request the run queued, which opens the review in Desktop's own signed-in window; any
+browser link beside it is judged as above.
+
 `connector-setup` shares the suite but not that question. Its eleven cases carry
 `connector-setup`, `connector-tool`, `blocked-read`, `blocked-command` and `commands` oracles,
 no approver is built for them, and nothing in the lane approves and retries. It proves what an
