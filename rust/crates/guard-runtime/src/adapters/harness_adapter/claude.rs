@@ -146,7 +146,7 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
             Some(Ok(object)) => object,
         },
     };
-    let facts = argv::facts(fields)?;
+    let facts = argv::facts(ctx, fields)?;
     let mut hooks = hooks_of(&payload).unwrap_or_default();
     synced(ctx, &facts, &contract, &mut hooks)?;
     payload.set("hooks", hooks.value());
@@ -209,7 +209,7 @@ fn refresh(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let Some(mut hooks) = hooks_of(&payload) else {
         return Ok(json!({ "path": path_text(&path), "text": null }));
     };
-    let facts = argv::facts(fields)?;
+    let facts = argv::facts(ctx, fields)?;
     synced(ctx, &facts, &contract, &mut hooks)?;
     payload.set("hooks", hooks.value());
     Ok(json!({ "path": path_text(&path), "text": payload.render()? }))
@@ -222,7 +222,7 @@ fn hook_argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         .and_then(Value::as_str)
         .ok_or(Failure::Invalid)?;
     let contract = hook_contract()?;
-    let facts = argv::facts(fields)?;
+    let facts = argv::facts(ctx, fields)?;
     let argv = match which {
         "hook" => argv::hook_argv(ctx, &facts)?,
         "daemon" => argv::daemon_argv(ctx, &facts, &contract)?,

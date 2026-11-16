@@ -10,18 +10,13 @@ use super::{after, dispatch, shim, Home};
 #[path = "tests_claude_round_trip.rs"]
 mod round_trip;
 
-fn facts(bridge: Option<&str>, frozen: bool) -> String {
+fn facts(bridge: Option<&str>) -> String {
     json!({
         "bridge": bridge,
         "session_runtime": bridge,
         "runtime_build": "1.2.3+abc123",
-        "frozen": frozen,
-        "launcher": frozen.then_some("/g/bin/hol-guard"),
-        "python": "/usr/bin/python3",
-        "package_root": "/src",
         "daemon_url": "http://127.0.0.1:4781",
         "query_extras": [["harness", "claude-code"]],
-        "recovery_launcher": frozen.then_some("/g/bin/hol-guard-core"),
     })
     .to_string()
 }
@@ -35,8 +30,8 @@ fn install_without_a_native_runtime_asks_for_repair() {
         let answer = run(
             &home,
             "prepare_install",
-            json!({"shim": shim()}),
-            &facts(None, frozen),
+            json!({"shim": shim(), "caller": super::caller(frozen)}),
+            &facts(None),
         );
         assert_eq!(
             answer["runtime_error"],
@@ -50,7 +45,12 @@ fn ask(home: &Home, op: &str, fields: &Map<String, Value>) -> Value {
     let mut request =
         json!({"harness": "claude-code", "op": op, "context": home.context(json!({"PATH": ""}))});
     for (key, value) in fields {
-        request[key] = value.clone();
+        // The calling process is stamped into the context, not the request.
+        if key == "caller" {
+            request["context"]["caller"] = value.clone();
+        } else {
+            request[key] = value.clone();
+        }
     }
     dispatch(&request).unwrap()
 }
@@ -81,8 +81,8 @@ fn installed_as(home: &Home, bridge: Option<&str>, frozen: bool) -> Value {
     let answer = run(
         home,
         "prepare_install",
-        json!({"shim": shim()}),
-        &facts(bridge, frozen),
+        json!({"shim": shim(), "caller": super::caller(frozen)}),
+        &facts(bridge),
     );
     serde_json::from_str(&after(&answer["files"][0])).unwrap()
 }
@@ -141,7 +141,7 @@ fn install_writes_session_start_and_every_runtime_group() {
     .unwrap();
     assert_eq!(config["fallback_daemon_url"], "http://127.0.0.1:4781");
     let recovery = config["recovery_command"].as_array().unwrap();
-    assert_eq!(recovery[..3], ["/usr/bin/python3", "-I", "-c"]);
+    assert_eq!(recovery[..3], ["/py", "-I", "-c"]);
     assert!(recovery[3]
         .as_str()
         .unwrap()
@@ -193,8 +193,11 @@ fn install_refuses_settings_that_are_not_an_object() {
 #[test]
 fn frozen_builds_launch_the_stable_cli() {
     let home = Home::new();
-    let frozen = facts(None, true);
-    let argv = |which: &str| run(&home, "argv", json!({"which": which}), &frozen)["argv"].clone();
+    let facts = facts(None);
+    let argv = |which: &str| {
+        let fields = json!({"which": which, "caller": super::caller(true)});
+        run(&home, "argv", fields, &facts)["argv"].clone()
+    };
     assert_eq!(argv("hook")[0], "/g/bin/hol-guard");
     assert_eq!(argv("hook")[1], "hook");
     let session = argv("session_start");
@@ -206,13 +209,13 @@ fn frozen_builds_launch_the_stable_cli() {
 #[test]
 fn source_checkout_argv_imports_from_the_package_root() {
     let home = Home::new();
-    let source = facts(None, false);
+    let source = facts(None);
     let hook = run(&home, "argv", json!({"which": "hook"}), &source)["argv"].clone();
-    assert_eq!(hook[0], "/usr/bin/python3");
+    assert_eq!(hook[0], "/py");
     assert!(hook[2]
         .as_str()
         .unwrap()
-        .contains("sys.path.insert(0, '/src')"));
+        .contains("sys.path.insert(0, '/opt/guard/site')"));
     let session = run(
         &home,
         "argv",
@@ -478,7 +481,7 @@ fn install_notes_name_the_settings_file_and_the_rollback() {
         &home,
         "prepare_install",
         json!({"shim": shim()}),
-        &facts(Some(RUNTIME), false),
+        &facts(Some(RUNTIME)),
     );
     let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
     // Compare decoded strings: JSON text would escape Windows backslashes.

@@ -40,7 +40,7 @@ fn install_then_uninstall_returns_every_unrelated_user_setting() {
         &home,
         "prepare_install",
         json!({"shim": shim()}),
-        &facts(Some(RUNTIME), false),
+        &facts(Some(RUNTIME)),
     );
     let with_guard = after(&answer["files"][0]);
     let installed: Value = serde_json::from_str(&with_guard).unwrap();
@@ -78,7 +78,7 @@ fn install_then_uninstall_for_a_workspace_leaves_its_claude_files_untouched() {
         if answer.get("reply").is_none() {
             return answer;
         }
-        fields.insert("facts".into(), json!(facts(Some(RUNTIME), false)));
+        fields.insert("facts".into(), json!(facts(Some(RUNTIME))));
         dispatch(&Value::Object(fields)).unwrap()
     };
     let mut fields = Map::new();

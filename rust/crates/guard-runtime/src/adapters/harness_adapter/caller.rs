@@ -42,6 +42,18 @@ pub(super) fn executable(ctx: &Ctx) -> Step<&str> {
     text(ctx, "executable")
 }
 
+/// `guard_cli_launcher()`: the argv0 Guard writes into harness hooks, MCP
+/// proxies and launchers, the caller's interpreter unless it is frozen.
+pub(super) fn launcher(ctx: &Ctx) -> Step<&str> {
+    text(ctx, "launcher")
+}
+
+/// `resolve_frozen_guard_cli()` of a frozen caller: the prune-safe launcher a
+/// daemon recovery runs through.
+pub(super) fn frozen_launcher(ctx: &Ctx) -> Step<&str> {
+    text(ctx, "frozen_launcher")
+}
+
 /// The interpreter a Codex hook relaunches: a frozen binary by its resolved
 /// bytes, since the hook manifest authenticates exactly those, else the
 /// caller's interpreter.

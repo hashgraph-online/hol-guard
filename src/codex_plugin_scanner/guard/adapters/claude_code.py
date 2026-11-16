@@ -56,7 +56,6 @@ def _native_bridge_executable(guard_home: Path) -> Path | None:
 def _facts(context: HarnessContext) -> str:
     """What this process knows about the runtimes and CLI the hooks launch."""
     from ..runtime.harness_attribution import cursor_hook_query_extras
-    from ..stable_guard_cli import guard_cli_launcher, resolve_frozen_guard_cli
 
     bridge = _native_bridge_executable(context.guard_home)
     session = native_hook_bridge_executable(NATIVE_CLAUDE_SESSION_START_FEATURE, guard_home=context.guard_home)
@@ -67,20 +66,14 @@ def _facts(context: HarnessContext) -> str:
         capabilities = native_runtime_status().capabilities
         if capabilities is not None:
             runtime_build = f"{capabilities.runtime_version}+{capabilities.build_sha}"
-    frozen = bool(getattr(sys, "frozen", False))
     guard_home = context.guard_home
     return json.dumps(
         {
             "bridge": None if bridge is None else str(bridge),
             "session_runtime": None if session is None else str(session),
             "runtime_build": runtime_build,
-            "frozen": frozen,
-            "launcher": guard_cli_launcher() if frozen else None,
-            "python": sys.executable,
-            "package_root": str(Path(__file__).resolve().parents[3]),
             "daemon_url": load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home),
             "query_extras": [[str(key), str(value)] for key, value in cursor_hook_query_extras().items()],
-            "recovery_launcher": resolve_frozen_guard_cli() if frozen else None,
         }
     )
 

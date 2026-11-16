@@ -3,10 +3,10 @@
 //! frozen or source-checkout form.
 //!
 //! Python answers a `{"reply": {"facts": null}}` with what only the Guard
-//! process knows: the native runtimes that carry each hook feature, whether it
-//! is a frozen build and its stable launcher, its interpreter and package
-//! root, the daemon URL, the query extras the attributed harness adds, and the
-//! launcher a frozen build recovers its daemon through.
+//! process knows: the native runtimes that carry each hook feature, the daemon
+//! URL and the query extras the attributed harness adds. The caller's frozen
+//! state, launchers, interpreter and package root come from the request's
+//! `caller` stamp.
 
 use std::path::Path;
 
@@ -71,7 +71,7 @@ fn strings(value: &PyVal) -> Step<Vec<String>> {
 }
 
 /// The facts merged into this request, or the reply that asks for them.
-pub(super) fn facts(fields: &Map<String, Value>) -> Step<Facts> {
+pub(super) fn facts(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Facts> {
     let Some(raw) = fields.get("facts") else {
         return Err(Failure::Reply(json!({ "facts": null })));
     };
@@ -79,6 +79,7 @@ pub(super) fn facts(fields: &Map<String, Value>) -> Step<Facts> {
     let Ok(PyVal::Dict(facts)) = pyjson::parse(raw) else {
         return Err(Failure::Invalid);
     };
+    let frozen = super::caller::frozen(ctx)?;
     let query_extras = get(&facts, "query_extras")
         .and_then(PyVal::as_list)
         .ok_or(Failure::Invalid)?
@@ -92,13 +93,21 @@ pub(super) fn facts(fields: &Map<String, Value>) -> Step<Facts> {
         bridge: optional_text(get(&facts, "bridge"))?,
         session_runtime: optional_text(get(&facts, "session_runtime"))?,
         runtime_build: optional_text(get(&facts, "runtime_build"))?,
-        frozen: matches!(get(&facts, "frozen"), Some(PyVal::Bool(true))),
-        launcher: optional_text(get(&facts, "launcher"))?,
-        python: required_text(get(&facts, "python"))?,
-        package_root: required_text(get(&facts, "package_root"))?,
+        frozen,
+        launcher: if frozen {
+            Some(super::caller::launcher(ctx)?.to_owned())
+        } else {
+            None
+        },
+        python: super::caller::executable(ctx)?.to_owned(),
+        package_root: super::caller::package_root(ctx)?.to_owned(),
         daemon_url: required_text(get(&facts, "daemon_url"))?,
         query_extras,
-        recovery_launcher: optional_text(get(&facts, "recovery_launcher"))?,
+        recovery_launcher: if frozen {
+            Some(super::caller::frozen_launcher(ctx)?.to_owned())
+        } else {
+            None
+        },
     })
 }
 
