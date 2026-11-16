@@ -105,7 +105,7 @@ def _add_receipts(store: GuardStore, count: int) -> None:
 
 @pytest.fixture
 def store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GuardStore:
-    from codex_plugin_scanner.guard import adapters
+    from codex_plugin_scanner.guard.harness import registry as adapters
 
     guard_store = GuardStore(tmp_path / "guard-home")
     _seed_cloud(guard_store)

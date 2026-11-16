@@ -7,25 +7,26 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import adapters
+from codex_plugin_scanner.guard import harness as harness_package
+from codex_plugin_scanner.guard.harness import registry
 from codex_plugin_scanner.guard.harness.contracts import HARNESS_CONTRACTS
 from scripts.ci.hook_data_plane_ownership_contract import load_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = Path(adapters.__file__).parent
+PACKAGE = Path(harness_package.__file__).parent
 
 
-def test_adapter_search_path_contains_only_the_public_package() -> None:
-    assert [Path(path).resolve() for path in adapters.__path__] == [PACKAGE.resolve()]
+def test_harness_search_path_contains_only_the_public_package() -> None:
+    assert [Path(path).resolve() for path in harness_package.__path__] == [PACKAGE.resolve()]
 
 
 def test_public_adapter_registry_and_aliases_remain_unchanged() -> None:
-    registered = adapters.list_adapters()
+    registered = registry.list_adapters()
     assert {adapter.harness for adapter in registered} == {contract.harness for contract in HARNESS_CONTRACTS}
     for adapter in registered:
-        assert adapters.get_adapter(adapter.harness) is adapter
+        assert registry.get_adapter(adapter.harness) is adapter
         for alias in adapter.aliases:
-            assert adapters.get_adapter(alias) is adapter
+            assert registry.get_adapter(alias) is adapter
 
 
 def test_adapter_sources_remain_in_native_ownership_contract(monkeypatch: pytest.MonkeyPatch) -> None:
