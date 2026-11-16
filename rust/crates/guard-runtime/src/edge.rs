@@ -314,6 +314,7 @@ fn evaluate_validated_envelope<Lease>(
                 // in hand sets, so they all stay at their default false.
                 guard_command::pretool::PathContext {
                     home_dir: Some(envelope.source.home_dir.as_str()),
+                    guard_home: Some(envelope.source.guard_home.as_str()),
                     cwd: envelope.source.cwd.as_deref(),
                     ..Default::default()
                 },

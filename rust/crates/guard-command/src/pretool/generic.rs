@@ -262,6 +262,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
         deadline,
         crate::pretool::PathContext {
             literal_words: &[],
+            guard_home: None,
             home_dir,
             cwd,
             cdpath_unset: false,

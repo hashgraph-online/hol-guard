@@ -51,6 +51,7 @@ pub(crate) fn evidence_response(
         None,
         PathContext {
             literal_words: &[],
+            guard_home: None,
             home_dir: request.home_dir.as_deref(),
             cwd: request.cwd.as_deref(),
             cdpath_unset: false,

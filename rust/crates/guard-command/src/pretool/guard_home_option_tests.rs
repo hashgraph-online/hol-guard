@@ -1,4 +1,4 @@
-use super::{normal_home, without_home_option, without_own_home};
+use super::{normal_home, without_active_home, without_home_option, without_own_home};
 
 fn words(text: &str) -> Vec<String> {
     text.split_whitespace().map(str::to_owned).collect()
@@ -112,4 +112,39 @@ fn windows_drive_homes_compare_as_windows_paths() {
     assert_eq!(normal_home("C:"), None);
     assert_eq!(normal_home("C:\\"), None);
     assert_eq!(normal_home("relative/home"), None);
+}
+
+/// The Guard home the hook reports is set aside only while it exists, and
+/// only when the option names exactly that directory.
+#[test]
+fn only_the_reported_guard_home_is_set_aside() {
+    let account = account("reported");
+    let store = account.join("lane-guard-home");
+    let store_text = store.to_str().unwrap().to_owned();
+    let wait = |reported: Option<&str>, value: &str| {
+        without_active_home(
+            &words(&format!("approvals wait abc --home {value}")),
+            reported,
+        )
+    };
+    assert_eq!(wait(Some(&store_text), &store_text), None, "missing store");
+    std::fs::create_dir_all(&store).unwrap();
+    assert_eq!(
+        wait(Some(&store_text), &store_text),
+        Some(words("approvals wait abc"))
+    );
+    assert_eq!(
+        wait(Some(&format!("{store_text}/")), &store_text),
+        Some(words("approvals wait abc"))
+    );
+    assert_eq!(wait(None, &store_text), None);
+    assert_eq!(wait(Some("relative/home"), "relative/home"), None);
+    assert_eq!(
+        wait(
+            Some(&store_text),
+            &format!("{store_text}/../lane-guard-home")
+        ),
+        None
+    );
+    let _ = std::fs::remove_dir_all(&account);
 }

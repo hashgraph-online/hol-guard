@@ -92,6 +92,7 @@ fn segment_proofs(
     }
     let proof_context = crate::pretool::PathContext {
         literal_words: &[],
+        guard_home: context.guard_home,
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,

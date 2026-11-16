@@ -7,6 +7,11 @@ use std::path::Path;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PathContext<'a> {
     pub home_dir: Option<&'a str>,
+    /// The Guard home the hook reported: the store this decision is made
+    /// against. Guard's own read-only commands may name it with `--home`,
+    /// because that reads the store the hook already uses. Literal contexts
+    /// leave this unset.
+    pub guard_home: Option<&'a str>,
     pub cwd: Option<&'a str>,
     pub cdpath_unset: bool,
     /// No inherited `RUSTUP_TOOLCHAIN` or `RUSTUP_HOME` can change which
