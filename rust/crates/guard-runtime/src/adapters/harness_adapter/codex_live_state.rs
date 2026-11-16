@@ -8,7 +8,6 @@
 //! name a handler command carries.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use guard_contracts::{
@@ -20,10 +19,10 @@ use sha2::{Digest, Sha256};
 
 use super::codex::{config_path, hooks_path, EVENTS};
 use super::codex_hook_state::{decide, with_syntax};
+use super::codex_live_read::{live_hooks, LiveHooks};
 use super::{path_text, Ctx, Failure, Step};
 use crate::codex_hook_manifest_auth as manifest_auth;
 use crate::codex_hook_manifest_verify_op::evaluate_request;
-use crate::codex_toml_read::{self, TomlVal};
 use crate::pyjson::{self, PyVal};
 
 type Entries = Vec<(String, PyVal)>;
@@ -51,22 +50,13 @@ pub(super) fn live_hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
     if spec_text(spec, "config_path")? != path_text(&config) {
         return Err(Failure::Invalid);
     }
-    let json_hooks = read_json_hooks(&ctx.absolute(&hooks_file));
-    let mut avoid = Vec::new();
-    if let Some(hooks) = &json_hooks {
-        strings_in(hooks, &mut avoid);
-    }
-    let avoid: Vec<&str> = avoid.iter().map(String::as_str).collect();
-    let (payload, tokens) =
-        codex_toml_read::wire_avoiding(&read_config(&ctx.absolute(&config)), &avoid);
-    let toml_hooks = payload.get("hooks").cloned().unwrap_or(PyVal::Null);
-    let features = payload.get("features").cloned().unwrap_or(PyVal::Null);
-    let json_hooks = json_hooks.unwrap_or(PyVal::Null);
-    let live = if matches!(toml_hooks, PyVal::Dict(_)) {
-        &toml_hooks
-    } else {
-        &json_hooks
-    };
+    let LiveHooks {
+        features,
+        toml_hooks,
+        json_hooks,
+        tokens,
+    } = LiveHooks::read(ctx);
+    let live = live_hooks(&toml_hooks, &json_hooks);
     // A caller whose hook budget is already spent gets the unverified state
     // the resident verifier gave it before, without touching the manifest.
     let (manifest, failure) = if fields.get("budget_spent").and_then(Value::as_bool) == Some(true) {
@@ -173,47 +163,6 @@ fn spec_strings(spec: &Map<String, Value>, key: &str) -> Step<Vec<String>> {
         .iter()
         .map(|item| item.as_str().map(str::to_owned).ok_or(Failure::Invalid))
         .collect()
-}
-
-/// `read_toml_payload`: the payload, or nothing when the file is missing or
-/// does not parse.
-fn read_config(path: &Path) -> Vec<(String, TomlVal)> {
-    if !path.is_file() {
-        return Vec::new();
-    }
-    let Ok(data) = fs::read(path) else {
-        return Vec::new();
-    };
-    std::str::from_utf8(&data)
-        .ok()
-        .and_then(|text| codex_toml_read::read(text).ok())
-        .unwrap_or_default()
-}
-
-/// `hooks.json`'s `hooks` value, when the file holds a JSON object.
-fn read_json_hooks(path: &Path) -> Option<PyVal> {
-    if !path.is_file() {
-        return None;
-    }
-    let text = fs::read_to_string(path).ok()?;
-    match pyjson::parse(&text) {
-        Ok(payload @ PyVal::Dict(_)) => payload.get("hooks").cloned(),
-        _ => None,
-    }
-}
-
-fn strings_in(value: &PyVal, out: &mut Vec<String>) {
-    match value {
-        PyVal::Str(text) => out.push(text.clone()),
-        PyVal::List(items) => items.iter().for_each(|item| strings_in(item, out)),
-        PyVal::Dict(entries) => {
-            for (key, item) in entries {
-                out.push(key.clone());
-                strings_in(item, out);
-            }
-        }
-        _ => {}
-    }
 }
 
 /// `load_authenticated_hook_manifest`, or the failure the verifier reports.

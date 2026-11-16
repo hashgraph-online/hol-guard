@@ -354,7 +354,7 @@ pub(super) fn event_matches(hooks: &Entries, syntax: &mut Syntax) -> Map<String,
 
 /// `live_guard_codex_hooks_intercept`: a handler Codex can actually start,
 /// covering the shell, on both intercept events.
-fn intercept(hooks: &Entries, syntax: &mut Syntax) -> bool {
+pub(super) fn intercept(hooks: &Entries, syntax: &mut Syntax) -> bool {
     INTERCEPT_EVENTS.iter().all(|event| {
         groups(hooks, event).iter().any(|group| {
             group.as_dict().is_some_and(|group| {

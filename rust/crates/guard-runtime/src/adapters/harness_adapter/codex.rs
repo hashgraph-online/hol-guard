@@ -15,8 +15,8 @@ use sha2::{Digest, Sha256};
 
 use super::files::{self, Doc};
 use super::{
-    codex_alternate_plan, codex_config_hooks, codex_files, codex_live_state, codex_main_plan,
-    codex_merge, codex_migration, codex_servers, codex_sources, codex_uninstall,
+    codex_alternate_plan, codex_config_hooks, codex_files, codex_live_read, codex_live_state,
+    codex_main_plan, codex_merge, codex_migration, codex_servers, codex_sources, codex_uninstall,
     codex_uninstall_config, codex_uninstall_plan, common, hook_render, path_answer, path_text, Ctx,
     Failure, Spec, Step,
 };
@@ -87,6 +87,7 @@ pub(super) fn dispatch(
         "uninstall_config" => codex_uninstall_config::uninstall_config(ctx, fields),
         "uninstall_plan" => codex_uninstall_plan::uninstall_plan(ctx, fields),
         "live_hook_state" => codex_live_state::live_hook_state(ctx, fields),
+        "runtime_hooks_verified" => codex_live_read::runtime_hooks_verified(ctx, fields),
         _ => common(spec, op, ctx),
     }
 }

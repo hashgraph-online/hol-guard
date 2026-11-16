@@ -600,9 +600,10 @@ def prepare_codex_shell_cleanup(context: HarnessContext) -> tuple[TransitionFile
     return files
 
 
-def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
-    """The runtime reads the config and hooks files, authenticates and verifies
-    the hook manifest, and decides which managed events Guard owns."""
+def live_hook_ask(op: str, context: HarnessContext) -> dict[str, Any]:
+    """Ask a live hook state op: the runtime reads the config and hooks files,
+    authenticates and verifies the hook manifest, and decides which managed
+    events Guard owns."""
     from ..codex_hook_file_integrity import _python_package_roots, active_hook_validation_deadline
     from ..codex_hook_manifest import _spec_payload
 
@@ -619,12 +620,16 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
         **short_path_fields(),
     }
     timeout = max(timeout, _LIVE_STATE_MIN_SECONDS)
-    answer = settle_short_paths(
-        lambda: ask("live_hook_state", context, harness="codex", timeout_seconds=timeout, **request),
+    return settle_short_paths(
+        lambda: ask(op, context, harness="codex", timeout_seconds=timeout, **request),
         request,
-        "live_hook_state",
+        op,
     )
-    state = json.loads(_reply_text(answer, "state"))
+
+
+def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
+    """The live Codex hook state, decided natively."""
+    state = json.loads(_reply_text(live_hook_ask("live_hook_state", context), "state"))
     if not isinstance(state, dict):
         raise ValueError("Harness adapter answer is malformed")
     return state
