@@ -203,7 +203,12 @@ class _PersistentNativeClientPool:
     ) -> _PersistentNativeClient | None:
         with self._condition:
             if idle_only:
-                return self._lease_idle_locked(min(deadline_monotonic, time.monotonic() + max(0.0, idle_wait_seconds)))
+                return self._lease_idle_locked(
+                    min(deadline_monotonic, time.monotonic() + max(0.0, idle_wait_seconds)),
+                    # Preserve the immediate nonwaiting borrow path. Waiting callers
+                    # must not take a parked lease after their request has expired.
+                    request_deadline=deadline_monotonic if idle_wait_seconds > 0 else None,
+                )
             while not self._closed:
                 # Timed-out requests may have no teardown budget left. Retain
                 # ownership until close confirms containment, but reclaim
@@ -232,7 +237,9 @@ class _PersistentNativeClientPool:
         _LAST_FAILURE_CODE.set("native_client_pool_exhausted")
         return None
 
-    def _lease_idle_locked(self, wait_until: float) -> _PersistentNativeClient | None:
+    def _lease_idle_locked(
+        self, wait_until: float, *, request_deadline: float | None = None
+    ) -> _PersistentNativeClient | None:
         """Borrow a live parked stream, waiting until ``wait_until`` for one in use.
 
         Readiness is advisory: another caller can borrow the last stream before
@@ -244,7 +251,9 @@ class _PersistentNativeClientPool:
         while not self._closed:
             # Recheck after every condition wait, before consuming a parked
             # lease: a closing owner must never retire the resident's last stream.
-            if native_process_stop_requested():
+            if native_process_stop_requested() or (
+                request_deadline is not None and time.monotonic() >= request_deadline
+            ):
                 _LAST_FAILURE_CODE.set("native_client_timed_out")
                 return None
             for client in reversed(self._idle):
@@ -259,7 +268,9 @@ class _PersistentNativeClientPool:
             remaining = wait_until - time.monotonic()
             if not busy or remaining <= 0:
                 return None
-            self._condition.wait(timeout=remaining)
+            # Stop scopes do not notify this pool's condition. Wake periodically
+            # so a closing owner does not wait through the full idle grace.
+            self._condition.wait(timeout=min(remaining, 0.05))
         return None
 
     def request(
