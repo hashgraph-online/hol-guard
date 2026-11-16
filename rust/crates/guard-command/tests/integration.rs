@@ -140,6 +140,7 @@ pub mod pretool_git_filter_batches;
 pub mod pretool_git_filter_config;
 pub mod pretool_git_global_config;
 pub mod pretool_git_hash_object;
+pub mod pretool_git_hash_substitution;
 pub mod pretool_git_helper_config;
 pub mod pretool_git_heredoc_message;
 pub mod pretool_git_history_reads;

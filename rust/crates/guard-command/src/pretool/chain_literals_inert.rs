@@ -128,6 +128,13 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
                 )
             }
         };
+        // A lookup can print nothing; only a Git command reads a missing
+        // revision as the same kind of operation.
+        if value == git_value::COMMIT_VALUE
+            && !git_value::in_git_command(&masked, &substitutions, substitution.start)
+        {
+            return None;
+        }
         if !judged.contains(&judged_text) {
             judged.push(judged_text);
         }
@@ -362,6 +369,9 @@ fn patterned_word(chars: &[char], substitution: &ShellCommandSubstitution) -> bo
 /// The stand-in for a substitution body that is one simple value-producing
 /// command with literal arguments.
 fn stand_in(body: &str) -> Option<&'static str> {
+    if let Some(value) = git_value::stand_in(body) {
+        return Some(value);
+    }
     if body.len() > MAX_BODY_CHARS
         || !body.chars().all(|c| {
             c.is_ascii_alphanumeric() || matches!(c, ' ' | '+' | '%' | '_' | ':' | '.' | '-')
@@ -431,6 +441,9 @@ fn date_arguments(arguments: &[&str]) -> bool {
     }
     true
 }
+
+#[path = "chain_literals_git_value.rs"]
+mod git_value;
 
 #[path = "chain_literals_temp_cd.rs"]
 pub(crate) mod temp_cd;
