@@ -1,0 +1,443 @@
+{
+ "tasks": [
+  {
+   "repo": "click",
+   "lang": "py",
+   "upstream": "pallets/click",
+   "pr": 3902,
+   "prompt": "Help pages no longer break a line within a hyphenated word\n\nAlso fixes `write_usage` breaking a line inside an argument. Closes #3362.\r\n\r\nAlso reverts part of https://github.com/pallets/click/pull/3420 now that long words truncation is simplified.",
+   "tests": [
+    "tests/test_compat.py",
+    "tests/test_formatting.py"
+   ],
+   "parent": "8abb77a8432e03ed14a95f972b44f905279415a7",
+   "merge": "a46a95c733d0ed72f63cd2915f2bc4a09a7179f9",
+   "secs": 0.5
+  },
+  {
+   "repo": "click",
+   "lang": "py",
+   "upstream": "pallets/click",
+   "pr": 3901,
+   "prompt": "Stop passing a deprecated command's help text through `gettext`\n\nThis PR is a small consistency fix, that is aligning the way the `(DEPRECATED)` label is translated in options, arguments and commands.\r\n\r\nIn the latter, the deprecation text was translated in addition to the label, which is not the behavior of options and arguments.\r\n\r\nRelated to: https://github.com/janluke/cloup/pull/244",
+   "tests": [
+    "tests/test_commands.py"
+   ],
+   "parent": "6d34602f4b0668a61873af1c547bfd40cb7deffc",
+   "merge": "5125851aaa19840c82b9811193b2c2d6cf245326",
+   "secs": 0.6
+  },
+  {
+   "repo": "click",
+   "lang": "py",
+   "upstream": "pallets/click",
+   "pr": 3896,
+   "prompt": "Add `context_settings` parameter to `CliRunner.invoke`\n\nThis PR adds a `context_settings` parameter to `CliRunner.invoke()`, allowing tests to pass context-specific settings to the command's `Context`.\n\n`CliRunner.invoke()` passes its extra keyword arguments to the `Context` of the command, except `color`: its own `color` parameter takes that name. `context_settings` solves this collision. And now a test can set what its terminal supports, as well as the `color` of the context in the same call.\n\nWith this addition, I can now test cases that were previously difficult or impossible to cover, such as verifying how the command behaves with different `Context` settings.\n\nThis was proposed 5 years ago in #2110 but at that time this change was evaluated as niche. Since then, we did a lot of color handling improvements in Click (#3505, #3653, #3739) which added a lot of color-related tests, so this is no longer a niche concern.\n\nFor evidence, I used the new `context_settings` parameter to extend and simplify existing checks. See `test_prompt_and_confirm_ansi_respects_color` and `test_tempfile_pager_handles_ansi`.",
+   "tests": [
+    "tests/test_termui.py",
+    "tests/test_testing.py"
+   ],
+   "parent": "dd149eb3129d887a22202c3fafa5ceb0e0d7018d",
+   "merge": "fdb65f4809719580436acb067410cec64433e5de",
+   "secs": 2.3
+  },
+  {
+   "repo": "boltons",
+   "lang": "py",
+   "upstream": "mahmoud/boltons",
+   "pr": 610,
+   "prompt": "October PR sweep follow-up: #482, #483, #605, #607, #608\n\nFollow-up to #609: the five remaining genuine fixes in the queue, re-implemented in one commit per module, plus CHANGELOG 26.3.0 entries. Closes #479.\n\nNot folded: #606 (new `shorten_chars` API overlapping `strutils.ellipsize`, empty PR template).\n\n## Changes\n\n- fileutils: FilePerms revoke clears old bits; already on master via #609, now credited alongside #518 (#482, @oyeong011; fixes #480)\n- fileutils: rotate_file keeps *keep* generations instead of *keep* - 1 (#483, @oyeong011)\n- dictutils: OMD.update_extend(self) keeps every value; mirrored in urlutils' vendored OMD (#605, @Gabrieljr42)\n- ioutils: SpooledStringIO.readline(0) returns '' in memory and after rollover (#607, @36taransingh5-dotcom)\n- timeutils: isoparse's inline dateutil link no longer collides with the module's link target (#608, @bbaransahin)\n\n## Verification\n\n* Full local suite including doctests: 775 passed (CPython 3.14.7).\n* The new and updated regression tests fail against master (fe1ce8b) and pass here. The two existing rotate_file full-rotation tests had pinned the off-by-one (they asserted only keep - 1 backups); they now pre-create and check all five generations.\n* Local Sphinx build: the dateutil duplicate-target diagnostics are gone (0 mentions).",
+   "tests": [
+    "tests/test_dictutils.py",
+    "tests/test_fileutils.py",
+    "tests/test_ioutils.py"
+   ],
+   "parent": "fe1ce8bcc4df6f76cba8fbcd1559fa774c34b334",
+   "merge": "d31d821d56c8f7756af9c30a864077f2e5855321",
+   "secs": 0.9
+  },
+  {
+   "repo": "boltons",
+   "lang": "py",
+   "upstream": "mahmoud/boltons",
+   "pr": 513,
+   "prompt": "Fix spooled stream write compatibility and backwards text seeks\n\n## The change\n\nMake spooled streams return their write count, and let SpooledBytesIO accept buffer-protocol inputs. Wrapping the binary stream in `io.BufferedWriter` currently fails on flush because it supplies a memoryview; successful writes also return None instead of their byte or character count. The rollover calculation now uses the buffer size in bytes, including multi-byte memoryviews.\n\nA second fix corrects backwards character-relative seeks in SpooledStringIO and rejects negative absolute destinations without moving the stream. Previously a backwards seek consumed the rest of the buffer while reporting the requested earlier position. UTF-8 navigation now restarts from the beginning for backwards movement.\n\nSix write regression cases and six seek regression cases fail before their respective fixes. All 685 combined tests and module doctests pass afterward on Python 3.11.15. Coverage includes rolled and in-memory streams, Unicode character counts, BufferedWriter flushes, and rollover with a multi-byte memoryview. Documentation examples are updated for the returned values.\n\n## The backstory\n\nThis follows the utility-library investigation in #502. The bug was found through source inspection and a real BufferedWriter integration regression, rather than a production incident. The change keeps spooled streams compatible with standard I/O callers.\n\n## AI assistance\n\n- Harness/tooling: OpenAI Codex acting on behalf of rupayon123.\n- Model: GPT-6-based Codex; exact backend variant not exposed.\n- Original task excerpt: \u201cExecute my daily GitHub contribution and maintenance workflow on my behalf. Do real, verified work, not only research, a plan, configuration changes, or a status summary.\u201d Required reproducible, tested fixes and no duplicate patches.",
+   "tests": [
+    "tests/test_ioutils.py"
+   ],
+   "parent": "961dcff3f42e73b245aef65e377fe82763b257bb",
+   "merge": "4e5faa3d7e4008d89e0d8bf1ea87b6d9a061a16d",
+   "secs": 0.5
+  },
+  {
+   "repo": "boltons",
+   "lang": "py",
+   "upstream": "mahmoud/boltons",
+   "pr": 481,
+   "prompt": "Complete September PR sweep for 26.2.0\n\n## Changes\n\nFold #463, #466, #476, #478, #460, #459, and #477 with contributor credits.\n\n* Preserve reverse iterator encodings and caller-owned text streams.\n* Honor ThresholdCounter mapping counts using items(), without a Python 2 fallback.\n* Allow empty and keyword-only LRI/LRU updates. Self-source updates still apply keywords; eviction internals are unchanged.\n* Return all pairs from most_common() when its limit is omitted.\n* Make the yottabyte suffix reachable.\n* Preserve URL passwords when the username is empty.\n* Consolidate 26.2.0 release notes, including the separately landed #434 completion and the earlier mode() and separator fixes.\n\n## Verification\n\n* Full local suite: 672 passed (Python 3.14.5), including doctests.\n* Each folded fix has a regression that fails against its pre-fix implementation and passes after the maintainer implementation. #459 is covered by its added doctest.\n* Verified latin-1 decoding, explicit BytesIO encoding, stream seek/read reuse and context-manager close, mapping counts, cache update/eviction behavior, and URL round trips.\n* Removed the legacy-mapping fallback test, duplicate coverage, and non-empty assertions rather than carrying them into the suite.\n\nCI must pass before merge. The folded PRs will be closed with credit after this lands.",
+   "tests": [
+    "tests/test_cacheutils.py",
+    "tests/test_jsonutils.py",
+    "tests/test_namedutils.py",
+    "tests/test_statsutils.py",
+    "tests/test_strutils.py",
+    "tests/test_urlutils.py"
+   ],
+   "parent": "8bb31ba90e574daddbf0d7a2dc658398dc141e38",
+   "merge": "1216b467c10b852d08aa6895c80b6b9ec8f990d8",
+   "secs": 0.8
+  },
+  {
+   "repo": "toolz",
+   "lang": "py",
+   "upstream": "pytoolz/toolz",
+   "pr": 635,
+   "prompt": "Fix interpose([]) raising StopIteration\n\n## Summary\n- `interpose(el, [])` called `next()` on an empty concat/zip pipeline and raised `StopIteration`.\n- Catch that case and return an empty iterator; nonempty behavior unchanged.\n- Adds a regression test.\n\n## Test plan\n- [x] `pytest toolz/tests/test_itertoolz.py -k interpose`\n- [x] Manual: `list(interpose('a', [])) == []` and `list(interpose('a', [1,2,3])) == [1,'a',2,'a',3]`",
+   "tests": [
+    "toolz/tests/test_itertoolz.py"
+   ],
+   "parent": "55ce42dc3b6f786ed9d4e38633cc5cfe3622a526",
+   "merge": "d2eba0374a452c2b18fe188b04527e22bda3548c",
+   "secs": 0.4
+  },
+  {
+   "repo": "toolz",
+   "lang": "py",
+   "upstream": "pytoolz/toolz",
+   "pr": 634,
+   "prompt": "Expose combined `__annotations__` on composed functions (#496)\n\n`Compose` already synthesizes `__signature__` (parameters of the first function applied, return annotation of the last), but it had no `__annotations__`, so `typing.get_type_hints()` and tools that read `__annotations__` directly saw nothing on a composed callable.\r\n\r\nThis adds an instance property that builds the same view:\r\n\r\n```python\r\ndef f(x: int) -> str: ...\r\ndef g(y: str) -> float: ...\r\ncompose(g, f).__annotations__          # {'x': int, 'return': float}\r\ntyping.get_type_hints(compose(g, f))   # {'x': int, 'return': float}\r\n```\r\n\r\nFunctions without annotations contribute nothing; callables with no `__annotations__` at all (e.g. `str`, arbitrary objects) are handled.\r\n\r\nScope: this is a small runtime step toward the static typing discussed in #496 \u2014 the composed callable now reports `Callable[[A], C]` for `compose(g, f)` with `f: A -> B`, `g: B -> C`. It does not add stubs or annotate the library itself; happy to split or drop it if you'd rather approach #496 differently.\r\n\r\nTests: `test_compose_annotations` (combined view, unannotated pieces, `get_type_hints`, consistency with `__signature__`). Full suite incl. doctests passes locally (`pytest --doctest-modules toolz/`; the only failure is `test_has_version`, which needs an installed distribution and fails identically on master in my environment).\r\n\r\nAuthored with the help of an AI agent (Rookery Alpha), human-reviewed.",
+   "tests": [
+    "toolz/tests/test_functoolz.py"
+   ],
+   "parent": "80ddcb3e104eda18838a2e7f7a10b9dc4e8086a8",
+   "merge": "a1e25cbd2c398b534f0736f5838e416202b0cb28",
+   "secs": 0.4
+  },
+  {
+   "repo": "toolz",
+   "lang": "py",
+   "upstream": "pytoolz/toolz",
+   "pr": 551,
+   "prompt": "Revert \"Faster isiterable when x isn't iterable.\" and add test cases for isiterable",
+   "tests": [
+    "toolz/tests/test_itertoolz.py"
+   ],
+   "parent": "1aa72df3a75b3584eb26c4456269e9c0afbc043f",
+   "merge": "386c75033d64f7be4bac9536cea291b848a47fbf",
+   "secs": 0.4
+  },
+  {
+   "repo": "moreit",
+   "lang": "py",
+   "upstream": "more-itertools/more-itertools",
+   "pr": 1345,
+   "prompt": "Fix numeric_range equality and hashing above sys.maxsize\n\n### Issue reference\n\nCloses #1344.\n\n### Changes\n\nUse `numeric_range._len`, its cached arbitrary-precision length, when comparing or hashing numeric ranges. Calling `len()` internally currently raises `OverflowError` for otherwise valid ranges whose number of values exceeds `sys.maxsize`. This prevents equality comparisons and use as dictionary keys, whereas the built-in `range` supports both.\n\nThe explicit public call `len(numeric_range(10**30))` continues to raise `OverflowError`, like `len(range(10**30))`; this change does not alter that API behavior.\n\nRegression tests cover equal ranges (including different stops yielding the same values), descending ranges, unequal lengths/starts/steps, matching built-in range hashes, and dictionary lookups using an equivalent range.\n\n### Checks and tests\n\nValidation on Windows / CPython 3.13.9 against master 08dca28:\n- Before the fix, the new regression tests produce nine failing subcases with `OverflowError`.\n- Full unittest suite under coverage: **936 tests run, OK (5 skipped)**; **100% coverage** (2,233 statements).\n- `ruff format --check .` and `ruff check more_itertools tests`: pass (Ruff 0.17.3).\n- `python -m mypy.stubtest more_itertools.more more_itertools.recipes`: pass.\n- `python -m sphinx -W -b html docs docs/_build/html`: pass.\n- `python -m flit build` and `python -m twine check dist/*`: pass.\n- `git diff --check`: clean.\n\nThese are the checks from `make all-checks`, run individually in a local virtual environment on Windows rather than through make. Other Python versions/platforms have not been run locally.\n\n### AI assistance\n\nThis patch, regression tests, validation commands, issue and PR description were prepared with OpenAI Codex desktop at the account owner's request. The issue was found during source review, not a claimed production incident. No independent human review is claimed; the model identifier is not exposed to this session.\n\nOriginal user reque",
+   "tests": [
+    "tests/test_more.py"
+   ],
+   "parent": "08dca284ba5446a026afdc34067b658f9da989eb",
+   "merge": "f42daddf205f335fea6e200dad46049f33e71221",
+   "secs": 3.2
+  },
+  {
+   "repo": "moreit",
+   "lang": "py",
+   "upstream": "more-itertools/more-itertools",
+   "pr": 1342,
+   "prompt": "fix: validate the chunk size in chunked_even\n\n### Issue reference\n\nN/A \u2014 trivial boundary fix; no issue was filed.\n\n### Changes\n\n`chunked_even(iterable, n)` did not validate `n` before handing it to `islice`. A negative size leaked `ValueError: Indices for islice()...`; a zero size leaked `ValueError: Step for islice()...` and consumed two source items before raising. Its sibling sizing functions (`chunked`, `ichunked`, `sliced`) already define the contract: `n == 0` yields nothing without consuming the source, `n < 0` raises `ValueError('n must be at least 0')`.\n\nThe fix adds those two guards at the top of `chunked_even`, before `iter(iterable)`, so invalid sizes fail before any source consumption and match the rest of the module.\n\n### Checks and tests\n\nThe new `test_zero_chunk_size` and `test_negative_chunk_size` fail on `4aeb433` with the `islice` errors and pass on this branch. They also assert the source iterator is untouched after the error/empty result.\n\n`pytest -q` \u2192 767 passed, 21,194 subtests passed. `ruff check more_itertools tests` and `ruff format --check more_itertools tests` pass.\n\n<details><summary>Details</summary>\n\n`chunked_even(..., None)` remains unsupported (`TypeError`), unchanged. Other itertools recipes with bare `ValueError` tests (`take`, `nth`, `consume`, `spy`, `nth_or_last`) are outside this change because they have no sibling-consistency contract.\n\n</details>",
+   "tests": [
+    "tests/test_more.py"
+   ],
+   "parent": "20c4ee5c63f8f8c35a37aee3b69d95cd2450c09a",
+   "merge": "08dca284ba5446a026afdc34067b658f9da989eb",
+   "secs": 3.5
+  },
+  {
+   "repo": "moreit",
+   "lang": "py",
+   "upstream": "more-itertools/more-itertools",
+   "pr": 1322,
+   "prompt": "peekable: avoid caching entire iterable on negative slice with omitted stop\n\n### Issue reference\nNone\n\n### Changes\nA reverse slice with an omitted stop, such as `peekable(count())[5::-1]`, ends at index 0. The old implementation treated the internal negative stop sentinel as right-relative indexing and cached the entire source. This hangs on an infinite iterator and buffers unnecessary items on a large finite source.\n\nCache only through `start + 1` for this case; retain full caching for actual negative indices or an omitted reverse start. The release note is under Unreleased, above the existing 11.2.1/11.2.0 history.\n\n### Checks and tests\n- Preserve the finite-source regression and add a guarded infinite source: prefill three cached items, take repeated reverse slices, then verify normal iteration order. A seventh source read fails immediately instead of hanging. Adapted from @carlitogwapito's [test-only commit](https://github.com/carlitogwapito/more-itertools/commit/383711aab0b06db2a27df46af3871d02819e7d8a).\n- The same guarded test fails with the exact read-bound assertion on master `4aeb433` and passes on this branch. Imports were checked against each checkout.\n- Python 3.13.3: full unittest run, 932 tests with 5 skipped; 100% statement coverage.\n- Ruff format/check, stubtest, Sphinx with `-W`, Flit sdist/wheel build, and Twine checks passed. Gate components ran individually with pinned development tools; the literal `make all-checks` target and the full version/OS matrix were not run.",
+   "tests": [
+    "tests/test_more.py"
+   ],
+   "parent": "4aeb4338ae1407d8da9723e86da99efeb446f719",
+   "merge": "69dbc3392928afe1cc892a387bf0e721522f21c2",
+   "secs": 3.7
+  },
+  {
+   "repo": "jinja",
+   "lang": "py",
+   "upstream": "pallets/jinja",
+   "pr": 2062,
+   "prompt": "don't apply `urlize` to `@a@b`\n\nDon't apply `urlize` to values like `@a@b`.\r\n\r\ncontinues #1870",
+   "tests": [
+    "tests/test_utils.py"
+   ],
+   "parent": "106d61cba58e3ca0ecd176712f187c6685d6d76d",
+   "merge": "7a41ddb915a540c7a35c6cf823a8b50a2553e46b",
+   "secs": 0.6
+  },
+  {
+   "repo": "jinja",
+   "lang": "py",
+   "upstream": "pallets/jinja",
+   "pr": 2033,
+   "prompt": "sandbox disallows `clear` and `pop` on mutable sequence\n\nThis PR adds the attributes `clear` and `pop` on `MutableSequence` to the default `modifies_known_mutable` check used by `ImmutableSandboxedEnvironment`.\r\n\r\nfixes #2032\r\n\r\nLet me know if I should add an entry to CHANGES.rst. I didn't see any previous mention of `ImmutableSandboxedEnvironment` in there so I wasn't sure if I should.",
+   "tests": [
+    "tests/test_security.py"
+   ],
+   "parent": "1dc04bccf9384cced4262d7ca7157638b0ebd970",
+   "merge": "91e3521173251e3f56706423067d722e5e3e52ad",
+   "secs": 0.4
+  },
+  {
+   "repo": "jinja",
+   "lang": "py",
+   "upstream": "pallets/jinja",
+   "pr": 2029,
+   "prompt": "Fix pickle/copy support for the `missing` singleton\n\nFix pickle/copy support for the `missing` singleton:\r\n\r\n* Fix pickle support for the `missing` singleton.\r\n* Add unit test for pickling the `missing` singleton.\r\n* Add unit test for copying the `missing` singleton.\r\n\r\nFixes #2027",
+   "tests": [
+    "tests/test_utils.py"
+   ],
+   "parent": "ba8847a466d0f3ad622502f86e819737a4b9fdc7",
+   "merge": "1dc04bccf9384cced4262d7ca7157638b0ebd970",
+   "secs": 3.3
+  },
+  {
+   "repo": "pluggy",
+   "lang": "py",
+   "upstream": "pytest-dev/pluggy",
+   "pr": 809,
+   "prompt": "Fix distribution tracking for declined entry points\n\nCloses #807.\n\nI now use the name returned by `register()` when recording an entry point distribution. If registration declines the plugin and returns `None`, the entry point is not counted or added to `_name2dist`, so distribution listing cannot reference a missing plugin.\n\nThe regression test covers both a `None` entry point and a `PluginManager` subclass that declines registration. It also checks that a manager-provided registered name is used for the distribution mapping.\n\nVerification:\n- `uv run pytest` (226 passed)\n- `uv run pre-commit run -a`\n- `git diff --check`",
+   "tests": [
+    "testing/test_pluginmanager.py"
+   ],
+   "parent": "0224f79fc75efadaafe24dbab9deee2ff616ecd7",
+   "merge": "49c07369faedfbf8689dc2d86c3330d48ea286ad",
+   "secs": 0.6
+  },
+  {
+   "repo": "pluggy",
+   "lang": "py",
+   "upstream": "pytest-dev/pluggy",
+   "pr": 799,
+   "prompt": "Keep hook tracing from crashing on impostor values\n\nWritten by Claude Opus 5.5 via Claude Code for the pluggy maintainers; I prompted it, it did the work, I read it.\n\nFixes #792.\n\n- Formatting is now chosen from `type()` rather than `isinstance()`. `isinstance()` trusts `__class__`, so `Mock(spec=str)` / `Mock(spec=dict)` were sent down the `str`/`dict` paths and raised `TypeError` from inside the hook call.\n- `enable_tracing` now ends the \"finish\" message with an explicit `{}`. Before, a hook that returned a `dict` had its result listed as if it were the call's arguments.\n- Formatting a value goes through the same failure guard as `str()`/`repr()`. A failure shows up in the trace and is not raised.\n\nSupersedes the closed #793 and #796.",
+   "tests": [
+    "testing/test_tracer.py"
+   ],
+   "parent": "09fabb162b8f84af0292b827c94e0149b82d448a",
+   "merge": "20950ae1a494ce2f0bfce5d821e10a0b1cc2b82b",
+   "secs": 0.3
+  },
+  {
+   "repo": "pluggy",
+   "lang": "py",
+   "upstream": "pytest-dev/pluggy",
+   "pr": 767,
+   "prompt": "Drop entry-point distribution info when unregistering a plugin\n\n_Requested by **Ronny** \u00b7 [project thread](https://claude.ai/code/project/chan_016UJjZXYjfpXuyNsZWbXxvR?thread=cmsg_016UJjZXYjfpXuyNsZWbXxvRAsyLfisvwRS6VXWYtrwRWi)_\n\n\ud83e\udd16 Written by Claude Opus 5.5 via Claude Code for the pluggy maintainers; I prompted it, it did the work, I read it.\n\nFixes #763.\n\nBefore: `unregister()` left the plugin in `list_plugin_distinfo()` / `list_plugin_distributions()` (and so in pytest's \"plugins:\" header), and reloading the entry point appended a duplicate row.\n\nAfter: both listings only show entry-point plugins that are still registered, and a reload takes the old slot.\n\nHow: the private `_plugin_distinfo` list of `(plugin, dist)` tuples becomes `_name2dist: dict[str, Distribution]`, keyed by the registration name like `_name2plugin`. `unregister()` pops the name; the listings are built from the two dicts, so no identity map over plugin objects is needed. `list_plugin_distinfo()` now just wraps `list_plugin_distributions()`.\n\nThe `_name2plugin` cleanup in `unregister()` becomes `if not self.is_blocked(name): pop`. The old guard existed only to keep a blocked name's marker, and the `assert name is not None` was a leftover mypy narrowing from 2019. `test_unregister_blocked` now asserts the block survives, which it did not check before.\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)",
+   "tests": [
+    "testing/test_pluginmanager.py"
+   ],
+   "parent": "78e3f45d6c18a6efe6c46a2a79b63073f45a44bd",
+   "merge": "09fabb162b8f84af0292b827c94e0149b82d448a",
+   "secs": 0.4
+  },
+  {
+   "repo": "cachetools",
+   "lang": "py",
+   "upstream": "tkem/cachetools",
+   "pr": 445,
+   "prompt": "Restore autospec calls to @cachedmethod decorated methods\n\n# Description\n\nOn class access, `@cachedmethod` methods now return a small callable object\ninstead of a plain function. Calling through the class, as in\n`Cached.get(obj, 1)`, still works as before.\n\n## Motivation and Context\n\nSince v7.2.2, calling a `@cachedmethod` method on an autospec mock raises\n`TypeError: missing a required argument`. See #443 for a reproduction.\n\n`create_autospec()` drops `self` only from plain functions in the class\n`__dict__`. Here that entry is the descriptor, so mock takes whatever class\naccess returns as the instance-call signature. Since v7.2.2 that is a function\nwith signature `(self, key)`, so the first argument is bound to `self`.\n\nThe fix returns a callable object instead, so mock checks calls against its\n`__call__(self, /, *args, **kwargs)`. `functools.update_wrapper()` keeps\n`__wrapped__`, `__name__` and `__qualname__`, so `inspect.signature(Cached.get)`\nis unchanged.\n\nBehavior notes:\n\n- Autospec mocks accept any arguments for these methods, as they did in v7.2.1.\n  Exact parity with undecorated methods isn't possible while the class\n  attribute is a descriptor.\n- In v7.2.1, autospec mocks also had `cache_clear`, `cache_info` and the other\n  wrapper attributes. Since v7.2.2 they don't, and this PR does not bring them\n  back.\n- Calling through the class without an instance still raises `TypeError`, with\n  a different message.\n\n## Related Issue\n\nhttps://github.com/tkem/cachetools/issues/443\n\n## Has this been tested and documented?\n\n`tox` passes (py, docs, doctest, pyright, ruff, ruff-format).\n\n`test_autospec_call` makes positional and keyword calls on an\n`instance=True` autospec mock. It fails without the fix. The existing\n`test_autospec_no_warnings` only built the mock, which is why it missed this\nregression.\n\nCommits:\n\n- Fix #443: Restore autospec calls to @cachedmethod methods.\n- Tests for #443: Call @cachedmethod methods on autospec mocks.\n\nNo documentation changes; this ",
+   "tests": [
+    "tests/test_cachedmethod.py"
+   ],
+   "parent": "eba200635273fe45b67e669b84cb45f995b27c24",
+   "merge": "95e6addbd82afd75f81cb5650f32f6d74af2f1f9",
+   "secs": 0.5
+  },
+  {
+   "repo": "cachetools",
+   "lang": "py",
+   "upstream": "tkem/cachetools",
+   "pr": 441,
+   "prompt": "Fix #440: Compute TTL expiration before changing cache state\n\n# Description\n\nCompute a TTL item's expiration before changing the cache or its expiration links. When `timer() + ttl` raises (for example, datetime overflow), the rejected entry no longer remains with an unset expiration that makes later membership checks fail.\n\n## Motivation and Context\n\nThe documented datetime/timedelta timer combination can overflow at insertion time. The cache should propagate that arithmetic error while retaining usable state.\n\n## Related Issue\n\nFixes https://github.com/tkem/cachetools/issues/440\n\n## Has this been tested and documented?\n\nThe regression fails before the fix with `TypeError` when checking the rejected key. Full `tox` passes: unit tests with coverage, documentation build, 58 doctests, pyright, ruff, and ruff formatting. This changes failure handling for the existing API and needs no new API documentation.",
+   "tests": [
+    "tests/test_ttl.py"
+   ],
+   "parent": "f4f288579dc3c8f82f62d0eaca7774303d9d3768",
+   "merge": "39f9dd234aabc0859c703e7d9747fbefe7133f4c",
+   "secs": 0.3
+  },
+  {
+   "repo": "cachetools",
+   "lang": "py",
+   "upstream": "tkem/cachetools",
+   "pr": 436,
+   "prompt": "Fix #435: Restore class access to cached instance methods\n\n# Description\r\n\r\nRestore calls to a `cachedmethod` through its class when the instance is explicitly supplied: `Example.value(example, 3)` now uses the same per-instance wrapper as `example.value(3)`.\r\n\r\nClass access currently creates a wrapper bound to `None`, so evaluating the cache factory raises `AttributeError`. The shared descriptor now returns an unbound callable which binds the supplied instance through the existing descriptor. Locking, condition handling and per-instance statistics continue to use the existing wrappers. The original method remains available as `__wrapped__`.\r\n\r\n## Motivation and Context\r\n\r\nThis ordinary instance-method invocation worked in cachetools 6.2.0 and fails on current master. It is separate from the deprecated `@classmethod` behavior.\r\n\r\n## Related Issue\r\n\r\nFixes #435.\r\n\r\n## Has this been tested and documented?\r\n\r\n- Original baseline: `tox -e py`, 338 tests passed.\r\n- The new class-call regression coverage failed on the original implementation (nine wrapper variants and a base-class call).\r\n- The complete default `tox` run passed on Windows Python 3.12.14: 341 tests, 58 doctests, strict documentation build, Pyright (zero errors/warnings), Ruff and formatting. Other Python versions/platforms have not been tested locally.\r\n- Independent review caught a `__wrapped__` compatibility risk, which was corrected and covered by a regression test. The reviewer then reran the method/classmethod tests through tox: 56 passed.\r\n- Removed the class-access documentation paragraph at the maintainer request; retained a short implementation comment about the existing self-named receiver convention.\r\n\r\nAI assistance: this is an autonomous, user-authorized Codex contribution. Codex investigated the regression, wrote the fix and tests, ran validation, and used a separate agent for review. No manual human review or production incident is claimed.\r\n\r\nReview update (2026-10-11): the shipped type stu",
+   "tests": [
+    "tests/test_cachedmethod.py"
+   ],
+   "parent": "0985ec0d8fefdce90bcbba2dfe88117dad9bb6f6",
+   "merge": "c59bf8dc9c3ce8b9a246b189a3dc8e325f97f974",
+   "secs": 0.3
+  },
+  {
+   "repo": "tomli",
+   "lang": "py",
+   "upstream": "hukkin/tomli",
+   "pr": 318,
+   "prompt": "Set smaller MAX_INLINE_NESTING to avoid python:3.13-alpine worker thread crash",
+   "tests": [
+    "tests/test_misc.py"
+   ],
+   "parent": "c3299981db699cacabbd6edd0e32934f5e3e600b",
+   "merge": "1e6e869aa9dbbddc492608944e82d9ad5397280f",
+   "secs": 0.3
+  },
+  {
+   "repo": "tomli",
+   "lang": "py",
+   "upstream": "hukkin/tomli",
+   "pr": 286,
+   "prompt": "Limit number of parts of a key\n\ntomli has quadratic time complexity when handling parts of a key (via Flags.is_ calls in key_value_rule's loop, and maybe elsewhere). This isn't a problem unless a document has an excessive number (10_000-ish) of parts in a key.\r\nLimiting input size seems like the best fix here.\r\n\r\n`sys.getrecursionlimit` and `RecursionError` is already (and in the non-mypyc version, implicitly) used for `MAX_INLINE_NESTING`. Keys happen to not be parsed by recursive functions,\r\nbut that's an implementation detail; `RecursionError` works nicely for names of recursive\r\nstructures.",
+   "tests": [
+    "tests/test_misc.py"
+   ],
+   "parent": "c20c49113890c226ffb27a67befe20d14fcf0c73",
+   "merge": "e1fdb94bc998377f1c2545c7cd4f70ff2a3fb4e4",
+   "secs": 0.3
+  },
+  {
+   "repo": "tomli",
+   "lang": "py",
+   "upstream": "hukkin/tomli",
+   "pr": 238,
+   "prompt": "Add attributes to TOMLDecodeError\n\nAdds the same attributes to `TOMLDecodeError` that `JSONDecodeError` has.\r\n\r\nCreated a discussion about this https://discuss.python.org/t/69546\r\n\r\nedit: and a cpython issue https://github.com/python/cpython/issues/126175",
+   "tests": [
+    "tests/test_error.py"
+   ],
+   "parent": "59ed9efb3d6bb7ec71454601a72088b0a6853b8c",
+   "merge": "d1d6a8571b06b18005af8bf9078c1d37de5353e1",
+   "secs": 0.2
+  },
+  {
+   "repo": "sortedcontainers",
+   "lang": "py",
+   "upstream": "grantjenks/python-sortedcontainers",
+   "pr": 159,
+   "prompt": "Fix update() ordering to be more consistent with add() ordering\n\nThis pull request fixes #158 by prepending existing elements to new ones (to stick with the same ordering as the `add()` method).\r\n\r\nI have run the included `tox` tests and benchmarks offline and have not seen any noticeable difference in performance after looking at the benchmark plots.",
+   "tests": [
+    "tests/test_coverage_sortedkeylist_modulo.py",
+    "tests/test_coverage_sortedkeylist_negate.py"
+   ],
+   "parent": "13d30bc654eb9e6be092282ca502967fcb7f0113",
+   "merge": "7dc426c95a0c329d5514e6198d92080f1ffc1e5e",
+   "secs": 1.3
+  },
+  {
+   "repo": "mux",
+   "lang": "go",
+   "upstream": "gorilla/mux",
+   "pr": 760,
+   "prompt": "Feature route metadata\n\n## What type of PR is this? (check all applicable)\r\n\r\n- [ ] Refactor\r\n- [x] Feature\r\n- [ ] Bug Fix\r\n- [ ] Optimization\r\n- [ ] Documentation Update\r\n- [ ] Go Version Update\r\n- [ ] Dependency Update\r\n\r\n## Description\r\nAdded metadata to route. as proposed in #750 \r\nDocumentation will be added uppon request.\r\n\r\n## Related Tickets & Documents\r\n\r\n\r\n- Related Issue #750 \r\n- Closes #750 \r\n\r\n## Added/updated tests?\r\n\r\n- [x] Yes\r\n- [ ] No, and this is why: _please replace this line with details on why tests\r\n      have not been included_\r\n- [ ] I need help with writing tests\r\n\r\n## Run verifications and test\r\n\r\n- [x] `make verify` is passing\r\n- [x] `make test` is passing",
+   "tests": [
+    "route_test.go"
+   ],
+   "parent": "525206d7c2b250ca658700448b3bf23ec4707115",
+   "merge": "10f71ea482969adafbfc9dcbac1bd11691e23708",
+   "secs": 1.9
+  },
+  {
+   "repo": "mux",
+   "lang": "go",
+   "upstream": "gorilla/mux",
+   "pr": 748,
+   "prompt": "[BUG #739] Fixed handling of invalid query params\n\n## What type of PR is this? (check all applicable)\r\n\r\n- [ ] Refactor\r\n- [ ] Feature\r\n- [x] Bug Fix\r\n- [ ] Optimization\r\n- [ ] Documentation Update\r\n- [ ] Go Version Update\r\n- [ ] Dependency Update\r\n\r\n## Description\r\nFix made in #712 is not an optimal solution to the problem #704, since it completely prevents the possibility of getting error `ErrMethodMismatch` for subrouters.\r\n\r\nThe proposed solution corrects this situation and allows correct error handling of invalid query paramaters and preserves the possibility of getting `ErrMethodMismatch` in subrouters.\r\n\r\n## Related Tickets & Documents\r\n\r\n- Related Issue #739\r\n- Closes #739\r\n\r\n## Added/updated tests?\r\n\r\n- [x] Yes\r\n- [ ] No, and this is why: _please replace this line with details on why tests\r\n      have not been included_\r\n- [ ] I need help with writing tests\r\n\r\n## Run verifications and test\r\n\r\n- [x] `make verify` is passing\r\n- [x] `make test` is passing",
+   "tests": [
+    "mux_test.go"
+   ],
+   "parent": "2b030fc311d07b8c5950807800b03b2d32a7142c",
+   "merge": "976b536446a77de8de2d5559c78f612970fb5e37",
+   "secs": 0.7
+  },
+  {
+   "repo": "mux",
+   "lang": "go",
+   "upstream": "gorilla/mux",
+   "pr": 732,
+   "prompt": "Optimize/new route regexp allocations\n\n## What type of PR is this? (check all applicable)\r\n\r\n- [x] Refactor\r\n- [ ] Feature\r\n- [ ] Bug Fix\r\n- [x] Optimization\r\n- [ ] Documentation Update\r\n\r\n## Description\r\n\r\nThis optimizes NewRouter creation. The change introduces strings.Builder for more efficient strings concatenation, and replaces SplitN with Index, avoiding the allocations for the slice.\r\n\r\n## Related Tickets & Documents\r\n\r\n| Test Group                  | Condition | Average Time (ns/op) | Average Memory (B/op) | Average Allocations |\r\n|-----------------------------|-----------|----------------------|-----------------------|---------------------|\r\n| **BenchmarkNewRouter**      | Before    | 37041                | 26553                  | 376                 |\r\n|                             | After     | 32046                | 25800                  | 347                 |\r\n| **BenchmarkNewRouterRegexpFunc** | Before | 4713                 | 2385                   | 75                  |\r\n|                             | After     | 2792                 | 1640                   | 46                  |\r\n\r\n\r\nBenchmarkNewRouterRegexpFunc:\r\n\r\nTime Improvement: Significant improvement in execution time from 4,713 ns/op to 2,792 ns/op.\r\nMemory Usage: Memory usage per operation dropped from 2,385 bytes to 1,640 bytes.\r\nAllocations: Allocations per operation decreased substantially from 75 to 46.\r\n\r\n## Added/updated tests?\r\n\r\n- [x] Yes\r\n\r\n## Run verifications and test\r\n\r\n- [ ] `make verify` is passing\r\n- [x] `make test` is passing",
+   "tests": [
+    "regexp_test.go"
+   ],
+   "parent": "cfec64dd9f7b38263f7ac56023c96299587d529a",
+   "merge": "de7178dc9dffadc3cf56bece3962737e8b0710b8",
+   "secs": 1.2
+  },
+  {
+   "repo": "semver",
+   "lang": "rust",
+   "upstream": "dtolnay/semver",
+   "pr": 296,
+   "prompt": "Add a dedicated error for parsing Version from an empty string\n\nSee https://github.com/Homebrew/homebrew-core/pull/114382#issuecomment-1297979948.",
+   "tests": [
+    "tests/test_version.rs"
+   ],
+   "parent": "cc2cfed67c17dfe6abae18726830bdb6d7cf740d",
+   "merge": "c113ff9d3bfe771db894176a9d3380d948035748",
+   "secs": 3.3
+  },
+  {
+   "repo": "semver",
+   "lang": "rust",
+   "upstream": "dtolnay/semver",
+   "pr": 275,
+   "prompt": "Impl Send + Sync for Identifier\n\nFixes #274.",
+   "tests": [
+    "tests/test_autotrait.rs"
+   ],
+   "parent": "bc699173757905dfd19a372c4f668a9ef03c21d0",
+   "merge": "44f0ac4913d38c374e4d391ec855c7138133f39e",
+   "secs": 2.2
+  },
+  {
+   "repo": "ufo",
+   "lang": "ts",
+   "upstream": "unjs/ufo",
+   "pr": 335,
+   "prompt": "fix(withoutBase): collapse leading slashes\n\nslicing the base prefix from inputs like `/legacy//evil.com` left the\r\nremainder as `//evil.com`, which browsers interpret as a protocol-relative\r\nURL. This enabled an open redirect when consumers (e.g. nitro route rules)\r\nfed the result into a redirect Location header.\r\n\r\nNormalize all leading slashes on the trimmed remainder so the output is\r\nalways a single-host-relative path.\r\n\n\n\n\n## Summary by CodeRabbit\n\n* **Bug Fixes**\n  * Enhanced path sanitization to prevent potential security vulnerabilities with protocol-relative URLs. Malformed paths containing repeated leading slashes are now safely normalized to relative path formats.\n\n* **Tests**\n  * Added test coverage for edge cases with repeated leading slashes in paths.",
+   "tests": [
+    "test/base.test.ts"
+   ],
+   "parent": "a7b94e69ff6159de8ddfd4940c90db4708c0d67e",
+   "merge": "5cd9e676711af3f4e4b5398ddf6ca8d52c1c7e1f",
+   "secs": 3.2
+  },
+  {
+   "repo": "ufo",
+   "lang": "ts",
+   "upstream": "unjs/ufo",
+   "pr": 313,
+   "prompt": "fix(withBase, withoutBase): prevent false prefix matches\n\nResolves: https://github.com/nuxt/nuxt/issues/33924\r\n\r\n## Summary\r\n\r\nWhile investigating [nuxt/nuxt#33924](https://github.com/nuxt/nuxt/issues/33924), I found that `withoutBase` was being a bit too eager when stripping base URLs.\r\n\r\n**The issue:** When using `baseURL: '/admin/'` with a page like `/admin-dashboard`, the function incorrectly stripped `/admin` because it only checked `startsWith()` without verifying that the match ends at a path segment boundary.\r\n\r\n```js\r\nwithoutBase(\"/admin-dashboard\", \"/admin/\")\r\n// Before: \"/-dashboard\" \u274c\r\n// After:  \"/admin-dashboard\" \u2705\r\n```\r\n\r\nThe fix: Added a simple check to ensure the character after the base is either /, ?, or end of string before treating it as a valid base match.\r\n\r\nTest plan\r\n\r\n- Added test cases for the bug\r\n- All existing tests pass\r\n\r\n### Update \u26a0\ufe0f\r\nSame issue is in `withBase` as well. I also fixed it and added new tests.",
+   "tests": [
+    "test/base.test.ts"
+   ],
+   "parent": "5fb179d51384301ffb66b48e213863a27cadd1ff",
+   "merge": "eb29945470c8629309764f026a36e7f477a9a1ff",
+   "secs": 1.9
+  },
+  {
+   "repo": "ufo",
+   "lang": "ts",
+   "upstream": "unjs/ufo",
+   "pr": 287,
+   "prompt": "feat: add `filterQuery` utility\n\nresolves #230",
+   "tests": [
+    "test/query.test.ts"
+   ],
+   "parent": "7959de5b49f52e7eb2919a33a9bfe30911e05712",
+   "merge": "3c4b43de1128f2c04c2131db9a7e9fe2c7daf0d5",
+   "secs": 1.8
+  }
+ ]
+}
