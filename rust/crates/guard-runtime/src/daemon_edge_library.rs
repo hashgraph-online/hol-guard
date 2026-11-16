@@ -13,7 +13,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
@@ -139,6 +139,33 @@ pub(in crate::daemon_edge) fn call_resident_within(
     args: Value,
     wait: Duration,
 ) -> Result<Value, CallError> {
+    // One budget covers both attempts, including the time either spends
+    // finding or starting a process before it sends the call.
+    let deadline = Instant::now() + wait;
+    match call_resident_once(config, name, args.clone(), wait, deadline) {
+        // The process was already gone, so the call never reached it. Under
+        // host load a child that died (or was stopped by an earlier call that
+        // gave up on it) is the usual reason the next hook found no resident;
+        // the replacement starts here instead of failing this hook and
+        // leaving the start to the one after it. A call that was delivered and
+        // then lost its answer is not repeated: it may have run.
+        Err(CallError::Unavailable) => {
+            if Instant::now() >= deadline {
+                return Err(CallError::Unavailable);
+            }
+            call_resident_once(config, name, args, wait, deadline)
+        }
+        other => other,
+    }
+}
+
+fn call_resident_once(
+    config: &ReadConfig,
+    name: &str,
+    args: Value,
+    wait: Duration,
+    deadline: Instant,
+) -> Result<Value, CallError> {
     let (_, guard_home, _) = config.cli().ok_or(CallError::Unavailable)?;
     let guard_home = guard_home.to_owned();
     let resident = {
@@ -182,7 +209,13 @@ pub(in crate::daemon_edge) fn call_resident_within(
             .is_ok()
     };
     let answer = if written {
-        receiver.recv_timeout(wait.min(CALL_TIMEOUT)).ok()
+        receiver
+            .recv_timeout(
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(CALL_TIMEOUT),
+            )
+            .ok()
     } else {
         None
     };

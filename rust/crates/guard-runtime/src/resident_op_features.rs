@@ -269,6 +269,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-machine-state-files-v1",
     "native-windows-private-state-v1",
     "native-windows-private-directory-v1",
+    crate::windows_private_state::resident::FEATURE,
     "native-device-key-metadata-v1",
     "native-cloud-actions-connect-v1",
     "native-registry-trust-v1",

@@ -32,6 +32,7 @@ fn decision(harness: &str, command: &str, home: &Path) -> String {
         None,
         PathContext {
             literal_words: &[],
+            guard_home: None,
             home_dir: home.to_str(),
             cwd: cwd.to_str(),
             cdpath_unset: false,

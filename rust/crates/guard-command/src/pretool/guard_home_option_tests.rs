@@ -1,4 +1,4 @@
-use super::{normal_home, without_home_option, without_own_home};
+use super::{normal_home, without_active_home, without_home_option, without_own_home};
 
 fn words(text: &str) -> Vec<String> {
     text.split_whitespace().map(str::to_owned).collect()
@@ -112,4 +112,78 @@ fn windows_drive_homes_compare_as_windows_paths() {
     assert_eq!(normal_home("C:"), None);
     assert_eq!(normal_home("C:\\"), None);
     assert_eq!(normal_home("relative/home"), None);
+}
+
+/// The Guard home the hook reports is set aside only while it exists, and
+/// only when the option names exactly that directory.
+#[test]
+fn only_the_reported_guard_home_is_set_aside() {
+    let account = account("reported");
+    let store = account.join("lane-guard-home");
+    let store_text = store.to_str().unwrap().to_owned();
+    // The temporary path can contain spaces, so it stays one argument.
+    let wait = |reported: Option<&str>, value: &str| {
+        let mut argv = words("approvals wait abc --home");
+        argv.push(value.to_owned());
+        without_active_home(&argv, reported)
+    };
+    assert_eq!(wait(Some(&store_text), &store_text), None, "missing store");
+    std::fs::create_dir_all(&store).unwrap();
+    assert_eq!(
+        wait(Some(&store_text), &store_text),
+        Some(words("approvals wait abc"))
+    );
+    assert_eq!(
+        wait(Some(&format!("{store_text}/")), &store_text),
+        Some(words("approvals wait abc"))
+    );
+    assert_eq!(wait(None, &store_text), None);
+    assert_eq!(wait(Some("relative/home"), "relative/home"), None);
+    assert_eq!(
+        wait(
+            Some(&store_text),
+            &format!("{store_text}/../lane-guard-home")
+        ),
+        None
+    );
+    let _ = std::fs::remove_dir_all(&account);
+}
+
+/// The parsed --home path may look identical to the reported Guard home,
+/// but a Windows batch launcher reparses shell metacharacters in the
+/// original words. The exemption cannot throw that evidence away.
+#[test]
+fn a_set_aside_home_must_keep_the_original_windows_launcher_check() {
+    for (home, reaches_launcher) in [
+        ("C:/Users/Alice/.hol-guard", true),
+        ("C:/Users/Alice&whoami/.hol-guard", false),
+        ("C:/Users/Alice%PATH%/.hol-guard", false),
+        ("C:/Users/Alice^whoami/.hol-guard", false),
+    ] {
+        let arguments = words(&format!("approvals wait abc --json --home {home}"));
+        // All of these would become the same apparently harmless command
+        // after stripping the --home option.
+        assert_eq!(
+            without_home_option(&arguments, home),
+            Some(words("approvals wait abc --json"))
+        );
+        assert_eq!(
+            super::super::guard_diagnostics::arguments_reach_the_launcher(
+                "hol-guard",
+                &arguments,
+                true,
+            ),
+            reaches_launcher,
+            "{home}"
+        );
+        // A direct executable avoids cmd.exe's second parse; the enclosing
+        // command model still applies every other normal Guard check.
+        assert!(
+            super::super::guard_diagnostics::arguments_reach_the_launcher(
+                "hol-guard.exe",
+                &arguments,
+                true,
+            )
+        );
+    }
 }

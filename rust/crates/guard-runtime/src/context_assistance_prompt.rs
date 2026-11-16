@@ -5,8 +5,7 @@
 //! lookup share what is left of the hook's budget, the lookup runs on its own
 //! thread, a repeat of the same prompt joins the lookup already running, a
 //! prompt CIGAR cannot answer yet gets the matched files, and anything failed
-//! or off adds nothing.
-//! Only an allowed prompt gets context, and only for harnesses that show
+//! or off adds nothing. Only an allowed prompt gets context, and only for harnesses that show
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
 use crate::context_assistance_engine::{project_context_on, quick_excerpts};
@@ -24,6 +23,8 @@ use std::time::{Duration, Instant};
 
 #[path = "context_assistance_prompt_changes.rs"]
 mod changes;
+#[path = "context_assistance_prompt_chores.rs"]
+mod chores;
 #[path = "context_assistance_prompt_excerpts.rs"]
 mod excerpts;
 use excerpts::render;
@@ -267,6 +268,10 @@ fn attach(
     if let Some(changed) = &changed {
         add_context(response, &changed.text);
     }
+    let chores_by = Instant::now() + left() / 3;
+    if chores::added(response, &root, prompt, &context_on, chores_by) && changed.is_none() {
+        return;
+    }
     let Some(budget) = left().checked_sub(MIN_WAIT) else {
         return;
     };
@@ -365,8 +370,7 @@ fn attach(
     add_context(response, &context.text);
 }
 
-/// What a prompt gets: CIGAR's answer, or Guard's own read when CIGAR is
-/// starting, busy or late.
+/// What a prompt gets: CIGAR's answer, or Guard's own read when CIGAR is starting, busy or late.
 fn answered(
     lookup: Result<Option<Rendered>, Miss>,
     own_read: impl FnOnce() -> Option<Rendered>,

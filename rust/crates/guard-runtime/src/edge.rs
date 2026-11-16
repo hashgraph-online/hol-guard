@@ -309,11 +309,11 @@ fn evaluate_validated_envelope<Lease>(
                             envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000),
                         ),
                 ),
-                // The envelope carries the roots and nothing more: every
-                // proof a context can hold is one a caller with the command
-                // in hand sets, so they all stay at their default false.
+                // The envelope carries only the roots. Every proof a context
+                // holds is set by a caller with the command, so all stay false.
                 guard_command::pretool::PathContext {
                     home_dir: Some(envelope.source.home_dir.as_str()),
+                    guard_home: Some(envelope.source.guard_home.as_str()),
                     cwd: envelope.source.cwd.as_deref(),
                     ..Default::default()
                 },
