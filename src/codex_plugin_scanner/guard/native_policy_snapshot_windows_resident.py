@@ -1,12 +1,14 @@
 """Owner-private Windows state ops answered by the resident runtime.
 
-A process that already holds a resident client for a Guard home sends each
-private-state request inside that home to the resident, which runs the same
-held handles and owner/DACL checks as the one-shot ``windows-private-state``
-command without starting a process per op. ``None`` means the resident is not
-this request's route (no resident client here for the home, a runtime without
-the operation, or a resident or transport failure), and the caller starts the
-one-shot command.
+A process that already holds a live resident client stream for a Guard home
+sends each private-state request inside that home over that stream to the
+resident, which runs the same held handles and owner/DACL checks as the
+one-shot ``windows-private-state`` command without starting a process per op.
+Only an idle stream already parked in this process is borrowed: asking never
+starts a client stream, so it never brings back a resident that was stopped.
+``None`` means the resident is not this request's route (no idle stream here
+for the home, a runtime without the operation, or a resident or transport
+failure), and the caller starts the one-shot command.
 """
 
 from __future__ import annotations
@@ -52,6 +54,7 @@ def resident_private_state_answer(request: Mapping[str, object], *, output_limit
         environment=_isolated_environment(),
         payload=json.dumps(envelope, separators=(",", ":"), sort_keys=True).encode("utf-8"),
         deadline_monotonic=deadline,
+        idle_only=True,
     )
     if response is None or len(response) > output_limit:
         return None

@@ -12,13 +12,14 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_policy_snapshot_windows_atomic as private_state
-from codex_plugin_scanner.guard import native_resident_client, native_runtime
 from codex_plugin_scanner.guard import native_policy_snapshot_windows_resident as resident
+from codex_plugin_scanner.guard import native_resident_client, native_runtime
 from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_windows import write_windows_ack
 
 EXECUTABLE = Path("/runtime/hol-guard-runtime.exe")
+_REAL_REQUEST = native_resident_client.native_resident_client_request
 
 
 class _WindowsOSProxy:
@@ -30,6 +31,10 @@ class _WindowsOSProxy:
         return getattr(os, name)
 
 
+class _PosixOSProxy(_WindowsOSProxy):
+    name = "posix"
+
+
 class _Resident:
     """Answers the resident operation from the real files, and counts round trips."""
 
@@ -38,8 +43,12 @@ class _Resident:
         self.homes: list[Path] = []
         self.frame: bytes | None = None
 
-    def __call__(self, *, executable: Path, guard_home: Path, payload: bytes, **_: object) -> bytes | None:
+    def __call__(
+        self, *, executable: Path, guard_home: Path, payload: bytes, idle_only: bool = False, **_: object
+    ) -> bytes | None:
         assert executable == EXECUTABLE
+        # Only a stream already parked here is borrowed; asking never starts one.
+        assert idle_only is True
         envelope = json.loads(payload)
         assert envelope["operation"] == "windows_private_state"
         assert envelope["request"]["guard_home"] == str(guard_home)
@@ -71,7 +80,7 @@ class _Resident:
 
 @pytest.fixture
 def home(tmp_path: Path) -> Path:
-    guard_home = tmp_path / "guard"
+    guard_home = tmp_path.resolve() / "guard"
     (guard_home / "native-runtime").mkdir(parents=True)
     (guard_home / "native-runtime" / "command-control-authority.v1.json").write_bytes(b'{"generation":1}')
     return guard_home
@@ -114,6 +123,13 @@ def worker(monkeypatch: pytest.MonkeyPatch, home: Path) -> _Resident:
     return answer
 
 
+@pytest.fixture
+def clock(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    now = [1000.0]
+    monkeypatch.setattr(private_state, "_clock", lambda: now[0])
+    return now
+
+
 def _idle_second(home: Path) -> None:
     """What an idle worker asks for in one second: its rechecks and an ACK lease renewal."""
 
@@ -126,13 +142,20 @@ def _idle_second(home: Path) -> None:
     private_state._windows_ensure_private_directory(state, private_root=home)
 
 
-def test_an_idle_worker_starts_no_runtime_process(worker: _Resident, process_starts: list[str], home: Path) -> None:
-    for _second in range(90):
+def test_an_idle_worker_starts_no_runtime_process(
+    worker: _Resident, process_starts: list[str], home: Path, clock: list[float]
+) -> None:
+    for _second in range(150):
         _idle_second(home)
+        clock[0] += 1.0
 
     assert process_starts == []
+    # The read memo lapses every 60 s; each recheck goes to the resident too.
+    reads = [name for operation, name in worker.operations if operation == "read"]
+    assert reads.count("command-control-authority.v1.json") == 3
+    assert reads.count("business-source-authority.v1.json") == 3
     assert {operation for operation, _name in worker.operations} == {"read", "write", "ensure"}
-    assert worker.operations.count(("write", "ack.json")) == 90
+    assert worker.operations.count(("write", "ack.json")) == 150
     assert set(worker.homes) == {home}
     assert (home / "native-runtime" / "direct-lane" / "ack.json").read_bytes() == b'{"lease":1}'
     assert private_state._windows_delete_private_child(
@@ -207,7 +230,42 @@ def test_a_runtime_without_the_operation_uses_the_command(
 
 
 def test_other_systems_never_ask_the_resident(worker: _Resident, monkeypatch: pytest.MonkeyPatch, home: Path) -> None:
-    monkeypatch.setattr(resident, "os", os)
+    monkeypatch.setattr(resident, "os", _PosixOSProxy())
 
     assert resident.resident_private_state_answer({"op": "ensure", "directory": str(home)}, output_limit=4096) is None
     assert worker.operations == []
+
+
+def test_a_pool_without_an_idle_stream_starts_no_client(
+    worker: _Resident, process_starts: list[str], home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Through the real pool: with no parked stream, nothing is started and the command answers."""
+
+    started: list[Path] = []
+
+    def no_client(**kwargs: object) -> None:
+        started.append(Path(str(kwargs.get("state_dir"))))
+        raise AssertionError("a private-state request must not start a client stream")
+
+    state_dir = native_resident_client._pinned_state_dir(home / "native-runtime")
+    pool = native_resident_client._PersistentNativeClientPool(
+        executable=EXECUTABLE, state_dir=state_dir, environment={}
+    )
+    asked: list[bool] = []
+    real_request = pool.request
+
+    def counted(payload: bytes, **kwargs: object) -> bytes | None:
+        asked.append(bool(kwargs.get("idle_only")))
+        return real_request(payload, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(pool, "request", counted)
+    monkeypatch.setattr(native_resident_client, "_CLIENT_POOLS", {(str(EXECUTABLE), str(state_dir)): pool})
+    monkeypatch.setattr(native_resident_client, "native_resident_client_request", _REAL_REQUEST)
+    monkeypatch.setattr(native_resident_client, "_PersistentNativeClient", no_client)
+
+    with pytest.raises(NativePolicySnapshotError, match="native_windows_private_state_unavailable"):
+        write_windows_ack(home, home / "native-runtime" / "direct-lane" / "ack.json", b"{}")
+
+    assert asked == [True]
+    assert started == []
+    assert process_starts == ["write"]

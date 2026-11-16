@@ -392,9 +392,9 @@ def native_resident_client_ready(executable: Path, guard_home: Path) -> bool:
 def native_resident_guard_home_containing(executable: Path, paths: tuple[Path, ...]) -> Path | None:
     """The Guard home of a resident this process already talks to that holds every path.
 
-    Only homes with a client pool for `executable` count, so asking never
-    starts a resident: a caller with no resident of its own for the home keeps
-    its own route.
+    Only homes with a client pool for `executable` count, and the lookup
+    starts nothing; a caller with no pool of its own for the home keeps its
+    own route.
     """
 
     targets = [os.path.normcase(os.path.abspath(path)) for path in paths]
