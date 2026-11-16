@@ -112,6 +112,7 @@ mod proof;
 mod settings_hooks;
 mod shim_profile;
 mod shim_remove;
+mod shims_apply;
 mod simple;
 mod uninstall_apply;
 mod which;
@@ -295,6 +296,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     if op == "prepare_guard_shim_shell_profile" {
         return answer(shim_profile::prepare(&ctx, fields));
     }
+    if op == "apply_guard_shims" {
+        return answer(shims_apply::apply_guard_shims(&ctx, fields));
+    }
     if op == "prepare_guard_shim_removal" {
         return answer(shim_remove::prepare(&ctx, fields));
     }
@@ -308,6 +312,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     }
     if op == "apply_install" {
         return answer(install_apply::apply(spec, &ctx, fields));
+    }
+    if op == "apply_plan" {
+        return answer(shims_apply::apply_plan(spec, &ctx, fields));
     }
     answer(if op == "default_launch" {
         default_launch(spec, &ctx, fields)

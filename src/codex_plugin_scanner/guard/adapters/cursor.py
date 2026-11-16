@@ -184,10 +184,23 @@ def _manifest(answer: dict[str, Any]) -> dict[str, object]:
 
 def _install_hooks(context: HarnessContext, op: str) -> dict[str, object]:
     """Publish the plan, then require the hooks Cursor now reads to be Guard's."""
+    from .. import native_transition_files
+    from ..codex_install_transaction import require_codex_install_owner
+    from ..runtime_transition import assert_transition_mutation_allowed
+
+    require_codex_install_owner(context.guard_home)
+    assert_transition_mutation_allowed(context.guard_home)
     # The plan also retires the project-local hooks an older install wrote.
-    manifest = _prepared(_cursor_ask(op, context)).publish(context.guard_home, removals=True)
+    answer = _cursor_ask(
+        "apply_plan",
+        context,
+        plan_op=op,
+        removals=True,
+        transition=native_transition_files.transition_context(),
+    )
+    native_transition_files.settle(answer.get("publish"))
     _cursor_ask("verify", context)
-    return manifest
+    return _manifest(answer)
 
 
 def install_cursor_hooks(context: HarnessContext, *, actor: str = "cursor-hooks") -> dict[str, object]:

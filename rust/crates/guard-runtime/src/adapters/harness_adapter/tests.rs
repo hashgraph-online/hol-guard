@@ -29,6 +29,8 @@ mod hermes_family;
 mod install_apply_family;
 #[path = "tests_opencode.rs"]
 mod opencode_family;
+#[path = "tests_shims_apply.rs"]
+mod shims_apply_family;
 #[path = "tests_pi.rs"]
 mod pi_family;
 #[path = "tests_shims.rs"]

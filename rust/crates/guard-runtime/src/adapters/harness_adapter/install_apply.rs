@@ -56,7 +56,7 @@ fn payload(entry: &Value) -> Step<Option<Value>> {
     })))
 }
 
-fn payloads(answer: &Value) -> Step<Option<Vec<Value>>> {
+pub(super) fn payloads(answer: &Value) -> Step<Option<Vec<Value>>> {
     answer
         .get("files")
         .and_then(Value::as_array)
@@ -66,9 +66,37 @@ fn payloads(answer: &Value) -> Step<Option<Vec<Value>>> {
         .collect::<Step<Option<Vec<_>>>>()
 }
 
-/// The publish answer for a plan refused before any file was written.
+/// A `transition_files` publish answer for a plan refused before any file
+/// was written.
+pub(super) fn refused_publish(reason: &str) -> Value {
+    json!({ "error": { "transition": reason }, "events": [] })
+}
+
 fn refused(reason: &str) -> Value {
-    json!({ "manifest": null, "publish": { "error": { "transition": reason }, "events": [] } })
+    json!({ "manifest": null, "publish": refused_publish(reason) })
+}
+
+/// `PreparedHarnessInstall.publish` over `files`, with the caller's
+/// `transition` context; the progress events no caller watches are dropped.
+pub(super) fn publish(
+    files: Vec<Value>,
+    removals: bool,
+    fields: &Map<String, Value>,
+) -> Step<Value> {
+    let mut request = match fields.get("transition") {
+        Some(Value::Object(transition)) => transition.clone(),
+        _ => return Err(Failure::Invalid),
+    };
+    request.insert("op".into(), json!("publish"));
+    request.insert("files".into(), Value::Array(files));
+    request.insert("removals".into(), json!(removals));
+    request.insert("rollback".into(), json!(true));
+    let mut published =
+        crate::transition_files::dispatch(&Value::Object(request)).map_err(|_| Failure::Invalid)?;
+    if let Some(Value::Array(events)) = published.get_mut("events") {
+        events.retain(|event| event.get("written").is_none());
+    }
+    Ok(published)
 }
 
 pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
@@ -100,18 +128,6 @@ pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step
         .and_then(Value::as_str)
         .ok_or(Failure::Invalid)?
         .to_owned();
-    let mut request = match fields.get("transition") {
-        Some(Value::Object(transition)) => transition.clone(),
-        _ => return Err(Failure::Invalid),
-    };
-    request.insert("op".into(), json!("publish"));
-    request.insert("files".into(), Value::Array(files));
-    request.insert("removals".into(), json!(false));
-    request.insert("rollback".into(), json!(true));
-    let mut published =
-        crate::transition_files::dispatch(&Value::Object(request)).map_err(|_| Failure::Invalid)?;
-    if let Some(Value::Array(events)) = published.get_mut("events") {
-        events.retain(|event| event.get("written").is_none());
-    }
+    let published = publish(files, false, fields)?;
     Ok(json!({ "manifest": manifest, "publish": published }))
 }
