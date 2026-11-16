@@ -220,7 +220,15 @@ def acquire_lease(lock: dict[str, object], *, wait: bool, deadline: float | None
 
 
 def release_lease(lease: str) -> None:
-    _lease_request({"op": "lease_release", "lease": lease})
+    """Release a lease; best effort.
+
+    It runs in ``finally`` blocks, so a failure here must not replace the
+    operation's own error, and the resident reaps a dead client's lease.
+    """
+    try:
+        _lease_request({"op": "lease_release", "lease": lease})
+    except Exception:  # never mask the first error
+        return
 
 
 def lease_held(lease: str) -> bool:
