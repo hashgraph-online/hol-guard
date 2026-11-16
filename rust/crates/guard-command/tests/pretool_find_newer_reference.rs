@@ -67,7 +67,7 @@ fn a_project_file_may_be_the_reference() {
             "find . -maxdepth 3 -iname '*bing*' -newer README.md".to_owned(),
             "find src -name '*.py' -newer docs/PRD.md -type f".to_owned(),
             format!(
-                "find . -maxdepth 3 -iname '*bing*' -newer {}",
+                "find . -maxdepth 3 -iname '*bing*' -newer '{}'",
                 prd.display()
             ),
             "find reports -newer ./README.md 2>/dev/null | head -10".to_owned(),
