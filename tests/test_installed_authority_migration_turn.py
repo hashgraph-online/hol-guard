@@ -181,3 +181,66 @@ def test_a_failed_migration_records_how_long_it_ran(tmp_path, recorded) -> None:
     [(event, detail)] = recorded
     assert event == "installed_authority_migration_failed"
     assert " elapsed_ms=" in detail
+
+
+def test_the_bundle_check_runs_while_another_process_holds_the_turn(tmp_path, monkeypatch) -> None:
+    # At a cold start the artifact reconcile usually holds the turn; checking
+    # the installed bundle first overlaps that wait instead of following it.
+    checks: list[str] = []
+    steps: list[str] = []
+    monkeypatch.setattr(extension_control_host, "_verify_installed_bundle_early", lambda: checks.append("bundle"))
+    store = _SlowStore(tmp_path, seconds=0.0)
+
+    with installed_authority_migration_turn(tmp_path, wait_seconds=0.0) as held:
+        assert held
+        assert migrate_installed_authority(store, wait_seconds=0.05, on_phase=steps.append) is False  # pyright: ignore[reportArgumentType]
+
+    assert checks == ["bundle"]
+    assert steps == ["bundle_checked"]
+    assert store.calls == 0
+
+    assert migrate_installed_authority(store, wait_seconds=0.05, on_phase=steps.append) is True  # pyright: ignore[reportArgumentType]
+    assert steps == ["bundle_checked", "bundle_checked", "turn_held"]
+    assert store.calls == 1
+
+
+def test_a_caller_that_will_not_wait_skips_the_early_bundle_check(tmp_path, monkeypatch) -> None:
+    # An extension-control host gives up on a taken turn at once; checking
+    # the bundle first would only delay its fallback.
+    checks: list[str] = []
+    steps: list[str] = []
+    monkeypatch.setattr(extension_control_host, "_verify_installed_bundle_early", lambda: checks.append("bundle"))
+    store = _SlowStore(tmp_path, seconds=0.0)
+
+    with installed_authority_migration_turn(tmp_path, wait_seconds=0.0) as held:
+        assert held
+        assert migrate_installed_authority(store, wait_seconds=0.0, on_phase=steps.append) is False  # pyright: ignore[reportArgumentType]
+
+    assert checks == []
+    assert steps == []
+    assert store.calls == 0
+
+
+def test_a_failed_early_bundle_check_leaves_the_failure_to_the_migration(tmp_path, recorded, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.catalog_delivery import preparation_authority
+
+    def unverifiable():
+        raise ValueError("installed bundle metadata unavailable")
+
+    monkeypatch.setattr(preparation_authority, "load_installed_bundle", unverifiable)
+    store = _SlowStore(tmp_path, seconds=0.0)
+
+    assert migrate_installed_authority(store) is True  # pyright: ignore[reportArgumentType]
+    assert store.calls == 1
+    assert recorded == []
+
+
+def test_a_failing_phase_reporter_does_not_skip_the_migration(tmp_path, monkeypatch) -> None:
+    def broken(_step: str) -> None:
+        raise BrokenPipeError
+
+    monkeypatch.setattr(extension_control_host, "_verify_installed_bundle_early", lambda: None)
+    store = _SlowStore(tmp_path, seconds=0.0)
+
+    assert migrate_installed_authority(store, on_phase=broken) is True  # pyright: ignore[reportArgumentType]
+    assert store.calls == 1

@@ -69,7 +69,7 @@ def test_worker_host_reports_each_start_step_it_finishes(tmp_path, monkeypatch):
     with pytest.raises(_StopError):
         host.start(on_phase=steps.append)
 
-    assert steps == ["admitted", "<publish>", "publishing"]
+    assert steps == ["bundle_checked", "turn_held", "admitted", "<publish>", "publishing"]
 
 
 def test_worker_host_retries_a_failed_migration_until_it_lands(tmp_path, monkeypatch):

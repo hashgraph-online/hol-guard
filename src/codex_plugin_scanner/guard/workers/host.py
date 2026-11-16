@@ -198,7 +198,7 @@ class WorkerHost:
         # engine compiled is refused by the resident, so publishing first
         # would fail every hook closed until something else migrated it.
         report = on_phase or (lambda _step: None)
-        self._admit_installed_release()
+        self._admit_installed_release(on_phase=report)
         report("admitted")
         self._start_policy_publication()
         report("publishing")
@@ -236,14 +236,18 @@ class WorkerHost:
         if isinstance(assessment, threading.Thread):
             self._threads.append(assessment)
 
-    def _admit_installed_release(self) -> None:
-        """Migrates the active command packs to the installed engine, once it succeeds."""
+    def _admit_installed_release(self, on_phase: Callable[[str], None] | None = None) -> None:
+        """Migrates the active command packs to the installed engine, once it succeeds.
+
+        Only the first attempt, during start, reports its steps; the retry
+        loop runs after the daemon has stopped reading them.
+        """
 
         if self._installed_authority_admitted:
             return
         from ..extension_control_host import migrate_installed_authority
 
-        self._installed_authority_admitted = migrate_installed_authority(self.store)
+        self._installed_authority_admitted = migrate_installed_authority(self.store, on_phase=on_phase)
 
     def _start_policy_publication(self) -> None:
         """Keeps the native policy snapshot, its direct-lane ACK and evidence drain live.
