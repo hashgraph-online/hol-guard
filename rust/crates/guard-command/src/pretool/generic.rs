@@ -293,8 +293,12 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
     let _cursor = super::cursor_session_outputs::scope(harness, context.cwd);
-    let mut context =
-        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
+    // The session is rebuilt from the execution environment; the Guard home
+    // the hook reported is not part of it, so it is carried across.
+    let mut context = super::PathContext {
+        guard_home: context.guard_home,
+        ..super::PathContext::for_session(context.home_dir, context.cwd, execution_environment)
+    };
     let (projected_payload, cline_payload);
     let mut payload = payload;
     let within;
@@ -437,8 +441,10 @@ fn evaluate_envelope(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     project_redirects: bool,
 ) -> PreToolResultV1 {
-    let context =
-        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
+    let context = super::PathContext {
+        guard_home: context.guard_home,
+        ..super::PathContext::for_session(context.home_dir, context.cwd, execution_environment)
+    };
     let super::PathContext { home_dir, cwd, .. } = context;
     let yield_payload = (harness == "omp")
         .then(|| omp::yield_signal_payload(payload))
