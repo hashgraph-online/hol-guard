@@ -230,6 +230,8 @@ fn spaced_words_digests_and_masks_are_not_secrets() {
         "digest = '9e10 7d9d 372b b682 6bd8 1d35'\n",
         "pw = 'xxxx xxxx xxxx xxxx xxxx xxxx'\n",
         "otp = 'test demo seed code from docs page'\n",
+        "keys = 'cvzx cvzx cvzx cvzx cvzx cvzx'\n",
+        "keys = 'qwzx cvbn mjkl pqzx cvhj klmn'\n",
     ] {
         assert!(!holds_bare_secret(text), "{text}");
     }
@@ -298,6 +300,10 @@ fn a_random_url_password_on_a_remote_host_is_a_secret() {
             "broker = \"amqp://svc:{}@mq.corp.net:5672/\"\n",
             joined(&["wkzq", "vtmp"])
         ),
+        format!(
+            "MAIL_URL=smtps://user:{}@smtp.examplebank.com:465\n",
+            joined(&["qzvt", "kmbr"])
+        ),
     ] {
         assert!(holds_bare_secret(&text), "{text}");
     }
@@ -313,6 +319,18 @@ fn local_hosts_and_word_url_passwords_are_not_secrets() {
         "DATABASE_URL=postgres://app:pass@db.company.com/app\n".to_string(),
         "AMQP_URL=amqp://guest:guest@rabbitmq.internal:5672\n".to_string(),
         "url = 'https://admin:hunter@service.company.com/'\n".to_string(),
+        format!(
+            "see https://service.company.com?label=:{}@smtp.mail.org:465\n",
+            joined(&["qzvt", "kmbr"])
+        ),
+        format!(
+            "see https://service.company.com#note:{}@smtp.mail.org:465\n",
+            joined(&["qzvt", "kmbr"])
+        ),
+        format!(
+            "url = 'smtps://user:{}@mail.example.org:465'\n",
+            joined(&["qzvt", "kmbr"])
+        ),
         format!(
             "url = 'https://user:{}@example.com/'\n",
             joined(&["qzvt", "kmbr"])

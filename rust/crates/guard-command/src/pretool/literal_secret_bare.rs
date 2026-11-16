@@ -56,8 +56,8 @@ patterns! {
     SPACED_GROUPS = r#"["'](?P<v>(?:[a-z0-9]{4} ){5,7}[a-z0-9]{4})["']"#;
     SECRET_WORD_GROUPS = r#"(?i)["']?\w*secret\w*["']?\s*[:=]\s*["'](?P<v>[a-z]{3,}(?:_[a-z]{3,}){2,})["']"#;
     SECRET_SETTER = r#"\bset\w*(?:Secret|Password|Token)\w*\(\s*["'](?P<v>[A-Za-z]{8,16})["']\s*\)"#;
-    URL_PASSWORD = r#"\b[a-z][a-z0-9+.-]*://[^\s/"'<>]+:(?P<v>[a-z]{4,})@(?P<h>[A-Za-z0-9.-]+\.[a-z]{2,})"#;
-    LOCAL_HOST = r"localhost|example|127\.|0\.0\.0\.0|\.local$|\.test$|\.invalid$|\.internal$";
+    URL_PASSWORD = r#"\b[a-z][a-z0-9+.-]*://[^\s/?#"'<>]+:(?P<v>[a-z]{4,})@(?P<h>[A-Za-z0-9.-]+\.[a-z]{2,})"#;
+    LOCAL_HOST = r"localhost|127\.|0\.0\.0\.0|\.local$|\.test$|\.invalid$|\.internal$|\.example$|(?:^|\.)example\.(?:com|net|org)$";
     RANDOM_KEY = r"(?m)^\s*(?P<k>[a-z]{15}):\s";
     RANDOM_KEY_VALUE = r"(?m)^[ \t]*(?P<k>[a-z]{15}):[ \t]+(?P<v>[A-Za-z0-9]{8,32})[ \t\r]*$";
     WIDE_FILLER = r"(?i)test|sample|demo|abc|foo|bar|zxcv|hjkl";
@@ -208,11 +208,22 @@ fn random_letters(value: &str, cut: i32) -> bool {
     english_score(&letters_only(value)) <= cut
 }
 
+/// Placeholders and keyboard runs are checked on the joined value too, so a
+/// run split across groups (`cvzx cvzx …`) still reads as typed; a value
+/// that repeats one group is a sample, not a generated password.
 fn spaced_groups(value: &str) -> bool {
+    let joined = value.replace(' ', "");
     let letters = letters_only(value);
-    !HEX.is_match(&value.replace(' ', ""))
+    let groups = value.split(' ').collect::<Vec<_>>();
+    let distinct = groups
+        .iter()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    !HEX.is_match(&joined)
         && letters.len() >= 16
+        && distinct == groups.len()
         && !typed_value(value)
+        && !typed_value(&joined)
         && english_score(&letters) <= RANDOM_TOKEN
 }
 
