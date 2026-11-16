@@ -62,3 +62,9 @@ def test_a_powershell_call_with_a_spaced_path_keeps_the_path_whole():
 def test_an_unreadable_powershell_call_is_refused(command):
     with pytest.raises(ValueError):
         split_powershell_call(command)
+
+
+def test_a_powershell_literal_reads_typographic_quotes_as_quotes():
+    command = "& \u2018C:\\Users\\O\u2019\u2019Neil\\hol-guard.exe\u2019 hook"
+
+    assert split_powershell_call(command) == ["C:\\Users\\O\u2019Neil\\hol-guard.exe", "hook"]

@@ -205,12 +205,18 @@ def split_windows_command_line(command: str) -> list[str]:
     return argv
 
 
+#: Every character PowerShell reads as a single quote, so Guard's writer doubles
+#: each of them inside a literal.
+POWERSHELL_SINGLE_QUOTES = "'\u2018\u2019\u201a\u201b"
+
+
 def split_powershell_call(command: str) -> list[str]:
     """Split a PowerShell call-operator line such as ``& 'C:\\Program Files\\x.exe' hook``.
 
     Codex runs its hook command through PowerShell on Windows, and Guard writes
     this form when the program path needs quoting. Each token is either a
-    single-quoted literal, where ``''`` stands for one quote, or a bare word.
+    single-quoted literal, where a doubled quote stands for one, or a bare word.
+    PowerShell counts the typographic single quotes as quotes too.
     Anything else is a line this lane cannot read, so it raises.
     """
 
@@ -225,15 +231,15 @@ def split_powershell_call(command: str) -> list[str]:
             index += 1
         if index == len(rest):
             break
-        if rest[index] == "'":
+        if rest[index] in POWERSHELL_SINGLE_QUOTES:
             index += 1
             literal: list[str] = []
             while True:
                 if index >= len(rest):
                     raise ValueError("unbalanced quote in PowerShell call")
-                if rest[index] == "'":
-                    if index + 1 < len(rest) and rest[index + 1] == "'":
-                        literal.append("'")
+                if rest[index] in POWERSHELL_SINGLE_QUOTES:
+                    if index + 1 < len(rest) and rest[index + 1] in POWERSHELL_SINGLE_QUOTES:
+                        literal.append(rest[index])
                         index += 2
                         continue
                     index += 1
@@ -244,7 +250,7 @@ def split_powershell_call(command: str) -> list[str]:
         else:
             start = index
             while index < len(rest) and rest[index] not in " \t":
-                if rest[index] in "'\"":
+                if rest[index] in POWERSHELL_SINGLE_QUOTES or rest[index] == '"':
                     raise ValueError("quote inside a bare PowerShell token")
                 index += 1
             argv.append(rest[start:index])
@@ -480,6 +486,7 @@ def assess_harness(home: Path, harness: str, expectation: dict[str, Any]) -> dic
 
 __all__ = [
     "CONTRACT_PATH",
+    "POWERSHELL_SINGLE_QUOTES",
     "GateBlockedError",
     "assess_claude",
     "assess_codex",
