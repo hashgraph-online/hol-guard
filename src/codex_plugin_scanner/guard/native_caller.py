@@ -25,16 +25,18 @@ def caller_identity() -> dict[str, object]:
     """This process's interpreter, frozen state, launchers, package root and version."""
     from ..version import __version__
     from .frozen_runtime_commands import is_frozen_guard_runtime
-    from .stable_guard_cli import guard_cli_launcher, resolve_frozen_guard_cli
+    from .stable_guard_cli import guard_cli_launcher, prune_safe_cli_executable, resolve_frozen_guard_cli
 
     executable = Path(sys.executable).expanduser()
     frozen = _frozen_contract or is_frozen_guard_runtime()
+    absolute = str(executable.absolute())
     return {
-        "executable": str(executable.absolute()),
+        "executable": absolute,
         "executable_resolved": str(executable.resolve(strict=frozen)),
         "frozen": frozen,
         "launcher": guard_cli_launcher(),
         "frozen_launcher": resolve_frozen_guard_cli() if frozen else None,
+        "cli_executable": prune_safe_cli_executable(absolute) if frozen else absolute,
         "package_root": str(Path(__file__).resolve().parents[2]),
         "version": __version__,
     }

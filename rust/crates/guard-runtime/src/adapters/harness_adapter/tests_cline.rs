@@ -417,6 +417,29 @@ fn the_hook_spec_names_the_guard_hook_command_and_its_budget() {
 }
 
 #[test]
+fn the_hook_spec_binds_the_callers_process_into_the_bounded_config() {
+    let home = Home::new();
+    let spec = home.ask("cline", "hook_spec", json!({}));
+    let config: Value = serde_json::from_str(spec["config"].as_str().unwrap()).unwrap();
+    assert_eq!(config["python_executable"], "/py");
+    assert_eq!(config["package_root"], "/opt/guard/site");
+    assert!(config["guard_home"].as_str().unwrap().ends_with("guard"));
+    assert_eq!(config["cli_args"], spec["cli_args"]);
+    assert_eq!(config["harness"], "cline");
+    assert_eq!(config["timeout_seconds"], 8);
+    assert_eq!(config["frozen_launcher"], false);
+    assert!(spec["workspace_config"].is_null());
+    // The compact JSON Python wrote, key for key.
+    let text = spec["config"].as_str().unwrap();
+    assert!(text.starts_with(
+        "{\"python_executable\":\"/py\",\"package_root\":\"/opt/guard/site\",\"guard_home\":\""
+    ));
+    assert!(
+        text.ends_with("\"harness\":\"cline\",\"timeout_seconds\":8,\"frozen_launcher\":false}")
+    );
+}
+
+#[test]
 fn the_hook_spec_names_a_home_other_than_the_users() {
     let home = Home::new();
     let mut context = home.context(json!({"PATH": ""}));

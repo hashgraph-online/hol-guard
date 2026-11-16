@@ -68,9 +68,19 @@ def bounded_cli_hook_command(
         "frozen_launcher": frozen_launcher,
     }
     config_json = json.dumps(config, ensure_ascii=True, separators=(",", ":"))
+    return bounded_hook_command_for_config(config_json, require_desktop_proxy=require_desktop_proxy)
+
+
+def bounded_hook_command_for_config(config_json: str, *, require_desktop_proxy: bool = False) -> tuple[str, ...]:
+    """Wrap a hook config the native runtime built in the bounded bridge or the signed Desktop proxy."""
+
+    config = json.loads(config_json)
+    frozen_launcher = config["frozen_launcher"] is True
+    harness = str(config["harness"])
+    guard_home = Path(str(config["guard_home"]))
     if frozen_launcher:
         desktop_proxy = _trusted_desktop_hook_proxy_command(
-            python_executable, config_json, require_proxy=require_desktop_proxy
+            str(config["python_executable"]), config_json, require_proxy=require_desktop_proxy
         )
         if desktop_proxy is not None:
             return desktop_proxy
@@ -156,6 +166,7 @@ __all__ = [
     "RUNTIME_MISSING",
     "_FROZEN_BRIDGE_COMMAND",
     "bounded_cli_hook_command",
+    "bounded_hook_command_for_config",
     "bounded_hook_script_path",
     "main_from_argv",
 ]

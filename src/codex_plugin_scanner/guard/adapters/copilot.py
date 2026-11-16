@@ -10,7 +10,6 @@ proxy argv for each server, the shim and the ``--help`` probe subprocess.
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -51,26 +50,13 @@ def _ask(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
 
 def _hook_fields(context: HarnessContext) -> dict[str, object]:
     """Guard's bounded hook argv for each hooks object."""
-    from .bounded_cli_hook_bridge import bounded_cli_hook_command
+    from .bounded_cli_hook_bridge import bounded_hook_command_for_config
 
     spec = _ask("hook_spec", context)
-
-    def argv(cli_args: list[str]) -> list[str]:
-        return list(
-            bounded_cli_hook_command(
-                python_executable=sys.executable,
-                package_root=Path(__file__).resolve().parents[3],
-                guard_home=context.guard_home,
-                cli_args=[str(part) for part in cli_args],
-                harness=_HARNESS,
-                timeout_seconds=int(spec["timeout_seconds"]),
-            )
-        )
-
-    workspace = spec["workspace_cli_args"]
+    workspace = spec["workspace_config"]
     return {
-        "config_argv": argv(spec["cli_args"]),
-        "workspace_argv": None if workspace is None else argv(workspace),
+        "config_argv": list(bounded_hook_command_for_config(str(spec["config"]))),
+        "workspace_argv": None if workspace is None else list(bounded_hook_command_for_config(str(workspace))),
     }
 
 

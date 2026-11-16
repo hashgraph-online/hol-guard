@@ -94,6 +94,7 @@ mod hermes_config;
 mod hermes_hooks;
 mod hermes_install;
 mod hermes_uninstall;
+mod hook_config;
 mod hook_render;
 mod install_apply;
 mod isolated_python;
@@ -332,6 +333,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     }
     answer(if op == "default_launch" {
         default_launch(spec, &ctx, fields)
+    } else if op == "hook_spec" {
+        route(spec, op, &ctx, fields)
+            .and_then(|spec_answer| hook_config::with_config(spec, &ctx, spec_answer))
     } else {
         route(spec, op, &ctx, fields)
     })

@@ -42,6 +42,12 @@ pub(super) fn executable(ctx: &Ctx) -> Step<&str> {
     text(ctx, "executable")
 }
 
+/// The executable a bounded hook config names: the caller's interpreter, or
+/// for a frozen caller its prune-safe launcher path.
+pub(super) fn cli_executable(ctx: &Ctx) -> Step<&str> {
+    text(ctx, "cli_executable")
+}
+
 /// `guard_cli_launcher()`: the argv0 Guard writes into harness hooks, MCP
 /// proxies and launchers, the caller's interpreter unless it is frozen.
 pub(super) fn launcher(ctx: &Ctx) -> Step<&str> {

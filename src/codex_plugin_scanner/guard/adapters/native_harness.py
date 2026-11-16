@@ -13,7 +13,6 @@ from __future__ import annotations
 import base64
 import json
 import os
-import sys
 from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -264,19 +263,9 @@ class NativeHarnessAdapter(HarnessAdapter):
         return native_runner_authority(_KIND, request)
 
     def _hook_argv(self, context: HarnessContext) -> list[str]:
-        from .bounded_cli_hook_bridge import bounded_cli_hook_command
+        from .bounded_cli_hook_bridge import bounded_hook_command_for_config
 
-        spec = self._ask("hook_spec", context)
-        return list(
-            bounded_cli_hook_command(
-                python_executable=sys.executable,
-                package_root=Path(__file__).resolve().parents[3],
-                guard_home=context.guard_home,
-                cli_args=[str(part) for part in spec["cli_args"]],
-                harness=self.harness,
-                timeout_seconds=int(spec["timeout_seconds"]),
-            )
-        )
+        return list(bounded_hook_command_for_config(str(self._ask("hook_spec", context)["config"])))
 
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
         from ..runtime_transition import TransitionError

@@ -104,6 +104,7 @@ fn caller(frozen: bool) -> Value {
         "frozen": frozen,
         "launcher": if frozen { "/g/bin/hol-guard" } else { "/py" },
         "frozen_launcher": frozen.then_some("/g/bin/hol-guard-core"),
+        "cli_executable": "/py",
         "package_root": "/opt/guard/site",
         "version": "0.0.0",
     })

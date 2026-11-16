@@ -31,7 +31,7 @@ _PROBE_TIMEOUT_SECONDS = 20.0
 def _facts(context: HarnessContext, transport: str) -> dict[str, object]:
     """The attested Guard CLI the managed transport runs."""
     from ..frozen_runtime_commands import is_frozen_guard_runtime
-    from .bounded_cli_hook_bridge import bounded_cli_hook_command
+    from .bounded_cli_hook_bridge import bounded_hook_command_for_config
     from .guard_cli_attestation import guard_hook_command, resolve_attested_guard_cli
     from .native_hook_bridge import native_hook_bridge_executable
 
@@ -39,16 +39,7 @@ def _facts(context: HarnessContext, transport: str) -> dict[str, object]:
     hook_argv: list[str] | None = None
     if not attested.frozen and attested.python is not None:
         spec = ask("hook_spec", context, harness=_HARNESS)
-        hook_argv = list(
-            bounded_cli_hook_command(
-                python_executable=str(attested.python.executable),
-                package_root=Path(__file__).resolve().parents[3],
-                guard_home=context.guard_home,
-                cli_args=[str(part) for part in spec["cli_args"]],
-                harness=_HARNESS,
-                timeout_seconds=int(spec["timeout_seconds"]),
-            )
-        )
+        hook_argv = list(bounded_hook_command_for_config(str(spec["config"])))
     runtime = None
     if transport == "hooks" and not is_frozen_guard_runtime():
         runtime = native_hook_bridge_executable(_HOOK_WORKER_FEATURE, guard_home=context.guard_home)
