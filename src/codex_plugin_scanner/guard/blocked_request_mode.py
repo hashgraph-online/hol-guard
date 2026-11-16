@@ -182,4 +182,19 @@ def safe_alternative_reason(
     reason = reason.strip()
     if wait in (_NOT_QUEUED, _APPROVAL_CANNOT_UNBLOCK):
         reason = reason.replace(_INBOX_APPROVAL_OFFER, "")
-    return " ".join(part for part in (reason, hint, wait) if part)
+    return " ".join(part for part in (reason, hint, matched_rule(reason_code), wait) if part)
+
+
+def matched_rule(reason_code: str | None) -> str:
+    """Name the native rule that held the action, so the agent can tell holds apart.
+
+    Only a plain rule identifier is named; ``unknown`` and anything else say nothing.
+    """
+    code = reason_code or ""
+    if (
+        code == "unknown"
+        or not 0 < len(code) <= 64
+        or not all(c.isascii() and (c.islower() or c.isdigit() or c == "_") for c in code)
+    ):
+        return ""
+    return f"Guard rule: `{code}`."

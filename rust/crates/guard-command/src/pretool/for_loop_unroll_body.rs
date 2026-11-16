@@ -322,22 +322,22 @@ pub(crate) fn rebinds(item: &str, name: &str) -> bool {
     // name. Scanning both forms covers a name split across quotes and one
     // that quoting would instead join to its neighbour. A binding builtin is
     // read from the words the shell builds, so `select` inside a quoted jq
-    // filter is text handed to jq, while `'re'ad n` is still `read`.
-    let binding_word = binding::holds_a_binding_word(item);
-    may_rebind(item, name, binding_word) || may_rebind(&unquoted(item), name, binding_word)
+    // filter is text handed to jq, while `'re'ad n` is still `read`. Whether
+    // the shell rewrites the text is read from it as written for both forms.
+    let found = (
+        binding::holds_a_binding_word(item),
+        binding::rewritten(item),
+    );
+    may_rebind(item, name, found) || may_rebind(&unquoted(item), name, found)
 }
 
 /// A bare `NAME` only binds where something in the same item can bind a name:
 /// the word is an assignment, a builtin that takes a name is there, or the
 /// item opens an arithmetic command, which assigns without an `=` sign. A
 /// name the item merely talks about, as in `echo "pkg: $pkg"`, binds nothing.
-fn may_rebind(text: &str, name: &str, binding_word: bool) -> bool {
-    names_a_target(text, name) && (assigns(text, name) || binding_word || text.contains("(("))
-}
-
-/// `NAME=`, `NAME+=` and `NAME[index]=` where the shell reads an assignment.
-fn assigns(text: &str, name: &str) -> bool {
-    binding::assigns(text, name)
+fn may_rebind(text: &str, name: &str, (binding_word, rewritten): (bool, bool)) -> bool {
+    let assigns = || binding::assigns(text, name, rewritten);
+    names_a_target(text, name) && (assigns() || binding_word || text.contains("(("))
 }
 
 /// The word the shell builds once it removes the quoting, which is the text
@@ -557,7 +557,7 @@ fn word_boundary(character: Option<char>) -> bool {
 #[path = "for_loop_unroll_pipeline.rs"]
 mod pipeline;
 
-use pipeline::pipeline_stages;
+pub(in crate::pretool) use pipeline::pipeline_stages;
 
 /// Whether a backslash makes the character at `at` a literal. The shell reads
 /// `\ ` as a space stuck to the word beside it, so `cat \ $f` is one glued

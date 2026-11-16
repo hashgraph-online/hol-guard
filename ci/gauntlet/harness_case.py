@@ -27,6 +27,7 @@ from .approval_retry_persistent import collect as collect_approval_persistent
 from .approval_retry_persistent import stage as stage_approval_persistent
 from .approval_retry_persistent import write_package_review_config
 from .approval_retry_relay import (
+    DESKTOP_RELAY_CASE,
     RELAY_MARKER,
     RELAY_ORACLE,
     SIGNED_LINK_REDACTIONS,
@@ -250,7 +251,7 @@ def run_harness_case(
                     )
                 )
             if scenario.oracle == RELAY_ORACLE:
-                case["review_policy"] = write_relay_config(guard_home)
+                case["review_policy"] = write_relay_config(guard_home, desktop=scenario.id == DESKTOP_RELAY_CASE)
             if CONNECTOR_PROFILE in scenario.profiles:
                 connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
                 connector_state = state_digest(connector.state_dir)

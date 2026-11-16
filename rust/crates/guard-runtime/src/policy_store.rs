@@ -92,6 +92,9 @@ pub(crate) use policy_store_validation::read_verifier_key;
 use policy_store_validation::validate_private_directory;
 
 #[cfg(test)]
+#[path = "policy_store_cigar_replay_tests.rs"]
+mod cigar_replay_tests;
+#[cfg(test)]
 #[path = "policy_store_scope_tests.rs"]
 mod scope_tests;
 #[cfg(test)]

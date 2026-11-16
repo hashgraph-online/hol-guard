@@ -144,7 +144,7 @@ def _default_guidance() -> tuple[str, ...]:
 
     notes = {
         safe_alternative_reason(
-            "", reason_code="x", approval_queued=queued, retry_reuses_approval=reuses, exact_action_allowable=exact
+            "", reason_code="", approval_queued=queued, retry_reuses_approval=reuses, exact_action_allowable=exact
         )
         for queued, reuses, exact in product((True, False), repeat=3)
     }

@@ -270,14 +270,7 @@ fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::pa
 /// Upper bound on the entries a leaf glob's directory may hold.
 const MAX_LEAF_ENTRIES: usize = 4096;
 
-/// `ls /tmp/pg-run/.s.PGSQL*`: a pattern in the last component only, below a
-/// literal directory that `ls` may list by name and that no other user can
-/// add an entry to. The screened glob expansion refuses
-/// hidden and socket matches, but a listing prints only their names, as
-/// listing the directory itself would. Every entry the pattern could match
-/// under any shell option (`dotglob`, `nocaseglob`) is screened: a directory
-/// match has its entries listed, so it needs the listing proof itself, and
-/// any other match must clear the sensitive-path and credential-name screens.
+/// Screen every leaf glob match below a listable, owner-controlled non-home directory.
 fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     // Windows spells the home path with `\`, so there it is a separator.
     let separator = |c: char| c == '/' || (c == '\\' && cfg!(windows));
@@ -290,11 +283,11 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
         || value.contains(['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0'])
         || (value.contains('\\') && !cfg!(windows))
         || value.contains(['{', '}', '(', ')', '!'])
-        // zsh `EXTENDED_GLOB` reads `#`, `^` and `~` as operators, so
-        // `*fact#ory*` can match `.factory`; the glob path refuses them too.
+        // zsh extended globs can reach hidden names; `**` reaches unchecked nested paths.
+        // Reject both rather than trusting the leaf-only proof.
         || pattern.contains(['#', '^', '~'])
-        // A trailing wildcard can always spell a credential name, so the
-        // pattern only screens its fixed path; every match is screened below.
+        || pattern.contains("**")
+        // The fixed directory and every wildcard match need screening.
         || super::sensitive_path_argument(value)
         || super::sensitive_read_path_argument(directory)
     {
@@ -305,8 +298,7 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     // names it can expand to and not by every sibling, such as a hidden
     // `.factory` beside it. That match is byte-wise, so a name that is not
     // ASCII uses a looser match that holds under any locale. A bracket class
-    // falls back to the literal text before the first wildcard and after the
-    // last one.
+    // uses the literal prefix and suffix around the wildcards.
     let lowered = pattern.to_ascii_lowercase();
     let prefix = &lowered[..lowered.find(['*', '?', '[']).unwrap_or(lowered.len())];
     let suffix = &lowered[lowered.rfind(['*', '?', ']']).map_or(0, |at| at + 1)..];
@@ -323,23 +315,26 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
             && name.starts_with(prefix)
             && name.ends_with(suffix)
     };
-    // `.*` can match `.` and `..`, which name the directory and its parent.
-    if candidate(".") || candidate("..") {
+    // A shell matches `.` and `..` (the directory, its parent) only by a `.`-led pattern.
+    if pattern.starts_with(['.', '[']) && (candidate(".") || candidate("..")) {
         return false;
     }
     let Some(base) = expanded_path(directory, context) else {
         return false;
     };
-    // The shell expands the pattern after this screen, and anyone can add a
-    // matching link to a world-writable directory (`/tmp`) in between, so a
-    // pattern directly below one keeps its review whatever it matches now.
+    let Ok(canonical_base) = std::fs::canonicalize(&base) else {
+        return false;
+    };
+    if context
+        .home_dir
+        .is_some_and(|h| !std::fs::canonicalize(h).is_ok_and(|home| home != canonical_base))
+    {
+        return false;
+    }
+    // Shell expansion races are unsafe in world-writable directories.
     if super::listing_temporary::writable_by_anyone(&base) {
         return false;
     }
-    // The listing names the matches, not the directory holding them, so a
-    // temporary directory only the owner can add entries to answers for a
-    // pattern below it (`ls /tmp/tmp.ab12/pg*`) although listing it whole
-    // may stay reviewed. Every match is screened on its own below.
     if !safe_reads::safe_listing_arguments(&[directory.to_owned()], context)
         && !super::listing_temporary::temporary_glob_directory(&base, context)
     {
@@ -367,20 +362,24 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
         let Some(text) = path.to_str() else {
             return false;
         };
-        // A hidden directory (`.config`, `.cache`) may hold credentials whose
-        // names the listing would print, so a wildcard never reaches into one.
+        // Never a hidden directory (`.config`) or a key file (`server.pem`), as in `ls -R`.
         let listed = if std::fs::metadata(&path).is_ok_and(|metadata| metadata.is_dir()) {
             !name.starts_with('.')
                 && safe_reads::safe_listing_arguments(&[text.to_owned()], context)
         } else {
             !super::sensitive_read_path_argument(text)
+                && !search::key_file_name(&name)
                 && std::fs::canonicalize(&path).is_ok_and(|canonical| {
-                    super::read_paths::resolved_location_allowed(
-                        &canonical,
-                        context.home_dir,
-                        context.cwd,
-                        false,
-                    )
+                    canonical
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|name| !search::key_file_name(name))
+                        && super::read_paths::resolved_location_allowed(
+                            &canonical,
+                            context.home_dir,
+                            context.cwd,
+                            false,
+                        )
                 })
         };
         if !listed {

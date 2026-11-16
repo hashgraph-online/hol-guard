@@ -1653,9 +1653,9 @@
   {
    "file": "rust/crates/guard-runtime/src/guard_paths.rs",
    "item": "pub(crate) fn owned_by_current_user(_path: &Path) -> bool",
-   "verdict": "windows-unsupported",
-   "note": "Ownership is not proven off Unix, so nothing is treated as owned by the current account. Fails closed.",
-   "cfg": "not(unix)",
+   "verdict": "other-platform",
+   "note": "Windows reads the owner's SID through `guard_runtime_windows_process::owned_by_current_user`, so this arm is left for a target that is neither Unix nor Windows: it has no ownership primitive, nothing is treated as owned by the current account, and the hook workspace keeps the home roots. Fails closed.",
+   "cfg": "not(any(unix, windows))",
    "body": "ac0d58312b36"
   },
   {

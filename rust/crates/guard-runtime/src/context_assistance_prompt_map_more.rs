@@ -118,9 +118,8 @@ pub(super) fn changelog_file(path: &str) -> bool {
 /// close matches and the last of its best ones, where a new test fits. A test
 /// scores the rarity of the words it uses, so the few tests that use a rare
 /// word outrank the many that say "option". The best file's short close
-/// tests are shown whole, as a named function is, since an agent fixing or
-/// writing the code reads them next; not for a rename, a review or a question, nor when
-/// `earlier` holds them, shown by an earlier prompt or above.
+/// tests are shown whole, as a named function is, since an agent fixing or writing
+/// the code reads them next; not for a rename, review, question, or when shown earlier.
 pub(super) fn tests(
     files: &[File],
     mentioned: &[String],
@@ -447,11 +446,8 @@ pub(super) fn entry(files: &[File], pick: &Pick) -> String {
     entry
 }
 
-/// Each named definition's entry and the spans shown whole. A short function
-/// or method the prompt names is shown whole, even when the prompt asks about
-/// changes, since a diff shows only the lines that changed; but not for a
-/// rename, which asks where code is, nor when an earlier prompt of the
-/// session was shown it.
+/// Each named definition's entry and the spans shown whole: a short named
+/// function, even about changes, not for a rename nor when shown earlier.
 pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entry> {
     let mut listed = Vec::new();
     let mut room = if asked.everywhere {
@@ -460,11 +456,13 @@ pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entr
         MAX_SHOWN_DEFINITION_CHARS
     };
     let mut said = docstring::Said::default();
+    let mut shown_any = false;
     for pick in chosen {
         let mut item = Entry::plain(entry(files, pick));
         let code = (pick.whole).then(|| docstring::shown(&files[pick.file], pick.at, asked, said));
         if let Some((span, code, note)) = code.flatten() {
-            if code.len() <= room && !asked.earlier.contains(&span) {
+            let first = docstring::whole_here(asked, shown_any, &code);
+            if first && code.len() <= room && !asked.earlier.contains(&span) {
                 said = said.and(&note);
                 room -= code.len();
                 let shown = fenced(&code);
@@ -472,6 +470,7 @@ pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entr
                 item.text.push_str(&shown);
                 item.text.push_str(&note);
                 item.shown.push(span);
+                shown_any = true;
             }
         }
         listed.push(item);

@@ -123,6 +123,9 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # inline code, which Guard stops when enforcing. A contained run
         # prints one line inside the workspace, which is all the case does.
         "gauntlet-watch-fixture-command-is-still-stopped",
+        # A DNS lookup reading names from a batch file: the lookup keeps its
+        # review, and a contained run has no network, so no name leaves.
+        "dns-dig-batch-file",
         # An awk program whose output pipe the read screen must refuse: the pipe
         # runs a network client, and a contained run has no network, so nothing
         # leaves. A read misclassification would be a quiet allow and still fail.

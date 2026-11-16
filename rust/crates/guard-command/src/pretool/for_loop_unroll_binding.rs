@@ -160,13 +160,10 @@ const TRANSPARENT_WORDS: &[&str] = &[
 /// word, since a redirection may stand among the assignments. Text the shell
 /// rewrites before it splits words -- a backtick, a backslash, a `$(`, `${`,
 /// `$'` or `$"` form, or a quote left open -- is read the old way: any word
-/// that starts with `NAME=` counts.
-pub(super) fn assigns(text: &str, name: &str) -> bool {
+/// that starts with `NAME=` counts. `rewritten` says whether the item as
+/// written holds such text; see [`rewritten`].
+pub(super) fn assigns(text: &str, name: &str, rewritten: bool) -> bool {
     let shaped = |word: &str| assignment_shaped(word, Some(name));
-    let rewritten = text.contains(['`', '\\'])
-        || ["$(", "${", "$'", "$\""]
-            .iter()
-            .any(|form| text.contains(form));
     match (!rewritten)
         .then(|| assignment_position_words(text))
         .flatten()
@@ -178,6 +175,48 @@ pub(super) fn assigns(text: &str, name: &str) -> bool {
             })
             .any(shaped),
     }
+}
+
+/// Whether the shell rewrites part of `item` before it splits words. Inside
+/// plain single quotes it rewrites nothing, so a jq filter such as
+/// `'gsub("\n";" ")'` is text there. The item is read as written: the copy
+/// with its quotes removed shows a backslash the shell never acts on.
+pub(super) fn rewritten(item: &str) -> bool {
+    let unquoted = outside_single_quotes(item);
+    unquoted.contains(['`', '\\'])
+        || ["$(", "${", "$'", "$\""]
+            .iter()
+            .any(|form| unquoted.contains(form))
+}
+
+/// The text without its plain single-quoted spans. A `$'…'` span is kept, as
+/// its escapes are rewritten. A quote left open drops the rest of the text;
+/// `assignment_position_words` then finds the open quote and reads it all.
+fn outside_single_quotes(text: &str) -> String {
+    let mut out = String::new();
+    let mut double = false;
+    let mut previous = None;
+    let mut characters = text.chars();
+    while let Some(character) = characters.next() {
+        match character {
+            '\\' => {
+                out.push(character);
+                out.extend(characters.next());
+                previous = None;
+                continue;
+            }
+            '"' => double = !double,
+            '\'' if !double && previous != Some('$') => {
+                characters.find(|quoted| *quoted == '\'');
+                previous = None;
+                continue;
+            }
+            _ => {}
+        }
+        out.push(character);
+        previous = Some(character);
+    }
+    out
 }
 
 /// `IDENT=`, `IDENT+=` or `IDENT[` at the start of a word; with a name, only
@@ -340,6 +379,11 @@ mod tests {
                 "for f in a b; do echo 'x y' f=$f; done",
                 "echo 'x y' f=a; echo 'x y' f=b",
             ),
+            (
+                "for n in 1 2; do gh api graphql -F n=$n --jq '.x | gsub(\"\\n\";\" \")'; done",
+                "gh api graphql -F n=1 --jq '.x | gsub(\"\\n\";\" \")'; \
+                 gh api graphql -F n=2 --jq '.x | gsub(\"\\n\";\" \")'",
+            ),
         ] {
             assert_eq!(
                 crate::pretool::for_loop_unroll::unroll(looped).as_deref(),
@@ -359,8 +403,11 @@ mod tests {
             "echo ok # n=1",
             "time -p echo n=1",
             "echo nn=1 xn=1",
+            "gh api -F n=\u{1} --jq 'gsub(\"\\n\";\" \")'",
+            "echo 'a`b`' n=1",
+            "echo '$(x)' n=1",
         ] {
-            assert!(!super::assigns(item, "n"), "{item}");
+            assert!(!super::assigns(item, "n", super::rewritten(item)), "{item}");
         }
     }
 
@@ -390,8 +437,12 @@ mod tests {
             "echo $(x) n=1",
             "echo \\x n=1",
             "echo 'open n=1",
+            "x='a\\b' n=1",
+            "echo \"\\x\" n=1",
+            "echo $'\\x' n=1",
+            "echo \\' n=1",
         ] {
-            assert!(super::assigns(item, "n"), "{item}");
+            assert!(super::assigns(item, "n", super::rewritten(item)), "{item}");
         }
     }
 

@@ -185,10 +185,11 @@ fn a_comment_does_not_start_a_heredoc_or_quote() {
         assert!(has(command, "npm publish"), "{command:?}");
         assert!(spellings(command).complete, "{command:?}");
     }
-    // A quote only the plain reading opens may be real, so the line asks.
+    // The exact parse reads the comment; with comments off the quote never
+    // closes and the shell runs nothing, so the line is still read through.
     let apostrophe = "(true) # it's done\nnpm publish";
     assert!(has(apostrophe, "npm publish"));
-    assert!(!spellings(apostrophe).complete);
+    assert!(spellings(apostrophe).complete);
 }
 
 #[test]
@@ -207,4 +208,50 @@ fn arithmetic_that_lists_itself_is_complete() {
 fn a_hash_inside_an_expansion_is_also_read_as_text() {
     let command = "(true); echo ${x:- #'}\n<<EOF '}\nEOF\nnpm publish\nEOF";
     assert!(has(command, "npm publish"), "{command:?}");
+}
+
+#[test]
+fn a_comment_after_an_exact_command_keeps_its_spellings() {
+    for command in [
+        "npm publish # note",
+        "npm publish #note",
+        "true # x; npm publish",
+        // Bash runs this first line before it meets the open quote below.
+        "true # x; npm publish\necho # it's fine",
+    ] {
+        assert!(has(command, "npm publish"), "{command:?}");
+        assert!(spellings(command).complete, "{command:?}");
+    }
+    // A shell with comments off would leave this quote open and run nothing.
+    for command in ["git status # it's fine", "ls # don't recurse"] {
+        assert!(spellings(command).complete, "{command:?}");
+    }
+    // A quoted or escaped `#` is text, so the step is not cut there.
+    for command in ["npm publish '#x'", "npm publish \"#x\"", "npm publish \\#x"] {
+        assert!(!has(command, "npm publish"), "{command:?}");
+    }
+    // With a real comment after it, the cut lands on the comment.
+    assert!(!has("npm publish '#a' #b", "npm publish"));
+    assert!(has("npm publish '#a' #b", "npm publish '#a'"));
+}
+
+#[test]
+fn a_comment_cut_reads_each_word_as_bash_unquotes_it() {
+    // `'$#release'` starts with `$`, so it is not counted as a `#` argument.
+    assert!(has("git show '$#release' #note", "git show '$#release'"));
+    assert!(spellings("git show '$#release' #note").complete);
+    // Empty quotes vanish, so `''#a` is the argument `#a` and not a comment.
+    assert!(has("npm publish ''#a #b", "npm publish '#a'"));
+    // An escape inside ANSI-C quotes can spell `#` or hide a quote, and an
+    // empty `$''` vanishes; none of these lines is read through.
+    for command in [
+        "npm publish $'\\x23a' #b",
+        "git show $'#a\\'b' #note",
+        "npm publish $''#a #b",
+    ] {
+        assert!(!spellings(command).complete, "{command:?}");
+    }
+    // Bash starts a comment at a `#` glued to `;|&()<>`.
+    assert!(has("npm publish x;#b", "npm publish x"));
+    assert!(has("npm publish x&&#b", "npm publish x"));
 }

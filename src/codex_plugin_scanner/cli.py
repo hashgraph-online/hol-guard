@@ -482,6 +482,16 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:
                 print(str(exc), file=sys.stderr)
                 return 1
+        from .guard.cli.desktop_daemon_workers import is_daemon_workers_fast_path_argv, run_daemon_workers_cli
+
+        if is_daemon_workers_fast_path_argv(requested_argv):
+            # Fast path: the native daemon starts its worker host on every cold
+            # start and is not ready until the host publishes policy.
+            try:
+                return run_daemon_workers_cli(requested_argv)
+            except Exception as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
         if is_daemon_serve_fast_path_argv(requested_argv):
             # Fast path: Desktop and the isolated launcher start the
             # approval-center with `daemon --serve`. The command hub must not

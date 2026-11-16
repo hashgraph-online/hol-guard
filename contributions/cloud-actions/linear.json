@@ -1,0 +1,631 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "linear",
+    "name": "Linear",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.linear.app"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "comments:create",
+      "issues:create",
+      "read",
+      "write"
+    ]
+  },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "linear"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "linear.issues.list",
+      "title": "List a team's issues",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.linear.app",
+          "path": "/graphql",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "query",
+                "value": {
+                  "const": "query ($team: String!) { team (id: $team) { issues (first: 50) { nodes { id identifier title url state { name } } } } }"
+                }
+              },
+              {
+                "name": "variables",
+                "value": {
+                  "object": [
+                    {
+                      "name": "team",
+                      "value": {
+                        "arg": "team_id"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "team_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "all"
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "issues",
+            "value": {
+              "list": {
+                "from": "data.team.issues.nodes",
+                "maxItems": 50,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "identifier",
+                    "value": {
+                      "from": "identifier"
+                    }
+                  },
+                  {
+                    "name": "title",
+                    "value": {
+                      "from": "title"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "url",
+                    "value": {
+                      "from": "url"
+                    }
+                  },
+                  {
+                    "name": "state",
+                    "value": {
+                      "from": "state.name"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "errors",
+            "value": {
+              "list": {
+                "from": "errors",
+                "maxItems": 20,
+                "fields": [
+                  {
+                    "name": "message",
+                    "value": {
+                      "from": "message"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "lists a team's issues",
+          "kind": "safe",
+          "arguments": {
+            "team_id": "11111111-2222-4333-8444-555555555555"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": "{\"query\":\"query ($team: String!) { team (id: $team) { issues (first: 50) { nodes { id identifier title url state { name } } } } }\",\"variables\":{\"team\":\"11111111-2222-4333-8444-555555555555\"}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.linear.app/graphql"
+            },
+            "response": "{\"data\":{\"team\":{\"issues\":{\"nodes\":[{\"id\":\"66666666-7777-4888-9999-aaaaaaaaaaaa\",\"identifier\":\"ENG-7\",\"title\":\"Ship the release notes\",\"url\":\"https://linear.app/example/issue/ENG-7\",\"state\":{\"name\":\"Todo\"},\"assignee\":{\"email\":\"a@example.test\"}}]}}}}",
+            "projection": {
+              "issues": [
+                {
+                  "id": "66666666-7777-4888-9999-aaaaaaaaaaaa",
+                  "identifier": "ENG-7",
+                  "title": "Ship the release notes",
+                  "url": "https://linear.app/example/issue/ENG-7",
+                  "state": "Todo"
+                }
+              ]
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "keeps only the error text when the team cannot be read",
+          "kind": "safe",
+          "arguments": {
+            "team_id": "11111111-2222-4333-8444-555555555555"
+          },
+          "expect": {
+            "request": {
+              "body": "{\"query\":\"query ($team: String!) { team (id: $team) { issues (first: 50) { nodes { id identifier title url state { name } } } } }\",\"variables\":{\"team\":\"11111111-2222-4333-8444-555555555555\"}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.linear.app/graphql"
+            },
+            "response": "{\"data\":null,\"errors\":[{\"message\":\"Entity not found: Team\",\"extensions\":{\"code\":\"INPUT_ERROR\"}}]}",
+            "projection": {
+              "errors": [
+                {
+                  "message": "Entity not found: Team"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "refuses a team id that could close the query",
+          "kind": "risky",
+          "arguments": {
+            "team_id": "x\") { id } }"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "linear.issues.create",
+      "title": "Create an issue",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.linear.app",
+          "path": "/graphql",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "query",
+                "value": {
+                  "const": "mutation ($team: String!, $title: String!) { issueCreate (input: { teamId: $team, title: $title }) { success issue { id identifier url } } }"
+                }
+              },
+              {
+                "name": "variables",
+                "value": {
+                  "object": [
+                    {
+                      "name": "team",
+                      "value": {
+                        "arg": "team_id"
+                      }
+                    },
+                    {
+                      "name": "title",
+                      "value": {
+                        "arg": "title"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "team_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "title": {
+          "type": "string",
+          "required": true,
+          "maxLength": 255
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "success",
+            "value": {
+              "from": "data.issueCreate.success"
+            }
+          },
+          {
+            "name": "id",
+            "value": {
+              "from": "data.issueCreate.issue.id"
+            }
+          },
+          {
+            "name": "identifier",
+            "value": {
+              "from": "data.issueCreate.issue.identifier"
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "from": "data.issueCreate.issue.url"
+            }
+          },
+          {
+            "name": "errors",
+            "value": {
+              "list": {
+                "from": "errors",
+                "maxItems": 20,
+                "fields": [
+                  {
+                    "name": "message",
+                    "value": {
+                      "from": "message"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "issues:create"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "creates an issue",
+          "kind": "safe",
+          "arguments": {
+            "team_id": "11111111-2222-4333-8444-555555555555",
+            "title": "Ship the release notes"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"query\":\"mutation ($team: String!, $title: String!) { issueCreate (input: { teamId: $team, title: $title }) { success issue { id identifier url } } }\",\"variables\":{\"team\":\"11111111-2222-4333-8444-555555555555\",\"title\":\"Ship the release notes\"}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.linear.app/graphql"
+            },
+            "response": "{\"data\":{\"issueCreate\":{\"success\":true,\"issue\":{\"id\":\"66666666-7777-4888-9999-aaaaaaaaaaaa\",\"identifier\":\"ENG-8\",\"url\":\"https://linear.app/example/issue/ENG-8\"}}}}",
+            "projection": {
+              "success": true,
+              "id": "66666666-7777-4888-9999-aaaaaaaaaaaa",
+              "identifier": "ENG-8",
+              "url": "https://linear.app/example/issue/ENG-8"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a team id that is not an id",
+          "kind": "risky",
+          "arguments": {
+            "team_id": "ENG",
+            "title": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "linear.comments.create",
+      "title": "Comment on an issue",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.linear.app",
+          "path": "/graphql",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "query",
+                "value": {
+                  "const": "mutation ($issue: String!, $body: String!) { commentCreate (input: { issueId: $issue, body: $body }) { success comment { id url } } }"
+                }
+              },
+              {
+                "name": "variables",
+                "value": {
+                  "object": [
+                    {
+                      "name": "issue",
+                      "value": {
+                        "arg": "issue_id"
+                      }
+                    },
+                    {
+                      "name": "body",
+                      "value": {
+                        "arg": "body"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "issue_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Z][A-Z0-9]{0,9}-[0-9]{1,9})$"
+        },
+        "body": {
+          "type": "string",
+          "required": true,
+          "maxLength": 10000
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "success",
+            "value": {
+              "from": "data.commentCreate.success"
+            }
+          },
+          {
+            "name": "id",
+            "value": {
+              "from": "data.commentCreate.comment.id"
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "from": "data.commentCreate.comment.url"
+            }
+          },
+          {
+            "name": "errors",
+            "value": {
+              "list": {
+                "from": "errors",
+                "maxItems": 20,
+                "fields": [
+                  {
+                    "name": "message",
+                    "value": {
+                      "from": "message"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "comments:create"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "comments on an issue by its short id",
+          "kind": "safe",
+          "arguments": {
+            "issue_id": "ENG-123",
+            "body": "Release notes are up."
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"query\":\"mutation ($issue: String!, $body: String!) { commentCreate (input: { issueId: $issue, body: $body }) { success comment { id url } } }\",\"variables\":{\"issue\":\"ENG-123\",\"body\":\"Release notes are up.\"}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.linear.app/graphql"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a lower-case short id",
+          "kind": "risky",
+          "arguments": {
+            "issue_id": "eng-123",
+            "body": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

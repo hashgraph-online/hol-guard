@@ -1,0 +1,332 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "calendly",
+    "name": "Calendly",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.calendly.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "api"
+    ]
+  },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "calendly"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "calendly.events.get",
+      "title": "Read a scheduled event",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "api.calendly.com",
+          "path": "/scheduled_events/{event_uuid}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "event_uuid": {
+          "type": "string",
+          "required": true,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9-]{8,64}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "event"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "uri",
+            "value": {
+              "from": "resource.uri"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "resource.name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "status",
+            "value": {
+              "from": "resource.status"
+            }
+          },
+          {
+            "name": "start_time",
+            "value": {
+              "from": "resource.start_time"
+            }
+          },
+          {
+            "name": "end_time",
+            "value": {
+              "from": "resource.end_time"
+            }
+          },
+          {
+            "name": "error_title",
+            "value": {
+              "from": "title"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "error_message",
+            "value": {
+              "from": "message"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "api"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "reads one event",
+          "kind": "safe",
+          "arguments": {
+            "event_uuid": "GBGBDCAADAEDCRZ2"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://api.calendly.com/scheduled_events/GBGBDCAADAEDCRZ2"
+            },
+            "response": "{\"resource\":{\"uri\":\"https://api.calendly.com/scheduled_events/GBGBDCAADAEDCRZ2\",\"name\":\"Intro call\",\"status\":\"active\",\"start_time\":\"2026-12-01T15:00:00Z\",\"end_time\":\"2026-12-01T15:30:00Z\"}}",
+            "projection": {
+              "uri": "https://api.calendly.com/scheduled_events/GBGBDCAADAEDCRZ2",
+              "name": "Intro call",
+              "status": "active",
+              "start_time": "2026-12-01T15:00:00Z",
+              "end_time": "2026-12-01T15:30:00Z"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an event id with a path",
+          "kind": "risky",
+          "arguments": {
+            "event_uuid": "GBGB/../users/me"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "calendly.events.cancel",
+      "title": "Cancel a scheduled event",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.calendly.com",
+          "path": "/scheduled_events/{event_uuid}/cancellation",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "reason",
+                "value": {
+                  "arg": "reason"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "event_uuid": {
+          "type": "string",
+          "required": true,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9-]{8,64}$"
+        },
+        "reason": {
+          "type": "string",
+          "required": true,
+          "maxLength": 500
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "event"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "reversibility": {
+          "const": "permanent"
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "canceled_by",
+            "value": {
+              "from": "resource.canceled_by"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "reason",
+            "value": {
+              "from": "resource.reason"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "error_title",
+            "value": {
+              "from": "title"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "error_message",
+            "value": {
+              "from": "message"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "api"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "cancels one event",
+          "kind": "safe",
+          "arguments": {
+            "event_uuid": "GBGBDCAADAEDCRZ2",
+            "reason": "Moving to next week."
+          },
+          "expect": {
+            "facts": {
+              "class": "delete"
+            },
+            "request": {
+              "body": "{\"reason\":\"Moving to next week.\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.calendly.com/scheduled_events/GBGBDCAADAEDCRZ2/cancellation"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a missing reason",
+          "kind": "risky",
+          "arguments": {
+            "event_uuid": "GBGBDCAADAEDCRZ2"
+          },
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

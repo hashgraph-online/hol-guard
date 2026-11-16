@@ -77,7 +77,9 @@ def test_package_hint_leaves_the_approval_step_to_the_queue_state() -> None:
 
 def test_specific_deny_text_without_queued_approval_points_to_no_approval() -> None:
     text = safe_alternative_reason("Blocked.", reason_code="native_policy_reapproval_required", approval_queued=False)
-    assert text.startswith("Blocked. No approval is waiting in HOL Guard")
+    assert text.startswith(
+        "Blocked. Guard rule: `native_policy_reapproval_required`. No approval is waiting in HOL Guard"
+    )
     assert "Ask the user to approve" not in text
     assert "hol-guard approvals" not in text
 
@@ -187,3 +189,12 @@ def test_direct_read_review_leaves_out_the_search_advice() -> None:
         approval_queued=True,
     )
     assert "A search is checked" in search
+
+
+def test_deny_text_names_only_a_plain_rule_identifier() -> None:
+    # The agent can tell holds apart by rule; an unknown or odd code names nothing.
+    named = safe_alternative_reason("Held.", reason_code="native_network_review", approval_queued=True)
+    assert "Guard rule: `native_network_review`." in named
+    for code in ("unknown", "", "Native-Rule", "a`b", "x" * 65):
+        text = safe_alternative_reason("Held.", reason_code=code, approval_queued=True)
+        assert "Guard rule:" not in text

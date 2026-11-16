@@ -62,6 +62,9 @@ pub mod cloud_catalog;
 pub mod cloud_pack;
 pub mod cloud_pack_artifact;
 pub mod cloud_pack_cli;
+pub mod cloud_pack_connection;
+#[cfg(test)]
+mod cloud_pack_connection_tests;
 #[cfg(test)]
 mod cloud_pack_corpus_tests;
 pub mod cloud_pack_diff;
@@ -90,6 +93,8 @@ mod cloud_pack_money;
 #[cfg(test)]
 mod cloud_pack_money_tests;
 pub mod cloud_pack_pattern;
+#[cfg(test)]
+mod cloud_pack_reconcile_tests;
 pub mod cloud_pack_request;
 pub mod cloud_pack_response;
 #[cfg(test)]
@@ -177,6 +182,7 @@ mod command_workspace_write_candidates;
 pub mod content_sensitivity;
 pub mod contributed_mcp_decision;
 mod contributed_mcp_url;
+mod shell_comment_lines;
 pub use contributed_mcp_url::normalized_remote_mcp_url;
 mod data_flow;
 pub mod dep_map;

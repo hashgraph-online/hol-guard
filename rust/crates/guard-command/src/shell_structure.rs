@@ -567,7 +567,7 @@ fn find_newline(chars: &[char], from: usize) -> Option<usize> {
 
 #[path = "shell_structure_heredoc_bodies.rs"]
 mod heredoc_bodies;
-pub use heredoc_bodies::mask_closed_heredoc_bodies;
+pub use heredoc_bodies::{mask_closed_heredoc_bodies, mask_shell_comments};
 
 #[cfg(test)]
 #[path = "shell_structure_tests.rs"]

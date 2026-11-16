@@ -109,3 +109,35 @@ fn a_loop_written_out_past_the_command_limit_keeps_its_review() {
     let long = format!("for n in {}; do echo \"$n\" '{text}'; done", numbers(32));
     assert_ne!(action(&long, &home), "allow");
 }
+
+/// The same long loop after another step of the list, as in
+/// `gh pr view 6221 …; echo '---'; for n in …; do …; done`. That splice gave
+/// up at 8 KiB while the loop alone could grow to the command limit, and a
+/// loop after `&&` read the quoted pipes of its jq filter as stages.
+#[test]
+fn a_long_loop_after_another_step_is_judged_by_its_steps() {
+    let home = fixture();
+    // After `;` or `&&`. The filter's `|` sits inside quotes, so it does not
+    // make the `&&`-gated loop look like it changes the shell.
+    for before in [
+        "gh pr view 6221 --repo example/project --json state 2>&1; echo '---'; ",
+        "gh pr view 6221 --repo example/project --json state && ",
+    ] {
+        let command = format!("{before}{}", pull_request_loop(23, ""));
+        assert_eq!(action(&command, &home), "allow", "{before}");
+        for extra in [" rm -rf ~/.ssh;", " cat ~/.ssh/id_ed25519;"] {
+            let unsafe_loop = format!("{before}{}", pull_request_loop(23, extra));
+            assert_ne!(action(&unsafe_loop, &home), "allow", "{before}{extra}");
+        }
+    }
+    // Past the command limit the list is still refused.
+    let text = "x".repeat(1100);
+    let listed = |count| {
+        format!(
+            "echo start; for n in {}; do echo \"$n\" '{text}'; done",
+            numbers(count)
+        )
+    };
+    assert_eq!(action(&listed(2), &home), "allow");
+    assert_ne!(action(&listed(32), &home), "allow");
+}

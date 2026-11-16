@@ -18,7 +18,7 @@ use serde_json::{json, Map, Value};
 use std::sync::LazyLock;
 
 /// Every pack this build ships; tests read the same list.
-pub(crate) const SHIPPED_SOURCES: [&str; 46] = [
+pub(crate) const SHIPPED_SOURCES: [&str; 53] = [
     include_str!("../../../../contributions/cloud-actions/airtable.json"),
     include_str!("../../../../contributions/cloud-actions/asana.json"),
     include_str!("../../../../contributions/cloud-actions/atlassian.json"),
@@ -27,6 +27,8 @@ pub(crate) const SHIPPED_SOURCES: [&str; 46] = [
     include_str!("../../../../contributions/cloud-actions/box.json"),
     include_str!("../../../../contributions/cloud-actions/buildkite-mcp.json"),
     include_str!("../../../../contributions/cloud-actions/calendar.json"),
+    include_str!("../../../../contributions/cloud-actions/calendly.json"),
+    include_str!("../../../../contributions/cloud-actions/clickup.json"),
     include_str!("../../../../contributions/cloud-actions/cloudflare.json"),
     include_str!("../../../../contributions/cloud-actions/discord.json"),
     include_str!("../../../../contributions/cloud-actions/docs.json"),
@@ -40,7 +42,10 @@ pub(crate) const SHIPPED_SOURCES: [&str; 46] = [
     include_str!("../../../../contributions/cloud-actions/hubspot.json"),
     include_str!("../../../../contributions/cloud-actions/hubspot-mcp.json"),
     include_str!("../../../../contributions/cloud-actions/huggingface-mcp.json"),
+    include_str!("../../../../contributions/cloud-actions/intercom.json"),
     include_str!("../../../../contributions/cloud-actions/intercom-mcp.json"),
+    include_str!("../../../../contributions/cloud-actions/linear.json"),
+    include_str!("../../../../contributions/cloud-actions/mailchimp.json"),
     include_str!("../../../../contributions/cloud-actions/monday.json"),
     include_str!("../../../../contributions/cloud-actions/monday-mcp.json"),
     include_str!("../../../../contributions/cloud-actions/neon-mcp.json"),
@@ -62,8 +67,10 @@ pub(crate) const SHIPPED_SOURCES: [&str; 46] = [
     include_str!("../../../../contributions/cloud-actions/stripe-mcp.json"),
     include_str!("../../../../contributions/cloud-actions/supabase-mcp.json"),
     include_str!("../../../../contributions/cloud-actions/teams.json"),
+    include_str!("../../../../contributions/cloud-actions/trello.json"),
     include_str!("../../../../contributions/cloud-actions/vercel-mcp.json"),
     include_str!("../../../../contributions/cloud-actions/webflow-mcp.json"),
+    include_str!("../../../../contributions/cloud-actions/zendesk.json"),
     include_str!("../../../../contributions/cloud-actions/zoom.json"),
 ];
 
