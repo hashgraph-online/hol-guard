@@ -267,7 +267,7 @@ def test_grok_repair_rewrites_versioned_desktop_core_when_shim_exists(
         str(versioned),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.sys.frozen",
+        "codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge.sys.frozen",
         True,
         raising=False,
     )

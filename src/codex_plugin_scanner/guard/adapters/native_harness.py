@@ -15,15 +15,14 @@ import json
 import os
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import datetime, timezone
 from functools import cache
 from pathlib import Path
 from typing import Any
 
+from ..harness.diagnostic_probes import command_probes_enabled
 from ..models import HarnessDetection
 from ..native_caller import caller_identity
 from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall
-from .diagnostic_probes import command_probes_enabled
 from .native_harness_steps import detection_from
 
 _KIND = "harness_adapter"
@@ -137,6 +136,11 @@ def ask(
     return answer
 
 
+def _surface(surface: str | None) -> dict[str, object]:
+    """The surface field, left out so the runtime applies the harness default."""
+    return {} if surface is None else {"surface": surface}
+
+
 def raise_failure(answer: dict[str, Any]) -> None:
     """Raise the error a one-key failure answer names; return for any other answer."""
     if "refusal" in answer:
@@ -184,7 +188,7 @@ class NativeHarnessAdapter(HarnessAdapter):
 
     def _ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
         if op in _EXTENSION_OPS and self._spec.get("extension"):
-            from .extension_runtime import extension_runtime
+            from ..harness.extension_runtime import extension_runtime
 
             fields["runtime"] = extension_runtime()
         answer = self._owned_ask(op, context, **fields)
@@ -193,6 +197,12 @@ class NativeHarnessAdapter(HarnessAdapter):
             from ..claude_hook_entry import claude_facts
 
             fields["facts"] = claude_facts(context.guard_home)
+            answer = self._owned_ask(op, context, **fields)
+        if answer == {"reply": {"workspace_skills": None}} and "workspace_skills" not in fields:
+            # Only a Windows walk in this process finds the workspace skills.
+            from ..aibom_detection import portable_workspace_skills
+
+            fields["workspace_skills"] = portable_workspace_skills(self.harness, context.workspace_dir)
             answer = self._owned_ask(op, context, **fields)
         return answer
 
@@ -223,6 +233,10 @@ class NativeHarnessAdapter(HarnessAdapter):
         return detection_from(self.harness, context, answer)
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
+        if self._spec.get("launch_runner"):
+            from .native_harness_steps import runner_launch_argv
+
+            return runner_launch_argv(self._spec["launch_runner"], context, passthrough_args)
         op = self._spec.get("launch_op") or (
             "launch_command" if self._spec.get("trusted_launcher") else "default_launch"
         )
@@ -253,6 +267,10 @@ class NativeHarnessAdapter(HarnessAdapter):
         return environment
 
     def launch_environment(self, context: HarnessContext) -> dict[str, str]:
+        if self._spec.get("launch_runner"):
+            from .native_harness_steps import runner_launch_environment
+
+            return runner_launch_environment(self._spec["launch_runner"], context)
         if not self._spec.get("dynamic"):
             return {}
         environment = self._ask("launch_env", context).get("env")
@@ -323,7 +341,7 @@ class NativeHarnessAdapter(HarnessAdapter):
         if operation == "install" and self._spec.get("install") == "delegated":
             self._delegated_targets(context)
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
+    def install(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         mode = self._spec.get("install")
         if mode == "delegated":
             return self._install_delegated(context)
@@ -332,7 +350,7 @@ class NativeHarnessAdapter(HarnessAdapter):
 
             shim = install_guard_shim(self.harness, context)
             return {"harness": self.harness, "active": True, "config_path": shim["shim_path"], **shim}
-        return self._apply_install(context)
+        return self._apply_install(context, **_surface(surface))
 
     def _apply_install(self, context: HarnessContext, **options: object) -> dict[str, object]:
         """Prepare the shim and the plan and publish both in one native call."""
@@ -348,9 +366,14 @@ class NativeHarnessAdapter(HarnessAdapter):
             fields["hook_argv"] = self._hook_argv(context)
         if self._spec.get("retired_hooks"):
             fields["retired_commands"] = self._retired_hooks(context, fields["hook_argv"])
+        if self._spec.get("frozen_fact"):
+            from ..frozen_runtime_commands import is_frozen_guard_runtime
+
+            fields["frozen"] = is_frozen_guard_runtime()
         answer = self._ask(
             "apply_install",
             context,
+            timeout_seconds=self._spec.get("install_timeout"),
             **self._shim_names(),
             interpreter=shim_interpreter(),
             shell_profile=shell_profile_facts(context),
@@ -367,8 +390,8 @@ class NativeHarnessAdapter(HarnessAdapter):
         raise_failure(answer.get("failure") or {})
         return json.loads(_text(answer, "manifest"))
 
-    def uninstall(self, context: HarnessContext) -> dict[str, object]:
-        return self._apply_uninstall(context)
+    def uninstall(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
+        return self._apply_uninstall(context, **_surface(surface))
 
     def _apply_uninstall(self, context: HarnessContext, **options: object) -> dict[str, object]:
         from .. import native_transition_files
@@ -381,6 +404,17 @@ class NativeHarnessAdapter(HarnessAdapter):
         native_transition_files._replay(answer.pop("events", None), None, None)
         raise_failure(answer)
         return json.loads(_text(answer, "manifest"))
+
+    def diagnostic_warnings(
+        self,
+        detection: HarnessDetection,
+        runtime_probe: dict[str, object] | None,
+    ) -> list[str]:
+        if not self._spec.get("warnings_op"):
+            return super().diagnostic_warnings(detection, runtime_probe)
+        from .native_harness_steps import native_warnings
+
+        return native_warnings(self, detection, runtime_probe)
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         payload = super().diagnostics(context)
@@ -417,43 +451,9 @@ class NativeHarnessAdapter(HarnessAdapter):
 
     def _install_delegated(self, context: HarnessContext) -> dict[str, object]:
         """Install each native provider, bind its proof, then publish the receipt."""
-        from ..codex_hook_integrity import atomic_write_text
-        from ..shims import install_guard_shim
-        from ..store import GuardStore
-        from . import get_adapter
+        from .native_harness_steps import install_delegated
 
-        # Repeat preparation under the shared owner; the earlier read-only
-        # check does not authorize mutation.
-        delegates = self._delegate_fields(context)
-        prepared = self._delegated_targets(context)
-        native = _native_context(context)
-        proofs: dict[str, str] = {}
-        for target in prepared["targets"]:
-            self._ask("delegate_preflight", context, target=target, **delegates)
-            manifest = get_adapter(target).install(native)
-            bound = self._ask(
-                "delegate_bind",
-                context,
-                target=target,
-                manifest=json.dumps(manifest, default=lambda _: None),
-                **delegates,
-            )
-            GuardStore(context.guard_home).set_managed_install(
-                target, True, None, json.loads(_text(bound, "bound")), datetime.now(timezone.utc).isoformat()
-            )
-            proofs[target] = _text(bound, "proof")
-        receipt = self._ask("delegate_receipt", context, providers=prepared["providers"], proofs=proofs, **delegates)
-        shim = install_guard_shim(self.harness, native)
-        atomic_write_text(Path(_text(receipt, "path")), _text(receipt, "text"))
-        answer = self._ask(
-            "finish_install",
-            context,
-            shim=json.dumps(shim),
-            providers=prepared["providers"],
-            receipt=_text(receipt, "text"),
-            **delegates,
-        )
-        return json.loads(_text(answer, "manifest"))
+        return install_delegated(self, context)
 
 
 def planned_files(answer: dict[str, Any]) -> list[Any]:

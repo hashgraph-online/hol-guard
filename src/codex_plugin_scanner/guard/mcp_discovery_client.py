@@ -169,7 +169,7 @@ def _stdio_servers(loaded: Sequence[HarnessDetection]) -> tuple[DiscoveredHarnes
 
 
 def _group_entry(server: ManagedMcpServer, identity: McpServerIdentity) -> dict[str, object]:
-    from .adapters.contracts import display_name_for
+    from .harness.contracts import display_name_for
 
     return {
         "harness": server.harness,

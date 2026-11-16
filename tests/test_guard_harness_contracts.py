@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS, HarnessProtectionContract, contract_for
+from codex_plugin_scanner.guard.harness.contracts import HARNESS_CONTRACTS, HarnessProtectionContract, contract_for
 
 
 class TestHarnessProtectionContract:

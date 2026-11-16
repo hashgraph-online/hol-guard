@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
+from codex_plugin_scanner.guard.harness.bounded_cli_hook_failure import failure_payload
 from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     availability_harness_response,
     cursor_unparseable_input_permission,

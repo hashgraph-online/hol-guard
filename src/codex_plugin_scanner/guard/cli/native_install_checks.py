@@ -12,9 +12,18 @@ from ..store import GuardStore
 
 def _opencode_protection_checks(context: HarnessContext, store: GuardStore | None) -> dict[str, object]:
     """Verify the managed OpenCode plugin, launcher, and MCP routing configuration."""
-    from ..adapters.opencode_runtime import opencode_protection_checks
+    from ..adapters import get_adapter
+    from ..adapters.native_harness import ask
 
-    return opencode_protection_checks(context, store)
+    managed = store.get_managed_install("opencode") if store is not None else None
+    answer = ask(
+        "protection",
+        context,
+        harness="opencode",
+        managed_active=bool(managed and managed.get("active")),
+        config_paths=list(get_adapter("opencode").detect(context).config_paths),
+    )
+    return json.loads(str(answer["checks"]))
 
 
 def _grok_pretool_is_catchall(pretool_hook: Path, context: HarnessContext | None = None) -> bool:

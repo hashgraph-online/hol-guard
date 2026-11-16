@@ -83,7 +83,7 @@ class TestDevinAdapterIdentity:
         assert "devin" in {item.harness for item in list_adapters()}
 
     def test_contract_resolve(self) -> None:
-        from codex_plugin_scanner.guard.adapters.contracts import contract_for, setup_contract_for
+        from codex_plugin_scanner.guard.harness.contracts import contract_for, setup_contract_for
 
         contract = contract_for("devin")
         assert contract is not None

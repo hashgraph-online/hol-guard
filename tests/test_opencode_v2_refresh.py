@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
+from codex_plugin_scanner.guard.adapters import get_adapter
 from tests.opencode_test_support import pretool_plugin_source
 from tests.test_opencode_pretool import _bun_executable, _ctx
 
@@ -31,7 +31,7 @@ def _stale_companion(tmp_path: Path):
         ),
         encoding="utf-8",
     )
-    OpenCodeHarnessAdapter().install(ctx)
+    get_adapter("opencode").install(ctx)
     payload = json.loads(config.read_text(encoding="utf-8"))
     companion = payload["mcp"]["hol-guard::test"]
     argv = companion["command"]
@@ -42,7 +42,7 @@ def _stale_companion(tmp_path: Path):
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file mode contract")
 def test_refresh_preserves_jsonc_comments_and_existing_mode(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.opencode_runtime import refresh_opencode_proxy_launchers
+    from codex_plugin_scanner.guard.cli.update_opencode import refresh_opencode_proxy_launchers
     from codex_plugin_scanner.guard.runtime.jsonc import loads_jsonc
 
     ctx, config, payload = _stale_companion(tmp_path)
@@ -65,7 +65,7 @@ def test_refresh_preserves_jsonc_comments_and_existing_mode(tmp_path: Path) -> N
 
 
 def test_invalid_workspace_config_does_not_block_valid_global_refresh(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.opencode_runtime import refresh_opencode_proxy_launchers
+    from codex_plugin_scanner.guard.cli.update_opencode import refresh_opencode_proxy_launchers
 
     ctx, config, _ = _stale_companion(tmp_path)
     other = config.with_name("opencode.jsonc")
@@ -79,7 +79,7 @@ def test_invalid_workspace_config_does_not_block_valid_global_refresh(tmp_path: 
 
 
 def test_refresh_skips_changed_transport(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.opencode_runtime import refresh_opencode_proxy_launchers
+    from codex_plugin_scanner.guard.cli.update_opencode import refresh_opencode_proxy_launchers
 
     ctx, config, payload = _stale_companion(tmp_path)
     payload["mcp"]["test"]["type"] = "remote"
@@ -161,7 +161,7 @@ def test_refresh_companion_launcher_preserves_permissions_and_binding(
     mismatched_binding: bool,
     frozen_runtime: bool,
 ) -> None:
-    from codex_plugin_scanner.guard.adapters.opencode_runtime import refresh_opencode_proxy_launchers
+    from codex_plugin_scanner.guard.cli.update_opencode import refresh_opencode_proxy_launchers
 
     ctx = _ctx(tmp_path)
     config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
@@ -180,7 +180,7 @@ def test_refresh_companion_launcher_preserves_permissions_and_binding(
         ),
         encoding="utf-8",
     )
-    OpenCodeHarnessAdapter().install(ctx)
+    get_adapter("opencode").install(ctx)
     payload = json.loads(config.read_text(encoding="utf-8"))
     companion = payload["mcp"]["hol-guard::test"]
     proxy_index = companion["command"].index("opencode-mcp-proxy")

@@ -336,7 +336,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         backups = frozenset(Path(str(path)) for path in answer["backups"])
         return _CodexInstallPlan(prepared, publication, backups, shim_manifest, fields)
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
+    def install(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         from .runtime_transition import assert_transition_mutation_allowed
 
         with codex_install_transaction(context.guard_home, self._target_config_path(context), actor="install"):
@@ -382,7 +382,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             **fields,
         )
 
-    def uninstall(self, context: HarnessContext) -> dict[str, object]:
+    def uninstall(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         from .runtime_transition import assert_transition_mutation_allowed
 
         with codex_install_transaction(context.guard_home, self._target_config_path(context), actor="uninstall"):

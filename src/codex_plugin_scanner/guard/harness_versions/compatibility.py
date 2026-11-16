@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Final
 
-from ..adapters.contracts import HARNESS_CONTRACTS
+from ..harness.contracts import HARNESS_CONTRACTS
 from .discovery import VersionObservation
 
 OBSERVATION_MAX_AGE_SECONDS = 15 * 60

@@ -8,9 +8,19 @@ from pathlib import Path
 
 from ..adapters.base import HarnessContext
 from ..adapters.native_harness import ask
-from ..adapters.opencode_runtime import refresh_opencode_proxy_launchers
 from ..store import GuardStore
 from .managed_install_context import managed_install_context as _repair_context_from_managed_install
+
+
+def refresh_opencode_proxy_launchers(context: HarnessContext, *, warnings: list[str] | None = None) -> int:
+    """Refresh verified Guard CLI prefixes without changing server or tool authority.
+
+    The runtime holds the OpenCode config lock across the reads and writes.
+    """
+    answer = ask("refresh_apply", context, harness="opencode")
+    if warnings is not None:
+        warnings.extend(str(warning) for warning in answer["warnings"])
+    return int(answer["refreshed"])
 
 
 def _refresh_opencode_pretool_plugin(

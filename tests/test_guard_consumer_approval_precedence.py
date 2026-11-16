@@ -15,9 +15,9 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import codex_remote_client as codex_remote_control
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
 from codex_plugin_scanner.guard.adapters.native_harness import NATIVE_HARNESSES, NativeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
@@ -550,7 +550,7 @@ def test_guard_run_rejects_opencode_overlay_environment_changed_after_saved_clai
         return claimed
 
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: OpenCodeHarnessAdapter())
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: get_adapter("opencode"))
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_mutate_overlay)
     monkeypatch.setattr(
         wrapper_run_finish.subprocess,

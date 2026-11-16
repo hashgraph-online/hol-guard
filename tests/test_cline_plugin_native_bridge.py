@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import (
+from codex_plugin_scanner.guard.harness.bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_COMMAND,
     NATIVE_BOUNDED_HOOK_FEATURE,
 )

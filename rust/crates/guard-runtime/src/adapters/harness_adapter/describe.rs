@@ -431,7 +431,7 @@ impl Spec {
             // Hermes signs its manifest, which may create the state key, so it
             // has no rebind preparation; Copilot plans one from what it detected.
             "prepare": match self.harness {
-                "hermes" => "unavailable",
+                "hermes" | "cline" => "unavailable",
                 "copilot" => "detected",
                 _ => "plan",
             },
@@ -445,6 +445,14 @@ impl Spec {
             },
             // Grok resolves its own trusted executable and retires stale hook
             // commands the CLI's validator names.
+            // Cline answers its own doctor warnings, needs the frozen-runtime
+            // fact to pick a transport, and runs probes inside its install.
+            "warnings_op": self.harness == "cline",
+            "frozen_fact": self.harness == "cline",
+            "install_timeout": if self.harness == "cline" { json!(INSTALL_PROBE_TIMEOUT) } else { Value::Null },
+            // OpenCode launches through its own runner kind, which renders the
+            // inline config overlay and the argv around the caller's arguments.
+            "launch_runner": if self.harness == "opencode" { "opencode_launch" } else { "" },
             "trusted_launcher": self.harness == "grok",
             "retired_hooks": self.harness == "grok",
             // Paseo and the Pi family add to the generic doctor report.
@@ -459,6 +467,10 @@ impl Spec {
         })
     }
 }
+
+/// Cline's install may run the hook canary and `node --check` twice (once
+/// per transport) and the hook state once more, each up to 20 seconds.
+const INSTALL_PROBE_TIMEOUT: u64 = 90;
 
 pub(crate) fn describe() -> Value {
     json!({

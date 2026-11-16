@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .adapters.base import HarnessContext
-from .adapters.contracts import contract_for
+from .harness.contracts import contract_for
 from .mdm.runtime_request import runtime_answer
 
 _FEATURE = "native-hook-removal-sweep-v1"

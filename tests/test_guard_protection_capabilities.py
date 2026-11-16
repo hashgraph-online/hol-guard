@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
+from codex_plugin_scanner.guard.harness.contracts import HARNESS_CONTRACTS
 from codex_plugin_scanner.guard.protection_capabilities import (
     capability_for,
     protection_capability_payloads,

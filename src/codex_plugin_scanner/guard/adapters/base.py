@@ -13,16 +13,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
 
 from ...path_support import resolves_within_root
-from ..models import GuardArtifact, HarnessDetection
-from .contracts import HarnessCoverageSummary, HarnessSetupContract, HarnessSetupStep, setup_contract_for
-from .diagnostic_probes import skipped_command_probe
-from .harness_diagnostics_bridge import (
+from ..harness.contracts import HarnessCoverageSummary, HarnessSetupContract, HarnessSetupStep, setup_contract_for
+from ..harness.diagnostic_probes import skipped_command_probe
+from ..harness.harness_diagnostics_bridge import (
     _detection_request,
     _diagnostic_setup_status,
     _harness_diagnostics,
     _launcher_artifact,
     artifacts_use_guard,
 )
+from ..models import GuardArtifact, HarnessDetection
 
 if TYPE_CHECKING:
     from ..inventory_contract import GuardAgentInventorySnapshot
@@ -279,7 +279,7 @@ class HarnessAdapter:
             )
 
     @_owned_adapter_mutation
-    def install(self, context: HarnessContext) -> dict[str, object]:
+    def install(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         from ..shims import install_guard_shim
 
         shim_manifest = install_guard_shim(self.harness, context)
@@ -291,7 +291,7 @@ class HarnessAdapter:
         }
 
     @_owned_adapter_mutation
-    def uninstall(self, context: HarnessContext) -> dict[str, object]:
+    def uninstall(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         from ..shims import remove_guard_shim
 
         shim_manifest = remove_guard_shim(self.harness, context)

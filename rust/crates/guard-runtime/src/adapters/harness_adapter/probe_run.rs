@@ -100,7 +100,7 @@ fn text(record: &Value, key: &str) -> String {
 }
 
 /// `ClineHarnessAdapter._cli`: the Cline CLI and its `--version` output.
-fn cline_cli(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+pub(super) fn cline_cli(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let resolved = route(spec, "resolved_executable", ctx, fields)?;
     let Some(path) = resolved.get("path").and_then(Value::as_str) else {
         return Ok(json!({ "path": null, "output": "" }));
@@ -112,6 +112,20 @@ fn cline_cli(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value>
     );
     let output = format!("{}\n{}", text(&record, "stdout"), text(&record, "stderr"));
     Ok(json!({ "path": path, "output": output }))
+}
+
+/// `fields` with `cli` filled in by the `--version` probe when the caller
+/// did not name it.
+pub(super) fn with_cline_cli(
+    spec: &Spec,
+    ctx: &Ctx,
+    fields: &Map<String, Value>,
+) -> Step<Map<String, Value>> {
+    let mut asked = fields.clone();
+    if !asked.contains_key("cli") {
+        asked.insert("cli".into(), cline_cli(spec, ctx, fields)?);
+    }
+    Ok(asked)
 }
 
 /// The harness's `runtime_probe`, with every CLI probe it names run here.

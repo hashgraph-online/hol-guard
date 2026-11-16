@@ -16,6 +16,27 @@ use serde_json::{json, Map, Value};
 use super::{guard_shim, route, shims_apply, Ctx, Failure, Spec, Step};
 use crate::transition_files::resolve_lenient;
 
+/// The OpenCode config lock for an OpenCode install or uninstall, waited
+/// for as `opencode_config_lock` did.
+pub(super) fn opencode_lock(spec: &Spec, ctx: &Ctx) -> Step<Option<std::fs::File>> {
+    if spec.harness != "opencode" {
+        return Ok(None);
+    }
+    crate::transition_files::hold_opencode_lock(&ctx.home, OPENCODE_LOCK_WAIT)
+        .map(Some)
+        .map_err(|reason| {
+            if reason == "opencode_config_busy" {
+                Failure::Runtime(OPENCODE_BUSY.to_owned())
+            } else {
+                Failure::Refusal(reason)
+            }
+        })
+}
+
+const OPENCODE_LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+pub(super) const OPENCODE_BUSY: &str =
+    "Another Guard operation is updating OpenCode config; try again shortly";
+
 /// `normalized_after_mode`: a published mode never keeps group/world write.
 fn normalized_after_mode(mode: u64) -> u64 {
     if cfg!(windows) || mode & !0o777 != 0 {
@@ -106,6 +127,12 @@ pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step
     if spec.harness == "cursor" {
         return super::cursor_apply::install(spec, ctx, fields);
     }
+    if spec.harness == "cline" {
+        return super::cline_apply::install(spec, ctx, fields);
+    }
+    // Readers and writers of OpenCode's config serialize on one home lock,
+    // held from the plan's reads through the publish.
+    let _config = opencode_lock(spec, ctx)?;
     let mut shim_fields = Map::new();
     shim_fields.insert("harness".into(), json!(spec.harness));
     for key in ["launcher_name", "display_name", "interpreter"] {

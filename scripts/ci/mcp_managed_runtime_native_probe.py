@@ -1014,7 +1014,7 @@ if Path('/candidate-wheel').is_dir():
 
         relatives += ['codex_plugin_scanner/guard/adapters/' + name + '.py'
 
-                      for name in ('cursor', 'cline_runtime')]
+                      for name in ('cursor', 'native_harness')]
 
         if os.environ.get('VERIFY_NATIVE_VALUES') == '1':
 

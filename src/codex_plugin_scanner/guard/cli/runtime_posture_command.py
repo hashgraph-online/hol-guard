@@ -216,7 +216,7 @@ def run_runtime_status_command(
     reaches no network, and it produces no verdict of its own.
     """
 
-    from ..adapters.diagnostic_probes import without_command_probes
+    from ..harness.diagnostic_probes import without_command_probes
     from .doctor_native_runtime import native_runtime_section
 
     stream = output_stream if output_stream is not None else sys.stdout

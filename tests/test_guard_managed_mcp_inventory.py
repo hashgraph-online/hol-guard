@@ -7,11 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_runtime import ClineHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cline_runtime import install_mcp_proxies as install_cline_mcp_proxies
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
+from codex_plugin_scanner.guard.adapters.native_harness import ask
 from codex_plugin_scanner.guard.mcp_discovery_client import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.mcp_server_client import (
     ManagedMcpServer,
@@ -391,10 +390,10 @@ def test_cline_installed_inventory_uses_private_launch_values(tmp_path: Path) ->
     before = discover_harness_mcp_servers(
         home_dir=context.home_dir,
         guard_home=context.guard_home,
-        detections=(ClineHarnessAdapter().detect(context),),
+        detections=(get_adapter("cline").detect(context),),
     )
-    install_cline_mcp_proxies(context)
-    detection = ClineHarnessAdapter().detect(context)
+    ask("mcp_install", context, harness="cline")
+    detection = get_adapter("cline").detect(context)
     serialized = json.dumps([artifact.to_dict() for artifact in detection.artifacts])
     for secret in ("secret-token-value", "secret-env-value"):
         assert secret not in serialized and secret not in repr(detection)
@@ -426,7 +425,7 @@ def test_opencode_installed_inventory_normalizes_padded_env_keys(tmp_path: Path)
     payload = {"mcp": {"fixture": {"type": "local", "command": ["hol-guard", *args], "environment": server.env}}}
     config_path.parent.mkdir(parents=True)
     config_path.write_text(json.dumps(payload), encoding="utf-8")
-    detected = OpenCodeHarnessAdapter().detect(context)
+    detected = get_adapter("opencode").detect(context)
     artifacts = [artifact for artifact in detected.artifacts if artifact.artifact_type == "mcp_server"]
     servers = discover_harness_mcp_servers(
         home_dir=context.home_dir,

@@ -5,15 +5,22 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .base import HarnessContext
-from .native_harness import NativeHarnessAdapter, _text
+from ..adapters.base import HarnessContext
+from ..adapters.native_harness import NativeHarnessAdapter
+
+
+def _text(answer: dict[str, object], key: str) -> str:
+    value = answer.get(key)
+    if not isinstance(value, str):
+        raise ValueError("Harness adapter answer is malformed")
+    return value
 
 
 def extension_source(
     harness: str, context: HarnessContext, *, variant: str = "active", config_path: Path | None = None
 ) -> str:
     """The Pi-family extension source this Guard renders for ``harness``."""
-    from . import get_adapter
+    from ..adapters import get_adapter
 
     adapter = get_adapter(harness)
     if not isinstance(adapter, NativeHarnessAdapter):
@@ -26,7 +33,7 @@ def extension_source(
 
 def extension_is_current(harness: str, context: HarnessContext) -> bool:
     """Whether the managed Pi-family extension already matches this Guard."""
-    from . import get_adapter
+    from ..adapters import get_adapter
 
     adapter = get_adapter(harness)
     if not isinstance(adapter, NativeHarnessAdapter) or not adapter._spec.get("extension"):
@@ -36,7 +43,7 @@ def extension_is_current(harness: str, context: HarnessContext) -> bool:
 
 def legacy_omp_extension_is_verified(context: HarnessContext, pi_install: dict[str, object]) -> bool:
     """Whether Oh My Pi holds exactly the extension the former combined Pi install wrote."""
-    from . import get_adapter
+    from ..adapters import get_adapter
 
     adapter = get_adapter("pi")
     if not isinstance(adapter, NativeHarnessAdapter):

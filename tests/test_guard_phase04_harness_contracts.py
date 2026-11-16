@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from codex_plugin_scanner.guard.cli.install_commands import list_harness_setup_items
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
@@ -121,7 +120,7 @@ def test_gr096_managed_hook_json_matches_each_harness_schema(tmp_path: Path) -> 
         json.dumps({"mcp": {"team-tools": {"type": "local", "command": ["node", "server.js"]}}}),
         encoding="utf-8",
     )
-    opencode_manifest = OpenCodeHarnessAdapter().install(context)
+    opencode_manifest = get_adapter("opencode").install(context)
     get_adapter("copilot").install(context)
 
     codex_hooks = _read_codex_hooks(Path(str(codex_manifest["managed_hook_config_path"])))

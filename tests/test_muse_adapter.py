@@ -8,10 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters, muse_hook_render
+from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.muse_hook_render import muse_bridge_response
 from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter, ask
+from codex_plugin_scanner.guard.harness import muse_hook_render
+from codex_plugin_scanner.guard.harness.muse_hook_render import muse_bridge_response
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
@@ -81,7 +82,7 @@ class TestMuseAdapterIdentity:
         assert "muse" in {item.harness for item in list_adapters()}
 
     def test_contract_resolve(self) -> None:
-        from codex_plugin_scanner.guard.adapters.contracts import contract_for, setup_contract_for
+        from codex_plugin_scanner.guard.harness.contracts import contract_for, setup_contract_for
 
         contract = contract_for("muse")
         assert contract is not None
@@ -97,7 +98,7 @@ class TestMuseAdapterIdentity:
         assert _agent_type("muse") == "muse"
 
     def test_capability_rows_cover_muse_events(self) -> None:
-        from codex_plugin_scanner.guard.adapters.contracts import contract_for
+        from codex_plugin_scanner.guard.harness.contracts import contract_for
 
         contract = contract_for("muse")
         assert contract is not None

@@ -35,6 +35,7 @@ mod claude_argv;
 mod claude_install_target;
 mod claude_settings;
 mod cline;
+mod cline_apply;
 mod cline_hooks;
 mod cline_install;
 mod cline_mcp;

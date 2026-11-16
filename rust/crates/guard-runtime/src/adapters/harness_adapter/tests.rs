@@ -15,6 +15,8 @@ use super::dispatch;
 mod claude_family;
 #[path = "tests_cline.rs"]
 mod cline_family;
+#[path = "tests_cline_opencode_apply.rs"]
+mod cline_opencode_apply_family;
 #[path = "tests_codex.rs"]
 mod codex_family;
 #[path = "tests_copilot.rs"]

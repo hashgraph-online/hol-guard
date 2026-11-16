@@ -371,7 +371,7 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
     if not bool(getattr(sys, "frozen", False)):
         return None
     if requested_argv[:1] == ["__guard-bounded-hook"]:
-        from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
+        from .guard.harness.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(requested_argv[1:])
     if requested_argv[:1] == ["__guard-cursor-hook"]:
@@ -415,7 +415,7 @@ def main(argv: list[str] | None = None) -> int:
     argv = _frozen_module_argv(sys.argv[1:] if argv is None else argv)
     effective_argv = argv
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-bounded-hook"]:
-        from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
+        from .guard.harness.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(effective_argv[1:])
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-cursor-hook"]:

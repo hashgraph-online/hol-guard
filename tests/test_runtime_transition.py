@@ -882,12 +882,12 @@ def test_pi_family_plan_restores_extension_settings_and_user_entries(transition,
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(transition, previous_exists):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
-    adapter = OpenCodeHarnessAdapter()
+    adapter = get_adapter("opencode")
     config = ctx.home_dir / ".config/opencode/opencode.json"
     config.parent.mkdir(parents=True)
     config.write_text(
@@ -923,8 +923,8 @@ def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(tran
 
 
 def test_opencode_foreign_source_config_prevents_any_transition_publication(transition):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 
     runtime, plan, bindings, pointer = transition
     workspace = runtime.home.parent / "workspace"
@@ -932,7 +932,7 @@ def test_opencode_foreign_source_config_prevents_any_transition_publication(tran
     source = workspace / "opencode.jsonc"
     source.write_text('{ // user config\n"mcp": {"user": {"type": "local", "command": ["node", "user.js"]}}}')
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=workspace, guard_home=runtime.home)
-    prepared = OpenCodeHarnessAdapter().prepare_install(ctx)
+    prepared = get_adapter("opencode").prepare_install(ctx)
     dependency = next(change for change in prepared.files if change.path == source)
     assert dependency.before == dependency.after == source.read_bytes()
     source.write_text('{"user_edit": true}')
@@ -986,7 +986,7 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
     if previous_exists:
         adapter.install(ctx)
     if frozen:
-        from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
+        from codex_plugin_scanner.guard.harness import bounded_cli_hook_bridge as bridge
 
         monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
         use_bounded_runtime(monkeypatch, runtime.home.parent / "hol-guard-runtime")

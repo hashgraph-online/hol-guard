@@ -11,7 +11,7 @@ import logging
 from typing import Protocol, cast
 
 from .adapters.base import HarnessContext
-from .adapters.contracts import contract_for
+from .harness.contracts import contract_for
 from .harness_versions import service
 from .harness_versions.compatibility import PAYLOAD_SCHEMA, STATE_VERSION_UNKNOWN
 

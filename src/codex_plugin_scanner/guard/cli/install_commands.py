@@ -9,10 +9,9 @@ from pathlib import Path
 
 from ..adapters import get_adapter, list_adapters
 from ..adapters.base import HarnessAdapter, HarnessContext
-from ..adapters.cline_runtime import ClineHarnessAdapter
-from ..adapters.contracts import contract_for
 from ..adapters.cursor import CursorHarnessAdapter
 from ..codex_install_transaction import codex_install_transaction
+from ..harness.contracts import contract_for
 from ..managed_install_proof import verify_managed_install_proof
 from ..native_mcp_tool_evidence import NativeMcpToolEvidenceError, native_skill_firewall_metadata_patch
 from ..native_runner_authority import NativeRunnerAuthorityError
@@ -83,7 +82,7 @@ def _apply_adapter_management(
             if active
             else adapter.uninstall(context, surface=selected_surface)
         )
-    if isinstance(adapter, ClineHarnessAdapter):
+    if adapter.harness == "cline":
         return adapter.install(context, surface=surface) if active else adapter.uninstall(context, surface=surface)
     raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
 
@@ -268,7 +267,7 @@ def build_harness_verification(
         verification.update(_opencode_protection_checks(context, store))
     if adapter.harness == "grok":
         verification.update(_grok_protection_checks(context))
-    if isinstance(adapter, ClineHarnessAdapter):
+    if adapter.harness == "cline":
         runtime_probe = adapter.runtime_probe(context)
         verification["runtime"] = runtime_probe or {}
         verification["warnings"] = adapter.diagnostic_warnings(adapter.detect(context), runtime_probe)

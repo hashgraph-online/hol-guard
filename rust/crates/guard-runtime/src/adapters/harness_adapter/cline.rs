@@ -350,7 +350,11 @@ pub(crate) fn dispatch(
                 .map(|base| ctx.home.join(base).join("bin").join("cline"));
             resolved_executable(spec, ctx, &candidates)
         }
-        "detect" => detect(spec, ctx, fields),
+        "detect" => detect(
+            spec,
+            ctx,
+            &super::probe_run::with_cline_cli(spec, ctx, fields)?,
+        ),
         "runtime_probe" => runtime_probe(ctx, fields),
         "hook_spec" => Ok(hook_spec(ctx)),
         "diagnostic_warnings" => diagnostic_warnings(fields),

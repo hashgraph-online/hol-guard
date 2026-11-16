@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 
 from ..adapters.base import HarnessContext
-from ..adapters.bounded_cli_hook_bridge import bounded_hook_script_path
+from ..harness.bounded_cli_hook_bridge import bounded_hook_script_path
 from ..store import GuardStore
 
 # Harnesses older releases installed with a stable client script under

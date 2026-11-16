@@ -130,8 +130,8 @@ def test_install_preparation_is_complete_or_explicitly_unavailable(tmp_path: Pat
 @pytest.mark.parametrize("harness,expected", [("kimi", 3), ("zcode", 5), ("devin", 5), ("grok", 10)])
 def test_frozen_preparation_hands_the_hook_to_the_runtime(tmp_path, monkeypatch, harness, expected):
     """A frozen Guard writes no helper script; its runtime's durable copy answers the hook."""
-    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness import bounded_cli_hook_bridge as bridge
 
     ctx = context(tmp_path)
     monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
@@ -145,13 +145,13 @@ def test_frozen_preparation_hands_the_hook_to_the_runtime(tmp_path, monkeypatch,
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_opencode_prepared_generation_matches_normal_install(tmp_path, previous_exists):
-    from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
+    from codex_plugin_scanner.guard.adapters import get_adapter
 
     ctx = context(tmp_path)
     config = ctx.home_dir / ".config/opencode/opencode.json"
     config.parent.mkdir(parents=True)
     config.write_text('{"user_setting": true, "mcp": {"user": {"type": "local", "command": ["node", "user.js"]}}}')
-    adapter = OpenCodeHarnessAdapter()
+    adapter = get_adapter("opencode")
     if previous_exists:
         adapter.install(ctx)
     prepared = adapter.prepare_install(ctx)
@@ -172,8 +172,8 @@ def test_frozen_copilot_preparation_plans_no_helper_and_publishes_nothing(
     native_adapter_state_integrity_runtime,
 ):
     del native_adapter_state_integrity_runtime
-    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
 
     ctx = HarnessContext(

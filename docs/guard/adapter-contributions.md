@@ -25,7 +25,7 @@ Search [open adapter PRs](https://github.com/hashgraph-online/hol-guard/pulls?q=
 | --- | --- |
 | Public Python adapter classes and registrations | `src/codex_plugin_scanner/guard/adapters/<harness>.py` and `adapters/__init__.py` |
 | Shared adapter context and install ownership | `adapters/base.py` |
-| Static setup, event coverage, and known blind spots | `guard/contracts/harness-protection-contracts.v1.json`, loaded by `adapters/contract_registry.py` and served by `adapters/contracts.py` |
+| Static setup, event coverage, and known blind spots | `guard/contracts/harness-protection-contracts.v1.json`, loaded by `harness/contract_registry.py` and served by `harness/contracts.py` |
 | Native harness install, render and hook decisions | `rust/crates/guard-runtime/src/adapters/harness_adapter/<harness>.rs` |
 | Native harness discovery | `rust/crates/guard-runtime/src/adapters/detection/<harness>_detect.rs` |
 | Native hook request handling | `rust/crates/guard-runtime/src/adapters/hook_adapter_op.rs` |

@@ -28,9 +28,9 @@ except ModuleNotFoundError:
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import claude_hook_entry as claude_adapter_module
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter_module
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_connect as guard_connect_support_module
@@ -4053,7 +4053,7 @@ args = ["workspace-skill.js", "--changed"]
         assert runtime_payload["permission"]["global_only_lab_*"] == "ask"
 
     def test_opencode_launch_command_treats_debug_tokens_as_interactive_prompt(self, tmp_path):
-        adapter = OpenCodeHarnessAdapter()
+        adapter = get_adapter("opencode")
         context = HarnessContext(
             home_dir=tmp_path / "home",
             workspace_dir=tmp_path / "workspace",

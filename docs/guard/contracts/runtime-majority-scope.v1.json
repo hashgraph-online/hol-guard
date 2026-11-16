@@ -41,11 +41,11 @@
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge",
+        "module": "codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge",
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.adapters.desktop_hook_proxy",
+        "module": "codex_plugin_scanner.guard.harness.desktop_hook_proxy",
         "surface": "hook_http_and_cli_events"
       },
       {
@@ -505,7 +505,7 @@
     ],
     "reviewed_runtime": [
       {
-        "path": "src/codex_plugin_scanner/guard/adapters/extension_runtime.py",
+        "path": "src/codex_plugin_scanner/guard/harness/extension_runtime.py",
         "reason": "Reviewed process facts for the Pi-family extension render: the Guard process's own hol-guard entry points, native hook runtime, Windows interpreter, contained-run sink and taskkill path, which only that process knows. native_harness.py imports it lazily for render and install ops; the native harness_adapter kind renders the extension and decides everything. Count the complete module in runtime scope."
       },
       {
@@ -545,6 +545,7 @@
           "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
           "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+          "src/codex_plugin_scanner/guard/harness/*hook*.py",
           "src/codex_plugin_scanner/guard/adapters/_modules/*/*hook*.py",
           "src/codex_plugin_scanner/guard/native_*.py",
           "src/codex_plugin_scanner/guard/proxy/*",
@@ -691,12 +692,10 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/adapters/cline_runtime.py",
           "src/codex_plugin_scanner/guard/adapters/cursor.py",
-          "src/codex_plugin_scanner/guard/adapters/native_extension.py",
+          "src/codex_plugin_scanner/guard/harness/native_extension.py",
           "src/codex_plugin_scanner/guard/adapters/native_harness.py",
           "src/codex_plugin_scanner/guard/adapters/native_harness_steps.py",
-          "src/codex_plugin_scanner/guard/adapters/opencode_runtime.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
         "reason": "Reviewed: adapter implementations behind the harness registry. Adapters normalize harness payloads into hook requests, so they sit on the hook path, and hook-path authority is never excluded. Install and setup methods that have a function_exclusions entry are excluded as install_config, not hook path; install helpers without an entry (for example in the Cline support modules) stay counted, which understates the Rust share."
@@ -832,7 +831,8 @@
     "adapters": {
       "path": [
         "src/codex_plugin_scanner/guard/adapters/*.py",
-        "src/codex_plugin_scanner/guard/adapters/_modules/*/*.py"
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/*.py",
+        "src/codex_plugin_scanner/guard/harness/*.py"
       ]
     },
     "vendored": {
@@ -1240,20 +1240,6 @@
         "reason": "Building and reconciling the OAuth package-firewall entitlement during connect and cloud sync."
       },
       {
-        "id": "adapter-opencode-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/opencode_runtime.py",
-        "symbols": [
-          "OpenCodeHarnessAdapter.install",
-          "OpenCodeHarnessAdapter.prepare_install",
-          "OpenCodeHarnessAdapter._plan_install",
-          "OpenCodeHarnessAdapter.uninstall"
-        ],
-        "entry_points": [],
-        "reason": "OpenCode adapter install and uninstall; the native harness_adapter kind plans the config, backup, plugin and runtime overlay changes, and Python keeps the config lock, Guard's proxy argv and the attested plugin facts.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
         "id": "store2-connect-cli-helpers",
         "category": "cli_only",
         "path": "src/codex_plugin_scanner/guard/cli/commands_support_connect.py",
@@ -1441,23 +1427,6 @@
         "entry_points": [],
         "reason": "Operator recovery of the extension-control authority store: resetting to a recovered or new key and acknowledging degraded mode.",
         "evidence": "The store methods are called only from cli/extension_controls_commands.py and daemon/extension_control_api.py, both removed by the extension-authoring exclusion; the same-named method on daemon/client.py is a separate HTTP client used only by that excluded CLI. _restore_missing_snapshot_before_recovery and _reset_extension_control_authority are called only from the recovery method, and _note_controls_lost_by_reset only from the reset. The reset is the only in-scope caller of _bootstrap_extension_control_authority. Hook evaluation reads the authority view and layers and never recovers or acknowledges. The report validates that no retained symbol references them."
-      },
-      {
-        "id": "adapter-cline-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/cline_runtime.py",
-        "symbols": [
-          "ClineHarnessAdapter.install",
-          "ClineHarnessAdapter.prepare_install",
-          "ClineHarnessAdapter.uninstall",
-          "_reconcile",
-          "_facts",
-          "install_mcp_proxies",
-          "proxy_entry"
-        ],
-        "entry_points": [],
-        "reason": "Cline adapter install and uninstall; the native harness_adapter kind chooses the transport, writes the native hooks or the AgentPlugin, runs the hook canary and the plugin's node --check, rewrites the MCP settings and removes them, and Python keeps the attested Guard CLI and Guard's proxy argv.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "approvals-resolution-and-dashboard-snapshot",

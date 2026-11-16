@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_FEATURE
+from codex_plugin_scanner.guard.harness.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_FEATURE
 from tests.native_runtime_stamp import stamp_native_runtime
 from tests.opencode_test_support import pretool_plugin_source
 
