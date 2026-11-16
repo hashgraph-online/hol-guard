@@ -216,7 +216,7 @@ fn registers(generation: &Map<String, Value>, expected: &[&str; 3]) -> Checked<b
 }
 
 /// `python_bridge_argv`: the legacy Python argv inside a native prefix.
-fn bridge_argv(argv: &[Value]) -> &[Value] {
+pub(crate) fn bridge_argv(argv: &[Value]) -> &[Value] {
     let prefixed = argv.len() > 3
         && argv[0].as_str().is_some_and(|first| !first.is_empty())
         && argv[1].as_str() == Some(BRIDGE_COMMAND);
@@ -228,7 +228,7 @@ fn bridge_argv(argv: &[Value]) -> &[Value] {
 }
 
 /// `bridge_argv_sha256`: SHA-256 of the argv as ASCII-only compact JSON.
-fn argv_sha256(argv: &[&str; 3]) -> String {
+pub(crate) fn argv_sha256(argv: &[&str; 3]) -> String {
     let mut text = String::from("[");
     for (index, item) in argv.iter().enumerate() {
         if index > 0 {

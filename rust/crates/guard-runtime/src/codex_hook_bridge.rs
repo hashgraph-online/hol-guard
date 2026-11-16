@@ -474,7 +474,7 @@ mod recovery;
 #[path = "codex_hook_bridge_restart.rs"]
 mod restart;
 #[path = "codex_hook_bridge_trust.rs"]
-mod trust;
+pub(crate) mod trust;
 
 #[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_tests.rs"]

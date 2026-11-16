@@ -26,15 +26,12 @@ if TYPE_CHECKING:
     from .native_daemon_manage import GuardDaemonHookFailureKind
     from .native_daemon_peer import DaemonArtifactBinding
 
-from .codex_hook_bridge_runtime import decode_bridge_config_argument
-from .codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND
 from .frozen_runtime_commands import (
     FROZEN_CODEX_BRIDGE_ARG,
     FROZEN_DAEMON_RECOVER_ARG,
     FROZEN_DAEMON_SERVE_ARG,
     consume_frozen_daemon_serve_gate,
     decode_frozen_daemon_serve_payload,
-    frozen_daemon_recovery_command,
     is_frozen_guard_runtime,
 )
 
@@ -201,160 +198,25 @@ def _validate_frozen_codex_hook_launch(
     still have to agree. It never changes the process identity or environment.
     """
 
-    from . import codex_hook_runtime_trust as trust
-    from .codex_hook_file_integrity import active_hook_validation_deadline, verify_executable_file_identity
-    from .codex_hook_integrity import load_authenticated_hook_manifest_path
-    from .codex_hook_launch_runtime import isolated_hook_environment, private_hook_runtime_cwd
+    from .codex_hook_runtime_trust import authenticate_codex_hook_launch
 
-    state, configured_manifest, guard_home = trust._resolve_managed_hook_paths(state_path, manifest_path)
-    manifest = load_authenticated_hook_manifest_path(guard_home, configured_manifest)
-    trust._verify_manifest_context(manifest, guard_home=guard_home, manifest_path=configured_manifest)
-    interpreter = trust._mapping(manifest.get("interpreter"), label="interpreter")
-    verify_executable_file_identity(interpreter)
-    packaged_by_role = trust._verified_packaged_files(manifest)
-
-    invocation_path = interpreter.get("invocation_path")
-    target = trust._mapping(interpreter.get("target"), label="interpreter target")
-    target_path = target.get("path")
-    current_invocation = str(Path(sys.executable).expanduser().resolve(strict=True))
+    artifact = None
     if expected_artifact is not None:
-        current_invocation = str(expected_artifact.executable)
-        if (
-            target_path != current_invocation
-            or target.get("sha256") != expected_artifact.executable_sha256
-            or manifest.get("package_version") != expected_artifact.package_version
-        ):
-            raise ValueError("managed frozen Codex transition artifact identity is invalid")
-    if invocation_path != current_invocation or not isinstance(target_path, str):
-        raise ValueError("managed frozen Codex hook executable identity is invalid")
-    if any(identity.get("path") != target_path for identity in packaged_by_role.values()):
-        raise ValueError("managed frozen Codex hook package identity is incomplete")
-
-    _verify_frozen_transport(manifest, packaged_by_role)
-    _verify_frozen_launch_contracts(
-        manifest,
-        interpreter=interpreter,
-        guard_home=guard_home,
-        fallback_command=fallback_command,
-        start_command=start_command,
+        artifact = {
+            "executable": str(expected_artifact.executable),
+            "sha256": expected_artifact.executable_sha256,
+            "package_version": expected_artifact.package_version,
+        }
+    executable = (
+        str(expected_artifact.executable)
+        if expected_artifact is not None
+        else str(Path(sys.executable).expanduser().resolve(strict=True))
     )
-    _verify_frozen_bridge_contract(
-        manifest,
-        interpreter=interpreter,
-        state=state,
-        configured_manifest=configured_manifest,
+    return authenticate_codex_hook_launch(
+        manifest_path=manifest_path,
+        state_path=state_path,
         fallback_command=fallback_command,
         start_command=start_command,
         config_json=config_json,
+        frozen={"executable": executable, "artifact": artifact},
     )
-    return trust.TrustedCodexHookLaunch(
-        cwd=private_hook_runtime_cwd(configured_manifest),
-        environment=isolated_hook_environment(),
-        deadline_monotonic=active_hook_validation_deadline(),
-    )
-
-
-def _verify_frozen_transport(
-    manifest: Mapping[str, object],
-    packaged_by_role: Mapping[str, dict[str, object]],
-) -> None:
-    transport = manifest.get("transport")
-    if not isinstance(transport, dict) or transport.get("wrapper") is not None:
-        raise ValueError("managed frozen Codex hook transport identity is invalid")
-    for role in ("bridge", "bridge_runtime", "launch_runtime", "runtime_trust", "windows_job"):
-        if transport.get(role) != packaged_by_role.get(role):
-            raise ValueError("managed frozen Codex hook transport identity is invalid")
-
-
-def _verify_frozen_launch_contracts(
-    manifest: Mapping[str, object],
-    *,
-    interpreter: Mapping[str, object],
-    guard_home: Path,
-    fallback_command: Sequence[str],
-    start_command: Sequence[str],
-) -> None:
-    from . import codex_hook_runtime_trust as trust
-    from .codex_hook_file_integrity import canonical_path
-
-    invocation_path = interpreter.get("invocation_path")
-    if not isinstance(invocation_path, str):
-        raise ValueError("managed frozen Codex hook interpreter path is invalid")
-
-    fallback = trust._mapping(manifest.get("fallback"), label="fallback")
-    fallback_argv = tuple(trust._string_list(fallback.get("argv"), label="fallback argv"))
-    if (
-        fallback_argv != tuple(fallback_command)
-        or fallback.get("interpreter") != interpreter
-        or fallback.get("package_roles") != ["fallback_entrypoint"]
-        or fallback_argv[:4] != (invocation_path, "hook", "--harness", "codex")
-    ):
-        raise ValueError("managed frozen Codex hook fallback contract is invalid")
-
-    daemon_start = trust._mapping(manifest.get("daemon_start"), label="daemon start")
-    daemon_argv = tuple(trust._string_list(daemon_start.get("argv"), label="daemon start argv"))
-    context = trust._mapping(manifest.get("context"), label="context")
-    authenticated_guard_home = context.get("runtime_guard_home")
-    authenticated_home_dir = context.get("home_dir")
-    if (
-        daemon_argv != tuple(start_command)
-        or daemon_start.get("interpreter") != interpreter
-        or daemon_start.get("package_roles") != ["daemon_entrypoint", "daemon_manager"]
-        or len(daemon_argv) != 3
-        or daemon_argv[:2] != (invocation_path, _FROZEN_DAEMON_RECOVER_ARG)
-        or not isinstance(authenticated_guard_home, str)
-        or not isinstance(authenticated_home_dir, str)
-        or canonical_path(guard_home) != authenticated_guard_home
-    ):
-        raise ValueError("managed frozen Codex hook daemon-start contract is invalid")
-    daemon_payload = _decode_private_payload(daemon_argv[2], label="Codex daemon recovery")
-    if daemon_payload != {
-        "guard_home": authenticated_guard_home,
-        "home_dir": authenticated_home_dir,
-    }:
-        raise ValueError("managed frozen Codex hook daemon-start context is invalid")
-
-
-def _verify_frozen_bridge_contract(
-    manifest: Mapping[str, object],
-    *,
-    interpreter: Mapping[str, object],
-    state: Path,
-    configured_manifest: Path,
-    fallback_command: Sequence[str],
-    start_command: Sequence[str],
-    config_json: str,
-) -> None:
-    invocation_path = interpreter.get("invocation_path")
-    if not isinstance(invocation_path, str):
-        raise ValueError("managed frozen Codex hook interpreter path is invalid")
-    config = _decode_private_payload(decode_bridge_config_argument(config_json), label="Codex bridge")
-    if (
-        config.get("state_path") != str(state)
-        or config.get("manifest_path") != str(configured_manifest)
-        or config.get("fallback_command") != list(fallback_command)
-        or config.get("start_command") != list(start_command)
-    ):
-        raise ValueError("managed frozen Codex hook bridge config is invalid")
-    events = manifest.get("events")
-    if not isinstance(events, list) or not events:
-        raise ValueError("managed frozen Codex hook event identity is invalid")
-    for event in events:
-        argv = event.get("argv") if isinstance(event, dict) else None
-        # The native runtime is a verified copy of the bundled one, so only
-        # its command and the config it reads identify the bridge.
-        if (
-            not isinstance(argv, list)
-            or len(argv) != 3
-            or not isinstance(argv[0], str)
-            or argv[1:] != [NATIVE_CODEX_HOOK_COMMAND, config_json]
-        ):
-            raise ValueError("managed frozen Codex hook bridge config changed after authentication")
-
-
-__all__ = [
-    "frozen_daemon_recovery_command",
-    "install_frozen_codex_runtime",
-    "is_frozen_guard_runtime",
-    "run_frozen_internal_command",
-]

@@ -207,17 +207,23 @@ def _authenticated(guard_home: Path, **request: str | None) -> dict[str, object]
         manifest = authenticated_manifest(_home_text(guard_home), **request)
     except AuthorityRecordRefusedError as exc:
         check_hook_validation_deadline()
-        if exc.reason in _KEY_UNAVAILABLE_REASONS:
-            raise CodexHookIntegrityError(
-                "codex_hook_manifest_verification_unavailable",
-                "Guard could not verify the Codex hook installation; run repair and retry.",
-            ) from exc
-        message = _MANIFEST_MESSAGES.get(
-            exc.reason, "The private Codex hook authentication key is not usable; repair the Codex installation."
-        )
-        raise CodexHookIntegrityError(exc.reason, message) from exc
+        raise manifest_refusal(exc.reason) from exc
     check_hook_validation_deadline()
     return manifest
+
+
+def manifest_refusal(reason: str) -> CodexHookIntegrityError:
+    """The status-safe refusal for a native manifest-authentication reason."""
+
+    if reason in _KEY_UNAVAILABLE_REASONS:
+        return CodexHookIntegrityError(
+            "codex_hook_manifest_verification_unavailable",
+            "Guard could not verify the Codex hook installation; run repair and retry.",
+        )
+    message = _MANIFEST_MESSAGES.get(
+        reason, "The private Codex hook authentication key is not usable; repair the Codex installation."
+    )
+    return CodexHookIntegrityError(reason, message)
 
 
 def write_hook_manifest(guard_home: Path, config_path: Path, manifest: dict[str, object]) -> Path:

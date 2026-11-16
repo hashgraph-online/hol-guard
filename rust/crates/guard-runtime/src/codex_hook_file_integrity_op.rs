@@ -29,6 +29,16 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     let args = args.as_object().ok_or(ERR_INVALID)?;
     let roots = package_roots(args)?;
     let outcome = match text(args, "op")? {
+        "launch" => {
+            return Ok(refusal(crate::codex_hook_launch_trust::launch(
+                args, &roots,
+            )))
+        }
+        "captured" => {
+            return Ok(refusal(crate::codex_hook_launch_trust::captured(
+                args, &roots,
+            )))
+        }
         "validate" => {
             let (path, role, executable_required) = target(args)?;
             admit(&path, role, executable_required, &roots).map(|_| Value::Null)
@@ -54,6 +64,16 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         Ok(identity) => json!({ "ok": true, "identity": identity }),
         Err(reason) => json!({ "error": { "message": message(&reason), "reason": reason } }),
     })
+}
+
+/// A launch answer: `{"ok": true}` with any facts it carries, or the
+/// refusal with the wording the asker reports.
+fn refusal(outcome: Result<Value, crate::codex_hook_launch_trust::Refusal>) -> Value {
+    match outcome {
+        Ok(Value::Null) => json!({ "ok": true }),
+        Ok(facts) => json!({ "ok": true, "facts": facts }),
+        Err((reason, message)) => json!({ "error": { "message": message, "reason": reason } }),
+    }
 }
 
 fn field<'a>(args: &'a Map<String, Value>, key: &str) -> &'a Value {

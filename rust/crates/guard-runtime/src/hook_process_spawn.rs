@@ -148,9 +148,9 @@ fn home_fallback() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/"))
 }
 
-#[allow(dead_code)]
+/// `Path.resolve()`, spelled as Python spells it on every platform.
 fn canonical_or_self(p: &Path) -> PathBuf {
-    std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
+    crate::codex_hook_bridge_trust_files::canonical(p)
 }
 
 /// Python `repr()` of a path string — `Path('…')` needs a quoted literal.

@@ -203,6 +203,7 @@ mod codex_hook_file_identity_op;
 mod codex_hook_file_integrity_op;
 mod codex_hook_identity;
 mod codex_hook_key;
+mod codex_hook_launch_trust;
 mod codex_hook_manifest_auth;
 mod codex_hook_manifest_build;
 mod codex_hook_manifest_iso_time;
