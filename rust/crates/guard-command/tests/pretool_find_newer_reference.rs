@@ -60,7 +60,7 @@ fn action(fixture: &Fixture, harness: &str, command: &str) -> String {
 
 // Quote the complete path for POSIX shells, including embedded apostrophes.
 fn shell_quote_path(path: &Path) -> String {
-    format!("'{}'", path.to_str().unwrap().replace('\'', "'\\\"'\\\"'"))
+    format!("'{}'", path.to_str().unwrap().replace('\'', "'\"'\"'"))
 }
 
 #[test]
