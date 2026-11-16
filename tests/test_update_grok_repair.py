@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.native_install_checks import grok_protection
 from codex_plugin_scanner.guard.cli.update_grok_repair import repair_grok_install
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_bounded_runtime import use_bounded_runtime
 
 _PROMPT_FILE = "hol-guard-prompt.json"
 
@@ -21,11 +22,7 @@ _PROMPT_FILE = "hol-guard-prompt.json"
 def runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """The host's native runtime, as install and validation both find it."""
     path = tmp_path / "hol-guard-runtime"
-    for module in ("bounded_cli_hook_bridge", "bounded_cli_hook_native"):
-        monkeypatch.setattr(
-            f"codex_plugin_scanner.guard.adapters.{module}.native_bridge_executable",
-            lambda *_args, **_kwargs: path,
-        )
+    use_bounded_runtime(monkeypatch, path)
     return path
 
 

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use super::{dispatch, Home};
+use super::{caller, dispatch, Home};
 
 const MARKER: &str = "# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n";
 
@@ -26,13 +26,19 @@ fn managed(home: &Home) -> PathBuf {
     home.guard().join("managed/cline")
 }
 
-fn hook_facts(home: &Home) -> Value {
+/// The caller stamp whose native runtime is an empty file: it advertises every
+/// bridge but cannot answer a canary.
+fn stamped(home: &Home) -> Value {
     let runtime = home.root.join("native-runtime");
     fs::write(&runtime, b"").unwrap();
+    let mut stamp = caller(false);
+    stamp["native_runtime"]["path"] = json!(runtime);
+    stamp
+}
+
+fn hook_facts(_home: &Home) -> Value {
     json!({
         "python": true,
-        "runtime": runtime,
-        "hook_argv": ["guard", "hook"],
         "guard_cli": ["guard"],
         "identity": {"runtime": "python"},
     })
@@ -42,7 +48,12 @@ fn install_hooks(home: &Home) -> Value {
     home.ask(
         "cline",
         "install_transport",
-        json!({"transport": "hooks", "frozen": false, "facts": hook_facts(home)}),
+        json!({
+            "transport": "hooks",
+            "frozen": false,
+            "facts": hook_facts(home),
+            "caller": stamped(home),
+        }),
     )
 }
 

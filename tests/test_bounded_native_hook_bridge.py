@@ -10,14 +10,15 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters import cline_runtime
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_COMMAND,
     NATIVE_BOUNDED_HOOK_FEATURE,
     NATIVE_MUSE_HOOK_FEATURE,
 )
+from codex_plugin_scanner.guard.adapters.native_harness import ask
 from tests.cline_worker_config import worker_config
+from tests.native_runtime_stamp import stamp_native_runtime
 
 _NATIVE_HARNESSES = ("copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline")
 _POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="asserts POSIX hook command syntax")
@@ -47,6 +48,10 @@ def _offer_native(monkeypatch: pytest.MonkeyPatch, runtime: Path, features: tupl
         ),
     )
     monkeypatch.setattr(native_runtime, "native_runtime_status", lambda *, deadline_monotonic=None: status)
+    # The native side reads the same runtime from the caller stamp.
+    runtime.parent.mkdir(parents=True, exist_ok=True)
+    runtime.write_bytes(b"native runtime")
+    stamp_native_runtime(monkeypatch, runtime, features)
 
 
 def _command(tmp_path: Path, harness: str) -> tuple[str, ...]:
@@ -113,7 +118,7 @@ def test_cline_worker_runs_the_native_bridge_once_per_payload(tmp_path: Path, mo
     _offer_native(monkeypatch, runtime, (NATIVE_BOUNDED_HOOK_FEATURE,))
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
-    argv = tuple(cline_runtime._facts(context, "plugin")["hook_argv"])  # pyright: ignore[reportPrivateUsage]
+    argv = tuple(ask("hook_spec", context, harness="cline")["hook_argv"])
     worker = json.loads(worker_config(context, event_name="PreToolUse", guard_cli=list(argv)))
 
     assert argv[:2] == (str(runtime), NATIVE_BOUNDED_HOOK_COMMAND)

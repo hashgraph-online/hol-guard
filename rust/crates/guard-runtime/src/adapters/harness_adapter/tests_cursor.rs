@@ -6,12 +6,11 @@ use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
-use super::{after, dispatch, Home};
+use super::{after, caller, dispatch, Home};
 use crate::runner_authority_op::KindResult;
 
-fn facts(bridge: Value) -> String {
+fn facts() -> String {
     json!({
-        "bridge": bridge,
         "attestation": {"command": ["/g/bin/hol-guard"], "identity": {"sha256": "ab12cd"}, "python": null},
         "interpreter": null,
         "frozen_recovery": ["/g/bin/hol-guard", "cursor", "recover"],
@@ -19,9 +18,25 @@ fn facts(bridge: Value) -> String {
     .to_string()
 }
 
+/// The caller stamp whose native runtime is `bridge`, or has none when null.
+fn stamped(bridge: &Value) -> Value {
+    let mut stamp = caller(false);
+    if bridge.is_null() {
+        stamp["native_runtime"] = Value::Null;
+    } else {
+        stamp["native_runtime"]["path"] = bridge.clone();
+    }
+    stamp
+}
+
 fn ask(home: &Home, op: &str, fields: &Map<String, Value>) -> KindResult {
+    ask_with(home, op, fields, &bridge())
+}
+
+fn ask_with(home: &Home, op: &str, fields: &Map<String, Value>, bridge: &Value) -> KindResult {
     let mut request =
         json!({"harness": "cursor", "op": op, "context": home.context(json!({"PATH": ""}))});
+    request["context"]["caller"] = stamped(bridge);
     for (key, value) in fields {
         request[key] = value.clone();
     }
@@ -32,13 +47,13 @@ fn ask(home: &Home, op: &str, fields: &Map<String, Value>) -> KindResult {
 fn run(home: &Home, op: &str, bridge: Value) -> KindResult {
     let mut fields = Map::new();
     for _ in 0..16 {
-        let answer = ask(home, op, &fields)?;
+        let answer = ask_with(home, op, &fields, &bridge)?;
         let Some(reply) = answer.get("reply").and_then(Value::as_object) else {
             return Ok(answer);
         };
         let (key, value) = reply.iter().next().unwrap();
         let answered = match key.as_str() {
-            "facts" => json!(facts(bridge.clone())),
+            "facts" => json!(facts()),
             "servers" => json!(
                 json!({"detect": value, "managed": [], "skipped": [], "observed": []}).to_string()
             ),
@@ -137,7 +152,7 @@ fn rebind_with_caller(caller: Value) -> Value {
         "context": home.context(json!({"PATH": ""})),
     });
     request["context"]["caller"] = caller;
-    request["facts"] = json!(facts(bridge()));
+    request["facts"] = json!(facts());
     dispatch(&request).unwrap()
 }
 

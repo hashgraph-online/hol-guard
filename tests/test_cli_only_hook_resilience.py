@@ -9,12 +9,14 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard import native_caller
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import (
     _hook_fields as copilot_hook_fields,  # pyright: ignore[reportPrivateUsage]
 )
 from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter
+from tests.native_bounded_runtime import use_bounded_runtime
 
 CommandFactory = Callable[[HarnessContext], tuple[str, ...]]
 _BRIDGE = "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge"
@@ -23,7 +25,7 @@ _BRIDGE = "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge"
 @pytest.fixture
 def runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "hol-guard-runtime"
-    monkeypatch.setattr(f"{_BRIDGE}.native_bridge_executable", lambda *_args, **_kwargs: path)
+    use_bounded_runtime(monkeypatch, path)
     return path
 
 
@@ -133,6 +135,7 @@ def test_a_hook_install_without_a_runtime_asks_for_repair(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
 ) -> None:
     monkeypatch.setattr(f"{_BRIDGE}.native_bridge_executable", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(native_caller, "_native_runtime", lambda: None)
     factory = _copilot_command if harness == "copilot" else _native_command(harness)
 
     with pytest.raises(RuntimeError, match="hol-guard repair"):

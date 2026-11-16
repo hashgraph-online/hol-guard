@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
 from codex_plugin_scanner.guard.models import HarnessDetection
+from tests.native_bounded_runtime import durable_copy, use_bounded_runtime
 from tests.zcode_test_support import write_cli_config as _write_cli_config
 from tests.zcode_test_support import zcode_context as _ctx
 
@@ -130,10 +131,7 @@ class TestZCodeInstallUninstall:
         ctx = _ctx(tmp_path)
         runtime = tmp_path / "hol-guard-runtime"
         monkeypatch.setattr("sys.frozen", True, raising=False)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.native_bridge_executable",
-            lambda *_args, **_kwargs: runtime,
-        )
+        digest = use_bounded_runtime(monkeypatch, runtime)
         get_adapter("zcode").install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         handler = payload["hooks"]["events"]["PreToolUse"][0]["hooks"][0]
@@ -141,7 +139,8 @@ class TestZCodeInstallUninstall:
         import shlex
 
         tokens = shlex.split(command.split(" # ", 1)[0])
-        assert tokens[:2] == [str(runtime), "bounded-hook-bridge"], tokens[:3]
+        # A frozen Guard names the verified durable copy of its runtime.
+        assert tokens[:2] == [str(durable_copy(ctx.guard_home, runtime, digest)), "bounded-hook-bridge"], tokens[:3]
         bridge_config = json.loads(tokens[2])
         assert bridge_config["harness"] == "zcode"
         assert bridge_config["frozen_launcher"] is True

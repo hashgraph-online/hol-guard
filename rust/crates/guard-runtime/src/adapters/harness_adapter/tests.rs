@@ -111,10 +111,22 @@ fn caller(frozen: bool) -> Value {
             "path": "/g/hol-guard-runtime",
             "size": 3,
             "sha256": "0".repeat(64),
-            "features": ["codex-hook-bridge-v1"],
+            "features": NATIVE_FEATURES,
         },
     })
 }
+
+/// What the stamped test runtime advertises: every hook bridge.
+const NATIVE_FEATURES: [&str; 8] = [
+    "codex-hook-bridge-v1",
+    "cursor-hook-bridge-v1",
+    "claude-hook-bridge-v1",
+    "claude-session-start-v1",
+    "cline-hook-worker-v1",
+    "pi-hook-bridge-v1",
+    "bounded-hook-bridge-v1",
+    "bounded-hook-bridge-muse-v1",
+];
 
 /// A frozen `caller` whose native runtime is a real three-byte file, so the
 /// durable copy under the Guard home can be published. Returns the stamp and
@@ -126,7 +138,7 @@ fn frozen_with_runtime(home: &Home) -> (Value, String) {
     let sha = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
     let mut stamp = caller(true);
     stamp["native_runtime"] =
-        json!({"path": runtime, "size": 3, "sha256": sha, "features": ["codex-hook-bridge-v1"]});
+        json!({"path": runtime, "size": 3, "sha256": sha, "features": NATIVE_FEATURES});
     let copy = home
         .guard()
         .join("native-runtime")

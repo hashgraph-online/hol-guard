@@ -22,7 +22,6 @@ from typing import Any
 from ..shims import prepare_guard_shim
 from .base import HarnessContext, PreparedHarnessInstall, _owned_adapter_mutation, _run_command_probe, _shell_command
 from .native_harness import NativeHarnessAdapter, ask, planned_files
-from .native_hook_bridge import native_hook_bridge_executable
 
 _HARNESS = "claude-code"
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
@@ -30,8 +29,6 @@ _STALE_DAEMON_HOOK = (
     "This HOL Guard hook predates the native runtime, so Guard blocked the call. Run `hol-guard repair`."
 )
 CLAUDE_GUARD_SESSION_START_HOOK_MARKER = "HOL_GUARD_CLAUDE_SESSION_START_HOOK"
-NATIVE_CLAUDE_HOOK_FEATURE = "claude-hook-bridge-v1"
-NATIVE_CLAUDE_SESSION_START_FEATURE = "claude-session-start-v1"
 # One reply, ``facts``, settles every op.
 _REPLY_LIMIT = 2
 
@@ -48,30 +45,13 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
     return _daemon_module().load_guard_daemon_url(guard_home)
 
 
-def _native_bridge_executable(guard_home: Path) -> Path | None:
-    """The validated native runtime when it can proxy Claude hooks itself."""
-    return native_hook_bridge_executable(NATIVE_CLAUDE_HOOK_FEATURE, guard_home=guard_home)
-
-
 def _facts(context: HarnessContext) -> str:
-    """What this process knows about the runtimes and CLI the hooks launch."""
+    """What only this process knows about the daemon the hooks reach."""
     from ..runtime.harness_attribution import cursor_hook_query_extras
 
-    bridge = _native_bridge_executable(context.guard_home)
-    session = native_hook_bridge_executable(NATIVE_CLAUDE_SESSION_START_FEATURE, guard_home=context.guard_home)
-    runtime_build = None
-    if session is not None and session == bridge:
-        from ..native_runtime import native_runtime_status
-
-        capabilities = native_runtime_status().capabilities
-        if capabilities is not None:
-            runtime_build = f"{capabilities.runtime_version}+{capabilities.build_sha}"
     guard_home = context.guard_home
     return json.dumps(
         {
-            "bridge": None if bridge is None else str(bridge),
-            "session_runtime": None if session is None else str(session),
-            "runtime_build": runtime_build,
             "daemon_url": load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home),
             "query_extras": [[str(key), str(value)] for key, value in cursor_hook_query_extras().items()],
         }

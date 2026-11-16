@@ -10,7 +10,9 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Map, Value};
 
 use super::kimi::expand_user;
-use super::{common, path_answer, path_text, resolved_executable, Ctx, Failure, Spec, Step};
+use super::{
+    common, hook_config, path_answer, path_text, resolved_executable, Ctx, Failure, Spec, Step,
+};
 use crate::context_digest::python_strip;
 use crate::zcode_artifacts::{Fields, Scope};
 
@@ -303,9 +305,9 @@ fn diagnostic_warnings(fields: &Map<String, Value>) -> Step<Value> {
     Ok(json!({ "warnings": warnings }))
 }
 
-/// The `guard hook` arguments the bounded bridge runs for a Cline hook, and
-/// the bridge's budget for it. `--home` names a home other than the user's.
-fn hook_spec(ctx: &Ctx) -> Value {
+/// The `guard hook` arguments the bounded bridge runs for a Cline hook.
+/// `--home` names a home other than the user's.
+fn hook_args(ctx: &Ctx) -> Vec<String> {
     let mut cli_args = vec![
         "guard".to_owned(),
         "hook".to_owned(),
@@ -317,7 +319,17 @@ fn hook_spec(ctx: &Ctx) -> Value {
     if !ctx.default_home() {
         cli_args.extend(["--home".to_owned(), path_text(&ctx.home)]);
     }
-    json!({ "cli_args": cli_args, "timeout_seconds": HOOK_TIMEOUT_SECONDS })
+    cli_args
+}
+
+/// The `hook_spec` answer: those arguments and the bridge's budget for them.
+fn hook_spec(ctx: &Ctx) -> Value {
+    json!({ "cli_args": hook_args(ctx), "timeout_seconds": HOOK_TIMEOUT_SECONDS })
+}
+
+/// The command Cline's native hooks and plugin run to reach the bounded bridge.
+pub(super) fn hook_argv(ctx: &Ctx) -> Step<Vec<String>> {
+    hook_config::hook_argv(ctx, "cline", &hook_args(ctx), HOOK_TIMEOUT_SECONDS as i64)
 }
 
 pub(crate) fn dispatch(

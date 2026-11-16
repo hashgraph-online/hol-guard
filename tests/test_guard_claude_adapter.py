@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_caller
 from codex_plugin_scanner.guard.adapters import claude_code, get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
@@ -356,7 +357,7 @@ def test_claude_shell_command_uses_list2cmdline_on_windows():
 
 
 def test_claude_daemon_hook_command_without_a_native_runtime_asks_for_repair(tmp_path, monkeypatch):
-    monkeypatch.setattr(claude_code, "native_hook_bridge_executable", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(native_caller, "_native_runtime", lambda: None)
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
 

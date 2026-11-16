@@ -7,6 +7,8 @@ use serde_json::{json, Map, Value};
 use super::cursor::{get, malformed, runtime, BRIDGE_UNAVAILABLE};
 use super::{caller, hook_render, proxy_launch, Ctx, Failure, Step};
 use crate::pyjson::{self, PyVal};
+const BRIDGE_FEATURE: &str = "cursor-hook-bridge-v1";
+
 /// The Python interpreter the attested Guard CLI runs on.
 pub(super) struct HookPython {
     pub(super) executable: String,
@@ -109,7 +111,8 @@ impl Ask<'_> {
         };
         let pinned = self.ctx.env("HOL_GUARD_CURSOR_HOOK_BRIDGE") == Some("python")
             && self.ctx.env("HOL_GUARD_TEST_MODE") == Some("1");
-        let bridge = optional_text(get(&facts, "bridge"))?.filter(|_| !pinned);
+        let bridge = proxy_launch::bridge(self.ctx, BRIDGE_FEATURE, Some(&self.ctx.guard_home))?
+            .filter(|_| !pinned);
         let frozen_recovery = match get(&facts, "frozen_recovery") {
             None | Some(PyVal::Null) => None,
             value => Some(strings(value)?),

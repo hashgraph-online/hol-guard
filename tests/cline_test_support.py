@@ -46,7 +46,7 @@ def hook_state(context: HarnessContext) -> dict[str, Any]:
 
 def install_plugin(context: HarnessContext) -> dict[str, Any]:
     """Write the managed plugin the way an install does, without confirming it."""
-    facts = cline_runtime._facts(context, "plugin")
+    facts = cline_runtime._facts(context)
     answer = ask("install_transport", context, harness="cline", transport="plugin", frozen=False, facts=facts)
     return answer["manifest"]
 

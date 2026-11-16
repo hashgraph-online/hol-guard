@@ -5,12 +5,32 @@
 //! frozen state to build it. `bounded_cli_hook_command` used to write this
 //! JSON itself; the native runtime now answers it as the `config` of a
 //! `hook_spec` (and the `workspace_config` of a spec with workspace
-//! arguments), and Python only wraps it in the runtime's bounded bridge.
+//! arguments). The same answers carry `hook_argv`, the command a harness runs
+//! for it: the signed Desktop proxy launch when a frozen Desktop Core has one,
+//! else the caller's validated native runtime in its bounded bridge.
+//! `bounded_hook_command_for_config` and `native_bridge_executable` built it in
+//! Python before.
 
 use serde_json::{json, Map, Value};
 
-use super::{caller, path_text, Ctx, Failure, Spec, Step};
+use super::{caller, path_text, proxy_launch, Ctx, Failure, Spec, Step};
+use crate::desktop_hook_proxy::signed_argv;
 use crate::hook_env_stamp::json_string;
+
+/// The subcommand of the native runtime that answers a bounded hook.
+const BOUNDED_COMMAND: &str = "bounded-hook-bridge";
+const BOUNDED_FEATURE: &str = "bounded-hook-bridge-v1";
+/// A runtime without this feature refuses a Muse config.
+const MUSE_FEATURE: &str = "bounded-hook-bridge-muse-v1";
+/// The harnesses whose hook the native runtime answers from the daemon itself.
+const BOUNDED_HARNESSES: [&str; 10] = [
+    "copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline", "opencode", "grok", "muse",
+];
+const DESKTOP: &str = "HOL_GUARD_DESKTOP";
+const DESKTOP_PROXY: &str = "HOL_GUARD_DESKTOP_HOOK_PROXY";
+/// The refusal an install without a native runtime answers.
+const RUNTIME_MISSING: &str =
+    "HOL Guard's native runtime is missing, so Guard blocked this hook. Run `hol-guard repair`.";
 
 /// `json.dumps(..., ensure_ascii=True)` for one string.
 fn ascii(text: &str) -> String {
@@ -43,6 +63,54 @@ fn arguments(value: &Value) -> Step<Vec<String>> {
         .collect()
 }
 
+/// `bounded_hook_command_for_config`: the command a harness runs for a bounded
+/// hook config. A frozen Desktop Core with a verified signed proxy runs
+/// through it; otherwise the native runtime that carries the bounded bridge
+/// feature, which a frozen caller names by its durable copy.
+fn bounded_argv(ctx: &Ctx, harness: &str, config: &str) -> Step<Vec<String>> {
+    let frozen = caller::frozen(ctx)?;
+    if frozen {
+        let proxy = signed_argv(
+            caller::cli_executable(ctx)?,
+            config,
+            false,
+            ctx.env(DESKTOP),
+            ctx.env(DESKTOP_PROXY),
+        );
+        if let Some(argv) = proxy {
+            return Ok(argv);
+        }
+    }
+    let feature = if harness == "muse" {
+        MUSE_FEATURE
+    } else {
+        BOUNDED_FEATURE
+    };
+    let guard_home = ctx.resolved(&ctx.guard_home);
+    let native = if BOUNDED_HARNESSES.contains(&harness) {
+        proxy_launch::bridge(ctx, feature, Some(guard_home.as_path()).filter(|_| frozen))?
+    } else {
+        None
+    };
+    let native = native.ok_or_else(|| Failure::Runtime(RUNTIME_MISSING.to_owned()))?;
+    Ok(vec![native, BOUNDED_COMMAND.to_owned(), config.to_owned()])
+}
+
+/// The command a bounded hook of `harness` runs for the `guard hook`
+/// arguments it names.
+pub(super) fn hook_argv(
+    ctx: &Ctx,
+    harness: &str,
+    cli_args: &[String],
+    timeout_seconds: i64,
+) -> Step<Vec<String>> {
+    bounded_argv(
+        ctx,
+        harness,
+        &config(ctx, harness, cli_args, timeout_seconds)?,
+    )
+}
+
 /// A `hook_spec` answer with the bounded hook config of each argument list
 /// it names.
 pub(super) fn with_config(spec: &Spec, ctx: &Ctx, mut answer: Value) -> Step<Value> {
@@ -53,10 +121,19 @@ pub(super) fn with_config(spec: &Spec, ctx: &Ctx, mut answer: Value) -> Step<Val
         .ok_or(Failure::Invalid)?;
     let cli_args = arguments(fields.get("cli_args").ok_or(Failure::Invalid)?)?;
     let main = config(ctx, spec.harness, &cli_args, timeout)?;
-    let workspace = match fields.get("workspace_cli_args") {
-        None | Some(Value::Null) => Value::Null,
-        Some(args) => json!(config(ctx, spec.harness, &arguments(args)?, timeout)?),
+    let (workspace, workspace_argv) = match fields.get("workspace_cli_args") {
+        None | Some(Value::Null) => (Value::Null, Value::Null),
+        Some(args) => {
+            let text = config(ctx, spec.harness, &arguments(args)?, timeout)?;
+            let argv = bounded_argv(ctx, spec.harness, &text)?;
+            (json!(text), json!(argv))
+        }
     };
+    fields.insert(
+        "hook_argv".to_owned(),
+        json!(bounded_argv(ctx, spec.harness, &main)?),
+    );
+    fields.insert("workspace_hook_argv".to_owned(), workspace_argv);
     fields.insert("config".to_owned(), json!(main));
     fields.insert("workspace_config".to_owned(), workspace);
     Ok(answer)
@@ -71,5 +148,7 @@ pub(super) fn answer(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Ste
         .and_then(Value::as_i64)
         .ok_or(Failure::Invalid)?;
     let cli_args = arguments(fields.get("cli_args").ok_or(Failure::Invalid)?)?;
-    Ok(json!({ "config": config(ctx, spec.harness, &cli_args, timeout)? }))
+    let text = config(ctx, spec.harness, &cli_args, timeout)?;
+    let argv = bounded_argv(ctx, spec.harness, &text)?;
+    Ok(json!({ "config": text, "hook_argv": argv }))
 }

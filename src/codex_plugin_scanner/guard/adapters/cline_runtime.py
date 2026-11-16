@@ -23,31 +23,18 @@ if TYPE_CHECKING:
 
 _HARNESS = "cline"
 _DISPLAY_NAME = "Cline CLI"
-_HOOK_WORKER_FEATURE = "cline-hook-worker-v1"
 # Ops that may run the hook canary (10s) and `node --check` (5s) inside the request.
 _PROBE_TIMEOUT_SECONDS = 20.0
 
 
-def _facts(context: HarnessContext, transport: str) -> dict[str, object]:
+def _facts(context: HarnessContext) -> dict[str, object]:
     """The attested Guard CLI the managed transport runs."""
-    from ..frozen_runtime_commands import is_frozen_guard_runtime
-    from .bounded_cli_hook_bridge import bounded_hook_command_for_config
     from .guard_cli_attestation import guard_hook_command, resolve_attested_guard_cli
-    from .native_hook_bridge import native_hook_bridge_executable
 
     attested = resolve_attested_guard_cli(context)
-    hook_argv: list[str] | None = None
-    if not attested.frozen and attested.python is not None:
-        spec = ask("hook_spec", context, harness=_HARNESS)
-        hook_argv = list(bounded_hook_command_for_config(str(spec["config"])))
-    runtime = None
-    if transport == "hooks" and not is_frozen_guard_runtime():
-        runtime = native_hook_bridge_executable(_HOOK_WORKER_FEATURE, guard_home=context.guard_home)
     return {
         "identity": attested.manifest_payload(),
         "guard_cli": list(guard_hook_command(attested, harness=_HARNESS)[:-3]),
-        "hook_argv": hook_argv,
-        "runtime": None if runtime is None else str(runtime),
         "python": attested.python is not None,
     }
 
@@ -61,7 +48,7 @@ def _reconcile(context: HarnessContext, transport: str, *, frozen: bool) -> dict
         timeout_seconds=_PROBE_TIMEOUT_SECONDS,
         transport=transport,
         frozen=frozen,
-        facts=_facts(context, transport),
+        facts=_facts(context),
     )
     probe = installed["probe"]
     fields = {"canary": probe["canary"]} if "canary" in probe else {"verdict": probe["result"]}

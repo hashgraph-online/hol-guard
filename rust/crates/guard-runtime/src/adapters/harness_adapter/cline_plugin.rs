@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use super::cline::{managed_root, paths, runtime, state_text, write_file};
 use super::cline_hooks::managed;
 use super::cline_run;
-use super::{path_text, Ctx, Failure, Step};
+use super::{caller, path_text, Ctx, Failure, Step};
 
 const MARKER: &str = "HOL_GUARD_MANAGED_CLINE_PLUGIN_V1";
 const PACKAGE_NAME: &str = "hol-guard-cline-plugin";
@@ -91,13 +91,14 @@ pub(super) fn install(ctx: &Ctx, facts: &Map<String, Value>) -> Step<Value> {
         let _ = fs::remove_file(proof_path(ctx, name));
     }
     let guard_cli = string_list(facts.get("guard_cli").ok_or(Failure::Invalid)?)?;
-    let hook_argv = match facts.get("hook_argv") {
-        None | Some(Value::Null) => {
-            let mut argv = guard_cli.as_array().cloned().unwrap_or_default();
-            argv.extend([json!("--harness"), json!("cline"), json!("--json")]);
-            Value::Array(argv)
-        }
-        Some(argv) => string_list(argv)?,
+    // The bounded bridge needs a standalone Python Guard; a frozen Guard or one
+    // without Python runs the attested Guard CLI directly.
+    let hook_argv = if !caller::frozen(ctx)? && facts.get("python") == Some(&Value::Bool(true)) {
+        json!(super::cline::hook_argv(ctx)?)
+    } else {
+        let mut argv = guard_cli.as_array().cloned().unwrap_or_default();
+        argv.extend([json!("--harness"), json!("cline"), json!("--json")]);
+        Value::Array(argv)
     };
     let request = json!({
         "guard_cli": guard_cli,

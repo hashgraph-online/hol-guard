@@ -1,9 +1,12 @@
 """Process facts a generated Pi-family extension binds.
 
 The native ``harness_adapter`` kind renders the extension and picks the CLI
-it runs. Only the Guard process knows its own ``hol-guard`` entry points, its
-native hook runtime and, on Windows, its interpreter, contained-run sink and
-``taskkill`` path, so it sends them with each request that renders.
+it runs and the native hook runtime, both from the caller stamp. Only the Guard
+process knows its own ``hol-guard`` entry points and, on Windows, its
+interpreter, contained-run sink and ``taskkill`` path, so it sends them with
+each request that renders. ``HOL_GUARD_PI_HOOK_BRIDGE=fetch`` keeps every hook
+on the extension's own daemon request; contract tests set it so a subprocess
+install and the parent verifier agree.
 """
 
 from __future__ import annotations
@@ -13,11 +16,6 @@ import site
 import sys
 import sysconfig
 from pathlib import Path
-
-PI_HOOK_BRIDGE_FEATURE = "pi-hook-bridge-v1"
-# `fetch` keeps every Pi hook on the extension's own daemon request. Contract
-# tests set it so a subprocess install and the parent verifier agree.
-PI_HOOK_BRIDGE_SWITCH = "HOL_GUARD_PI_HOOK_BRIDGE"
 
 
 def installing_runtime_cli_candidates() -> list[str]:
@@ -32,15 +30,6 @@ def installing_runtime_cli_candidates() -> list[str]:
         scripts.insert(0, sysconfig.get_path("scripts", sysconfig.get_preferred_scheme("user")))
     name = "hol-guard.exe" if os.name == "nt" else "hol-guard"
     return [str(Path(directory) / name) for directory in scripts if directory]
-
-
-def pi_native_hook_runtime(*, guard_home: Path, platform_name: str = os.name) -> Path | None:
-    """The native runtime the extension spawns for each hook, or ``None``."""
-    if platform_name == "nt" or os.environ.get(PI_HOOK_BRIDGE_SWITCH) == "fetch":
-        return None
-    from .native_hook_bridge import native_hook_bridge_executable
-
-    return native_hook_bridge_executable(PI_HOOK_BRIDGE_FEATURE, guard_home=guard_home)
 
 
 def _windows_facts(platform_name: str = os.name) -> dict[str, object] | None:
@@ -70,20 +59,15 @@ def _windows_facts(platform_name: str = os.name) -> dict[str, object] | None:
     }
 
 
-def extension_runtime(guard_home: Path) -> dict[str, object]:
+def extension_runtime() -> dict[str, object]:
     """The ``runtime`` field of a request that renders a Pi-family extension."""
-    native = pi_native_hook_runtime(guard_home=guard_home)
     return {
         "installing_cli": installing_runtime_cli_candidates(),
-        "native_hook_runtime": None if native is None else str(native),
         "windows": _windows_facts(),
     }
 
 
 __all__ = [
-    "PI_HOOK_BRIDGE_FEATURE",
-    "PI_HOOK_BRIDGE_SWITCH",
     "extension_runtime",
     "installing_runtime_cli_candidates",
-    "pi_native_hook_runtime",
 ]

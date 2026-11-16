@@ -1,7 +1,7 @@
 //! The request environment the adapters this kind owns may read.
 
 /// Every variable a request's `env` may carry.
-pub(crate) const ENV_NAMES: [&str; 48] = [
+pub(crate) const ENV_NAMES: [&str; 49] = [
     "PATH",
     "PATHEXT",
     "NoDefaultCurrentDirectoryInExePath",
@@ -29,6 +29,7 @@ pub(crate) const ENV_NAMES: [&str; 48] = [
     "CLINE_DIR",
     "CLINE_MCP_SETTINGS_PATH",
     "HOL_GUARD_CURSOR_HOOK_BRIDGE",
+    "HOL_GUARD_PI_HOOK_BRIDGE",
     "HOL_GUARD_TEST_MODE",
     "HERMES_HOME",
     "HERMES_HOST_HOME",

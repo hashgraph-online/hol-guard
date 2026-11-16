@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import (
 )
 from tests.cline_test_support import install_plugin
 from tests.cline_test_support import plugin_source as _plugin_source
+from tests.native_runtime_stamp import stamp_native_runtime
 
 _BEFORE_TOOL = 'plugin.hooks.beforeTool({toolCall:{toolCallId:"1",toolName:"run_commands"},input:{commands:["ls"]}})'
 
@@ -37,14 +38,10 @@ def _activate_plugin(context: HarnessContext) -> None:
 
 
 def _offer_native(monkeypatch: pytest.MonkeyPatch, runtime: Path) -> None:
-    # Fake only the bridge lookup: a faked runtime status would also reach the
-    # native runner authority that renders the plugin.
-    from codex_plugin_scanner.guard.adapters import native_hook_bridge
-
-    def executable(feature: str, *, guard_home: Path | None = None) -> Path | None:
-        return runtime if feature == NATIVE_BOUNDED_HOOK_FEATURE else None
-
-    monkeypatch.setattr(native_hook_bridge, "native_hook_bridge_executable", executable)
+    # Stamp only the runtime the caller names: a faked runtime status would also
+    # reach the native runner authority that renders the plugin.
+    runtime.write_bytes(b"native runtime")
+    stamp_native_runtime(monkeypatch, runtime, (NATIVE_BOUNDED_HOOK_FEATURE,))
 
 
 def _hook_argv(source: str) -> list[str]:

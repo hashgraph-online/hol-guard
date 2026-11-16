@@ -181,7 +181,7 @@ class NativeHarnessAdapter(HarnessAdapter):
         if op in _EXTENSION_OPS and self._spec.get("extension"):
             from .extension_runtime import extension_runtime
 
-            fields["runtime"] = extension_runtime(context.guard_home)
+            fields["runtime"] = extension_runtime()
         return ask(op, context, harness=self.harness, **fields)
 
     def _shim_names(self) -> dict[str, Any]:
@@ -263,9 +263,7 @@ class NativeHarnessAdapter(HarnessAdapter):
         return native_runner_authority(_KIND, request)
 
     def _hook_argv(self, context: HarnessContext) -> list[str]:
-        from .bounded_cli_hook_bridge import bounded_hook_command_for_config
-
-        return list(bounded_hook_command_for_config(str(self._ask("hook_spec", context)["config"])))
+        return [str(part) for part in self._ask("hook_spec", context)["hook_argv"]]
 
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
         from ..runtime_transition import TransitionError

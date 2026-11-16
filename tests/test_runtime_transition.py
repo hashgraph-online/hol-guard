@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.runtime_transition_admission import (
     NativeProtectionAdmission,
     _seal_verified_admission,
 )
+from tests.native_bounded_runtime import use_bounded_runtime
 
 
 class FixtureAuthority:
@@ -988,9 +989,7 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
         from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
 
         monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
-        monkeypatch.setattr(
-            bridge, "native_bridge_executable", lambda *_args, **_kwargs: runtime.home.parent / "hol-guard-runtime"
-        )
+        use_bounded_runtime(monkeypatch, runtime.home.parent / "hol-guard-runtime")
         monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
     prepared = adapter.prepare_install(ctx)
     # A frozen Guard hands the hook to its runtime and plans no helper script.

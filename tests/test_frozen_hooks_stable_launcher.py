@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import stable_guard_cli
+from codex_plugin_scanner.guard import native_caller, stable_guard_cli
 from codex_plugin_scanner.guard.adapters import claude_code, cline_runtime
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.hook_python import guard_cli_command
@@ -71,10 +71,7 @@ def test_claude_frozen_hooks_use_the_stable_launcher(
 ) -> None:
     _, launcher = versioned_core
 
-    def no_native_bridge(_feature: str, **_kwargs: object) -> None:
-        return None
-
-    monkeypatch.setattr(claude_code, "native_hook_bridge_executable", no_native_bridge)
+    monkeypatch.setattr(native_caller, "_native_runtime", lambda: None)
     monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = _context(tmp_path)
     adapter = claude_code.ClaudeCodeHarnessAdapter

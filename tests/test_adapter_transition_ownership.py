@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.adapters import list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
 from codex_plugin_scanner.guard.codex_install_transaction import require_codex_install_owner
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests.native_bounded_runtime import use_bounded_runtime
 
 
 class WritingAdapter(HarnessAdapter):
@@ -134,12 +135,13 @@ def test_frozen_preparation_hands_the_hook_to_the_runtime(tmp_path, monkeypatch,
 
     ctx = context(tmp_path)
     monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bridge, "native_bridge_executable", lambda *_args, **_kwargs: tmp_path / "hol-guard-runtime")
+    use_bounded_runtime(monkeypatch, tmp_path / "hol-guard-runtime")
     monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
     prepared = get_adapter(harness).prepare_install(ctx)
     assert len(prepared.files) == expected
     assert not any(change.path.suffix == ".py" for change in prepared.files)
-    assert not ctx.guard_home.exists()
+    # The runtime's durable copy is published; no helper script is.
+    assert not (ctx.guard_home / "bin").exists()
 
 
 @pytest.mark.parametrize("previous_exists", [False, True])
@@ -189,7 +191,7 @@ def test_frozen_copilot_preparation_plans_no_helper_and_publishes_nothing(
         guard_home=ctx.guard_home,
     )
     monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bridge, "native_bridge_executable", lambda *_args, **_kwargs: tmp_path / "hol-guard-runtime")
+    use_bounded_runtime(monkeypatch, tmp_path / "hol-guard-runtime")
     monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
     prepared = CopilotHarnessAdapter().prepare_install(ctx)
     assert len(prepared.files) == (12 if workspace_enabled else 7)

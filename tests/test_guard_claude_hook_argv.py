@@ -16,9 +16,9 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_comm
 from codex_plugin_scanner.guard.adapters.claude_code import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
     CLAUDE_GUARD_SESSION_START_HOOK_MARKER,
-    NATIVE_CLAUDE_HOOK_FEATURE,
     ClaudeCodeHarnessAdapter,
 )
+from tests.native_runtime_stamp import stamp_native_runtime
 
 
 def _handler_argv(handler: dict[str, object]) -> tuple[str, ...]:
@@ -318,41 +318,12 @@ def test_exec_hook_does_not_run_marker_embedded_in_workspace_path(tmp_path: Path
     assert not marker_path.exists()
 
 
-def _native_status(features: tuple[str, ...], path: Path):
-    from codex_plugin_scanner.guard.native_runtime_values import (
-        NativeRuntimeCapabilities,
-        NativeRuntimeIdentity,
-        NativeRuntimeStatus,
-    )
-
-    return NativeRuntimeStatus(
-        mode="auto",
-        available=True,
-        compatible=True,
-        reason="ok",
-        identity=NativeRuntimeIdentity(path=path, size=1, mtime_ns=1, sha256="0" * 64),
-        capabilities=NativeRuntimeCapabilities(
-            protocol_version=1,
-            runtime_version="0",
-            rule_digest="0" * 64,
-            build_sha="0" * 40,
-            target="test",
-            features=features,
-        ),
-    )
-
-
 def test_daemon_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from codex_plugin_scanner.guard import native_runtime
-
     runtime = tmp_path / "hol-guard-runtime"
-    monkeypatch.setattr(
-        native_runtime,
-        "native_runtime_status",
-        lambda *, deadline_monotonic=None: _native_status((NATIVE_CLAUDE_HOOK_FEATURE,), runtime),
-    )
+    runtime.write_bytes(b"runtime")
+    stamp_native_runtime(monkeypatch, runtime, ("claude-hook-bridge-v1",))
     monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
@@ -369,13 +340,9 @@ def test_daemon_hook_uses_the_native_bridge_when_the_runtime_offers_it(
 def test_daemon_hook_without_the_native_feature_asks_for_repair(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from codex_plugin_scanner.guard import native_runtime
-
-    monkeypatch.setattr(
-        native_runtime,
-        "native_runtime_status",
-        lambda *, deadline_monotonic=None: _native_status(("resident-protocol-v2",), tmp_path / "hol-guard-runtime"),
-    )
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"runtime")
+    stamp_native_runtime(monkeypatch, runtime, ("resident-protocol-v2",))
     monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 

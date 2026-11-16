@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.inventory_contract import serialize_inventory_sn
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.models import Finding, Severity
 from tests.artifact_risk_support import artifact_risk_signals
+from tests.native_bounded_runtime import durable_copy, use_bounded_runtime
 
 FIXTURES = Path(__file__).parent / "fixtures" / "hermes-plugin-evil"
 
@@ -59,10 +60,7 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(
 ):
     runtime = tmp_path / "hol-guard-runtime"
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.native_bridge_executable",
-        lambda *_args, **_kwargs: runtime,
-    )
+    digest = use_bounded_runtime(monkeypatch, runtime)
     _write(
         tmp_path / ".hermes" / "config.yaml",
         (
@@ -91,7 +89,10 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(
     assert overlay_path.exists() is True
     assert pretool_path.exists() is True
     bridge_config = json.loads(pretool_payload["command"][-1])
-    assert pretool_payload["command"][:2] == [str(runtime), "bounded-hook-bridge"]
+    assert pretool_payload["command"][:2] == [
+        str(durable_copy(context.guard_home, runtime, digest)),
+        "bounded-hook-bridge",
+    ]
     assert bridge_config["cli_args"][-1] == "--json"
     assert bridge_config["harness"] == "hermes"
     assert bridge_config["timeout_seconds"] == 3

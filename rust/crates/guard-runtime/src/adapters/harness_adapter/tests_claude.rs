@@ -10,18 +10,29 @@ use super::{after, dispatch, shim, Home};
 #[path = "tests_claude_round_trip.rs"]
 mod round_trip;
 
-fn facts(bridge: Option<&str>) -> String {
+fn facts() -> String {
     json!({
-        "bridge": bridge,
-        "session_runtime": bridge,
-        "runtime_build": "1.2.3+abc123",
         "daemon_url": "http://127.0.0.1:4781",
         "query_extras": [["harness", "claude-code"]],
     })
     .to_string()
 }
 
-pub(super) const RUNTIME: &str = "/g/hol-guard-runtime";
+const RUNTIME: &str = "/g/hol-guard-runtime";
+
+/// The caller stamp, whose native runtime is `bridge` or absent.
+fn stamped(frozen: bool, bridge: Option<&str>) -> Value {
+    let mut stamp = super::caller(frozen);
+    stamp["native_runtime"] = match bridge {
+        None => Value::Null,
+        Some(path) => {
+            let mut runtime = stamp["native_runtime"].clone();
+            runtime["path"] = json!(path);
+            runtime
+        }
+    };
+    stamp
+}
 
 #[test]
 fn install_without_a_native_runtime_asks_for_repair() {
@@ -30,8 +41,8 @@ fn install_without_a_native_runtime_asks_for_repair() {
         let answer = run(
             &home,
             "prepare_install",
-            json!({"shim": shim(), "caller": super::caller(frozen)}),
-            &facts(None),
+            json!({"shim": shim(), "caller": stamped(frozen, None)}),
+            &facts(),
         );
         assert_eq!(
             answer["runtime_error"],
@@ -78,11 +89,16 @@ fn installed(home: &Home, bridge: Option<&str>) -> Value {
 }
 
 fn installed_as(home: &Home, bridge: Option<&str>, frozen: bool) -> Value {
+    let caller = match (frozen, bridge) {
+        // A frozen caller names the durable copy of a runtime that exists.
+        (true, Some(_)) => super::frozen_with_runtime(home).0,
+        _ => stamped(frozen, bridge),
+    };
     let answer = run(
         home,
         "prepare_install",
-        json!({"shim": shim(), "caller": super::caller(frozen)}),
-        &facts(bridge),
+        json!({"shim": shim(), "caller": caller}),
+        &facts(),
     );
     serde_json::from_str(&after(&answer["files"][0])).unwrap()
 }
@@ -193,9 +209,9 @@ fn install_refuses_settings_that_are_not_an_object() {
 #[test]
 fn frozen_builds_launch_the_stable_cli() {
     let home = Home::new();
-    let facts = facts(None);
+    let facts = facts();
     let argv = |which: &str| {
-        let fields = json!({"which": which, "caller": super::caller(true)});
+        let fields = json!({"which": which, "caller": stamped(true, None)});
         run(&home, "argv", fields, &facts)["argv"].clone()
     };
     assert_eq!(argv("hook")[0], "/g/bin/hol-guard");
@@ -209,8 +225,15 @@ fn frozen_builds_launch_the_stable_cli() {
 #[test]
 fn source_checkout_argv_imports_from_the_package_root() {
     let home = Home::new();
-    let source = facts(None);
-    let hook = run(&home, "argv", json!({"which": "hook"}), &source)["argv"].clone();
+    let source = facts();
+    let caller = stamped(false, None);
+    let hook = run(
+        &home,
+        "argv",
+        json!({"which": "hook", "caller": caller}),
+        &source,
+    )["argv"]
+        .clone();
     assert_eq!(hook[0], "/py");
     assert!(hook[2]
         .as_str()
@@ -219,7 +242,7 @@ fn source_checkout_argv_imports_from_the_package_root() {
     let session = run(
         &home,
         "argv",
-        json!({"which": "python_session_start"}),
+        json!({"which": "python_session_start", "caller": caller}),
         &source,
     )["argv"]
         .clone();
@@ -477,12 +500,7 @@ fn install_target_does_not_read_a_device_or_an_oversized_settings_file() {
 #[test]
 fn install_notes_name_the_settings_file_and_the_rollback() {
     let home = Home::new();
-    let answer = run(
-        &home,
-        "prepare_install",
-        json!({"shim": shim()}),
-        &facts(Some(RUNTIME)),
-    );
+    let answer = run(&home, "prepare_install", json!({"shim": shim()}), &facts());
     let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
     // Compare decoded strings: JSON text would escape Windows backslashes.
     let notes: Vec<&str> = manifest["notes"]

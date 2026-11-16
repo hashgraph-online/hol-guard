@@ -5,7 +5,7 @@ use std::fs;
 use serde_json::{json, Map, Value};
 
 use super::super::{after, dispatch, shim, Home};
-use super::{ask, facts, run, settings, RUNTIME};
+use super::{ask, facts, run, settings};
 
 /// Drop the empty hook lists uninstall leaves behind; they hold no user data.
 fn without_empty_hook_lists(mut payload: Value) -> Value {
@@ -36,12 +36,7 @@ fn install_then_uninstall_returns_every_unrelated_user_setting() {
         serde_json::to_string_pretty(&original).unwrap(),
     )
     .unwrap();
-    let answer = run(
-        &home,
-        "prepare_install",
-        json!({"shim": shim()}),
-        &facts(Some(RUNTIME)),
-    );
+    let answer = run(&home, "prepare_install", json!({"shim": shim()}), &facts());
     let with_guard = after(&answer["files"][0]);
     let installed: Value = serde_json::from_str(&with_guard).unwrap();
     assert_ne!(
@@ -78,7 +73,7 @@ fn install_then_uninstall_for_a_workspace_leaves_its_claude_files_untouched() {
         if answer.get("reply").is_none() {
             return answer;
         }
-        fields.insert("facts".into(), json!(facts(Some(RUNTIME))));
+        fields.insert("facts".into(), json!(facts()));
         dispatch(&Value::Object(fields)).unwrap()
     };
     let mut fields = Map::new();

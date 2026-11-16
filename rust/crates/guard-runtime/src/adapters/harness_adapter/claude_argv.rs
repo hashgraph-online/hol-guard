@@ -3,9 +3,9 @@
 //! frozen or source-checkout form.
 //!
 //! Python answers a `{"reply": {"facts": null}}` with what only the Guard
-//! process knows: the native runtimes that carry each hook feature, the daemon
-//! URL and the query extras the attributed harness adds. The caller's frozen
-//! state, launchers, interpreter and package root come from the request's
+//! process knows: the daemon URL and the query extras the attributed harness
+//! adds. The caller's frozen state, launchers, interpreter, package root and
+//! the native runtimes that carry each hook feature come from the request's
 //! `caller` stamp.
 
 use std::path::Path;
@@ -13,7 +13,7 @@ use std::path::Path;
 use serde_json::{json, Map, Value};
 
 use super::cursor::get;
-use super::{path_text, Ctx, Failure, Step};
+use super::{path_text, proxy_launch, Ctx, Failure, Step};
 use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 use crate::claude_hook_plan::py_repr_str;
 use crate::claude_session_start_contract::{
@@ -27,10 +27,12 @@ pub(super) const NATIVE_COMMAND: &str = "claude-hook-bridge";
 /// The refusal an install without a native runtime answers.
 pub(super) const RUNTIME_MISSING: &str =
     "HOL Guard's native runtime is missing, so Guard cannot review hooks. Run `hol-guard repair`.";
+const HOOK_FEATURE: &str = "claude-hook-bridge-v1";
+const SESSION_START_FEATURE: &str = "claude-session-start-v1";
 const SESSION_START_MODE: &str = "session-start";
 const FROZEN_COMMAND: &str = "__guard-claude-hook";
 
-/// What the Guard process answered for `facts`.
+/// The caller's stamp and what the Guard process answered for `facts`.
 pub(super) struct Facts {
     /// The runtime that carries `claude-hook-bridge-v1`.
     bridge: Option<String>,
@@ -89,10 +91,16 @@ pub(super) fn facts(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Facts> {
             _ => Err(Failure::Invalid),
         })
         .collect::<Step<Vec<_>>>()?;
+    let guard_home = Some(ctx.guard_home.as_path());
+    let bridge = proxy_launch::bridge(ctx, HOOK_FEATURE, guard_home)?;
+    let session_runtime = proxy_launch::bridge(ctx, SESSION_START_FEATURE, guard_home)?;
+    // One runtime carries both hooks, so its build is the running binary's.
+    let runtime_build = (bridge.is_some() && bridge == session_runtime)
+        .then(crate::claude_session_start::runtime_build);
     Ok(Facts {
-        bridge: optional_text(get(&facts, "bridge"))?,
-        session_runtime: optional_text(get(&facts, "session_runtime"))?,
-        runtime_build: optional_text(get(&facts, "runtime_build"))?,
+        bridge,
+        session_runtime,
+        runtime_build,
         frozen,
         launcher: if frozen {
             Some(super::caller::launcher(ctx)?.to_owned())

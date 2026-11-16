@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.cli.native_install_checks import (
     grok_hooks_protection_ready,
     grok_runtime_hooks_verified,
 )
+from tests.native_bounded_runtime import use_bounded_runtime
 
 from .grok_test_support import grok_hook_command_parts, grok_paths
 
@@ -43,11 +44,7 @@ def _redirect(command: tuple[str, ...], target: Path, option: str) -> tuple[str,
 def _runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The host's native runtime, as install and validation both find it."""
     runtime = tmp_path / "hol-guard-runtime"
-    for module in ("bounded_cli_hook_bridge", "bounded_cli_hook_native"):
-        monkeypatch.setattr(
-            f"codex_plugin_scanner.guard.adapters.{module}.native_bridge_executable",
-            lambda *_args, **_kwargs: runtime,
-        )
+    use_bounded_runtime(monkeypatch, runtime)
 
 
 def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPatch) -> tuple[str, ...]:

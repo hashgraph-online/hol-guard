@@ -24,7 +24,6 @@ from .native_harness import NativeHarnessAdapter, ask, detection_from, planned_f
 
 _HARNESS = "cursor"
 _PROXY = "cursor-mcp-proxy"
-_NATIVE_BRIDGE_FEATURE = "cursor-hook-bridge-v1"
 # Each reply names something new, so an op settles within a handful of rounds.
 _REPLY_LIMIT = 32
 _AGENT_SHIM = {"launcher_name": "cursor-agent", "display_name": "Cursor CLI (cursor-agent)"}
@@ -46,9 +45,7 @@ def _facts(context: HarnessContext) -> str:
     from ..frozen_runtime_commands import frozen_daemon_recovery_command
     from .guard_cli_attestation import resolve_attested_guard_cli
     from .isolated_hook_python import isolated_cursor_hook_python
-    from .native_hook_bridge import native_hook_bridge_executable
 
-    bridge = native_hook_bridge_executable(_NATIVE_BRIDGE_FEATURE, guard_home=context.guard_home)
     attestation: dict[str, object]
     recovery: list[str] | None = None
     try:
@@ -72,7 +69,6 @@ def _facts(context: HarnessContext) -> str:
             recovery = list(frozen_daemon_recovery_command(context.guard_home, context.home_dir))
     return _dumps(
         {
-            "bridge": None if bridge is None else str(bridge),
             "attestation": attestation,
             "interpreter": isolated_cursor_hook_python(),
             "frozen_recovery": recovery,
