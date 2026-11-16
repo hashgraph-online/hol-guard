@@ -23,7 +23,6 @@ from .base import HarnessContext, PreparedHarnessInstall, _run_command_probe
 from .native_harness import NativeHarnessAdapter, ask, detection_from, planned_files
 
 _HARNESS = "cursor"
-_PROXY = "cursor-mcp-proxy"
 # Each reply names something new, so an op settles within a handful of rounds.
 _REPLY_LIMIT = 32
 _AGENT_SHIM = {"launcher_name": "cursor-agent", "display_name": "Cursor CLI (cursor-agent)"}
@@ -76,32 +75,6 @@ def _facts(context: HarnessContext) -> str:
     )
 
 
-def _servers(context: HarnessContext, detected: dict[str, Any]) -> str:
-    """The servers Guard manages in a detection, with Guard's entry for each."""
-    from .mcp_servers import (
-        managed_stdio_servers,
-        observable_stdio_servers_with_proxy,
-        proxy_launcher_entry,
-        skipped_stdio_server_names,
-    )
-
-    detection = detection_from(_HARNESS, context, detected)
-    managed = []
-    for server in managed_stdio_servers(detection):
-        entry = proxy_launcher_entry(proxy_command=_PROXY, context=context, server=server)
-        env = entry.pop("env", None)
-        entry["type"] = "stdio"
-        if env is not None:
-            entry["env"] = env
-        managed.append([server.name, server.source_scope, server.config_path, entry])
-    observed = [
-        [server.name, server.source_scope, server.config_path]
-        for server in observable_stdio_servers_with_proxy(detection)
-    ]
-    skipped = list(skipped_stdio_server_names(detection))
-    return _dumps({"detect": detected, "managed": managed, "skipped": skipped, "observed": observed})
-
-
 def _answer(context: HarnessContext, op: str, key: str, value: Any, fields: dict[str, Any]) -> None:
     """Merge this process's answer to one reply into the request."""
     from .hook_python import disposable_guard_hook_probe
@@ -114,8 +87,6 @@ def _answer(context: HarnessContext, op: str, key: str, value: Any, fields: dict
             fields["facts"] = _facts(context)
     elif key == "probe":
         fields["cursor_probe"] = _cursor_agent_subcommand_available(str(value))
-    elif key == "servers":
-        fields["servers"] = _servers(context, value)
     else:
         raise ValueError("Cursor adapter reply is malformed")
 

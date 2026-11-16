@@ -6,9 +6,9 @@
 //! replies `{"reply": {...}}` with one key: `facts` (the attested Guard CLI,
 //! the native hook bridge and the interpreters), `probe` (whether `cursor
 //! agent --help` runs), `expand` (8.3 short names), `render` (Windows hook
-//! command lines), `relaunch` (Guard's proxy argv) and `servers` (which
-//! detected servers Guard manages, with their proxy entries). It merges each
-//! answer into the request and asks again.
+//! command lines) and `relaunch` (Guard's proxy argv). It merges each answer
+//! into the request and asks again. The servers Guard manages are chosen here
+//! from the detection.
 
 use std::path::{Path, PathBuf};
 

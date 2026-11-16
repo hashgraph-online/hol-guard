@@ -229,10 +229,10 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
     )?;
     let listing = snapshot.hook_listing(ctx);
     let detected = detect_sources(spec, ctx, &sources(ctx, &listing), Some(&snapshot.contents))?;
-    let artifacts = detected["artifacts"].as_array().ok_or(Failure::Invalid)?;
-    let managed = managed_servers::managed(ctx, artifacts, PROXY)?;
+    let artifacts = managed_servers::detected(ctx, super::copilot::HARNESS, &detected)?;
+    let managed = managed_servers::managed(ctx, &artifacts, PROXY)?;
     let skipped = PyVal::List(
-        managed_servers::skipped(artifacts)?
+        managed_servers::skipped(&artifacts)?
             .into_iter()
             .map(files::text)
             .collect(),

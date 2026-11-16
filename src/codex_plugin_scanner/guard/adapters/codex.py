@@ -362,7 +362,7 @@ def _ask_install_plan(
 
 def _plan_report(answer: Mapping[str, Any], detection: HarnessDetection) -> tuple[dict[str, Any], dict[str, object]]:
     """The launcher manifest and the reported fields of a planned install."""
-    fields = {
+    fields: dict[str, object] = {
         "backup_path": str(answer["backup_path"]),
         "managed": [str(name) for name in answer["managed_servers"]],
         "migrated": [str(name) for name in answer["migrated"]],

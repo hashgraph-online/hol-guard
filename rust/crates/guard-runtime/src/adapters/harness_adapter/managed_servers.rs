@@ -13,6 +13,68 @@ use super::{proxy_launch, Ctx, Failure, Step};
 use crate::harness_mcp_discovery;
 use crate::pyjson::PyVal;
 
+/// `detection_from`'s artifacts: the detected ones, extended with the
+/// workspace AIBOM the way `extend_detection_with_workspace_aibom` extends
+/// them when the detection asks for it and the install has a workspace.
+///
+/// Only server artifacts are read from the result, so the portable workspace
+/// skills the Python merge sent are not needed here.
+pub(super) fn detected(ctx: &Ctx, harness: &str, detection: &Value) -> Step<Vec<Value>> {
+    let mut merged = detection
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .cloned()
+        .ok_or(Failure::Invalid)?;
+    let workspace = match &ctx.workspace {
+        Some(workspace) if detection.get("workspace_aibom") == Some(&Value::Bool(true)) => {
+            ctx.absolute(workspace)
+        }
+        _ => return Ok(merged),
+    };
+    let existing: Vec<Value> = merged
+        .iter()
+        .map(|artifact| {
+            json!({
+                "artifact_id": artifact.get("artifact_id"),
+                "artifact_type": artifact.get("artifact_type"),
+                "harness": artifact.get("harness"),
+                "config_path": artifact.get("config_path").filter(|path| path.is_string()),
+            })
+        })
+        .collect();
+    let plan = crate::aibom_op::workspace_merge_plan(&json!({
+        "harness": harness,
+        "workspace_dir": super::path_text(&workspace),
+        "existing": existing,
+    }))
+    .map_err(unavailable)?;
+    let invalid = || Failure::Refusal("native_runner_authority_result_invalid".into());
+    if plan.get("extra_count").and_then(Value::as_u64) == Some(0) {
+        return Ok(merged);
+    }
+    for replacement in plan
+        .get("replacements")
+        .and_then(Value::as_array)
+        .ok_or_else(invalid)?
+    {
+        let index = replacement
+            .get("index")
+            .and_then(Value::as_u64)
+            .and_then(|index| usize::try_from(index).ok())
+            .filter(|index| *index < merged.len())
+            .ok_or_else(invalid)?;
+        merged[index] = replacement.get("artifact").cloned().ok_or_else(invalid)?;
+    }
+    merged.extend(
+        plan.get("appended")
+            .and_then(Value::as_array)
+            .ok_or_else(invalid)?
+            .iter()
+            .cloned(),
+    );
+    Ok(merged)
+}
+
 /// One managed server: its name, source scope, config path and the launch
 /// entry that runs it behind Guard's proxy.
 pub(super) type Managed = (String, String, String, PyVal);
@@ -146,16 +208,15 @@ fn proxy_fields(artifact: &Value, found: &Value) -> Step<(String, Map<String, Va
     }
 }
 
-/// `managed_stdio_servers` and `proxy_launcher_entry` under `proxy_command`:
-/// each local stdio server Guard can wrap, in detection order, with the
-/// entry that launches it behind the proxy.
-pub(super) fn managed(ctx: &Ctx, artifacts: &[Value], proxy_command: &str) -> Step<Vec<Managed>> {
-    let detected = servers(artifacts);
+/// `_kept`: each server artifact the `select` op answered, in detection
+/// order, beside the server it found. `include_proxy` also recovers the
+/// original servers behind Guard's own proxies, for observation only.
+fn kept<'a>(artifacts: &'a [Value], include_proxy: bool) -> Step<Vec<(&'a Value, Value)>> {
     let mut chosen = Vec::new();
     let mut requests = Vec::new();
-    for artifact in &detected {
+    for artifact in servers(artifacts) {
         if let Some(request) = select_request(artifact) {
-            chosen.push(*artifact);
+            chosen.push(artifact);
             requests.push(request);
         }
     }
@@ -164,7 +225,7 @@ pub(super) fn managed(ctx: &Ctx, artifacts: &[Value], proxy_command: &str) -> St
     }
     let answer = harness_mcp_discovery::dispatch(&json!({
         "op": "select",
-        "include_proxy": false,
+        "include_proxy": include_proxy,
         "artifacts": requests,
     }))
     .map_err(unavailable)?;
@@ -173,12 +234,21 @@ pub(super) fn managed(ctx: &Ctx, artifacts: &[Value], proxy_command: &str) -> St
         .and_then(Value::as_array)
         .filter(|found| found.len() == chosen.len())
         .ok_or_else(malformed)?;
+    Ok(chosen
+        .into_iter()
+        .zip(found)
+        .filter(|(_, found)| !found.is_null())
+        .map(|(artifact, found)| (artifact, found.clone()))
+        .collect())
+}
+
+/// `managed_stdio_servers` and `proxy_launcher_entry` under `proxy_command`:
+/// each local stdio server Guard can wrap, in detection order, with the
+/// entry that launches it behind the proxy.
+pub(super) fn managed(ctx: &Ctx, artifacts: &[Value], proxy_command: &str) -> Step<Vec<Managed>> {
     let mut managed = Vec::new();
-    for (artifact, found) in chosen.into_iter().zip(found) {
-        if found.is_null() {
-            continue;
-        }
-        let (name, fields) = proxy_fields(artifact, found)?;
+    for (artifact, found) in kept(artifacts, false)? {
+        let (name, fields) = proxy_fields(artifact, &found)?;
         let entry = proxy_launch::entry(ctx, proxy_command, &fields)?;
         managed.push((
             name,
@@ -188,6 +258,23 @@ pub(super) fn managed(ctx: &Ctx, artifacts: &[Value], proxy_command: &str) -> St
         ));
     }
     Ok(managed)
+}
+
+/// `observable_stdio_servers_with_proxy`: the name, source scope and config
+/// path of every server discovery observes, including the originals behind
+/// Guard's proxies, which install never wraps again.
+pub(super) fn observed(artifacts: &[Value]) -> Step<Vec<[String; 3]>> {
+    kept(artifacts, true)?
+        .into_iter()
+        .map(|(artifact, found)| {
+            let (name, _) = proxy_fields(artifact, &found)?;
+            Ok([
+                name,
+                text(found.get("source_scope"))?,
+                text(found.get("config_path"))?,
+            ])
+        })
+        .collect()
 }
 
 /// `skipped_stdio_server_names`: the named servers Guard cannot manage

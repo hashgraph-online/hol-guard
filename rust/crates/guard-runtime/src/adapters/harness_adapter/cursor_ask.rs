@@ -1,6 +1,6 @@
 //! What Python answers between Cursor ops: the facts about the attested
 //! Guard CLI and the native hook bridge, the long form of 8.3 names, Windows
-//! the 8.3 names of hook command paths, Guard's proxy relaunches and the managed servers.
+//! the 8.3 names of hook command paths, and Guard's proxy relaunches.
 
 use serde_json::{json, Map, Value};
 
@@ -189,20 +189,5 @@ impl Ask<'_> {
                 proxy_launch::relay_launch(self.ctx, launcher, &python_args)
             })
             .collect()
-    }
-
-    /// The detected servers Guard manages, as Python derived them from `detect`.
-    pub(super) fn servers(&self, detected: &Value) -> Step<Value> {
-        let answered = match self.fields.get("servers") {
-            Some(Value::String(raw)) => {
-                serde_json::from_str::<Value>(raw).map_err(|_| Failure::Invalid)?
-            }
-            Some(_) => return Err(Failure::Invalid),
-            None => Value::Null,
-        };
-        if answered.get("detect") != Some(detected) {
-            return Err(Self::reply("servers", detected.clone()));
-        }
-        Ok(answered)
     }
 }

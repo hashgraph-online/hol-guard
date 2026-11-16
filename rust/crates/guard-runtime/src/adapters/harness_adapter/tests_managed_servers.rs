@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 
 use super::super::Ctx;
-use super::{managed, select_request, skipped, wired};
+use super::{detected, managed, observed, select_request, skipped, wired};
 use crate::pyjson::PyVal;
 
 fn ctx() -> Ctx {
@@ -115,4 +115,24 @@ fn the_codex_plan_reads_managed_servers_from_the_detected_artifacts() {
     let entry: Value = serde_json::from_str(servers[0]["entry"].as_str().unwrap()).unwrap();
     assert_eq!(entry["command"], json!("/py/bin/python"));
     assert!(wired(&ctx(), &serde_json::Map::new(), "codex-mcp-proxy").is_err());
+}
+
+#[test]
+fn observed_servers_name_each_selected_server_with_its_scope_and_path() {
+    let artifacts = [server("lab", json!("node")), server("broken", Value::Null)];
+    assert_eq!(
+        observed(&artifacts).unwrap(),
+        vec![[
+            "lab".to_owned(),
+            "global".to_owned(),
+            "/u/home/.copilot/mcp-config.json".to_owned()
+        ]]
+    );
+}
+
+#[test]
+fn a_detection_without_a_workspace_keeps_its_own_artifacts() {
+    let detection = json!({"artifacts": [server("lab", json!("node"))], "workspace_aibom": true});
+    assert_eq!(detected(&ctx(), "copilot", &detection).unwrap().len(), 1);
+    assert!(detected(&ctx(), "copilot", &json!({})).is_err());
 }

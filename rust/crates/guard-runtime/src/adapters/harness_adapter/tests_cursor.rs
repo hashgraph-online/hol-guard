@@ -51,12 +51,9 @@ fn run(home: &Home, op: &str, bridge: Value) -> KindResult {
         let Some(reply) = answer.get("reply").and_then(Value::as_object) else {
             return Ok(answer);
         };
-        let (key, value) = reply.iter().next().unwrap();
+        let (key, _) = reply.iter().next().unwrap();
         let answered = match key.as_str() {
             "facts" => json!(facts()),
-            "servers" => json!(
-                json!({"detect": value, "managed": [], "skipped": [], "observed": []}).to_string()
-            ),
             other => panic!("unexpected reply {other}"),
         };
         fields.insert(key.clone(), answered);
