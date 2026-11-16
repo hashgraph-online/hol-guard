@@ -223,6 +223,7 @@ pub mod pretool_literal_route_writes;
 pub mod pretool_lockfile_install;
 pub mod pretool_lockfile_install_forms;
 pub mod pretool_lookup_reads;
+pub mod pretool_loop_comment_lines;
 pub mod pretool_ls_documentation_glob_names;
 pub mod pretool_ls_temporary_operands;
 pub mod pretool_manager_exec_local_bin;
