@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { ActionButton } from "../approval-center-primitives";
 import { isGuardDemoMode } from "../guard-demo";
-import { ContextAssistanceApiError } from "./api";
 import { CigarSavingsPanel } from "./savings-panel";
 import { readUsageMeter, type UsageMeter, type UsageTool, type UsageTotals } from "./usage-api";
+import { pollUsage } from "./usage-poll";
 
 const NAMES: Record<string, string> = {
   codex: "Codex", "claude-code": "Claude Code", copilot: "Copilot", cursor: "Cursor", gemini: "Gemini", opencode: "OpenCode", pi: "Pi",
@@ -16,7 +16,6 @@ const ROWS: [keyof UsageTotals, string][] = [
   ["requests", "Model requests"],
   ["compactions", "Chat summaries"],
 ];
-const POLL_MS = 3_000;
 const exact = new Intl.NumberFormat();
 const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
 
@@ -72,17 +71,9 @@ export function CigarUsagePanel() {
   useEffect(() => {
     if (demo) return;
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
     setError(null);
-    const load = () => readUsageMeter(controller.signal).then((next) => {
-      setMeter(next);
-      if (next.state === "counting" || next.refreshing) timer = setTimeout(load, POLL_MS);
-    }, (cause: unknown) => {
-      if (controller.signal.aborted) return;
-      setError(cause instanceof ContextAssistanceApiError ? cause.message : "Guard could not read usage right now. Try again in a moment.");
-    });
-    void load();
-    return () => { controller.abort(); if (timer) clearTimeout(timer); };
+    void pollUsage(controller.signal, { read: readUsageMeter, onMeter: setMeter, onError: setError });
+    return () => controller.abort();
   }, [demo, attempt]);
 
   if (demo) return <div className="cigar-note"><strong>Usage is not shown in the demo</strong><p>On your computer this tab lists what each AI app used.</p></div>;
