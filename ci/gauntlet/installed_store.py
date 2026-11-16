@@ -11,6 +11,7 @@ module manufactures that history and then checks what the install left behind.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -18,8 +19,12 @@ from .installed_registration import guard_handlers, handler_argv, read_config
 
 #: A path an older build could plausibly have registered and that no longer
 #: exists. If the install joins rather than prunes, this stays behind and the
-#: harness ends up calling a command that is not there.
-STALE_COMMAND = "/opt/hol-guard-previous/bin/hol-guard"
+#: harness ends up calling a command that is not there. It has to be absolute
+#: on the host that runs the lane: Windows reads ``/opt/...`` as relative to the
+#: current drive, and Guard rightly leaves a relative command alone.
+STALE_COMMAND = (
+    r"C:\hol-guard-previous\bin\hol-guard.exe" if os.name == "nt" else "/opt/hol-guard-previous/bin/hol-guard"
+)
 
 #: The marker Guard puts in its own Claude hook argv, spelled here rather than
 #: imported so the lane keeps its own copy of what a previous build wrote. A
