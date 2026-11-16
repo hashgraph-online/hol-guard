@@ -693,11 +693,10 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/adapters/cline_runtime.py",
-          "src/codex_plugin_scanner/guard/adapters/copilot.py",
           "src/codex_plugin_scanner/guard/adapters/cursor.py",
-          "src/codex_plugin_scanner/guard/adapters/hermes.py",
           "src/codex_plugin_scanner/guard/adapters/native_extension.py",
           "src/codex_plugin_scanner/guard/adapters/native_harness.py",
+          "src/codex_plugin_scanner/guard/adapters/native_harness_steps.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_runtime.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
@@ -1160,21 +1159,6 @@
         "evidence": "No production code calls inventory_snapshot: the only references are the method definition and tests/test_guard_aibom_detection.py, which test the method directly. The AIBOM collection, upload and CLI modules (aibom_collection, aibom_commands, aibom_cli, aibom_content_upload) are already excluded by aibom-inventory and build snapshots through their own path. Its lazy imports of inventory_contract and inventory_cisco were the only in-scope edge to the inventory_contract assembly modules (items, metadata, redaction, scans, mcp, models, constants) and, through them, skill_document_evidence and trust_metadata_boundary. aibom_detection now imports fingerprint_mapping and fingerprint_text straight from inventory_contract_fingerprints, which stay in scope because adapter detect() hashes MCP server content synchronously during launch."
       },
       {
-        "id": "adapter-copilot-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/copilot.py",
-        "symbols": [
-          "CopilotHarnessAdapter.install",
-          "CopilotHarnessAdapter.prepare_install",
-          "CopilotHarnessAdapter._prepared_install",
-          "CopilotHarnessAdapter.uninstall",
-          "_server_fields"
-        ],
-        "entry_points": [],
-        "reason": "Copilot adapter install and uninstall; the native harness_adapter kind owns which hook entries are Guard's, the MCP plan, the lifecycle locks, the signed state, backups, the file plan and the bounded hook argv, which it computes from the caller stamp. Python keeps Guard's proxy argv for each server and the shim.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _prepared_install and _server_fields are called only from them. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
         "id": "adapter-cursor-setup",
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/adapters/cursor.py",
@@ -1260,18 +1244,6 @@
         "entry_points": [],
         "reason": "OpenCode adapter install and uninstall; the native harness_adapter kind plans the config, backup, plugin and runtime overlay changes, and Python keeps the config lock, Guard's proxy argv and the attested plugin facts.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
-        "id": "adapter-hermes-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/hermes.py",
-        "symbols": [
-          "HermesHarnessAdapter.install",
-          "HermesHarnessAdapter.prepare_install"
-        ],
-        "entry_points": [],
-        "reason": "Hermes adapter install; the native harness_adapter kind plans the config, overlay, pretool and manifest changes, and Python publishes them.",
-        "evidence": "install and prepare_install have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "store2-connect-cli-helpers",
@@ -1655,12 +1627,24 @@
           "NativeHarnessAdapter.uninstall",
           "NativeHarnessAdapter._hook_argv",
           "NativeHarnessAdapter._apply_install",
+          "NativeHarnessAdapter._apply_uninstall",
           "NativeHarnessAdapter._install_delegated",
           "NativeHarnessAdapter.current_hook_command"
         ],
         "entry_points": [],
         "reason": "Install and uninstall for the harnesses the native harness_adapter kind answers (Devin, Antigravity, Gemini, Kimi, OpenClaw, Paseo and Muse): the launcher shim, the bounded hook argv, publishing the native file plan and Paseo's delegated provider installs.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_argv, _apply_install and _install_delegated are called only from them; current_hook_command is called only by the excluded update repair, to tell an up-to-date hook from an old one. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_argv, _apply_install, _apply_uninstall and _install_delegated are called only from them; current_hook_command is called only by the excluded update repair, to tell an up-to-date hook from an old one. The report validates that no retained symbol or in-scope module references the excluded names."
+      },
+      {
+        "id": "adapter-native-harness-detected-rebind",
+        "category": "install_config",
+        "path": "src/codex_plugin_scanner/guard/adapters/native_harness_steps.py",
+        "symbols": [
+          "prepared_from_detection"
+        ],
+        "entry_points": [],
+        "reason": "The rebind Copilot plans from what the native runtime detected: the launcher shim, the enrolled state key dependency and the native file plan.",
+        "evidence": "prepared_from_detection is called only from NativeHarnessAdapter.prepare_install, which is excluded by adapter-native-harness-setup and invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       }
     ],
     "dynamic_imports": []
