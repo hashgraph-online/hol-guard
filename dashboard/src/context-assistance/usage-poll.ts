@@ -50,6 +50,8 @@ export async function pollUsage(signal: AbortSignal, hooks: UsagePollHooks): Pro
       await wait(USAGE_POLL_MS * failures, signal);
       continue;
     }
+    // A read that finishes after the tab was left must not update a page that is gone.
+    if (signal.aborted) return;
     failures = 0;
     hooks.onMeter(meter);
     if (meter.state !== "counting" && !meter.refreshing) return;

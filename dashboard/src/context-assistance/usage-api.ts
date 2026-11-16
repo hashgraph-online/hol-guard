@@ -93,7 +93,13 @@ export async function readUsageMeter(signal?: AbortSignal): Promise<UsageMeter> 
     throw new ContextAssistanceApiError("usage_unavailable", "Guard could not read usage right now. Try again in a moment.");
   }
   // A reply cut off mid-body (dropped connection, timeout) rejects here and is retried;
-  // only a complete reply with the wrong shape is "numbers this page does not understand".
-  const body: unknown = await response.json();
+  // only a complete reply that is not JSON or has the wrong shape is "numbers this page does not understand".
+  const text = await response.text();
+  let body: unknown = null;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    // Complete but not JSON: parseUsageMeter reports usage_payload_invalid.
+  }
   return parseUsageMeter(body);
 }

@@ -6072,7 +6072,12 @@ async function readUsageMeter(signal) {
     await response.body?.cancel().catch(() => void 0);
     throw new ContextAssistanceApiError("usage_unavailable", "Guard could not read usage right now. Try again in a moment.");
   }
-  const body = await response.json();
+  const text2 = await response.text();
+  let body = null;
+  try {
+    body = JSON.parse(text2);
+  } catch {
+  }
   return parseUsageMeter(body);
 }
 const USAGE_POLL_MS = 3e3;
@@ -6107,6 +6112,7 @@ async function pollUsage(signal, hooks) {
       await wait2(USAGE_POLL_MS * failures, signal);
       continue;
     }
+    if (signal.aborted) return;
     failures = 0;
     hooks.onMeter(meter);
     if (meter.state !== "counting" && !meter.refreshing) return;

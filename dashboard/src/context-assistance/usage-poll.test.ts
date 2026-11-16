@@ -78,8 +78,8 @@ async function run(answers: (UsageMeter | Error)[]) {
   assert.deepEqual(errors, []);
 }
 
-// A reply cut off after its headers is retried, not shown as numbers the page does not understand.
-{
+// Reads through the real readUsageMeter against scripted replies from Guard.
+async function runFetch(replies: (() => Response)[]) {
   const originalFetch = globalThis.fetch;
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   const storage = new Map<string, string>();
@@ -88,12 +88,12 @@ async function run(answers: (UsageMeter | Error)[]) {
     location: new URL("http://127.0.0.1:4781/guard/settings?guard-token=usage-test-session"),
     sessionStorage: browserStorage, localStorage: browserStorage,
   } });
-  const replies = [
-    () => new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{"state":"rea')); c.error(new TypeError("network error")); } }), { status: 200 }),
-    () => new Response(JSON.stringify(meter("ready")), { status: 200 }),
-  ];
   let fetches = 0;
-  globalThis.fetch = async () => replies[fetches++]!();
+  globalThis.fetch = async () => {
+    const reply = replies[fetches++];
+    if (!reply) throw new Error("fetch past the script");
+    return reply();
+  };
   const shown: UsageMeter["state"][] = [];
   const errors: string[] = [];
   try {
@@ -108,9 +108,35 @@ async function run(answers: (UsageMeter | Error)[]) {
     if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
     else Reflect.deleteProperty(globalThis, "window");
   }
-  assert.equal(fetches, 2);
-  assert.deepEqual(errors, []);
-  assert.deepEqual(shown, ["ready"]);
+  return { fetches, shown, errors };
+}
+
+// A reply cut off after its headers is retried, not shown as numbers the page does not understand.
+{
+  const result = await runFetch([
+    () => new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{"state":"rea')); c.error(new TypeError("network error")); } }), { status: 200 }),
+    () => new Response(JSON.stringify(meter("ready")), { status: 200 }),
+  ]);
+  assert.equal(result.fetches, 2);
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.shown, ["ready"]);
+}
+
+// A complete reply that is not JSON will not change on a retry, so that shows at once.
+{
+  const result = await runFetch([() => new Response("<html>proxy error</html>", { status: 200 })]);
+  assert.equal(result.fetches, 1);
+  assert.deepEqual(result.errors, ["Guard returned usage numbers this page does not understand."]);
+}
+
+// A read that finishes after leaving the tab does not update the page.
+{
+  const controller = new AbortController();
+  await pollUsage(controller.signal, {
+    read: async () => { controller.abort(); return meter("ready"); },
+    onMeter: () => assert.fail("no meter after leaving"),
+    onError: () => assert.fail("no error after leaving"),
+  });
 }
 
 console.log("usage-poll tests passed");
