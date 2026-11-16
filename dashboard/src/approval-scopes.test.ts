@@ -11,7 +11,6 @@ import {
   recommendedScopeForAction,
   requestSupportsScope,
   scopeChoiceWithDuration,
-  blockScopeChoiceWithDuration,
   scopeChoicesForRequest,
   standardScopeChoicesForRequest,
   onceOnlyReasonCopy,
@@ -19,7 +18,7 @@ import {
   willPersistExactAction,
 } from "./approval-scopes";
 import type { GuardApprovalRequest } from "./guard-types";
-import { ReviewScopeControls, allowButtonLabel, showsScopeTerms } from "./review-scope-controls";
+import { ReviewScopeControls, allowButtonLabel } from "./review-scope-controls";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -389,61 +388,19 @@ assert(
   "T-AS-26: workspace choice copy matches the primary allow button",
 );
 
-for (const choice of [...DEFAULT_SCOPE_CHOICES, ...BLOCK_SCOPE_CHOICES]) {
-  assert(
-    choice.appliesTo.length > 0 && choice.expiry.length > 0 && choice.policyImpact.length > 0,
-    `T-AS-27: ${choice.value} choice states where it applies, when it expires and its policy impact`,
-  );
-}
-for (const choice of DEFAULT_SCOPE_CHOICES.filter((item) => item.value !== "artifact")) {
-  assert(
-    choice.expiry.includes("Until you remove it") && choice.policyImpact.startsWith("Adds a saved allow"),
-    `T-AS-28: broader ${choice.value} allow says it is saved until removed (got: '${choice.expiry}')`,
-  );
-}
 const exactOnce = DEFAULT_SCOPE_CHOICES.find((item) => item.value === "artifact");
 assert(
-  exactOnce !== undefined && exactOnce.policyImpact.startsWith("Nothing is saved"),
-  "T-AS-29: the exact-action default saves nothing",
-);
-assert(
   exactOnce !== undefined && scopeChoiceWithDuration(exactOnce, false) === exactOnce,
-  "T-AS-30: the one-time exact action keeps its one-time terms",
+  "T-AS-30: the one-time exact action keeps its one-time copy",
 );
 assert(
   exactOnce !== undefined &&
-    scopeChoiceWithDuration(exactOnce, true).expiry.includes("Until you remove it") &&
-    scopeChoiceWithDuration(exactOnce, true).policyImpact.startsWith("Adds a saved allow"),
-  "T-AS-31: Always allow on the exact action shows saved terms",
-);
-assert(
-  exactOnce !== undefined &&
-    scopeChoiceWithDuration(exactOnce, true).label === "Save this exact action" &&
+    scopeChoiceWithDuration(exactOnce, true).label === "Always allow this exact action" &&
     !scopeChoiceWithDuration(exactOnce, true).description.includes("Nothing is saved"),
   "T-AS-34: Always allow on the exact action relabels the choice and drops the one-time description",
 );
-const exactBlock = BLOCK_SCOPE_CHOICES.find((item) => item.value === "artifact");
-assert(
-  exactBlock !== undefined &&
-    exactBlock.expiry.includes("15 minutes") &&
-    exactBlock.policyImpact.startsWith("Nothing is saved"),
-  "T-AS-35: blocking the exact action lasts 15 minutes and saves nothing",
-);
-assert(
-  exactBlock !== undefined &&
-    blockScopeChoiceWithDuration(exactBlock, false) === exactBlock &&
-    blockScopeChoiceWithDuration(exactBlock, true).expiry.includes("Until you remove it") &&
-    blockScopeChoiceWithDuration(exactBlock, true).policyImpact.startsWith("Adds a saved block"),
-  "T-AS-37: a block that will be saved shows saved terms",
-);
-for (const choice of [...DEFAULT_SCOPE_CHOICES, ...BLOCK_SCOPE_CHOICES].filter((item) => item.value === "publisher")) {
-  assert(
-    choice.expiry.includes("changed command from this source still matches"),
-    "T-AS-36: a source decision says a changed command still matches",
-  );
-}
 
-const broaderMarkup = renderToStaticMarkup(
+const simpleMarkup = renderToStaticMarkup(
   createElement(ReviewScopeControls, {
     commonScopeOptions: DEFAULT_SCOPE_CHOICES.filter((item) => item.value === "artifact"),
     broaderScopeOptions: DEFAULT_SCOPE_CHOICES.filter((item) => item.value === "harness"),
@@ -461,11 +418,10 @@ const broaderMarkup = renderToStaticMarkup(
   }),
 );
 assert(
-  broaderMarkup.split("Expires").length - 1 === 2 &&
-    broaderMarkup.includes("Adds a saved allow for this app on this machine."),
-  "T-AS-32: the picked exact action and every broader scope render their scope, expiry and policy impact",
+  simpleMarkup.includes("Allow just this once") && simpleMarkup.includes("Approval scope"),
+  "T-AS-32: the card shows the one-time choice under its section label",
 );
 assert(
-  !showsScopeTerms(DEFAULT_SCOPE_CHOICES[0], false) && showsScopeTerms(DEFAULT_SCOPE_CHOICES[1], false),
-  "T-AS-33: only an unpicked exact action hides its terms",
+  !simpleMarkup.includes("Applies to") && !simpleMarkup.includes("Expires") && !simpleMarkup.includes("Policy"),
+  "T-AS-33: a scope choice is a label and one line, with no applies-to, expiry or policy table",
 );

@@ -5,6 +5,7 @@ import type {
 } from "../guard-types";
 import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, resolveActionEnvelopeDetailText } from "../approval-center-utils";
+import { explainMcpCall } from "../mcp-call/explain-mcp-call";
 import { detectCategory, type ReceiptCategory } from "./categories";
 import { approvalLeftActionStopped } from "./approval-outcome";
 import {
@@ -379,6 +380,10 @@ function isPackageDependencyMutationRequest(request: GuardApprovalRequest): bool
 export function plainEnglishRequestTitle(request: GuardApprovalRequest): string {
   if (request.artifact_type === "native_bash_request") {
     return "Run this script?";
+  }
+  const mcpCall = explainMcpCall(request);
+  if (mcpCall !== null) {
+    return mcpCall.headline;
   }
   const category = detectCategory({
     ...request,

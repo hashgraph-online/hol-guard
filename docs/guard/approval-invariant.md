@@ -72,12 +72,10 @@ recommendation whenever the exact action is offered, and the dashboard follows
 it. Broader choices (this project, this source, this app, everywhere) stay
 available but are never preselected.
 
-Every choice states three things on the card:
-
-- **Applies to**: the action and the place the decision covers.
-- **Expires**: one identical retry for Allow once; for a saved decision, until
-  the user removes it or the action itself changes.
-- **Policy**: whether anything is saved, and where it applies.
+Each choice is a label and one plain sentence. The card does not add a terms
+table (applies to, expires, policy) under a choice: a person deciding in a few
+seconds reads the label and the sentence, and the sentence says whether
+anything is saved and where it applies.
 
 Choosing a broader scope does not widen what the decision approves. A saved
 allow at any scope still answers only the action whose hash it was saved

@@ -48,6 +48,12 @@ const UNSAFE_CHARACTERS = new RegExp(
   "g",
 );
 
+/** Strips control and bidi characters and collapses whitespace, then caps the length. */
+export function cleanAgentText(value: string, maxChars: number): string {
+  const text = value.replace(UNSAFE_CHARACTERS, " ").replace(/\s+/g, " ").trim();
+  return text.length > maxChars ? `${text.slice(0, maxChars)}…` : text;
+}
+
 export function resolveAgentStatedIntent(item: GuardApprovalRequest): AgentStatedIntent | null {
   const envelope = item.action_envelope_json;
   if (!envelope) {
@@ -88,7 +94,7 @@ export function resolveAgentStatedIntent(item: GuardApprovalRequest): AgentState
   return null;
 }
 
-function firstToolInput(raw: Record<string, unknown> | null): Record<string, unknown> | null {
+export function firstToolInput(raw: Record<string, unknown> | null): Record<string, unknown> | null {
   if (raw === null) {
     return null;
   }
