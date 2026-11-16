@@ -134,6 +134,7 @@ pub(super) fn safe_stdin_arguments(arguments: &[String], literal_words: &[String
 
 mod exclusion;
 mod includes;
+mod missing;
 mod reach;
 pub(in crate::pretool) use reach::sensitive_reach_reason;
 
@@ -370,7 +371,7 @@ fn scan_into(
                 || ((!argument.starts_with('~') || context.shell_home_matches)
                     && crate::pretool::safe_reads::glob_file_matches(argument, context).is_some())
                 || sibling::named_path(argument, context, absent.plain)
-                || (absent.plain && absent_target(argument, context));
+                || (absent.plain && missing::missing_operand(argument, context));
             if !proven && unsafe_search_value(SearchValueRole::Path, argument, context) {
                 return false;
             }
@@ -451,22 +452,7 @@ fn scan_into(
                     // above answers the same question without it.
                     || (!dereference && includes.narrows(target, context))
             };
-            recursive_targets_proven(&targets, proven, absent.recursive.then_some(context))
-        })
-}
-
-/// Every recursive root is proven or missing (`grep -rn x src tests` with no
-/// `tests`, and `grep -rn x <absent>` on its own): a root that is not there
-/// opens nothing, so the walk reads no file. With no operand at all `grep -r`
-/// walks the working directory instead, which only a proven root admits.
-fn recursive_targets_proven(
-    targets: &[&str],
-    proven: impl Fn(&str) -> bool,
-    absent: Option<ReadContext<'_>>,
-) -> bool {
-    !targets.is_empty()
-        && targets.iter().copied().all(|target| {
-            proven(target) || absent.is_some_and(|context| absent_target(target, context))
+            missing::recursive_targets_proven(&targets, proven, absent.recursive.then_some(context))
         })
 }
 
