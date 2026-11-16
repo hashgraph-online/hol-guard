@@ -9,10 +9,15 @@
 //! rules about where a loop may stand and what it may hold live in
 //! `for_loop_unroll::unroll_in_list`; anything else returns `None` and keeps
 //! the existing review.
+//!
+//! The written-out list may grow to the longest command Guard parses, the
+//! same limit a loop standing alone gets, so moving a long loop after another
+//! step does not change its verdict.
 
-use super::super::control_flow_flatten::MAX_FLATTENED_BYTES;
 use super::super::for_loop_unroll::unroll_in_list;
 use super::next_construct;
+
+const MAX_SPLICED_BYTES: usize = crate::MAX_COMMAND_BYTES;
 
 /// The command list with each top-level `for` loop written out, or `None`
 /// when the command holds no such loop or anything around one is outside the
@@ -37,12 +42,12 @@ pub(super) fn spliced_loops(command: &str, home_dir: Option<&str>) -> Option<Str
         if !tail.is_empty() {
             out.push(' ');
         }
-        if out.len() > MAX_FLATTENED_BYTES {
+        if out.len() > MAX_SPLICED_BYTES {
             return None;
         }
         spliced_any = true;
         rest = tail;
     }
     out.push_str(rest);
-    (spliced_any && out.len() <= MAX_FLATTENED_BYTES).then_some(out)
+    (spliced_any && out.len() <= MAX_SPLICED_BYTES).then_some(out)
 }
