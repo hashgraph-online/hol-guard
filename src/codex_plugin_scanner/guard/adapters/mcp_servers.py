@@ -35,7 +35,7 @@ GUARD_MCP_COMPANION_PREFIX = "hol-guard::"
 
 
 def is_guard_mcp_companion_name(name: str) -> bool:
-    return name.startswith(GUARD_MCP_COMPANION_PREFIX)
+    return _companion(name, None, ())["companion"] is True
 
 
 def is_verified_guard_mcp_companion(
@@ -43,7 +43,16 @@ def is_verified_guard_mcp_companion(
     command: str | None,
     args: tuple[str, ...],
 ) -> bool:
-    return is_guard_mcp_companion_name(name) and is_guard_proxy_command(command, args)
+    return _companion(name, command, args)["verified"] is True
+
+
+def _companion(name: str, command: str | None, args: tuple[str, ...]) -> dict[str, Any]:
+    """The native runtime's read of a Guard companion: its name, and whether its launch is a Guard proxy too."""
+
+    answer = adapter_op("mcp_companion", name=wire_text(name), command=command, args=list(args))
+    if not isinstance(answer.get("companion"), bool) or not isinstance(answer.get("verified"), bool):
+        raise ValueError("native_mcp_server_select_malformed")
+    return answer
 
 
 def managed_stdio_servers(detection: HarnessDetection) -> tuple[ManagedMcpServer, ...]:
@@ -65,11 +74,23 @@ def observable_stdio_servers_with_proxy(detection: HarnessDetection) -> tuple[Ma
 def skipped_stdio_server_names(detection: HarnessDetection) -> tuple[str, ...]:
     """Return server names Guard cannot manage through the runtime proxy."""
 
-    named = [
-        artifact for artifact in detection.artifacts if artifact.artifact_type == "mcp_server" and artifact.name.strip()
-    ]
-    selected = _select(named, include_guard_managed_proxy=False)
-    return tuple(artifact.name for artifact, server in zip(named, selected, strict=True) if server is None)
+    servers = [artifact for artifact in detection.artifacts if artifact.artifact_type == "mcp_server"]
+    entries = [{"name": wire_text(artifact.name), "request": _select_request(artifact)} for artifact in servers]
+    if not entries:
+        return ()
+    from ..native_runner_authority import NativeRunnerAuthorityError
+
+    try:
+        positions = adapter_op("mcp_skipped", entries=entries)["skipped"]
+    except NativeRunnerAuthorityError as error:
+        raise ValueError(f"native_mcp_server_identity_unavailable:{error}") from error
+    except KeyError as error:
+        raise ValueError("native_mcp_server_select_malformed") from error
+    if not isinstance(positions, list) or not all(
+        type(position) is int and 0 <= position < len(servers) for position in positions
+    ):
+        raise ValueError("native_mcp_server_select_malformed")
+    return tuple(servers[position].name for position in cast(list[int], positions))
 
 
 def proxy_cli_args(
@@ -274,6 +295,20 @@ def _selected_server(artifact: GuardArtifact, found: object) -> ManagedMcpServer
         )
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError("native_mcp_server_select_malformed") from error
+
+
+def adapter_op(op: str, **fields: object) -> dict[str, Any]:
+    """One context-free MCP op of the ``harness_adapter`` kind."""
+
+    from ..native_runner_authority import native_runner_authority
+
+    return native_runner_authority("harness_adapter", {"op": op, **fields})
+
+
+def wire_text(value: str) -> str:
+    """Text the request can carry: a lone surrogate becomes ``?``. Only whether the name is blank is read."""
+
+    return value.encode("utf-8", errors="replace").decode("utf-8")
 
 
 def _native(request: dict[str, object], field: str) -> list[object]:

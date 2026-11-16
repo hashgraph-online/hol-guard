@@ -1104,6 +1104,7 @@ class LocalCliApiService:
                 workspace_dir=workspace_dir,
                 detections=detections,
             )
+            configured_names = configured_mcp_server_names(detections)
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as error:
             # A failed read leaves no remote snapshot to reconcile against.
             self._remote_discovery_cache = None
@@ -1121,7 +1122,7 @@ class LocalCliApiService:
                 raise DiscoveryStageError("configured_host_scan_failed") from None
             return ()
         self._discovery_cache = (now, servers)
-        self._configured_names = configured_mcp_server_names(detections)
+        self._configured_names = configured_names
         try:
             remote = discover_remote_mcp_servers(
                 home_dir=home_dir,

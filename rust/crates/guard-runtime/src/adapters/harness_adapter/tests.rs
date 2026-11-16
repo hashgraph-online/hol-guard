@@ -27,6 +27,8 @@ mod grok_zcode;
 mod hermes_family;
 #[path = "tests_install_apply.rs"]
 mod install_apply_family;
+#[path = "tests_mcp_servers.rs"]
+mod mcp_servers_family;
 #[path = "tests_opencode.rs"]
 mod opencode_family;
 #[path = "tests_shims_apply.rs"]

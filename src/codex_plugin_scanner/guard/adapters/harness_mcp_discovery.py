@@ -24,7 +24,7 @@ from .harness_mcp_remote import (
     _remote_servers,
     remote_scan_harnesses,
 )
-from .mcp_servers import ManagedMcpServer, observable_stdio_servers_with_proxy, proxy_process_env
+from .mcp_servers import ManagedMcpServer, adapter_op, observable_stdio_servers_with_proxy, proxy_process_env, wire_text
 
 if TYPE_CHECKING:
     from .base import HarnessContext
@@ -74,12 +74,29 @@ def discover_remote_mcp_servers(
 def configured_mcp_server_names(loaded: Sequence[HarnessDetection]) -> dict[str, tuple[str, ...]]:
     """Map each harness to the MCP server names its configs declare, stdio or remote."""
 
-    names: dict[str, dict[str, None]] = {}
-    for detection in loaded:
-        for artifact in detection.artifacts:
-            if artifact.artifact_type == "mcp_server" and artifact.name.strip():
-                names.setdefault(artifact.harness, {})[artifact.name.strip()] = None
-    return {harness: tuple(found) for harness, found in names.items()}
+    artifacts = [
+        {
+            "harness": wire_text(artifact.harness),
+            "artifact_type": artifact.artifact_type,
+            "name": wire_text(artifact.name),
+        }
+        for detection in loaded
+        for artifact in detection.artifacts
+    ]
+    if not artifacts:
+        return {}
+    answer = adapter_op("mcp_server_names", artifacts=artifacts).get("names")
+    if not isinstance(answer, list):
+        raise ValueError("harness_mcp_discovery names answer is malformed")
+    names: dict[str, tuple[str, ...]] = {}
+    for group in cast(list[object], answer):
+        if not isinstance(group, list) or len(cast(list[object], group)) != 2:
+            raise ValueError("harness_mcp_discovery names answer is malformed")
+        harness, found = cast(list[object], group)
+        if not isinstance(harness, str) or not isinstance(found, list) or not all(isinstance(n, str) for n in found):
+            raise ValueError("harness_mcp_discovery names answer is malformed")
+        names[harness] = tuple(cast(list[str], found))
+    return names
 
 
 def configured_harness_detections(
@@ -396,12 +413,21 @@ def extra_env_for_mcp_launch(
 def apply_source_labels(items: list[dict[str, object]], labels: dict[str, str]) -> list[dict[str, object]]:
     """Overlay harness source labels onto listed custom extensions."""
 
+    if not items or not labels:
+        return items
+    cli_ids: list[str | None] = []
     for item in items:
         cli_id = item.get("cli_id")
-        if not isinstance(cli_id, str):
-            continue
-        label = labels.get(cli_id)
-        if label:
+        cli_ids.append(wire_text(cli_id) if isinstance(cli_id, str) else None)
+    chosen = adapter_op(
+        "mcp_source_labels",
+        cli_ids=cli_ids,
+        labels={wire_text(key): value for key, value in labels.items()},
+    ).get("labels")
+    if not isinstance(chosen, list) or len(cast(list[object], chosen)) != len(items):
+        raise ValueError("harness_mcp_discovery labels answer is malformed")
+    for item, label in zip(items, cast(list[object], chosen), strict=True):
+        if isinstance(label, str):
             item["source_label"] = label
     return items
 

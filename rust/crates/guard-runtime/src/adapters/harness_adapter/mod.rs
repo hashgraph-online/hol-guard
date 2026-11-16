@@ -98,6 +98,7 @@ mod install_apply;
 mod isolated_python;
 mod kimi;
 mod managed_record;
+mod mcp_servers;
 mod openclaw;
 mod opencode;
 mod opencode_build;
@@ -279,6 +280,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         .ok_or(ERR_INVALID)?;
     if op == "describe" {
         return Ok(describe::describe());
+    }
+    if mcp_servers::handles(op) {
+        return answer(mcp_servers::dispatch(op, fields));
     }
     let ctx = Ctx::parse(fields.get("context"))?;
     if op == "proof_verify" || op == "proof_bind" {
