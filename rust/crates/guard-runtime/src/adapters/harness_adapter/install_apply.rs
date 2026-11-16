@@ -1,0 +1,117 @@
+//! `apply_install`: a harness install, published where its plan is made.
+//!
+//! What `NativeHarnessAdapter.install` chained from Python: prepare both
+//! launcher shims, prepare the adapter's own plan with the shim manifest,
+//! then publish every planned file as `PreparedHarnessInstall.publish` did,
+//! restoring what it wrote when a later file fails. The caller still holds
+//! installation ownership and journals the mutation records the publish hands
+//! back, so the answer is `{"manifest": text, "publish": answer}` where
+//! `publish` is the `transition_files` publish answer, with the progress
+//! events no caller here watches left out. Fields: those of `prepare_install`
+//! less `shim`, the shim's `launcher_name`, `display_name` and
+//! `interpreter`, and `transition` (`package_roots` and `budget`).
+
+use serde_json::{json, Map, Value};
+
+use super::{guard_shim, route, Ctx, Failure, Spec, Step};
+use crate::transition_files::resolve_lenient;
+
+/// `normalized_after_mode`: a published mode never keeps group/world write.
+fn normalized_after_mode(mode: u64) -> u64 {
+    if cfg!(windows) || mode & !0o777 != 0 {
+        return mode;
+    }
+    mode & !0o022
+}
+
+/// `TransitionFile(...).payload()` for one planned change of an answer;
+/// `None` for a target `payload()` refuses as `file_target_invalid`.
+fn payload(entry: &Value) -> Step<Option<Value>> {
+    let entry = entry.as_object().ok_or(Failure::Invalid)?;
+    let path = entry
+        .get("path")
+        .and_then(Value::as_str)
+        .map(std::path::Path::new)
+        .ok_or(Failure::Invalid)?;
+    if !path.is_absolute() || path.symlink_metadata().is_ok_and(|meta| meta.is_symlink()) {
+        return Ok(None);
+    }
+    let before = entry.get("before").cloned().unwrap_or(Value::Null);
+    let after = entry.get("after").cloned().unwrap_or(Value::Null);
+    let mode = |key: &str| entry.get(key).and_then(Value::as_u64).unwrap_or(0o600);
+    let before_mode = mode("before_mode");
+    let mut after_mode = mode("after_mode");
+    // `publishes_user_file`: an existing file this change rewrites.
+    if !before.is_null() && (before != after || before_mode != after_mode) {
+        after_mode = normalized_after_mode(after_mode);
+    }
+    Ok(Some(json!({
+        "path": resolve_lenient(path).to_string_lossy(),
+        "before": before,
+        "after": after,
+        "before_mode": before_mode,
+        "after_mode": after_mode,
+        "kind": "binding",
+        "no_follow": entry.get("no_follow").and_then(Value::as_bool).unwrap_or(false),
+    })))
+}
+
+fn payloads(answer: &Value) -> Step<Option<Vec<Value>>> {
+    answer
+        .get("files")
+        .and_then(Value::as_array)
+        .ok_or(Failure::Invalid)?
+        .iter()
+        .map(payload)
+        .collect::<Step<Option<Vec<_>>>>()
+}
+
+/// The publish answer for a plan refused before any file was written.
+fn refused(reason: &str) -> Value {
+    json!({ "manifest": null, "publish": { "error": { "transition": reason }, "events": [] } })
+}
+
+pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    let mut shim_fields = Map::new();
+    shim_fields.insert("harness".into(), json!(spec.harness));
+    for key in ["launcher_name", "display_name", "interpreter"] {
+        shim_fields.insert(key.into(), fields.get(key).cloned().unwrap_or(Value::Null));
+    }
+    let shim = guard_shim::prepare(ctx, &shim_fields)?;
+    let shim_manifest = shim
+        .get("manifest")
+        .and_then(Value::as_str)
+        .ok_or(Failure::Invalid)?;
+    let Some(mut files) = payloads(&shim)? else {
+        return Ok(refused("file_target_invalid"));
+    };
+    let mut plan_fields = fields.clone();
+    for key in ["launcher_name", "display_name", "interpreter", "transition"] {
+        plan_fields.remove(key);
+    }
+    plan_fields.insert("shim".into(), json!(shim_manifest));
+    let plan = route(spec, "prepare_install", ctx, &plan_fields)?;
+    let Some(planned) = payloads(&plan)? else {
+        return Ok(refused("file_target_invalid"));
+    };
+    files.extend(planned);
+    let manifest = plan
+        .get("manifest")
+        .and_then(Value::as_str)
+        .ok_or(Failure::Invalid)?
+        .to_owned();
+    let mut request = match fields.get("transition") {
+        Some(Value::Object(transition)) => transition.clone(),
+        _ => return Err(Failure::Invalid),
+    };
+    request.insert("op".into(), json!("publish"));
+    request.insert("files".into(), Value::Array(files));
+    request.insert("removals".into(), json!(false));
+    request.insert("rollback".into(), json!(true));
+    let mut published =
+        crate::transition_files::dispatch(&Value::Object(request)).map_err(|_| Failure::Invalid)?;
+    if let Some(Value::Array(events)) = published.get_mut("events") {
+        events.retain(|event| event.get("written").is_none());
+    }
+    Ok(json!({ "manifest": manifest, "publish": published }))
+}

@@ -94,6 +94,7 @@ mod hermes_hooks;
 mod hermes_install;
 mod hermes_uninstall;
 mod hook_render;
+mod install_apply;
 mod isolated_python;
 mod kimi;
 mod managed_record;
@@ -304,6 +305,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     let spec = describe::spec(harness).ok_or(ERR_INVALID)?;
     if op == "apply_uninstall" {
         return uninstall_apply::apply(spec, &ctx, fields);
+    }
+    if op == "apply_install" {
+        return answer(install_apply::apply(spec, &ctx, fields));
     }
     answer(if op == "default_launch" {
         default_launch(spec, &ctx, fields)

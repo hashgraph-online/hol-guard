@@ -106,7 +106,7 @@ class HermesHarnessAdapter(NativeHarnessAdapter):
         super().__init__(_HARNESS, (), "")
 
     def install(self, context: HarnessContext) -> dict[str, object]:
-        return super().prepare_install(context).publish(context.guard_home)
+        return super().install(context)
 
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
         """Unavailable: the plan signs its manifest, which may create the state key."""

@@ -53,6 +53,7 @@ NATIVE_HARNESSES: tuple[tuple[str, tuple[str, ...], str], ...] = (
 #: Ops that render a Pi-family extension, so they carry this process's facts.
 _EXTENSION_OPS = frozenset(
     {
+        "apply_install",
         "prepare_install",
         "prepare_uninstall",
         "apply_uninstall",
@@ -323,7 +324,33 @@ class NativeHarnessAdapter(HarnessAdapter):
 
             shim = install_guard_shim(self.harness, context)
             return {"harness": self.harness, "active": True, "config_path": shim["shim_path"], **shim}
-        return self.prepare_install(context).publish(context.guard_home)
+        return self._apply_install(context)
+
+    def _apply_install(self, context: HarnessContext) -> dict[str, object]:
+        """Prepare the shim and the plan and publish both in one native call."""
+        from .. import native_transition_files
+        from ..codex_install_transaction import require_codex_install_owner
+        from ..runtime_transition import assert_transition_mutation_allowed
+        from ..shims import shim_interpreter
+
+        require_codex_install_owner(context.guard_home)
+        assert_transition_mutation_allowed(context.guard_home)
+        fields: dict[str, object] = {}
+        if self._spec.get("hook") is not None:
+            fields["hook_argv"] = self._hook_argv(context)
+        if self._spec.get("retired_hooks"):
+            fields["retired_commands"] = self._retired_hooks(context, fields["hook_argv"])
+        answer = self._ask(
+            "apply_install",
+            context,
+            **self._shim_names(),
+            interpreter=shim_interpreter(),
+            transition=native_transition_files.transition_context(),
+            **fields,
+        )
+        raise_failure(answer)
+        native_transition_files.settle(answer.get("publish"))
+        return json.loads(_text(answer, "manifest"))
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         from .. import native_transition_files
