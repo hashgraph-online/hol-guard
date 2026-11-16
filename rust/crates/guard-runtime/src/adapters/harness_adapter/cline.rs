@@ -23,6 +23,8 @@ const DUPLICATE: &str =
 const PENDING: &str = "Cline protection is installed but live runtime proof is pending or stale. Run a safe Cline tool action, then `hol-guard apps test cline`.";
 const JETBRAINS: &str =
     "Cline JetBrains remains unverified until a live pre-tool proof is recorded.";
+/// The seconds the bounded bridge gives one Cline hook.
+const HOOK_TIMEOUT_SECONDS: u64 = 8;
 
 /// The `RuntimeError` the Cline adapter raised.
 pub(super) fn runtime(message: impl Into<String>) -> Failure {
@@ -301,6 +303,23 @@ fn diagnostic_warnings(fields: &Map<String, Value>) -> Step<Value> {
     Ok(json!({ "warnings": warnings }))
 }
 
+/// The `guard hook` arguments the bounded bridge runs for a Cline hook, and
+/// the bridge's budget for it. `--home` names a home other than the user's.
+fn hook_spec(ctx: &Ctx) -> Value {
+    let mut cli_args = vec![
+        "guard".to_owned(),
+        "hook".to_owned(),
+        "--guard-home".to_owned(),
+        path_text(&ctx.guard_home),
+        "--harness".to_owned(),
+        "cline".to_owned(),
+    ];
+    if !ctx.default_home() {
+        cli_args.extend(["--home".to_owned(), path_text(&ctx.home)]);
+    }
+    json!({ "cli_args": cli_args, "timeout_seconds": HOOK_TIMEOUT_SECONDS })
+}
+
 pub(crate) fn dispatch(
     spec: &Spec,
     op: &str,
@@ -321,6 +340,7 @@ pub(crate) fn dispatch(
         }
         "detect" => detect(spec, ctx, fields),
         "runtime_probe" => runtime_probe(ctx, fields),
+        "hook_spec" => Ok(hook_spec(ctx)),
         "diagnostic_warnings" => diagnostic_warnings(fields),
         "mcp_scan" => cline_mcp::scan(ctx),
         "mcp_apply" => cline_mcp::apply(ctx, fields),

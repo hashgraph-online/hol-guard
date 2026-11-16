@@ -24,7 +24,6 @@ if TYPE_CHECKING:
 _HARNESS = "cline"
 _DISPLAY_NAME = "Cline CLI"
 _HOOK_WORKER_FEATURE = "cline-hook-worker-v1"
-_BRIDGE_TIMEOUT_SECONDS = 8
 # Ops that may run the hook canary (10s) and `node --check` (5s) inside the request.
 _PROBE_TIMEOUT_SECONDS = 20.0
 
@@ -39,17 +38,15 @@ def _facts(context: HarnessContext, transport: str) -> dict[str, object]:
     attested = resolve_attested_guard_cli(context)
     hook_argv: list[str] | None = None
     if not attested.frozen and attested.python is not None:
-        guard_args = ["guard", "hook", "--guard-home", str(context.guard_home), "--harness", _HARNESS]
-        if context.home_dir.resolve() != Path.home().resolve():
-            guard_args.extend(["--home", str(context.home_dir)])
+        spec = ask("hook_spec", context, harness=_HARNESS)
         hook_argv = list(
             bounded_cli_hook_command(
                 python_executable=str(attested.python.executable),
                 package_root=Path(__file__).resolve().parents[3],
                 guard_home=context.guard_home,
-                cli_args=guard_args,
+                cli_args=[str(part) for part in spec["cli_args"]],
                 harness=_HARNESS,
-                timeout_seconds=_BRIDGE_TIMEOUT_SECONDS,
+                timeout_seconds=int(spec["timeout_seconds"]),
             )
         )
     runtime = None
