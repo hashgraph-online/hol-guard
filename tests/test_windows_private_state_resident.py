@@ -13,7 +13,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_policy_snapshot_windows_atomic as private_state
 from codex_plugin_scanner.guard import native_resident_client, native_runtime
-from codex_plugin_scanner.guard import native_windows_private_state_resident as resident
+from codex_plugin_scanner.guard import native_policy_snapshot_windows_resident as resident
 from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_windows import write_windows_ack

@@ -56,7 +56,7 @@ def _private_state_answer(
     feature: str,
 ) -> dict[str, object] | None:
     from .mdm.runtime_request import runtime_answer
-    from .native_windows_private_state_resident import resident_private_state_answer
+    from .native_policy_snapshot_windows_resident import resident_private_state_answer
 
     body = {"schema": _PRIVATE_STATE_SCHEMA, **request}
     answer = resident_private_state_answer(body, output_limit=output_limit)
