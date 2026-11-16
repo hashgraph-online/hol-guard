@@ -10,7 +10,6 @@ import pytest
 from codex_plugin_scanner.guard import native_caller, stable_guard_cli
 from codex_plugin_scanner.guard.adapters import claude_code
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.hook_python import guard_cli_command
 from codex_plugin_scanner.guard.adapters.mcp_relay_native import mcp_proxy_launch
 from codex_plugin_scanner.guard.adapters.mcp_servers import (
     ManagedMcpServer,
@@ -100,14 +99,6 @@ def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_co
     assert commands == [launcher] * len(commands)
     assert is_guard_proxy_command(launcher, tuple(python_args))
     assert not is_guard_proxy_command(str(tmp_path / "other-tool"), ("server.js",))
-
-
-def test_frozen_opencode_cli_command_uses_the_stable_launcher(tmp_path: Path, versioned_core: tuple[Path, str]) -> None:
-    _, launcher = versioned_core
-
-    command = guard_cli_command(_context(tmp_path), ["-m", "codex_plugin_scanner.cli", "guard", "opencode-mcp-proxy"])
-
-    assert command == [launcher, "opencode-mcp-proxy"]
 
 
 def test_transition_binding_keeps_the_exact_process(versioned_core: tuple[Path, str]) -> None:

@@ -8,13 +8,12 @@ from typing import Any
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.native_harness import ask
-from codex_plugin_scanner.guard.adapters.opencode_runtime import plugin_render_args
 
 _PLUGIN_FILE = "hol-guard-pretool.ts"
 
 
 def _refresh(context: HarnessContext) -> dict[str, Any]:
-    return ask("plugin_refresh", context, harness="opencode", plugin=plugin_render_args(context))
+    return ask("plugin_refresh", context, harness="opencode")
 
 
 def pretool_plugin_source(context: HarnessContext) -> str:

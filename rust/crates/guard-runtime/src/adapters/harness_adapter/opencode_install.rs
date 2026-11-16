@@ -280,9 +280,7 @@ pub(super) fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
             launched.push(opencode_servers::launched(ctx, &launch, server)?);
         }
     }
-    let plugin = fields
-        .get("plugin")
-        .ok_or_else(|| Failure::Reply(json!({ "plugin": null })))?;
+    let plugin = opencode::plugin_args(ctx, fields, true)?;
     let target = managed_config_path(ctx);
     let mut payload = snapshot
         .configs
@@ -347,7 +345,6 @@ pub(super) fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
                 path_value(&ctx.resolved(workspace))
             }),
         );
-    let plugin = opencode::plugin_args(ctx, plugin)?;
     let source = crate::opencode_plugin_render::render(&plugin)
         .map_err(|error| {
             Failure::Refusal(format!(

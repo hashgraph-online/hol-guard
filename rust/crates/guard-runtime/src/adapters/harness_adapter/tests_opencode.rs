@@ -309,18 +309,24 @@ fn runtime_probe_needs_the_command_on_path() {
 }
 
 #[test]
-fn install_without_servers_asks_only_for_the_plugin_arguments() {
+fn install_without_servers_attests_the_plugin_guard_cli_itself() {
     let home = Home::new();
     let answer = home.ask("opencode", "prepare_install", json!({"shim": shim()}));
-    assert_eq!(answer, json!({"reply": {"plugin": null}}));
+    assert_eq!(
+        answer,
+        json!({"runtime_error": super::super::attested_cli::REINSTALL})
+    );
 }
 
 #[test]
-fn install_with_servers_builds_the_launch_from_the_caller() {
+fn install_with_servers_builds_the_launch_then_attests_the_plugin_guard_cli() {
     let home = Home::new();
     write(&global(&home).join("opencode.json"), SERVERS);
     let answer = home.ask("opencode", "prepare_install", json!({"shim": shim()}));
-    assert_eq!(answer, json!({"reply": {"plugin": null}}));
+    assert_eq!(
+        answer,
+        json!({"runtime_error": super::super::attested_cli::REINSTALL})
+    );
 }
 
 #[test]

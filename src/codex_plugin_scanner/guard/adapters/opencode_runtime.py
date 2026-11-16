@@ -1,10 +1,10 @@
 """OpenCode through the native ``harness_adapter`` kind.
 
 The kind owns OpenCode's paths, detection, install and uninstall plans, the
-pretool plugin, the protection checks and the launcher refresh. This module
-keeps what must run in the Guard process: the home-scoped config lock held
-across a publish, the attested Guard CLI the plugin runs, the probe
-subprocesses and the ``opencode_launch`` runner calls.
+pretool plugin and the Guard CLI it runs, the protection checks and the
+launcher refresh. This module keeps what must run in the Guard process: the
+home-scoped config lock held across a publish, the probe subprocesses and the
+``opencode_launch`` runner calls.
 """
 
 from __future__ import annotations
@@ -52,41 +52,9 @@ def opencode_config_lock(home_dir: Path, *, timeout: float = 5.0) -> Iterator[No
         release_lease(lease)
 
 
-def plugin_render_args(context: HarnessContext) -> dict[str, object]:
-    """The attested Guard CLI facts the native kind renders the pretool plugin from."""
-    from ..codex_hook_windows_job import windows_system_executable_path
-    from .guard_cli_attestation import executable_identity_payload, resolve_attested_guard_cli
-
-    guard_cli = resolve_attested_guard_cli(context)
-    identity = guard_cli.frozen_identity or (guard_cli.python.identity if guard_cli.python is not None else None)
-    if identity is None:
-        raise RuntimeError("Guard could not attest the OpenCode hook runtime.")
-    import_roots: list[str] = []
-    if guard_cli.python is not None:
-        # The plugin fills in the interpreter and the per-workspace CLI argv
-        # when it runs a hook; the native kind adds the bounded bridge argv.
-        import_roots = [str(root) for root in guard_cli.python.import_roots]
-    try:
-        taskkill_path = windows_system_executable_path("taskkill.exe") if os.name == "nt" else None
-    except (OSError, ValueError):
-        taskkill_path = None
-    return {
-        "guard_home": str(context.guard_home.resolve()),
-        "python": executable_identity_payload(identity),
-        "frozen": guard_cli.frozen,
-        "import_roots": import_roots,
-        "taskkill_path": taskkill_path,
-    }
-
-
 def _answer_reply(context: HarnessContext, key: str, fields: dict[str, Any]) -> None:
     """Fill the one fact the native install asked for."""
-    from .hook_python import disposable_guard_hook_probe
-
-    if key == "plugin":
-        with disposable_guard_hook_probe():
-            fields["plugin"] = plugin_render_args(context)
-    elif key == "workspace_skills":
+    if key == "workspace_skills":
         from ..aibom_detection import portable_workspace_skills
 
         fields["workspace_skills"] = portable_workspace_skills(_HARNESS, context.workspace_dir)
@@ -130,10 +98,7 @@ class OpenCodeHarnessAdapter(NativeHarnessAdapter):
 
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
         """Render the whole install without taking the write-creating config lock."""
-        from .hook_python import disposable_guard_hook_probe
-
-        with disposable_guard_hook_probe():
-            return super().prepare_install(context)
+        return super().prepare_install(context)
 
     def _ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
         """Answer the facts the native install plan asks of this process, then re-ask."""
@@ -179,6 +144,5 @@ __all__ = [
     "OpenCodeHarnessAdapter",
     "opencode_config_lock",
     "opencode_protection_checks",
-    "plugin_render_args",
     "refresh_opencode_proxy_launchers",
 ]

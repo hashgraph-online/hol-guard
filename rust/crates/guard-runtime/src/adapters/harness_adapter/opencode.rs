@@ -14,7 +14,9 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::files::{self, path_value, text, Doc};
-use super::{detection, hook_config, path_answer, path_text, Ctx, Failure, Spec, Step};
+use super::{
+    attested_cli, detection, hook_config, path_answer, path_text, Ctx, Failure, Spec, Step,
+};
 use crate::aibom_paths::py_path;
 use crate::copilot_detect::{strip_jsonc, universal_newlines};
 use crate::opencode_plugin_render::{dumps, dumps_unmapping};
@@ -51,12 +53,51 @@ pub(crate) fn dispatch(
     }
 }
 
-/// The plugin render arguments Python attested, with the bounded native hook
-/// argv `[runtime, "bounded-hook-bridge", config]` the plugin starts. A
-/// frozen caller names none: the plugin runs its frozen launcher. Any other
-/// caller needs the native runtime that carries the bridge.
-pub(super) fn plugin_args(ctx: &Ctx, plugin: &Value) -> Step<Value> {
-    let mut args = plugin.clone();
+/// `plugin_render_args`: the attested Guard CLI the pretool plugin runs. The
+/// interpreter (or frozen launcher) identity, the import roots a Python Guard
+/// runs from and the system `taskkill` a Windows hook stops its tree with.
+/// `scoped` runs a Python probe in a directory this request owns, as an
+/// install does (`disposable_guard_hook_probe`).
+fn plugin_render_args(ctx: &Ctx, scoped: bool) -> Step<Value> {
+    let attested = attested_cli::attested(ctx, scoped)?.map_err(Failure::Runtime)?;
+    let import_roots = attested
+        .python
+        .as_ref()
+        .map(|python| python.import_roots.clone())
+        .unwrap_or_default();
+    Ok(json!({
+        "guard_home": path_text(&ctx.resolved(&ctx.guard_home)),
+        "python": attested.interpreter.to_json().ok_or(Failure::Invalid)?,
+        "frozen": attested.python.is_none(),
+        "import_roots": import_roots,
+        "taskkill_path": taskkill_path(),
+    }))
+}
+
+#[cfg(windows)]
+fn taskkill_path() -> Option<String> {
+    let windows = guard_runtime_windows_process::kernel_windows_directory()?;
+    Some(format!(
+        "{}\\System32\\taskkill.exe",
+        windows.trim_end_matches(['\\', '/'])
+    ))
+}
+
+#[cfg(not(windows))]
+fn taskkill_path() -> Option<String> {
+    None
+}
+
+/// The plugin render arguments, with the bounded native hook argv
+/// `[runtime, "bounded-hook-bridge", config]` the plugin starts. A frozen
+/// caller names none: the plugin runs its frozen launcher. Any other caller
+/// needs the native runtime that carries the bridge. Unit tests hand in the
+/// arguments a Python caller cannot attest there.
+pub(super) fn plugin_args(ctx: &Ctx, fields: &Map<String, Value>, scoped: bool) -> Step<Value> {
+    let mut args = match fields.get("plugin") {
+        Some(given @ Value::Object(_)) if cfg!(test) => given.clone(),
+        _ => plugin_render_args(ctx, scoped)?,
+    };
     let fields = args.as_object_mut().ok_or(Failure::Invalid)?;
     let frozen = fields
         .get("frozen")

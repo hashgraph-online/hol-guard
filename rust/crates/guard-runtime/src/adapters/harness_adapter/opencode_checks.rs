@@ -29,8 +29,7 @@ const INVALID_WARNING: &str =
     "An invalid OpenCode config was left unchanged; other configs were checked.";
 
 fn render_plugin(ctx: &Ctx, fields: &Map<String, Value>) -> Step<String> {
-    let plugin = fields.get("plugin").ok_or(Failure::Invalid)?;
-    crate::opencode_plugin_render::render(&opencode::plugin_args(ctx, plugin)?)
+    crate::opencode_plugin_render::render(&opencode::plugin_args(ctx, fields, false)?)
         .map_err(|error| {
             Failure::Refusal(format!(
                 "Guard could not render the OpenCode plugin: {error}"
