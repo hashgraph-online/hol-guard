@@ -6,7 +6,7 @@ use std::path::Path;
 use serde_json::{json, Value};
 
 use super::super::dispatch;
-use super::{after, shim, Home};
+use super::{after, caller, frozen_with_runtime, shim, Home};
 
 fn plugin() -> Value {
     let vectors: Value = serde_json::from_str(include_str!(
@@ -45,21 +45,21 @@ fn install(home: &Home) -> Value {
     )
 }
 
-/// The facts of the Guard process an install with managed servers is built from.
+/// A source caller whose interpreter launches each managed proxy.
 fn launch() -> Value {
-    json!({
-        "executable": "/py/bin/python",
-        "frozen": false,
-        "relay": null,
-        "env": [["PYTHONPATH", "/g/lib"], ["HOL_GUARD_NATIVE", "1"]],
-    })
+    let mut stamp = caller(false);
+    stamp["executable"] = json!("/py/bin/python");
+    stamp
 }
 
-fn install_with(home: &Home, launch: Value) -> Value {
-    home.ask(
+/// An install with managed servers, built from `stamp` and an environment
+/// that sets the import path and one native binding.
+fn install_with(home: &Home, stamp: Value) -> Value {
+    home.ask_env(
         "opencode",
         "prepare_install",
-        json!({"shim": shim(), "plugin": plugin(), "launch": launch}),
+        json!({"shim": shim(), "plugin": plugin(), "caller": stamp}),
+        json!({"PATH": "", "PYTHONPATH": "/g/lib", "HOL_GUARD_NATIVE": "1"}),
     )
 }
 
@@ -226,11 +226,9 @@ fn plugin_refresh_is_current_once_both_copies_match() {
 fn refresh_skips_an_invalid_config_with_a_warning() {
     let home = Home::new();
     write(&global(&home).join("opencode.json"), "{oops");
-    let answer = home.ask("opencode", "refresh_scan", json!({}));
-    assert_eq!(answer["candidates"], json!([]));
-    assert_eq!(answer["warnings"].as_array().unwrap().len(), 1);
-    let applied = home.ask("opencode", "refresh_apply", json!({"commands": "[]"}));
-    assert_eq!(applied, json!({"refreshed": 0}));
+    let applied = home.ask("opencode", "refresh_apply", json!({}));
+    assert_eq!(applied["refreshed"], json!(0));
+    assert_eq!(applied["warnings"].as_array().unwrap().len(), 1);
 }
 
 #[cfg(unix)]
@@ -272,34 +270,29 @@ fn install_without_servers_asks_only_for_the_plugin_arguments() {
 }
 
 #[test]
-fn install_with_servers_asks_for_the_launch_facts_first() {
+fn install_with_servers_builds_the_launch_from_the_caller() {
     let home = Home::new();
     write(&global(&home).join("opencode.json"), SERVERS);
     let answer = home.ask("opencode", "prepare_install", json!({"shim": shim()}));
-    assert_eq!(answer, json!({"reply": {"launch": null}}));
-    let answer = home.ask(
-        "opencode",
-        "prepare_install",
-        json!({"shim": shim(), "launch": launch()}),
-    );
     assert_eq!(answer, json!({"reply": {"plugin": null}}));
 }
 
 #[test]
-fn install_refuses_malformed_launch_facts() {
+fn install_refuses_a_caller_without_launch_facts() {
     let home = Home::new();
     write(&global(&home).join("opencode.json"), SERVERS);
-    for bad in [json!(null), json!({"executable": "/py"}), json!("py")] {
-        let request = json!({
-            "harness": "opencode",
-            "op": "prepare_install",
-            "context": home.context(json!({"PATH": ""})),
-            "shim": shim(),
-            "plugin": plugin(),
-            "launch": bad,
-        });
-        assert!(dispatch(&request).is_err(), "{request}");
-    }
+    let mut stamp = launch();
+    stamp.as_object_mut().unwrap().remove("frozen");
+    let mut context = home.context(json!({"PATH": ""}));
+    context["caller"] = stamp;
+    let request = json!({
+        "harness": "opencode",
+        "op": "prepare_install",
+        "context": context,
+        "shim": shim(),
+        "plugin": plugin(),
+    });
+    assert!(dispatch(&request).is_err(), "{request}");
 }
 
 #[test]
@@ -342,27 +335,29 @@ fn install_routes_a_local_server_through_the_guard_proxy() {
 fn install_launches_the_proxy_through_the_native_relay_when_one_is_selected() {
     let home = Home::new();
     write(&global(&home).join("opencode.json"), SERVERS);
-    let mut facts = launch();
-    facts["relay"] = json!("/r/relay");
-    let config = managed_config(&home, &install_with(&home, facts.clone()));
+    let mut stamp = launch();
+    stamp["native_runtime"]["features"] = json!(["mcp-stdio-relay-v1"]);
+    let config = managed_config(&home, &install_with(&home, stamp));
     assert_eq!(
         json!(
             config["mcp"]["hol-guard::files"]["command"]
                 .as_array()
                 .expect("command")[..4]
         ),
-        json!(["/r/relay", "mcp-relay", "/py/bin/python", "-m"])
+        json!(["/g/hol-guard-runtime", "mcp-relay", "/py/bin/python", "-m"])
     );
-    // A frozen launcher is relayed whole, not unwrapped.
-    facts["frozen"] = json!(true);
-    let config = managed_config(&home, &install_with(&home, facts));
+    // A frozen launcher is relayed whole, through the durable runtime copy.
+    let (mut stamp, copy) = frozen_with_runtime(&home);
+    stamp["native_runtime"]["features"] = json!(["mcp-stdio-relay-v1"]);
+    stamp["executable_resolved"] = json!("/py/bin/python");
+    let config = managed_config(&home, &install_with(&home, stamp));
     assert_eq!(
         json!(
             config["mcp"]["hol-guard::files"]["command"]
                 .as_array()
                 .expect("command")[..4]
         ),
-        json!(["/r/relay", "mcp-relay", "/py/bin/python", "-m"])
+        json!([copy, "mcp-relay", "/py/bin/python", "-m"])
     );
 }
 
@@ -370,10 +365,9 @@ fn install_launches_the_proxy_through_the_native_relay_when_one_is_selected() {
 fn install_drops_the_module_prefix_for_a_frozen_launcher() {
     let home = Home::new();
     write(&global(&home).join("opencode.json"), SERVERS);
-    let mut facts = launch();
-    facts["executable"] = json!("/app/hol-guard");
-    facts["frozen"] = json!(true);
-    let config = managed_config(&home, &install_with(&home, facts));
+    let mut stamp = caller(true);
+    stamp["executable_resolved"] = json!("/app/hol-guard");
+    let config = managed_config(&home, &install_with(&home, stamp));
     assert_eq!(
         json!(
             config["mcp"]["hol-guard::files"]["command"]

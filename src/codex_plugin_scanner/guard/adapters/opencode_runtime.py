@@ -3,17 +3,14 @@
 The kind owns OpenCode's paths, detection, install and uninstall plans, the
 pretool plugin, the protection checks and the launcher refresh. This module
 keeps what must run in the Guard process: the home-scoped config lock held
-across a publish, the facts of this process an install is built from (the
-interpreter, the MCP relay, the launcher environment and the attested Guard
-CLI the plugin runs), the probe subprocesses and the ``opencode_launch``
-runner calls.
+across a publish, the attested Guard CLI the plugin runs, the probe
+subprocesses and the ``opencode_launch`` runner calls.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import sys
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -56,13 +53,6 @@ def opencode_config_lock(home_dir: Path, *, timeout: float = 5.0) -> Iterator[No
         release_lease(lease)
 
 
-def _guard_proxy_command(context: HarnessContext, proxy_args: list[str]) -> list[str]:
-    from .hook_python import guard_cli_command
-    from .mcp_relay_native import mcp_proxy_command
-
-    return mcp_proxy_command(guard_cli_command(context, proxy_args))
-
-
 def plugin_render_args(context: HarnessContext) -> dict[str, object]:
     """The attested Guard CLI facts the native kind renders the pretool plugin from."""
     from ..codex_hook_windows_job import windows_system_executable_path
@@ -98,29 +88,11 @@ def plugin_render_args(context: HarnessContext) -> dict[str, object]:
     }
 
 
-def _launch_facts(context: HarnessContext) -> dict[str, object]:
-    """The Guard process facts a managed server's proxy launch is built from."""
-    from ..launcher import merge_guard_launcher_env
-    from .hook_python import resolve_guard_hook_python
-    from .mcp_relay_native import native_mcp_relay
-
-    relay = native_mcp_relay(Path(str(context.guard_home)))
-    return {
-        "executable": str(resolve_guard_hook_python(context)),
-        "frozen": bool(getattr(sys, "frozen", False)),
-        "relay": None if relay is None else str(relay),
-        "env": [list(item) for item in merge_guard_launcher_env().items()],
-    }
-
-
 def _answer_reply(context: HarnessContext, key: str, fields: dict[str, Any]) -> None:
     """Fill the one fact the native install asked for."""
     from .hook_python import disposable_guard_hook_probe
 
-    if key == "launch":
-        with disposable_guard_hook_probe():
-            fields["launch"] = _launch_facts(context)
-    elif key == "plugin":
+    if key == "plugin":
         with disposable_guard_hook_probe():
             fields["plugin"] = plugin_render_args(context)
     elif key == "workspace_skills":
@@ -134,21 +106,9 @@ def _answer_reply(context: HarnessContext, key: str, fields: dict[str, Any]) -> 
 def refresh_opencode_proxy_launchers(context: HarnessContext, *, warnings: list[str] | None = None) -> int:
     """Refresh verified Guard CLI prefixes without changing server or tool authority."""
     with opencode_config_lock(context.home_dir):
-        scan = ask("refresh_scan", context, harness=_HARNESS)
+        answer = ask("refresh_apply", context, harness=_HARNESS)
         if warnings is not None:
-            warnings.extend(str(warning) for warning in scan["warnings"])
-        commands = [
-            {
-                "path": candidate["path"],
-                "name": candidate["name"],
-                "digest": candidate["digest"],
-                "command": _guard_proxy_command(
-                    context, ["-m", "codex_plugin_scanner.cli", "guard", *candidate["proxy_args"]]
-                ),
-            }
-            for candidate in scan["candidates"]
-        ]
-        answer = ask("refresh_apply", context, harness=_HARNESS, commands=json.dumps(commands))
+            warnings.extend(str(warning) for warning in answer["warnings"])
         return int(answer["refreshed"])
 
 

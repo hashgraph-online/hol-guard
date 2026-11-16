@@ -275,10 +275,7 @@ pub(super) fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
     let selection = opencode_servers::select(&artifacts)?;
     let mut launched = Vec::with_capacity(selection.servers.len());
     if !selection.servers.is_empty() {
-        let launch = fields
-            .get("launch")
-            .ok_or_else(|| Failure::Reply(json!({ "launch": null })))?;
-        let launch = Launch::parse(launch)?;
+        let launch = Launch::of(ctx)?;
         for server in &selection.servers {
             launched.push(opencode_servers::launched(ctx, &launch, server)?);
         }

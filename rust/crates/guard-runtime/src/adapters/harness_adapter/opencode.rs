@@ -44,8 +44,7 @@ pub(crate) fn dispatch(
         "runtime_probe" => Ok(runtime_probe(spec, ctx)),
         "plugin_refresh" => super::opencode_checks::plugin_refresh(ctx, fields),
         "protection" => super::opencode_checks::protection(ctx, fields),
-        "refresh_scan" => super::opencode_checks::refresh_scan(ctx),
-        "refresh_apply" => super::opencode_checks::refresh_apply(ctx, fields),
+        "refresh_apply" => super::opencode_checks::refresh_apply(ctx),
         _ => super::common(spec, op, ctx),
     }
 }

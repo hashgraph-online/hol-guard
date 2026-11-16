@@ -4,7 +4,6 @@ import json
 import os
 import stat
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -88,23 +87,6 @@ def test_refresh_skips_changed_transport(tmp_path: Path) -> None:
     before = config.read_bytes()
     assert refresh_opencode_proxy_launchers(ctx) == 0
     assert config.read_bytes() == before
-
-
-def test_refresh_does_not_overwrite_concurrent_config_edit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.adapters import opencode_runtime
-
-    ctx, config, payload = _stale_companion(tmp_path)
-    original = opencode_runtime._guard_proxy_command
-    user_edit = json.dumps({**payload, "user_note": "edited concurrently"}).encode()
-
-    def changed(context, args):
-        config.write_bytes(user_edit)
-        return original(context, args)
-
-    monkeypatch.setattr(opencode_runtime, "_guard_proxy_command", changed)
-    with pytest.raises(ValueError, match="changed during launcher refresh"):
-        opencode_runtime.refresh_opencode_proxy_launchers(ctx)
-    assert config.read_bytes() == user_edit
 
 
 def test_invalid_config_does_not_prevent_independent_plugin_refresh(tmp_path: Path) -> None:
@@ -212,11 +194,13 @@ def test_refresh_companion_launcher_preserves_permissions_and_binding(
     before = json.loads(config.read_text(encoding="utf-8"))
 
     if frozen_runtime:
-        from codex_plugin_scanner.guard.adapters import hook_python
+        from codex_plugin_scanner.guard.adapters import native_harness
 
-        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        stamp = native_harness.caller_identity()
         monkeypatch.setattr(
-            hook_python, "resolve_guard_hook_python", lambda _context: Path("/durable/current-hol-guard")
+            native_harness,
+            "caller_identity",
+            lambda: {**stamp, "frozen": True, "executable_resolved": "/durable/current-hol-guard"},
         )
 
     assert refresh_opencode_proxy_launchers(ctx) == (0 if mismatched_binding else 1)

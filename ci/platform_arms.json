@@ -1030,9 +1030,9 @@
    "file": "rust/crates/guard-runtime/src/aibom_skills.rs",
    "item": "mod native",
    "verdict": "windows-unsupported",
-   "note": "Every AIBOM skills entry point returns `native_runner_authority_aibom_skills_unsupported` off Unix.",
+   "note": "Skill discovery returns `native_runner_authority_aibom_skills_unsupported` off Unix; directory identity walks natively on every platform.",
    "cfg": "not(unix)",
-   "body": "f6c3b376dbcc"
+   "body": "11a0b78bed08"
   },
   {
    "file": "rust/crates/guard-runtime/src/approval_enrollment.rs",

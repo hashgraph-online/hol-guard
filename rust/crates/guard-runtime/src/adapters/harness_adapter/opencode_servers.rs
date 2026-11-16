@@ -13,12 +13,12 @@ use serde_json::{json, Value};
 
 use super::files::{text, Doc};
 use super::opencode::PROXY;
-use super::{path_text, Ctx, Failure, Step};
+use super::{caller, path_text, proxy_launch, Ctx, Failure, Step};
 use crate::pyjson::PyVal;
 use guard_contracts::python_strip;
 
 /// The proxy argv every Guard MCP proxy launch starts with.
-const MODULE_PREFIX: [&str; 3] = ["-m", "codex_plugin_scanner.cli", "guard"];
+pub(super) const MODULE_PREFIX: [&str; 3] = ["-m", "codex_plugin_scanner.cli", "guard"];
 const RELAY_COMMAND: &str = "mcp-relay";
 /// The variable the launcher's import path travels in.
 const PYTHONPATH: &str = "PYTHONPATH";
@@ -53,8 +53,7 @@ pub(super) struct Selection {
     pub(super) artifacts: Vec<String>,
 }
 
-/// The facts of the Guard process a proxy launch is built from:
-/// `{executable, frozen, relay, env}`.
+/// The facts of the Guard process a proxy launch is built from.
 pub(super) struct Launch {
     /// The attested interpreter, or the frozen Guard launcher.
     executable: String,
@@ -66,33 +65,18 @@ pub(super) struct Launch {
 }
 
 impl Launch {
-    pub(super) fn parse(value: &Value) -> Step<Self> {
-        let fields = value.as_object().ok_or(Failure::Invalid)?;
-        let executable = fields
-            .get("executable")
-            .and_then(Value::as_str)
-            .ok_or(Failure::Invalid)?;
-        let relay = match fields.get("relay") {
-            None | Some(Value::Null) => None,
-            Some(Value::String(path)) => Some(path.clone()),
-            Some(_) => return Err(Failure::Invalid),
-        };
-        let env = fields
-            .get("env")
-            .and_then(Value::as_array)
-            .ok_or(Failure::Invalid)?
-            .iter()
-            .map(pair)
-            .collect::<Option<Vec<_>>>()
-            .ok_or(Failure::Invalid)?;
+    /// `_launch_facts`: the caller's hook interpreter, whether it is frozen,
+    /// the relay its Guard home selects and its launcher environment.
+    pub(super) fn of(ctx: &Ctx) -> Step<Self> {
         Ok(Self {
-            executable: executable.to_owned(),
-            frozen: fields
-                .get("frozen")
-                .and_then(Value::as_bool)
-                .ok_or(Failure::Invalid)?,
-            relay,
-            env,
+            executable: caller::hook_python(ctx)?.to_owned(),
+            frozen: caller::frozen(ctx)?,
+            relay: proxy_launch::bridge(
+                ctx,
+                proxy_launch::RELAY_FEATURE,
+                Some(ctx.guard_home.as_path()),
+            )?,
+            env: proxy_launch::launcher_env(ctx, &[]),
         })
     }
 }
@@ -102,13 +86,6 @@ pub(super) struct Launched {
     pub(super) proxy_environment: PyVal,
     /// `[companion, override]`: the argv without and with the workspace.
     pub(super) launches: [PyVal; 2],
-}
-
-fn pair(value: &Value) -> Option<(String, String)> {
-    match value.as_array().map(Vec::as_slice) {
-        Some([Value::String(key), Value::String(item)]) => Some((key.clone(), item.clone())),
-        _ => None,
-    }
 }
 
 fn pairs(value: &Value) -> Option<Vec<(String, String)>> {
