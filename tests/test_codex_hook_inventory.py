@@ -396,14 +396,14 @@ def test_source_change_after_inventory_stops_before_activation_write(
     original_payload = {"hooks": {"FutureAgentEvent": [{**_command_group("python3 first.py"), "enabled": False}]}}
     changed_payload = {"hooks": {"FutureAgentEvent": [{**_command_group("python3 changed.py"), "enabled": False}]}}
     _write(hooks_path, json.dumps(original_payload, indent=2) + "\n")
-    original_prepare = codex_adapter.prepare_codex_hook_migration
+    original_plan = codex_adapter._alternate_plan
 
-    def mutate_then_prepare(context: HarnessContext, **kwargs: Any) -> object:
-        if kwargs["hooks_path"].resolve() == hooks_path.resolve():
+    def mutate_then_plan(context: HarnessContext, config: Path, hooks: Path, *args: Any, **kwargs: Any) -> object:
+        if hooks.resolve() == hooks_path.resolve():
             _write(hooks_path, json.dumps(changed_payload, indent=2) + "\n")
-        return original_prepare(context, **kwargs)
+        return original_plan(context, config, hooks, *args, **kwargs)
 
-    monkeypatch.setattr(codex_adapter, "prepare_codex_hook_migration", mutate_then_prepare)
+    monkeypatch.setattr(codex_adapter, "_alternate_plan", mutate_then_plan)
 
     rc = main(_install_args(home_dir, workspace_dir))
     captured = capsys.readouterr()

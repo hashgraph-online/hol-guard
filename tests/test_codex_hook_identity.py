@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
 from codex_plugin_scanner.guard.codex_hook_identity import CodexHookGroupQuestion, canonical_codex_hook_group_identities
+from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 from codex_plugin_scanner.guard.codex_hook_inventory import enumerate_codex_hooks
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import (
@@ -367,7 +368,7 @@ def test_partial_unlink_failure_restores_every_legacy_source_and_keeps_toml_back
     assert home_config.read_text(encoding="utf-8") == original_home_config
     assert workspace_config.read_text(encoding="utf-8") == original_workspace_config
     assert not codex_adapter.hook_manifest_path(guard_home, home_config).exists()
-    assert not codex_adapter.hook_secret_path(guard_home).exists()
+    assert not hook_secret_path(guard_home).exists()
     backup_payloads = [
         json.loads(path.read_text(encoding="utf-8"))
         for path in (guard_home / "managed" / "codex" / "migration-backups").glob("*.json")

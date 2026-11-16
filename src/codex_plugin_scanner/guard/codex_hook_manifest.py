@@ -7,12 +7,12 @@ construction at the harness boundary and prevents a circular dependency.
 
 from __future__ import annotations
 
-import hashlib
+import os
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_file_integrity import (
@@ -23,7 +23,6 @@ from .codex_hook_file_integrity import (
 from .codex_hook_integrity import (
     _MANIFEST_MESSAGES,
     authenticate_hook_manifest_text,
-    canonical_manifest_bytes,
     hook_authority_receipt_path,
     hook_manifest_path,
     hook_secret_path,
@@ -230,86 +229,34 @@ class PreparedCodexHookRepair:
     native_runtime: NativeRuntimeIdentity | None = None
     verification_workspace: Path | None = None
 
-    def payload(self) -> dict[str, object]:
-        from .runtime_transition import TransitionError, checked_files
+    def _checked(self) -> dict[str, object]:
+        """The runtime checks the plan and answers its payload and subject."""
+        from .native_transition_files import publication
 
-        try:
-            if str(uuid.UUID(self.operation_id)) != self.operation_id:
-                raise ValueError("noncanonical operation")
-        except ValueError as exc:
-            raise TransitionError("authority_repair_plan_invalid") from exc
-        home = self.guard_home.resolve(strict=False)
-        config = self.config_path.parent.resolve(strict=False) / self.config_path.name
-        change = self.manifest_change
-        if (
-            len(self.files) > 128
-            or len({item.path for item in self.files}) != len(self.files)
-            or change.path != hook_manifest_path(home, config)
-            or change.before is not None
-            or change.after is None
-            or change.expected_digest is not None
-            or not change.no_follow
-            or change.kind != "binding"
-            or change.after_mode != 0o600
-            or sum(item == change for item in self.files) != 1
-            or any(
-                item != change and (item.expected_digest is None or item.before is not None or item.after is not None)
-                for item in self.files
-            )
-        ):
+        native = self.native_runtime
+        answer = publication(
+            "repair_plan",
+            self.guard_home,
+            config=os.path.abspath(self.config_path),
+            operation_id=self.operation_id,
+            change=self.manifest_change.payload(),
+            files=[item.payload() for item in self.files],
+            native_runtime=None
+            if native is None
+            else {"path": str(native.path), "size": native.size, "mtime_ns": native.mtime_ns, "sha256": native.sha256},
+            verification_workspace=None if self.verification_workspace is None else str(self.verification_workspace),
+        )
+        if not isinstance(answer, dict) or not isinstance(answer.get("payload"), dict):
+            from .runtime_transition import TransitionError
+
             raise TransitionError("authority_repair_plan_invalid")
-        required = {hook_secret_path(home), hook_authority_receipt_path(home, config), config}
-        if not required <= {item.path for item in self.files if item.expected_digest is not None}:
-            raise TransitionError("authority_repair_plan_invalid")
-        payload: dict[str, object] = {
-            "schema": "hol-guard.codex-authority-repair-plan.v1",
-            "action": CODEX_AUTHORITY_REPAIR_ACTION,
-            "guard_home": str(home),
-            "config_path": str(config),
-            "operation_id": self.operation_id,
-            "files": checked_files(self.files),
-        }
-        if self.native_runtime is not None or self.verification_workspace is not None:
-            native, workspace = self.native_runtime, self.verification_workspace
-            if (
-                native is None
-                or workspace is None
-                or not workspace.is_absolute()
-                or workspace.resolve(strict=False) != workspace
-                or not workspace.is_dir()
-                or not native.path.is_absolute()
-                or native.path.resolve(strict=False) != native.path
-                or type(native.size) is not int
-                or native.size <= 0
-                or type(native.mtime_ns) is not int
-                or len(native.sha256) != 64
-                or any(char not in "0123456789abcdef" for char in native.sha256)
-                or not any(
-                    item.path == native.path
-                    and item.expected_digest == native.sha256
-                    and item.artifact_identity is not None
-                    and item.artifact_identity.get("size") == native.size
-                    for item in self.files
-                )
-            ):
-                raise TransitionError("authority_repair_native_binding_invalid")
-            try:
-                if native.path.stat().st_mtime_ns != native.mtime_ns:
-                    raise TransitionError("native_runtime_generation_changed")
-            except OSError as exc:
-                raise TransitionError("native_runtime_generation_changed") from exc
-            payload["native_runtime"] = {
-                "path": str(native.path),
-                "size": native.size,
-                "mtime_ns": native.mtime_ns,
-                "sha256": native.sha256,
-            }
-            payload["verification_workspace"] = str(workspace)
-        return payload
+        return answer
+
+    def payload(self) -> dict[str, object]:
+        return cast(dict[str, object], self._checked()["payload"])
 
     def subject(self) -> str:
-        digest = hashlib.sha256(canonical_manifest_bytes(self.payload())).hexdigest()
-        return f"codex-authority-repair:{self.operation_id}:{digest}"
+        return str(self._checked()["subject"])
 
 
 def prepare_authenticated_hook_manifest_repair(spec: CodexHookManifestSpec) -> PreparedCodexHookRepair:

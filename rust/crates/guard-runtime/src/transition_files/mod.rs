@@ -29,9 +29,12 @@ mod publication_files;
 mod publication_generation;
 mod publication_io;
 mod publication_receipt;
+mod publication_repair_plan;
 mod publication_target;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_publication_repair_plan;
 #[cfg(test)]
 mod tests_publication_target;
 

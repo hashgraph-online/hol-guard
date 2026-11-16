@@ -265,6 +265,7 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_generation_before" => super::publication_generation::snapshot(call),
         "publication_target" => super::publication_target::target(call),
         "publication_abort" => super::publication_abort::abort(call),
+        "publication_repair_plan" => super::publication_repair_plan::plan(call),
         "publication_remove" => remove_record(&call.home()?).map(|()| Value::Null),
         "publication_prepare" => publication::prepare(call),
         "publication_assert_repair" => publication::assert_repair(call),
