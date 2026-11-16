@@ -356,10 +356,24 @@ jobs:
           python -I ci/gauntlet/summarise_installed_acceptance.py "$RUNNER_TEMP/evidence" \
             >> "$GITHUB_STEP_SUMMARY"
 
+      # The lane's harness homes hold Windows profile folders the upload action cannot scan, so
+      # copy only the reports out before publishing them.
+      - name: Collect the reports
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/reports"
+          for report in "$RUNNER_TEMP"/evidence/*/installed-acceptance.json; do
+            [[ -f "$report" ]] || continue
+            lane=$(basename "$(dirname "$report")")
+            mkdir -p "$RUNNER_TEMP/reports/$lane"
+            cp "$report" "$RUNNER_TEMP/reports/$lane/"
+          done
+
       - name: Publish the evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: installed-acceptance-evidence-${{ matrix.os }}
-          path: ${{ runner.temp }}/evidence/**/installed-acceptance.json
+          path: ${{ runner.temp }}/reports/**/installed-acceptance.json
           if-no-files-found: warn
