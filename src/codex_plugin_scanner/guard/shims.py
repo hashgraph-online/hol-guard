@@ -129,12 +129,7 @@ def apply_guard_shims(
     from . import native_transition_files
     from .adapters.native_harness import ask
 
-    profile_fields = None
-    if profile:
-        profile_fields = {
-            "shell": Path(os.environ.get("SHELL", "")).name,
-            "shim_dir_transient": _is_transient_path(context.guard_home / "bin"),
-        }
+    profile_fields = shell_profile_facts(context) if profile else None
     answer = ask(
         "apply_guard_shims",
         context,  # pyright: ignore[reportArgumentType]
@@ -145,6 +140,15 @@ def apply_guard_shims(
     )
     native_transition_files.settle(answer.get("publish"))
     return answer
+
+
+def shell_profile_facts(context: HarnessContextLike) -> dict[str, object]:
+    """The shell whose profile gets the PATH block, and whether the shim dir is temporary."""
+
+    return {
+        "shell": Path(os.environ.get("SHELL", "")).name,
+        "shim_dir_transient": _is_transient_path(context.guard_home / "bin"),
+    }
 
 
 def remove_guard_shim(

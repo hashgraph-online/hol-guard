@@ -103,6 +103,9 @@ pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step
     if spec.harness == "copilot" {
         return copilot(spec, ctx, fields);
     }
+    if spec.harness == "cursor" {
+        return super::cursor_apply::install(spec, ctx, fields);
+    }
     let mut shim_fields = Map::new();
     shim_fields.insert("harness".into(), json!(spec.harness));
     for key in ["launcher_name", "display_name", "interpreter"] {
@@ -117,7 +120,13 @@ pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step
         return Ok(refused("file_target_invalid"));
     };
     let mut plan_fields = fields.clone();
-    for key in ["launcher_name", "display_name", "interpreter", "transition"] {
+    for key in [
+        "launcher_name",
+        "display_name",
+        "interpreter",
+        "transition",
+        "shell_profile",
+    ] {
         plan_fields.remove(key);
     }
     plan_fields.insert("shim".into(), json!(shim_manifest));

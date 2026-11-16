@@ -7,8 +7,8 @@ something only the Guard process knows replies with one key, and this module
 answers it and asks again: ``facts`` (the attested Guard CLI, the native hook
 bridge and the interpreters), ``probe`` (whether ``cursor agent --help``
 runs) and ``servers`` (which detected servers Guard manages, with
-their proxy entries). The shims, the ``mcp list`` probe
-and the frozen hook script also stay here.
+their proxy entries). ``install`` and ``uninstall`` run every surface in
+one native apply op each; the frozen hook script stays here.
 """
 
 from __future__ import annotations
@@ -173,15 +173,6 @@ class CursorHarnessAdapter(NativeHarnessAdapter):
     def _surface(self, context: HarnessContext, surface: str) -> str:
         return str(self._ask("surface", context, surface=surface)["surface"])
 
-    def install(self, context: HarnessContext, *, surface: str = "editor") -> dict[str, object]:
-        surface = self._surface(context, surface)
-        if surface == "cli":
-            return self._install_cli(context)
-        editor = _install_hooks(context, "install")
-        if surface == "editor":
-            return editor
-        return self._all(context, editor, self._install_cli(context), active=True)
-
     def prepare_install(self, context: HarnessContext, *, surface: str = "editor") -> PreparedHarnessInstall:
         """Prepare every selected surface before any binding or profile publication."""
         from ..runtime_transition import RuntimeTransition
@@ -199,27 +190,10 @@ class CursorHarnessAdapter(NativeHarnessAdapter):
         RuntimeTransition._compare({"files": [change.payload() for change in prepared.files]}, "before")
         return prepared
 
-    def uninstall(self, context: HarnessContext, *, surface: str = "editor") -> dict[str, object]:
-        surface = self._surface(context, surface)
-        if surface == "editor":
-            return _manifest(self._ask("uninstall", context))
-        cli = self._uninstall_cli(context)
-        if surface == "cli":
-            return cli
-        editor = _manifest(self._ask("uninstall", context))
-        return self._all(context, editor, cli, active=False)
-
     def _all(
         self, context: HarnessContext, editor: dict[str, object], cli: dict[str, object], *, active: bool
     ) -> dict[str, object]:
         return _manifest(self._ask("all_manifest", context, editor=_dumps(editor), cli=_dumps(cli), active=active))
-
-    def _install_cli(self, context: HarnessContext) -> dict[str, object]:
-        from ..shims import ensure_guard_shim_path_in_shell_profile, install_guard_shim
-
-        agent = install_guard_shim(_HARNESS, context, **_AGENT_SHIM)
-        cursor = install_guard_shim(_HARNESS, context, **_CURSOR_SHIM)
-        return self._cli_manifest(context, agent, cursor, ensure_guard_shim_path_in_shell_profile(context))
 
     def _prepare_cli(self, context: HarnessContext) -> PreparedHarnessInstall:
         from ..runtime_transition import RuntimeTransition
@@ -238,18 +212,6 @@ class CursorHarnessAdapter(NativeHarnessAdapter):
     ) -> dict[str, object]:
         fields = {"agent_shim": _dumps(agent), "cursor_shim": _dumps(cursor), "profile": _dumps(profile)}
         return _manifest(self._ask("cli_manifest", context, **fields))
-
-    def _uninstall_cli(self, context: HarnessContext) -> dict[str, object]:
-        from ..shims import remove_guard_shim
-
-        shim = remove_guard_shim(
-            _HARNESS,
-            context,
-            launcher_name="cursor-agent",
-            legacy_launcher_names=self.legacy_launcher_names,
-            display_name="Cursor CLI",
-        )
-        return _manifest(self._ask("cli_uninstalled", context, shim=_dumps(shim)))
 
 
 __all__ = [

@@ -75,6 +75,7 @@ mod copilot_mcp;
 mod copilot_state;
 mod copilot_uninstall;
 mod cursor;
+mod cursor_apply;
 mod cursor_ask;
 mod cursor_editor;
 mod cursor_files;

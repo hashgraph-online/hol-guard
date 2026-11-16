@@ -125,6 +125,8 @@ pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Kind
     let mut events = Vec::new();
     let step = if spec.install == Install::Shim {
         shim_only(spec, ctx)
+    } else if spec.harness == "cursor" {
+        super::cursor_apply::uninstall(spec, ctx, fields)
     } else {
         // The plan comes first, so a refusal leaves the launcher in place.
         route(spec, "prepare_uninstall", ctx, fields).and_then(|plan| {

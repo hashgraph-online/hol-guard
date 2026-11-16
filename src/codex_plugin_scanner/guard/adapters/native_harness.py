@@ -302,7 +302,7 @@ class NativeHarnessAdapter(HarnessAdapter):
         if operation == "install" and self._spec.get("install") == "delegated":
             self._delegated_targets(context)
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
+    def install(self, context: HarnessContext, **options: object) -> dict[str, object]:
         mode = self._spec.get("install")
         if mode == "delegated":
             return self._install_delegated(context)
@@ -311,14 +311,14 @@ class NativeHarnessAdapter(HarnessAdapter):
 
             shim = install_guard_shim(self.harness, context)
             return {"harness": self.harness, "active": True, "config_path": shim["shim_path"], **shim}
-        return self._apply_install(context)
+        return self._apply_install(context, **options)
 
-    def _apply_install(self, context: HarnessContext) -> dict[str, object]:
+    def _apply_install(self, context: HarnessContext, **options: object) -> dict[str, object]:
         """Prepare the shim and the plan and publish both in one native call."""
         from .. import native_transition_files
         from ..codex_install_transaction import require_codex_install_owner
         from ..runtime_transition import assert_transition_mutation_allowed
-        from ..shims import shim_interpreter
+        from ..shims import shell_profile_facts, shim_interpreter
 
         require_codex_install_owner(context.guard_home)
         assert_transition_mutation_allowed(context.guard_home)
@@ -332,21 +332,28 @@ class NativeHarnessAdapter(HarnessAdapter):
             context,
             **self._shim_names(),
             interpreter=shim_interpreter(),
+            shell_profile=shell_profile_facts(context),
             transition=native_transition_files.transition_context(),
             **fields,
+            **options,
         )
         raise_failure(answer)
+        # Each earlier publish is journaled before the last one, then any
+        # failure the runtime met after a publish that succeeded.
+        for published in answer.get("published") or ():
+            native_transition_files.settle(published)
         native_transition_files.settle(answer.get("publish"))
+        raise_failure(answer.get("failure") or {})
         return json.loads(_text(answer, "manifest"))
 
-    def uninstall(self, context: HarnessContext) -> dict[str, object]:
+    def uninstall(self, context: HarnessContext, **options: object) -> dict[str, object]:
         from .. import native_transition_files
         from ..runtime_transition import assert_transition_mutation_allowed
 
         assert_transition_mutation_allowed(context.guard_home)
         # The runtime prepares the plan, removes the launchers and applies the
         # plan; the managed writes it made come back for the journal.
-        answer = self._ask("apply_uninstall", context)
+        answer = self._ask("apply_uninstall", context, **options)
         native_transition_files._replay(answer.pop("events", None), None, None)
         raise_failure(answer)
         return json.loads(_text(answer, "manifest"))
