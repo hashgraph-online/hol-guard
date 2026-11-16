@@ -96,6 +96,7 @@ mod hermes_uninstall;
 mod hook_render;
 mod isolated_python;
 mod kimi;
+mod managed_record;
 mod openclaw;
 mod opencode;
 mod opencode_build;
@@ -280,6 +281,12 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     let ctx = Ctx::parse(fields.get("context"))?;
     if op == "proof_verify" || op == "proof_bind" {
         return answer(proof::dispatch(op, &ctx, fields));
+    }
+    if op == "managed_install_record" {
+        return answer(managed_record::record(&ctx, fields));
+    }
+    if op == "managed_install_guidance" {
+        return answer(managed_record::guidance_after(&ctx, fields));
     }
     if op == "prepare_guard_shim" {
         return answer(guard_shim::prepare(&ctx, fields));
