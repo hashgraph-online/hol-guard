@@ -85,6 +85,18 @@ fn a_capacity_refusal_names_its_cause() {
 }
 
 #[test]
+fn a_capacity_refusal_names_a_recovery_command() {
+    for code in [
+        hook_scheduler::DEADLINE_EXHAUSTED,
+        hook_scheduler::QUEUE_CAPACITY,
+    ] {
+        let reason = capacity_reason(code);
+        assert!(reason.contains("Retry this action"), "{reason}");
+        assert!(reason.ends_with("run `hol-guard repair`."), "{reason}");
+    }
+}
+
+#[test]
 fn a_step_refusal_needs_a_reason_and_a_code() {
     assert_eq!(
         refusal(&json!({"reason": "r", "reason_code": "c"})),

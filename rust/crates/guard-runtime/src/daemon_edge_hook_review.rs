@@ -572,12 +572,14 @@ fn refusal(refused: &Value) -> Option<(&str, &str)> {
     ))
 }
 
-/// The message a capacity refusal carries.
+/// The message a capacity refusal carries. A retry usually succeeds once a
+/// cold start or a burst has passed; one that keeps failing points at a
+/// daemon that needs repair, so each message names the command for that.
 fn capacity_reason(code: &str) -> &'static str {
     if code == hook_scheduler::DEADLINE_EXHAUSTED {
-        "HOL Guard could not complete local review within the hook deadline. Retry this action."
+        "HOL Guard could not complete local review within the hook deadline. Retry this action; if it keeps failing, run `hol-guard repair`."
     } else {
-        "HOL Guard is safely queueing the maximum local review workload. Retry this action."
+        "HOL Guard is safely queueing the maximum local review workload. Retry this action; if it keeps failing, run `hol-guard repair`."
     }
 }
 
