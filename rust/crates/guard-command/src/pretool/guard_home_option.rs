@@ -198,6 +198,15 @@ pub fn guard_approval_inspection_command(
     {
         return false;
     }
+    // A Windows .cmd launcher reparses the original words, so the --home
+    // word is checked before it is set aside.
+    if !super::guard_diagnostics::arguments_reach_the_launcher(
+        executable,
+        &segment.arguments,
+        cfg!(windows),
+    ) {
+        return false;
+    }
     let names_home = segment
         .arguments
         .iter()

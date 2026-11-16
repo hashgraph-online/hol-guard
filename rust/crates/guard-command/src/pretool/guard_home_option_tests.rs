@@ -152,6 +152,19 @@ fn approval_inspection_is_proven_only_on_the_hook_guard_home() {
         &home_text,
         None,
     ));
+
+    // A Windows batch launcher reparses the original --home word, so a home
+    // whose path carries a shell metacharacter is not proven there.
+    if cfg!(windows) {
+        let odd = account.join("a&b");
+        std::fs::create_dir_all(&odd).unwrap();
+        let odd = odd.to_string_lossy().into_owned();
+        assert!(!guard_approval_inspection_command(
+            &format!("hol-guard approvals wait abc123 --home '{odd}'"),
+            &odd,
+            Some(&cwd),
+        ));
+    }
 }
 
 /// The Guard home the hook reports is set aside only while it exists, and
