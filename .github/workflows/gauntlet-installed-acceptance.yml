@@ -96,7 +96,7 @@ jobs:
           compiler: ${{ env.COMPILER }}
 
       - name: Lane tests
-        run: uv run --no-sync python -m pytest tests/test_gauntlet_installed_lane.py tests/test_gauntlet_installed_replay_verdict.py tests/test_gauntlet_installed_startup.py -q
+        run: uv run --no-sync python -m pytest tests/test_gauntlet_installed_lane.py tests/test_gauntlet_installed_replay_verdict.py tests/test_gauntlet_installed_startup.py tests/test_gauntlet_installed_windows_argv.py -q
 
       - name: Check out the matching historical client
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10

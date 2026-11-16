@@ -11,6 +11,7 @@ that registers nothing fails even if it reports success.
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -149,6 +150,69 @@ def guard_handlers(group: object) -> list[dict[str, Any]]:
     return found
 
 
+def split_windows_command_line(command: str) -> list[str]:
+    """Split a command line the way a Windows program's C runtime reads it.
+
+    Guard writes a Windows hook command with ``subprocess.list2cmdline``. POSIX
+    ``shlex`` treats each backslash in such a line as an escape and drops it, so
+    ``C:\\guard\\hol-guard.exe`` would become ``C:guardhol-guard.exe``. This
+    follows the C runtime instead: whitespace separates arguments outside
+    quotes, ``2n`` backslashes before a quote become ``n`` and toggle quoting,
+    ``2n+1`` become ``n`` and a literal quote, and any other backslash is kept.
+    """
+
+    argv: list[str] = []
+    current: list[str] = []
+    in_word = False
+    quoted = False
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if char == "\\":
+            run = 0
+            while index < len(command) and command[index] == "\\":
+                run += 1
+                index += 1
+            if index < len(command) and command[index] == '"':
+                current.append("\\" * (run // 2))
+                if run % 2:
+                    current.append('"')
+                    index += 1
+            else:
+                current.append("\\" * run)
+            in_word = True
+            continue
+        if char == '"':
+            if quoted and index + 1 < len(command) and command[index + 1] == '"':
+                current.append('"')
+                index += 2
+                continue
+            quoted = not quoted
+            in_word = True
+        elif char in " \t" and not quoted:
+            if in_word:
+                argv.append("".join(current))
+                current = []
+                in_word = False
+        else:
+            current.append(char)
+            in_word = True
+        index += 1
+    if quoted:
+        raise ValueError("unbalanced quote in command line")
+    if in_word:
+        argv.append("".join(current))
+    return argv
+
+
+def split_command_line(command: str, *, windows: bool | None = None) -> list[str]:
+    """Split a registered hook command line by the rules of this host's shell."""
+
+    if os.name == "nt" if windows is None else windows:
+        return split_windows_command_line(command)
+    return shlex.split(command)
+
+
 def handler_argv(handler: dict[str, Any]) -> list[str]:
     """The exact argv a harness would run for one Guard hook handler.
 
@@ -164,7 +228,7 @@ def handler_argv(handler: dict[str, Any]) -> list[str]:
         argv.extend(str(part) for part in command)
     elif isinstance(command, str):
         try:
-            argv.extend(shlex.split(command))
+            argv.extend(split_command_line(command))
         except ValueError:
             # Unbalanced quoting: no argv the harness could run either, so
             # report nothing rather than a command line this lane invented.
@@ -375,4 +439,6 @@ __all__ = [
     "load_contract",
     "read_config",
     "runnable_handlers",
+    "split_command_line",
+    "split_windows_command_line",
 ]
