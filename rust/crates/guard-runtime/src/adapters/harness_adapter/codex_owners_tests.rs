@@ -108,25 +108,18 @@ fn a_windows_legacy_binding_accepts_the_plain_json_config() {
 }
 
 #[test]
-fn a_windows_short_path_asks_the_host_to_expand_it() {
+fn a_windows_short_path_expands_to_the_long_path_it_is_given() {
     let hooks = json!({"PreToolUse": [{"matcher": "Bash", "hooks": [handler("C:\\PROGRA~1\\py.exe -I x y")]}]});
-    let mut request = json!({
+    let request = json!({
         "op": "legacy",
         "windows": true,
-        "long_paths": {},
+        "long_paths": {"C:\\PROGRA~1\\py.exe": "C:\\Program Files\\py.exe"},
         "hooks": hooks.to_string(),
         "expected": json!([{"event": "PreToolUse", "group": {"matcher": "Bash"}}]).to_string(),
         "argv": ["C:\\Program Files\\py.exe", "-I", "x", "y"],
         "legacy_argv": [],
         "statuses": [STATUS],
     });
-    match ask(request.clone()) {
-        Err(Failure::Reply(reply)) => {
-            assert_eq!(reply, json!({"expand": ["C:\\PROGRA~1\\py.exe"]}));
-        }
-        _ => panic!("expected a reply"),
-    }
-    request["long_paths"] = json!({"C:\\PROGRA~1\\py.exe": "C:\\Program Files\\py.exe"});
     let answer = ask(request).unwrap_or_else(|_| panic!("refused"));
     assert_eq!(decoded(&answer, "bindings").as_array().unwrap().len(), 1);
 }

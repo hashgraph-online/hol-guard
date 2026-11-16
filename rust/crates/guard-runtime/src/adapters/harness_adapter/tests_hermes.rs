@@ -1,6 +1,5 @@
-//! Hermes through the `harness_adapter` kind, answering its replies the way
-//! the Python glue does. The runtime renders `config.yaml` itself; the tests
-//! read it back with the PyYAML-compatible loader.
+//! Hermes through the `harness_adapter` kind. The runtime renders `config.yaml`
+//! itself; the tests read it back with the PyYAML-compatible loader.
 
 use std::fs;
 use std::path::PathBuf;
@@ -21,31 +20,14 @@ fn ask(home: &Home, op: &str, fields: &Map<String, Value>) -> Value {
     dispatch(&request).unwrap()
 }
 
-/// Answer every reply until the op settles, as `HermesHarnessAdapter._ask` does.
+/// One answer of the op; the runtime asks the caller for nothing.
 fn run(home: &Home, op: &str, extra: Value) -> Value {
-    let mut fields = extra.as_object().cloned().unwrap_or_default();
-    for _ in 0..16 {
-        let answer = ask(home, op, &fields);
-        let Some(reply) = answer.get("reply").and_then(Value::as_object) else {
-            return answer;
-        };
-        let (key, value) = reply.iter().next().unwrap();
-        let answered = match key.as_str() {
-            "launchers" => {
-                let entries: Vec<Value> = value
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|request| json!({"command": "/g/bin/hol-guard", "args": ["proxy", request["name"]]}))
-                    .collect();
-                json!({"requests": value, "guard_cli": "/g/bin/hol-guard", "entries": entries})
-                    .to_string()
-            }
-            other => panic!("unexpected reply {other}"),
-        };
-        fields.insert(key.clone(), json!(answered));
+    let fields = extra.as_object().cloned().unwrap_or_default();
+    let answer = ask(home, op, &fields);
+    if let Some(reply) = answer.get("reply") {
+        panic!("unexpected reply {reply}");
     }
-    panic!("{op} never settled");
+    answer
 }
 
 fn hermes_home(home: &Home) -> PathBuf {
@@ -127,14 +109,18 @@ fn install_registers_a_fail_closed_hook_and_approves_only_its_command() {
             .unwrap_or_else(|| panic!("no overlay entry for {key}"))
             .clone()
     };
-    assert_eq!(server("yaml:github")["args"], json!(["proxy", "github"]));
     assert_eq!(
         server("yaml:github")["metadata"]["guard_transport"],
         "stdio"
     );
-    for (key, transport) in [("yaml:remote", "remote"), ("yaml:bare", "stdio")] {
+    for (key, transport) in [
+        ("yaml:github", "stdio"),
+        ("yaml:remote", "remote"),
+        ("yaml:bare", "stdio"),
+    ] {
         let entry = server(key);
-        assert_eq!(entry["command"], "/g/bin/hol-guard");
+        // The launcher is the caller stamp's; no native runtime means no relay.
+        assert_eq!(entry["command"], "/py");
         assert_eq!(entry["transport"], "stdio");
         let args: Vec<&str> = entry["args"]
             .as_array()
@@ -142,7 +128,6 @@ fn install_registers_a_fail_closed_hook_and_approves_only_its_command() {
             .iter()
             .map(|arg| arg.as_str().unwrap())
             .collect();
-        assert_eq!(&args[2..4], ["hermes", "mcp-proxy"]);
         assert_eq!(&args[args.len() - 3..], ["--server", key, "--stdio"]);
         assert_eq!(entry["metadata"]["guard_transport"], transport);
     }

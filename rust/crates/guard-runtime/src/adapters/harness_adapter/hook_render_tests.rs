@@ -161,12 +161,15 @@ fn names_the_request_supplies_are_used_without_a_lookup() {
 
 #[cfg(not(windows))]
 #[test]
-fn a_windows_render_from_another_host_asks_for_the_missing_names() {
-    let command = argv(&["C:\\a b\\py.exe", "hook"]);
-    assert!(matches!(
-        names_for(&Map::new(), [&command[..]], true),
-        Err(Failure::Reply(reply)) if reply == json!({"shorten": ["C:\\a b\\py.exe"]})
-    ));
+fn a_windows_render_from_another_host_has_no_short_name_to_give() {
+    let missing = "C:\\a b\\py.exe";
+    let command = argv(&[missing, "hook"]);
+    let found = names_for(&Map::new(), [&command[..]], true).ok().unwrap();
+    assert_eq!(found.get(missing), Some(&(None, None)));
+    assert!(render(&command, true, &found)
+        .ok()
+        .unwrap()
+        .starts_with("& '"));
 }
 
 #[cfg(windows)]

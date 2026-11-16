@@ -127,7 +127,7 @@ impl Ask<'_> {
         })
     }
 
-    /// The long path Python resolved for each 8.3 name it was asked about.
+    /// The long path the caller named for an 8.3 name; the rest this host expands.
     fn long_paths(&self) -> Step<Map<String, Value>> {
         match self.fields.get("long_paths") {
             None => Ok(Map::new()),
@@ -136,7 +136,7 @@ impl Ask<'_> {
         }
     }
 
-    /// One `cursor_hook_config` request; an unseen short name is asked about.
+    /// One `cursor_hook_config` request.
     pub(super) fn hook_config(&self, op: &str, mut request: Map<String, Value>) -> Step<Value> {
         let asked = self.long_paths()?;
         let known: Map<String, Value> = asked
@@ -152,24 +152,11 @@ impl Ask<'_> {
         request.insert("long_paths".into(), Value::Object(known));
         let mut answer = crate::cursor_hook_config::dispatch(&Value::Object(request))
             .map_err(|error| runtime(format!("Cursor hook config request failed: {error}")))?;
-        let tokens = answer
+        // The runtime expanded every short name itself.
+        answer
             .as_object_mut()
             .and_then(|answer| answer.remove("short_tokens"))
             .ok_or_else(malformed)?;
-        let unseen: Vec<Value> = tokens
-            .as_array()
-            .ok_or_else(malformed)?
-            .iter()
-            .filter(|token| {
-                token
-                    .as_str()
-                    .is_some_and(|token| !asked.contains_key(token))
-            })
-            .cloned()
-            .collect();
-        if !unseen.is_empty() {
-            return Err(Self::reply("expand", json!(unseen)));
-        }
         Ok(answer)
     }
 

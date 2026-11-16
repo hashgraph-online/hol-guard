@@ -39,40 +39,12 @@ fn run(home: &Home, op: &str, bridge: Value) -> KindResult {
         let (key, value) = reply.iter().next().unwrap();
         let answered = match key.as_str() {
             "facts" => json!(facts(bridge.clone())),
-            "expand" => {
-                let mut paths = fields
-                    .get("long_paths")
-                    .and_then(Value::as_object)
-                    .cloned()
-                    .unwrap_or_default();
-                for token in value.as_array().unwrap() {
-                    paths.insert(token.as_str().unwrap().to_owned(), token.clone());
-                }
-                Value::Object(paths)
-            }
-            // Windows asks the host for each spaced path's 8.3 name; none has one.
-            "shorten" => {
-                let mut names = fields
-                    .get("short_names")
-                    .and_then(Value::as_object)
-                    .cloned()
-                    .unwrap_or_default();
-                for path in value.as_array().unwrap() {
-                    names.insert(path.as_str().unwrap().to_owned(), json!([null, null]));
-                }
-                Value::Object(names)
-            }
             "servers" => json!(
                 json!({"detect": value, "managed": [], "skipped": [], "observed": []}).to_string()
             ),
             other => panic!("unexpected reply {other}"),
         };
-        let field = match key.as_str() {
-            "expand" => "long_paths",
-            "shorten" => "short_names",
-            other => other,
-        };
-        fields.insert(field.to_owned(), answered);
+        fields.insert(key.clone(), answered);
     }
     panic!("{op} never settled");
 }

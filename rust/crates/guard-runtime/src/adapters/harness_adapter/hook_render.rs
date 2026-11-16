@@ -6,14 +6,13 @@
 //! that would need quoting by its 8.3 short name when that name is itself a
 //! plain token and maps back to exactly that path. Only the Windows host can
 //! name the short form: the runtime asks its own host for a path the request's
-//! `short_names` does not name, and only a caller rendering for Windows from
-//! another host is asked with `{"reply": {"shorten": [...]}}` to answer each
-//! with `[short, long_of_short]`. Without a plain form the command falls back to
+//! `short_names` does not name, and a host with no 8.3 names has none to give.
+//! Without a plain form the command falls back to
 //! PowerShell's call operator with single-quoted literals.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 
 use super::{Failure, Step};
 use crate::cursor_hook_command::is_short_token;
@@ -71,11 +70,6 @@ pub(super) fn unnamed<'a>(
         .collect()
 }
 
-/// The reply asking the host for `paths`' short names.
-fn ask_for(paths: BTreeSet<String>) -> Failure {
-    Failure::Reply(json!({ "shorten": paths }))
-}
-
 /// `[short, long_of_short]` for `path`, as this Windows host names them.
 fn host_name(path: &str) -> (Option<String>, Option<String>) {
     let short = guard_runtime_windows_process::short_path_name(path);
@@ -86,9 +80,8 @@ fn host_name(path: &str) -> (Option<String>, Option<String>) {
 }
 
 /// The short names every path in `argvs` needs: those the request names,
-/// then this host's own answer for the rest. Only a Windows host can name a
-/// short form, so a caller rendering for Windows from another host is asked
-/// with `{"reply": {"shorten": [...]}}` instead.
+/// then this host's own answer for the rest. A host with no 8.3 names has no
+/// short form to give, so such a path keeps the call operator.
 pub(super) fn names_for<'a>(
     fields: &Map<String, Value>,
     argvs: impl IntoIterator<Item = &'a [String]>,
@@ -98,9 +91,6 @@ pub(super) fn names_for<'a>(
     let missing = unnamed(argvs, windows, &names);
     if missing.is_empty() {
         return Ok(names);
-    }
-    if !cfg!(windows) {
-        return Err(ask_for(missing));
     }
     for path in missing {
         let named = host_name(&path);

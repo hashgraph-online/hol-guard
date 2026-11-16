@@ -1,12 +1,14 @@
 //! Skill artifacts for AIBOM inventory. The native walk composes discovery and
 //! directory identity in-process; a caller that cannot use it (no native skill
-//! walk on this platform, or a root that cannot be carried as UTF-8) supplies
+//! discovery on this platform, or a root that cannot be carried as UTF-8) supplies
 //! the finished artifacts instead.
 
 use std::path::Path;
 
 use guard_contracts::{SkillDirectoryIdentityV1, SkillDirectoryLimitsV1};
 use serde_json::{json, Map, Value};
+
+use crate::skill_identity_inspect::inspect_skill_directory;
 
 pub(crate) const ERR_IDENTITY: &str = "native_runner_authority_aibom_skill_identity_invalid";
 
@@ -53,14 +55,24 @@ pub(crate) struct DirectoryIdentity {
 }
 
 /// `inspect_skill_directory` plus `skill_directory_identity_metadata`, walked
-/// natively. Platforms without a native walk refuse; the caller supplies the
-/// finished identity instead.
+/// natively on every platform.
 pub(crate) fn directory_identity(
     skill_md: &Path,
     scope_root: &Path,
     version_label: &str,
 ) -> Result<DirectoryIdentity, &'static str> {
-    native::directory_identity(skill_md, scope_root, version_label)
+    let identity = inspect_skill_directory(skill_md, scope_root, &LIMITS);
+    let failure_reason = match identity.failure_reason {
+        Some(reason) => serde_json::to_value(reason)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_owned)),
+        None => None,
+    };
+    Ok(DirectoryIdentity {
+        metadata: identity_metadata(&identity, version_label)?,
+        complete: identity.status == "complete",
+        failure_reason,
+    })
 }
 
 pub(crate) const LIMITS: SkillDirectoryLimitsV1 = SkillDirectoryLimitsV1 {
@@ -132,26 +144,6 @@ mod native {
     use crate::skill_identity_canon::Failure;
     use crate::skill_identity_discovery::{discover_skill_documents, issue_id};
     use crate::skill_identity_inspect::{incomplete_identity, inspect_skill_directory};
-
-    /// The identity of one skill directory: its metadata and completeness.
-    pub(super) fn directory_identity(
-        skill_md: &Path,
-        scope_root: &Path,
-        version_label: &str,
-    ) -> Result<super::DirectoryIdentity, &'static str> {
-        let identity = inspect_skill_directory(skill_md, scope_root, &LIMITS);
-        let failure_reason = match identity.failure_reason {
-            Some(reason) => serde_json::to_value(reason)
-                .ok()
-                .and_then(|value| value.as_str().map(str::to_owned)),
-            None => None,
-        };
-        Ok(super::DirectoryIdentity {
-            metadata: identity_metadata(&identity, version_label)?,
-            complete: identity.status == "complete",
-            failure_reason,
-        })
-    }
 
     fn skill_metadata(
         relative_root: &str,
@@ -248,14 +240,6 @@ mod native {
     use std::path::Path;
 
     use serde_json::Value;
-
-    pub(super) fn directory_identity(
-        _skill_md: &Path,
-        _scope_root: &Path,
-        _version_label: &str,
-    ) -> Result<super::DirectoryIdentity, &'static str> {
-        Err("native_runner_authority_aibom_skills_unsupported")
-    }
 
     pub(super) fn skills(
         _harness: &str,

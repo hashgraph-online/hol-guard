@@ -3,8 +3,8 @@
 //! Hooks and bindings cross as order-preserving JSON text in which a scalar
 //! JSON cannot carry is a token, equal values sharing one (`_Wire`), so
 //! comparing tokens compares values. A Windows command naming an 8.3 short
-//! path is answered with `{"reply": {"expand": [...]}}`: the host resolves
-//! each name and asks again with `long_paths`.
+//! path is expanded from `long_paths` when the caller names it, and otherwise
+//! by this host.
 //!
 //! `remove` drops the handlers a manifest authenticates, `legacy` finds the
 //! pre-manifest registrations of the current package, `unlaunchable` drops

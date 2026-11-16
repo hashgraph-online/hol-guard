@@ -26,7 +26,6 @@ from ..aibom_detection import (
     native_adapter_detection_payload,
 )
 from ..codex_config import read_toml_payload
-from ..codex_hook_command_line import short_path_facts
 from ..codex_hook_compatibility import python_bridge_argv
 from ..codex_hook_integrity import (
     atomic_write_text,
@@ -50,9 +49,7 @@ from ..codex_hook_registration import (
     legacy_binding_fields,
 )
 from ..codex_hook_self_binding import (
-    expanded_short_paths,
     install_fields,
-    settle_short_paths,
     short_path_fields,
 )
 from ..codex_hook_trust import apply_codex_hook_trust_doctor
@@ -228,9 +225,6 @@ def _hook_registration(context: HarnessContext) -> _HookRegistration:
     argv = _hook_command_parts(context)
     fields: dict[str, object] = {"argv": list(argv), "long_timeout": _post_tool_hook_timeout_seconds(context)}
     answer = _codex("groups", context, **fields)
-    if set(answer) == {"reply"}:
-        # A Windows path is rendered by its 8.3 name, which only this host knows.
-        answer = _codex("groups", context, **fields, short_names=short_path_facts(answer["reply"]["shorten"]))
     return _HookRegistration(argv, _reply_text(answer, "groups"), _reply_text(answer, "bindings"))
 
 
@@ -243,9 +237,6 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
 
     fields: dict[str, object] = {"launch": _launch_fields(context)}
     answer = _codex("manifest_spec", context, **fields)
-    if set(answer) == {"reply"}:
-        # A Windows path is rendered by its 8.3 name, which only this host knows.
-        answer = _codex("manifest_spec", context, **fields, short_names=short_path_facts(answer["reply"]["shorten"]))
     spec = answer.get("spec")
     if not isinstance(spec, dict):
         raise ValueError("Harness adapter answer is malformed")
@@ -355,8 +346,6 @@ def _ask_install_plan(
         reply = answer.get("reply")
         if not isinstance(reply, Mapping):
             break
-        if "expand" in reply:
-            request["long_paths"] = {**request.get("long_paths", {}), **expanded_short_paths(reply)}
     else:
         raise RuntimeError(f"{op} did not settle its replies")
     check_hook_validation_deadline()
@@ -426,11 +415,7 @@ def live_hook_ask(op: str, context: HarnessContext) -> dict[str, Any]:
         **short_path_fields(),
     }
     timeout = max(timeout, _LIVE_STATE_MIN_SECONDS)
-    return settle_short_paths(
-        lambda: ask(op, context, harness="codex", timeout_seconds=timeout, **request),
-        request,
-        op,
-    )
+    return dict(ask(op, context, harness="codex", timeout_seconds=timeout, **request))
 
 
 def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
@@ -590,11 +575,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             ],
         }
         legacy: dict[str, object] = {**_legacy_fields(context), **short_path_fields()}
-        payload = settle_short_paths(
-            lambda: native_adapter_detection_payload("codex_detect", {**request, "legacy": legacy}),
-            legacy,
-            "codex_detect",
-        )
+        payload = native_adapter_detection_payload("codex_detect", {**request, "legacy": legacy})
         artifacts, found_paths, warnings = detection_from_payload(payload)
         command_available = _command_available(context)
         detection = HarnessDetection(
@@ -781,7 +762,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             **install_fields(_runtime_guard_home(context), None),
             **short_path_fields(),
         }
-        answer = settle_short_paths(lambda: _codex("uninstall", context, **request), request, "uninstall")
+        answer = _codex("uninstall", context, **request)
         _replay(answer.get("events"), None, None)
         if "fault" in answer:
             raise _exception(answer["fault"])

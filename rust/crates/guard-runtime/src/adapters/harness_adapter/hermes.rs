@@ -3,9 +3,9 @@
 //! `guard` section and `hooks.pre_tool_call` entry in the Hermes
 //! `config.yaml`, and the shell-hooks allowlist that approves that entry.
 //!
-//! Python answers two replies this module cannot: the proxy launch of each
-//! local stdio server (`launchers`) and, on Windows, the skill directory
-//! identities the resident's descriptor walk cannot read (`skills`).
+//! Python answers the proxy launch of each local stdio server (`launchers`),
+//! which this module cannot. The skill directory identities are read here on
+//! every platform.
 
 use std::path::{Path, PathBuf};
 
@@ -14,7 +14,7 @@ use serde_json::{json, Map, Value};
 use super::files::{self, Doc};
 use super::openclaw::{json_payload, truthy};
 use super::{cloud_identity, hermes_hooks, hermes_install, hermes_uninstall};
-use super::{common, detection, path_answer, path_text, which, Ctx, Failure, Spec, Step};
+use super::{common, detection, path_answer, path_text, which, Ctx, Spec, Step};
 use crate::adapter_state_integrity_op::state_verified;
 use crate::guard_store_json::py_strip;
 use crate::pyjson::PyVal;
@@ -152,7 +152,7 @@ fn hook_args(ctx: &Ctx) -> Vec<String> {
     args
 }
 
-fn detect(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+fn detect(spec: &Spec, ctx: &Ctx) -> Step<Value> {
     let home = ctx.absolute(&hermes_home(ctx));
     let host = host_home(ctx).map(|host| ctx.absolute(&host));
     let mut request = Map::new();
@@ -168,20 +168,6 @@ fn detect(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         "manifest_path".into(),
         json!(path_text(&ctx.absolute(&bundle(ctx).0))),
     );
-    if ctx.windows {
-        // The resident's descriptor walk is unix-only; Python reads the skills.
-        let roots: Vec<String> = std::iter::once(&home)
-            .chain(&host)
-            .map(|root| path_text(root))
-            .collect();
-        let identities = fields
-            .get("skills")
-            .and_then(Value::as_str)
-            .and_then(|answer| serde_json::from_str::<Value>(answer).ok())
-            .filter(Value::is_object)
-            .ok_or_else(|| Failure::Reply(json!({ "skills": roots })))?;
-        request.insert("skill_identities".into(), identities);
-    }
     let found = crate::hermes_detect::detect(&Value::Object(request));
     let available = which::command_available(ctx, spec.executable, Some(&ctx.home), &[]);
     detection(spec, found, available)
@@ -302,7 +288,7 @@ pub(crate) fn dispatch(
                 .unwrap_or(&ctx.home)
                 .join(".mcp.json"),
         ),
-        "detect" => detect(spec, ctx, fields),
+        "detect" => detect(spec, ctx),
         "hook_spec" => Ok(json!({
             "cli_args": hook_args(ctx),
             "timeout_seconds": HOOK_INTERNAL_TIMEOUT_SECONDS,

@@ -2,7 +2,6 @@
 //! owns comes from the authenticated manifest, widened by the live hooks only
 //! while that manifest is merely stale, and whether Codex still trusts them.
 
-use std::collections::BTreeSet;
 use std::path::Path;
 
 use serde_json::{json, Map, Value};
@@ -150,26 +149,12 @@ pub(super) fn owned_matches(
         .collect()
 }
 
-/// Runs `body` over the caller's `windows` and `long_paths`, then asks for
-/// any short name it met that was not yet expanded.
+/// Runs `body` over the caller's `windows` and `long_paths`. A short name
+/// the request does not name is expanded by this host.
 pub(super) fn with_syntax<T>(
     fields: &Map<String, Value>,
     body: impl FnOnce(&mut Syntax) -> Step<T>,
 ) -> Step<T> {
-    let long_paths = long_paths(fields)?;
-    let known: BTreeSet<String> = long_paths.keys().cloned().collect();
-    let mut syntax = Syntax::new(flag(fields, "windows")?, long_paths);
-    // A refusal over a name not yet expanded may be wrong, so the names
-    // come first.
-    let answer = body(&mut syntax);
-    let missing: Vec<&String> = syntax
-        .short_tokens()
-        .iter()
-        .filter(|token| !known.contains(*token))
-        .collect();
-    if missing.is_empty() {
-        answer
-    } else {
-        Err(Failure::Reply(json!({ "expand": missing })))
-    }
+    let mut syntax = Syntax::new(flag(fields, "windows")?, long_paths(fields)?);
+    body(&mut syntax)
 }

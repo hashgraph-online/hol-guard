@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 from dataclasses import replace
@@ -11,7 +10,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_caller
-from codex_plugin_scanner.guard.adapters import hermes as hermes_adapter
 from codex_plugin_scanner.guard.adapters import mcp_relay_native, mcp_servers, native_hook_bridge
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
@@ -188,50 +186,6 @@ def test_shared_launcher_entry_selects_the_relay(tmp_path: Path, advertised: set
     native_entry = proxy_launcher_entry(proxy_command="codex-mcp-proxy", context=context, server=_server(tmp_path))
     assert native_entry["command"] == str(_RUNTIME)
     assert native_entry["args"] == [NATIVE_MCP_RELAY_COMMAND, sys.executable, *python_entry["args"]]  # type: ignore[misc]
-
-
-def _hermes_launch(tmp_path: Path) -> dict[str, object]:
-    """The launch this process answers for one local stdio server the native kind names."""
-
-    context = HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=tmp_path / "guard")
-    request = {
-        "name": "demo",
-        "config_path": "/hermes/config.yaml",
-        "command": "python",
-        "args": ["-m", "demo"],
-        "env": [["DEMO_TOKEN", "secret"]],
-    }
-    answer = json.loads(hermes_adapter._launchers(context, [request]))  # pyright: ignore[reportPrivateUsage]
-    assert answer["requests"] == [request]
-    return answer["entries"][0]
-
-
-def test_hermes_stdio_servers_launch_the_python_proxy_without_an_advertised_relay(
-    tmp_path: Path, advertised: set[str]
-) -> None:
-    entry = _hermes_launch(tmp_path)
-    assert entry["command"] == sys.executable
-    args = entry["args"]
-    assert isinstance(args, list)
-    assert args[args.index("guard") + 1] == "hermes-mcp-proxy"
-    assert args[args.index("--command") + 1] == "python"
-    assert "--arg=-m" in args
-    assert "--arg=demo" in args
-    assert "--server-env-key=DEMO_TOKEN" in args
-    assert not any("secret" in str(value) for value in args)
-
-
-def test_hermes_stdio_servers_launch_through_the_native_relay_when_advertised(
-    tmp_path: Path, advertised: set[str]
-) -> None:
-    python_entry = _hermes_launch(tmp_path)
-    advertised.add(NATIVE_MCP_RELAY_FEATURE)
-    entry = _hermes_launch(tmp_path)
-    assert entry["command"] == str(_RUNTIME)
-    args = entry["args"]
-    assert isinstance(args, list)
-    assert args[:2] == [NATIVE_MCP_RELAY_COMMAND, sys.executable]
-    assert args[2:] == python_entry["args"]
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the Guard proxy recognition needs the resident runtime")

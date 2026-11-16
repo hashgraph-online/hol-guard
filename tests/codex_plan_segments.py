@@ -24,7 +24,7 @@ from codex_plugin_scanner.guard.adapters.codex import (
 from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer
 from codex_plugin_scanner.guard.adapters.native_harness import planned_files
 from codex_plugin_scanner.guard.codex_config import _restore_native, _Wire
-from codex_plugin_scanner.guard.codex_hook_self_binding import install_fields, settle_short_paths, short_path_fields
+from codex_plugin_scanner.guard.codex_hook_self_binding import install_fields, short_path_fields
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 
 
@@ -62,7 +62,7 @@ def prepare_codex_hook_migration(
         **install_fields(_runtime_guard_home(context), None),
         **short_path_fields(),
     }
-    answer = settle_short_paths(lambda: _codex("hook_migration", context, **request), request, "hook_migration")
+    answer = _codex("hook_migration", context, **request)
     tokens = answer.get("tokens")
     if not isinstance(tokens, dict):
         raise ValueError("Harness adapter answer is malformed")
@@ -116,7 +116,7 @@ def prepare_codex_alternate_cleanup(
         **install_fields(_runtime_guard_home(context), None),
         **short_path_fields(),
     }
-    answer = settle_short_paths(lambda: _codex("alternate_change", context, **request), request, "alternate_change")
+    answer = _codex("alternate_change", context, **request)
     change = _one_planned_file(answer)
     RuntimeTransition._compare({"files": [change.payload()]}, "before")
     return change

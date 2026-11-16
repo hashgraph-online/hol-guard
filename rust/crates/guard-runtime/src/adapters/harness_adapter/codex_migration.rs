@@ -13,7 +13,7 @@
 //! (`cwd`, `guard_home`, `package_root`, `expected`, `argv`, `legacy_argv`,
 //! `statuses`, `windows`, `long_paths`). Answer: `{"files": [...], "config":
 //! <payload JSON text>, "tokens": {token: meaning}}`. A Windows short name is
-//! answered with `{"reply": {"expand": [...]}}`, as `codex_hook_owners` does.
+//! expanded by this host, as `codex_hook_owners` does.
 
 use std::path::{Path, PathBuf};
 

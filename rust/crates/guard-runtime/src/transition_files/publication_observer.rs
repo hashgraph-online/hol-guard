@@ -9,7 +9,7 @@
 //! is the argv and environment to run, the observation channel, and digests
 //! of the config and manifest the caller rechecks around the launch.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
@@ -51,8 +51,8 @@ struct Bridge {
 }
 
 /// Request: `home`, `config`, `windows`, `long_paths`, `runtime_path` or
-/// `frozen`, and `package_roots`. Answer: `{"expand": [...]}` while a short
-/// name still needs its long form, else the launch the observer may run.
+/// `frozen`, and `package_roots`. Answer: the launch the observer may run. A
+/// short name `long_paths` does not name is expanded by this host.
 pub(super) fn binding(call: &mut Call<'_>) -> Step<Value> {
     let windows = call.args.get("windows").and_then(Value::as_bool);
     let long_paths = call.args.get("long_paths").and_then(Value::as_object);
@@ -64,20 +64,8 @@ pub(super) fn binding(call: &mut Call<'_>) -> Step<Value> {
         .map(|(short, long)| long.as_str().map(|long| (short.clone(), long.to_owned())))
         .collect::<Option<_>>()
         .ok_or(Fault::Transition("files_invalid"))?;
-    let known: BTreeSet<String> = long_paths.keys().cloned().collect();
     let mut syntax = Syntax::new(windows, long_paths);
-    let answer = observed(call, &mut syntax);
-    // A refusal over a name not yet expanded may be wrong, so names come first.
-    let missing: Vec<&String> = syntax
-        .short_tokens()
-        .iter()
-        .filter(|token| !known.contains(*token))
-        .collect();
-    if missing.is_empty() {
-        answer
-    } else {
-        Ok(json!({ "expand": missing }))
-    }
+    observed(call, &mut syntax)
 }
 
 fn observed(call: &mut Call<'_>, syntax: &mut Syntax) -> Step<Value> {

@@ -205,14 +205,9 @@ fn a_posix_groups_command_is_shlex_joined() {
 
 #[cfg(windows)]
 #[test]
-fn a_windows_groups_command_asks_the_host_to_shorten_spaced_paths() {
+fn a_windows_groups_command_uses_the_short_names_it_is_given() {
     let home = Home::new();
-    let fields = json!({"argv": ["C:\\Program Files\\py.exe", "-I"], "long_timeout": 85});
-    assert_eq!(
-        ask(&home, "groups", fields.clone())["reply"],
-        json!({"shorten": ["C:\\Program Files\\py.exe"]})
-    );
-    let mut fields = fields;
+    let mut fields = json!({"argv": ["C:\\Program Files\\py.exe", "-I"], "long_timeout": 85});
     fields["short_names"] =
         json!({"C:\\Program Files\\py.exe": ["C:\\PROGRA~1\\py.exe", "C:\\Program Files\\py.exe"]});
     let answer = ask(&home, "groups", fields);

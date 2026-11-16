@@ -6,9 +6,8 @@ the uninstall restores, hook health and the rebind decision. An op that needs
 something only the Guard process knows replies with one key, and this module
 answers it and asks again: ``facts`` (the attested Guard CLI, the native hook
 bridge and the interpreters), ``probe`` (whether ``cursor agent --help``
-runs), ``expand`` (8.3 short names), ``render`` (Windows hook command lines)
-and ``servers`` (which detected servers
-Guard manages, with their proxy entries). The shims, the ``mcp list`` probe
+runs) and ``servers`` (which detected servers Guard manages, with
+their proxy entries). The shims, the ``mcp list`` probe
 and the frozen hook script also stay here.
 """
 
@@ -109,7 +108,6 @@ def _servers(context: HarnessContext, detected: dict[str, Any]) -> str:
 
 def _answer(context: HarnessContext, op: str, key: str, value: Any, fields: dict[str, Any]) -> None:
     """Merge this process's answer to one reply into the request."""
-    from ..codex_hook_command_line import _expand_short_token, short_path_facts
     from .hook_python import disposable_guard_hook_probe
 
     if key == "facts":
@@ -120,10 +118,6 @@ def _answer(context: HarnessContext, op: str, key: str, value: Any, fields: dict
             fields["facts"] = _facts(context)
     elif key == "probe":
         fields["cursor_probe"] = _cursor_agent_subcommand_available(str(value))
-    elif key == "expand":
-        fields["long_paths"] = {**fields.get("long_paths", {}), **{str(t): _expand_short_token(str(t)) for t in value}}
-    elif key == "shorten":
-        fields["short_names"] = {**fields.get("short_names", {}), **short_path_facts(value)}
     elif key == "servers":
         fields["servers"] = _servers(context, value)
     else:
