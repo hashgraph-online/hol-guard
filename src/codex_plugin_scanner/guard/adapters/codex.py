@@ -60,8 +60,7 @@ from ..codex_hook_self_binding import (
     settle_short_paths,
     short_path_fields,
 )
-from ..codex_hook_sources import parse_json_object, parse_toml_object
-from ..codex_hook_sources import strict_json_object as _strict_json_object
+from ..codex_hook_sources import parse_toml_object
 from ..codex_hook_sources import strict_toml_object as _strict_toml_object
 from ..codex_hook_trust import apply_codex_hook_trust_doctor
 from ..codex_install_transaction import codex_install_transaction
@@ -362,6 +361,23 @@ def _one_planned_file(answer: dict[str, Any]) -> TransitionFile:
 
 def _b64(data: bytes | None) -> str | None:
     return None if data is None else base64.b64encode(data).decode("ascii")
+
+
+def _check_sources(
+    context: HarnessContext,
+    pairs: Sequence[tuple[Path, Path]],
+    captured: Mapping[Path, bytes | None] | None = None,
+) -> None:
+    """Refuse a config or hooks source that is not a readable regular file or
+    does not parse strictly; captured bytes are checked as they were captured."""
+    sources: list[dict[str, object]] = []
+    for config, hooks in pairs:
+        for path, label, kind in ((config, "Codex config file", "toml"), (hooks, "Codex hooks file", "json")):
+            source: dict[str, object] = {"path": str(path), "label": label, "kind": kind}
+            if captured is not None:
+                source["data"] = _b64(captured[path])
+            sources.append(source)
+    _codex("check_sources", context, sources=sources)
 
 
 @dataclass(frozen=True, slots=True)
@@ -753,9 +769,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         else:
             captured = {path: config_contents[path] for pair in pairs for path in pair}
             # An install refuses a captured generation it cannot parse strictly.
-            for config, hooks in pairs:
-                parse_toml_object(captured[config], path=config, label="Codex config file")
-                parse_json_object(captured[hooks], path=hooks, label="Codex hooks file")
+            _check_sources(context, pairs, captured)
         authenticated_manifest = load_hook_manifest_baseline(_hook_manifest_spec(context))
         hook_config_path = self._hook_config_path(context)
         request: dict[str, object] = {
@@ -918,9 +932,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         if self._hook_config_path(context) != self._target_config_path(context):
             raise RuntimeError("Codex hook authentication currently requires one canonical global config target.")
         # A source that is not a readable regular file refuses before the journal opens.
-        for config_path, hooks_path in self._config_hook_pairs(context):
-            _strict_toml_object(config_path, label="Codex config file")
-            _strict_json_object(hooks_path, label="Codex hooks file")
+        _check_sources(context, self._config_hook_pairs(context))
         plans: list[_CodexInstallPlan] = []
 
         def plan() -> tuple[PreparedCodexHookPublication, tuple[TransitionFile, ...]]:

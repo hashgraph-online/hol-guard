@@ -57,7 +57,7 @@ pub(super) fn migration(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let (before_config, config_mode) = existing(ctx, &config_path)?;
     let (before_hooks, hooks_mode) = existing(ctx, &hooks_path)?;
     let config_entries = read_toml(before_config.as_deref(), &config_path, "Codex config file")?;
-    let hooks = read_json(before_hooks.as_deref(), &hooks_path)?;
+    let hooks = read_json(before_hooks.as_deref(), &hooks_path, "Codex hooks file")?;
     let mut avoid = Vec::new();
     strings(&PyVal::Dict(hooks.clone()), &mut avoid);
     owned
@@ -180,11 +180,14 @@ pub(super) fn read_toml(
 }
 
 /// `parse_json_object` over the captured bytes.
-fn read_json(data: Option<&[u8]>, path: &Path) -> Step<Vec<(String, PyVal)>> {
+pub(super) fn read_json(
+    data: Option<&[u8]>,
+    path: &Path,
+    label: &str,
+) -> Step<Vec<(String, PyVal)>> {
     let Some(data) = data else {
         return Ok(Vec::new());
     };
-    let label = "Codex hooks file";
     let path = path_text(path);
     let malformed = || {
         Failure::Runtime(format!(

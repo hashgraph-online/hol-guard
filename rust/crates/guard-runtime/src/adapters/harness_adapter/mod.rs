@@ -56,6 +56,7 @@ mod codex_python_hook;
 mod codex_python_imports;
 mod codex_python_values;
 mod codex_servers;
+mod codex_sources;
 mod codex_uninstall;
 mod codex_uninstall_config;
 mod copilot;

@@ -16,8 +16,8 @@ use sha2::{Digest, Sha256};
 use super::files::{self, Doc};
 use super::{
     codex_alternate_plan, codex_config_hooks, codex_files, codex_hook_state, codex_main_plan,
-    codex_merge, codex_migration, codex_servers, codex_uninstall, codex_uninstall_config, common,
-    hook_render, path_answer, path_text, Ctx, Failure, Spec, Step,
+    codex_merge, codex_migration, codex_servers, codex_sources, codex_uninstall,
+    codex_uninstall_config, common, hook_render, path_answer, path_text, Ctx, Failure, Spec, Step,
 };
 use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 use crate::harness_diagnostics::setup_failures_besides_missing_command;
@@ -81,6 +81,7 @@ pub(super) fn dispatch(
         "alternate_change" => codex_alternate_plan::alternate_change(ctx, fields),
         "main_plan" => codex_main_plan::main_plan(ctx, fields),
         "managed_mcp" => codex_servers::managed_mcp(fields),
+        "check_sources" => codex_sources::check_sources(fields),
         "uninstall_restore" => codex_uninstall::uninstall_restore(fields),
         "uninstall_config" => codex_uninstall_config::uninstall_config(ctx, fields),
         _ => common(spec, op, ctx),
