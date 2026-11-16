@@ -215,6 +215,68 @@ fn observed_mcp_allow_answers_the_unreviewed_tool_setting() {
 }
 
 #[test]
+fn observed_mcp_allow_cannot_cover_a_renamed_composio_executor() {
+    for tool in [
+        "mcp__work_COMPOSIO_MULTI_EXECUTE_TOOL",
+        "mcp__work__COMPOSIO_MULTI_EXECUTE_TOOL",
+        "work_composio_remote_bash_tool",
+    ] {
+        let mut policy = policy("allow");
+        policy
+            .mcp_tool_actions
+            .insert(format!("omp:{tool}"), "allow".into());
+        policy
+            .risk_actions
+            .insert("mcp_dangerous_tool".into(), "require-reapproval".into());
+        let mut result = generic_result("review");
+        result.action.harness = "omp".into();
+        result.action.action_type = PreToolActionTypeV1::McpTool;
+        result.reason_code = "native_mcp_tool_review".into();
+        let output =
+            apply_pre_tool_policy(&snapshot(policy), &json!({"tool_name": tool}), result).unwrap();
+        assert_ne!(output.decision, "allow", "{tool}");
+    }
+}
+
+#[test]
+fn observed_mcp_allow_answers_the_unreviewed_tool_setting_for_its_output() {
+    let tool = "mcp__composio__COMPOSIO_SEARCH_TOOLS";
+    let mut policy = policy("allow");
+    policy
+        .mcp_tool_actions
+        .insert(format!("claude-code:{tool}"), "allow".into());
+    policy
+        .risk_actions
+        .insert("mcp_dangerous_tool".into(), "require-reapproval".into());
+    let snapshot = snapshot(policy);
+    let post = |tool: &str, response: HookReviewResponseV1| {
+        apply_post_tool_policy(
+            &snapshot,
+            &post_request(json!({
+                "tool_name": tool,
+                "tool_input": {"queries": [{"use_case": "find issues"}]},
+                "tool_response": "results"
+            })),
+            GuardHookPayloadKindV2::Inline,
+            response,
+        )
+        .unwrap()
+    };
+    let output = post(tool, HookReviewResponseV1::allow("output_scan_allow"));
+    assert_eq!(output.decision, "allow", "{:?}", output.reason);
+    let other = post(
+        "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+        HookReviewResponseV1::allow("output_scan_allow"),
+    );
+    assert_eq!(other.decision, "deny");
+    let secret = post(
+        tool,
+        HookReviewResponseV1::deny("output_secret_match", "output contains a secret"),
+    );
+    assert_eq!(secret.decision, "deny");
+}
+
+#[test]
 fn observed_mcp_server_block_does_not_block_another_connector() {
     let mut policy = policy("allow");
     policy

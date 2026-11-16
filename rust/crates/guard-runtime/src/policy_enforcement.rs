@@ -133,24 +133,7 @@ pub(crate) fn apply_pre_tool_policy(
         && !facts.sensitive_target;
     let mut operator_allowed_mcp_tool = false;
     if result.action.action_type == PreToolActionTypeV1::McpTool {
-        // Tool arguments can themselves contain `tool_name` (dispatchers are
-        // common). They are data, never the outer tool's authority selector.
-        let tool = match payload.as_object() {
-            Some(record) => {
-                let mut envelopes = vec![record];
-                for key in ["tool_call", "toolCall", "preToolUse", "pre_tool_use"] {
-                    if let Some(envelope) = record.get(key).and_then(Value::as_object) {
-                        envelopes.push(envelope);
-                    }
-                }
-                preferred_tool_name(&envelopes)?.or_else(|| {
-                    ["action", "operation"]
-                        .into_iter()
-                        .find_map(|key| record.get(key).and_then(Value::as_str).map(str::to_owned))
-                })
-            }
-            None => None,
-        };
+        let tool = policy_enforcement_mcp_provider::outer_tool_name(payload)?;
         if let Some(tool) = tool {
             let composio_name = tool
                 .rsplit("__")
@@ -212,8 +195,12 @@ pub(crate) fn apply_pre_tool_policy(
                 result.reason =
                     "This MCP tool requires approval under its custom extension settings.".into();
             }
-            operator_allowed_mcp_tool = choice == Some("allow")
-                && !composio_execution
+            operator_allowed_mcp_tool = !composio_execution
+                && policy_enforcement_mcp_provider::operator_allows_tool(
+                    &snapshot.effective_policy.mcp_tool_actions,
+                    &harness,
+                    &tool,
+                )
                 && result.action.bounded
                 && !facts.sensitive_target
                 && !facts.changed_hash
