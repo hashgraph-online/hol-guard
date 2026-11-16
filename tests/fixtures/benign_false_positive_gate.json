@@ -32905,6 +32905,141 @@
       "expect": "allow"
     },
     {
+      "id": "neg-write-wrapped-secret-setter",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/src/OAuthConfig.java",
+        "content": "        client.setClientSecret(new SecretValue(\"q7ZvT2kMbR\"));\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-write-dashed-token-setter",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/src/AuthClient.java",
+        "content": "        auth.setAccessToken(\"qzvt-kmbr-wplh-snxj\");\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-write-auth-token-comment",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/rest/client.go",
+        "content": "// Example: use the auth token 9E107D9D372BB6826BD81D3542A419D64C1B7A2E93F05D18E7A9C3F1026B84D5\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-write-long-key-array",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/src/Cipher.java",
+        "content": "    private static final long[] KEY = {0x9f3c2a7d5e1b4c86L, 0x41d8e6b207c95fa3L};\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-write-dashed-api-key",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/util/mail.py",
+        "content": "os.environ[\"MAILGUN_API_KEY\"] = \"key-7302918-qzvt-kmbrwp\"\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "write-wrapped-setter-from-environment",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/src/OAuthConfig.java",
+        "content": "        client.setClientSecret(new SecretValue(System.getenv(\"CLIENT_SECRET\")));\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "write-auth-token-comment-prose",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/rest/client.go",
+        "content": "// read the auth token from the environment\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "write-long-round-constants",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/src/Sha512.java",
+        "content": "    private static final long[] ROUND_CONSTANTS = {0x428a2f98d728ae22L, 0x7137449123ef65cdL};\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "write-api-key-from-environment",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/util/mail.py",
+        "content": "MAILGUN_API_KEY = os.environ[\"MAILGUN_API_KEY\"]\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-write-oauth-header-token",
       "fix_area": "write",
       "harnesses": [

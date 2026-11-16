@@ -20,6 +20,8 @@ use serde_json::{Map, Value};
 
 #[path = "literal_secret_bare.rs"]
 mod bare;
+#[path = "literal_secret_code.rs"]
+mod code;
 #[path = "literal_secret_letters.rs"]
 mod letters;
 #[path = "literal_secret_oauth.rs"]
@@ -228,6 +230,7 @@ fn holds_spelled_secret(text: &str) -> bool {
     }) || strong::holds_proven_secret(text)
         || oauth::holds_oauth_credential(text)
         || bare::holds_bare_secret(text)
+        || code::holds_code_secret(text)
 }
 
 /// The rows a patch adds: a Codex `apply_patch` body in `command`, or an Oh

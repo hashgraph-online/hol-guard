@@ -196,11 +196,11 @@ fn any_value(shape: &Regex, text: &str, keep: fn(&str) -> bool) -> bool {
 
 /// A key a template or a person would type: a placeholder, a counting or
 /// keyboard run, or a test word.
-fn typed_value(value: &str) -> bool {
+pub(super) fn typed_value(value: &str) -> bool {
     FILLER.is_match(value) || WIDE_FILLER.is_match(value) || SEQUENTIAL.is_match(value)
 }
 
-fn letters_only(value: &str) -> String {
+pub(super) fn letters_only(value: &str) -> String {
     value.chars().filter(char::is_ascii_alphabetic).collect()
 }
 

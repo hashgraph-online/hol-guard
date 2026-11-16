@@ -37,6 +37,11 @@ CASES = {
     "omp-write-passes-a-random-key-to-a-secret-setter": "AppConfig.java",
     "omp-write-spells-a-password-into-a-mail-url": "mail.yml",
     "omp-write-keys-a-line-by-a-random-app-secret": "app.yaml",
+    "omp-write-wraps-a-client-secret-in-a-setter": "OAuthConfig.java",
+    "omp-write-passes-dashed-groups-to-a-token-setter": "AuthClient.java",
+    "omp-write-gives-an-auth-token-in-a-comment": "client.go",
+    "omp-write-spells-a-key-as-hex-longs": "Cipher.java",
+    "omp-write-sets-a-dashed-api-key": "mail_settings.py",
     "omp-write-spells-an-oauth-key-into-a-test": "client_spec.rb",
 }
 
