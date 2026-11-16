@@ -440,7 +440,7 @@ Every session passed in both arms. Codex and Oh My Pi save 52–76% of cost in a
 
 ### Mixed prompts (replay, no model calls)
 
-`benchmarks/cigar/scripts/mixed.py` sends 100 everyday prompts from `benchmarks/cigar/references/mixed_prompts.json` through the cigar arm's prompt hook, one fresh session each, against pristine copies of tomli, cachetools, sortedcontainers and click (25 each). 56 prompts need no code (follow-up questions, plans, documents, chat, chores, vague asks); 44 do (explain, pasted trace or log, rename, fix, test, review), each with the files a good note names. A note "carries code" when it has a mapped range (`path:12-30`) or a pasted excerpt (`path (lines 1-112)`). Baseline on 2026-11-16, `main` at `ef1cef9179`:
+`benchmarks/cigar/scripts/mixed.py` sends 100 everyday prompts from `benchmarks/cigar/references/mixed_prompts.json` through the cigar arm's prompt hook, one fresh session each, against pristine copies of tomli, cachetools, sortedcontainers and click (25 each). 56 prompts need no code (follow-up questions, plans, documents, chat, chores, vague asks); 44 do (explain, pasted trace or log, rename, fix, test, review), each with the files a good note names. A note "carries code" when it has a mapped range (`path:12-30`) or a pasted excerpt (`path (lines 1-112)`). Baseline on 2026-11-16, the rig's 3.59.0 wheel (main after #7853):
 
 | prompts | count | silent | right | wrong | average note size (chars) |
 |---|---|---|---|---|---|

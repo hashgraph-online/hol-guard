@@ -1,6 +1,7 @@
 """Mixed-prompt precision check, no model calls.
 
 Usage: mixed.py [--config <codex config.toml>] [--prompts FILE] [--save FILE] [--kinds a,b] [--show]
+                [--swap OLD=NEW]... [--rescore FILE]
 
 Replays CIGAR's prompt hook of the cigar arm on references/mixed_prompts.json: follow-up questions,
 planning, chat, explain, pasted traces and logs, renames, fixes. Each prompt runs in a fresh session
@@ -33,9 +34,15 @@ ap.add_argument("--prompts", default=str(REFS / "mixed_prompts.json"))
 ap.add_argument("--save")
 ap.add_argument("--kinds")
 ap.add_argument("--show", action="store_true", help="print each wrong note's first lines")
+ap.add_argument("--swap", action="append", default=[], metavar="OLD=NEW",
+                help="replace OLD with NEW in the hook command and env, to replay another Guard venv or home")
 ap.add_argument("--rescore", help="score notes saved by an earlier --save instead of replaying")
 a = ap.parse_args()
 hook = tomllib.load(open(a.config, "rb"))["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+for pair in a.swap:
+    old, new = pair.split("=", 1)
+    hook = {**hook, "command": hook["command"].replace(old, new),
+            "env": {k: v.replace(old, new) for k, v in hook.get("env", {}).items()}}
 
 # Code in a note: a mapped range "path/to/file.py:12-30", a line "path/to/file.py:12:", or a pasted
 # excerpt "path/to/file.md (lines 1-112)".
