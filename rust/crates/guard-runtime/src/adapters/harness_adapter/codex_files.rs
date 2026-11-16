@@ -215,3 +215,20 @@ pub(super) fn manifest(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> S
     );
     files::manifest_answer(doc)
 }
+
+/// `TransitionFile` serializes `path.resolve(strict=False)`: each planned
+/// change's `path`, and each bare path in `paths`, in that spelling.
+pub(super) fn canonical(ctx: &Ctx, changes: &mut [Value], paths: &mut [Value]) -> Step<()> {
+    let resolve = |path: Option<&Value>| -> Step<Value> {
+        let path = path.and_then(Value::as_str).ok_or(Failure::Invalid)?;
+        Ok(json!(path_text(&ctx.resolved(Path::new(path)))))
+    };
+    for change in changes.iter_mut() {
+        let path = resolve(change.get("path"))?;
+        change["path"] = path;
+    }
+    for path in paths.iter_mut() {
+        *path = resolve(Some(path))?;
+    }
+    Ok(())
+}

@@ -453,7 +453,8 @@ fn plan(ctx: &Ctx, transitions: &mut Transitions<'_>) -> Planned<Value> {
     if publication[0].get("before") != contents.get(main_config.as_str()) {
         return Err(Stop::Conflict);
     }
-    let pins = dependencies(&manifest)?;
+    let mut pins = dependencies(&manifest)?;
+    super::codex_files::canonical(ctx, &mut pins, &mut [])?;
     transitions.compare(&pins)?;
 
     let mut files = Vec::new();
@@ -467,6 +468,7 @@ fn plan(ctx: &Ctx, transitions: &mut Transitions<'_>) -> Planned<Value> {
     files.extend(cleanup);
     files.extend(shim_files);
     files.extend(pins);
+    super::codex_files::canonical(ctx, &mut files, &mut backups)?;
     let files = unique(transitions, files)?;
     transitions.compare(&files)?;
     Ok(json!({

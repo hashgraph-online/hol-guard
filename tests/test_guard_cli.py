@@ -4445,7 +4445,7 @@ args = ["workspace-skill.js", "--changed"]
         config_payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
         managed_handler = config_payload["hooks"]["PreToolUse"][-1]["hooks"][0]
         managed_handler["statusMessage"] = "HOL Guard checking tool action (tampered)"
-        _write_text(config_path, codex_adapter_module.dump_toml(config_payload))
+        _write_text(config_path, dump_toml(config_payload))
         context = HarnessContext(home_dir=home_dir, workspace_dir=Path.cwd(), guard_home=home_dir)
 
         before = codex_adapter_module.codex_native_hook_state(context)

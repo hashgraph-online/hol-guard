@@ -24,7 +24,12 @@ from codex_plugin_scanner.guard.codex_hook_manifest import (
     check_hook_validation_deadline,
     generation_request,
 )
-from codex_plugin_scanner.guard.codex_hook_self_binding import install_fields, settle_short_paths, short_path_fields
+from codex_plugin_scanner.guard.codex_hook_self_binding import (
+    ask_hook_owners,
+    install_fields,
+    settle_short_paths,
+    short_path_fields,
+)
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 
 
@@ -213,3 +218,21 @@ def write_authenticated_hook_config_owned(
     if not isinstance(state, dict):
         raise TransitionError("native_transition_invalid")
     return state
+
+
+def remove_unlaunchable_guard_hook_events(
+    hooks: dict[str, object],
+    *,
+    legacy_status_messages: Sequence[str] | set[str],
+    windows: bool | None = None,
+) -> tuple[dict[str, object], bool]:
+    """Ask the native owner check to drop legacy Guard handlers whose program is gone."""
+
+    wire = _Wire(hooks)
+    answer = ask_hook_owners(
+        "unlaunchable", windows=windows, hooks=wire.text(hooks), statuses=sorted(legacy_status_messages)
+    )
+    remaining = answer["hooks"]
+    if isinstance(remaining, str):
+        remaining = wire.decode(remaining)
+    return dict(remaining), bool(answer["changed"])
