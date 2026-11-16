@@ -160,8 +160,11 @@ pub(super) fn uses<'a>(
         // too: a call to `_import_common` is where it has to change.
         .filter(|item| item.phrase || (everywhere && item.named) || item.lines.len() >= 2)
         .collect();
+    // With `lone`, a use holding two prompt words outranks many uses of
+    // one, so the cut below cannot drop the only match that places the list.
     kept.sort_by(|a, b| {
         (b.phrase.cmp(&a.phrase))
+            .then((lone && b.words.len() > 1).cmp(&(lone && a.words.len() > 1)))
             .then(b.lines.len().cmp(&a.lines.len()))
             .then(b.words.len().cmp(&a.words.len()))
     });

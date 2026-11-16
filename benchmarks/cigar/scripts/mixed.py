@@ -38,11 +38,13 @@ ap.add_argument("--swap", action="append", default=[], metavar="OLD=NEW",
                 help="replace OLD with NEW in the hook command and env, to replay another Guard venv or home")
 ap.add_argument("--rescore", help="score notes saved by an earlier --save instead of replaying")
 a = ap.parse_args()
-hook = tomllib.load(open(a.config, "rb"))["hooks"]["UserPromptSubmit"][0]["hooks"][0]
-for pair in a.swap:
-    old, new = pair.split("=", 1)
-    hook = {**hook, "command": hook["command"].replace(old, new),
-            "env": {k: v.replace(old, new) for k, v in hook.get("env", {}).items()}}
+hook = None
+if not a.rescore:
+    hook = tomllib.load(open(a.config, "rb"))["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+    for pair in a.swap:
+        old, new = pair.split("=", 1)
+        hook = {**hook, "command": hook["command"].replace(old, new),
+                "env": {k: v.replace(old, new) for k, v in hook.get("env", {}).items()}}
 
 # Code in a note: a mapped range "path/to/file.py:12-30", a line "path/to/file.py:12:", or a pasted
 # excerpt "path/to/file.md (lines 1-112)".
@@ -54,13 +56,13 @@ if a.kinds:
     prompts = [p for p in prompts if p["kind"] in keep]
 
 projects = {}
+RUN = uuid.uuid4().hex[:12]
 
 
 def project(repo):
     if repo not in projects:
-        dest = WORK / "notes" / f"mixed-{repo}"
-        if dest.exists():
-            shutil.rmtree(dest)
+        # Each run copies into its own folder, so runs side by side never share a project.
+        dest = WORK / "notes" / f"mixed-{RUN}" / repo
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(REPOS_DIR / repo / "pristine", dest, symlinks=True, ignore=shutil.ignore_patterns("__pycache__"))
         projects[repo] = dest
@@ -89,8 +91,8 @@ for p in prompts:
     v, files = verdict(p, text)
     rows.append({**p, "verdict": v, "files_named": files, "chars": len(text), "note": text})
 
-for dest in projects.values():
-    shutil.rmtree(dest)
+if projects:
+    shutil.rmtree(WORK / "notes" / f"mixed-{RUN}")
 
 if a.save:
     Path(a.save).write_text(json.dumps(rows, indent=1))

@@ -27,8 +27,11 @@ def note(hook, project, prompt, session, timeout=90):
         timeout=timeout,
         env=dict(os.environ, **hook.get("env", {})),
     )
+    # A failed or garbled hook run must not score as a silent note.
+    if out.returncode != 0:
+        raise RuntimeError(f"hook exited {out.returncode}: {out.stderr[-300:]!r}")
     try:
-        o = json.loads(out.stdout or "{}")
-    except ValueError:
-        return f"<<hook output not JSON: {out.stdout[:200]!r} {out.stderr[-200:]!r}>>"
+        o = json.loads(out.stdout)
+    except ValueError as err:
+        raise RuntimeError(f"hook output not JSON: {out.stdout[:200]!r} {out.stderr[-200:]!r}") from err
     return (o.get("hookSpecificOutput") or {}).get("additionalContext") or ""
