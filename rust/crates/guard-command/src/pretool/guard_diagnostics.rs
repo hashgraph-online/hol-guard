@@ -149,7 +149,7 @@ const REPARSED: &[char] = &['"', '&', '|', '<', '>', '^', '%', '!', '(', ')', '\
 /// ids beside them -- keep their review there, and only where the text holds
 /// one of those characters. The explicit `.exe` spelling names a real program,
 /// which is read once.
-fn arguments_reach_the_launcher(basename: &str, arguments: &[String], windows_host: bool) -> bool {
+pub(super) fn arguments_reach_the_launcher(basename: &str, arguments: &[String], windows_host: bool) -> bool {
     !windows_host
         || basename.ends_with(".exe")
         || arguments.iter().all(|word| !word.contains(REPARSED))
