@@ -123,6 +123,7 @@ pub mod pretool_for_loop_conditionals;
 pub mod pretool_for_loop_home_words;
 pub mod pretool_for_loop_in_list;
 pub mod pretool_for_loop_long_body;
+pub mod pretool_jq_filter_credential_words;
 pub mod pretool_for_loop_quoted_builtin;
 pub mod pretool_forged_worktree;
 pub mod pretool_generic;
