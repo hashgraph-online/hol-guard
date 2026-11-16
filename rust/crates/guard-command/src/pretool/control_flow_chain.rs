@@ -199,8 +199,16 @@ fn starts_with_word(text: &str, word: &str) -> bool {
 /// a state builtin at the head of any stage, a nested construct's keyword, or
 /// a head word the shell would rewrite first (quoted, escaped or expanded), so
 /// its real name is unknown here.
+///
+/// Only an unquoted `|` starts a stage. A `|` inside a quoted word, as in
+/// `jq -c '.[]?|select(.c)'`, is text the command receives, and reading the
+/// rest of that word as a command head would see a quote and refuse an
+/// ordinary read. An item that ends inside a quote counts as a change.
 pub(super) fn changes_shell_state(item: &str) -> bool {
-    item.split('|').any(|stage| {
+    let Some(stages) = super::for_loop_unroll::body::pipeline_stages(item) else {
+        return true;
+    };
+    stages.into_iter().any(|stage| {
         let first = command_head(stage);
         command_word_changes_shell_state(stage)
             || first == "if"

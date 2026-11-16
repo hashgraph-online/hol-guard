@@ -557,7 +557,7 @@ fn word_boundary(character: Option<char>) -> bool {
 #[path = "for_loop_unroll_pipeline.rs"]
 mod pipeline;
 
-use pipeline::pipeline_stages;
+pub(in crate::pretool) use pipeline::pipeline_stages;
 
 /// Whether a backslash makes the character at `at` a literal. The shell reads
 /// `\ ` as a space stuck to the word beside it, so `cat \ $f` is one glued

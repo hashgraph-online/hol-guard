@@ -112,22 +112,19 @@ fn a_loop_written_out_past_the_command_limit_keeps_its_review() {
 
 /// The same long loop after another step of the list, as in
 /// `gh pr view 6221 …; echo '---'; for n in …; do …; done`. That splice gave
-/// up at 8 KiB while the loop alone could grow to the command limit.
+/// up at 8 KiB while the loop alone could grow to the command limit, and a
+/// loop after `&&` read the quoted pipes of its jq filter as stages.
 #[test]
 fn a_long_loop_after_another_step_is_judged_by_its_steps() {
     let home = fixture();
-    // The semicolon-joined form is the verified benign regression. A loop
-    // gated by `&&` has separate conditional-list semantics; do not treat a
-    // review of that unproven shape as an Allow regression.
-    let before = "gh pr view 6221 --repo example/project --json state 2>&1; echo '---'; ";
-    let command = format!("{before}{}", pull_request_loop(23, ""));
-    assert_eq!(action(&command, &home), "allow", "{before}");
-
-    // Both list placements must still refuse destructive or secret reads.
+    // After `;` or `&&`. The filter's `|` sits inside quotes, so it does not
+    // make the `&&`-gated loop look like it changes the shell.
     for before in [
-        before,
+        "gh pr view 6221 --repo example/project --json state 2>&1; echo '---'; ",
         "gh pr view 6221 --repo example/project --json state && ",
     ] {
+        let command = format!("{before}{}", pull_request_loop(23, ""));
+        assert_eq!(action(&command, &home), "allow", "{before}");
         for extra in [" rm -rf ~/.ssh;", " cat ~/.ssh/id_ed25519;"] {
             let unsafe_loop = format!("{before}{}", pull_request_loop(23, extra));
             assert_ne!(action(&unsafe_loop, &home), "allow", "{before}{extra}");
