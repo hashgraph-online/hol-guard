@@ -1,6 +1,6 @@
 //! Hermes through the `harness_adapter` kind, answering its replies the way
-//! the Python glue does. The `yaml` answer echoes the JSON rendering, which
-//! YAML reads back the same.
+//! the Python glue does. The runtime renders `config.yaml` itself; the tests
+//! read it back with the PyYAML-compatible loader.
 
 use std::fs;
 use std::path::PathBuf;
@@ -41,7 +41,6 @@ fn run(home: &Home, op: &str, extra: Value) -> Value {
                 json!({"requests": value, "guard_cli": "/g/bin/hol-guard", "entries": entries})
                     .to_string()
             }
-            "yaml" => json!([value, value]).to_string(),
             other => panic!("unexpected reply {other}"),
         };
         fields.insert(key.clone(), json!(answered));
@@ -73,7 +72,23 @@ fn planned(answer: &Value, name: &str) -> Value {
         .iter()
         .find(|change| change["path"].as_str().unwrap().ends_with(name))
         .unwrap_or_else(|| panic!("no planned {name}"));
-    serde_json::from_str(&after(change)).unwrap()
+    if name.ends_with(".yaml") {
+        yaml_json(&after(change))
+    } else {
+        serde_json::from_str(&after(change)).unwrap()
+    }
+}
+
+/// A rendered `config.yaml` read back as JSON.
+fn yaml_json(text: &str) -> Value {
+    let doc = crate::hermes_yaml::load(text)
+        .ok()
+        .and_then(Result::ok)
+        .expect("config.yaml loads");
+    let rendered = super::super::files::render(&doc)
+        .ok()
+        .expect("config renders");
+    serde_json::from_str(&rendered).unwrap()
 }
 
 #[test]
@@ -206,7 +221,7 @@ fn uninstall_without_a_manifest_removes_only_this_homes_proxies() {
         .iter()
         .find(|write| write["path"].as_str().unwrap().ends_with("config.yaml"))
         .unwrap();
-    let config: Value = serde_json::from_str(config["text"].as_str().unwrap()).unwrap();
+    let config = yaml_json(config["text"].as_str().unwrap());
     let names: Vec<&String> = config["mcp_servers"].as_object().unwrap().keys().collect();
     assert_eq!(names, ["foreign", "malformed"]);
 }

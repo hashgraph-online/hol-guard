@@ -5,9 +5,9 @@ payload, the Guard entries in ``config.yaml`` and its shell-hooks allowlist,
 the authenticated manifest, uninstall, the launch environment, the runtime
 probe and the doctor warning. An op that needs something only the Guard
 process knows replies with one key, and this module answers it and asks again:
-``launchers`` (Guard's proxy launch for each local stdio server), ``yaml``
-(PyYAML's rendering of a rewritten ``config.yaml``) and, on Windows,
-``skills`` (the skill directory identities the resident cannot walk there).
+``launchers`` (Guard's proxy launch for each local stdio server) and, on
+Windows, ``skills`` (the skill directory identities the resident cannot walk
+there).
 """
 
 from __future__ import annotations
@@ -15,8 +15,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
-
-import yaml as _yaml  # type: ignore[import-untyped]
 
 from ..skill_directory_identity import inspect_skill_directory, skill_directory_identity_metadata
 from .base import HarnessContext, PreparedHarnessInstall
@@ -90,9 +88,6 @@ def _answer(context: HarnessContext, key: str, value: Any, fields: dict[str, Any
     """Merge this process's answer to one reply into the request."""
     if key == "launchers" and isinstance(value, list):
         fields["launchers"] = _launchers(context, value)
-    elif key == "yaml" and isinstance(value, str):
-        rendered = _yaml.dump(json.loads(value), default_flow_style=False, sort_keys=False)
-        fields["yaml"] = json.dumps([value, rendered])
     elif key == "skills" and isinstance(value, list):
         fields["skills"] = json.dumps(_portable_skill_identities([str(home) for home in value]))
     else:

@@ -3,10 +3,9 @@
 //! `guard` section and `hooks.pre_tool_call` entry in the Hermes
 //! `config.yaml`, and the shell-hooks allowlist that approves that entry.
 //!
-//! Python answers three replies this module cannot: the proxy launch of each
-//! local stdio server (`launchers`), PyYAML's rendering of a rewritten
-//! `config.yaml` (`yaml`), and, on Windows, the skill directory identities the
-//! resident's descriptor walk cannot read (`skills`).
+//! Python answers two replies this module cannot: the proxy launch of each
+//! local stdio server (`launchers`) and, on Windows, the skill directory
+//! identities the resident's descriptor walk cannot read (`skills`).
 
 use std::path::{Path, PathBuf};
 
@@ -267,19 +266,9 @@ fn approval_flow(fields: &Map<String, Value>) -> Value {
     }
 }
 
-/// PyYAML's `yaml.dump(doc, default_flow_style=False, sort_keys=False)`,
-/// which Python renders for the JSON text it is shown.
-pub(super) fn yaml(fields: &Map<String, Value>, doc: &PyVal) -> Step<String> {
-    let rendered = files::render(doc)?;
-    let answer = fields
-        .get("yaml")
-        .and_then(Value::as_str)
-        .and_then(|answer| serde_json::from_str::<Vec<String>>(answer).ok())
-        .filter(|pair| pair.len() == 2 && pair[0] == rendered);
-    match answer {
-        Some(mut pair) => pair.pop().ok_or(Failure::Invalid),
-        None => Err(Failure::Reply(json!({ "yaml": rendered }))),
-    }
+/// PyYAML's `yaml.dump(doc, default_flow_style=False, sort_keys=False)`.
+pub(super) fn yaml(doc: &PyVal) -> String {
+    crate::pyyaml_dump::dump(doc)
 }
 
 /// `config.yaml` written through its resolved directory, as

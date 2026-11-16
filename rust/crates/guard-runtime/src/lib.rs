@@ -728,6 +728,7 @@ mod hermes_vectors_tests;
 mod hermes_yaml;
 mod hermes_yaml_construct;
 mod hermes_yaml_resolve;
+mod pyyaml_dump;
 #[path = "adapters/hook_adapter_op.rs"]
 mod hook_adapter_op;
 mod hook_approval_context;

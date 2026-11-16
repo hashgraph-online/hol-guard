@@ -123,7 +123,10 @@ def test_install_writes_guard_mcp_proxy_entries_to_config_yaml(tmp_path: Path):
     adapter.install(context)
 
     config_path = tmp_path / ".hermes" / "config.yaml"
-    config = pyyaml.safe_load(config_path.read_text(encoding="utf-8"))
+    written = config_path.read_text(encoding="utf-8")
+    config = pyyaml.safe_load(written)
+    # The native runtime renders the file byte for byte as PyYAML's block dump.
+    assert written == pyyaml.dump(config, default_flow_style=False, sort_keys=False)
 
     # Guard-managed proxy entries should be prefixed with "guard-".
     guard_servers = {k: v for k, v in config["mcp_servers"].items() if k.startswith("guard-")}
