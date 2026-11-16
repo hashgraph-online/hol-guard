@@ -178,16 +178,15 @@ impl Ask<'_> {
         Ok(answer)
     }
 
-    /// `render_hook_command` of each argv. A Windows path is asked of the host
-    /// for its 8.3 name first; a line Windows cannot carry fails only its own
+    /// `render_hook_command` of each argv. A Windows path's 8.3 name is looked
+    /// up first; a line Windows cannot carry fails only its own
     /// command.
     pub(super) fn render(&self, argvs: &[Vec<String>]) -> Step<Vec<Step<String>>> {
-        let names = hook_render::short_names(self.fields)?;
-        let unnamed =
-            hook_render::unnamed(argvs.iter().map(Vec::as_slice), self.ctx.windows, &names);
-        if !unnamed.is_empty() {
-            return Err(hook_render::ask_for(unnamed));
-        }
+        let names = hook_render::names_for(
+            self.fields,
+            argvs.iter().map(Vec::as_slice),
+            self.ctx.windows,
+        )?;
         Ok(argvs
             .iter()
             .map(|argv| hook_render::render(argv, self.ctx.windows, &names))

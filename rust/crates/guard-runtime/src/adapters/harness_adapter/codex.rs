@@ -297,11 +297,7 @@ fn hook_env(ctx: &Ctx) -> Step<Vec<(String, PyVal)>> {
 /// `_managed_hook_groups` and `_manifest_event_bindings`, as ordered JSON.
 fn groups(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let argv = strings(fields.get("argv"))?;
-    let names = hook_render::short_names(fields)?;
-    let unnamed = hook_render::unnamed([&argv[..]], ctx.windows, &names);
-    if !unnamed.is_empty() {
-        return Err(hook_render::ask_for(unnamed));
-    }
+    let names = hook_render::names_for(fields, [&argv[..]], ctx.windows)?;
     let command = &hook_render::render(&argv, ctx.windows, &names)?;
     let env = PyVal::Dict(hook_env(ctx)?);
     let long = fields

@@ -139,3 +139,45 @@ fn short_names_are_read_from_the_request() {
     assert!(short_names(malformed.as_object().unwrap()).is_err());
     assert!(short_names(&Map::new()).ok().unwrap().is_empty());
 }
+
+#[test]
+fn names_the_request_supplies_are_used_without_a_lookup() {
+    let command = argv(&["C:\\a b\\py.exe", "hook"]);
+    let fields =
+        json!({"short_names": {"C:\\a b\\py.exe": ["C:\\AB~1\\py.exe", "C:\\a b\\py.exe"]}});
+    let found = names_for(fields.as_object().unwrap(), [&command[..]], true)
+        .ok()
+        .unwrap();
+    assert_eq!(
+        render(&command, true, &found).ok().unwrap(),
+        "C:\\AB~1\\py.exe hook"
+    );
+    // A POSIX render needs no short name at all.
+    assert!(names_for(&Map::new(), [&command[..]], false)
+        .ok()
+        .unwrap()
+        .is_empty());
+}
+
+#[cfg(not(windows))]
+#[test]
+fn a_windows_render_from_another_host_asks_for_the_missing_names() {
+    let command = argv(&["C:\\a b\\py.exe", "hook"]);
+    assert!(matches!(
+        names_for(&Map::new(), [&command[..]], true),
+        Err(Failure::Reply(reply)) if reply == json!({"shorten": ["C:\\a b\\py.exe"]})
+    ));
+}
+
+#[cfg(windows)]
+#[test]
+fn a_windows_host_names_a_missing_path_itself() {
+    let missing = "C:\\no such guard path\\py.exe";
+    let command = argv(&[missing, "hook"]);
+    let found = names_for(&Map::new(), [&command[..]], true).ok().unwrap();
+    assert_eq!(found.get(missing), Some(&(None, None)));
+    assert!(render(&command, true, &found)
+        .ok()
+        .unwrap()
+        .starts_with("& '"));
+}
