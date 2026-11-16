@@ -9,12 +9,12 @@ from threading import Event
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.adapters.codex_lifecycle_lock import (
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
+from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.codex_lifecycle_lock import (
     codex_configuration_lock,
     codex_lifecycle_locks,
 )
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 
 
 def test_core_publication_transaction_shares_configuration_exclusion(tmp_path):

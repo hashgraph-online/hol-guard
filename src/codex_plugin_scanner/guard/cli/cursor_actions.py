@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 
 from ..adapters.base import HarnessContext
-from ..adapters.codex_install_plan import guard_proxy_server_names
 from ..adapters.cursor import cursor_cli_detected, cursor_cli_shim_installed
+from ..codex_harness_client import guard_proxy_server_names
 from ..store import GuardStore
 
 

@@ -17,10 +17,10 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_hook_launch_runtime as launch_runtime
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
     isolated_daemon_start_command,

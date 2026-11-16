@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_publication_inverse as publication
-from codex_plugin_scanner.guard.adapters.codex import _hook_manifest_spec, codex_native_hook_state
+from codex_plugin_scanner.guard.codex_harness_client import _hook_manifest_spec, codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_recovery import commit_hook_publication, recover_hook_publication
 from codex_plugin_scanner.guard.codex_hook_rollback import rollback_file_identity

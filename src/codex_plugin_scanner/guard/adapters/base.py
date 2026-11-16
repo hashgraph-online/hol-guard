@@ -174,7 +174,7 @@ def _owned_adapter_mutation(method: Callable[..., _MutationResult]) -> Callable[
 
         with ExitStack() as ownership:
             if self.harness == "codex":
-                from .codex_lifecycle_lock import codex_lifecycle_locks
+                from ..codex_lifecycle_lock import codex_lifecycle_locks
 
                 ownership.enter_context(codex_lifecycle_locks(context))
             ownership.enter_context(_home_owner_lock(context.guard_home))

@@ -14,8 +14,10 @@ from collections.abc import Generator, Iterable
 from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .base import HarnessContext
+if TYPE_CHECKING:
+    from .adapters.base import HarnessContext
 
 _TargetOwnerKey = tuple[str, int, int]
 _HELD_TARGETS: ContextVar[dict[_TargetOwnerKey, str] | None] = ContextVar("codex_lifecycle_targets", default=None)
@@ -43,7 +45,7 @@ def _target_lock(
     allow_owned: bool = False,
     wait: bool = False,
 ) -> Generator[None, None, None]:
-    from ..native_transition_files import acquire_lease, lease_held, release_lease
+    from .native_transition_files import acquire_lease, lease_held, release_lease
 
     if wait and deadline is None:
         raise ValueError("Codex lifecycle waiting requires an absolute deadline.")

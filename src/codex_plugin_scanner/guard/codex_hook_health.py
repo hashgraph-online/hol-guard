@@ -13,7 +13,7 @@ from .adapters.base import HarnessContext
 def codex_runtime_hooks_verified(context: HarnessContext) -> bool:
     """Return whether live Codex hooks still intercept Guard's shell boundary."""
 
-    from .adapters.codex import live_hook_ask
+    from .codex_harness_client import live_hook_ask
 
     try:
         answer = live_hook_ask("runtime_hooks_verified", context)

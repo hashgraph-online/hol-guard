@@ -27,7 +27,7 @@
     ["AaBsqHCkkSbnfNaazft-", "variadic", "guard/cli/commands_support_codex_git_config.py", "_git_gitdir_condition_patterns"],
     ["AaBsqHPSkSbnfNaazfvn", "windows", "guard/windows_paths.py", "windows_terminate_process_if_creation_time"],
     ["AaBsqG_EkSbnfNaazfte", "variadic", "guard/runtime/decisions.py", "_approval_scopes_for_action"],
-    ["AaBsqHF1kSbnfNaazfuO", "variadic", "guard/adapters/codex_remote_control.py", "guarded_codex_launch_command_candidates"],
+    ["AaBsqHF1kSbnfNaazfuO", "variadic", "guard/codex_remote_client.py", "guarded_codex_launch_command_candidates"],
     ["AaBsqHMXkSbnfNaazfvf", "lattice", "guard/action_lattice.py", "<module>"],
     ["AaBsqHMXkSbnfNaazfve", "lattice", "guard/action_lattice.py", "<module>"],
     ["AaBsqG74kSbnfNaazftG", "variadic", "guard/runtime/command_rules.py", "PipelineMatcher.match"],

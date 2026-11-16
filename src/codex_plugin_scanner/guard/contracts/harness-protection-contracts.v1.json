@@ -47,7 +47,7 @@
           "known_blind_spots": [
             "A source declaration does not prove that a live Codex process honored a deny response."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/codex.py:_managed_hook_groups"
+          "source_reference": "src/codex_plugin_scanner/guard/codex_harness_client.py:_managed_hook_groups"
         },
         {
           "event": "PreToolUse",
@@ -122,7 +122,7 @@
           "known_blind_spots": [
             "Native approval UX and Guard evidence still require a live host/version check."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/codex.py:_permission_request_hook_group"
+          "source_reference": "src/codex_plugin_scanner/guard/codex_harness_client.py:_permission_request_hook_group"
         },
         {
           "event": "UserPromptSubmit",
@@ -143,7 +143,7 @@
           "known_blind_spots": [
             "Prompt screening does not prove downstream model or host request rewriting."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/codex.py:_prompt_hook_group"
+          "source_reference": "src/codex_plugin_scanner/guard/codex_harness_client.py:_prompt_hook_group"
         },
         {
           "event": "PostToolUse",
@@ -162,7 +162,7 @@
           "known_blind_spots": [
             "Native post-tool observation does not prove model-visible output replacement."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/codex.py:_post_tool_hook_group"
+          "source_reference": "src/codex_plugin_scanner/guard/codex_harness_client.py:_post_tool_hook_group"
         }
       ]
     },

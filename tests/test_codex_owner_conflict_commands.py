@@ -7,10 +7,12 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_config import dump_toml
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
+
+_CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -27,7 +29,7 @@ def test_guard_codex_install_rejects_ambiguous_foreign_direct_hook(tmp_path: Pat
     config_path = CodexHarnessAdapter._hook_config_path(context)
     foreign_command = shlex.join(codex_adapter._current_launch(context)["fallback"])
     foreign_group = {
-        "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
+        "matcher": _CODEX_GUARD_TOOL_MATCHER,
         "hooks": [
             {
                 "type": "command",

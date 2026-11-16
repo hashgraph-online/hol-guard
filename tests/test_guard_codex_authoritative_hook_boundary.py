@@ -15,15 +15,17 @@ import pytest
 import tomllib
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters import codex_install_plan as install_plan
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.codex_config import dump_toml
+from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import codex_plan_segments as segments
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.conftest import guard_commands_module
+
+SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
+SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -57,9 +59,9 @@ def _install_codex(home_dir: Path, workspace_dir: Path, capsys: pytest.CaptureFi
 def _managed_shell_block(body: str) -> str:
     return "\n".join(
         (
-            install_plan.SHELL_GUARD_BEGIN,
+            SHELL_GUARD_BEGIN,
             body,
-            install_plan.SHELL_GUARD_END,
+            SHELL_GUARD_END,
         )
     )
 
@@ -103,8 +105,8 @@ def test_install_migrates_legacy_shell_controls_without_changing_user_bytes(tmp_
 
 
 def test_legacy_shell_cleanup_preserves_crlf_non_utf8_and_unmatched_markers(tmp_path) -> None:
-    begin = install_plan.SHELL_GUARD_BEGIN.encode("ascii")
-    end = install_plan.SHELL_GUARD_END.encode("ascii")
+    begin = SHELL_GUARD_BEGIN.encode("ascii")
+    end = SHELL_GUARD_END.encode("ascii")
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
     context.home_dir.mkdir()
     unterminated = b"KEEP\n" + begin + b"\nunterminated\n"
@@ -160,7 +162,7 @@ def test_codex_launch_fails_closed_when_authoritative_hook_is_tampered(
     workspace_dir = tmp_path / "workspace"
     _install_codex(home_dir, workspace_dir, capsys)
     config_path = home_dir / ".codex" / "config.toml"
-    payload = codex_adapter._read_toml(config_path)
+    payload = read_toml_payload(config_path)
     hooks = payload["hooks"]
     assert isinstance(hooks, dict)
     pre_tool_groups = hooks["PreToolUse"]
@@ -197,7 +199,7 @@ def test_codex_launch_rejects_hook_bound_to_opposite_home_mode(
         home_override_explicit=True,
     )
     config_path = home_dir / ".codex" / "config.toml"
-    payload = codex_adapter._read_toml(config_path)
+    payload = read_toml_payload(config_path)
     hooks = payload["hooks"]
     assert isinstance(hooks, dict)
     pre_tool_groups = hooks["PreToolUse"]

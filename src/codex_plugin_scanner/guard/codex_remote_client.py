@@ -99,7 +99,7 @@ def codex_remote_launch_environment(home_dir: Path) -> dict[str, str]:
 
 
 def _ask(op: str, fields: Mapping[str, object], budget: float | None = None) -> dict[str, Any]:
-    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     try:
         return native_runner_authority("codex_remote_launch", {**fields, "op": op}, timeout_seconds=budget)

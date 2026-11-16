@@ -22,8 +22,8 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, require_high_risk, update_settings
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.native_daemon_manage import _guard_daemon_pid_is_proven_dead
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status

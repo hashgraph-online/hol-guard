@@ -14,12 +14,12 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex_remote_control
+from codex_plugin_scanner.guard import codex_remote_client as codex_remote_control
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.native_harness import NATIVE_HARNESSES, NativeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision

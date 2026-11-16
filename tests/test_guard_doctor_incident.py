@@ -9,9 +9,9 @@ from pathlib import Path
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.cli.commands_router import run_guard_command
 from codex_plugin_scanner.guard.cli.doctor_incident import codex_incident_report, run_codex_incident_export
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 
 

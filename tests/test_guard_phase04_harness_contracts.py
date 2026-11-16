@@ -10,8 +10,6 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
@@ -19,6 +17,7 @@ from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from codex_plugin_scanner.guard.cli.install_commands import list_harness_setup_items
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.store import GuardStore
 
 

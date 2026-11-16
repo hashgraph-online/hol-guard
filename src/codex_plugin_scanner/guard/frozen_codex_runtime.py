@@ -62,9 +62,9 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
     if not force and not is_frozen_guard_runtime():
         return False
 
+    from . import codex_harness_client as codex
     from . import codex_hook_runtime_trust as runtime_trust
     from . import native_caller
-    from .adapters import codex
 
     if bool(getattr(codex, "_HOL_GUARD_FROZEN_CODEX_RUNTIME", False)):
         return True

@@ -10,7 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_hook_file_integrity as integrity
 from codex_plugin_scanner.guard import native_runner_authority
-from codex_plugin_scanner.guard.adapters.codex import _hook_manifest_spec
+from codex_plugin_scanner.guard.codex_harness_client import _hook_manifest_spec
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
@@ -38,7 +38,8 @@ def test_inverse_plan_is_read_only_and_binds_foreign_config_for_review(installed
 import os, sys
 from pathlib import Path
 from codex_plugin_scanner.guard import native_transition_files
-from codex_plugin_scanner.guard.adapters import codex
+from codex_plugin_scanner.guard import codex_harness_client as codex
+from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 home = Path(sys.argv[1])
 context = HarnessContext(home, None, home / '.hol-guard', home_override_explicit=True)
@@ -56,10 +57,10 @@ def exit_after_signed_conflict(op, *args, **kwargs):
         os._exit(17)
 from tests import codex_publication_steps
 codex._publish_hooks = codex_publication_steps.stepwise_publish_hooks
-codex.CodexHarnessAdapter._install_owned = codex_publication_steps.stepwise_install_owned
+codex_lifecycle.CodexHarnessAdapter._install_owned = codex_publication_steps.stepwise_install_owned
 codex_publication_steps.readback = conflict_after_publication
 native_transition_files.publication = exit_after_signed_conflict
-codex.CodexHarnessAdapter().install(context)
+codex_lifecycle.CodexHarnessAdapter().install(context)
 raise RuntimeError('signed conflict boundary was not reached')
 """
         child = subprocess.run(

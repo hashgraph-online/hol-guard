@@ -25,7 +25,7 @@ def test_codex_doctor_keeps_live_bridge_hooks_when_interpreter_is_stale(
 ) -> None:
     context = _context(tmp_path)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.codex._command_available",
+        "codex_plugin_scanner.guard.codex_harness_lifecycle._command_available",
         lambda *_args: True,
     )
     command = "python -I ./codex_daemon_hook_bridge.py '{}'"
@@ -56,7 +56,7 @@ def test_codex_doctor_keeps_live_bridge_hooks_when_interpreter_is_stale(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.codex.codex_native_hook_state",
+        "codex_plugin_scanner.guard.codex_harness_client.codex_native_hook_state",
         fixed_hook_state(verified=False, reason="codex_hook_interpreter_path_mismatch"),
     )
 
@@ -228,7 +228,7 @@ def test_codex_doctor_reports_leftover_hooks_for_an_uninstalled_codex(
 ) -> None:
     context = _context(tmp_path)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.codex._command_available",
+        "codex_plugin_scanner.guard.codex_harness_lifecycle._command_available",
         lambda *_args: False,
     )
     command = "hol-guard guard hook codex"
@@ -251,7 +251,7 @@ def test_codex_doctor_reports_leftover_hooks_for_an_uninstalled_codex(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.codex.codex_native_hook_state",
+        "codex_plugin_scanner.guard.codex_harness_client.codex_native_hook_state",
         fixed_hook_state(verified=True),
     )
 

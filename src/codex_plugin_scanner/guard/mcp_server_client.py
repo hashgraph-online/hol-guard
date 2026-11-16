@@ -310,7 +310,7 @@ def _text(value: object) -> str:
 def is_guard_proxy_command(command: str | None, args: tuple[str, ...]) -> bool:
     """Whether the launch is a Guard MCP proxy, as the native runtime reads it."""
 
-    from .adapters.codex_install_plan import guard_proxy_server_names
+    from .codex_harness_client import guard_proxy_server_names
 
     return bool(guard_proxy_server_names({"launch": {"command": command, "args": list(args)}}))
 

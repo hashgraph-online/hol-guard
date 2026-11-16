@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_harness_client as adapter_module
 from codex_plugin_scanner.guard import codex_hook_rollback as rollback
-from codex_plugin_scanner.guard.adapters import codex as adapter_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path, hook_secret_path
+from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_text, hook_manifest_path, hook_secret_path
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 from tests import codex_hook_publication_helpers as publication_helpers
 from tests import codex_publication_steps as publication_steps
@@ -56,7 +56,7 @@ def test_config_edit_during_failed_write_survives_rollback(
             hook_secret_path(context.guard_home),
         ):
             transaction_files[participant] = participant.read_bytes()
-        adapter_module.atomic_write_text(config_path, concurrent_text, mode=0o600)
+        atomic_write_text(config_path, concurrent_text, mode=0o600)
 
     _interrupt_config_write(monkeypatch, config_path, concurrent_edit)
     with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
@@ -167,7 +167,7 @@ def test_matching_replacement_is_not_owned_by_the_failed_transaction(
     def matching_replacement(rendered: bytes) -> None:
         nonlocal replacement, replacement_identity
         replacement = rendered
-        adapter_module.atomic_write_text(config_path, rendered.decode("utf-8"), mode=0o600)
+        atomic_write_text(config_path, rendered.decode("utf-8"), mode=0o600)
         replacement_identity = config_path.stat().st_ino
 
     _interrupt_config_write(monkeypatch, config_path, matching_replacement)
@@ -195,7 +195,7 @@ def test_matching_replacement_after_completed_write_is_preserved(
         nonlocal replacement, replacement_identity
         replacement = config_path.read_bytes()
         previous_identity = config_path.stat().st_ino
-        adapter_module.atomic_write_text(config_path, replacement.decode("utf-8"), mode=0o600)
+        atomic_write_text(config_path, replacement.decode("utf-8"), mode=0o600)
         replacement_identity = config_path.stat().st_ino
         assert replacement_identity != previous_identity
         raise OSError("injected readback failure after a matching external replacement")

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex as adapter
-from codex_plugin_scanner.guard.adapters import codex_install_plan as install_plan
+from codex_plugin_scanner.guard import codex_harness_client as adapter
+from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
 from codex_plugin_scanner.guard.codex_hook_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
@@ -16,10 +16,13 @@ from .test_codex_publication_preparation import _context, _tree
 from .test_frozen_codex_runtime import frozen_codex_contract  # noqa: F401 -- shared pytest fixture
 from .test_runtime_transition import begin, transition  # noqa: F401 -- shared pytest fixture
 
+SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
+SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
+
 
 def _sources(tmp_path, monkeypatch):
     context = replace(_context(tmp_path, monkeypatch), workspace_dir=tmp_path / "workspace")
-    harness = adapter.CodexHarnessAdapter()
+    harness = adapter_lifecycle.CodexHarnessAdapter()
     harness.install(context)
     global_config = harness._target_config_path(context)
     global_config.write_text(
@@ -42,11 +45,7 @@ def _sources(tmp_path, monkeypatch):
             )
         )
     context.home_dir.joinpath(".zshenv").write_bytes(
-        b"\xffKEEP\n\n"
-        + install_plan.SHELL_GUARD_BEGIN.encode()
-        + b"\nlegacy\n"
-        + install_plan.SHELL_GUARD_END.encode()
-        + b"\nAFTER\xfe\n"
+        b"\xffKEEP\n\n" + SHELL_GUARD_BEGIN.encode() + b"\nlegacy\n" + SHELL_GUARD_END.encode() + b"\nAFTER\xfe\n"
     )
     guard = context.guard_home / "managed/codex/codex-zshenv-guard.zsh"
     guard.write_bytes(b"legacy guard script")
@@ -116,7 +115,7 @@ def test_preparation_refuses_missing_authority_without_enrollment(tmp_path, monk
     context = _context(tmp_path, monkeypatch)
     before = _tree(tmp_path)
     with pytest.raises(CodexHookIntegrityError):
-        adapter.CodexHarnessAdapter().prepare_install(context)
+        adapter_lifecycle.CodexHarnessAdapter().prepare_install(context)
     assert _tree(tmp_path) == before
 
 
@@ -127,7 +126,7 @@ def test_frozen_preparation_pins_shared_executable_once_with_invocation(tmp_path
     executable.chmod(0o700)
     monkeypatch.setattr(adapter.sys, "executable", str(executable))
     context = _context(tmp_path, monkeypatch)
-    harness = adapter.CodexHarnessAdapter()
+    harness = adapter_lifecycle.CodexHarnessAdapter()
     harness.install(context)
     before = _tree(tmp_path)
     prepared = harness.prepare_install(context)

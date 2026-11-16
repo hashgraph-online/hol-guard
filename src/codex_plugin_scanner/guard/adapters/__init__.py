@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 # ``(module, class)`` for a Python adapter; ``(".native_harness", harness)``
 # for one the native ``harness_adapter`` kind answers.
 _ADAPTER_SPECS: tuple[tuple[str, str], ...] = (
-    (".codex", "CodexHarnessAdapter"),
+    ("codex_plugin_scanner.guard.codex_harness_lifecycle", "CodexHarnessAdapter"),
     (".claude_code", "ClaudeCodeHarnessAdapter"),
     (".native_harness", "copilot"),
     (".cursor", "CursorHarnessAdapter"),

@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_harness_client as adapter
+from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
 from codex_plugin_scanner.guard import codex_hook_manifest as manifests
 from codex_plugin_scanner.guard import native_transition_files as transition_files
-from codex_plugin_scanner.guard.adapters import codex as adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
@@ -58,7 +59,7 @@ def test_preparation_missing_authority_never_enrolls(tmp_path, monkeypatch):
 
 def test_enrolled_pair_preparation_preserves_files_and_authority(tmp_path, monkeypatch):
     context = _context(tmp_path, monkeypatch)
-    adapter.CodexHarnessAdapter().install(context)
+    adapter_lifecycle.CodexHarnessAdapter().install(context)
     spec = adapter._hook_manifest_spec(context)
     baseline = manifests.load_hook_manifest_baseline(spec)
     before = _tree(tmp_path)
@@ -76,7 +77,7 @@ def test_enrolled_pair_preparation_preserves_files_and_authority(tmp_path, monke
 
 def test_preparation_does_not_repair_unsafe_authority_directory(tmp_path, monkeypatch):
     context = _context(tmp_path, monkeypatch)
-    adapter.CodexHarnessAdapter().install(context)
+    adapter_lifecycle.CodexHarnessAdapter().install(context)
     spec = adapter._hook_manifest_spec(context)
     baseline = manifests.load_hook_manifest_baseline(spec)
     hook_secret_path(context.guard_home).parent.chmod(0o755)
@@ -88,7 +89,7 @@ def test_preparation_does_not_repair_unsafe_authority_directory(tmp_path, monkey
 
 def test_foreign_config_during_identity_capture_is_preserved(tmp_path, monkeypatch):
     context = _context(tmp_path, monkeypatch)
-    adapter.CodexHarnessAdapter().install(context)
+    adapter_lifecycle.CodexHarnessAdapter().install(context)
     spec = adapter._hook_manifest_spec(context)
     baseline = manifests.load_hook_manifest_baseline(spec)
     real_publication = transition_files.publication
@@ -108,7 +109,7 @@ def test_foreign_config_during_identity_capture_is_preserved(tmp_path, monkeypat
 
 def test_missing_manifest_rebind_cannot_enroll_with_existing_key(tmp_path, monkeypatch):
     context = _context(tmp_path, monkeypatch)
-    adapter.CodexHarnessAdapter().install(context)
+    adapter_lifecycle.CodexHarnessAdapter().install(context)
     spec = adapter._hook_manifest_spec(context)
     from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 
@@ -121,7 +122,7 @@ def test_missing_manifest_rebind_cannot_enroll_with_existing_key(tmp_path, monke
 
 def test_foreign_key_during_identity_capture_is_preserved(tmp_path, monkeypatch):
     context = _context(tmp_path, monkeypatch)
-    adapter.CodexHarnessAdapter().install(context)
+    adapter_lifecycle.CodexHarnessAdapter().install(context)
     spec = adapter._hook_manifest_spec(context)
     baseline = manifests.load_hook_manifest_baseline(spec)
     config_before = spec.config_path.read_bytes()

@@ -14,11 +14,12 @@ from types import ModuleType
 import pytest
 
 from codex_plugin_scanner.cli import _build_parser
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_hook_runtime_trust, frozen_codex_runtime, native_caller
 from codex_plugin_scanner.guard import native_daemon_manage as daemon_api
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.codex_config import read_toml_payload
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.frozen_runtime_commands import (
     frozen_daemon_recovery_command,
     frozen_daemon_serve_command,
@@ -300,7 +301,7 @@ def test_frozen_codex_install_and_runtime_trust_validate_without_source_files(
     assert state["protection_active"] is True
     assert state["integrity_status"] == "valid"
 
-    config_payload = codex_adapter._read_toml(codex_config)
+    config_payload = read_toml_payload(codex_config)
     hooks = config_payload["hooks"]
     pre_tool_group = hooks["PreToolUse"][-1]
     handler = pre_tool_group["hooks"][0]
@@ -338,7 +339,7 @@ def test_frozen_codex_hook_runs_behind_the_durable_native_bridge(
     CodexHarnessAdapter().install(context)
 
     assert codex_adapter.codex_native_hook_state(context)["integrity_status"] == "valid"
-    handler = codex_adapter._read_toml(codex_config)["hooks"]["PreToolUse"][-1]["hooks"][0]
+    handler = read_toml_payload(codex_config)["hooks"]["PreToolUse"][-1]["hooks"][0]
     bridge_argv = shlex.split(handler["command"])
     invocation = str(Path(sys.executable).resolve(strict=True))
     assert bridge_argv[:2] == [str(runtime), "codex-hook-bridge"]
@@ -430,7 +431,7 @@ def test_frozen_runtime_trust_rejects_bridge_command_tampering(
     codex_config.write_text("[features]\ncodex_hooks = true\n", encoding="utf-8")
     CodexHarnessAdapter().install(context)
 
-    config_payload = codex_adapter._read_toml(codex_config)
+    config_payload = read_toml_payload(codex_config)
     handler = config_payload["hooks"]["PreToolUse"][-1]["hooks"][0]
     bridge_argv = shlex.split(handler["command"])
     bridge_config_json = bridge_argv[2]

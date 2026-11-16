@@ -8,7 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard import runtime_transition_codex_observer as observer
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction

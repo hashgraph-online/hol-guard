@@ -9,8 +9,8 @@ from pathlib import Path
 
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
-from ..adapters.codex import _hook_manifest_spec
 from ..approval_gate import ApprovalGateError, public_config, require_high_risk
+from ..codex_harness_client import _hook_manifest_spec
 from ..codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline
 from ..codex_hook_manifest import (
     CODEX_AUTHORITY_REPAIR_ACTION,

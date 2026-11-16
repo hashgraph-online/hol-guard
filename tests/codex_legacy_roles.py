@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 
 
 @contextmanager

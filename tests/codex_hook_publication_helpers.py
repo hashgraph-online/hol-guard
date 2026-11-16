@@ -14,7 +14,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from codex_plugin_scanner.guard.adapters import codex as adapter
+from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_config import _Wire, dump_toml
 from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, hook_secret_path

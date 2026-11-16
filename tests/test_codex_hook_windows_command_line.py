@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_bridge_runtime import decode_bridge_config_argument
 from codex_plugin_scanner.guard.codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS

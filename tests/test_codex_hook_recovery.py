@@ -11,7 +11,8 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_hook_integrity, codex_hook_recovery
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter, codex_native_hook_state
+from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import (
     canonical_manifest_bytes,
@@ -31,7 +32,8 @@ CRASHING_INSTALLER = (
     + r"""
 import os, sys
 from pathlib import Path
-from codex_plugin_scanner.guard.adapters import codex
+from codex_plugin_scanner.guard import codex_harness_client as codex
+from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 home = Path(sys.argv[1])
 phase = sys.argv[2]
@@ -40,7 +42,7 @@ if phase == "commit_cleanup":
     from codex_plugin_scanner.guard import codex_hook_recovery
     _stepwise_publication()
     codex_hook_recovery._remove_record = lambda *_: os._exit(17)
-    codex.CodexHarnessAdapter().install(context)
+    codex_lifecycle.CodexHarnessAdapter().install(context)
     raise RuntimeError("commit cleanup was not reached")
 if phase == "manifest":
     from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
@@ -62,7 +64,7 @@ else:
         original(*args, **kwargs)
         os._exit(17)
     setattr(owner, name, crash_after)
-codex.CodexHarnessAdapter().install(context)
+codex_lifecycle.CodexHarnessAdapter().install(context)
 raise RuntimeError("crash boundary was not reached")
 """
 )
@@ -72,7 +74,8 @@ UNRECORDED_CONFIG_INSTALLER = (
     + r"""
 import os, sys
 from pathlib import Path
-from codex_plugin_scanner.guard.adapters import codex
+from codex_plugin_scanner.guard import codex_harness_client as codex
+from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 home = Path(sys.argv[1])
 context = HarnessContext(home_dir=home, guard_home=home / '.hol-guard', workspace_dir=None)
@@ -86,7 +89,7 @@ def publish_without_record(change, generation):
     if generation == 'after' and str(change['path']).endswith('config.toml'):
         os._exit(17)
 RuntimeTransition._write_file = staticmethod(publish_without_record)
-codex.CodexHarnessAdapter().install(context)
+codex_lifecycle.CodexHarnessAdapter().install(context)
 raise RuntimeError('unrecorded publication boundary was not reached')
 """
 )
@@ -167,7 +170,8 @@ def test_live_conflict_preserves_every_participant_after_process_exit(installed,
 import hashlib, json, os, sys
 from pathlib import Path
 from codex_plugin_scanner.guard import codex_hook_recovery as recovery
-from codex_plugin_scanner.guard.adapters import codex
+from codex_plugin_scanner.guard import codex_harness_client as codex
+from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 home, substitution = Path(sys.argv[1]), sys.argv[2]
@@ -212,7 +216,7 @@ def crash_after_conflict_record(op, *args, **kwargs):
         os._exit(17)
 native_transition_files.publication = crash_after_conflict_record
 context = HarnessContext(home_dir=home, guard_home=home / '.hol-guard', workspace_dir=None)
-codex.CodexHarnessAdapter().install(context)
+codex_lifecycle.CodexHarnessAdapter().install(context)
 raise RuntimeError('conflict record boundary was not reached')
 """
     )

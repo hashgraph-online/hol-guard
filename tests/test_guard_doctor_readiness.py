@@ -12,10 +12,10 @@ from rich.console import Console
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import list_adapters
 from codex_plugin_scanner.guard.adapters.base import _run_command_probe
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.diagnostic_probes import without_command_probes
 from codex_plugin_scanner.guard.cli.doctor_readiness import doctor_runtime_readiness
 from codex_plugin_scanner.guard.cli.render import _render_doctor, emit_guard_payload
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from tests.codex_hook_state_support import fixed_hook_state
 
 
@@ -261,9 +261,9 @@ def test_global_doctor_validates_registration_without_executable_probes(tmp_path
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda *_args: True)
+    monkeypatch.setattr("codex_plugin_scanner.guard.codex_harness_lifecycle._command_available", lambda *_args: True)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.codex.codex_native_hook_state",
+        "codex_plugin_scanner.guard.codex_harness_client.codex_native_hook_state",
         fixed_hook_state(verified=False, reason="codex_hook_interpreter_path_mismatch"),
     )
     rc = main(
