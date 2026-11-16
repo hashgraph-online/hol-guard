@@ -107,7 +107,32 @@ fn caller(frozen: bool) -> Value {
         "cli_executable": "/py",
         "package_root": "/opt/guard/site",
         "version": "0.0.0",
+        "native_runtime": {
+            "path": "/g/hol-guard-runtime",
+            "size": 3,
+            "sha256": "0".repeat(64),
+            "features": ["codex-hook-bridge-v1"],
+        },
     })
+}
+
+/// A frozen `caller` whose native runtime is a real three-byte file, so the
+/// durable copy under the Guard home can be published. Returns the stamp and
+/// the copy's path.
+fn frozen_with_runtime(home: &Home) -> (Value, String) {
+    let runtime = home.root.join("bundle").join("hol-guard-runtime");
+    fs::create_dir_all(runtime.parent().unwrap()).unwrap();
+    fs::write(&runtime, b"abc").unwrap();
+    let sha = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    let mut stamp = caller(true);
+    stamp["native_runtime"] =
+        json!({"path": runtime, "size": 3, "sha256": sha, "features": ["codex-hook-bridge-v1"]});
+    let copy = home
+        .guard()
+        .join("native-runtime")
+        .join(sha)
+        .join("hol-guard-runtime");
+    (stamp, copy.to_string_lossy().into_owned())
 }
 
 fn shim() -> String {

@@ -49,8 +49,7 @@ fn argv_fields(home: &Home, frozen: bool) -> Value {
         "home_is_current": false,
         "runtime_guard_home": home.guard(),
         "workspace_explicit": false,
-        "caller": super::caller(frozen),
-        "native_bridge": "/g/hol-guard-runtime",
+        "caller": if frozen { super::frozen_with_runtime(home).0 } else { super::caller(false) },
         "manifest_path": "/g/manifest.json",
         "long_timeout": 85,
     })
@@ -99,7 +98,7 @@ fn argv_without_a_native_runtime_asks_for_repair() {
     let home = Home::new();
     for frozen in [false, true] {
         let mut fields = argv_fields(&home, frozen);
-        fields.as_object_mut().unwrap().remove("native_bridge");
+        fields["caller"]["native_runtime"] = Value::Null;
         let answer = ask(&home, "argv", fields);
         assert_eq!(
             answer["runtime_error"],
@@ -112,11 +111,11 @@ fn argv_without_a_native_runtime_asks_for_repair() {
 fn a_frozen_guard_is_its_own_interpreter_for_every_launch() {
     let home = Home::new();
     let answer = ask(&home, "argv", argv_fields(&home, true));
+    let (_, copy) = super::frozen_with_runtime(&home);
     let argv = answer["argv"].as_array().unwrap();
-    assert_eq!(
-        argv[..2],
-        [json!("/g/hol-guard-runtime"), json!("codex-hook-bridge")]
-    );
+    // A frozen Guard's bundled runtime vanishes with its process, so the
+    // hook names the durable copy under the Guard home.
+    assert_eq!(argv[..2], [json!(copy), json!("codex-hook-bridge")]);
     assert_eq!(argv.len(), 3);
     let fallback = answer["fallback"].as_array().unwrap();
     assert_eq!(
@@ -345,21 +344,18 @@ fn alternate_cleanup_drops_guard_entries_and_the_idle_hook_feature() {
 }
 
 #[test]
-fn managed_mcp_asks_for_each_proxy_launch_then_rewrites_it() {
+fn managed_mcp_rewrites_each_proxy_to_the_callers_launch() {
     let home = Home::new();
     let payload =
         json!({"mcp_servers": {"p": {"command": "/old/python", "args": PROXY_ARGS}}}).to_string();
     let fields =
         json!({"payload": payload, "servers": [{"name": "new", "entry": "{\"command\":\"x\"}"}]});
-    let reply = ask(&home, "managed_mcp", fields.clone());
-    assert_eq!(reply["reply"]["relaunch"]["p"], json!(PROXY_ARGS));
-
-    let mut answered = fields;
-    answered["relaunch"] = json!({"p": ["/new/python", PROXY_ARGS]});
-    let answer = ask(&home, "managed_mcp", answered);
+    let answer = ask(&home, "managed_mcp", fields);
     assert_eq!(answer["migrated"], json!(["p"]));
     let rendered: Value = serde_json::from_str(answer["rendered"].as_str().unwrap()).unwrap();
-    assert_eq!(rendered["mcp_servers"]["p"]["command"], "/new/python");
+    // The stamp's runtime cannot relay, so the proxy keeps its Python launch.
+    assert_eq!(rendered["mcp_servers"]["p"]["command"], "/py");
+    assert_eq!(rendered["mcp_servers"]["p"]["args"], json!(PROXY_ARGS));
     assert_eq!(rendered["mcp_servers"]["new"], json!({"command": "x"}));
 }
 

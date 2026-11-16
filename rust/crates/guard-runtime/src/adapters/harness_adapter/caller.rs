@@ -10,7 +10,7 @@ use super::{Ctx, Failure, Step};
 
 /// The variables a managed launcher pins from the installer's environment
 /// (`_LAUNCHER_BINDING_ENV_VARS`).
-const LAUNCHER_BINDING_ENV: [&str; 4] = [
+pub(super) const LAUNCHER_BINDING_ENV: [&str; 4] = [
     "HOL_GUARD_NATIVE",
     "HOL_GUARD_NATIVE_BINARY",
     "HOL_GUARD_NATIVE_DIAGNOSTIC",

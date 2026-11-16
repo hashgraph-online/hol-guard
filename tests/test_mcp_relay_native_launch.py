@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter
+from codex_plugin_scanner.guard import native_caller
 from codex_plugin_scanner.guard.adapters import hermes as hermes_adapter
 from codex_plugin_scanner.guard.adapters import mcp_relay_native, mcp_servers, native_hook_bridge
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -80,6 +80,12 @@ def advertised(monkeypatch: pytest.MonkeyPatch) -> set[str]:
         native_hook_bridge,
         "native_hook_bridge_executable",
         lambda feature, *, guard_home=None: _RUNTIME if feature in features else None,
+    )
+    # The native side reads the same runtime from the caller stamp.
+    monkeypatch.setattr(
+        native_caller,
+        "_native_runtime",
+        lambda: {"path": str(_RUNTIME), "size": 0, "sha256": "0" * 64, "features": sorted(features)},
     )
     return features
 
@@ -226,15 +232,6 @@ def test_hermes_stdio_servers_launch_through_the_native_relay_when_advertised(
     assert isinstance(args, list)
     assert args[:2] == [NATIVE_MCP_RELAY_COMMAND, sys.executable]
     assert args[2:] == python_entry["args"]
-
-
-def test_refresh_moves_entries_between_launchers(tmp_path: Path, advertised: set[str]) -> None:
-    args = _python_args(tmp_path, "cursor-mcp-proxy", "cursor")
-    stale_native = {"command": "/old/runtime", "args": [NATIVE_MCP_RELAY_COMMAND, "/old/python", *args]}
-    assert cursor_adapter._relaunch(stale_native["args"]) == [sys.executable, args]  # pyright: ignore[reportPrivateUsage]
-    advertised.add(NATIVE_MCP_RELAY_FEATURE)
-    refreshed = cursor_adapter._relaunch(args)  # pyright: ignore[reportPrivateUsage]
-    assert refreshed == [str(_RUNTIME), [NATIVE_MCP_RELAY_COMMAND, sys.executable, *args]]
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the Guard proxy recognition needs the resident runtime")

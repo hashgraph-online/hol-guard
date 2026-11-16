@@ -18,7 +18,6 @@ from codex_plugin_scanner.guard.adapters.codex import (
     CodexHarnessAdapter,
     _codex,
     _legacy_fields,
-    _relaunch,
     _reply_text,
     _runtime_guard_home,
 )
@@ -95,8 +94,6 @@ def render_codex_managed_mcp(
         ],
     }
     answer = _codex("managed_mcp", context, **fields)
-    if set(answer) == {"reply"}:
-        answer = _codex("managed_mcp", context, **fields, relaunch=_relaunch(answer["reply"]["relaunch"]))
     rendered = wire.decode(_reply_text(answer, "rendered"))
     return rendered, tuple(str(name) for name in answer["migrated"])
 

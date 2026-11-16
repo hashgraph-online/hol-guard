@@ -11,17 +11,21 @@ fn launch(home: &Home, explicit: bool) -> Value {
         "home_is_current": false,
         "runtime_guard_home": home.guard(),
         "workspace_explicit": explicit,
-        "native_bridge": "/g/hol-guard-runtime",
         "manifest_path": "/g/manifest.json",
         "long_timeout": 85,
     })
 }
 
 fn spec_of(home: &Home, frozen: bool) -> Value {
+    let stamp = if frozen {
+        super::super::frozen_with_runtime(home).0
+    } else {
+        caller(false)
+    };
     let answer = home.ask(
         "codex",
         "manifest_spec",
-        json!({ "launch": launch(home, false), "caller": caller(frozen) }),
+        json!({ "launch": launch(home, false), "caller": stamp }),
     );
     answer["spec"].clone()
 }
@@ -88,8 +92,7 @@ fn the_spec_carries_the_launch_commands_and_every_event_binding() {
             "home_is_current": false,
             "runtime_guard_home": home.guard(),
             "workspace_explicit": false,
-            "native_bridge": "/g/hol-guard-runtime",
-            "manifest_path": "/g/manifest.json",
+                "manifest_path": "/g/manifest.json",
             "long_timeout": 85,
             "caller": caller(false),
         }),

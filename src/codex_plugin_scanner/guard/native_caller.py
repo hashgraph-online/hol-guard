@@ -32,6 +32,23 @@ def hook_python() -> str:
     return str(executable.absolute())
 
 
+def _native_runtime() -> dict[str, object] | None:
+    """The validated native runtime the native side launches hooks and MCP
+    relays through: its path, size, digest and features, or None."""
+    from .native_runtime import native_runtime_status
+
+    status = native_runtime_status()
+    identity = status.identity
+    if not status.available or not status.compatible or identity is None or status.capabilities is None:
+        return None
+    return {
+        "path": str(identity.path),
+        "size": identity.size,
+        "sha256": identity.sha256,
+        "features": sorted(status.capabilities.features),
+    }
+
+
 def caller_identity() -> dict[str, object]:
     """This process's interpreter, frozen state, launchers, package root and version."""
     from ..version import __version__
@@ -59,4 +76,5 @@ def caller_identity() -> dict[str, object]:
         "cli_executable": prune_safe_cli_executable(absolute) if frozen else absolute,
         "package_root": str(Path(__file__).resolve().parents[2]),
         "version": __version__,
+        "native_runtime": _native_runtime(),
     }

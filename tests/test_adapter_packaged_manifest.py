@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
     hook_manifest_path,
     load_authenticated_hook_manifest_path,
 )
+from tests.native_runtime_stamp import stamp_native_runtime
 
 
 def test_codex_manifest_files_name_the_native_runtime_the_hook_runs(
@@ -23,7 +24,7 @@ def test_codex_manifest_files_name_the_native_runtime_the_hook_runs(
     context = HarnessContext(
         home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=None, home_override_explicit=True
     )
-    monkeypatch.setattr(codex, "_native_bridge_executable", lambda _home: runtime)
+    stamp_native_runtime(monkeypatch, runtime)
     files = dict(codex._hook_manifest_spec(context).packaged_file_paths)
     assert files["bridge"] == runtime.resolve()
     assert "bridge_resume" not in files

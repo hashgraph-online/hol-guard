@@ -35,6 +35,7 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
 )
 from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from tests import codex_hook_publication_helpers as publication_helpers
+from tests.native_runtime_stamp import stamp_native_runtime
 from tests.transition_fault_support import interrupt_publication_at
 
 
@@ -470,7 +471,7 @@ def test_guard_codex_native_hook_state_detects_bridge_content_mode_and_symlink_c
     bridge_path.parent.mkdir(parents=True)
     bridge_path.write_bytes(b"#!/bin/sh\nexit 0\n")
     bridge_path.chmod(0o644)
-    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda _guard_home: bridge_path)
+    stamp_native_runtime(monkeypatch, bridge_path)
     adapter = CodexHarnessAdapter()
     adapter.install(context)
 
@@ -509,7 +510,7 @@ def test_guard_codex_repair_refuses_to_authenticate_changed_same_version_bridge(
     bridge_path.parent.mkdir(parents=True)
     bridge_path.write_bytes(b"#!/bin/sh\nexit 0\n")
     bridge_path.chmod(0o644)
-    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda _guard_home: bridge_path)
+    stamp_native_runtime(monkeypatch, bridge_path)
     adapter = CodexHarnessAdapter()
     adapter.install(context)
     valid_state = codex_adapter.codex_native_hook_state(context)

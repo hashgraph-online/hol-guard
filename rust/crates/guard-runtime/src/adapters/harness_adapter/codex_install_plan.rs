@@ -399,10 +399,7 @@ fn plan(ctx: &Ctx, transitions: &mut Transitions<'_>) -> Planned<Value> {
         })
         .collect();
     mcp.insert("servers".into(), json!(wired));
-    if let Some(relaunch) = fields.get("relaunch") {
-        mcp.insert("relaunch".into(), relaunch.clone());
-    }
-    let managed = managed_mcp(&mcp)?;
+    let managed = managed_mcp(ctx, &mcp)?;
     let migrated = managed.get("migrated").cloned().ok_or(Failure::Invalid)?;
 
     // Every alternate config is planned before the generation, so a reply

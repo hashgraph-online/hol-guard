@@ -81,7 +81,7 @@ pub(super) fn dispatch(
         "alternate_plan" => codex_alternate_plan::alternate_plan(ctx, fields),
         "alternate_change" => codex_alternate_plan::alternate_change(ctx, fields),
         "main_plan" => codex_main_plan::main_plan(ctx, fields),
-        "managed_mcp" => codex_servers::managed_mcp(fields),
+        "managed_mcp" => codex_servers::managed_mcp(ctx, fields),
         "check_sources" => codex_sources::check_sources(fields),
         "uninstall_restore" => codex_uninstall::uninstall_restore(fields),
         "uninstall_config" => codex_uninstall_config::uninstall_config(ctx, fields),
@@ -206,6 +206,9 @@ fn int(value: i64) -> PyVal {
 /// A frozen Guard (`frozen`) is its own interpreter: the fallback drops the
 /// `-c` bootstrap and the start command is its private recovery argument.
 /// The handler itself is always the native runtime's `codex-hook-bridge`.
+/// `NATIVE_CODEX_HOOK_FEATURE`: a runtime that can answer Codex hooks.
+const NATIVE_HOOK_FEATURE: &str = "codex-hook-bridge-v1";
+
 pub(super) fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let home_is_current = flag(fields, "home_is_current")?;
     let runtime_home = PathBuf::from(text(fields, "runtime_guard_home")?);
@@ -228,7 +231,9 @@ pub(super) fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     }
     // Every hook runs in the native runtime. Without one there is nothing
     // to review hooks with, so the install asks for a repair instead.
-    let Some(native) = fields.get("native_bridge").and_then(Value::as_str) else {
+    let Some(native) =
+        super::proxy_launch::bridge(ctx, NATIVE_HOOK_FEATURE, Some(runtime_home.as_path()))?
+    else {
         return Err(Failure::Runtime(
             super::claude_argv::RUNTIME_MISSING.to_owned(),
         ));

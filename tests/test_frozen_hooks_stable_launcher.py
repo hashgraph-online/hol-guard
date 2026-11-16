@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import stable_guard_cli
-from codex_plugin_scanner.guard.adapters import claude_code, cline_runtime, cursor, hermes
+from codex_plugin_scanner.guard.adapters import claude_code, cline_runtime, hermes
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.hook_python import guard_cli_command
 from codex_plugin_scanner.guard.adapters.mcp_relay_native import mcp_proxy_launch
@@ -96,15 +96,13 @@ def _hermes_launch_command(context: HarnessContext) -> object:
 
 
 def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_core: tuple[Path, str]) -> None:
-    executable, launcher = versioned_core
+    _, launcher = versioned_core
     context = _context(tmp_path)
     server = _server(tmp_path)
     python_args = proxy_cli_args(proxy_command="cursor-mcp-proxy", guard_home=str(context.guard_home), server=server)
-    stale: dict[str, object] = {"command": str(executable), "args": python_args}
 
     commands = [
         proxy_launcher_entry(proxy_command="cursor-mcp-proxy", context=context, server=server)["command"],
-        cursor._relaunch(stale["args"])[0],  # pyright: ignore[reportPrivateUsage]
         mcp_proxy_launch(stable_guard_cli.guard_cli_launcher(), list(python_args))[0],
         cline_runtime.proxy_entry(context, server)["command"],
         _hermes_launch_command(context),

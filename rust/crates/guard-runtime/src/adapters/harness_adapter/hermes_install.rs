@@ -264,7 +264,7 @@ pub(super) fn prepare(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> St
     }
     let (manifest_empty, verified, ordered) = existing_manifest(ctx, &manifest_path);
     let state = install_state(ctx, manifest_empty, &overlay_path, &pretool_path)?;
-    let overlay = hermes_config::overlay(ctx, fields, &sources)?;
+    let overlay = hermes_config::overlay(ctx, &sources)?;
     let identity = cloud_identity::hints(ctx, spec.harness);
     let mut pretool = Doc::default();
     pretool

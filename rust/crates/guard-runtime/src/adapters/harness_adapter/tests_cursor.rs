@@ -62,12 +62,6 @@ fn run(home: &Home, op: &str, bridge: Value) -> KindResult {
                 }
                 Value::Object(names)
             }
-            "relaunch" => json!(value
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|args| json!([args, ["/g/bin/hol-guard", args]]))
-                .collect::<Vec<_>>()),
             "servers" => json!(
                 json!({"detect": value, "managed": [], "skipped": [], "observed": []}).to_string()
             ),

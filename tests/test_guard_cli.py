@@ -46,6 +46,7 @@ from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import codex_hook_publication_helpers as publication_helpers
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.native_runtime_stamp import stamp_native_runtime
 from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.support.network import stub_authenticated_urlopen
@@ -4543,7 +4544,7 @@ args = ["workspace-skill.js", "--changed"]
         original_bridge = b"#!/bin/sh\nexit 0\n"
         bridge_path.write_bytes(original_bridge)
         bridge_path.chmod(0o644)
-        monkeypatch.setattr(codex_adapter_module, "_native_bridge_executable", lambda _guard_home: bridge_path)
+        stamp_native_runtime(monkeypatch, bridge_path)
         assert main(["guard", "install", "codex", "--home", str(home_dir), "--json"]) == 0
         json.loads(capsys.readouterr().out)
         context = HarnessContext(home_dir=home_dir, workspace_dir=Path.cwd(), guard_home=home_dir)

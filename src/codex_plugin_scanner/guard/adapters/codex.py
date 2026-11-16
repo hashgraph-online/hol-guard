@@ -27,7 +27,7 @@ from ..aibom_detection import (
 )
 from ..codex_config import read_toml_payload
 from ..codex_hook_command_line import short_path_facts
-from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
+from ..codex_hook_compatibility import python_bridge_argv
 from ..codex_hook_integrity import (
     atomic_write_text,
     hook_authority_receipt_path,
@@ -59,7 +59,6 @@ from ..codex_hook_trust import apply_codex_hook_trust_doctor
 from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
 from ..models import HarnessDetection
-from ..native_caller import hook_python
 from ..native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
 from ..native_path_anchor import anchor_to_process_directory
 from ..shims import shim_interpreter
@@ -71,7 +70,6 @@ from .codex_remote_control import (
     guarded_codex_launch_command_candidates,
     guarded_codex_launch_command_from_prefix,
 )
-from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (
     ManagedMcpServer,
     managed_stdio_servers,
@@ -79,7 +77,6 @@ from .mcp_servers import (
     skipped_stdio_server_names,
 )
 from .native_harness import NativeHarnessAdapter, ask
-from .native_hook_bridge import native_hook_bridge_executable
 
 if TYPE_CHECKING:
     from ..codex_hook_manifest import PreparedCodexHookPublication
@@ -167,26 +164,18 @@ def _runtime_guard_home(context: HarnessContext, *, home_is_current: bool | None
     return guard_home.resolve(strict=False)
 
 
-def _native_bridge_executable(guard_home: Path) -> Path | None:
-    return native_hook_bridge_executable(NATIVE_CODEX_HOOK_FEATURE, guard_home=guard_home)
-
-
 def _launch_fields(context: HarnessContext, *, home_is_current: bool | None = None) -> dict[str, object]:
     """What the runtime cannot see of this launch: the home mode and Guard home,
-    the native runtime and the hook's manifest path and timeout. It derives
-    the argv, the interpreter, the package paths and the manifest spec from
+    and the hook's manifest path and timeout. It derives the argv, the native
+    runtime, the interpreter, the package paths and the manifest spec from
     these and the caller stamp."""
 
     current = _home_is_current(context) if home_is_current is None else home_is_current
     guard_home = _runtime_guard_home(context, home_is_current=current)
-    # The native runtime answers each hook from the daemon without starting
-    # Python. Without one, the adapter refuses and asks for repair.
-    native_bridge = _native_bridge_executable(guard_home)
     return {
         "home_is_current": current,
         "runtime_guard_home": str(guard_home),
         "workspace_explicit": context.workspace_override_explicit,
-        "native_bridge": None if native_bridge is None else str(native_bridge),
         "manifest_path": str(hook_manifest_path(guard_home, CodexHarnessAdapter._hook_config_path(context))),
         "long_timeout": _post_tool_hook_timeout_seconds(context),
     }
@@ -324,17 +313,6 @@ class _CodexInstallPlan:
     fields: dict[str, object]
 
 
-def _relaunch(asked: Mapping[str, object]) -> dict[str, object]:
-    """Each Guard proxy's launch, the way this process would write it."""
-    python = hook_python()
-    relaunch: dict[str, object] = {}
-    for name, args in asked.items():
-        _, python_args = python_proxy_launch(None, tuple(str(arg) for arg in cast(Sequence[object], args)))
-        launcher, launch_args = mcp_proxy_launch(python, python_args)
-        relaunch[str(name)] = [launcher, list(launch_args)]
-    return relaunch
-
-
 def _plan_file(item: Mapping[str, Any]) -> TransitionFile:
     """One file an ``install_plan`` answer plans."""
     from ..runtime_transition import TransitionFile
@@ -377,8 +355,6 @@ def _ask_install_plan(
         reply = answer.get("reply")
         if not isinstance(reply, Mapping):
             break
-        if "relaunch" in reply:
-            request["relaunch"] = _relaunch(cast(Mapping[str, object], reply["relaunch"]))
         if "expand" in reply:
             request["long_paths"] = {**request.get("long_paths", {}), **expanded_short_paths(reply)}
     else:

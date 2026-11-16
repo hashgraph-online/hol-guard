@@ -5,7 +5,7 @@
 use serde_json::{json, Map, Value};
 
 use super::cursor::{get, malformed, runtime, BRIDGE_UNAVAILABLE};
-use super::{caller, hook_render, Ctx, Failure, Step};
+use super::{caller, hook_render, proxy_launch, Ctx, Failure, Step};
 use crate::pyjson::{self, PyVal};
 /// The Python interpreter the attested Guard CLI runs on.
 pub(super) struct HookPython {
@@ -188,43 +188,15 @@ impl Ask<'_> {
             .collect())
     }
 
-    /// Guard's MCP proxy launch `(command, args)` for each set of proxy args.
+    /// Guard's MCP proxy launch `(command, args)` for each set of proxy args:
+    /// a relay launch unwrapped to its Python proxy argv, then launched again
+    /// through Guard's launcher and the relay this runtime can serve.
     pub(super) fn relaunch(&self, sets: &[Vec<String>]) -> Step<Vec<(String, Vec<String>)>> {
-        if sets.is_empty() {
-            return Ok(Vec::new());
-        }
-        let known = self
-            .fields
-            .get("relaunch")
-            .and_then(Value::as_array)
-            .map_or(&[][..], Vec::as_slice);
-        let lookup = |args: &Vec<String>| {
-            known
-                .iter()
-                .find(|pair| pair.get(0) == Some(&json!(args)))
-                .and_then(|pair| pair.get(1))
-        };
-        let missing: Vec<&Vec<String>> =
-            sets.iter().filter(|args| lookup(args).is_none()).collect();
-        if !missing.is_empty() {
-            return Err(Self::reply("relaunch", json!(missing)));
-        }
+        let launcher = caller::launcher(self.ctx)?;
         sets.iter()
             .map(|args| {
-                let launch = lookup(args).ok_or(Failure::Invalid)?;
-                let command = launch
-                    .get(0)
-                    .and_then(Value::as_str)
-                    .ok_or(Failure::Invalid)?
-                    .to_owned();
-                let args = launch
-                    .get(1)
-                    .and_then(Value::as_array)
-                    .ok_or(Failure::Invalid)?
-                    .iter()
-                    .map(|arg| arg.as_str().map(str::to_owned).ok_or(Failure::Invalid))
-                    .collect::<Step<_>>()?;
-                Ok((command, args))
+                let (_, python_args) = proxy_launch::python_launch(None, args);
+                proxy_launch::relay_launch(self.ctx, launcher, &python_args)
             })
             .collect()
     }

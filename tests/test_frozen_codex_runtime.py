@@ -26,23 +26,21 @@ from codex_plugin_scanner.guard.frozen_runtime_commands import (
 )
 from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 from tests.codex_legacy_roles import without_package_roles
+from tests.native_runtime_stamp import stamp_native_runtime
 
 
 @pytest.fixture
-def frozen_codex_contract(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+def frozen_codex_contract(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     original_validator = codex_hook_runtime_trust.validate_codex_hook_launch
     had_marker = hasattr(codex_adapter, "_HOL_GUARD_FROZEN_CODEX_RUNTIME")
     marker_value = getattr(codex_adapter, "_HOL_GUARD_FROZEN_CODEX_RUNTIME", None)
     try:
         assert frozen_codex_runtime.install_frozen_codex_runtime(force=True) is True
         # A frozen build runs hooks through the verified runtime copy it
-        # publishes under the Guard home; the install only names that path.
-        monkeypatch.setattr(
-            codex_adapter,
-            "_native_bridge_executable",
-            lambda home: home / "native-runtime" / ("a" * 64) / "hol-guard-runtime",
-        )
-        yield
+        # publishes under the Guard home from its bundled runtime.
+        runtime = tmp_path_factory.mktemp("bundle") / "hol-guard-runtime"
+        runtime.write_bytes(b"#!/bin/sh\nexit 0\n")
+        yield stamp_native_runtime(monkeypatch, runtime)
     finally:
         # Tests can patch functions installed by this fixture. Undo those
         # patches before restoring the source contract, otherwise pytest's
@@ -241,7 +239,7 @@ def test_frozen_daemon_serve_gate_rejects_noncanonical_payload(
 
 def test_frozen_codex_contract_binds_commands_and_roles_to_one_executable(
     tmp_path: Path,
-    frozen_codex_contract: None,
+    frozen_codex_contract: str,
 ) -> None:
     context = _context(tmp_path)
 
@@ -275,7 +273,7 @@ def test_frozen_codex_contract_binds_commands_and_roles_to_one_executable(
 @pytest.mark.parametrize("desktop_launcher", [False, True], ids=["direct", "desktop_shell_launcher"])
 def test_frozen_codex_install_and_runtime_trust_validate_without_source_files(
     tmp_path: Path,
-    frozen_codex_contract: None,
+    frozen_codex_contract: str,
     monkeypatch: pytest.MonkeyPatch,
     desktop_launcher: bool,
 ) -> None:
@@ -328,15 +326,11 @@ def test_frozen_codex_install_and_runtime_trust_validate_without_source_files(
 
 def test_frozen_codex_hook_runs_behind_the_durable_native_bridge(
     tmp_path: Path,
-    frozen_codex_contract: None,
-    monkeypatch: pytest.MonkeyPatch,
+    frozen_codex_contract: str,
 ) -> None:
     context = _context(tmp_path)
-    runtime = context.guard_home / "native-runtime" / ("a" * 64) / "hol-guard-runtime"
     # The durable copy is named from the Guard home the install binds.
-    monkeypatch.setattr(
-        codex_adapter, "_native_bridge_executable", lambda home: home / "native-runtime" / ("a" * 64) / runtime.name
-    )
+    runtime = context.guard_home / "native-runtime" / frozen_codex_contract / "hol-guard-runtime"
     codex_config = context.home_dir / ".codex" / "config.toml"
     codex_config.parent.mkdir(parents=True)
     codex_config.write_text("[features]\ncodex_hooks = true\n", encoding="utf-8")
@@ -428,7 +422,7 @@ def test_retained_frozen_hook_can_be_validated_against_exact_transition_artifact
 
 def test_frozen_runtime_trust_rejects_bridge_command_tampering(
     tmp_path: Path,
-    frozen_codex_contract: None,
+    frozen_codex_contract: str,
 ) -> None:
     context = _context(tmp_path)
     codex_config = context.home_dir / ".codex" / "config.toml"
