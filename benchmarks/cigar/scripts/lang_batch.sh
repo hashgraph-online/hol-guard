@@ -27,12 +27,12 @@ trap release EXIT
 # and the harness under it, and waits for them, before release can remove the login copy.
 pids=()
 stop() {
-  trap '' INT TERM
+  trap '' INT TERM HUP
   for p in ${pids[@]+"${pids[@]}"}; do kill -TERM -- "-$p" 2>/dev/null; done
   for p in ${pids[@]+"${pids[@]}"}; do wait "$p" 2>/dev/null; done
   exit 130
 }
-trap stop INT TERM
+trap stop INT TERM HUP
 for a in $arms; do
   home="$W/arms/$a/codex_home"
   if [ -d "$home" ]; then
