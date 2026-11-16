@@ -11,6 +11,7 @@ import tomllib
 from codex_plugin_scanner.guard import codex_hook_integrity as integrity
 from codex_plugin_scanner.guard import codex_hook_manifest as manifests
 from codex_plugin_scanner.guard import codex_hook_recovery as recovery
+from codex_plugin_scanner.guard import native_caller
 from codex_plugin_scanner.guard.adapters import codex as adapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline
 
@@ -270,6 +271,7 @@ def retained_installation(tmp_path, monkeypatch):
             destination.write_bytes(source.read_bytes())
             destination.chmod(0o644)
         monkeypatch.setattr(adapter, "__file__", str(root / adapter_relative))
+        monkeypatch.setattr(native_caller, "__file__", str(root / "codex_plugin_scanner/guard/native_caller.py"))
         adapter.CodexHarnessAdapter().install(context)
         bridges.append(root / "codex_plugin_scanner/guard/codex_hook_runtime_trust.py")
     return context, bridges

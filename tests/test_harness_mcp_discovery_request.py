@@ -56,8 +56,7 @@ def _fake(monkeypatch: pytest.MonkeyPatch, answer: object) -> list[dict[str, obj
     native = authority.native_runner_authority
 
     def fake_native(kind: str, request: dict[str, object]) -> object:
-        assert kind == "harness_mcp_discovery"
-        if request["op"] == "proxy_env":
+        if kind != "harness_mcp_discovery" or request["op"] == "proxy_env":
             return native(kind, request)
         sent.append(request)
         if isinstance(answer, Exception):

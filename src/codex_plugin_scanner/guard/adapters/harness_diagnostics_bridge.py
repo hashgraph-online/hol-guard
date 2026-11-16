@@ -57,12 +57,15 @@ def _launcher_artifact(payload: dict[str, Any]) -> GuardArtifact:
 
     from ..native_runner_authority import NativeRunnerAuthorityError
 
-    texts = [
-        payload.get(key)
-        for key in ("artifact_id", "name", "harness", "artifact_type", "source_scope", "config_path", "command")
-    ]
+    keys = ("artifact_id", "name", "harness", "artifact_type", "source_scope", "config_path", "command")
+    texts: list[str] = []
+    for key in keys:
+        value = payload.get(key)
+        if not isinstance(value, str):
+            raise NativeRunnerAuthorityError("harness diagnostics answer is malformed")
+        texts.append(value)
     metadata = payload.get("metadata")
-    if not all(isinstance(text, str) for text in texts) or not isinstance(metadata, dict):
+    if not isinstance(metadata, dict):
         raise NativeRunnerAuthorityError("harness diagnostics answer is malformed")
     artifact_id, name, harness, artifact_type, source_scope, config_path, command = texts
     return GuardArtifact(

@@ -314,7 +314,7 @@ fn install_routes_a_local_server_through_the_guard_proxy() {
     let companion = &config["mcp"]["hol-guard::files"];
     assert_eq!(companion["type"], "local");
     assert_eq!(
-        companion["command"][..5],
+        json!(companion["command"].as_array().expect("command")[..5]),
         json!([
             "/py/bin/python",
             "-m",
@@ -346,14 +346,22 @@ fn install_launches_the_proxy_through_the_native_relay_when_one_is_selected() {
     facts["relay"] = json!("/r/relay");
     let config = managed_config(&home, &install_with(&home, facts.clone()));
     assert_eq!(
-        config["mcp"]["hol-guard::files"]["command"][..4],
+        json!(
+            config["mcp"]["hol-guard::files"]["command"]
+                .as_array()
+                .expect("command")[..4]
+        ),
         json!(["/r/relay", "mcp-relay", "/py/bin/python", "-m"])
     );
     // A frozen launcher is relayed whole, not unwrapped.
     facts["frozen"] = json!(true);
     let config = managed_config(&home, &install_with(&home, facts));
     assert_eq!(
-        config["mcp"]["hol-guard::files"]["command"][..4],
+        json!(
+            config["mcp"]["hol-guard::files"]["command"]
+                .as_array()
+                .expect("command")[..4]
+        ),
         json!(["/r/relay", "mcp-relay", "/py/bin/python", "-m"])
     );
 }
@@ -367,7 +375,11 @@ fn install_drops_the_module_prefix_for_a_frozen_launcher() {
     facts["frozen"] = json!(true);
     let config = managed_config(&home, &install_with(&home, facts));
     assert_eq!(
-        config["mcp"]["hol-guard::files"]["command"][..2],
+        json!(
+            config["mcp"]["hol-guard::files"]["command"]
+                .as_array()
+                .expect("command")[..2]
+        ),
         json!(["/app/hol-guard", "opencode-mcp-proxy"])
     );
 }

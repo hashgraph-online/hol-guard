@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_caller
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
@@ -412,11 +413,14 @@ def test_cached_launch_retains_exact_previous_artifact_identity(
             destination.write_bytes(source.read_bytes())
             destination.chmod(0o644)
     adapter_path = Path(codex.__file__).relative_to(source_root)
+    caller_path = "codex_plugin_scanner/guard/native_caller.py"
     monkeypatch.setattr(codex, "__file__", str(tmp_path / "old" / adapter_path))
+    monkeypatch.setattr(native_caller, "__file__", str(tmp_path / "old" / caller_path))
     codex.CodexHarnessAdapter().install(context)
     old_argv = codex._hook_command_parts(context)
     config = json.loads(old_argv[2])
     monkeypatch.setattr(codex, "__file__", str(tmp_path / "new" / adapter_path))
+    monkeypatch.setattr(native_caller, "__file__", str(tmp_path / "new" / caller_path))
     codex.CodexHarnessAdapter().install(context)
     monkeypatch.setattr(
         runtime_trust, "__file__", str(tmp_path / "old" / "codex_plugin_scanner/guard/codex_hook_runtime_trust.py")
@@ -468,6 +472,7 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
             destination.write_bytes(source.read_bytes())
             destination.chmod(0o644)
         monkeypatch.setattr(codex, "__file__", str(root / adapter_path))
+        monkeypatch.setattr(native_caller, "__file__", str(root / "codex_plugin_scanner/guard/native_caller.py"))
         codex.CodexHarnessAdapter().install(context)
         commands.append(codex._hook_command_parts(context))
     manifest = load_authenticated_hook_manifest(context.guard_home, context.home_dir / ".codex/config.toml")

@@ -1657,12 +1657,13 @@
           "NativeHarnessAdapter.install",
           "NativeHarnessAdapter.uninstall",
           "NativeHarnessAdapter._hook_argv",
+          "NativeHarnessAdapter._apply_install",
           "NativeHarnessAdapter._install_delegated",
           "NativeHarnessAdapter.current_hook_command"
         ],
         "entry_points": [],
         "reason": "Install and uninstall for the harnesses the native harness_adapter kind answers (Devin, Antigravity, Gemini, Kimi, OpenClaw, Paseo and Muse): the launcher shim, the bounded hook argv, publishing the native file plan and Paseo's delegated provider installs.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_argv and _install_delegated are called only from them; current_hook_command is called only by the excluded update repair, to tell an up-to-date hook from an old one. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_argv, _apply_install and _install_delegated are called only from them; current_hook_command is called only by the excluded update repair, to tell an up-to-date hook from an old one. The report validates that no retained symbol or in-scope module references the excluded names."
       }
     ],
     "dynamic_imports": []

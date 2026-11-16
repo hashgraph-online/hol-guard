@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.cli import managed_install_record
 from codex_plugin_scanner.guard.cli.install_commands import _apply_managed_install_owned, apply_managed_install
 
 PROBE = r"""
@@ -36,24 +37,30 @@ def test_installer_ownership_extends_through_store_proof_publication(
     context = HarnessContext(home_dir=home, guard_home=home / ".hol-guard", workspace_dir=None)
     observations = []
 
+    def native_record(op, _context, **fields):
+        assert op == "managed_install_record" and fields["target"] == "codex"
+        assert fields["manifest"]["protection_artifact_proof"]["artifacts"]
+        result = subprocess.run(
+            [sys.executable, "-c", PROBE, str(context.guard_home)],
+            env={**os.environ, "HOME": str(home), "USERPROFILE": str(home)},
+            capture_output=True,
+            timeout=5,
+        )
+        assert result.returncode == 0, result.stderr.decode(errors="replace")
+        observations.append(result.stdout.strip())
+        return {"row": None}
+
     class StoreProbe:
-        def set_managed_install(self, harness, active, workspace, manifest, now):
-            assert harness == "codex" and active
-            assert manifest["protection_artifact_proof"]["artifacts"]
-            result = subprocess.run(
-                [sys.executable, "-c", PROBE, str(context.guard_home)],
-                env={**os.environ, "HOME": str(home), "USERPROFILE": str(home)},
-                capture_output=True,
-                timeout=5,
-            )
-            assert result.returncode == 0, result.stderr.decode(errors="replace")
-            observations.append(result.stdout.strip())
+        guard_home = context.guard_home
+        path = context.guard_home / "guard.db"
+        guard_source = None
 
         def get_managed_install(self, _harness):
             return None
 
-    # Calling the old body without the new outer owner reproduces the window:
-    # the adapter is committed, but a competitor can enter during store.set.
+    monkeypatch.setattr(managed_install_record, "_native_install_ask", native_record)
+    # The native record takes the installer owner itself, so even the inner
+    # body alone keeps a competitor out while the row and proof are written.
     install = apply_managed_install if whole_operation else _apply_managed_install_owned
     install("install", "codex", False, context, StoreProbe(), None, "2026-09-30T00:00:00Z")
-    assert observations == [b"excluded" if whole_operation else b"entered"]
+    assert observations == [b"excluded"]

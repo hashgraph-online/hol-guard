@@ -341,6 +341,7 @@
     "src/codex_plugin_scanner/guard/native_aibom_summaries.py",
     "src/codex_plugin_scanner/guard/native_runner_authority.py",
     "src/codex_plugin_scanner/guard/native_transition_files.py",
+    "src/codex_plugin_scanner/guard/native_caller.py",
     "src/codex_plugin_scanner/guard/native_continuation_authority.py",
     "src/codex_plugin_scanner/guard/native_decisions.py",
     "src/codex_plugin_scanner/guard/native_signal_projection.py",

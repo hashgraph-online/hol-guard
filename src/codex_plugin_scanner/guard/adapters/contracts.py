@@ -107,9 +107,12 @@ def _setup_contract_from(payload: Mapping[str, Any]) -> HarnessSetupContract:
     harness, display_name = payload.get("harness"), payload.get("display_name")
     if not (isinstance(coverage, dict) and isinstance(harness, str) and isinstance(display_name, str)):
         raise ValueError("harness setup contract answer is malformed")
-    flags = [coverage.get(key) for key in ("native_hooks", "browser_fallback", "mcp_proxy", "prompt_hooks")]
-    if not all(isinstance(flag, bool) for flag in flags):
-        raise ValueError("harness setup contract answer is malformed")
+    flags: list[bool] = []
+    for key in ("native_hooks", "browser_fallback", "mcp_proxy", "prompt_hooks"):
+        flag = coverage.get(key)
+        if not isinstance(flag, bool):
+            raise ValueError("harness setup contract answer is malformed")
+        flags.append(flag)
     native_hooks, browser_fallback, mcp_proxy, prompt_hooks = flags
     return HarnessSetupContract(
         harness=harness,

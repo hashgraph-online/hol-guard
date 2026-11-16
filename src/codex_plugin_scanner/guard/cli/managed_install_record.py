@@ -16,7 +16,7 @@ from ..runtime_transition import TransitionError
 from ..store import GuardStore
 
 
-def _native_install_ask(op: str, context: HarnessContext, **fields: object) -> dict[str, Any]:
+def _native_install_ask(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
     """One managed-install op; a pending runtime transition refuses as before."""
     from ..adapters.native_harness import ask
 

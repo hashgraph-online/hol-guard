@@ -108,8 +108,10 @@ def install_guard_shim(
 
     with codex_install_transaction(context.guard_home, context.guard_home / "bin", actor="harness-shim.install"):
         assert_transition_mutation_allowed(context.guard_home)
-        shim = {"harness": harness, "launcher_name": launcher_name, "display_name": display_name}
+        shim: dict[str, object] = {"harness": harness, "launcher_name": launcher_name, "display_name": display_name}
         manifests = apply_guard_shims(context, shims=[shim])["shims"]
+        if not isinstance(manifests, list) or not manifests:
+            raise ValueError("Guard shim answer is malformed")
         return json.loads(str(manifests[0]))
 
 
