@@ -32,10 +32,20 @@ pub(super) fn safe_hol_guard_segment(
             segment.pipeline_index,
         )
     };
+    // A Windows .cmd launcher reparses the *original* argument words. A
+    // trusted --home word must not be removed before this check, or shell
+    // operators in the home path could be hidden from the reachability proof.
+    let arguments_reach_launcher = super::guard_diagnostics::arguments_reach_the_launcher(
+        basename,
+        &segment.arguments,
+        cfg!(windows),
+    );
     proven(&segment.arguments)
-        || without_own_home(&segment.arguments, context.home_dir).is_some_and(|rest| proven(&rest))
-        || without_active_home(&segment.arguments, context.guard_home)
-            .is_some_and(|rest| proven(&rest))
+        || (arguments_reach_launcher
+            && (without_own_home(&segment.arguments, context.home_dir)
+                .is_some_and(|rest| proven(&rest))
+                || without_active_home(&segment.arguments, context.guard_home)
+                    .is_some_and(|rest| proven(&rest))))
 }
 
 /// Home directories older releases kept Guard's state in, beside the user's

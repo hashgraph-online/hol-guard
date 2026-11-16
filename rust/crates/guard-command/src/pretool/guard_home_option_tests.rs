@@ -148,3 +148,40 @@ fn only_the_reported_guard_home_is_set_aside() {
     );
     let _ = std::fs::remove_dir_all(&account);
 }
+
+/// The parsed --home path may look identical to the reported Guard home,
+/// but a Windows batch launcher reparses shell metacharacters in the
+/// original words. The exemption cannot throw that evidence away.
+#[test]
+fn a_set_aside_home_must_keep_the_original_windows_launcher_check() {
+    for (home, reaches_launcher) in [
+        ("C:/Users/Alice/.hol-guard", true),
+        ("C:/Users/Alice&whoami/.hol-guard", false),
+        ("C:/Users/Alice%PATH%/.hol-guard", false),
+        ("C:/Users/Alice^whoami/.hol-guard", false),
+    ] {
+        let arguments = words(&format!("approvals wait abc --json --home {home}"));
+        // All of these would become the same apparently harmless command
+        // after stripping the --home option.
+        assert_eq!(
+            without_home_option(&arguments, home),
+            Some(words("approvals wait abc --json"))
+        );
+        assert_eq!(
+            super::super::guard_diagnostics::arguments_reach_the_launcher(
+                "hol-guard",
+                &arguments,
+                true,
+            ),
+            reaches_launcher,
+            "{home}"
+        );
+        // A direct executable avoids cmd.exe's second parse; the enclosing
+        // command model still applies every other normal Guard check.
+        assert!(super::super::guard_diagnostics::arguments_reach_the_launcher(
+            "hol-guard.exe",
+            &arguments,
+            true,
+        ));
+    }
+}
