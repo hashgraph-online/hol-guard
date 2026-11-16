@@ -160,7 +160,12 @@ fn runtime_launches(
             true,
         );
         for segment in &model.segments {
-            if let Some(executable) = launched(segment).filter(|name| is_runtime_name(name)) {
+            if let Some(executable) = launched(segment)
+                .filter(|(name, arguments)| {
+                    is_runtime_name(name) && !version_probe(segment, arguments)
+                })
+                .map(|(name, _)| name)
+            {
                 let cwd = cwd.filter(|_| known.cwd);
                 let search_path = search_path.filter(|_| known.path && !segment.path_overridden);
                 if let Some(path) = resolve(executable, cwd, search_path) {
@@ -233,24 +238,37 @@ impl Known {
     }
 }
 
-/// The program a segment starts, looking through the shell's `exec`.
-fn launched(segment: &CommandSegment) -> Option<&str> {
+/// The program a segment starts and the arguments it gets, looking through
+/// the shell's `exec`.
+fn launched(segment: &CommandSegment) -> Option<(&str, &[String])> {
     let executable = segment.executable.as_deref()?;
     if executable != "exec" {
-        return Some(executable);
+        return Some((executable, &segment.arguments));
     }
-    let mut arguments = segment.arguments.iter();
-    while let Some(argument) = arguments.next() {
+    let arguments = &segment.arguments;
+    let mut index = 0;
+    while let Some(argument) = arguments.get(index) {
         match argument.as_str() {
-            "-a" => {
-                arguments.next();
+            "-a" => index += 1,
+            "--" => {
+                let program = arguments.get(index + 1)?;
+                return Some((program, &arguments[index + 2..]));
             }
-            "--" => return arguments.next().map(String::as_str),
             flag if flag.starts_with('-') => {}
-            program => return Some(program),
+            program => return Some((program, &arguments[index + 1..])),
         }
+        index += 1;
     }
     None
+}
+
+/// `node -v` and `node --version` print the build's version and exit before
+/// any script, module or option file is read, so the advisories have nothing
+/// to reach. An environment prefix such as `NODE_OPTIONS` keeps it a launch.
+fn version_probe(segment: &CommandSegment, arguments: &[String]) -> bool {
+    segment.environment_names.is_empty()
+        && segment.wrapper_chain.is_empty()
+        && matches!(arguments, [only] if only == "-v" || only == "--version")
 }
 
 fn is_runtime_name(executable: &str) -> bool {

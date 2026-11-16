@@ -282,6 +282,39 @@ fn launches_resolve_the_way_the_shell_would() {
     assert!(launches("npm test && python3 -V && echo node").is_empty());
 }
 
+#[cfg(unix)]
+#[test]
+fn a_version_probe_is_not_a_launch_the_advisories_reach() {
+    let root = tempfile::tempdir().unwrap();
+    let bin = root.path().join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    executable(&bin.join("node"));
+    let search = bin.to_string_lossy().into_owned();
+    let launches =
+        |command: &str| runtime_launches(command, Some(root.path()), root.path(), Some(&search));
+    for command in [
+        "node --version",
+        "node -v",
+        "node --version 2>/dev/null",
+        "exec node -v",
+        "exec -a app -- node --version",
+        "command -v bun node pnpm npm; node --version; bun --version 2>/dev/null",
+    ] {
+        assert!(launches(command).is_empty(), "{command}");
+    }
+    for command in [
+        "node --version a.js",
+        "node -v -e 'run()'",
+        "node -e 'run()'",
+        "NODE_OPTIONS=--require=./x.js node --version",
+        "env NODE_OPTIONS=--require=./x.js node --version",
+        "node --version && node a.js",
+        "exec node a.js",
+    ] {
+        assert_eq!(launches(command).len(), 1, "{command}");
+    }
+}
+
 #[test]
 fn runtime_names_cover_node_and_its_windows_spelling_only() {
     assert!(is_runtime_name("node"));
