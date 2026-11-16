@@ -13,7 +13,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
@@ -134,6 +134,31 @@ pub(in crate::daemon_edge) fn call_resident(
 /// resident: the hook it served is answered fail-safe, and the process and
 /// its caches stay for the next hook.
 pub(in crate::daemon_edge) fn call_resident_within(
+    config: &ReadConfig,
+    name: &str,
+    args: Value,
+    wait: Duration,
+) -> Result<Value, CallError> {
+    let started = Instant::now();
+    match call_resident_once(config, name, args.clone(), wait) {
+        // The process was already gone, so the call never reached it. Under
+        // host load a child that died (or was stopped by an earlier call that
+        // gave up on it) is the usual reason the next hook found no resident;
+        // the replacement starts here instead of failing this hook and
+        // leaving the start to the one after it. A call that was delivered and
+        // then lost its answer is not repeated: it may have run.
+        Err(CallError::Unavailable) => {
+            let remaining = wait.saturating_sub(started.elapsed());
+            if remaining.is_zero() {
+                return Err(CallError::Unavailable);
+            }
+            call_resident_once(config, name, args, remaining)
+        }
+        other => other,
+    }
+}
+
+fn call_resident_once(
     config: &ReadConfig,
     name: &str,
     args: Value,

@@ -457,16 +457,21 @@ def test_prepare_workspace_policy_skips_wait_after_publisher_error(
     assert len(wait_deadlines) == 1
 
 
+@pytest.mark.parametrize(
+    "transient_error",
+    ("native_resident_restart_budget_busy", "native_approval_authority_busy"),
+)
 def test_prepare_workspace_policy_waits_for_transient_resident_restart_lock(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    transient_error: str,
 ) -> None:
     import codex_plugin_scanner.guard.hook_review.hook_worker as hook_worker_module
 
     wait_deadlines: list[float] = []
 
     class _Publisher:
-        last_error = "native_resident_restart_budget_busy"
+        last_error = transient_error
         ready = False
 
         def start(self) -> None:
