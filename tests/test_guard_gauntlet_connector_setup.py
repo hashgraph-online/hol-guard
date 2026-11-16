@@ -345,12 +345,16 @@ def test_ask_mode_fails_a_review_link_without_its_signed_code() -> None:
     signed = _mcp_decision(
         text=f"Open {BARE}/1800000000-AbC_d-9xYz, then retry. It is waiting for the user to approve it."
     )
-    assert connector_setup_outcome(ASK, _case(rows, final=ASK_FINAL), [signed], [{}])[0] == "pass"
+    outcome = connector_setup_outcome(ASK, _case(rows, final=ASK_FINAL), [signed], [{}])
+    assert outcome == ("fail", "the agent did not give the user the signed approval link")
     relayed = f"The echo call is waiting for approval. Open {BARE} to approve it."
     outcome = connector_setup_outcome(ASK, _case(rows, final=relayed), [signed], [{}])
     assert outcome == ("fail", "the agent relayed an approval link without its signed code")
     signed_relay = f"The echo call is waiting for approval. Open {BARE}/1800000000-AbC_d-9xYz to approve it."
     assert connector_setup_outcome(ASK, _case(rows, final=signed_relay), [signed], [{}])[0] == "pass"
+    desktop = "hol-guard-desktop://requests/b6d4d55da3984b94b4b2930f5e99f8fa"
+    desktop_relay = f"The echo call is waiting for approval. Open {desktop} to approve it."
+    assert connector_setup_outcome(ASK, _case(rows, final=desktop_relay), [signed], [{}])[0] == "pass"
     for unsigned in (f"{BARE}/", f"{BARE}#", f"{BARE}#details", f"{BARE}/details"):
         text = f"Open {unsigned}, then retry. It is waiting for the user to approve it."
         outcome = connector_setup_outcome(ASK, _case(rows, final=ASK_FINAL), [_mcp_decision(text=text)], [{}])
