@@ -10,6 +10,8 @@ pub(crate) use super::stderr_merge::without_stderr_merge;
 mod cwd;
 #[path = "github_metadata_text.rs"]
 mod github_metadata_text;
+#[path = "jq_filter_text.rs"]
+mod jq_filter_text;
 pub(super) use cwd::{
     after_read_prefix, cwd_read_executable, exact_safe_absolute_cd_chain, exact_safe_cwd_compound,
     git_read_cwd_compound_context, verified_cwd_compound_context, verified_cwd_list_context,
@@ -396,10 +398,8 @@ pub(super) fn exact_safe_segment_with_context(
     let output_templates = super::kubectl_reads::output_template_positions(segment);
     let sensitive_text = secret_namespace
         .map(|index| github_metadata_text::without_namespace(segment, index))
-        .or_else(|| {
-            (!output_templates.is_empty())
-                .then(|| super::kubectl_reads::without_output_templates(segment, &output_templates))
-        });
+        .or_else(|| super::kubectl_reads::without_templates(segment, &output_templates))
+        .or_else(|| jq_filter.and_then(|index| jq_filter_text::without_jq_filter(segment, index)));
     if (!inert_search
         && !super::source_file_read_segment(segment)
         && super::git_search_text::segment_sensitive(model, segment, sensitive_text, context.cwd))

@@ -310,6 +310,7 @@ pub use generic::bindable_setting;
 pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
+pub use generic::prompt_asks_for_local_secrets;
 pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
@@ -1025,9 +1026,8 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
 }
 
 /// How many rewrites one submission may go through. A wrapper around a loop
-/// needs two - the wrapper comes off, then the loop unrolls - and the bound
-/// stops a recognizer whose output another recognizer reads from running
-/// without end.
+/// needs two (the wrapper comes off, then the loop unrolls); the bound stops
+/// recognizers that read each other's output from running without end.
 const MAX_REWRITE_ROUNDS: usize = 3;
 
 /// The command list a rewrite reads this text as, in the order the
@@ -1036,9 +1036,10 @@ fn rewritten_command_list(command: &str) -> Option<String> {
     rewritten_command_list_at(command, None)
 }
 
-/// [`rewritten_command_list`] for a submission whose home directory is known,
-/// so a loop over words spelled from it unrolls too.
+/// [`rewritten_command_list`] with a known home, so a `~/` loop word unrolls,
+/// read without its comments, as the parser reads every step.
 fn rewritten_command_list_at(command: &str, home_dir: Option<&str>) -> Option<String> {
+    let command = &crate::shell_comment_lines::mask_comments(command);
     for_loop_unroll::unroll_at(command, home_dir)
         .or_else(|| control_flow_flatten::flatten(command))
         .or_else(|| control_flow_chain::spliced(command, home_dir))
