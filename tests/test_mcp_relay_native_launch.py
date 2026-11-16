@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter
 from codex_plugin_scanner.guard.adapters import hermes as hermes_adapter
 from codex_plugin_scanner.guard.adapters import mcp_relay_native, mcp_servers, native_hook_bridge
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import render_codex_managed_mcp
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.adapters.mcp_relay_native import (
     NATIVE_MCP_RELAY_COMMAND,
@@ -31,6 +30,7 @@ from codex_plugin_scanner.guard.adapters.mcp_servers import (
     proxy_launcher_entry,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from tests import codex_plan_segments as segments
 
 pytestmark = pytest.mark.native_mcp_relay
 
@@ -243,7 +243,7 @@ def test_codex_interpreter_refresh_reselects_the_launcher(tmp_path: Path, advert
     context = HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=tmp_path / "guard-home")
 
     def refresh(payload: dict[str, object]) -> tuple[dict[str, object], tuple[str, ...]]:
-        return render_codex_managed_mcp(context, payload, managed_servers=(), workspace_payload={})
+        return segments.render_codex_managed_mcp(context, payload, managed_servers=(), workspace_payload={})
 
     payload: dict[str, object] = {"mcp_servers": {"fixture": {"command": "/old/python", "args": list(args)}}}
     advertised.add(NATIVE_MCP_RELAY_FEATURE)

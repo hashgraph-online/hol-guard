@@ -28,13 +28,20 @@ fn fields(value: Value) -> Map<String, Value> {
     value.as_object().unwrap().clone()
 }
 
+fn planned(root: &Path, request: Value) -> Value {
+    let Ok(answer) = prepare(&ctx(root), &fields(request)) else {
+        panic!("the profile plan was refused");
+    };
+    answer
+}
+
 #[test]
 fn a_bash_profile_gets_the_launcher_block_and_keeps_its_mode() {
     let (_dir, root) = root();
     let profile = root.join(".bashrc");
     fs::write(&profile, "export EDITOR=vi\n").unwrap();
     fs::set_permissions(&profile, fs::Permissions::from_mode(0o640)).unwrap();
-    let answer = prepare(&ctx(&root), &fields(json!({"shell": "bash"}))).unwrap();
+    let answer = planned(&root, json!({"shell": "bash"}));
     let manifest = &answer["manifest"];
     assert_eq!(manifest["changed"], json!(true));
     assert_eq!(manifest["restart_shell_required"], json!(true));
@@ -49,7 +56,7 @@ fn a_bash_profile_gets_the_launcher_block_and_keeps_its_mode() {
 #[test]
 fn an_unknown_shell_uses_zshrc_and_a_missing_profile_is_private() {
     let (_dir, root) = root();
-    let answer = prepare(&ctx(&root), &fields(json!({"shell": "nu"}))).unwrap();
+    let answer = planned(&root, json!({"shell": "nu"}));
     let path = root.join(".zshrc");
     assert_eq!(
         answer["manifest"]["profile_path"],
@@ -62,11 +69,7 @@ fn an_unknown_shell_uses_zshrc_and_a_missing_profile_is_private() {
 #[test]
 fn a_transient_guard_home_asks_for_a_manual_path_entry() {
     let (_dir, root) = root();
-    let answer = prepare(
-        &ctx(&root),
-        &fields(json!({"shell": "zsh", "shim_dir_transient": true})),
-    )
-    .unwrap();
+    let answer = planned(&root, json!({"shell": "zsh", "shim_dir_transient": true}));
     assert_eq!(answer["files"], json!([]));
     assert_eq!(
         answer["manifest"]["manual_path_reason"],
