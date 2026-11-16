@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serde_json::json;
 
 use super::*;
@@ -75,13 +77,52 @@ fn a_capacity_refusal_names_its_cause() {
     let body = fail_safe(
         "codex",
         "PreToolUse",
-        capacity_reason(hook_scheduler::DEADLINE_EXHAUSTED),
+        &capacity_reason(
+            hook_scheduler::DEADLINE_EXHAUSTED,
+            Path::new("/home/dev/.hol-guard"),
+            "/home/dev",
+        ),
         hook_scheduler::DEADLINE_EXHAUSTED,
     );
     let text = body.to_string();
     assert!(text.contains("within the hook deadline"));
     assert!(text.contains(hook_scheduler::DEADLINE_EXHAUSTED));
-    assert!(capacity_reason(hook_scheduler::QUEUE_CAPACITY).contains("queueing"));
+    assert!(capacity_reason(
+        hook_scheduler::QUEUE_CAPACITY,
+        Path::new("/home/dev/.hol-guard"),
+        "/home/dev"
+    )
+    .contains("queueing"));
+}
+
+#[test]
+fn a_capacity_refusal_names_a_recovery_command() {
+    for code in [
+        hook_scheduler::DEADLINE_EXHAUSTED,
+        hook_scheduler::QUEUE_CAPACITY,
+    ] {
+        let reason = capacity_reason(code, Path::new("/home/dev/.hol-guard"), "/home/dev");
+        assert!(reason.contains("Retry this action"), "{reason}");
+        assert!(reason.ends_with("run `hol-guard repair`."), "{reason}");
+    }
+}
+
+#[test]
+fn a_capacity_refusal_names_a_non_default_guard_home() {
+    let reason = capacity_reason(
+        hook_scheduler::DEADLINE_EXHAUSTED,
+        Path::new("/srv/guard homes/one"),
+        "/home/dev",
+    );
+    assert!(
+        reason.ends_with("run `hol-guard repair --guard-home '/srv/guard homes/one'`."),
+        "{reason}"
+    );
+    let unknown_home = capacity_reason(hook_scheduler::QUEUE_CAPACITY, Path::new("/srv/guard"), "");
+    assert!(
+        unknown_home.ends_with("run `hol-guard repair --guard-home /srv/guard`."),
+        "{unknown_home}"
+    );
 }
 
 #[test]

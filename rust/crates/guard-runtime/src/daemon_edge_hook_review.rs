@@ -516,7 +516,10 @@ impl Hook<'_> {
             Ok(permit) => permit,
             Err(code) => {
                 scheduler.record_harness_rejection(capacity_harness);
-                return fail(capacity_reason(code), code);
+                return fail(
+                    &capacity_reason(code, Path::new(&self.config.guard_home), &self.home()),
+                    code,
+                );
             }
         };
         if let Some(answer) = self.lifecycle(&reply_harness, &event, &payload, expires) {
@@ -572,13 +575,30 @@ fn refusal(refused: &Value) -> Option<(&str, &str)> {
     ))
 }
 
-/// The message a capacity refusal carries.
-fn capacity_reason(code: &str) -> &'static str {
-    if code == hook_scheduler::DEADLINE_EXHAUSTED {
-        "HOL Guard could not complete local review within the hook deadline. Retry this action."
+/// The message a capacity refusal carries. A retry usually succeeds once a
+/// cold start or a burst has passed; one that keeps failing points at a
+/// daemon that needs repair, so each message names the command for that.
+///
+/// The command names the refusing daemon's Guard home whenever it is not
+/// known to be `<home_dir>/.hol-guard`, quoted for the shell: a bare
+/// `hol-guard repair` would repair the default install and leave this one
+/// refusing. An unknown home directory cannot prove the home is the default,
+/// so it names the home too.
+fn capacity_reason(code: &str, guard_home: &Path, home_dir: &str) -> String {
+    let command = if !home_dir.is_empty() && Path::new(home_dir).join(".hol-guard") == guard_home {
+        "hol-guard repair".to_owned()
     } else {
-        "HOL Guard is safely queueing the maximum local review workload. Retry this action."
-    }
+        format!(
+            "hol-guard repair --guard-home {}",
+            crate::mcp_proxy_shlex::quote(&guard_home.to_string_lossy())
+        )
+    };
+    let cause = if code == hook_scheduler::DEADLINE_EXHAUSTED {
+        "HOL Guard could not complete local review within the hook deadline."
+    } else {
+        "HOL Guard is safely queueing the maximum local review workload."
+    };
+    format!("{cause} Retry this action; if it keeps failing, run `{command}`.")
 }
 
 /// The harness's answer when the hook worker could not review the hook:
