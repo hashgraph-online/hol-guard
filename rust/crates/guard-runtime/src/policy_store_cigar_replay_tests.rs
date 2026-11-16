@@ -142,17 +142,41 @@ fn edge(
 
 /// What a decision is made of: the verdict, its reasons, and what the harness is told.
 fn decision(edge: &GuardHookEdgeResultV2) -> Value {
+    let field = |name: &str| {
+        let value = edge.result.get(name).cloned().unwrap_or(Value::Null);
+        assert!(
+            !value.is_null(),
+            "no `{name}` in Guard's result: {}",
+            edge.result
+        );
+        value
+    };
     json!({
-        "decision": edge.result.get("decision"),
-        "minimum_action": edge.result.get("minimum_action"),
-        "reason_codes": edge.result.get("reason_codes"),
-        "reasons": edge.result.get("reasons"),
+        "decision": field("decision"),
+        "minimum_action": field("minimum_action"),
+        "reason_code": field("reason_code"),
+        "reason": field("reason"),
         "harness_response": edge.harness_response,
         "containment_route": edge.containment_route,
     })
 }
 
-fn replay(home: &Home, user_home: &Path, project: &Path, harness: &str) -> (Value, Vec<Value>) {
+/// The shell tool a harness calls, and the field that carries the command.
+fn shell_tool(harness: &str, codex_exec: bool) -> (&'static str, &'static str) {
+    if codex_exec {
+        ("exec_command", "cmd")
+    } else {
+        (tool(harness), "command")
+    }
+}
+
+fn replay(
+    home: &Home,
+    user_home: &Path,
+    project: &Path,
+    harness: &str,
+    codex_exec: bool,
+) -> (Value, Vec<Value>) {
     let cwd = project.to_string_lossy();
     let prompt = edge(
         home,
@@ -167,14 +191,17 @@ fn replay(home: &Home, user_home: &Path, project: &Path, harness: &str) -> (Valu
     let calls = COMMANDS
         .iter()
         .map(|command| {
+            let (tool_name, field) = shell_tool(harness, codex_exec);
+            let mut tool_input = serde_json::Map::new();
+            tool_input.insert(field.to_owned(), json!(command));
             decision(&edge(
                 home,
                 user_home,
                 project,
                 harness,
                 "PreToolUse",
-                json!({"hook_event_name": "PreToolUse", "tool_name": tool(harness),
-                    "tool_input": {"command": command}, "session_id": "replay", "cwd": cwd}),
+                json!({"hook_event_name": "PreToolUse", "tool_name": tool_name,
+                    "tool_input": tool_input, "session_id": "replay", "cwd": cwd}),
             ))
         })
         .collect();
@@ -186,9 +213,30 @@ fn cigar_on_or_off_gives_every_recorded_command_the_same_decision() {
     let on = home("cigar-replay-on", CIGAR_ON);
     let off = home("cigar-replay-off", CIGAR_OFF);
     let (user_home, _project, root) = project();
-    for harness in ["claude-code", "codex", "omp"] {
-        let (prompt_on, with_cigar) = replay(&on, user_home.path(), &root, harness);
-        let (prompt_off, without) = replay(&off, user_home.path(), &root, harness);
+    // Codex runs shell commands through `exec_command` with `cmd` as well as `Bash`.
+    for (harness, codex_exec) in [
+        ("claude-code", false),
+        ("codex", false),
+        ("codex", true),
+        ("omp", false),
+    ] {
+        let (prompt_on, with_cigar) = replay(&on, user_home.path(), &root, harness, codex_exec);
+        let (prompt_off, without) = replay(&off, user_home.path(), &root, harness, codex_exec);
+        if codex_exec {
+            // Guard reads the command out of `cmd`: each call gets the same verdict as through `Bash`.
+            let (_, through_bash) = replay(&off, user_home.path(), &root, harness, false);
+            let verdicts = |calls: &[Value]| {
+                calls
+                    .iter()
+                    .map(|d| d["minimum_action"].clone())
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(
+                verdicts(&without),
+                verdicts(&through_bash),
+                "exec_command read differently"
+            );
+        }
         // Not a vacuous match: CIGAR is really on in one home and off in the other.
         assert!(
             prompt_on.to_string().contains("cart_total"),

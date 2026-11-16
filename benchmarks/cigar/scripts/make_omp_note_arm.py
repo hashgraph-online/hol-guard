@@ -41,8 +41,9 @@ def main() -> None:
         raise SystemExit(f"no full Guard omp arm at {source}; run make_omp_arms.py first")
     where = arms / "ompnote"
     (where / "home").mkdir(parents=True, exist_ok=True)
-    (where / "harness").write_text("omp\n")
+    # Write the extension first: a batch takes the harness marker to mean the arm is ready.
     (where / "hol-guard.ts").write_text(note_only(source.read_text()))
+    (where / "harness").write_text("omp\n")
     print("ompnote written from", source)
 
 

@@ -332,6 +332,15 @@ def hold_cost(step_usd):
 TOKEN_KEYS = ("input_tokens", "output_tokens")
 
 
+def session_tokens(row):
+    return sum(row["tokens"].get(k, 0) for k in TOKEN_KEYS)
+
+
+def share(paired_usd, row):
+    usd = row["cost"]["usd"]
+    return min(paired_usd / usd, 1.0) if usd else 0.0
+
+
 def paired(tag, arm, rows, base_arm, base_tags):
     bases = [(t, load(t, base_arm)) for t in base_tags]
     seeds = sorted(s for s in rows if all(s in b for _, b in bases))
@@ -340,14 +349,14 @@ def paired(tag, arm, rows, base_arm, base_tags):
         return
     cost, toks, kinds, harm = [], [], collections.defaultdict(list), [0, 0]
     for btag, brows in bases:
-        bc = sum(brows[s]["cost"]["usd"] for s in seeds)
-        ac = sum(rows[s]["cost"]["usd"] for s in seeds)
-        bt = sum(brows[s]["tokens"].get(k, 0) for s in seeds for k in TOKEN_KEYS)
-        at = sum(rows[s]["tokens"].get(k, 0) for s in seeds for k in TOKEN_KEYS)
-        cost.append(100 * (bc - ac) / bc if bc else 0.0)
-        toks.append(100 * (bt - at) / bt if bt else 0.0)
+        # Totals count only steps both arms reached, the same steps the per-kind
+        # figures use: a session that stopped early must not be credited with the
+        # other arm's cost for steps it never ran. Tokens are not split per step,
+        # so each session's tokens are scaled by the share of its cost in those steps.
+        bc = ac = bt = at = 0.0
         per = collections.defaultdict(lambda: [0.0, 0.0])
         for s in seeds:
+            sb = sa = 0.0
             for x, y in zip(row_steps(brows[s], RUNS / btag), row_steps(rows[s], RUNS / tag)):
                 # Cost comes from the same result line as requests: a step
                 # without one has no cost to compare.
@@ -355,8 +364,16 @@ def paired(tag, arm, rows, base_arm, base_tags):
                     continue
                 per[x["kind"]][0] += x["usd"]
                 per[x["kind"]][1] += y["usd"]
+                sb += x["usd"]
+                sa += y["usd"]
                 harm[1] += 1
                 harm[0] += y["usd"] > 1.2 * x["usd"]
+            bc += sb
+            ac += sa
+            bt += session_tokens(brows[s]) * share(sb, brows[s])
+            at += session_tokens(rows[s]) * share(sa, rows[s])
+        cost.append(100 * (bc - ac) / bc if bc else 0.0)
+        toks.append(100 * (bt - at) / bt if bt else 0.0)
         for k, (b, a) in per.items():
             kinds[k].append(100 * (b - a) / b if b else 0.0)
     passes = (sum(rows[s]["passed"] for s in seeds), [sum(b[s]["passed"] for s in seeds) for _, b in bases])

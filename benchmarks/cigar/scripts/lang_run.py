@@ -2,7 +2,7 @@
 
 Usage: lang_run.py --arm <arm> --seed <n> --tag <tag> --lang <go|rust|ts>
 Steps: bug, bug, bug2, bug, review (the Python set's bug and review prompts, unchanged). A step passes
-when the language's whole suite passes in the agent's sandbox and the tests are unchanged. Results go
+when the language's whole suite passes in the agent's sandbox and a fix step left the tests unchanged. Results go
 to the same results.jsonl rows as run.py, so report.py reads them; run one tag per language.
 Pools come from lang_prep.py; repos from lang_setup.sh.
 """
@@ -59,6 +59,8 @@ def check(lang, project, task, since):
     code, out = run_tests(lang, project, sandbox_home=PROJECTS.parent / "sandbox_home")
     res = {"suite": "pass" if code == 0 else f"exit status {code}: {out.strip().splitlines()[-1] if out.strip() else ''}"[:200]}
     ok = code == 0
+    # The review step's prompt asks the agent to tidy every change in the session, tests included,
+    # so only fix steps must leave the tests alone; the review must still leave the suite passing.
     if task["kind"] != "review":
         res["tests_unchanged"] = not R.git(project, "diff", "--stat", since, "--", *LANGS[lang]["tests"]).strip()
         ok = ok and res["tests_unchanged"]

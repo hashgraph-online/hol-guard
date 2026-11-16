@@ -6,6 +6,8 @@ set -euo pipefail
 W=${CIGAR_GAUNTLET_WORK:-/tmp/cigar-gauntlet}
 L="$W/lang"; mkdir -p "$L" "$L/sbx"
 PATH=$(echo "$PATH" | tr ':' '\n' | grep -v package-shims | paste -sd: -)
+# The same identity run.py writes, so setup can commit on a fresh rig.
+[ -f "$W/gitconfig" ] || printf '[user]\n\tname = dev\n\temail = dev@example.test\n' > "$W/gitconfig"
 rig_git() { GIT_CONFIG_GLOBAL="$W/gitconfig" git -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 fetch() { # name url tag
   [ -d "$L/$1" ] || git clone -q --depth 1 --branch "$3" "$2" "$L/$1"

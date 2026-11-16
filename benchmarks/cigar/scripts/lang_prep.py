@@ -83,7 +83,14 @@ def main():
         finally:
             f.write_text(text)
         failing = sorted(set(spec["failing"].findall(out)))
-        verdict = "build" if BUILD_ERROR.search(out) else ("pass" if code == 0 else ("keep" if failing else "noname"))
+        if BUILD_ERROR.search(out):
+            verdict = "build"
+        elif code == 0:
+            verdict = "pass"
+        elif failing:
+            verdict = "keep"
+        else:
+            verdict = "noname"
         print(c["path"], c["line"], c["qual"], verdict, len(failing), flush=True)
         if verdict == "keep":
             pool.append(dict(c, failing=failing[:6]))

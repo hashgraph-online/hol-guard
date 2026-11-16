@@ -7,9 +7,11 @@ Results go to the same results.jsonl rows as run.py, so report.py reads them.
 """
 
 import argparse
+import collections
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import time
@@ -66,24 +68,66 @@ def plan(seed):
     )
 
 
+REQUIREMENT = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*([^;]*)(?:;.*)?$")
+CLAUSE = re.compile(r"^\s*(~=|==|!=|>=|<=|>|<)\s*([0-9][0-9.]*)(\.\*)?\s*$")
+
+
+def version(text):
+    return tuple(int(part) for part in text.split(".") if part)
+
+
+def admits_minimum(spec, minimum=(4,)):
+    """True when the version range allows the minimum's line and excludes everything older."""
+    clauses = [c for c in spec.split(",") if c.strip()]
+    if not clauses:
+        return False
+    floor = False
+    for clause in clauses:
+        m = CLAUSE.match(clause)
+        if not m:
+            return False
+        op, v = m.group(1), version(m.group(2))
+        if op in (">=", "~=", "==") and v >= minimum:
+            floor = True
+        elif op == ">" and v >= minimum:
+            floor = True
+        elif op in ("<", "<=") and v <= minimum:
+            return False
+    return floor
+
+
 def declared(project):
-    """True when pyproject.toml parses and lists the new runtime dependency."""
+    """True when pyproject.toml parses and lists the new runtime dependency at 4.0 or newer."""
     try:
         meta = tomllib.loads((project / "pyproject.toml").read_text())
     except (OSError, tomllib.TOMLDecodeError):
         return False
-    deps = meta.get("project", {}).get("dependencies", [])
-    return any(d.replace("-", "_").lower().startswith(DEPENDENCY) and "4" in d for d in deps)
+    deps = meta.get("project", {}).get("dependencies", []) if isinstance(meta.get("project"), dict) else []
+    if not isinstance(deps, list):
+        return False
+    for dep in deps:
+        m = REQUIREMENT.match(dep) if isinstance(dep, str) else None
+        if m and re.sub(r"[-_.]+", "_", m.group(1)).lower() == DEPENDENCY and admits_minimum(m.group(2)):
+            return True
+    return False
 
 
-def logged(project, since):
-    """The changelog file at the project root that gained a non-blank line since the step began."""
-    R.git(project, "add", "-N", ".")
-    for name in R.git(project, "diff", "--name-only", since).split():
-        if "/" not in name and name.upper().startswith(CHANGELOG):
-            added = R.git(project, "diff", since, "--", name).splitlines()
-            if any(line.startswith("+") and not line.startswith("+++") and line[1:].strip() for line in added):
-                return name
+def changelogs(project):
+    """Changelog files at the project root and their lines, read before a step."""
+    return {
+        f.name: f.read_text(errors="replace").splitlines()
+        for f in project.iterdir()
+        if f.is_file() and f.name.upper().startswith(CHANGELOG)
+    }
+
+
+def logged(project, before):
+    """The root changelog file that gained a non-blank line during the step."""
+    for name, lines in changelogs(project).items():
+        added = collections.Counter(line for line in lines if line.strip())
+        added.subtract(line for line in before.get(name, []) if line.strip())
+        if any(n > 0 for n in added.values()):
+            return name
     return None
 
 
@@ -99,7 +143,7 @@ def wheel_ok(project, repo):
     return None
 
 
-def check(python, project, repo, pool, task, since):
+def check(python, project, repo, pool, task, since, notes):
     k = task["kind"]
     res = {"suite": R.suite(python, project, repo, pool)}
     ok = B.passed({"suite": res["suite"]})
@@ -107,7 +151,7 @@ def check(python, project, repo, pool, task, since):
         res["tests_unchanged"] = R.tests_unchanged(project, repo, since)
         ok = ok and res["tests_unchanged"]
     elif k == "changelog":
-        res["changelog"] = logged(project, since)
+        res["changelog"] = logged(project, notes)
         ok = ok and bool(res["changelog"])
     elif k == "dependency":
         res["declared"] = declared(project)
@@ -163,6 +207,7 @@ def main():
             break
         if task["kind"] == "bug":
             since = R.git(project, "rev-parse", "HEAD").strip()
+        notes = changelogs(project)
         out = runs / f"{a.arm}-s{a.seed}-{n}.jsonl"
         at = time.time()
         try:
@@ -175,17 +220,26 @@ def main():
                     code = O.run(where, project, Path(thread), base_env, task["prompt"], n > 1, out, B.STEP_TIMEOUT)
                 except subprocess.TimeoutExpired as failure:
                     raise B.StepError(f"omp timed out after {B.STEP_TIMEOUT}s") from failure
-                omp_outs.append(out)
+                finally:
+                    # A step that times out has still paid for the requests it streamed.
+                    if out.exists():
+                        omp_outs.append(out)
                 if code != 0:
                     raise B.StepError(f"omp exited {code}; see {out.with_suffix('.err')}")
             else:
                 B.codex_exec(project, codex_home, home if home.is_dir() else None, python, task["prompt"], thread, out)
                 thread = thread or B.thread_of(B.events_of(out))
         except B.StepError as failure:
+            if harness not in (B.claude.HARNESS, O.HARNESS) and not thread and out.exists():
+                # A first step that fails after it started a thread has still paid for its requests.
+                try:
+                    thread = B.thread_of(B.events_of(out))
+                except ValueError:
+                    pass
             error = f"step {n}: {failure}"
             print(a.arm, a.seed, n, "FAIL", error, flush=True)
             break
-        res = check(python, project, repo, pool, task, since)
+        res = check(python, project, repo, pool, task, since, notes)
         steps.append(
             {"step": n, "kind": task["kind"], "secs": round(time.time() - at), "checks": res, "passed": res["ok"]}
         )
