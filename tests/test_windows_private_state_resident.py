@@ -44,11 +44,20 @@ class _Resident:
         self.frame: bytes | None = None
 
     def __call__(
-        self, *, executable: Path, guard_home: Path, payload: bytes, idle_only: bool = False, **_: object
+        self,
+        *,
+        executable: Path,
+        guard_home: Path,
+        payload: bytes,
+        idle_only: bool = False,
+        idle_wait_seconds: float = 0.0,
+        **_: object,
     ) -> bytes | None:
         assert executable == EXECUTABLE
-        # Only a stream already parked here is borrowed; asking never starts one.
+        # Only a stream this process holds is borrowed; asking never starts one,
+        # but an op landing while that stream is busy waits for it to be parked.
         assert idle_only is True
+        assert idle_wait_seconds > 0
         envelope = json.loads(payload)
         assert envelope["operation"] == "windows_private_state"
         assert envelope["request"]["guard_home"] == str(guard_home)

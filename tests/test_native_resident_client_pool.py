@@ -742,9 +742,16 @@ def test_a_diagnostic_restores_the_failure_the_hook_path_left_behind(
 
     class Pool:
         def request(
-            self, _payload: bytes, *, deadline_monotonic: float, diagnostic: bool = False, idle_only: bool = False
+            self,
+            _payload: bytes,
+            *,
+            deadline_monotonic: float,
+            diagnostic: bool = False,
+            idle_only: bool = False,
+            idle_wait_seconds: float = 0.0,
         ) -> bytes:
             assert not idle_only
+            assert idle_wait_seconds == 0.0
             client_module._LAST_FAILURE_CODE.set("native_client_pool_exhausted")
             return b"answered"
 
