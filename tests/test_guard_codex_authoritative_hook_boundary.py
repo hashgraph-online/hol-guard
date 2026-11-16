@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.codex_publication_steps import use_stepwise_publication
 from tests.conftest import guard_commands_module
 
 
@@ -244,6 +245,8 @@ def test_codex_install_fails_closed_if_native_hook_reconciliation_is_unavailable
             config["after"] = _strip_hooks(config["after"])
         return answer
 
+    # Publish stepwise so the plan answer reaches the publication.
+    use_stepwise_publication(monkeypatch)
     monkeypatch.setattr(codex_adapter, "ask", _without_hooks)
 
     result = main(

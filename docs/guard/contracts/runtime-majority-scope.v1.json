@@ -1084,8 +1084,8 @@
         "path": "src/codex_plugin_scanner/guard/adapters/codex.py",
         "symbols": [
           "_install_manifest",
+          "_plan_report",
           "_located",
-          "_require_hook_semantics_readback",
           "prepare_codex_hook_migration",
           "render_codex_managed_mcp",
           "prepare_codex_alternate_cleanup",
@@ -1093,6 +1093,8 @@
           "CodexHarnessAdapter._all_hook_paths",
           "CodexHarnessAdapter.prepare_install",
           "CodexHarnessAdapter._prepare_plan",
+          "CodexHarnessAdapter._plan_request",
+          "CodexHarnessAdapter._planned",
           "CodexHarnessAdapter.install",
           "CodexHarnessAdapter._install_owned",
           "CodexHarnessAdapter.uninstall",

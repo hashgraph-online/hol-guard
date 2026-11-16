@@ -401,7 +401,7 @@ def test_source_change_after_inventory_stops_before_activation_write(
     def mutate_then_plan(op: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
         # The hooks source was captured by inventory; it changes before the
         # native plan compares its captures against disk.
-        if op == "install_plan":
+        if op in {"install_plan", "install"}:
             _write(hooks_path, json.dumps(changed_payload, indent=2) + "\n")
         return original_ask(op, *args, **kwargs)
 

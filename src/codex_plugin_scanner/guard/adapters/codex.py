@@ -14,8 +14,8 @@ import json
 import os
 import sys
 import time
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -372,29 +372,6 @@ class PreparedCodexHookMigration:
     files: tuple[TransitionFile, ...]
 
 
-def _withdraw_publication(context: HarnessContext, publication: PreparedCodexHookPublication) -> None:
-    """Publish a committed hook generation's inverse, as long as nobody changed it since."""
-
-    inverse = tuple(
-        replace(
-            change,
-            before=change.after,
-            after=change.before,
-            before_mode=change.after_mode,
-            after_mode=change.before_mode,
-        )
-        for change in publication.files
-    )
-    try:
-        PreparedHarnessInstall(inverse, {}).publish(context.guard_home, removals=True)
-        remove_hook_secret_if_unused(context.guard_home)
-    except BaseException as error:
-        raise RuntimeError(
-            "codex_hook_migration_rollback_failed: Guard could not fully restore Codex hook sources after "
-            "legacy JSON removal failed. Run `hol-guard install codex` to repair the installation."
-        ) from error
-
-
 @dataclass(frozen=True, slots=True)
 class _CodexInstallPlan:
     """A prepared install, with what publishing it as an ordinary install needs."""
@@ -468,8 +445,11 @@ def _plan_file(item: Mapping[str, Any]) -> TransitionFile:
     )
 
 
-def _ask_install_plan(context: HarnessContext, request: dict[str, Any], enroll_home: Path | None) -> dict[str, Any]:
-    """One ``install_plan`` answer, asked again with each reply it needs.
+def _ask_install_plan(
+    context: HarnessContext, request: dict[str, Any], enroll_home: Path | None, op: str = "install_plan"
+) -> dict[str, Any]:
+    """One ``install_plan`` (or whole ``install``) answer, asked again with
+    each reply it needs.
 
     An enrolling plan may create the hook key, so it runs under the key's
     ordinary writer, as the generation always has."""
@@ -483,12 +463,10 @@ def _ask_install_plan(context: HarnessContext, request: dict[str, Any], enroll_h
     for _ in range(4):
         check_hook_validation_deadline()
         if enroll_home is None:
-            answer = ask("install_plan", context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
+            answer = ask(op, context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
         else:
             with _ordinary_hook_writer(enroll_home, hook_secret_path(enroll_home), actor="codex.authority-key"):
-                answer = ask(
-                    "install_plan", context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request
-                )
+                answer = ask(op, context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
         reply = answer.get("reply")
         if not isinstance(reply, Mapping):
             break
@@ -497,14 +475,53 @@ def _ask_install_plan(context: HarnessContext, request: dict[str, Any], enroll_h
         if "expand" in reply:
             request["long_paths"] = {**request.get("long_paths", {}), **expanded_short_paths(reply)}
     else:
-        raise RuntimeError("install_plan did not settle its replies")
+        raise RuntimeError(f"{op} did not settle its replies")
     check_hook_validation_deadline()
     _replay(answer.get("events"), None, None)
     if answer.get("conflict") is True:
         raise TransitionError("adapter_preparation_generation_conflict")
     if "fault" in answer:
         raise _exception(answer["fault"])
+    _raise_publication_error(answer)
+    if "retire_error" in answer:
+        failure = _exception(answer["retire_error"])
+        if answer.get("withdrawn") is not True:
+            raise RuntimeError(
+                "codex_hook_migration_rollback_failed: Guard could not fully restore Codex hook sources after "
+                "legacy JSON removal failed. Run `hol-guard install codex` to repair the installation."
+            ) from failure
+        raise failure
     return answer
+
+
+def _plan_report(
+    answer: Mapping[str, Any], detection: Any, managed_servers: Any
+) -> tuple[dict[str, Any], dict[str, object]]:
+    """The launcher manifest and the reported fields of a planned install."""
+    fields = {
+        "backup_path": str(answer["backup_path"]),
+        **_server_fields(detection, managed_servers, [str(name) for name in answer["migrated"]]),
+    }
+    return json.loads(str(answer["shim_manifest"])), fields
+
+
+def _raise_publication_error(answer: Mapping[str, object]) -> None:
+    """Raise a ``publish_hooks`` error, chained to its rollback's when that failed too."""
+    error, rollback = answer.get("error"), answer.get("rollback_error")
+    if error is None:
+        return
+    failure = _publication_fault(error)
+    if rollback is not None:
+        rollback_error = _publication_fault(rollback)
+        raised = RuntimeError(
+            "Codex hook transaction failed and rollback could not be completed: "
+            f"{type(rollback_error).__name__}: {rollback_error}"
+        )
+        add_note = getattr(raised, "add_note", None)
+        if callable(add_note):
+            add_note(f"rollback error: {rollback_error!r}")
+        raise raised from failure
+    raise failure
 
 
 def render_codex_managed_mcp(
@@ -798,6 +815,14 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         """The whole install as one plan. ``enroll`` may create the hook key and
         checks every active handler's owner, as an ordinary install does; the
         runtime's ``install_plan`` op composes it."""
+        request, detection, managed_servers = self._plan_request(context, enroll=enroll)
+        enroll_home = _hook_manifest_spec(context).guard_home if enroll else None
+        answer = _ask_install_plan(context, request, enroll_home)
+        return self._planned(context, answer, detection, managed_servers)
+
+    def _plan_request(self, context: HarnessContext, *, enroll: bool) -> tuple[dict[str, Any], Any, Any]:
+        """The ``install_plan`` request over freshly captured sources, with the
+        detection and managed servers the prepared manifest reports."""
         from ..codex_hook_recovery import _snapshot
 
         spec = _hook_manifest_spec(context)
@@ -833,7 +858,12 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             **install_fields(_runtime_guard_home(context), None),
             **short_path_fields(),
         }
-        answer = _ask_install_plan(context, request, spec.guard_home if enroll else None)
+        return request, detection, managed_servers
+
+    def _planned(
+        self, context: HarnessContext, answer: Mapping[str, Any], detection: Any, managed_servers: Any
+    ) -> _CodexInstallPlan:
+        """The prepared install an ``install_plan`` answer describes."""
         files = tuple(_plan_file(item) for item in answer["files"])
         # The plan leads with the publication: authority, manifest, receipt, config.
         authority, manifest_change, receipt_change, config_change = files[:4]
@@ -845,11 +875,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             authority,
             receipt_change,
         )
-        shim_manifest = json.loads(str(answer["shim_manifest"]))
-        fields = {
-            "backup_path": str(answer["backup_path"]),
-            **_server_fields(detection, managed_servers, [str(name) for name in answer["migrated"]]),
-        }
+        shim_manifest, fields = _plan_report(answer, detection, managed_servers)
         prepared = PreparedHarnessInstall(
             files,
             _install_manifest(
@@ -874,10 +900,15 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             return self._install_owned(context)
 
     def _install_owned(self, context: HarnessContext) -> dict[str, object]:
-        """Publish the prepared plan: the authenticated generation and its
-        backups under the hook publication journal, then, once committed, the
-        retirements and launchers it planned beside them."""
-        from ..runtime_transition import assert_transition_mutation_allowed
+        """Publish the prepared plan in the runtime's ``install`` op: the
+        authenticated generation and its backups under the hook publication
+        journal, then, once committed, the retirements and launchers planned
+        beside them. When those fail they restore themselves and the op
+        withdraws the committed generation too, so legacy hooks never run
+        beside their migration."""
+        from ..codex_hook_manifest import _spec_payload
+        from ..codex_hook_recovery import _owned
+        from ..runtime_transition import TransitionError, assert_transition_mutation_allowed
 
         assert_transition_mutation_allowed(context.guard_home)
         spec = _hook_manifest_spec(context)
@@ -885,39 +916,27 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             raise RuntimeError("Codex hook authentication currently requires one canonical global config target.")
         # A source that is not a readable regular file refuses before the journal opens.
         _check_sources(context, self._config_hook_pairs(context))
-        plans: list[_CodexInstallPlan] = []
-
-        def plan() -> tuple[PreparedCodexHookPublication, tuple[TransitionFile, ...]]:
-            planned = self._prepare_plan(context, enroll=True)
-            plans.append(planned)
-            backups = tuple(change for change in planned.prepared.files if change.path in planned.backups)
-            return planned.publication, backups
-
-        hook_state = self._write_authenticated_hook_config_owned(
-            context,
-            config_path=spec.config_path,
-            payload=None,
-            previous_manifest=load_hook_manifest_baseline(spec),
-            plan=plan,
+        request, detection, managed_servers = self._plan_request(context, enroll=True)
+        request.update(
+            home=os.path.abspath(context.guard_home),
+            config=os.path.abspath(spec.config_path.expanduser()),
+            operation_id=_owned(context.guard_home),
+            spec=_spec_payload(spec),
+            budget_spent=False,
         )
-        planned = plans[0]
-        published = {change.path for change in planned.publication.files} | planned.backups
-        remaining = tuple(change for change in planned.prepared.files if change.path not in published)
-        try:
-            PreparedHarnessInstall(remaining, planned.prepared.manifest).publish(context.guard_home, removals=True)
-        except BaseException:
-            # The retirements restored themselves; withdraw the committed
-            # generation too, so legacy hooks never run beside their migration.
-            _withdraw_publication(context, planned.publication)
-            raise
+        answer = _ask_install_plan(context, request, spec.guard_home, op="install")
+        shim_manifest, fields = _plan_report(answer["plan"], detection, managed_servers)
+        hook_state = json.loads(_reply_text(answer, "state"))
+        if not isinstance(hook_state, dict):
+            raise TransitionError("native_transition_invalid")
         _require_codex_authoritative_shell_hook(context)
         return _install_manifest(
             context,
             "install",
-            planned.shim_manifest,
+            shim_manifest,
             manifest_path=str(hook_state["manifest_path"]),
             integrity=str(hook_state["integrity_status"]),
-            **planned.fields,
+            **fields,
         )
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
@@ -1061,15 +1080,12 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         config_path: Path,
         payload: dict[str, object] | None,
         previous_manifest: dict[str, object] | None,
-        plan: Callable[[], tuple[PreparedCodexHookPublication, tuple[TransitionFile, ...]]] | None = None,
     ) -> dict[str, object]:
         """Commit manifest first, then config, rolling both back on any failure.
 
         During the short manifest-first window an old config fails closed against
         the new manifest.  Codex never observes a newly registered hook before
-        its complete authenticated identity has been durably committed. ``plan``
-        prepares the generation in place of rendering ``payload``, with the
-        files written ahead of it. The runtime's ``publish_hooks`` op prepares
+        its complete authenticated identity has been durably committed. The runtime's ``publish_hooks`` op prepares
         the record, writes the files, reads the hooks back, verifies them and
         commits, or runs the durable inverse.
         """
@@ -1090,19 +1106,15 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             if not isinstance(target, dict):
                 raise TransitionError("native_transition_invalid")
             before = target.get("before")
-            if plan is not None:
-                publication, ahead = plan()
-            else:
-                assert payload is not None
-                original = None if before is None else base64.b64decode(str(before))
-                publication = prepare_authenticated_hook_publication(
-                    spec,
-                    rendered_config=dump_toml(payload, original=original),
-                    previous_manifest=previous_manifest,
-                    create_key=True,
-                )
-                ahead = ()
-            files = (*ahead, *publication.files)
+            assert payload is not None
+            original = None if before is None else base64.b64decode(str(before))
+            publication = prepare_authenticated_hook_publication(
+                spec,
+                rendered_config=dump_toml(payload, original=original),
+                previous_manifest=previous_manifest,
+                create_key=True,
+            )
+            files = publication.files
             request.update(
                 home=os.path.abspath(context.guard_home),
                 config=config,
@@ -1125,20 +1137,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             **short_path_fields(),
         }
         answer = settle_short_paths(publish, request, "publish_hooks")
-        error, rollback = answer.get("error"), answer.get("rollback_error")
-        if error is not None:
-            failure = _publication_fault(error)
-            if rollback is not None:
-                rollback_error = _publication_fault(rollback)
-                raised = RuntimeError(
-                    "Codex hook transaction failed and rollback could not be completed: "
-                    f"{type(rollback_error).__name__}: {rollback_error}"
-                )
-                add_note = getattr(raised, "add_note", None)
-                if callable(add_note):
-                    add_note(f"rollback error: {rollback_error!r}")
-                raise raised from failure
-            raise failure
+        _raise_publication_error(answer)
         state = json.loads(_reply_text(answer, "state"))
         if not isinstance(state, dict):
             raise TransitionError("native_transition_invalid")

@@ -16,6 +16,7 @@ import base64
 import json
 import os
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -118,16 +119,93 @@ def stepwise_publish_hooks(
         raise
 
 
+def _inverse(change: TransitionFile) -> TransitionFile:
+    return replace(
+        change, before=change.after, after=change.before, before_mode=change.after_mode, after_mode=change.before_mode
+    )
+
+
+def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, object]:
+    """The runtime's ``install`` op, one step at a time: plan, publish the
+    generation with its backups ahead of it stepwise, then the remaining
+    files, withdrawing the generation when those fail."""
+    from codex_plugin_scanner.guard.adapters import codex
+    from codex_plugin_scanner.guard.adapters.base import PreparedHarnessInstall
+    from codex_plugin_scanner.guard.codex_hook_file_integrity import _python_package_roots
+    from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, remove_hook_secret_if_unused
+    from codex_plugin_scanner.guard.codex_hook_manifest import _spec_payload
+    from codex_plugin_scanner.guard.codex_hook_recovery import _owned
+    from codex_plugin_scanner.guard.native_transition_files import publication as publication_op
+    from codex_plugin_scanner.guard.runtime_transition import assert_transition_mutation_allowed
+
+    assert_transition_mutation_allowed(context.guard_home)
+    spec = codex._hook_manifest_spec(context)
+    codex._check_sources(context, adapter._config_hook_pairs(context))
+    config = os.path.abspath(spec.config_path.expanduser())
+    target = publication_op("target", context.guard_home, config=config)
+    assert isinstance(target, dict)
+    planned = adapter._prepare_plan(context, enroll=True)
+    publication = planned.publication
+    ahead = tuple(change for change in planned.prepared.files if change.path in planned.backups)
+    files = (*ahead, *publication.files)
+    request = {
+        "spec": _spec_payload(spec),
+        "package_roots": [str(root) for root in _python_package_roots()],
+        "budget_spent": False,
+        "home": os.path.abspath(context.guard_home),
+        "config": config,
+        "operation_id": _owned(context.guard_home),
+        "original": target.get("before"),
+        "original_identity": target.get("identity"),
+        "key_present": target.get("key_present") is True,
+        "files": [change.payload() for change in files],
+        "config_index": files.index(publication.config_change),
+        "manifest_index": files.index(publication.manifest_change),
+        "receipt_index": files.index(publication.receipt_change),
+        "after_manifest": base64.b64encode(canonical_manifest_bytes(publication.manifest) + b"\n").decode(),
+    }
+    answer = codex._publish_hooks(context, request, files)
+    codex._raise_publication_error(answer)
+    hook_state = json.loads(str(answer["state"]))
+    published = {change.path for change in publication.files} | planned.backups
+    remaining = tuple(change for change in planned.prepared.files if change.path not in published)
+    try:
+        PreparedHarnessInstall(remaining, planned.prepared.manifest).publish(context.guard_home, removals=True)
+    except BaseException:
+        try:
+            inverse = tuple(_inverse(change) for change in publication.files)
+            PreparedHarnessInstall(inverse, {}).publish(context.guard_home, removals=True)
+            remove_hook_secret_if_unused(context.guard_home)
+        except BaseException as error:
+            raise RuntimeError(
+                "codex_hook_migration_rollback_failed: Guard could not fully restore Codex hook sources after "
+                "legacy JSON removal failed. Run `hol-guard install codex` to repair the installation."
+            ) from error
+        raise
+    codex._require_codex_authoritative_shell_hook(context)
+    return codex._install_manifest(
+        context,
+        "install",
+        planned.shim_manifest,
+        manifest_path=str(hook_state["manifest_path"]),
+        integrity=str(hook_state["integrity_status"]),
+        **planned.fields,
+    )
+
+
 def use_stepwise_publication(monkeypatch: pytest.MonkeyPatch) -> None:
     """Publish this test's hook generations one step at a time."""
     from codex_plugin_scanner.guard.adapters import codex
 
     monkeypatch.setattr(codex, "_publish_hooks", stepwise_publish_hooks)
+    monkeypatch.setattr(codex.CodexHarnessAdapter, "_install_owned", stepwise_install_owned)
 
 
 # The same switch for a child process script.
 STEPWISE_HOOKS = r"""
 from codex_plugin_scanner.guard.adapters import codex as _stepwise_codex
 from tests.codex_publication_steps import stepwise_publish_hooks as _stepwise_publish_hooks
+from tests.codex_publication_steps import stepwise_install_owned as _stepwise_install_owned
 _stepwise_codex._publish_hooks = _stepwise_publish_hooks
+_stepwise_codex.CodexHarnessAdapter._install_owned = _stepwise_install_owned
 """

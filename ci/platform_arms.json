@@ -848,7 +848,7 @@
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/codex_install_plan.rs",
    "item": "fn wire_file -- cfg! expression",
    "cfg": "unix",
-   "body": "ccf60f93f912"
+   "body": "5da34a1bdadd"
   },
   {
    "verdict": "posix-primitive",
