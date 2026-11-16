@@ -21,6 +21,7 @@ from pathlib import Path
 from .codex_hook_launch_runtime import run_isolated_hook_process
 from .fork_safety import forget_in_child
 from .native_approval_errors import FINITE_FAILURE_CODES
+from .native_process_stop_scope import native_process_stop_requested
 from .native_resident_revival import (
     RESTART_BLOCKED_CODE,
     HoldKey,
@@ -197,18 +198,12 @@ class _PersistentNativeClientPool:
                 return False
             return any(client._process is not None and client._process.poll() is None for client in self._idle)
 
-    def _lease(self, *, deadline_monotonic: float, idle_only: bool = False) -> _PersistentNativeClient | None:
+    def _lease(
+        self, *, deadline_monotonic: float, idle_only: bool = False, idle_wait_seconds: float = 0.0
+    ) -> _PersistentNativeClient | None:
         with self._condition:
             if idle_only:
-                # Readiness is advisory: another caller can borrow the last
-                # stream before dispatch. Select and remove it atomically.
-                if not self._closed:
-                    for client in reversed(self._idle):
-                        if client._process is not None and client._process.poll() is None:
-                            self._idle.remove(client)
-                            self._parked_at.pop(client, None)
-                            return client
-                return None
+                return self._lease_idle_locked(min(deadline_monotonic, time.monotonic() + max(0.0, idle_wait_seconds)))
             while not self._closed:
                 # Timed-out requests may have no teardown budget left. Retain
                 # ownership until close confirms containment, but reclaim
@@ -237,6 +232,31 @@ class _PersistentNativeClientPool:
         _LAST_FAILURE_CODE.set("native_client_pool_exhausted")
         return None
 
+    def _lease_idle_locked(self, wait_until: float) -> _PersistentNativeClient | None:
+        """Borrow a live parked stream, waiting until ``wait_until`` for one in use.
+
+        Readiness is advisory: another caller can borrow the last stream before
+        dispatch, so a stream is selected and removed atomically. The wait only
+        covers streams this pool already has busy; with none, nothing can be
+        parked and the caller is answered at once, so asking never starts one.
+        """
+
+        while not self._closed:
+            for client in reversed(self._idle):
+                if _client_alive(client):
+                    self._idle.remove(client)
+                    self._parked_at.pop(client, None)
+                    return client
+            idle = set(self._idle)
+            busy = any(
+                _client_alive(client) for client in self._clients if client not in idle and client not in self._retiring
+            )
+            remaining = wait_until - time.monotonic()
+            if not busy or remaining <= 0:
+                return None
+            self._condition.wait(timeout=remaining)
+        return None
+
     def request(
         self,
         payload: bytes,
@@ -244,19 +264,30 @@ class _PersistentNativeClientPool:
         deadline_monotonic: float,
         diagnostic: bool = False,
         idle_only: bool = False,
+        idle_wait_seconds: float = 0.0,
     ) -> bytes | None:
         """Send one request. ``diagnostic`` asks a question about the resident
         rather than giving it work: the answer must not arm or clear the hold
         that gates hook execution, and the stream it borrows is retired rather
         than parked, so the question leaves no lease of its own behind.
+
+        A caller whose stop scope is already set is refused before it borrows a
+        stream. Its response wait would end at once and close the borrowed
+        stream, and a parked stream is the client lease that keeps the resident
+        up, so a closing owner would otherwise take the resident down with it.
         """
+        if native_process_stop_requested():
+            _LAST_FAILURE_CODE.set("native_client_timed_out")
+            return None
         if not idle_only and restart_hold_active(self._hold_key) and not self.has_idle_client():
             # The Rust client just refused to respawn a crash-looping resident.
             # Answer the same bounded refusal instead of spawning a client per call.
             _LAST_FAILURE_CODE.set(RESTART_BLOCKED_CODE)
             _LAST_HOLD_KEY.set(self._hold_key)
             return restart_blocked_frame()
-        client = self._lease(deadline_monotonic=deadline_monotonic, idle_only=idle_only)
+        client = self._lease(
+            deadline_monotonic=deadline_monotonic, idle_only=idle_only, idle_wait_seconds=idle_wait_seconds
+        )
         if client is None:
             return None
         response: bytes | None = None
@@ -287,7 +318,8 @@ class _PersistentNativeClientPool:
                     self._idle.append(client)
                     self._parked_at[client] = time.monotonic()
                     self._schedule_trim_locked()
-                self._condition.notify()
+                # Idle-only borrowers and capacity waiters share this condition.
+                self._condition.notify_all()
             if close_client:
                 try:
                     contained = client.close(deadline_monotonic=deadline_monotonic)
@@ -372,6 +404,11 @@ class _PersistentNativeClientPool:
 _CLIENTS_LOCK = threading.Lock()
 _CLIENT_POOLS: dict[tuple[str, str], _PersistentNativeClientPool] = {}
 forget_in_child(_CLIENT_POOLS)
+
+
+def _client_alive(client: _PersistentNativeClient) -> bool:
+    process = client._process
+    return process is not None and process.poll() is None
 
 
 def native_resident_client_ready(executable: Path, guard_home: Path) -> bool:
@@ -677,6 +714,7 @@ def native_resident_client_request(
     deadline_monotonic: float | None = None,
     diagnostic: bool = False,
     idle_only: bool = False,
+    idle_wait_seconds: float = 0.0,
 ) -> bytes | None:
     """Send bounded bytes through a persistent Rust client stream.
 
@@ -687,7 +725,9 @@ def native_resident_client_request(
 
     ``idle_only`` borrows only an existing live idle client, without waiting
     for pool capacity or spawning a Python-owned client process. Rust still
-    owns resident recovery behind a live client stream.
+    owns resident recovery behind a live client stream. ``idle_wait_seconds``
+    lets an idle-only caller wait that long for a stream the pool has in use to
+    be parked; it never waits when the pool has no stream in use.
     """
     previous_failure = _LAST_FAILURE_CODE.get() if diagnostic else None
     previous_hold_key = _LAST_HOLD_KEY.get() if diagnostic else None
@@ -702,6 +742,7 @@ def native_resident_client_request(
             deadline_monotonic=deadline_monotonic,
             diagnostic=diagnostic,
             idle_only=idle_only,
+            idle_wait_seconds=idle_wait_seconds,
         )
     finally:
         if diagnostic:
@@ -722,6 +763,7 @@ def _resident_client_request(
     deadline_monotonic: float | None,
     diagnostic: bool,
     idle_only: bool = False,
+    idle_wait_seconds: float = 0.0,
 ) -> bytes | None:
     _LAST_FAILURE_CODE.set(None)
     _LAST_HOLD_KEY.set(None)
@@ -754,6 +796,7 @@ def _resident_client_request(
         deadline_monotonic=deadline,
         diagnostic=diagnostic,
         idle_only=idle_only,
+        idle_wait_seconds=idle_wait_seconds,
     )
 
 
