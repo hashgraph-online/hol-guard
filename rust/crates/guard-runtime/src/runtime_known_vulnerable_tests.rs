@@ -285,10 +285,14 @@ fn launches_resolve_the_way_the_shell_would() {
 #[cfg(unix)]
 #[test]
 fn a_version_probe_is_not_a_launch_the_advisories_reach() {
+    use std::os::unix::fs::PermissionsExt;
     let root = tempfile::tempdir().unwrap();
     let bin = root.path().join("bin");
     std::fs::create_dir_all(&bin).unwrap();
-    executable(&bin.join("node"));
+    // A compiled build, not a script.
+    std::fs::write(bin.join("node"), b"\x7fELF\x02\x01\x01\0").unwrap();
+    std::fs::set_permissions(bin.join("node"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    executable(&root.path().join("node"));
     let search = bin.to_string_lossy().into_owned();
     let launches =
         |command: &str| runtime_launches(command, Some(root.path()), root.path(), Some(&search));
@@ -308,6 +312,10 @@ fn a_version_probe_is_not_a_launch_the_advisories_reach() {
         "node -e 'run()'",
         "NODE_OPTIONS=--require=./x.js node --version",
         "env NODE_OPTIONS=--require=./x.js node --version",
+        "env node --version",
+        "nice node -v",
+        // A script named node runs its own text, whatever the flag.
+        "./node --version",
         "node --version && node a.js",
         "exec node a.js",
     ] {

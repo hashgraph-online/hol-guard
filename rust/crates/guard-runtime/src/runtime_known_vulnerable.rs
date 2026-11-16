@@ -160,16 +160,16 @@ fn runtime_launches(
             true,
         );
         for segment in &model.segments {
-            if let Some(executable) = launched(segment)
-                .filter(|(name, arguments)| {
-                    is_runtime_name(name) && !version_probe(segment, arguments)
-                })
-                .map(|(name, _)| name)
+            if let Some((executable, arguments)) =
+                launched(segment).filter(|(name, _)| is_runtime_name(name))
             {
                 let cwd = cwd.filter(|_| known.cwd);
                 let search_path = search_path.filter(|_| known.path && !segment.path_overridden);
                 if let Some(path) = resolve(executable, cwd, search_path) {
-                    if !launches.contains(&path) {
+                    let probe = model.wrapper_chain.is_empty()
+                        && version_probe(segment, arguments)
+                        && !script(&path);
+                    if !probe && !launches.contains(&path) {
                         launches.push(path);
                     }
                 }
@@ -264,11 +264,23 @@ fn launched(segment: &CommandSegment) -> Option<(&str, &[String])> {
 
 /// `node -v` and `node --version` print the build's version and exit before
 /// any script, module or option file is read, so the advisories have nothing
-/// to reach. An environment prefix such as `NODE_OPTIONS` keeps it a launch.
+/// to reach. An environment prefix such as `NODE_OPTIONS` or a wrapper keeps
+/// it a launch.
 fn version_probe(segment: &CommandSegment, arguments: &[String]) -> bool {
     segment.environment_names.is_empty()
         && segment.wrapper_chain.is_empty()
         && matches!(arguments, [only] if only == "-v" || only == "--version")
+}
+
+/// A script that calls itself `node` runs whatever it holds, `--version`
+/// included. Only a compiled build answers the flag itself, so a file that
+/// starts with `#!`, or cannot be read, stays a launch.
+fn script(path: &Path) -> bool {
+    use std::io::Read;
+    let mut head = [0u8; 2];
+    std::fs::File::open(path)
+        .and_then(|mut file| file.read_exact(&mut head))
+        .map_or(true, |()| head == *b"#!")
 }
 
 fn is_runtime_name(executable: &str) -> bool {
