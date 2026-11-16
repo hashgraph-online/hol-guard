@@ -956,14 +956,14 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
     native_adapter_state_integrity_runtime,
 ):
     del native_adapter_state_integrity_runtime
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
     from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
 
     runtime, plan, _, _ = transition
     workspace = runtime.home.parent / "workspace" if workspace_enabled else None
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=workspace, guard_home=runtime.home)
-    adapter = CopilotHarnessAdapter()
+    adapter = get_adapter("copilot")
     native_adapter_state_integrity(
         action="authenticate",
         harness="copilot",
@@ -1025,8 +1025,8 @@ def test_changed_copilot_authority_prevents_any_transition_mutation(
     native_adapter_state_integrity_runtime,
 ):
     del native_adapter_state_integrity_runtime
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
     from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
 
     runtime, plan, bindings, pointer = transition
@@ -1039,7 +1039,7 @@ def test_changed_copilot_authority_prevents_any_transition_mutation(
         create_key=True,
         guard_home=runtime.home,
     )
-    prepared = CopilotHarnessAdapter().prepare_install(ctx)
+    prepared = get_adapter("copilot").prepare_install(ctx)
     plan = replace(plan, files=(*plan.files, *prepared.files))
     if after_publication:
         begin(runtime, plan)

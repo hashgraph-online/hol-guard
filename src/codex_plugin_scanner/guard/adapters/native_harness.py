@@ -24,6 +24,7 @@ from ..models import HarnessDetection
 from ..native_caller import caller_identity
 from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall
 from .diagnostic_probes import command_probes_enabled
+from .native_harness_steps import detection_from
 
 _KIND = "harness_adapter"
 # Room for every CLI probe one harness runs, each bounded at five seconds.
@@ -186,14 +187,19 @@ class NativeHarnessAdapter(HarnessAdapter):
             from .extension_runtime import extension_runtime
 
             fields["runtime"] = extension_runtime()
-        answer = ask(op, context, harness=self.harness, **fields)
+        answer = self._owned_ask(op, context, **fields)
         if answer == {"reply": {"facts": None}} and "facts" not in fields:
             # The daemon URL the hooks reach is only known to this process.
             from ..claude_hook_entry import claude_facts
 
             fields["facts"] = claude_facts(context.guard_home)
-            answer = ask(op, context, harness=self.harness, **fields)
+            answer = self._owned_ask(op, context, **fields)
         return answer
+
+    def _owned_ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
+        from .native_harness_steps import owned_ask
+
+        return owned_ask(self.harness, self._spec.get("hook_ownership"), op, context, **fields)
 
     def _shim_names(self) -> dict[str, Any]:
         return {"launcher_name": self.launcher_name or None, "display_name": self._spec.get("display_name")}
@@ -217,10 +223,14 @@ class NativeHarnessAdapter(HarnessAdapter):
         return detection_from(self.harness, context, answer)
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
-        op = "launch_command" if self._spec.get("trusted_launcher") else "default_launch"
+        op = self._spec.get("launch_op") or (
+            "launch_command" if self._spec.get("trusted_launcher") else "default_launch"
+        )
         return [str(part) for part in self._ask(op, context, args=passthrough_args)["argv"]]
 
     def preview_launch_commands(self, context: HarnessContext, passthrough_args: list[str]) -> tuple[list[str], ...]:
+        if self._spec.get("launch_op"):
+            return (self.launch_command(context, passthrough_args),)
         if not self._spec.get("trusted_launcher"):
             return super().preview_launch_commands(context, passthrough_args)
         # Resolves without registering an explicit path.
@@ -275,8 +285,12 @@ class NativeHarnessAdapter(HarnessAdapter):
         from ..shims import prepare_guard_shim
 
         mode = self._spec.get("install")
-        if mode == "delegated":
+        if mode == "delegated" or self._spec.get("prepare") == "unavailable":
             raise TransitionError("adapter_preparation_unavailable")
+        if self._spec.get("prepare") == "detected":
+            from .native_harness_steps import prepared_from_detection
+
+            return prepared_from_detection(self, context, create_key=False)
         shim = prepare_guard_shim(self.harness, context, **self._shim_names())
         if mode == "shim":
             manifest = {"harness": self.harness, "active": True, "config_path": shim.manifest["shim_path"]}
@@ -440,30 +454,6 @@ class NativeHarnessAdapter(HarnessAdapter):
             **delegates,
         )
         return json.loads(_text(answer, "manifest"))
-
-
-def detection_from(harness: str, context: HarnessContext, answer: dict[str, Any]) -> HarnessDetection:
-    """The detection a ``detect``-shaped answer describes."""
-    from ..aibom_detection import _artifacts_from_payload, extend_detection_with_workspace_aibom
-
-    artifacts = _artifacts_from_payload(answer)
-    if answer.get("firewall") is True:
-        from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
-
-        artifacts = tuple(enrich_artifact_with_mcp_skill_firewall(artifact) for artifact in artifacts)
-    detection = HarnessDetection(
-        harness=harness,
-        installed=answer.get("installed") is True,
-        command_available=answer.get("command_available") is True,
-        config_paths=tuple(str(path) for path in answer.get("config_paths", ())),
-        artifacts=artifacts,
-        warnings=tuple(str(warning) for warning in answer.get("warnings", ())),
-    )
-    if answer.get("workspace_aibom") is not True:
-        return detection
-    return extend_detection_with_workspace_aibom(
-        detection, home_dir=context.home_dir, workspace_dir=context.workspace_dir
-    )
 
 
 def planned_files(answer: dict[str, Any]) -> list[Any]:

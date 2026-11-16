@@ -10,7 +10,6 @@ from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.aibom_detection import (
     INVENTORY_ITEM_KINDS,
     NativeAibomError,
@@ -305,7 +304,7 @@ def test_hermes_and_openclaw_inventory_snapshots_include_workspace_agents_md(tmp
         guard_home=tmp_path / ".hol-guard",
     )
 
-    for adapter in (HermesHarnessAdapter(), get_adapter("openclaw")):
+    for adapter in (get_adapter("hermes"), get_adapter("openclaw")):
         snapshot = adapter.inventory_snapshot(context, generated_at="2026-06-10T00:00:00Z")
         overlay_items = [item for item in snapshot.items if item.item_kind == "overlay"]
         assert any(item.metadata.get("instructionRole") == "agents_md" for item in overlay_items)
@@ -553,7 +552,7 @@ def test_workspace_skills_excluded_for_hermes_inventory_snapshot(tmp_path: Path)
         workspace_dir=workspace,
         guard_home=tmp_path / ".guard",
     )
-    snapshot = HermesHarnessAdapter().inventory_snapshot(
+    snapshot = get_adapter("hermes").inventory_snapshot(
         context,
         generated_at="2026-01-01T00:00:00Z",
     )

@@ -50,9 +50,13 @@ def refresh_claude_hooks(*, home_dir: Path, workspace_dir: Path | None, guard_ho
     """Rewrite the managed Claude hooks with this build's argv, under the install lock."""
     from .adapters import get_adapter
     from .adapters.base import HarnessContext
+    from .adapters.claude_code import ClaudeCodeHarnessAdapter
 
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
-    get_adapter(_HARNESS).refresh_runtime_hook_urls(context)
+    adapter = get_adapter(_HARNESS)
+    if not isinstance(adapter, ClaudeCodeHarnessAdapter):
+        raise RuntimeError("claude-code adapter is not registered")
+    adapter.refresh_runtime_hook_urls(context)
 
 
 def _run_session_start_from_argv(argv: Sequence[str]) -> int:

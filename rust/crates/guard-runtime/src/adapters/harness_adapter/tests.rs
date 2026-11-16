@@ -194,6 +194,35 @@ fn describe_lists_every_adapter_this_kind_owns() {
 }
 
 #[test]
+fn describe_names_the_hermes_and_copilot_preparation_and_hook_ownership() {
+    let answer = dispatch(&json!({"op": "describe"})).unwrap();
+    let find = |name: &str| {
+        answer["adapters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|adapter| adapter["harness"] == name)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(find("hermes")["prepare"], "unavailable");
+    assert_eq!(find("devin")["prepare"], "plan");
+    let copilot = find("copilot");
+    assert_eq!(copilot["prepare"], "detected");
+    assert_eq!(copilot["launch_op"], "launch_command");
+    assert_eq!(find("grok")["launch_op"], "");
+    assert!(copilot["hook_ownership"]["message"]
+        .as_str()
+        .unwrap()
+        .starts_with("Guard could not read which Copilot hooks"));
+    assert_eq!(
+        copilot["hook_ownership"]["ops"].as_array().unwrap().len(),
+        4
+    );
+    assert_eq!(find("cursor")["hook_ownership"], Value::Null);
+}
+
+#[test]
 fn kimi_install_adds_the_hook_and_keeps_shim_notes_last() {
     let home = Home::new();
     let answer = home.ask(

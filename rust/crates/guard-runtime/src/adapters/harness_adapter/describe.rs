@@ -47,6 +47,14 @@ const CENTER: &str = "approval-center";
 pub(crate) const PASEO_DELEGATES: [&str; 6] =
     ["claude-code", "codex", "copilot", "opencode", "pi", "omp"];
 
+/// Copilot ops that read or rewrite Guard's hook entries.
+const COPILOT_HOOK_OPS: [&str; 4] = [
+    "install_detection",
+    "prepare_install",
+    "apply_install",
+    "apply_uninstall",
+];
+
 pub(crate) use super::describe_env::{ENV_NAMES, ENV_PREFIXES};
 
 pub(crate) const SPECS: [Spec; 18] = [
@@ -420,6 +428,21 @@ impl Spec {
                 Install::Delegated => "delegated",
             },
             "dynamic": self.dynamic,
+            // Hermes signs its manifest, which may create the state key, so it
+            // has no rebind preparation; Copilot plans one from what it detected.
+            "prepare": match self.harness {
+                "hermes" => "unavailable",
+                "copilot" => "detected",
+                _ => "plan",
+            },
+            // Copilot names its own launch argv and previews only that one.
+            "launch_op": if self.harness == "copilot" { "launch_command" } else { "" },
+            // Copilot's hook ops refuse to touch a file the runtime did not plan.
+            "hook_ownership": if self.harness == "copilot" {
+                json!({"message": super::copilot::UNANSWERED, "ops": COPILOT_HOOK_OPS})
+            } else {
+                Value::Null
+            },
             // Grok resolves its own trusted executable and retires stale hook
             // commands the CLI's validator names.
             "trusted_launcher": self.harness == "grok",

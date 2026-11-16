@@ -34,7 +34,8 @@ pub(super) const MCP_KEYS: [&str; 2] = ["mcpServers", "servers"];
 pub(super) type Captured = [(PathBuf, Option<Vec<u8>>)];
 /// The workspace hook file's plan and the normalized file it edits.
 pub(super) type WorkspacePlan = (HookPlan, Vec<(String, PyVal)>);
-const UNANSWERED: &str = "Guard could not read which Copilot hooks it installed; the native Guard \
+pub(super) const UNANSWERED: &str =
+    "Guard could not read which Copilot hooks it installed; the native Guard \
                           runtime did not answer. Run `hol-guard doctor copilot` and try again.";
 
 pub(super) fn config_path(ctx: &Ctx) -> PathBuf {

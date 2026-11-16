@@ -10,11 +10,11 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
+from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
@@ -123,7 +123,7 @@ def test_gr096_managed_hook_json_matches_each_harness_schema(tmp_path: Path) -> 
         encoding="utf-8",
     )
     opencode_manifest = OpenCodeHarnessAdapter().install(context)
-    CopilotHarnessAdapter().install(context)
+    get_adapter("copilot").install(context)
 
     codex_hooks = _read_codex_hooks(Path(str(codex_manifest["managed_hook_config_path"])))
     claude_hooks = json.loads((context.home_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))["hooks"]
@@ -145,7 +145,7 @@ def test_gr099_managed_hooks_use_lightweight_cli_entrypoints(tmp_path: Path) -> 
 
     codex_manifest = CodexHarnessAdapter().install(context)
     ClaudeCodeHarnessAdapter().install(context)
-    CopilotHarnessAdapter().install(context)
+    get_adapter("copilot").install(context)
 
     codex_hooks = _read_codex_hooks(Path(str(codex_manifest["managed_hook_config_path"])))
     claude_hooks = json.loads((context.home_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))["hooks"]

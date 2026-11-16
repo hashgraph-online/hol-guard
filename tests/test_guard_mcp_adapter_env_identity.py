@@ -8,13 +8,12 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 
@@ -172,7 +171,7 @@ def _secondary_mcp_artifact(
         with mock.patch.dict(os.environ):
             os.environ.pop("HERMES_HOME", None)
             os.environ.pop("HERMES_HOST_HOME", None)
-            detection = HermesHarnessAdapter().detect(
+            detection = get_adapter("hermes").detect(
                 HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "guard-home")
             )
         return next(item for item in detection.artifacts if item.artifact_type == "mcp_server")

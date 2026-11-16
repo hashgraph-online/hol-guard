@@ -13,8 +13,8 @@ import pytest
 import yaml as pyyaml
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
@@ -56,7 +56,7 @@ def _config(tmp_path: Path) -> dict[str, object]:
 
 def test_install_writes_fail_closed_pretool_hook(tmp_path: Path) -> None:
     _config(tmp_path)
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     adapter.install(_ctx(tmp_path))
 
     config = pyyaml.safe_load((tmp_path / ".hermes" / "config.yaml").read_text(encoding="utf-8"))
@@ -80,7 +80,7 @@ def test_install_writes_fail_closed_pretool_hook(tmp_path: Path) -> None:
 
 def test_install_is_idempotent_for_runtime_hooks(tmp_path: Path) -> None:
     _config(tmp_path)
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     context = _ctx(tmp_path)
     adapter.install(context)
     adapter.install(context)
@@ -91,7 +91,7 @@ def test_install_is_idempotent_for_runtime_hooks(tmp_path: Path) -> None:
 
 def test_uninstall_removes_guard_hook_and_keeps_user_hooks(tmp_path: Path) -> None:
     _config(tmp_path)
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     context = _ctx(tmp_path)
     adapter.install(context)
     adapter.uninstall(context)
@@ -107,7 +107,7 @@ def test_uninstall_removes_guard_hook_and_keeps_user_hooks(tmp_path: Path) -> No
 
 def test_runtime_probe_is_not_ready_without_registered_hook(tmp_path: Path) -> None:
     _config(tmp_path)
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     context = _ctx(tmp_path)
     adapter.install(context)
     config_path = tmp_path / ".hermes" / "config.yaml"
@@ -126,7 +126,7 @@ def test_runtime_probe_is_not_ready_without_registered_hook(tmp_path: Path) -> N
 
 def test_doctor_protection_label_is_launch_review_only_without_hook(tmp_path: Path) -> None:
     _config(tmp_path)
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     context = _ctx(tmp_path)
     adapter.install(context)
     config_path = tmp_path / ".hermes" / "config.yaml"
@@ -217,7 +217,7 @@ def test_pretool_call_records_runtime_receipt(
     _write(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     _write(home_dir / ".hermes" / "config.yaml", "mcp_servers: {}\n")
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
-    HermesHarnessAdapter().install(context)
+    get_adapter("hermes").install(context)
     capsys.readouterr()
     monkeypatch.setattr(
         sys,
@@ -257,7 +257,7 @@ def test_pretool_call_records_runtime_receipt(
 
 def test_reinstall_retires_stale_allowlist_commands(tmp_path: Path) -> None:
     _config(tmp_path)
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     context = _ctx(tmp_path)
     adapter.install(context)
     allowlist_path = tmp_path / ".hermes" / "shell-hooks-allowlist.json"
@@ -283,7 +283,7 @@ def test_malformed_allowlist_refuses_install(tmp_path: Path) -> None:
     allowlist_path = tmp_path / ".hermes" / "shell-hooks-allowlist.json"
     allowlist_path.write_text('{"approvals": {}}\n', encoding="utf-8")
     with pytest.raises(ValueError, match="malformed"):
-        HermesHarnessAdapter().install(_ctx(tmp_path))
+        get_adapter("hermes").install(_ctx(tmp_path))
 
 
 def test_install_accepts_symlinked_custom_hermes_home_authority(
@@ -301,7 +301,7 @@ def test_install_accepts_symlinked_custom_hermes_home_authority(
     monkeypatch.setenv("HERMES_HOME", str(selected_home))
     (tmp_path / "workspace").mkdir()
 
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     adapter.install(_ctx(tmp_path))
 
     allowlist_path = real_home / "shell-hooks-allowlist.json"
@@ -324,7 +324,7 @@ def test_install_rejects_symlinked_allowlist_without_touching_target(tmp_path: P
         pytest.skip("file symlinks are unavailable")
 
     with pytest.raises(ValueError, match="regular file directly under"):
-        HermesHarnessAdapter().install(_ctx(tmp_path))
+        get_adapter("hermes").install(_ctx(tmp_path))
 
     assert allowlist_path.is_symlink()
     assert outside.read_text(encoding="utf-8") == original
@@ -343,7 +343,7 @@ def test_user_hook_with_marker_substring_is_preserved(tmp_path: Path) -> None:
         ),
     )
     (tmp_path / "workspace").mkdir(exist_ok=True)
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     adapter.install(_ctx(tmp_path))
     adapter.uninstall(_ctx(tmp_path))
     config = pyyaml.safe_load((tmp_path / ".hermes" / "config.yaml").read_text(encoding="utf-8"))

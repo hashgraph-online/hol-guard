@@ -173,7 +173,7 @@ def test_frozen_copilot_preparation_plans_no_helper_and_publishes_nothing(
 ):
     del native_adapter_state_integrity_runtime
     from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-    from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
 
     ctx = HarnessContext(
@@ -191,7 +191,7 @@ def test_frozen_copilot_preparation_plans_no_helper_and_publishes_nothing(
     )
     monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
     use_bounded_runtime(monkeypatch, tmp_path / "hol-guard-runtime")
-    prepared = CopilotHarnessAdapter().prepare_install(ctx)
+    prepared = get_adapter("copilot").prepare_install(ctx)
     assert len(prepared.files) == (12 if workspace_enabled else 7)
     assert not any(change.path.suffix == ".py" for change in prepared.files)
     assert not (ctx.guard_home / "bin").exists()
@@ -205,7 +205,7 @@ def test_copilot_prepared_generation_matches_normal_install(
     native_adapter_state_integrity_runtime,
 ):
     del native_adapter_state_integrity_runtime
-    from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
 
     ctx = HarnessContext(
@@ -221,7 +221,7 @@ def test_copilot_prepared_generation_matches_normal_install(
         create_key=True,
         guard_home=ctx.guard_home,
     )
-    adapter = CopilotHarnessAdapter()
+    adapter = get_adapter("copilot")
     prepared = adapter.prepare_install(ctx)
     assert adapter.install(ctx) == prepared.manifest
     for change in prepared.files:
@@ -230,7 +230,7 @@ def test_copilot_prepared_generation_matches_normal_install(
 
 
 def test_copilot_preparation_preserves_and_distinguishes_invalid_authority(tmp_path):
-    from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
+    from codex_plugin_scanner.guard.adapters import get_adapter
 
     ctx = context(tmp_path)
     authority = ctx.guard_home / "managed/adapter-state.key"
@@ -239,7 +239,7 @@ def test_copilot_preparation_preserves_and_distinguishes_invalid_authority(tmp_p
     authority.chmod(0o600)
     before = authority.stat()
     with pytest.raises(TransitionError, match="adapter_preparation_authority_invalid"):
-        CopilotHarnessAdapter().prepare_install(ctx)
+        get_adapter("copilot").prepare_install(ctx)
     assert authority.read_bytes() == b"invalid fixture authority"
     assert authority.stat().st_ino == before.st_ino
     assert authority.stat().st_mtime_ns == before.st_mtime_ns
