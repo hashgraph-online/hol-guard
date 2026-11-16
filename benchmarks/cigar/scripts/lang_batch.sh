@@ -23,7 +23,16 @@ release() {
   done
 }
 trap release EXIT
-trap 'exit 130' INT TERM
+# Each worker runs in its own process group (set -m), so a cancelled batch stops every worker
+# and the harness under it, and waits for them, before release can remove the login copy.
+pids=()
+stop() {
+  trap '' INT TERM
+  for p in ${pids[@]+"${pids[@]}"}; do kill -TERM -- "-$p" 2>/dev/null; done
+  for p in ${pids[@]+"${pids[@]}"}; do wait "$p" 2>/dev/null; done
+  exit 130
+}
+trap stop INT TERM
 for a in $arms; do
   home="$W/arms/$a/codex_home"
   if [ -d "$home" ]; then
@@ -31,7 +40,7 @@ for a in $arms; do
   fi
 done
 jobs_max=${CIGAR_GAUNTLET_JOBS:-4}
-pids=()
+set -m
 for s in $seeds; do
   for a in $arms; do
     while [ "$jobs_max" -gt 0 ] && [ "$(jobs -rp | wc -l)" -ge "$jobs_max" ]; do sleep 5; done
@@ -41,6 +50,6 @@ for s in $seeds; do
 done
 # A session that exits before writing its row fails the batch.
 failed=0
-for p in "${pids[@]}"; do wait "$p" || failed=$((failed + 1)); done
+for p in ${pids[@]+"${pids[@]}"}; do wait "$p" || failed=$((failed + 1)); done
 echo "batch $tag done: $(wc -l < "$W/runs/$tag/results.jsonl" 2>/dev/null || echo 0) sessions"
 [ "$failed" -eq 0 ] || { echo "$failed session(s) failed; see $logs"; exit 1; }
