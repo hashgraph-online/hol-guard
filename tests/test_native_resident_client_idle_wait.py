@@ -148,3 +148,84 @@ def test_stop_during_idle_wait_keeps_parked_lease(tmp_path: Path, monkeypatch: p
     assert pool._clients == {client}
     assert client.calls == 0
     assert client.closed == 0
+
+
+def test_idle_wait_does_not_take_lease_after_request_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    """A late parked stream must survive a caller whose request has expired."""
+    pool = _pool(tmp_path, monkeypatch)
+    client = _Client()
+    pool._clients.add(client)
+
+    def parked_after_deadline(timeout=None):
+        time.sleep(0.05)
+        pool._idle.append(client)
+
+    monkeypatch.setattr(pool._condition, "wait", parked_after_deadline)
+    answer = pool.request(
+        b"{}", deadline_monotonic=time.monotonic() + 0.015,
+        idle_only=True, idle_wait_seconds=0.2,
+    )
+    assert answer is None
+    assert pool._idle == [client]
+    assert pool._clients == {client}
+    assert client.calls == 0
+    assert client.closed == 0
+
+
+def test_stop_without_pool_notification_interrupts_idle_wait_promptly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    """A stopped publisher cannot wait its entire idle grace for a pool wake."""
+    pool = _pool(tmp_path, monkeypatch)
+    client = _Client()
+    pool._clients.add(client)
+    stop = threading.Event()
+    waiting = threading.Event()
+    original_wait = pool._condition.wait
+
+    def noticed_wait(timeout=None):
+        waiting.set()
+        return original_wait(timeout=timeout)
+
+    monkeypatch.setattr(pool._condition, "wait", noticed_wait)
+
+    def stop_without_notifying_pool():
+        if waiting.wait(timeout=1.0):
+            time.sleep(0.02)
+            stop.set()
+
+    worker = threading.Thread(target=stop_without_notifying_pool, daemon=True)
+    worker.start()
+    started = time.monotonic()
+    with native_process_stop_scope(stop):
+        answer = pool.request(
+            b"{}", deadline_monotonic=time.monotonic() + 2,
+            idle_only=True, idle_wait_seconds=0.8,
+        )
+    elapsed = time.monotonic() - started
+    worker.join(timeout=1)
+    assert not worker.is_alive()
+    assert waiting.is_set()
+    assert answer is None
+    assert elapsed < 0.4
+    assert pool._clients == {client}
+    assert client.closed == 0
+    assert client.calls == 0
+
+
+def test_idle_only_zero_wait_borrows_parked_stream_immediately(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    pool = _pool(tmp_path, monkeypatch)
+    client = _Client()
+    pool._clients.add(client)
+    pool._idle.append(client)
+    monkeypatch.setattr(pool._condition, "wait", _unexpected)
+    assert pool.request(
+        b"{}", deadline_monotonic=time.monotonic() + 2,
+        idle_only=True, idle_wait_seconds=0.0,
+    ) == b"ok"
+    assert pool._idle == [client]
+    assert client.calls == 1
