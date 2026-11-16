@@ -333,6 +333,7 @@ pub(crate) fn apply_pre_tool_policy_with_inspection(
             benign_prompt,
             package_scripts_disabled: package_scripts_disabled(payload, &result),
         },
+        false,
         guard_inspection && !facts.sensitive_target,
     )?;
     let effective = join_action(&result.minimum_action, &policy_floor)?;

@@ -197,7 +197,7 @@ pub(crate) fn apply_post_tool_policy_with_witness(
     } else {
         response.reason_code.as_str()
     };
-    let floor_for = |verified: bool| {
+    let floor_for = |verified: bool, own_inspection: bool| {
         policy_floor_with_cause_and_delivery(
             &snapshot.effective_policy,
             &snapshot.compiled,
@@ -211,9 +211,10 @@ pub(crate) fn apply_post_tool_policy_with_witness(
                 package_scripts_disabled: false,
             },
             verified,
+            own_inspection,
         )
     };
-    let (mut floor, mut floor_cause) = floor_for(verified_delivery)?;
+    let (mut floor, mut floor_cause) = floor_for(verified_delivery, false)?;
     // The user approved this exact call before it ran. The floor that sent it
     // to review may not withhold its clean output; only the execution floors
     // `delivery_floor` lowers are lifted, so a secret, a network or a risk
@@ -223,7 +224,10 @@ pub(crate) fn apply_post_tool_policy_with_witness(
         && action_rank(&floor) > action_rank(&intrinsic)
         && admitted_call()
     {
-        (floor, floor_cause) = floor_for(true)?;
+        // The supplied inspection command is not itself an approved call.
+        // Preserve artifact, publisher and changed-hash reviews for it.
+        let inspection = own_approval_wait(request);
+        (floor, floor_cause) = floor_for(!inspection, inspection)?;
     }
     let effective = join_action(&intrinsic, &floor)?;
     response.policy_action = Some(effective.clone());
