@@ -5,7 +5,7 @@
 //! refused.
 
 use serde_json::{json, Value};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 use super::{
@@ -47,7 +47,7 @@ fn settle(home: &Path, values: &[String]) -> Vec<Value> {
 /// A directory under the crate's own sources, which the account running the
 /// tests created. `None` when the sources sit under the temporary directory,
 /// which the plain workspace rule already trusts, or cannot be written to.
-fn outside_checkout() -> Option<TempDir> {
+fn outside_checkout() -> Option<(TempDir, PathBuf)> {
     let sources = python_realpath_lax(Path::new(env!("CARGO_MANIFEST_DIR"))).ok()?;
     let temp = python_realpath_lax(&std::env::temp_dir()).ok()?;
     if sources.starts_with(&temp) {
@@ -58,7 +58,17 @@ fn outside_checkout() -> Option<TempDir> {
         .prefix(".hook-workspace-probe-")
         .tempdir_in(&sources)
     {
-        Ok(directory) => Some(directory),
+        Ok(directory) => {
+            // The administrators SID can own a newly created temporary
+            // directory; explicitly give the fixture to the process user.
+            let owned = directory.path().join("owned");
+            assert!(
+                guard_runtime_windows_process::create_owner_only_directory(&owned)
+                    .expect("create caller-owned fixture"),
+                "fixture must be newly created"
+            );
+            Some((directory, owned))
+        },
         Err(error) => {
             eprintln!("skipped: the crate sources are not writable: {error}");
             None
@@ -69,11 +79,11 @@ fn outside_checkout() -> Option<TempDir> {
 #[test]
 fn a_checkout_the_caller_owns_outside_the_profile_is_the_hooks_workspace() {
     let home = TempDir::new().expect("a temporary home");
-    let Some(checkout) = outside_checkout() else {
+    let Some((_fixture, checkout)) = outside_checkout() else {
         return;
     };
-    std::fs::create_dir(checkout.path().join("src")).expect("a subdirectory");
-    let values = [text(checkout.path()), text(&checkout.path().join("src"))];
+    std::fs::create_dir(checkout.as_path().join("src")).expect("a subdirectory");
+    let values = [text(checkout.as_path()), text(&checkout.as_path().join("src"))];
     let results = settle(home.path(), &values);
     assert_eq!(results.len(), 6);
     for (index, value) in values.iter().enumerate() {
@@ -93,17 +103,24 @@ fn a_checkout_the_caller_owns_outside_the_profile_is_the_hooks_workspace() {
 #[test]
 fn system_directories_missing_paths_and_files_stay_refused() {
     let home = TempDir::new().expect("a temporary home");
-    let Some(checkout) = outside_checkout() else {
+    let Some((_fixture, checkout)) = outside_checkout() else {
         return;
     };
-    let file = checkout.path().join("notes.txt");
+    let file = checkout.as_path().join("notes.txt");
     std::fs::write(&file, "x").expect("a file");
     let system_root = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".to_owned());
+    let program_data = std::env::var("ProgramData")
+        .unwrap_or_else(|_| r"C:\ProgramData".to_owned());
+    let users_root = std::env::var_os("USERPROFILE")
+        .and_then(|profile| PathBuf::from(profile).parent().map(text))
+        .unwrap_or_else(|| r"C:\Users".to_owned());
     let values = vec![
         r"C:\".to_owned(),
+        program_data,
+        users_root,
         system_root.clone(),
         format!(r"{system_root}\System32"),
-        text(&checkout.path().join("missing")),
+        text(&checkout.as_path().join("missing")),
         text(&file),
     ];
     let results = settle(home.path(), &values);
