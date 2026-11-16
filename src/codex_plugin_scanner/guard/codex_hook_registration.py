@@ -179,16 +179,6 @@ def install_managed_codex_hook_groups(
     hooks.update(installed)
 
 
-def overlay_live_owned_event_matches(integrity: Mapping[str, object], hooks: object) -> dict[str, bool]:
-    """Keep stale-CLI ownership, but never treat missing or tampered manifests as installed."""
-
-    text = _Wire(hooks).text(hooks) if isinstance(hooks, dict) else "null"
-    answer = ask_hook_owners("overlay", hooks=text, integrity=json.loads(json.dumps(dict(integrity), default=str)))
-    found = answer.get("matches")
-    found = found if isinstance(found, dict) else {}
-    return {event_name: found.get(event_name) is True for event_name in MANAGED_CODEX_HOOK_EVENTS}
-
-
 _HOOK_STATE_FLAGS = (
     "config_present",
     "codex_hooks_enabled",
@@ -226,6 +216,5 @@ __all__ = [
     "live_guard_codex_hooks_intercept",
     "live_owned_codex_event_matches",
     "missing_guard_hook_program",
-    "overlay_live_owned_event_matches",
     "require_codex_hook_owner",
 ]

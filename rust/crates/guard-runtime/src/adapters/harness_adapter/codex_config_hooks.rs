@@ -198,6 +198,30 @@ fn record(
     Ok(())
 }
 
+/// `codex_hook_trust_stale`: whether a Guard hook's stored trust is missing
+/// or stale. Unknown trust reads as stale, so doctor never calls the hooks
+/// active on a guess; a short name to expand is still asked for.
+pub(super) fn trust_stale(
+    ctx: &Ctx,
+    base: &Map<String, Value>,
+    hooks: &[(String, PyVal)],
+    tokens: &Map<String, Value>,
+    config_path: &Path,
+) -> Step<bool> {
+    let request = match table_request(ctx, base, "stale", hooks, None, tokens, config_path) {
+        Ok(request) => request,
+        Err(reply @ Failure::Reply(_)) => return Err(reply),
+        Err(_) => return Ok(true),
+    };
+    let Ok(answer) = codex_hook_trust::answer_value(Value::Object(request)) else {
+        return Ok(true);
+    };
+    Ok(answer
+        .get("stale")
+        .and_then(Value::as_array)
+        .is_none_or(|stale| !stale.is_empty()))
+}
+
 /// `codex_hook_trust._table_request`.
 fn table_request(
     ctx: &Ctx,

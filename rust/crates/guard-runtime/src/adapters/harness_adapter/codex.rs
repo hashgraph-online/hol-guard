@@ -15,9 +15,9 @@ use sha2::{Digest, Sha256};
 
 use super::files::{self, Doc};
 use super::{
-    codex_alternate_plan, codex_config_hooks, codex_files, codex_main_plan, codex_merge,
-    codex_migration, codex_servers, codex_uninstall, codex_uninstall_config, common, hook_render,
-    path_answer, path_text, Ctx, Failure, Spec, Step,
+    codex_alternate_plan, codex_config_hooks, codex_files, codex_hook_state, codex_main_plan,
+    codex_merge, codex_migration, codex_servers, codex_uninstall, codex_uninstall_config, common,
+    hook_render, path_answer, path_text, Ctx, Failure, Spec, Step,
 };
 use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 use crate::harness_diagnostics::setup_failures_besides_missing_command;
@@ -30,11 +30,11 @@ const HOOK_TIMEOUT_SECONDS: i64 = 30;
 pub(super) const TOOL_MATCHER: &str = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*";
 const POST_TOOL_MATCHER: &str = "Bash|Read|mcp__.*";
 pub(super) const ENFORCEMENT_BOUNDARY: &str = "codex-native-hooks";
-const HOOK_UNAVAILABLE: &str = "codex_authoritative_hook_unavailable";
+pub(super) const HOOK_UNAVAILABLE: &str = "codex_authoritative_hook_unavailable";
 const NATIVE_HOOK_COMMAND: &str = "codex-hook-bridge";
 
 /// `(event, matcher, status message, long timeout)` in registration order.
-const EVENTS: [(&str, Option<&str>, &str, bool); 4] = [
+pub(super) const EVENTS: [(&str, Option<&str>, &str, bool); 4] = [
     (
         "PreToolUse",
         Some(TOOL_MATCHER),
@@ -67,7 +67,7 @@ pub(super) fn dispatch(
         "paths" => Ok(paths(ctx)),
         "argv" => argv(ctx, fields),
         "groups" => groups(ctx, fields),
-        "hook_state" => hook_state(fields),
+        "hook_state" => codex_hook_state::hook_state(ctx, fields),
         "doctor_status" => doctor_status(fields),
         "migration_backup" => codex_files::migration_backup(ctx, fields),
         "hook_migration" => codex_migration::migration(ctx, fields),
@@ -335,91 +335,6 @@ pub(super) fn registered(hooks: Option<&PyVal>) -> bool {
             .iter()
             .any(|(_, groups)| groups.as_list().is_some_and(|groups| !groups.is_empty()))
     })
-}
-
-/// `codex_native_hook_state` over what Python read and verified.
-fn hook_state(fields: &Map<String, Value>) -> Step<Value> {
-    let read = dict(fields, "read")?;
-    let read = PyVal::Dict(read);
-    let features = read.get("features").and_then(PyVal::as_dict);
-    let integrity = dict(fields, "integrity")?;
-    let matches = fields
-        .get("event_matches")
-        .and_then(Value::as_object)
-        .ok_or(Failure::Invalid)?;
-    let matched = |event: &str| matches.get(event).and_then(Value::as_bool) == Some(true);
-    let [pre, permission, prompt, post] = EVENTS.map(|(event, ..)| matched(event));
-    let managed = pre && permission && prompt && post;
-    let shell = pre && permission;
-    let valid = integrity
-        .iter()
-        .any(|(key, value)| key == "integrity_status" && value.as_str() == Some("valid"));
-    let enabled = features.is_none_or(|features| {
-        !features
-            .iter()
-            .any(|(key, value)| key == "hooks" && matches!(value, PyVal::Bool(false)))
-    });
-    let legacy = features.is_some_and(|features| {
-        features
-            .iter()
-            .any(|(key, value)| key == "codex_hooks" && matches!(value, PyVal::Bool(true)))
-    });
-    let config = text(fields, "config_path")?;
-    let hooks = text(fields, "hooks_path")?;
-    let shell_active = enabled && shell && valid;
-    let mut state = Doc::default();
-    state
-        .set("config_path", files::text(config))
-        .set("config_present", PyVal::Bool(Path::new(config).is_file()))
-        .set("hooks_path", files::text(hooks))
-        .set("hooks_present", PyVal::Bool(Path::new(hooks).is_file()))
-        .set(
-            "toml_hooks_present",
-            PyVal::Bool(registered(read.get("toml_hooks"))),
-        )
-        .set(
-            "json_hooks_present",
-            PyVal::Bool(registered(read.get("json_hooks"))),
-        )
-        .set("hooks_enabled", PyVal::Bool(enabled))
-        .set("codex_hooks_enabled", PyVal::Bool(enabled))
-        .set("legacy_codex_hooks_enabled", PyVal::Bool(legacy))
-        .set("managed_pre_tool_hook_installed", PyVal::Bool(pre))
-        .set(
-            "managed_permission_request_hook_installed",
-            PyVal::Bool(permission),
-        )
-        .set("managed_prompt_hook_installed", PyVal::Bool(prompt))
-        .set("managed_post_tool_hook_installed", PyVal::Bool(post))
-        .set("managed_hook_installed", PyVal::Bool(managed))
-        .set(
-            "shell_enforcement_boundary",
-            files::text(ENFORCEMENT_BOUNDARY),
-        )
-        .set("shell_hook_installed", PyVal::Bool(shell))
-        .set("shell_protection_active", PyVal::Bool(shell_active))
-        .set(
-            "shell_reason_code",
-            if shell_active {
-                PyVal::Null
-            } else {
-                files::text(HOOK_UNAVAILABLE)
-            },
-        )
-        .set(
-            "protection_active",
-            PyVal::Bool(enabled && managed && valid),
-        )
-        .set(
-            "hook_trust_stale",
-            PyVal::Bool(flag(fields, "trust_stale")?),
-        );
-    for (key, value) in integrity {
-        if key != "event_matches" {
-            state.set(&key, value);
-        }
-    }
-    Ok(json!({ "state": compact(&state.value(), false) }))
 }
 
 /// The doctor's final setup status once the hook warnings are in.

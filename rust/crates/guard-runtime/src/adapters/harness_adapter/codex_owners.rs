@@ -24,7 +24,7 @@ use serde_json::{json, Map, Value};
 use super::codex::{compact, dict, flag, text};
 use super::codex_merge::{get, pop, py_eq, set, Entries};
 use super::codex_owner_home::{self as home, Cwd, Home};
-use super::{codex_live_hooks, codex_preactivation};
+use super::{codex_hook_state, codex_live_hooks, codex_preactivation};
 use super::{Failure, Step};
 use crate::cursor_hook_command::{py_space, Syntax};
 use crate::pyjson::{self, PyVal};
@@ -74,22 +74,7 @@ pub(super) fn dispatch(fields: &Map<String, Value>) -> Step<Value> {
     if unknown || wanted.iter().any(|key| !fields.contains_key(*key)) {
         return Err(Failure::Invalid);
     }
-    let long_paths = long_paths(fields)?;
-    let known: BTreeSet<String> = long_paths.keys().cloned().collect();
-    let mut syntax = Syntax::new(flag(fields, "windows")?, long_paths);
-    // A refusal over a name not yet expanded may be wrong, so the names
-    // come first.
-    let answer = run(op, fields, &mut syntax);
-    let missing: Vec<&String> = syntax
-        .short_tokens()
-        .iter()
-        .filter(|token| !known.contains(*token))
-        .collect();
-    if missing.is_empty() {
-        answer
-    } else {
-        Err(Failure::Reply(json!({ "expand": missing })))
-    }
+    codex_hook_state::with_syntax(fields, |syntax| run(op, fields, syntax))
 }
 
 fn run(op: &str, fields: &Map<String, Value>, syntax: &mut Syntax) -> Step<Value> {

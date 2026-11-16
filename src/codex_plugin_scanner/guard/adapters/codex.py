@@ -53,7 +53,6 @@ from ..codex_hook_recovery import (
 from ..codex_hook_registration import (
     codex_doctor_result,
     legacy_binding_fields,
-    overlay_live_owned_event_matches,
 )
 from ..codex_hook_rollback import rollback_file_identity
 from ..codex_hook_self_binding import (
@@ -64,10 +63,7 @@ from ..codex_hook_self_binding import (
 from ..codex_hook_sources import parse_json_object, parse_toml_object
 from ..codex_hook_sources import strict_json_object as _strict_json_object
 from ..codex_hook_sources import strict_toml_object as _strict_toml_object
-from ..codex_hook_trust import (
-    apply_codex_hook_trust_doctor,
-    codex_hook_trust_stale,
-)
+from ..codex_hook_trust import apply_codex_hook_trust_doctor
 from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
 from ..launcher import merge_guard_launcher_env
@@ -609,21 +605,20 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     json_hooks = hooks_payload.get("hooks") if isinstance(hooks_payload, dict) else None
     hooks = toml_hooks if isinstance(toml_hooks, dict) else json_hooks
     integrity = _verify_live_hook_manifest(context, config_path=config_path, hooks=hooks)
-    event_matches = overlay_live_owned_event_matches(integrity, hooks)
     read = {"features": features, "toml_hooks": toml_hooks, "json_hooks": json_hooks}
     wire = _Wire(read, integrity)
     read_text = wire.text(read)
     integrity_text = wire.text(integrity)
-    answer = _codex(
-        "hook_state",
-        context,
-        read=read_text,
-        integrity=integrity_text,
-        event_matches={str(event): matched is True for event, matched in event_matches.items()},
-        trust_stale=codex_hook_trust_stale(config_payload, config_path),
-        config_path=str(config_path),
-        hooks_path=str(hooks_path),
-    )
+    request: dict[str, Any] = {
+        "read": read_text,
+        "integrity": integrity_text,
+        "tokens": wire.meanings,
+        "config_path": str(config_path),
+        "hooks_path": str(hooks_path),
+        **short_path_fields(),
+    }
+    # The runtime also decides which managed events Guard owns and whether Codex still trusts them.
+    answer = settle_short_paths(lambda: _codex("hook_state", context, **request), request, "hook_state")
     return wire.decode(_reply_text(answer, "state"))
 
 

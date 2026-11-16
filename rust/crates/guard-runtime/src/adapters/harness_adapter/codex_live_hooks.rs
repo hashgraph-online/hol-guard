@@ -15,6 +15,7 @@ use std::path::Path;
 use serde_json::{json, Map, Value};
 
 use super::codex::{compact, dict, strings, text};
+use super::codex_hook_state;
 use super::codex_merge::{get, set, Entries};
 use super::codex_owner_home::{self as home, Home, BRIDGE_SCRIPT};
 use super::codex_owners::{tokens, EVENTS};
@@ -27,7 +28,7 @@ use crate::pyjson::{self, PyVal};
 const NATIVE_COMMAND: &str = "codex-hook-bridge";
 const FROZEN_BRIDGE_ARG: &str = "--_hol-guard-codex-bridge";
 const INTERCEPT_EVENTS: [&str; 2] = ["PreToolUse", "PermissionRequest"];
-const FALLBACK_REASONS: [&str; 5] = [
+pub(super) const FALLBACK_REASONS: [&str; 5] = [
     "codex_hook_interpreter_path_mismatch",
     "codex_hook_manifest_packaged_files_stale",
     "codex_hook_manifest_package_version_stale",
@@ -337,7 +338,7 @@ fn groups<'a>(hooks: &'a Entries, event: &str) -> &'a [PyVal] {
 }
 
 /// `live_owned_codex_event_matches`.
-fn event_matches(hooks: &Entries, syntax: &mut Syntax) -> Map<String, Value> {
+pub(super) fn event_matches(hooks: &Entries, syntax: &mut Syntax) -> Map<String, Value> {
     EVENTS
         .iter()
         .map(|event| {
@@ -412,28 +413,15 @@ fn overlay(fields: &Map<String, Value>, syntax: &mut Syntax) -> Step<Value> {
         .get("integrity")
         .and_then(Value::as_object)
         .ok_or(Failure::Invalid)?;
+    let field = |key: &str| integrity.get(key).and_then(Value::as_str);
     let recorded = integrity.get("event_matches").and_then(Value::as_object);
-    let mut matches: Map<String, Value> = EVENTS
-        .iter()
-        .map(|event| {
-            let held = recorded.and_then(|m| m.get(*event)) == Some(&Value::Bool(true));
-            ((*event).to_owned(), Value::Bool(held))
-        })
-        .collect();
-    let valid = integrity.get("integrity_status").and_then(Value::as_str) == Some("valid");
-    let reason = integrity.get("integrity_reason").and_then(Value::as_str);
-    let fallback = reason.is_some_and(|reason| FALLBACK_REASONS.contains(&reason));
-    if !valid && fallback {
-        let live = match pyjson::parse(text(fields, "hooks")?) {
-            Ok(PyVal::Dict(hooks)) => event_matches(&hooks, syntax),
-            _ => Map::new(),
-        };
-        for (event, held) in &mut matches {
-            if live.get(event) == Some(&Value::Bool(true)) {
-                *held = Value::Bool(true);
-            }
-        }
-    }
+    let held = |event: &str| recorded.and_then(|m| m.get(event)) == Some(&Value::Bool(true));
+    let hooks = match pyjson::parse(text(fields, "hooks")?) {
+        Ok(PyVal::Dict(hooks)) => Some(hooks),
+        _ => None,
+    };
+    let (status, reason) = (field("integrity_status"), field("integrity_reason"));
+    let matches = codex_hook_state::owned_matches(status, reason, held, hooks.as_ref(), syntax);
     Ok(json!({ "matches": matches }))
 }
 
