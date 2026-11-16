@@ -212,6 +212,7 @@ pub mod pretool_inert_substitutions;
 pub mod pretool_inline_content;
 pub mod pretool_installed_package_source;
 pub mod pretool_jq_command_bindings;
+pub mod pretool_jq_filter_credential_words;
 pub mod pretool_jq_sibling_filters;
 pub mod pretool_kubectl_output_templates;
 pub mod pretool_leaf_glob_exact_matches;
