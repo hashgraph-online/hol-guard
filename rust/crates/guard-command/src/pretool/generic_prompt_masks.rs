@@ -16,9 +16,8 @@ const PSEUDO_DEVICE: &str =
 
 /// `--format`, `-format`, the `format:` value of `--pretty=format:` and
 /// `format` applied to what a program prints or to a piece of code (`format
-/// the value`, `format methods`) all choose how output is shaped; the bare
-/// word, or an assignment such as `operation=format`, still asks to format a
-/// disk.
+/// the value`, `format methods`) all choose how output is shaped. Any other
+/// `format` is then read by [`mask_layout_nouns`].
 ///
 /// Two of the printed nouns also name storage once another word follows them:
 /// `format the time machine disk`, `format the logs volume`. The mask reads
@@ -46,7 +45,7 @@ pub(super) fn mask_format_options(value: &str) -> String {
         Regex::new(&format!(r"(?i)^(?:[^.;!?\n]|\.\S)*?\.?{STORAGE_NOUN}"))
             .expect("bounded storage sentence")
     });
-    OPTION
+    let masked = OPTION
         .get_or_init(|| {
             Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report|values?|methods?|functions?|helpers?|calls?|spec(?:ifier)?s?|strings|fields?|names?|sizes?|templates?|placeholders?|widths?|headers?|errors?|exceptions?|tracebacks?|lines?|columns?|rows?|entries|entry|records?|items?|labels?)\b")
                 .expect("bounded format option")
@@ -62,8 +61,67 @@ pub(super) fn mask_format_options(value: &str) -> String {
                 "{}output-layout",
                 captures.get(1).map_or("", |prefix| prefix.as_str())
             )
-        })
-        .into_owned()
+        });
+    mask_layout_nouns(&masked)
+}
+
+/// `format` names a layout far more often than a disk operation: a `## Response
+/// format` heading, `the date format`, `the JSON format described below`. A
+/// `format` is a request to erase storage only when its sentence names storage
+/// (a disk word, a `/dev` path that is not a stream, a drive letter such as
+/// `C:`), when it is the value given to a setting (`mode=format`), or when it
+/// points back at something named earlier (`format it`, `format everything`,
+/// `format this.`). Any other `format` is masked. A sentence ends at `!`, `?`,
+/// `;`, a line break, or a dot before a space or the end of the text.
+fn mask_layout_nouns(value: &str) -> String {
+    static WORD: OnceLock<Regex> = OnceLock::new();
+    static STORAGE: OnceLock<Regex> = OnceLock::new();
+    static REFERENT: OnceLock<Regex> = OnceLock::new();
+    static PSEUDO: OnceLock<Regex> = OnceLock::new();
+    let word = WORD
+        .get_or_init(|| Regex::new(r"(?i)\bformat(?:s|ted|ting)?\b").expect("bounded format word"));
+    let storage = STORAGE.get_or_init(|| {
+        Regex::new(&format!(
+            r"(?i){STORAGE_NOUN}|(?:^|[^a-z0-9])[a-z]:(?:[\\/]|\s|$)"
+        ))
+        .expect("bounded storage target")
+    });
+    let referent = REFERENT.get_or_init(|| {
+        Regex::new(
+            r"(?i)^\s+(?:(?:it|them|everything)\b|(?:this|that|these|those|all)\s*(?:[.!?;,]|$))",
+        )
+        .expect("bounded format referent")
+    });
+    let pseudo = PSEUDO.get_or_init(|| Regex::new(PSEUDO_DEVICE).expect("bounded pseudo device"));
+    let ends = |index: usize| {
+        let byte = value.as_bytes()[index];
+        matches!(byte, b'!' | b'?' | b';' | b'\n')
+            || (byte == b'.'
+                && value
+                    .as_bytes()
+                    .get(index + 1)
+                    .is_none_or(u8::is_ascii_whitespace))
+    };
+    word.replace_all(value, |captures: &Captures| {
+        let whole = captures.get(0).expect("whole match present");
+        let start = (0..whole.start())
+            .rev()
+            .find(|&index| ends(index))
+            .map_or(0, |index| index + 1);
+        let end = (whole.end()..value.len())
+            .find(|&index| ends(index))
+            .unwrap_or(value.len());
+        let sentence = pseudo.replace_all(&value[start..end], "stream");
+        if value[..whole.start()].ends_with('=')
+            || referent.is_match(&value[whole.end()..])
+            || storage.is_match(&sentence)
+        {
+            whole.as_str().to_owned()
+        } else {
+            "layout".to_owned()
+        }
+    })
+    .into_owned()
 }
 
 /// Replaces a credential word that only names a category of action or rule,
