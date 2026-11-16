@@ -168,9 +168,7 @@ fn delivery_floor(
             cause,
             FloorCause::Default | FloorCause::Harness | FloorCause::Subprocess
         );
-    if (owner_admitted || inspecting_guard)
-        && matches!(action, "review" | "require-reapproval")
-    {
+    if (owner_admitted || inspecting_guard) && matches!(action, "review" | "require-reapproval") {
         "allow"
     } else {
         action
