@@ -68,7 +68,7 @@ fn outside_checkout() -> Option<(TempDir, PathBuf)> {
                 "fixture must be newly created"
             );
             Some((directory, owned))
-        },
+        }
         Err(error) => {
             eprintln!("skipped: the crate sources are not writable: {error}");
             None
@@ -82,8 +82,17 @@ fn a_checkout_the_caller_owns_outside_the_profile_is_the_hooks_workspace() {
     let Some((_fixture, checkout)) = outside_checkout() else {
         return;
     };
-    std::fs::create_dir(checkout.as_path().join("src")).expect("a subdirectory");
-    let values = [text(checkout.as_path()), text(&checkout.as_path().join("src"))];
+    // A folder created under an elevated token is owned by Administrators,
+    // which the exact-owner check refuses; give the subfolder to the caller.
+    assert!(
+        guard_runtime_windows_process::create_owner_only_directory(&checkout.join("src"))
+            .expect("a caller-owned subdirectory"),
+        "the subdirectory must be newly created"
+    );
+    let values = [
+        text(checkout.as_path()),
+        text(&checkout.as_path().join("src")),
+    ];
     let results = settle(home.path(), &values);
     assert_eq!(results.len(), 6);
     for (index, value) in values.iter().enumerate() {
@@ -109,8 +118,8 @@ fn system_directories_missing_paths_and_files_stay_refused() {
     let file = checkout.as_path().join("notes.txt");
     std::fs::write(&file, "x").expect("a file");
     let system_root = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".to_owned());
-    let program_data = std::env::var("ProgramData")
-        .unwrap_or_else(|_| r"C:\ProgramData".to_owned());
+    let program_data =
+        std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".to_owned());
     let users_root = std::env::var_os("USERPROFILE")
         .and_then(|profile| PathBuf::from(profile).parent().map(text))
         .unwrap_or_else(|| r"C:\Users".to_owned());
