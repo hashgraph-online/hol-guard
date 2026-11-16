@@ -17,7 +17,7 @@ use super::copilot::{
     hook_path, inline_hooks, parse_object, plan_hooks, scope_for, sources, target_mcp_paths,
     workspace_mcp_paths,
 };
-use super::copilot_mcp::{apply_plan, managed_servers, parsed_field, plan_servers, plan_targets};
+use super::copilot_mcp::{apply_plan, managed_servers, parsed_field, plan_targets};
 use super::copilot_state::{self as state, Held};
 use super::copilot_uninstall;
 use super::files::{self, Change, Doc, Object};
@@ -135,45 +135,11 @@ fn install_detection(spec: &Spec, ctx: &Ctx) -> Step<Value> {
     let snapshot = Snapshot::take(ctx)?;
     let listing = snapshot.hook_listing(ctx);
     let mut answer = detect_sources(spec, ctx, &sources(ctx, &listing), Some(&snapshot.contents))?;
-    let targets = target_mcp_paths(ctx)
-        .into_iter()
-        .map(|path| {
-            Ok((
-                path.clone(),
-                snapshot.object(&path, "The Copilot MCP config")?,
-            ))
-        })
-        .collect::<Step<Vec<_>>>()?;
-    let (plans, _) = plan_targets(ctx, &targets, &[])?;
-    let mut refresh = Vec::new();
-    for ((_, payload), plan) in targets.iter().zip(&plans) {
-        let servers = plan_servers(plan, payload)?;
-        let mut rows = Vec::new();
-        for row in plan["refresh"].as_array().ok_or(Failure::Invalid)? {
-            let index = row[0]
-                .as_u64()
-                .map(|index| index as usize)
-                .ok_or(Failure::Invalid)?;
-            let config = servers
-                .get(index)
-                .and_then(|(_, config)| config.as_dict())
-                .ok_or(Failure::Invalid)?;
-            let env = ["env", "environment"]
-                .iter()
-                .find_map(|key| {
-                    config
-                        .iter()
-                        .find(|(name, _)| name == key)
-                        .filter(|(_, value)| value.as_dict().is_some())
-                })
-                .map_or(Some(json!({})), |(_, env)| env.to_json())
-                .ok_or(Failure::Invalid)?;
-            rows.push(json!([row[1], env]));
-        }
-        refresh.push(Value::Array(rows));
+    // A malformed MCP config refuses the install before anything is planned.
+    for path in target_mcp_paths(ctx) {
+        snapshot.object(&path, "The Copilot MCP config")?;
     }
     answer["digest"] = json!(snapshot.digest);
-    answer["refresh"] = Value::Array(refresh);
     Ok(answer)
 }
 
@@ -276,18 +242,8 @@ fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         ));
     }
     let (plans, notes) = plan_targets(ctx, &gathered, &managed)?;
-    let refresh = parsed_field(fields, "refresh")?;
-    let refresh = refresh
-        .as_list()
-        .filter(|rows| rows.len() == targets.len())
-        .ok_or(Failure::Invalid)?;
-    for ((_, payload), (plan, launches)) in gathered.iter_mut().zip(plans.iter().zip(refresh)) {
-        apply_plan(
-            plan,
-            payload,
-            &managed,
-            launches.as_list().ok_or(Failure::Invalid)?,
-        )?;
+    for ((_, payload), plan) in gathered.iter_mut().zip(&plans) {
+        apply_plan(ctx, plan, payload, &managed)?;
     }
     let mut changes = Vec::new();
     let (mut backups, mut states) = (Vec::new(), Vec::new());
@@ -333,7 +289,14 @@ fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         backups.push(files::path_value(&backup));
         states.push(files::path_value(&state_path));
     }
-    let hook_env = parsed_field(fields, "hook_env")?;
+    // `merge_guard_launcher_env()`: the hook keeps the caller's import path
+    // and native bindings.
+    let hook_env = PyVal::Dict(
+        super::proxy_launch::launcher_env(ctx, &[])
+            .into_iter()
+            .map(|(key, value)| (key, PyVal::Str(value)))
+            .collect(),
+    );
     config_plan.install(&mut hooks, &hook_entry(ctx, &config_plan, &hook_env));
     config_payload.set("hooks", PyVal::Dict(hooks));
     changes.push(change(

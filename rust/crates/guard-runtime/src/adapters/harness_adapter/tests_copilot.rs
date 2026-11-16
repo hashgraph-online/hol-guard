@@ -30,7 +30,7 @@ fn ask(home: &Home, op: &str, extra: Value) -> KindResult {
 }
 
 /// The fields Python sends with `prepare_install` after `install_detection`.
-fn install_fields(found: &Value, refresh: Value) -> Value {
+fn install_fields(found: &Value) -> Value {
     let mut fields = Map::new();
     for (key, value) in [
         ("create_key", json!(true)),
@@ -39,17 +39,11 @@ fn install_fields(found: &Value, refresh: Value) -> Value {
         ("config_argv", json!(["/py", "hook"])),
         ("workspace_argv", json!(["/py", "hook", "--workspace"])),
         ("managed", json!("[]")),
-        ("refresh", json!(refresh.to_string())),
         ("skipped", json!("[]")),
-        ("hook_env", json!("{}")),
     ] {
         fields.insert(key.to_owned(), value);
     }
     Value::Object(fields)
-}
-
-fn empty_refresh(found: &Value) -> Value {
-    json!(vec![json!([]); found["refresh"].as_array().unwrap().len()])
 }
 
 #[test]
@@ -74,8 +68,7 @@ fn copilot_install_plans_both_workspace_mcp_targets() {
         r#"{"mcpServers": {"cli_lab": {"command": "python", "args": ["cli.py"]}}}"#,
     );
     let found = ask(&home, "install_detection", json!({})).unwrap();
-    let refresh = empty_refresh(&found);
-    let answer = ask(&home, "prepare_install", install_fields(&found, refresh)).unwrap();
+    let answer = ask(&home, "prepare_install", install_fields(&found)).unwrap();
     let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
     let targets: Vec<PathBuf> =
         serde_json::from_value(manifest["managed_config_paths"].clone()).unwrap();
@@ -90,7 +83,7 @@ fn copilot_install_plans_both_workspace_mcp_targets() {
 }
 
 #[test]
-fn copilot_install_refuses_a_malformed_later_plan_before_planning_any_write() {
+fn copilot_install_refuses_a_malformed_later_config_before_planning_any_write() {
     let home = Home::new();
     let ws = workspace(&home);
     let cli = ws.join(".mcp.json");
@@ -99,14 +92,8 @@ fn copilot_install_refuses_a_malformed_later_plan_before_planning_any_write() {
         &cli,
         r#"{"mcpServers": {"cli_lab": {"command": "python", "args": ["cli.py"]}}}"#,
     );
-    write(
-        &ide,
-        r#"{"servers": {"ide_lab": {"command": "node", "args": ["ide.js"]}}}"#,
-    );
+    write(&ide, "{not json");
     let before = (fs::read(&cli).unwrap(), fs::read(&ide).unwrap());
-    let found = ask(&home, "install_detection", json!({})).unwrap();
-    // Python built relaunches for the first target only.
-    let refresh = json!([[]]);
-    assert!(ask(&home, "prepare_install", install_fields(&found, refresh)).is_err());
+    assert!(ask(&home, "install_detection", json!({})).is_err());
     assert_eq!((fs::read(&cli).unwrap(), fs::read(&ide).unwrap()), before);
 }

@@ -61,10 +61,7 @@ def _hook_fields(context: HarnessContext) -> dict[str, object]:
 
 
 def _server_fields(context: HarnessContext, found: dict[str, Any]) -> dict[str, object]:
-    """Guard's entry for each managed server and the relaunch of each proxy entry."""
-    from ..launcher import merge_guard_launcher_env
-    from ..stable_guard_cli import guard_cli_launcher
-    from .mcp_relay_native import mcp_proxy_launch
+    """Guard's entry for each managed server; the runtime relaunches proxy entries itself."""
     from .mcp_servers import managed_stdio_servers, proxy_launcher_entry, skipped_stdio_server_names
 
     detection = detection_from(_HARNESS, context, found)
@@ -77,18 +74,9 @@ def _server_fields(context: HarnessContext, found: dict[str, Any]) -> dict[str, 
         ]
         for server in managed_stdio_servers(detection)
     ]
-    refresh = []
-    for rows in found["refresh"]:
-        launches = []
-        for python_args, env in rows:
-            command, args = mcp_proxy_launch(guard_cli_launcher(), python_args)
-            launches.append({"command": command, "args": args, "env": merge_guard_launcher_env(env)})
-        refresh.append(launches)
     return {
         "managed": json.dumps(managed),
-        "refresh": json.dumps(refresh),
         "skipped": json.dumps(list(skipped_stdio_server_names(detection))),
-        "hook_env": json.dumps(merge_guard_launcher_env()),
     }
 
 
