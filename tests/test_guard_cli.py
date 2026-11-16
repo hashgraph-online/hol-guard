@@ -26,11 +26,12 @@ except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters import claude_code as claude_adapter_module
+from codex_plugin_scanner.guard import claude_hook_entry as claude_adapter_module
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
+from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
+from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_connect as guard_connect_support_module
 from codex_plugin_scanner.guard.cli import commands_support_workspace as guard_workspace_support_module

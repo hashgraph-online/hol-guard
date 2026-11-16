@@ -10,10 +10,12 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import claude_hook_entry as claude_code
 from codex_plugin_scanner.guard import native_caller
-from codex_plugin_scanner.guard.adapters import claude_code, get_adapter
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
+from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 

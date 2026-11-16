@@ -173,6 +173,14 @@ class CursorHarnessAdapter(NativeHarnessAdapter):
     def _surface(self, context: HarnessContext, surface: str) -> str:
         return str(self._ask("surface", context, surface=surface)["surface"])
 
+    def install(self, context: HarnessContext, *, surface: str = "editor") -> dict[str, object]:
+        """Install every selected surface in one native apply op."""
+        return self._apply_install(context, surface=surface)
+
+    def uninstall(self, context: HarnessContext, *, surface: str = "editor") -> dict[str, object]:
+        """Remove every selected surface in one native apply op."""
+        return self._apply_uninstall(context, surface=surface)
+
     def prepare_install(self, context: HarnessContext, *, surface: str = "editor") -> PreparedHarnessInstall:
         """Prepare every selected surface before any binding or profile publication."""
         from ..runtime_transition import RuntimeTransition

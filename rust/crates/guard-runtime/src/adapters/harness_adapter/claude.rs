@@ -4,8 +4,8 @@
 //!
 //! Python answers `{"reply": {"facts": null}}` with what only the Guard
 //! process knows (see `claude_argv`), merges it into the request and asks
-//! again. It keeps the shim, the daemon start the SessionStart hook runs, the
-//! `claude --help` probe and the file publication.
+//! again. The SessionStart refresh writes the settings here; Python keeps
+//! the daemon start the SessionStart hook runs.
 
 use std::path::PathBuf;
 
@@ -200,7 +200,8 @@ fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
 }
 
 /// `refresh_runtime_hook_urls`: rewrite Guard's entries with this build's
-/// argv. `text` is `null` when the settings hold no hooks object.
+/// argv and write the settings back. `text` is `null`, and nothing is
+/// written, when the settings hold no hooks object.
 fn refresh(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let contract = hook_contract()?;
     let path = settings_path(ctx);
@@ -212,7 +213,13 @@ fn refresh(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let facts = argv::facts(ctx, fields)?;
     synced(ctx, &facts, &contract, &mut hooks)?;
     payload.set("hooks", hooks.value());
-    Ok(json!({ "path": path_text(&path), "text": payload.render()? }))
+    let text = payload.render()?;
+    let target = ctx.absolute(&path);
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| Failure::Os(error.to_string()))?;
+    }
+    std::fs::write(&target, text.as_bytes()).map_err(|error| Failure::Os(error.to_string()))?;
+    Ok(json!({ "path": path_text(&path), "text": text }))
 }
 
 /// One of the hook argv vectors, for the callers that still build it alone.

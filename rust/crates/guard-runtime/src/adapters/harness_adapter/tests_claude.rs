@@ -299,6 +299,25 @@ fn refresh_leaves_settings_without_hooks_alone() {
     assert_eq!(answer["text"], Value::Null);
 }
 
+#[test]
+fn refresh_writes_the_settings_it_rewrote() {
+    let home = Home::new();
+    let path = settings(&home);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, r#"{"model": "kept", "hooks": {}}"#).unwrap();
+    let answer = run(
+        &home,
+        "refresh",
+        json!({"caller": stamped(false, Some(RUNTIME))}),
+        &facts(),
+    );
+    let text = answer["text"].as_str().unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), text);
+    let written: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(written["model"], "kept");
+    assert!(written["hooks"]["SessionStart"].is_array());
+}
+
 fn target(home: &Home, workspace: Option<&std::path::Path>, env: Value) -> Value {
     let mut context = home.context(env);
     context["workspace"] = json!(workspace);

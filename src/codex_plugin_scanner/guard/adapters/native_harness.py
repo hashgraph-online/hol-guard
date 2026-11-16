@@ -186,7 +186,14 @@ class NativeHarnessAdapter(HarnessAdapter):
             from .extension_runtime import extension_runtime
 
             fields["runtime"] = extension_runtime()
-        return ask(op, context, harness=self.harness, **fields)
+        answer = ask(op, context, harness=self.harness, **fields)
+        if answer == {"reply": {"facts": None}} and "facts" not in fields:
+            # The daemon URL the hooks reach is only known to this process.
+            from ..claude_hook_entry import claude_facts
+
+            fields["facts"] = claude_facts(context.guard_home)
+            answer = ask(op, context, harness=self.harness, **fields)
+        return answer
 
     def _shim_names(self) -> dict[str, Any]:
         return {"launcher_name": self.launcher_name or None, "display_name": self._spec.get("display_name")}
@@ -302,7 +309,7 @@ class NativeHarnessAdapter(HarnessAdapter):
         if operation == "install" and self._spec.get("install") == "delegated":
             self._delegated_targets(context)
 
-    def install(self, context: HarnessContext, **options: object) -> dict[str, object]:
+    def install(self, context: HarnessContext) -> dict[str, object]:
         mode = self._spec.get("install")
         if mode == "delegated":
             return self._install_delegated(context)
@@ -311,7 +318,7 @@ class NativeHarnessAdapter(HarnessAdapter):
 
             shim = install_guard_shim(self.harness, context)
             return {"harness": self.harness, "active": True, "config_path": shim["shim_path"], **shim}
-        return self._apply_install(context, **options)
+        return self._apply_install(context)
 
     def _apply_install(self, context: HarnessContext, **options: object) -> dict[str, object]:
         """Prepare the shim and the plan and publish both in one native call."""
@@ -346,7 +353,10 @@ class NativeHarnessAdapter(HarnessAdapter):
         raise_failure(answer.get("failure") or {})
         return json.loads(_text(answer, "manifest"))
 
-    def uninstall(self, context: HarnessContext, **options: object) -> dict[str, object]:
+    def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        return self._apply_uninstall(context)
+
+    def _apply_uninstall(self, context: HarnessContext, **options: object) -> dict[str, object]:
         from .. import native_transition_files
         from ..runtime_transition import assert_transition_mutation_allowed
 

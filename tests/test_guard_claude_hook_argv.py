@@ -11,12 +11,13 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import claude_code
+from codex_plugin_scanner.guard import claude_hook_entry
+from codex_plugin_scanner.guard.adapters import native_harness
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.adapters.claude_code import (
+from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+from codex_plugin_scanner.guard.claude_hook_entry import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
     CLAUDE_GUARD_SESSION_START_HOOK_MARKER,
-    ClaudeCodeHarnessAdapter,
 )
 from tests.native_runtime_stamp import stamp_native_runtime
 
@@ -125,7 +126,7 @@ def test_session_start_argv_preserves_exact_paths(
     def fake_refresh(*, home_dir: Path, workspace_dir: Path | None, guard_home: Path) -> None:
         captured["refresh"] = (home_dir, workspace_dir, guard_home)
 
-    real_ask = claude_code.ask
+    real_ask = native_harness.ask
 
     def recording_ask(op: str, context: HarnessContext, **kwargs: Any) -> dict[str, Any]:
         from codex_plugin_scanner.guard.native_context import _BOUND_GUARD_HOME
@@ -133,11 +134,11 @@ def test_session_start_argv_preserves_exact_paths(
         captured["native_guard_home"] = _BOUND_GUARD_HOME.get()
         return real_ask(op, context, **kwargs)
 
-    monkeypatch.setattr(claude_code, "_daemon_module", lambda: FakeDaemonModule())
-    monkeypatch.setattr(ClaudeCodeHarnessAdapter, "refresh_installed_hook_urls", fake_refresh)
-    monkeypatch.setattr(claude_code, "ask", recording_ask)
+    monkeypatch.setattr(claude_hook_entry, "_daemon_module", lambda: FakeDaemonModule())
+    monkeypatch.setattr(claude_hook_entry, "refresh_claude_hooks", fake_refresh)
+    monkeypatch.setattr(native_harness, "ask", recording_ask)
 
-    result = claude_code._run_session_start_from_argv((guard_home, home_dir, workspace_dir))
+    result = claude_hook_entry._run_session_start_from_argv((guard_home, home_dir, workspace_dir))
 
     assert result == 0
     assert captured["native_guard_home"] == Path(guard_home)
@@ -169,7 +170,7 @@ def test_session_start_rejects_malformed_argv(
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.chdir(work)
     with pytest.raises(SystemExit, match="claude_session_start_argv_invalid"):
-        claude_code._run_session_start_from_argv(argv)
+        claude_hook_entry._run_session_start_from_argv(argv)
     # A refused vector never names the Guard home, so nothing lands beside the hook.
     assert list(work.iterdir()) == []
 
@@ -324,7 +325,7 @@ def test_daemon_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     runtime = tmp_path / "hol-guard-runtime"
     runtime.write_bytes(b"runtime")
     stamp_native_runtime(monkeypatch, runtime, ("claude-hook-bridge-v1",))
-    monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
+    monkeypatch.setattr(claude_hook_entry, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
     argv = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)
@@ -343,7 +344,7 @@ def test_daemon_hook_without_the_native_feature_asks_for_repair(
     runtime = tmp_path / "hol-guard-runtime"
     runtime.write_bytes(b"runtime")
     stamp_native_runtime(monkeypatch, runtime, ("resident-protocol-v2",))
-    monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
+    monkeypatch.setattr(claude_hook_entry, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
     with pytest.raises(RuntimeError, match="hol-guard repair"):

@@ -13,7 +13,7 @@ import time
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import claude_code
+from codex_plugin_scanner.guard import claude_hook_entry as claude_code
 
 
 def test_a_stale_frozen_daemon_hook_blocks_and_asks_for_repair(capsys: pytest.CaptureFixture[str]) -> None:

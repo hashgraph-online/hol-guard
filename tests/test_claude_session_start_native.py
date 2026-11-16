@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_caller
+from codex_plugin_scanner.guard import claude_hook_entry, native_caller
 from codex_plugin_scanner.guard.adapters import claude_code
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from tests.native_runtime_stamp import stamp_native_runtime
@@ -24,7 +24,7 @@ _HOOK_FEATURE = "claude-hook-bridge-v1"
 _SESSION_START_FEATURE = "claude-session-start-v1"
 _BOTH_FEATURES = (_HOOK_FEATURE, _SESSION_START_FEATURE)
 _MODE = "session-start"
-_SESSION_MARKER = claude_code.CLAUDE_GUARD_SESSION_START_HOOK_MARKER
+_SESSION_MARKER = claude_hook_entry.CLAUDE_GUARD_SESSION_START_HOOK_MARKER
 _ADAPTER = claude_code.ClaudeCodeHarnessAdapter
 
 posix_only = pytest.mark.skipif(os.name == "nt", reason="these lane fixtures are POSIX only")
@@ -52,7 +52,7 @@ def _handler(argv: tuple[str, ...] | list[str]) -> dict[str, object]:
 def _use_runtime(monkeypatch: pytest.MonkeyPatch, runtime: Path, features: tuple[str, ...]) -> None:
     runtime.write_bytes(b"runtime")
     stamp_native_runtime(monkeypatch, runtime, features)
-    monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:43123")
+    monkeypatch.setattr(claude_hook_entry, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:43123")
 
 
 @posix_only
@@ -160,7 +160,7 @@ def test_compiled_lane_hands_a_stale_session_to_the_python_command(native_hook_f
         "daemon_hook_command": [
             str(native_hook_force),
             "claude-hook-bridge",
-            claude_code.CLAUDE_GUARD_DAEMON_HOOK_MARKER,
+            claude_hook_entry.CLAUDE_GUARD_DAEMON_HOOK_MARKER,
         ],
         "bridge_config": {"state_path": str(tmp_path / "daemon-state.json"), "fallback_command": ["x"], "query": ""},
     }
@@ -208,7 +208,7 @@ def test_python_refresh_moves_an_upgraded_install_back_onto_the_native_lane(
         encoding="utf-8",
     )
 
-    _ADAPTER.refresh_installed_hook_urls(
+    claude_hook_entry.refresh_claude_hooks(
         home_dir=context.home_dir, workspace_dir=context.workspace_dir, guard_home=context.guard_home
     )
 
