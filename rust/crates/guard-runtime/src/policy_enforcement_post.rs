@@ -129,8 +129,7 @@ pub(crate) fn apply_post_tool_policy_with_witness(
     // The approval witness needs the same complete scan of this exact output,
     // but not the plain text shape the owner delivery ACK requires: a shell
     // result object such as `{"stdout": ..., "exit_code": 0}` is scanned whole.
-    let scanned = payload_kind == GuardHookPayloadKindV2::Inline
-        && response.decision == "allow"
+    let scanned_output = response.decision == "allow"
         && response.model_output_action == "allow_original"
         && matches!(
             response.reason_code.as_str(),
@@ -139,12 +138,22 @@ pub(crate) fn apply_post_tool_policy_with_witness(
         && response.reviewed_output_sha256.is_some()
         && response.reviewed_output_sha256
             == guard_hook_core::canonical_observed_output_sha256(&request.payload);
-    let clean_scan = scanned && plain_inline_output(&request.payload);
-    // A digest the host declared for an excerpt or a source reference proves
-    // less than the whole output, so those payloads never carry the witness.
-    let full_scan = scanned
-        && request.payload.get("guard_source_ref").is_none()
-        && request.payload.get("tool_response_summary").is_none();
+    let clean_scan = payload_kind == GuardHookPayloadKindV2::Inline
+        && scanned_output
+        && plain_inline_output(&request.payload);
+    // A digest the host declared for an excerpt proves less than the whole
+    // output, so it never carries the witness. A file read qualifies only
+    // when Guard read and scanned that whole file itself.
+    let full_scan = scanned_output
+        && match payload_kind {
+            GuardHookPayloadKindV2::Inline => {
+                request.payload.get("tool_response_summary").is_none()
+            }
+            GuardHookPayloadKindV2::SourceFileRef => {
+                response.reason_code == "source_full_scan_allow"
+            }
+            GuardHookPayloadKindV2::EncryptedPayloadRef => false,
+        };
     let verified_delivery = delivery.is_some() && clean_scan;
     let task_metadata = payload_kind == GuardHookPayloadKindV2::Inline
         && guard_command::pretool::bounded_task_metadata_output(&request.payload, &request.harness);

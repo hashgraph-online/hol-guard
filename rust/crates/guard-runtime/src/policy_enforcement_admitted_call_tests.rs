@@ -236,3 +236,35 @@ fn own_approval_wait_result_is_not_held_by_the_subprocess_floor() {
         &request
     ));
 }
+
+#[test]
+fn approved_file_read_is_released_only_on_guards_own_full_source_scan() {
+    let mut reviewed = policy("allow");
+    reviewed.default_action = "review".into();
+    let admitted = AdmittedPolicySnapshot::new(snapshot(reviewed)).unwrap();
+    let mut request = post_request(json!({
+        "tool_call_id": "call-read",
+        "tool_name": "read",
+        "tool_input": {"path": "/home/test/fixture/README.md"},
+        "guard_source_ref": {"output_sha256": "ab".repeat(32)}
+    }));
+    request.harness = "omp".into();
+    let read = |reason: &str, admitted_call: bool| {
+        let mut response = HookReviewResponseV1::allow(reason);
+        response.model_output_action = "allow_original".into();
+        response.reviewed_output_sha256 = Some("ab".repeat(32));
+        crate::policy_enforcement::apply_post_tool_policy_with_witness(
+            &admitted,
+            &request,
+            GuardHookPayloadKindV2::SourceFileRef,
+            response,
+            None,
+            || admitted_call,
+            false,
+        )
+        .unwrap()
+    };
+    assert_eq!(read("source_full_scan_allow", false).decision, "deny");
+    assert_eq!(read("source_full_scan_allow", true).decision, "allow");
+    assert_eq!(read("output_scan_allow", true).decision, "deny");
+}
