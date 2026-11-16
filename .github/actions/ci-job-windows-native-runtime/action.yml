@@ -72,7 +72,7 @@ runs:
       run: |
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
-        cargo test --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --lib hook_workspace_windows_tests -- --nocapture
+        cargo test --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime hook_workspace_windows_tests -- --nocapture
     - name: Upload the Windows native runtime
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
