@@ -139,8 +139,10 @@ pub(in crate::daemon_edge) fn call_resident_within(
     args: Value,
     wait: Duration,
 ) -> Result<Value, CallError> {
-    let started = Instant::now();
-    match call_resident_once(config, name, args.clone(), wait) {
+    // One budget covers both attempts, including the time either spends
+    // finding or starting a process before it sends the call.
+    let deadline = Instant::now() + wait;
+    match call_resident_once(config, name, args.clone(), wait, deadline) {
         // The process was already gone, so the call never reached it. Under
         // host load a child that died (or was stopped by an earlier call that
         // gave up on it) is the usual reason the next hook found no resident;
@@ -148,11 +150,10 @@ pub(in crate::daemon_edge) fn call_resident_within(
         // leaving the start to the one after it. A call that was delivered and
         // then lost its answer is not repeated: it may have run.
         Err(CallError::Unavailable) => {
-            let remaining = wait.saturating_sub(started.elapsed());
-            if remaining.is_zero() {
+            if Instant::now() >= deadline {
                 return Err(CallError::Unavailable);
             }
-            call_resident_once(config, name, args, remaining)
+            call_resident_once(config, name, args, wait, deadline)
         }
         other => other,
     }
@@ -163,6 +164,7 @@ fn call_resident_once(
     name: &str,
     args: Value,
     wait: Duration,
+    deadline: Instant,
 ) -> Result<Value, CallError> {
     let (_, guard_home, _) = config.cli().ok_or(CallError::Unavailable)?;
     let guard_home = guard_home.to_owned();
@@ -207,7 +209,13 @@ fn call_resident_once(
             .is_ok()
     };
     let answer = if written {
-        receiver.recv_timeout(wait.min(CALL_TIMEOUT)).ok()
+        receiver
+            .recv_timeout(
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(CALL_TIMEOUT),
+            )
+            .ok()
     } else {
         None
     };
