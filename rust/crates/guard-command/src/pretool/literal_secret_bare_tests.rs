@@ -312,6 +312,10 @@ fn a_random_url_password_on_a_remote_host_is_a_secret() {
             "REDIS_URL=redis://:{}@CACHE.CORP.NET:6379/0\n",
             joined(&["qzvt", "kmbr"])
         ),
+        format!(
+            "REDIS_URL=REDIS://:{}@CACHE.CORP.NET:6379/0\n",
+            joined(&["qzvt", "kmbr"])
+        ),
     ] {
         assert!(holds_bare_secret(&text), "{text}");
     }
