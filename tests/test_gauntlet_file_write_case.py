@@ -32,6 +32,11 @@ CASES = {
     "omp-write-spells-an-api-id-into-settings": "settings.py",
     "omp-write-spells-an-sql-auth-string": "seed.sql",
     "omp-write-spells-a-short-secret-into-a-test": "test_vault.py",
+    "omp-write-spells-a-spaced-app-password": "mailer.js",
+    "omp-write-spells-word-groups-under-a-secret-name": "oauth_settings.py",
+    "omp-write-passes-a-random-key-to-a-secret-setter": "AppConfig.java",
+    "omp-write-spells-a-password-into-a-mail-url": "mail.yml",
+    "omp-write-keys-a-line-by-a-random-app-secret": "app.yaml",
     "omp-write-spells-an-oauth-key-into-a-test": "client_spec.rb",
 }
 
