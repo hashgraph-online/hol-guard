@@ -16,6 +16,14 @@ fn a_wrapped_mixed_literal_handed_to_a_credential_setter_is_a_secret() {
             "cfg.setRefreshToken(new RefreshToken(\"{}\"));\n",
             joined(&["8wPl", "hS3n", "xJgd"])
         ),
+        format!(
+            "spec.setSecretKey(new SecretKeySpec(\"{}\"));\n",
+            joined(&["q7Zv", "T2kM", "bR9x"])
+        ),
+        format!(
+            "cfg.setPasswordValue(new Secret(\"{}\"));\n",
+            joined(&["8wPl", "hS3n", "xJgd"])
+        ),
     ] {
         assert!(holds_code_secret(&text), "{text}");
     }
@@ -126,6 +134,16 @@ fn filler_decimal_and_repeated_long_keys_are_not_secrets() {
         format!("long[] KEY = {{0x{0}L, 0x{0}L}};\n", "deadbeef".repeat(2)),
         "long[] KEY_ROTATION_TIMES = {1700000000000L, 1700086400000L};\n".to_string(),
         "long[] KEY_ROTATION_TIMES = {170000000000000, 170008640000000};\n".to_string(),
+        format!(
+            "long[] MONKEY_HASHES = {{{}, {}}};\n",
+            joined(&["0x9f3c2a7d", "5e1b4c86L"]),
+            joined(&["0x41d8e6b2", "07c95fa3L"])
+        ),
+        format!(
+            "long[] KEYBOARD_SCANCODES = {{{}, {}}};\n",
+            joined(&["0x9f3c2a7d", "5e1b4c86L"]),
+            joined(&["0x41d8e6b2", "07c95fa3L"])
+        ),
     ] {
         assert!(!holds_code_secret(&text), "{text}");
     }
@@ -169,6 +187,7 @@ fn uuid_word_and_placeholder_api_keys_are_not_secrets() {
         "api_key: 'sk-proj-placeholder'\n".to_string(),
         format!("API_KEY_ID = \"{}\"\n", joined(&["wq8-zvtk", "-mbr4-plhs"])),
         format!("apiKeyId: '{}',\n", joined(&["wq8-zvtk", "-mbr4-plhs"])),
+        format!("apiKeyIds: '{}',\n", joined(&["wq8-zvtk", "-mbr4-plhs"])),
         format!(
             "API_KEY_IDS = \"{}\"\n",
             joined(&["wq8-zvtk", "-mbr4-plhs"])
@@ -190,4 +209,22 @@ fn a_secret_name_setter_and_filler_auth_tokens_are_not_secrets() {
     ] {
         assert!(!holds_code_secret(&text), "{text}");
     }
+}
+
+#[test]
+fn a_key_list_suffix_that_is_not_an_id_segment_is_still_screened() {
+    for name in ["API_KEY_KIDS", "API_KEY_BIDS"] {
+        let text = format!("{name} = \"{}\"\n", joined(&["wq8-zvtk", "-mbr4-plhs"]));
+        assert!(holds_code_secret(&text), "{text}");
+    }
+}
+
+#[test]
+fn a_key_name_segment_in_a_long_table_is_screened() {
+    let text = format!(
+        "long[] HMAC_KEYS_V2 = {{{}, {}}};\n",
+        joined(&["0x9f3c2a7d", "5e1b4c86L"]),
+        joined(&["0x41d8e6b2", "07c95fa3L"])
+    );
+    assert!(holds_code_secret(&text), "{text}");
 }

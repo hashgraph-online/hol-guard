@@ -7,11 +7,12 @@
 //!
 //! - a credential setter handed a wrapped literal,
 //!   `setClientSecret(new SecretValue("…"))`, whose value mixes letters and
-//!   digits;
+//!   digits; the setter name ends in the credential word or in a value
+//!   suffix (`setSecretKey`), never a metadata one (`setSecretName`);
 //! - a credential setter handed dashed four-character groups of random
 //!   lowercase letters and digits, `setToken("qzvt-kmbr-…")`;
 //! - a comment that gives an auth token as 64 hex characters;
-//! - a `long[]` constant named `…KEY…` that spells key material as hex longs;
+//! - a `long[]` constant with a `KEY` name segment that spells key material as hex longs;
 //! - an API key name given dashed lowercase groups that mix letters and
 //!   digits and read as noise (`MAILGUN_API_KEY = "key-…"`); a UUID-shaped
 //!   value is left alone, since sites publish those as embed keys.
@@ -37,10 +38,10 @@ macro_rules! patterns {
 }
 
 patterns! {
-    WRAPPED_SETTER = r#"\bset\w*(?:Secret|Password|Token)\(\s*new\s+\w+\(\s*["'](?P<v>[A-Za-z0-9]{8,40})["']\s*\)\s*\)"#;
+    WRAPPED_SETTER = r#"\bset\w*(?:Secret|Password|Token)(?:Key|Value|Str|String|Literal|Bytes|Data)?\(\s*new\s+\w+\(\s*["'](?P<v>[A-Za-z0-9]{8,40})["']\s*\)\s*\)"#;
     DASHED_SETTER = r#"\bset\w*(?:Secret|Password|Token)\w*\(\s*["'](?P<v>[a-z0-9]{4}(?:-[a-z0-9]{4}){3,})["']\s*\)"#;
     AUTH_TOKEN_COMMENT = r"(?i)\bauth(?:entication)?[ _-]token\s+(?P<v>[0-9a-f]{64})\b";
-    LONG_KEY = r"\blong\[\]\s+\w*KEY\w*\s*=\s*\{(?P<v>\s*(?:-?0[xX][0-9a-fA-F]{12,}L?\s*,\s*)+-?0[xX][0-9a-fA-F]{12,}L?\s*,?\s*)\}";
+    LONG_KEY = r"\blong\[\]\s+(?:\w*_)?KEYS?(?:_\w*)?\s*=\s*\{(?P<v>\s*(?:-?0[xX][0-9a-fA-F]{12,}L?\s*,\s*)+-?0[xX][0-9a-fA-F]{12,}L?\s*,?\s*)\}";
     DASHED_API_KEY = r#"(?i:["']?(?P<n>\w*api_?key\w*)["']?\]?)\s*[:=]\s*["'](?P<v>[a-z0-9]{2,}(?:-[a-z0-9]{3,}){2,})["']"#;
     UUID_TAIL = r"[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
     HEX = r"^[0-9a-f]+$";
@@ -72,13 +73,19 @@ fn dashed_api_key(found: &regex::Captures) -> bool {
     let value = &found["v"];
     let joined = value.replace('-', "");
     !metadata_name(&found["n"])
-        && !found["n"].to_ascii_lowercase().ends_with("ids")
+        && !id_list_name(&found["n"])
         && mixed(value)
         && !HEX.is_match(&joined)
         && !UUID_TAIL.is_match(value)
         && !typed_value(value)
         && !typed_value(&joined)
         && english_score(&letters_only(value)) <= RANDOM_TOKEN
+}
+
+/// `IDS`, `API_KEY_IDS`, `apiKeyIds`: a list of key IDs, not a key.
+fn id_list_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower == "ids" || lower.ends_with("_ids") || name.ends_with("Ids")
 }
 
 fn any_value(shape: &Regex, text: &str, keep: fn(&str) -> bool) -> bool {
