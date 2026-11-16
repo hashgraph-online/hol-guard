@@ -169,3 +169,21 @@ fn other_loops_in_a_list_are_not_written_out() {
         assert_eq!(spliced(command, None), None, "{command}");
     }
 }
+
+/// A loop gated by `&&` is written out when a pipe inside a quoted filter is
+/// only text, and still keeps its review when a body item changes the shell.
+#[test]
+fn a_quoted_pipe_does_not_make_a_gated_loop_change_the_shell() {
+    let filter = "jq -c '{n:.number,c:[.checks[]?|select(.c!=null)|{n:.name}]}'";
+    let command =
+        format!("gh pr view 1 && for n in 1 2; do gh pr view \"$n\" --json number | {filter}; done");
+    let written = spliced(&command, None).expect("written out");
+    assert_eq!(written.matches("--json number | jq -c").count(), 2, "{written}");
+    for command in [
+        "gh pr view 1 && for n in 1 2; do echo 'a|b' | cd /tmp; done",
+        "gh pr view 1 && for n in 1 2; do echo \"a|b\"; cd /tmp; done",
+        "gh pr view 1 && for n in 1 2; do gh pr view \"$n\" | jq '.a|.b' | x=1 cat; done",
+    ] {
+        assert_eq!(spliced(command, None), None, "{command}");
+    }
+}

@@ -37607,6 +37607,40 @@
       "expect": "not_allow"
     },
     {
+      "id": "for-loop-after-and-with-quoted-pipes-in-jq-filter",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr view 6221 --repo example/project --json state && for n in 7000 7001 7002; do gh pr view \"$n\" --repo example/project --json number,state,isDraft,headRefOid,maintainerCanModify,mergeable,mergeStateStatus,author,headRepositoryOwner,title,files,statusCheckRollup,reviewDecision 2>/dev/null | jq -c '{n:.number,state:.state,head:.headRefOid[0:12],mcm:.maintainerCanModify,merge:.mergeable,mss:.mergeStateStatus,author:.author.login,owner:.headRepositoryOwner.login,rd:.reviewDecision,title:.title,files:[.files[].path],checks:[.statusCheckRollup[]?|select(.conclusion!=null)|{name:(.name//.context),c:.conclusion,s:.status}]}'; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-for-loop-after-and-with-quoted-pipes-removes-ssh-keys",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr view 6221 --repo example/project --json state && for n in 7000 7001 7002; do gh pr view \"$n\" --repo example/project --json number,state,isDraft,headRefOid,maintainerCanModify,mergeable,mergeStateStatus,author,headRepositoryOwner,title,files,statusCheckRollup,reviewDecision 2>/dev/null | jq -c '{n:.number,state:.state,head:.headRefOid[0:12],mcm:.maintainerCanModify,merge:.mergeable,mss:.mergeStateStatus,author:.author.login,owner:.headRepositoryOwner.login,rd:.reviewDecision,title:.title,files:[.files[].path],checks:[.statusCheckRollup[]?|select(.conclusion!=null)|{name:(.name//.context),c:.conclusion,s:.status}]}'; rm -rf ~/.ssh; done"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-skipped-loop-changes-directory-before-removal",
       "fix_area": "shell",
       "harnesses": [
