@@ -440,6 +440,23 @@ fn the_hook_spec_binds_the_callers_process_into_the_bounded_config() {
 }
 
 #[test]
+fn the_hook_config_op_binds_the_requested_arguments() {
+    let home = Home::new();
+    let answer = home.ask(
+        "opencode",
+        "hook_config",
+        json!({"cli_args": [], "timeout_seconds": 25}),
+    );
+    let text = answer["config"].as_str().unwrap();
+    assert!(text.starts_with(
+        "{\"python_executable\":\"/py\",\"package_root\":\"/opt/guard/site\",\"guard_home\":\""
+    ));
+    assert!(text.ends_with(
+        "\"cli_args\":[],\"harness\":\"opencode\",\"timeout_seconds\":25,\"frozen_launcher\":false}"
+    ));
+}
+
+#[test]
 fn the_hook_spec_names_a_home_other_than_the_users() {
     let home = Home::new();
     let mut context = home.context(json!({"PATH": ""}));

@@ -66,7 +66,7 @@ def _guard_proxy_command(context: HarnessContext, proxy_args: list[str]) -> list
 def plugin_render_args(context: HarnessContext) -> dict[str, object]:
     """The attested Guard CLI facts the native kind renders the pretool plugin from."""
     from ..codex_hook_windows_job import windows_system_executable_path
-    from .bounded_cli_hook_bridge import bounded_cli_hook_command
+    from .bounded_cli_hook_bridge import bounded_hook_command_for_config
     from .guard_cli_attestation import executable_identity_payload, resolve_attested_guard_cli
 
     guard_cli = resolve_attested_guard_cli(context)
@@ -79,16 +79,10 @@ def plugin_render_args(context: HarnessContext) -> dict[str, object]:
         # The plugin fills in the interpreter and the per-workspace CLI argv
         # when it runs a hook; the native kind keeps this argv only when it is
         # the bounded native bridge.
-        native_bridge_argv = list(
-            bounded_cli_hook_command(
-                python_executable=str(guard_cli.python.executable),
-                package_root=Path(__file__).resolve().parents[3],
-                guard_home=context.guard_home,
-                cli_args=[],
-                harness=_HARNESS,
-                timeout_seconds=_HOOK_TIMEOUT_SECONDS,
-            )
-        )
+        config = ask("hook_config", context, harness=_HARNESS, cli_args=[], timeout_seconds=_HOOK_TIMEOUT_SECONDS)[
+            "config"
+        ]
+        native_bridge_argv = list(bounded_hook_command_for_config(str(config)))
         import_roots = [str(root) for root in guard_cli.python.import_roots]
     try:
         taskkill_path = windows_system_executable_path("taskkill.exe") if os.name == "nt" else None

@@ -333,6 +333,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     }
     answer(if op == "default_launch" {
         default_launch(spec, &ctx, fields)
+    } else if op == "hook_config" {
+        hook_config::answer(spec, &ctx, fields)
     } else if op == "hook_spec" {
         route(spec, op, &ctx, fields)
             .and_then(|spec_answer| hook_config::with_config(spec, &ctx, spec_answer))

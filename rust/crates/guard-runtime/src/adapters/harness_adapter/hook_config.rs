@@ -61,3 +61,15 @@ pub(super) fn with_config(spec: &Spec, ctx: &Ctx, mut answer: Value) -> Step<Val
     fields.insert("workspace_config".to_owned(), workspace);
     Ok(answer)
 }
+
+/// `{"config": ...}`, the bounded hook config for the `cli_args` and
+/// `timeout_seconds` the caller names, for an adapter that builds its own
+/// hook argument list.
+pub(super) fn answer(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    let timeout = fields
+        .get("timeout_seconds")
+        .and_then(Value::as_i64)
+        .ok_or(Failure::Invalid)?;
+    let cli_args = arguments(fields.get("cli_args").ok_or(Failure::Invalid)?)?;
+    Ok(json!({ "config": config(ctx, spec.harness, &cli_args, timeout)? }))
+}
