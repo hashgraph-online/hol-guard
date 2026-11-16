@@ -81,18 +81,18 @@ def verdict(p, text):
 
 rows = []
 saved = {(r["repo"], r["prompt"]): r["note"] for r in json.load(open(a.rescore))} if a.rescore else None
-for p in prompts:
-    if saved is not None:
-        text = saved[(p["repo"], p["prompt"])]
+try:
+    for p in prompts:
+        if saved is not None:
+            text = saved[(p["repo"], p["prompt"])]
+        else:
+            text = notes_hook.note(hook, project(p["repo"]), p["prompt"], str(uuid.uuid4()))
         v, files = verdict(p, text)
         rows.append({**p, "verdict": v, "files_named": files, "chars": len(text), "note": text})
-        continue
-    text = notes_hook.note(hook, project(p["repo"]), p["prompt"], str(uuid.uuid4()))
-    v, files = verdict(p, text)
-    rows.append({**p, "verdict": v, "files_named": files, "chars": len(text), "note": text})
-
-if projects:
-    shutil.rmtree(WORK / "notes" / f"mixed-{RUN}")
+finally:
+    # A failed hook or Ctrl-C still removes this run's copies; the hook error is what surfaces.
+    if projects:
+        shutil.rmtree(WORK / "notes" / f"mixed-{RUN}", ignore_errors=True)
 
 if a.save:
     Path(a.save).write_text(json.dumps(rows, indent=1))
