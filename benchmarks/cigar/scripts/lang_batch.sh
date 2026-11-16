@@ -14,17 +14,22 @@ logs="$W/runs/$tag/logs"; mkdir -p "$logs"
 users="auth-users.$tag.$$"
 # One lock per arm around taking and giving back the login, so a batch that is
 # finishing cannot remove the copy another batch has just put in place.
-lock() { until mkdir "$1/.auth-lock" 2>/dev/null; do sleep 1; done; }
-unlock() { rmdir "$1/.auth-lock"; }
-for a in $arms; do
-  home="$W/arms/$a/codex_home"
-  if [ -d "$home" ]; then
-    lock "$home"
-    touch "$home/.$users"
-    install -m 600 ~/.codex/auth.json "$home/auth.json"
-    unlock "$home"
-  fi
-done
+# The lock holds its owner's pid; a lock whose owner has exited is taken over,
+# so a batch killed while holding it cannot stall later batches.
+held=""
+lock() {
+  until mkdir "$1/.auth-lock" 2>/dev/null; do
+    owner=$(cat "$1/.auth-lock/pid" 2>/dev/null)
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+      rm -rf "$1/.auth-lock"
+      continue
+    fi
+    sleep 1
+  done
+  echo $$ > "$1/.auth-lock/pid"
+  held=$1
+}
+unlock() { rm -rf "$1/.auth-lock"; held=""; }
 release() {
   for a in $arms; do
     home="$W/arms/$a/codex_home"
@@ -35,7 +40,22 @@ release() {
     unlock "$home"
   done
 }
-trap release EXIT
+cleanup() {
+  # Give back a lock this batch still holds before release takes each one again.
+  if [ -n "$held" ]; then unlock "$held"; fi
+  release
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+for a in $arms; do
+  home="$W/arms/$a/codex_home"
+  if [ -d "$home" ]; then
+    lock "$home"
+    touch "$home/.$users"
+    install -m 600 ~/.codex/auth.json "$home/auth.json"
+    unlock "$home"
+  fi
+done
 jobs_max=${CIGAR_GAUNTLET_JOBS:-4}
 pids=()
 for s in $seeds; do

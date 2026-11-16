@@ -354,6 +354,7 @@ def paired(tag, arm, rows, base_arm, base_tags):
         # other arm's cost for steps it never ran. Tokens are not split per step,
         # so each session's tokens are scaled by the share of its cost in those steps.
         bc = ac = bt = at = 0.0
+        pairs = 0
         per = collections.defaultdict(lambda: [0.0, 0.0])
         for s in seeds:
             sb = sa = 0.0
@@ -366,23 +367,29 @@ def paired(tag, arm, rows, base_arm, base_tags):
                 per[x["kind"]][1] += y["usd"]
                 sb += x["usd"]
                 sa += y["usd"]
+                pairs += 1
                 harm[1] += 1
                 harm[0] += y["usd"] > 1.2 * x["usd"]
             bc += sb
             ac += sa
             bt += session_tokens(brows[s]) * share(sb, brows[s])
             at += session_tokens(rows[s]) * share(sa, rows[s])
+        if not pairs:
+            print(f"\n{arm} vs {base_arm} ({btag}): no step has a result line on both sides; savings unavailable")
+            continue
         cost.append(100 * (bc - ac) / bc if bc else 0.0)
         toks.append(100 * (bt - at) / bt if bt else 0.0)
         for k, (b, a) in per.items():
             kinds[k].append(100 * (b - a) / b if b else 0.0)
+    if not cost:
+        return
     passes = (sum(rows[s]["passed"] for s in seeds), [sum(b[s]["passed"] for s in seeds) for _, b in bases])
 
     def rng(v):
         return f"{min(v):.1f}%" if len(v) == 1 else f"{min(v):.1f}-{max(v):.1f}%"
 
     print(f"\n== {arm} vs {base_arm} over {len(seeds)} seeds, {len(bases)} base run(s)")
-    print(f"cost saved {rng(cost)}  tokens saved {rng(toks)}  passed {arm} {passes[0]} / base {passes[1]}")
+    print(f"cost saved {rng(cost)}  tokens saved (estimate, by cost share) {rng(toks)}  passed {arm} {passes[0]} / base {passes[1]}")
     print(f"do-no-harm: {harm[0]} of {harm[1]} paired steps cost 20% more ({100 * harm[0] / max(harm[1], 1):.1f}%)")
     for k, v in sorted(kinds.items()):
         print(f"  {k:9} cost saved {rng(v)}")

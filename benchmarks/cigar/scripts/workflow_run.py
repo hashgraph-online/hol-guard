@@ -68,7 +68,7 @@ def plan(seed):
     )
 
 
-REQUIREMENT = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*([^;]*)(?:;.*)?$")
+REQUIREMENT = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*([^;]*)(?:;(.*))?$")
 CLAUSE = re.compile(r"^\s*(~=|==|!=|>=|<=|>|<)\s*([0-9][0-9.]*)(\.\*)?\s*$")
 
 
@@ -97,7 +97,11 @@ def admits_minimum(spec, minimum=(4,)):
 
 
 def declared(project):
-    """True when pyproject.toml parses and lists the new runtime dependency at 4.0 or newer."""
+    """True when pyproject.toml parses and lists the new runtime dependency at 4.0 or newer.
+
+    A declaration with an environment marker does not count: the step asks for an
+    unconditional runtime dependency, and a marker can leave it out on the grader's Python.
+    """
     try:
         meta = tomllib.loads((project / "pyproject.toml").read_text())
     except (OSError, tomllib.TOMLDecodeError):
@@ -107,7 +111,9 @@ def declared(project):
         return False
     for dep in deps:
         m = REQUIREMENT.match(dep) if isinstance(dep, str) else None
-        if m and re.sub(r"[-_.]+", "_", m.group(1)).lower() == DEPENDENCY and admits_minimum(m.group(2)):
+        if not m or (m.group(3) or "").strip():
+            continue
+        if re.sub(r"[-_.]+", "_", m.group(1)).lower() == DEPENDENCY and admits_minimum(m.group(2)):
             return True
     return False
 

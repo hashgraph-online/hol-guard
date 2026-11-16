@@ -382,6 +382,8 @@ The same rig with `CIGAR_GAUNTLET_STEPS=24`: four seeds (816, 2491, 3351, 7374),
 
 A long plan skips any target whose code an earlier step renamed and never sets up the same target twice, so every step can apply; a plan drops the steps it cannot fill, which leaves 20 to 22 steps per seed (83 paired steps per harness). Six-step plans are unchanged. A first run before that fix stopped three of four sessions early, in both arms, when a later step's code had been renamed; it is not used. Savings count only the steps both arms reached: a session that stopped early is not credited with the other arm's cost for the steps it never ran. Counting whole sessions instead put Claude Code at 66.2%, because its Guard session on seed 816 stopped after 8 steps.
 
+Savings count only steps both arms reached. Harness records give tokens per session, not per step, so tokens saved here is an estimate: each session's tokens scaled by the share of its cost in those steps. Cost saved is measured per step.
+
 | harness | tokens saved | cost saved | short set cost saved | passed (no Guard) | steps passed (no Guard) | holds | do-no-harm |
 |---|---|---|---|---|---|---|---|
 | Codex | 72.3% | 67.0% | 66.7% | 3 (4) | 82 (83) | 0 | 0.0% |
