@@ -56,7 +56,7 @@ patterns! {
     SPACED_GROUPS = r#"["'](?P<v>(?:[a-z0-9]{4} ){5,7}[a-z0-9]{4})["']"#;
     SECRET_WORD_GROUPS = r#"(?i)["']?\w*secret\w*["']?\s*[:=]\s*["'](?P<v>[a-z]{3,}(?:_[a-z]{3,}){2,})["']"#;
     SECRET_SETTER = r#"\bset\w*(?:Secret|Password|Token)\w*\(\s*["'](?P<v>[A-Za-z]{8,16})["']\s*\)"#;
-    URL_PASSWORD = r#"\b[a-z][a-z0-9+.-]*://[^\s/?#"'<>]*:(?P<v>[a-z]{4,})@(?P<h>[A-Za-z0-9.-]+\.[a-z]{2,})"#;
+    URL_PASSWORD = r#"\b[a-z][a-z0-9+.-]*://[^\s/?#"'<>]*:(?P<v>[a-z]{4,})@(?P<h>[A-Za-z0-9.-]+\.[A-Za-z]{2,})"#;
     LOCAL_HOST = r"localhost|127\.|0\.0\.0\.0|\.local$|\.test$|\.invalid$|\.internal$|\.example$|(?:^|\.)example\.(?:com|net|org)$";
     RANDOM_KEY = r"(?m)^\s*(?P<k>[a-z]{15}):\s";
     RANDOM_KEY_VALUE = r"(?m)^[ \t]*(?P<k>[a-z]{15}):[ \t]+(?P<v>[A-Za-z0-9]{8,32})[ \t\r]*$";
