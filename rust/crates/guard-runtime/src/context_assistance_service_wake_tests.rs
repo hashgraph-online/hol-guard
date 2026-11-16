@@ -273,7 +273,7 @@ fn a_busy_lock_keeps_the_last_project_context_choice() {
     );
     drop(guard);
     settings.effective.features.agent_context = false;
-    service.configure(settings).unwrap();
+    service.configure(settings.clone()).unwrap();
     let guard = lock(&service.state).unwrap();
     assert!(
         !service.prompt_context_chosen(),
