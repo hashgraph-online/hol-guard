@@ -130,6 +130,8 @@ fn coding_prompts_and_plain_plans_get_no_chore_note() {
         "explain how the parser handles nested tables",
         "why do the dependencies resolve slowly?",
         "what version of the parser handles this?",
+        "publish an event after saving a record",
+        "bump the retry limit to five",
     ] {
         assert!(note_for(&root, prompt).is_none(), "{prompt}");
     }
@@ -269,4 +271,13 @@ fn nothing_is_read_after_the_deadline() {
     let (_dir, root) = flit_project();
     let asks = asks("build the wheel and check it installs").unwrap();
     assert!(note(&root, &asks, Instant::now()).is_none());
+}
+
+#[test]
+fn an_unreleased_section_is_the_newest_entry() {
+    let (_dir, root) = flit_project();
+    let text = "# Changes\n\n## \\[Unreleased\\]\n\n- Fix\n\n## [1.2.3]\n";
+    fs::write(root.join("CHANGES.rst"), text).unwrap();
+    let note = note_for(&root, "update the changelog").unwrap();
+    assert!(note.contains("headed `## \\[Unreleased\\]`"), "{note}");
 }

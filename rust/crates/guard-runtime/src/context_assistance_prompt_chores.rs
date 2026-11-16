@@ -96,7 +96,10 @@ fn asks(prompt: &str) -> Option<Asks> {
     });
     let asks = Asks {
         build: built || has(&["wheel", "wheels", "sdist"]),
-        release: has(&["bump", "publish", "publishing"])
+        release: (has(&["bump", "publish", "publishing"])
+            && has(&[
+                "package", "pypi", "crate", "crates", "npm", "version", "patch", "minor", "major",
+            ]))
             || (has(&["release", "releases"])
                 && has(&[
                     "tag", "cut", "patch", "minor", "major", "publish", "prepare", "ship", "new",

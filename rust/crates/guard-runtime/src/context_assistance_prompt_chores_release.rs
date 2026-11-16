@@ -127,7 +127,9 @@ fn newest_entry(text: &str) -> Option<String> {
                     .all(|c| matches!(c, '-' | '=' | '~' | '^' | '*'))
         });
         let heading = trimmed.starts_with('#') || underlined;
-        (heading && trimmed.chars().any(|c| c.is_ascii_digit()) && trimmed.len() <= 80)
-            .then(|| trimmed.to_owned())
+        // An "Unreleased" section above the last release is the newest entry.
+        let named = trimmed.chars().any(|c| c.is_ascii_digit())
+            || trimmed.to_ascii_lowercase().contains("unreleased");
+        (heading && named && trimmed.len() <= 80).then(|| trimmed.to_owned())
     })
 }
