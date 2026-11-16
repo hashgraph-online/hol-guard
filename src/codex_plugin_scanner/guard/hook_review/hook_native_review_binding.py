@@ -7,6 +7,7 @@ import sqlite3
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import overload
 
 from ..native_decision_receipt import edge_receipt
 
@@ -100,6 +101,18 @@ def native_review_settle(
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
         return None
     return settled if settled in ("blocked", "allowed") else None
+
+
+@overload
+def admit_accepted_call(
+    store: object, *, harness: str, payload: Mapping[str, object], response: dict[str, object]
+) -> dict[str, object]: ...
+
+
+@overload
+def admit_accepted_call(
+    store: object, *, harness: str, payload: Mapping[str, object], response: dict[str, object] | None
+) -> dict[str, object] | None: ...
 
 
 def admit_accepted_call(

@@ -141,6 +141,7 @@ pub(crate) fn apply_pre_tool_policy_for_hook(
 const OWN_INSPECTION_REVIEW_REASON: &str = "native_command_review_required";
 const OWN_INSPECTION_ALLOW_REASON: &str = "native_exact_safe_command";
 
+#[cfg(any(test, target_os = "macos"))]
 pub(crate) fn apply_pre_tool_policy(
     snapshot: &AdmittedPolicySnapshot,
     payload: &Value,
