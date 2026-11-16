@@ -40,7 +40,11 @@ pub(super) fn operator_allows_tool(
     harness: &str,
     tool: &str,
 ) -> bool {
-    let name = tool.rsplit("__").next().unwrap_or(tool).to_ascii_lowercase();
+    let name = tool
+        .rsplit("__")
+        .next()
+        .unwrap_or(tool)
+        .to_ascii_lowercase();
     let executor = name.rfind("composio_").is_some_and(|start| {
         !matches!(
             &name[start..],
