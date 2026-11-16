@@ -9,6 +9,12 @@
 //! aside before the subcommand is checked: `hol-guard approvals wait <id>
 //! --home /Users/me/.hol-guard` is proven the way `hol-guard approvals wait
 //! <id>` is.
+//!
+//! The Guard home the hook reported for this request is set aside the same
+//! way. It is the store this decision is made against, so a `--home` naming
+//! it reads nothing the hook does not already use. When that home is not the
+//! account's default, the wait command Guard prints for a held request names
+//! it, and an agent that runs the printed command must not be held again.
 
 /// [`super::guard_diagnostics::safe_hol_guard_segment`] for `segment`, read
 /// once as written and once more with a `--home` naming the account's own
@@ -26,8 +32,20 @@ pub(super) fn safe_hol_guard_segment(
             segment.pipeline_index,
         )
     };
+    // A Windows .cmd launcher reparses the *original* argument words. A
+    // trusted --home word must not be removed before this check, or shell
+    // operators in the home path could be hidden from the reachability proof.
+    let arguments_reach_launcher = super::guard_diagnostics::arguments_reach_the_launcher(
+        basename,
+        &segment.arguments,
+        cfg!(windows),
+    );
     proven(&segment.arguments)
-        || without_own_home(&segment.arguments, context.home_dir).is_some_and(|rest| proven(&rest))
+        || (arguments_reach_launcher
+            && (without_own_home(&segment.arguments, context.home_dir)
+                .is_some_and(|rest| proven(&rest))
+                || without_active_home(&segment.arguments, context.guard_home)
+                    .is_some_and(|rest| proven(&rest))))
 }
 
 /// Home directories older releases kept Guard's state in, beside the user's
@@ -60,6 +78,21 @@ pub(super) fn without_own_home(
         return None;
     }
     without_home_option(arguments, &own)
+}
+
+/// `arguments` without their one `--home` option, when that option names the
+/// Guard home the hook reported for this request and that directory exists.
+/// `None` when there is no reported home, no such option, when it names any
+/// other directory, or when it is given more than once.
+pub(super) fn without_active_home(
+    arguments: &[String],
+    guard_home: Option<&str>,
+) -> Option<Vec<String>> {
+    let active = normal_home(guard_home?)?;
+    if !std::path::Path::new(&active).is_dir() {
+        return None;
+    }
+    without_home_option(arguments, &active)
 }
 
 /// The account's home as an absolute path with `/` separators and no

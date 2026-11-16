@@ -15,6 +15,7 @@ const CWD: &str = r"C:\home\tester\project";
 fn context() -> crate::pretool::PathContext<'static> {
     crate::pretool::PathContext {
         literal_words: &[],
+        guard_home: None,
         home_dir: Some(HOME),
         cwd: Some(CWD),
         cdpath_unset: false,
@@ -221,6 +222,7 @@ fn file_writes_never_follow_an_existing_symlink() {
     let cwd = root.to_str().unwrap().to_owned();
     let context = crate::pretool::PathContext {
         literal_words: &[],
+        guard_home: None,
         home_dir: Some(HOME),
         cwd: Some(&cwd),
         cdpath_unset: false,
