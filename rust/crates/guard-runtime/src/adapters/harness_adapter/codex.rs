@@ -89,15 +89,21 @@ pub(super) fn dispatch(
         "uninstall" => super::codex_uninstall_op::uninstall(ctx, fields),
         "manifest_spec" => codex_spec::manifest_spec(ctx, fields),
         "live_hook_state" => {
-            codex_live_state::live_hook_state(ctx, &codex_spec::with_spec(ctx, fields)?)
+            let spec_fields = codex_spec::with_spec(ctx, fields)?;
+            codex_live_state::live_hook_state(ctx, &spec_fields)
         }
         "runtime_hooks_verified" => {
-            codex_live_read::runtime_hooks_verified(ctx, &codex_spec::with_spec(ctx, fields)?)
+            let spec_fields = codex_spec::with_spec(ctx, fields)?;
+            codex_live_read::runtime_hooks_verified(ctx, &spec_fields)
         }
         "publish_hooks" => codex_publish::publish_hooks(ctx, fields),
-        "install" => super::codex_install::install(ctx, &codex_spec::with_spec(ctx, fields)?),
+        "install" => {
+            let spec_fields = codex_spec::with_spec(ctx, fields)?;
+            super::codex_install::install(ctx, &spec_fields)
+        }
         "install_plan" => {
-            super::codex_install_plan::install_plan(ctx, &codex_spec::with_spec(ctx, fields)?)
+            let spec_fields = codex_spec::with_spec(ctx, fields)?;
+            super::codex_install_plan::install_plan(ctx, &spec_fields)
         }
         _ => common(spec, op, ctx),
     }

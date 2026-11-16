@@ -141,7 +141,7 @@ fn rewrite(
     Ok(writes)
 }
 
-pub(super) fn prepare(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+pub(super) fn prepare(ctx: &Ctx, _fields: &Map<String, Value>) -> Step<Value> {
     let root = hermes::managed_root(ctx);
     let (manifest, ordered) = hermes::manifest(ctx)?;
     let authenticated = hermes::verified(ctx, &manifest);

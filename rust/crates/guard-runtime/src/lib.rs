@@ -728,7 +728,6 @@ mod hermes_vectors_tests;
 mod hermes_yaml;
 mod hermes_yaml_construct;
 mod hermes_yaml_resolve;
-mod pyyaml_dump;
 #[path = "adapters/hook_adapter_op.rs"]
 mod hook_adapter_op;
 mod hook_approval_context;
@@ -791,6 +790,7 @@ mod mcp_config_discovery_tests;
 mod muse_detect;
 mod pack_lifecycle;
 mod pack_preparation;
+mod pyyaml_dump;
 mod swarm_op;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.

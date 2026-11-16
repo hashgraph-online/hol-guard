@@ -78,8 +78,8 @@ def detection_request(harness: str, context: HarnessContext) -> dict[str, object
     including ones read from harness-written files, resolve against Python's
     cwd and never the resident's.
 
-    TODO(process-fact): ``cwd`` is a fact of the calling Python process. Drop it
-    here when the resident request envelope stamps it.
+    ``cwd`` is a fact of the calling Python process, so it travels with the
+    request until the resident request envelope stamps it.
     """
 
     workspace = context.workspace_dir
@@ -135,8 +135,9 @@ def _run_command_probe(
 ) -> dict[str, object]:
     """Run a harness CLI's ``--help`` or ``--version`` through the native ``command_probe`` kind.
 
-    TODO(process-fact): the working directory and the probe environment are facts of the
-    calling Python process. Drop them here when the resident request envelope stamps them.
+    The working directory and the probe environment are facts of the calling
+    Python process, so they travel with the request until the resident request
+    envelope stamps them.
     """
 
     skipped = skipped_command_probe(command)
@@ -460,8 +461,8 @@ class HarnessAdapter:
         context: HarnessContext,
         detection: HarnessDetection,
     ) -> HarnessDetection:
-        # TODO(process-fact): the caller's working directory, for a relative Guard home, comes from the
-        # resident request envelope once it stamps it; until then a relative home is refused natively.
+        # The caller's working directory, for a relative Guard home, is not in the
+        # resident request envelope yet, so a relative home is refused natively.
         artifact = _harness_diagnostics(
             "launcher_artifact",
             lambda value: value is None or isinstance(value, dict),
