@@ -314,7 +314,18 @@ pub(crate) fn owned_by_current_user(path: &Path) -> bool {
     std::fs::metadata(path).is_ok_and(|metadata| metadata.uid() == nix::unistd::getuid().as_raw())
 }
 
-#[cfg(not(unix))]
+/// Windows has no uid; the owner SID answers instead, read the way the other
+/// Windows ownership checks read it (the current user, or LocalSystem or the
+/// Administrators group, which already control everything the user owns).
+/// Answering `false` here refused every harness-reported checkout outside
+/// the profile directory, such as one on a second drive, so the hook lost its
+/// working directory and every Git read and workspace search was reviewed.
+#[cfg(windows)]
+pub(crate) fn owned_by_current_user(path: &Path) -> bool {
+    guard_runtime_windows_process::owned_by_current_user(path)
+}
+
+#[cfg(not(any(unix, windows)))]
 pub(crate) fn owned_by_current_user(_path: &Path) -> bool {
     false
 }
