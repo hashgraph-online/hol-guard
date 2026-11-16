@@ -38,20 +38,46 @@ fn apply(files: &[Value]) {
 }
 
 fn install(home: &Home) -> Value {
-    let found = home.ask("opencode", "install_detection", json!({}));
     home.ask(
         "opencode",
         "prepare_install",
-        json!({
-            "shim": shim(),
-            "servers": "[]",
-            "skipped": "[]",
-            "artifacts": "[]",
-            "source_config_paths": "[]",
-            "plugin": plugin(),
-            "digest": found["digest"],
-        }),
+        json!({"shim": shim(), "plugin": plugin()}),
     )
+}
+
+/// The facts of the Guard process an install with managed servers is built from.
+fn launch() -> Value {
+    json!({
+        "executable": "/py/bin/python",
+        "frozen": false,
+        "relay": null,
+        "env": [["PYTHONPATH", "/g/lib"], ["HOL_GUARD_NATIVE", "1"]],
+    })
+}
+
+fn install_with(home: &Home, launch: Value) -> Value {
+    home.ask(
+        "opencode",
+        "prepare_install",
+        json!({"shim": shim(), "plugin": plugin(), "launch": launch}),
+    )
+}
+
+const SERVERS: &str = r#"{
+  "mcp": {
+    "files": {
+      "type": "local",
+      "command": ["npx", "files-server"],
+      "environment": {"TOKEN": "abc", "PYTHONPATH": "/evil"}
+    },
+    "hosted": {"type": "remote", "url": "https://x.example/mcp"}
+  }
+}"#;
+
+fn managed_config(home: &Home, answer: &Value) -> Value {
+    let target = global(home).join("opencode.json");
+    let files = answer["files"].as_array().unwrap();
+    serde_json::from_str(&after(file(files, &target))).unwrap()
 }
 
 fn file<'a>(files: &'a [Value], path: &Path) -> &'a Value {
@@ -113,31 +139,6 @@ fn install_updates_the_root_config_and_backs_up_the_original() {
 }
 
 #[test]
-fn install_refuses_a_config_that_moved_after_detection() {
-    let home = Home::new();
-    let target = global(&home).join("opencode.json");
-    write(&target, "{}");
-    let found = home.ask("opencode", "install_detection", json!({}));
-    write(&target, "{\"theme\": \"light\"}");
-    let request = json!({
-        "harness": "opencode",
-        "op": "prepare_install",
-        "context": home.context(json!({"PATH": ""})),
-        "shim": shim(),
-        "servers": "[]",
-        "skipped": "[]",
-        "artifacts": "[]",
-        "source_config_paths": "[]",
-        "plugin": plugin(),
-        "digest": found["digest"],
-    });
-    assert_eq!(
-        dispatch(&request).unwrap(),
-        json!({"integrity": "target_changed"})
-    );
-}
-
-#[test]
 fn install_reads_a_comment_ended_by_a_lone_carriage_return() {
     let home = Home::new();
     let target = global(&home).join("opencode.json");
@@ -152,7 +153,7 @@ fn install_reads_a_comment_ended_by_a_lone_carriage_return() {
 fn install_refuses_an_invalid_config() {
     let home = Home::new();
     write(&global(&home).join("opencode.json"), "{oops");
-    let answer = home.ask("opencode", "install_detection", json!({}));
+    let answer = install(&home);
     let refusal = answer["refusal"].as_str().unwrap();
     assert!(refusal.starts_with("Refusing to install with an invalid OpenCode config at "));
 }
@@ -261,4 +262,126 @@ fn runtime_probe_needs_the_command_on_path() {
     let home = Home::new();
     let answer = home.ask("opencode", "runtime_probe", json!({}));
     assert_eq!(answer, json!({"commands": null}));
+}
+
+#[test]
+fn install_without_servers_asks_only_for_the_plugin_arguments() {
+    let home = Home::new();
+    let answer = home.ask("opencode", "prepare_install", json!({"shim": shim()}));
+    assert_eq!(answer, json!({"reply": {"plugin": null}}));
+}
+
+#[test]
+fn install_with_servers_asks_for_the_launch_facts_first() {
+    let home = Home::new();
+    write(&global(&home).join("opencode.json"), SERVERS);
+    let answer = home.ask("opencode", "prepare_install", json!({"shim": shim()}));
+    assert_eq!(answer, json!({"reply": {"launch": null}}));
+    let answer = home.ask(
+        "opencode",
+        "prepare_install",
+        json!({"shim": shim(), "launch": launch()}),
+    );
+    assert_eq!(answer, json!({"reply": {"plugin": null}}));
+}
+
+#[test]
+fn install_refuses_malformed_launch_facts() {
+    let home = Home::new();
+    write(&global(&home).join("opencode.json"), SERVERS);
+    for bad in [json!(null), json!({"executable": "/py"}), json!("py")] {
+        let request = json!({
+            "harness": "opencode",
+            "op": "prepare_install",
+            "context": home.context(json!({"PATH": ""})),
+            "shim": shim(),
+            "plugin": plugin(),
+            "launch": bad,
+        });
+        assert!(dispatch(&request).is_err(), "{request}");
+    }
+}
+
+#[test]
+fn install_routes_a_local_server_through_the_guard_proxy() {
+    let home = Home::new();
+    let target = global(&home).join("opencode.json");
+    write(&target, SERVERS);
+    let answer = install_with(&home, launch());
+    let config = managed_config(&home, &answer);
+    assert_eq!(config["mcp"]["files"]["enabled"], json!(false));
+    assert_eq!(config["mcp"]["hosted"]["type"], "remote");
+    let companion = &config["mcp"]["hol-guard::files"];
+    assert_eq!(companion["type"], "local");
+    assert_eq!(
+        companion["command"][..5],
+        json!([
+            "/py/bin/python",
+            "-m",
+            "codex_plugin_scanner.cli",
+            "guard",
+            "opencode-mcp-proxy"
+        ])
+    );
+    let command = companion["command"].as_array().unwrap();
+    assert!(command.contains(&json!("--command")));
+    assert!(command.contains(&json!("npx")));
+    assert!(command.contains(&json!("--arg=files-server")));
+    assert!(!command.contains(&json!("--workspace")));
+    assert_eq!(
+        companion["environment"],
+        json!({"PYTHONPATH": "/g/lib", "TOKEN": "abc", "HOL_GUARD_NATIVE": "1"})
+    );
+    let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
+    assert_eq!(manifest["managed_servers"], json!(["files"]));
+    assert_eq!(manifest["skipped_servers"], json!(["hosted"]));
+    assert_eq!(manifest["source_config_paths"], json!([target]));
+}
+
+#[test]
+fn install_launches_the_proxy_through_the_native_relay_when_one_is_selected() {
+    let home = Home::new();
+    write(&global(&home).join("opencode.json"), SERVERS);
+    let mut facts = launch();
+    facts["relay"] = json!("/r/relay");
+    let config = managed_config(&home, &install_with(&home, facts.clone()));
+    assert_eq!(
+        config["mcp"]["hol-guard::files"]["command"][..4],
+        json!(["/r/relay", "mcp-relay", "/py/bin/python", "-m"])
+    );
+    // A frozen launcher is relayed whole, not unwrapped.
+    facts["frozen"] = json!(true);
+    let config = managed_config(&home, &install_with(&home, facts));
+    assert_eq!(
+        config["mcp"]["hol-guard::files"]["command"][..4],
+        json!(["/r/relay", "mcp-relay", "/py/bin/python", "-m"])
+    );
+}
+
+#[test]
+fn install_drops_the_module_prefix_for_a_frozen_launcher() {
+    let home = Home::new();
+    write(&global(&home).join("opencode.json"), SERVERS);
+    let mut facts = launch();
+    facts["executable"] = json!("/app/hol-guard");
+    facts["frozen"] = json!(true);
+    let config = managed_config(&home, &install_with(&home, facts));
+    assert_eq!(
+        config["mcp"]["hol-guard::files"]["command"][..2],
+        json!(["/app/hol-guard", "opencode-mcp-proxy"])
+    );
+}
+
+#[test]
+fn install_ignores_a_server_that_is_already_a_guard_proxy() {
+    let home = Home::new();
+    let target = global(&home).join("opencode.json");
+    write(&target, SERVERS);
+    let first = install_with(&home, launch());
+    apply(first["files"].as_array().unwrap());
+    let answer = install_with(&home, launch());
+    let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
+    assert_eq!(manifest["managed_servers"], json!(["files"]));
+    let config = managed_config(&home, &answer);
+    assert_eq!(config["mcp"]["files"]["enabled"], json!(false));
 }

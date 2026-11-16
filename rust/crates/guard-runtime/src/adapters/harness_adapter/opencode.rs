@@ -38,7 +38,6 @@ pub(crate) fn dispatch(
             None => global_dir(ctx).join(CONFIG_NAMES[0]),
         }),
         "detect" => detect(spec, ctx),
-        "install_detection" => super::opencode_install::install_detection(spec, ctx),
         "prepare_install" => super::opencode_install::prepare_install(ctx, fields),
         "prepare_uninstall" => prepare_uninstall(ctx),
         "finish_uninstall" => finish_uninstall(ctx, fields),

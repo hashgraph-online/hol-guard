@@ -74,6 +74,11 @@ def test_install_cleanup_and_refresh_read_under_same_lock(tmp_path: Path, monkey
             pytest.fail("config reader ran without the shared lock")
         raise ReachedReadError
 
+    # The install owner check runs before the first read; the lock is what is under test.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.codex_install_transaction.require_codex_install_owner",
+        lambda *_args, **_kwargs: None,
+    )
     monkeypatch.setattr(adapter, "_ask", checked_read)
     monkeypatch.setattr(opencode_runtime, "ask", checked_read)
     for operation in (adapter.install, adapter.uninstall, opencode_runtime.refresh_opencode_proxy_launchers):

@@ -3,15 +3,17 @@
 The kind owns OpenCode's paths, detection, install and uninstall plans, the
 pretool plugin, the protection checks and the launcher refresh. This module
 keeps what must run in the Guard process: the home-scoped config lock held
-across a publish, Guard's own proxy argv and launcher environment, the
-attested Guard CLI the plugin runs, the probe subprocesses and the
-``opencode_launch`` runner calls.
+across a publish, the facts of this process an install is built from (the
+interpreter, the MCP relay, the launcher environment and the attested Guard
+CLI the plugin runs), the probe subprocesses and the ``opencode_launch``
+runner calls.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -20,14 +22,15 @@ from typing import TYPE_CHECKING, Any
 
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from .base import HarnessContext, PreparedHarnessInstall, _run_command_probe
-from .native_harness import NativeHarnessAdapter, ask, detection_from, planned_files
+from .native_harness import NativeHarnessAdapter, ask
 
 if TYPE_CHECKING:
     from ..store import GuardStore
 
 _HARNESS = "opencode"
-_PROXY = "opencode-mcp-proxy"
 _HOOK_TIMEOUT_SECONDS = 25
+_REPLY_LIMIT = 32
+_INSTALL_OPS = frozenset({"prepare_install", "apply_install"})
 
 
 @contextmanager
@@ -101,6 +104,39 @@ def plugin_render_args(context: HarnessContext) -> dict[str, object]:
     }
 
 
+def _launch_facts(context: HarnessContext) -> dict[str, object]:
+    """The Guard process facts a managed server's proxy launch is built from."""
+    from ..launcher import merge_guard_launcher_env
+    from .hook_python import resolve_guard_hook_python
+    from .mcp_relay_native import native_mcp_relay
+
+    relay = native_mcp_relay(Path(str(context.guard_home)))
+    return {
+        "executable": str(resolve_guard_hook_python(context)),
+        "frozen": bool(getattr(sys, "frozen", False)),
+        "relay": None if relay is None else str(relay),
+        "env": [list(item) for item in merge_guard_launcher_env().items()],
+    }
+
+
+def _answer_reply(context: HarnessContext, key: str, fields: dict[str, Any]) -> None:
+    """Fill the one fact the native install asked for."""
+    from .hook_python import disposable_guard_hook_probe
+
+    if key == "launch":
+        with disposable_guard_hook_probe():
+            fields["launch"] = _launch_facts(context)
+    elif key == "plugin":
+        with disposable_guard_hook_probe():
+            fields["plugin"] = plugin_render_args(context)
+    elif key == "workspace_skills":
+        from ..aibom_detection import portable_workspace_skills
+
+        fields["workspace_skills"] = portable_workspace_skills(_HARNESS, context.workspace_dir)
+    else:
+        raise ValueError("OpenCode adapter reply is malformed")
+
+
 def refresh_opencode_proxy_launchers(context: HarnessContext, *, warnings: list[str] | None = None) -> int:
     """Refresh verified Guard CLI prefixes without changing server or tool authority."""
     with opencode_config_lock(context.home_dir):
@@ -138,74 +174,36 @@ def opencode_protection_checks(context: HarnessContext, store: GuardStore | None
 
 
 class OpenCodeHarnessAdapter(NativeHarnessAdapter):
-    """OpenCode, with Guard's MCP proxy argv and attested plugin facts."""
+    """OpenCode, with the launch and attested plugin facts of the Guard process."""
 
     def __init__(self) -> None:
         super().__init__(_HARNESS, (), "")
 
     def install(self, context: HarnessContext) -> dict[str, object]:
         with opencode_config_lock(context.home_dir):
-            return self.prepare_install(context).publish(context.guard_home)
+            return super().install(context)
 
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
         """Render the whole install without taking the write-creating config lock."""
         from .hook_python import disposable_guard_hook_probe
 
         with disposable_guard_hook_probe():
-            return self._plan_install(context)
+            return super().prepare_install(context)
 
-    def _plan_install(self, context: HarnessContext) -> PreparedHarnessInstall:
-        from ..launcher import merge_guard_launcher_env
-        from ..shims import prepare_guard_shim
-        from .mcp_servers import managed_stdio_servers, proxy_cli_args, proxy_process_env, skipped_stdio_server_names
-
-        found = self._ask("install_detection", context)
-        detection = detection_from(self.harness, context, found)
-        home = str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None
-        workspace = None if context.workspace_dir is None else str(context.workspace_dir)
-        servers: list[dict[str, Any]] = []
-        for server in managed_stdio_servers(detection):
-            launches = [
-                _guard_proxy_command(
-                    context,
-                    proxy_cli_args(
-                        proxy_command=_PROXY,
-                        guard_home=str(context.guard_home),
-                        server=server,
-                        home=home,
-                        workspace=launch_workspace,
-                    ),
-                )
-                for launch_workspace in (None, workspace)
-            ]
-            servers.append(
-                {
-                    "name": server.name,
-                    "source_scope": server.source_scope,
-                    "config_path": server.config_path,
-                    "command": server.command,
-                    "args": list(server.args),
-                    "env": dict(server.env),
-                    "enabled": server.enabled,
-                    "proxy_environment": merge_guard_launcher_env(proxy_process_env(server.env)),
-                    "launches": launches,
-                }
-            )
-        artifacts = [artifact.name for artifact in detection.artifacts if artifact.artifact_type == "mcp_server"]
-        plugin = plugin_render_args(context)
-        shim = prepare_guard_shim(self.harness, context)
-        answer = self._ask(
-            "prepare_install",
-            context,
-            digest=found["digest"],
-            shim=json.dumps(shim.manifest),
-            servers=json.dumps(servers),
-            skipped=json.dumps(list(skipped_stdio_server_names(detection))),
-            artifacts=json.dumps(artifacts),
-            source_config_paths=json.dumps(list(detection.config_paths)),
-            plugin=plugin,
-        )
-        return PreparedHarnessInstall((*shim.files, *planned_files(answer)), json.loads(str(answer["manifest"])))
+    def _ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
+        """Answer the facts the native install plan asks of this process, then re-ask."""
+        if op not in _INSTALL_OPS:
+            return super()._ask(op, context, **fields)
+        for _ in range(_REPLY_LIMIT):
+            answer = super()._ask(op, context, **fields)
+            if set(answer) != {"reply"}:
+                return answer
+            reply = answer["reply"]
+            if not isinstance(reply, dict) or len(reply) != 1:
+                raise ValueError("OpenCode adapter reply is malformed")
+            ((key, _),) = reply.items()
+            _answer_reply(context, key, fields)
+        raise RuntimeError("OpenCode adapter request did not settle")
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         with opencode_config_lock(context.home_dir):

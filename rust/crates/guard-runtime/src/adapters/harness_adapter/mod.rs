@@ -104,6 +104,8 @@ mod opencode;
 mod opencode_build;
 mod opencode_checks;
 mod opencode_install;
+mod opencode_servers;
+mod opencode_workspace;
 mod paseo;
 mod paseo_install;
 mod paseo_paths;
