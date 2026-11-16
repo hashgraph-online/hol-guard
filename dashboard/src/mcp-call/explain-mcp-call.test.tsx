@@ -277,4 +277,61 @@ const SEARCH_INPUT = {
   assert(plain === "A different reason.", "T-MCP-49: any other reason is left as Core wrote it");
 }
 
+// Core takes a call's input from `toolCalls` when the top-level input is empty, and the card follows.
+{
+  const name = "mcp__acme__list_things";
+  const withCalls = (payload: Record<string, unknown>) =>
+    explainMcpCall(request(envelope(name, null, { raw_payload_redacted: { tool_name: name, ...payload } })));
+  const fromCalls = withCalls({ toolCalls: [{ name, args: { q: "hello" } }] });
+  assert(fromCalls?.facts[0]?.value === "hello" && fromCalls?.rawInput === JSON.stringify({ q: "hello" }, null, 2), "T-MCP-67: an input held only in toolCalls fills the rows and the exact input");
+  const afterEmpty = withCalls({ tool_input: {}, toolCalls: [{ name, args: { q: "again" } }] });
+  assert(afterEmpty?.facts[0]?.value === "again", "T-MCP-68: an empty top-level input falls back to toolCalls");
+  const kept = withCalls({ tool_input: { q: "top" }, toolCalls: [{ name, args: { q: "call" } }] });
+  assert(kept?.facts[0]?.value === "top", "T-MCP-69: a non-empty top-level input is kept");
+  const matched = withCalls({ toolCalls: [{ name: "other", args: { q: "no" } }, { name, args: { q: "yes" } }] });
+  assert(matched?.facts[0]?.value === "yes", "T-MCP-70: the call named like the tool is the one used");
+}
+
+// A string Core cannot have cut is skipped; one at the cut length may be Core's input.
+{
+  const name = "mcp__acme__list_things";
+  const skipped = explainMcpCall(
+    request(envelope(name, null, { raw_payload_redacted: { tool_name: name, tool_input: "not JSON", toolInput: { q: "x" } } })),
+  );
+  assert(skipped?.rawInput === JSON.stringify({ q: "x" }, null, 2), "T-MCP-71: a short string that is not JSON does not become the exact input");
+  const cut = `{"q":"${"a".repeat(233)}…`;
+  const long = explainMcpCall(request(envelope(name, null, { raw_payload_redacted: { tool_name: name, tool_input: cut, toolInput: { q: "x" } } })));
+  assert(cut.length === 240 && long?.rawInput === cut && long?.facts.length === 0, "T-MCP-72: a string cut at the limit is shown as recorded, with no rows");
+  assert(long?.truncated === true, "T-MCP-73: a cut input string is called shortened");
+}
+
+// Bidirectional controls show as escapes in the exact input.
+{
+  const explained = explainMcpCall(request(envelope("mcp__acme__list_things", { file: "invoice\u202etxt.exe" })));
+  assert(explained?.rawInput?.includes("invoice\\u202etxt.exe") === true && !explained.rawInput.includes("\u202e"), "T-MCP-74: a bidi control is escaped in the exact input");
+}
+
+// The recorded server can be the Codex wrapper while `mcp_tool` holds the whole name.
+{
+  const whole = "mcp__codex_apps__composio__COMPOSIO_SEARCH_TOOLS";
+  const item = request(envelope(whole, SEARCH_INPUT, { mcp_server: "codex_apps", mcp_tool: whole }));
+  const explained = explainMcpCall(item);
+  assert(explained?.connector === "Composio" && explained?.title === "Search for tools", "T-MCP-75: the connector is read from a whole mcp_tool name");
+}
+
+// The agent's own text is quoted, never a row or the queue detail.
+{
+  const thought = explainMcpCall(request(envelope("mcp__acme__list_things", { thought: "checking things", q: "x" })));
+  assert(thought?.facts.every((fact) => fact.label !== "Thought") === true && thought?.queueDetail === "x", "T-MCP-76: a thought is not a row or the queue detail");
+  assert(thought?.quotes?.items[0] === "checking things", "T-MCP-77: the thought is quoted");
+  const useCase = explainMcpCall(request(envelope("mcp__acme__list_things", { use_case: "find mail", q: "y" })));
+  assert(useCase?.queueDetail === "y", "T-MCP-78: a use case is not the queue detail");
+}
+
+// One order for a name that both runs code and sends.
+{
+  assert(classifyMcpEffect("execute_and_send") === "run-code", "T-MCP-79: a name that runs code and sends reads as running code");
+  assert(worstMcpEffect([classifyMcpEffect("execute_and_send")]) === classifyMcpEffect("execute_and_send"), "T-MCP-80: a group and a single tool agree");
+}
+
 console.log("mcp-call explain tests passed");

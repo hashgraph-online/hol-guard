@@ -1,9 +1,9 @@
 import { harnessDisplayName } from "../approval-center-utils";
 import type { GuardActionEnvelope, GuardApprovalRequest } from "../guard-types";
-import { explainComposioTool, type McpCallBody } from "./composio-calls";
+import { explainComposioTool, THOUGHT_CAPTION, type McpCallBody } from "./composio-calls";
 import type { McpCallExplanation } from "./mcp-call-types";
 import { classifyMcpEffect, MCP_EFFECT_COPY, type McpEffectKind } from "./mcp-effects";
-import { rawInputText, recordOf, scalarFacts, toolInputRecord } from "./mcp-input";
+import { CORE_STRING_LIMIT, recordOf, scalarFacts, selectToolInput, textOf, type SelectedToolInput } from "./mcp-input";
 import {
   isPlainNamePart,
   parseNamespacedMcpName,
@@ -15,8 +15,7 @@ import {
 
 const UNKNOWN_SERVER = "a connected server";
 const CODEX_APPS_SERVER = "codex_apps";
-// Core cuts every string in the recorded input at this length.
-const CORE_STRING_LIMIT = 240;
+const AGENT_TEXT_KEYS = ["thought", "use_case"];
 
 /**
  * Turns an MCP tool review into plain English from the call's own data: the
@@ -33,7 +32,8 @@ export function explainMcpCall(item: GuardApprovalRequest): McpCallExplanation |
 
   const harness = harnessDisplayName(item.harness);
   const raw = recordOf(envelope.raw_payload_redacted);
-  const input = toolInputRecord(raw);
+  const selected = selectToolInput(raw);
+  const input = selected.record;
   const connector = ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER;
   const shortTool = shortToolName(ref.server, ref.tool);
   const body =
@@ -43,8 +43,8 @@ export function explainMcpCall(item: GuardApprovalRequest): McpCallExplanation |
   return {
     ...body,
     connector,
-    rawInput: rawInputText(raw),
-    truncated: wasTruncated(item, input),
+    rawInput: selected.text,
+    truncated: wasTruncated(item, selected),
     toolId: ref.server.length > 0 ? `${ref.server} / ${ref.tool}` : ref.tool,
     whyAsked: `Guard has not reviewed ${ref.server.length > 0 ? `${connector}'s` : "this"} tool yet, and your policy asks before any unreviewed tool runs.`,
   };
@@ -76,6 +76,8 @@ function recordedTool(envelope: GuardActionEnvelope, fromToolName: McpServerRef 
 }
 
 function recordedServer(envelope: GuardActionEnvelope, fromToolName: McpServerRef | null, fromMcpTool: McpServerRef | null): string {
+  // `mcp_tool` can carry the whole `mcp__codex_apps__<connector>__<tool>` name next to the wrapper server.
+  if (envelope.mcp_server === CODEX_APPS_SERVER && fromMcpTool !== null) return fromMcpTool.server;
   if (isPlainNamePart(envelope.mcp_server)) return envelope.mcp_server;
   return fromMcpTool?.server ?? fromToolName?.server ?? "";
 }
@@ -101,7 +103,9 @@ function explainGenericTool(context: {
   const { harness, connector, shortTool, input } = context;
   const effect = classifyMcpEffect(shortTool);
   const title = sentenceCase(shortTool);
-  const { facts } = scalarFacts(input);
+  // `thought` and `use_case` are the agent's own account of the call. They are quoted, never shown as a fact.
+  const { facts } = scalarFacts(input, { skip: AGENT_TEXT_KEYS });
+  const thought = textOf(input?.thought, 300);
   const firstValue = facts[0]?.value ?? null;
   return {
     headline: `${harness} wants to ${effectPhrase(effect, connector)}`,
@@ -114,7 +118,7 @@ function explainGenericTool(context: {
         : "Read from the tool's name. Guard has not checked what it does.",
     facts,
     steps: [],
-    quotes: null,
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
     code: null,
     queueTitle: `${connector} · ${title}`,
     queueDetail: firstValue !== null && firstValue.length > 0 ? firstValue : null,
@@ -140,9 +144,11 @@ function effectPhrase(effect: McpEffectKind, connector: string): string {
   }
 }
 
-function wasTruncated(item: GuardApprovalRequest, input: Record<string, unknown> | null): boolean {
+function wasTruncated(item: GuardApprovalRequest, selected: SelectedToolInput): boolean {
   if ((item.action_explanation?.redaction.truncated_fields.length ?? 0) > 0) return true;
-  return input !== null && JSON.stringify(input).length >= CORE_STRING_LIMIT && containsLongString(input);
+  // An input Core recorded as text is cut when it reaches the limit. Its rows are not read, so only its length says.
+  if (selected.record === null) return selected.text !== null && selected.text.length >= CORE_STRING_LIMIT;
+  return JSON.stringify(selected.record).length >= CORE_STRING_LIMIT && containsLongString(selected.record);
 }
 
 function containsLongString(value: unknown): boolean {

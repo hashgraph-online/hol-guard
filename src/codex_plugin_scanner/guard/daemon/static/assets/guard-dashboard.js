@@ -13303,22 +13303,22 @@ const BLOCK_SCOPE_CHOICES = [
   {
     value: "workspace",
     label: "Block in project",
-    description: "Block matching actions in the current project."
+    description: "Block matching actions in the current project. Saved until you remove it."
   },
   {
     value: "publisher",
     label: "Block this source",
-    description: "Block matching actions from this source."
+    description: "Block matching actions from this source. Saved until you remove it."
   },
   {
     value: "harness",
     label: "Block in this app",
-    description: "Block matching actions from this AI app."
+    description: "Block matching actions from this AI app. Saved until you remove it."
   },
   {
     value: "global",
     label: "Block everywhere",
-    description: "Block matching actions across every project and AI app on this machine."
+    description: "Block matching actions across every project and AI app on this machine. Saved until you remove it."
   }
 ];
 function hasScopeContractMetadata(item) {
@@ -14619,8 +14619,8 @@ function classifyMcpEffect(identifier2) {
   });
   const has = (kind, set) => ambiguous.includes(kind) || words.some((word) => set.has(word));
   if (has("delete", DELETE_WORDS)) return "delete";
-  if (has("send", SEND_WORDS)) return "send";
   if (has("run-code", RUN_WORDS)) return "run-code";
+  if (has("send", SEND_WORDS)) return "send";
   if (has("connect", CONNECT_WORDS)) return "connect";
   if (has("write", WRITE_WORDS)) return "write";
   if (firstRead !== -1) return "read";
@@ -14832,6 +14832,9 @@ function shortToolName(server, tool) {
   return tool.toLowerCase().startsWith(prefix) && tool.length > prefix.length ? tool.slice(prefix.length) : tool;
 }
 const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"];
+const TOOL_NAME_KEYS = ["tool_name", "toolName", "name", "tool"];
+const CORE_STRING_LIMIT = 240;
+const BIDI_CONTROLS = new RegExp("[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]", "g");
 const KEY_PATTERN = /^[A-Za-z0-9_.-]{1,60}$/;
 const VALUE_CHARS = 160;
 const MAX_FACTS = 8;
@@ -14876,33 +14879,61 @@ function codeOf(value) {
   const text2 = value.replace(UNSAFE_CODE_CHARACTERS, " ").trim();
   return text2.length > 0 ? text2 : null;
 }
-function toolInputRecord(raw) {
-  return firstToolInput(raw);
+const NO_INPUT = { record: null, text: null };
+function selectToolInput(raw) {
+  if (raw === null) return NO_INPUT;
+  const keyed = inputFromKeys(raw);
+  const hasKeyedInput = keyed !== null && (keyed.record === null || Object.keys(keyed.record).length > 0);
+  if (hasKeyedInput) return keyed;
+  return inputFromToolCalls(raw) ?? keyed ?? NO_INPUT;
 }
-function rawInputText(raw) {
-  if (raw === null) return null;
+function inputFromKeys(raw) {
   for (const key of TOOL_INPUT_KEYS) {
     const value = raw[key];
-    const input = recordOf(value);
-    if (input !== null) {
-      try {
-        return JSON.stringify(input, null, 2);
-      } catch {
-        return null;
-      }
-    }
+    const record2 = recordOf(value);
+    if (record2 !== null) return inputFromRecord(record2);
     if (typeof value !== "string" || value.trim().length === 0) continue;
-    if (isNonObjectJson(value)) continue;
-    return value;
+    if (coreSkipsString(value)) continue;
+    return { record: null, text: escapeBidi(value) };
   }
   return null;
 }
-function isNonObjectJson(text2) {
+function inputFromToolCalls(raw) {
+  const calls = raw.toolCalls;
+  if (!Array.isArray(calls)) return null;
+  const expected = TOOL_NAME_KEYS.map((key) => raw[key]).find(
+    (value) => typeof value === "string" && value.trim().length > 0
+  );
+  let chosen;
+  for (const item of calls) {
+    const call = recordOf(item);
+    const name = call?.name;
+    if (call === null || typeof name !== "string" || name.trim().length === 0) continue;
+    const args = recordOf(call.args);
+    chosen ??= args;
+    if (expected === void 0 || expected.trim() === name.trim()) {
+      chosen = args;
+      break;
+    }
+  }
+  return chosen === void 0 || chosen === null ? null : inputFromRecord(chosen);
+}
+function inputFromRecord(record2) {
+  try {
+    return { record: record2, text: escapeBidi(JSON.stringify(record2, null, 2)) };
+  } catch {
+    return { record: record2, text: null };
+  }
+}
+function coreSkipsString(text2) {
   try {
     return recordOf(JSON.parse(text2)) === null;
   } catch {
-    return false;
+    return text2.length < CORE_STRING_LIMIT;
   }
+}
+function escapeBidi(text2) {
+  return text2.replace(BIDI_CONTROLS, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 function scalarText(value) {
   if (typeof value === "string") return textOf(value);
@@ -15106,7 +15137,7 @@ function slugLabel(slug) {
 }
 const UNKNOWN_SERVER = "a connected server";
 const CODEX_APPS_SERVER = "codex_apps";
-const CORE_STRING_LIMIT = 240;
+const AGENT_TEXT_KEYS = ["thought", "use_case"];
 function explainMcpCall(item) {
   const envelope = item.action_envelope_json;
   if (!envelope) return null;
@@ -15114,15 +15145,16 @@ function explainMcpCall(item) {
   if (ref === null) return null;
   const harness = harnessDisplayName(item.harness);
   const raw = recordOf(envelope.raw_payload_redacted);
-  const input = toolInputRecord(raw);
+  const selected = selectToolInput(raw);
+  const input = selected.record;
   const connector = ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER;
   const shortTool = shortToolName(ref.server, ref.tool);
   const body = (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ?? explainGenericTool({ harness, connector, shortTool, input });
   return {
     ...body,
     connector,
-    rawInput: rawInputText(raw),
-    truncated: wasTruncated(item, input),
+    rawInput: selected.text,
+    truncated: wasTruncated(item, selected),
     toolId: ref.server.length > 0 ? `${ref.server} / ${ref.tool}` : ref.tool,
     whyAsked: `Guard has not reviewed ${ref.server.length > 0 ? `${connector}'s` : "this"} tool yet, and your policy asks before any unreviewed tool runs.`
   };
@@ -15148,6 +15180,7 @@ function recordedTool(envelope, fromToolName, fromMcpTool) {
   return fromToolName?.tool ?? null;
 }
 function recordedServer(envelope, fromToolName, fromMcpTool) {
+  if (envelope.mcp_server === CODEX_APPS_SERVER && fromMcpTool !== null) return fromMcpTool.server;
   if (isPlainNamePart(envelope.mcp_server)) return envelope.mcp_server;
   return fromMcpTool?.server ?? fromToolName?.server ?? "";
 }
@@ -15161,7 +15194,8 @@ function explainGenericTool(context) {
   const { harness, connector, shortTool, input } = context;
   const effect = classifyMcpEffect(shortTool);
   const title = sentenceCase(shortTool);
-  const { facts } = scalarFacts(input);
+  const { facts } = scalarFacts(input, { skip: AGENT_TEXT_KEYS });
+  const thought = textOf(input?.thought, 300);
   const firstValue = facts[0]?.value ?? null;
   return {
     headline: `${harness} wants to ${effectPhrase(effect, connector)}`,
@@ -15171,7 +15205,7 @@ function explainGenericTool(context) {
     effectBasis: effect === "unknown" ? "Guard cannot tell what this does from its name. Read the inputs below." : "Read from the tool's name. Guard has not checked what it does.",
     facts,
     steps: [],
-    quotes: null,
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
     code: null,
     queueTitle: `${connector} · ${title}`,
     queueDetail: firstValue !== null && firstValue.length > 0 ? firstValue : null
@@ -15195,9 +15229,10 @@ function effectPhrase(effect, connector) {
       return `use ${connector}`;
   }
 }
-function wasTruncated(item, input) {
+function wasTruncated(item, selected) {
   if ((item.action_explanation?.redaction.truncated_fields.length ?? 0) > 0) return true;
-  return input !== null && JSON.stringify(input).length >= CORE_STRING_LIMIT && containsLongString(input);
+  if (selected.record === null) return selected.text !== null && selected.text.length >= CORE_STRING_LIMIT;
+  return JSON.stringify(selected.record).length >= CORE_STRING_LIMIT && containsLongString(selected.record);
 }
 function containsLongString(value) {
   if (typeof value === "string") return value.length >= CORE_STRING_LIMIT;

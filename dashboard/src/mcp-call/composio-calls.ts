@@ -10,7 +10,7 @@ type ComposioContext = { harness: string; input: Record<string, unknown> | null 
 const NAME_BASIS = "Read from the tool's name. Guard has not checked what it does.";
 const STEP_BASIS = "Read from the action names. Guard has not checked what they do.";
 const SEPARATE_CALL = "Running a tool is a separate call, and Guard reviews that call too.";
-const THOUGHT_CAPTION = "What the agent said it is doing";
+export const THOUGHT_CAPTION = "What the agent said it is doing";
 
 /**
  * Composio fronts many apps through a few fixed tools. The tool's name says

@@ -1,9 +1,15 @@
-import { cleanAgentText, firstToolInput } from "../agent-stated-intent";
+import { cleanAgentText } from "../agent-stated-intent";
 import type { McpFact } from "./mcp-call-types";
 import { sentenceCase } from "./mcp-services";
 
 // The keys Core reads a tool's input from, in its order (see `agent-stated-intent.ts`).
 const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"] as const;
+// The keys Core reads the tool's name from, which picks the `toolCalls` item to use.
+const TOOL_NAME_KEYS = ["tool_name", "toolName", "name", "tool"] as const;
+/** Core cuts every string it records at this length. A cut string is exactly this long. */
+export const CORE_STRING_LIMIT = 240;
+// Bidirectional controls reorder text on screen, so the exact input shows them as escapes.
+const BIDI_CONTROLS = new RegExp("[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]", "g");
 const KEY_PATTERN = /^[A-Za-z0-9_.-]{1,60}$/;
 const VALUE_CHARS = 160;
 const MAX_FACTS = 8;
@@ -64,47 +70,83 @@ export function codeOf(value: unknown): string | null {
   return text.length > 0 ? text : null;
 }
 
-/**
- * The tool input as an object, chosen the way Core chooses it. A string input
- * is never decoded: Core redacts the encoded text, so decoding it could surface
- * a secret the redaction hid. When Core's input is a string the card shows no
- * rows rather than rows from a different key.
- */
-export function toolInputRecord(raw: Record<string, unknown> | null): Record<string, unknown> | null {
-  return firstToolInput(raw);
-}
+/** The input Core approves: as an object for the rows, and as text for the exact-input disclosure. */
+export type SelectedToolInput = { record: Record<string, unknown> | null; text: string | null };
+
+const NO_INPUT: SelectedToolInput = { record: null, text: null };
 
 /**
- * The input exactly as Guard holds it, for the disclosure that shows what an
- * approval matches. It follows the same order as `toolInputRecord`, so the rows
- * and the disclosure always describe the same value.
+ * Picks the tool input the way Core does, once, so the rows and the disclosure
+ * always describe the same value. A string input is never decoded for rows:
+ * Core redacts the encoded text, so decoding it could surface a secret the
+ * redaction hid. The disclosure shows that string as recorded.
  */
-export function rawInputText(raw: Record<string, unknown> | null): string | null {
-  if (raw === null) return null;
+export function selectToolInput(raw: Record<string, unknown> | null): SelectedToolInput {
+  if (raw === null) return NO_INPUT;
+  const keyed = inputFromKeys(raw);
+  const hasKeyedInput = keyed !== null && (keyed.record === null || Object.keys(keyed.record).length > 0);
+  if (hasKeyedInput) return keyed;
+  // Core falls back to the matching `toolCalls` item's args when the top-level input is empty.
+  return inputFromToolCalls(raw) ?? keyed ?? NO_INPUT;
+}
+
+function inputFromKeys(raw: Record<string, unknown>): SelectedToolInput | null {
   for (const key of TOOL_INPUT_KEYS) {
     const value = raw[key];
-    const input = recordOf(value);
-    if (input !== null) {
-      try {
-        return JSON.stringify(input, null, 2);
-      } catch {
-        return null;
-      }
-    }
+    const record = recordOf(value);
+    if (record !== null) return inputFromRecord(record);
     if (typeof value !== "string" || value.trim().length === 0) continue;
-    if (isNonObjectJson(value)) continue;
-    return value;
+    if (coreSkipsString(value)) continue;
+    return { record: null, text: escapeBidi(value) };
   }
   return null;
 }
 
-/** Core skips a string under these keys only when it parses as JSON that is not an object. */
-function isNonObjectJson(text: string): boolean {
+function inputFromToolCalls(raw: Record<string, unknown>): SelectedToolInput | null {
+  const calls: unknown = raw.toolCalls;
+  if (!Array.isArray(calls)) return null;
+  const expected = TOOL_NAME_KEYS.map((key) => raw[key]).find(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+  let chosen: Record<string, unknown> | null | undefined;
+  for (const item of calls) {
+    const call = recordOf(item);
+    const name = call?.name;
+    if (call === null || typeof name !== "string" || name.trim().length === 0) continue;
+    const args = recordOf(call.args);
+    chosen ??= args;
+    if (expected === undefined || expected.trim() === name.trim()) {
+      chosen = args;
+      break;
+    }
+  }
+  return chosen === undefined || chosen === null ? null : inputFromRecord(chosen);
+}
+
+function inputFromRecord(record: Record<string, unknown>): SelectedToolInput {
+  try {
+    return { record, text: escapeBidi(JSON.stringify(record, null, 2)) };
+  } catch {
+    return { record, text: null };
+  }
+}
+
+/**
+ * Core skips a string under these keys when it is not an object once decoded.
+ * A string that does not decode and is shorter than Core's cut length cannot
+ * be a cut copy of an object, so Core skipped it. A longer one may be.
+ */
+function coreSkipsString(text: string): boolean {
   try {
     return recordOf(JSON.parse(text)) === null;
   } catch {
-    return false;
+    return text.length < CORE_STRING_LIMIT;
   }
+}
+
+/** Writes bidi controls as `\uXXXX` so the disclosure shows what they are instead of reordering the text. */
+function escapeBidi(text: string): string {
+  return text.replace(BIDI_CONTROLS, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
 /** A value short enough for a one-line row, or null when it needs the full input to make sense. */

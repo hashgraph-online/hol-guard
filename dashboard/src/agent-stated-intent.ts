@@ -94,7 +94,7 @@ export function resolveAgentStatedIntent(item: GuardApprovalRequest): AgentState
   return null;
 }
 
-export function firstToolInput(raw: Record<string, unknown> | null): Record<string, unknown> | null {
+function firstToolInput(raw: Record<string, unknown> | null): Record<string, unknown> | null {
   if (raw === null) {
     return null;
   }

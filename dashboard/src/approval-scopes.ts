@@ -91,22 +91,23 @@ export const BLOCK_SCOPE_CHOICES: ApprovalScopeChoice[] = [
   {
     value: "workspace",
     label: "Block in project",
-    description: "Block matching actions in the current project.",
+    description: "Block matching actions in the current project. Saved until you remove it.",
   },
   {
     value: "publisher",
     label: "Block this source",
-    description: "Block matching actions from this source.",
+    description: "Block matching actions from this source. Saved until you remove it.",
   },
   {
     value: "harness",
     label: "Block in this app",
-    description: "Block matching actions from this AI app.",
+    description: "Block matching actions from this AI app. Saved until you remove it.",
   },
   {
     value: "global",
     label: "Block everywhere",
-    description: "Block matching actions across every project and AI app on this machine.",
+    description:
+      "Block matching actions across every project and AI app on this machine. Saved until you remove it.",
   },
 ];
 

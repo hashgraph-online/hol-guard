@@ -88,8 +88,8 @@ export function classifyMcpEffect(identifier: string): McpEffectKind {
   // Strongest first, so a name that mixes a read word with a change word is
   // never presented as a read.
   if (has("delete", DELETE_WORDS)) return "delete";
-  if (has("send", SEND_WORDS)) return "send";
   if (has("run-code", RUN_WORDS)) return "run-code";
+  if (has("send", SEND_WORDS)) return "send";
   if (has("connect", CONNECT_WORDS)) return "connect";
   if (has("write", WRITE_WORDS)) return "write";
   if (firstRead !== -1) return "read";
