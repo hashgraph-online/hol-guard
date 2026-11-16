@@ -6066,11 +6066,58 @@ function parseUsageMeter(body) {
   return { ...body, savings: parseSavings(body.savings) };
 }
 async function readUsageMeter(signal) {
-  const timeout = AbortSignal.timeout(12e3);
+  const timeout = AbortSignal.timeout(3e4);
   const response = await fetchWithGuardAuth(PATH$1, { method: "GET", cache: "no-store", signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) throw new ContextAssistanceApiError("usage_unavailable", "Guard could not read usage right now. Try again in a moment.");
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => void 0);
+    throw new ContextAssistanceApiError("usage_unavailable", "Guard could not read usage right now. Try again in a moment.");
+  }
+  const text2 = await response.text();
+  let body = null;
+  try {
+    body = JSON.parse(text2);
+  } catch {
+  }
   return parseUsageMeter(body);
+}
+const USAGE_POLL_MS = 3e3;
+const USAGE_FAILURES_SHOWN = 3;
+const FALLBACK = "Guard could not read usage right now. Try again in a moment.";
+function waitFor(ms, signal) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+    function done() {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    }
+  });
+}
+async function pollUsage(signal, hooks) {
+  const wait2 = hooks.wait ?? waitFor;
+  let failures = 0;
+  while (!signal.aborted) {
+    let meter;
+    try {
+      meter = await hooks.read(signal);
+    } catch (cause) {
+      if (signal.aborted) return;
+      failures += 1;
+      const understood = cause instanceof ContextAssistanceApiError;
+      if (understood && cause.code === "usage_payload_invalid" || failures >= USAGE_FAILURES_SHOWN) {
+        hooks.onError(understood ? cause.message : FALLBACK);
+        return;
+      }
+      await wait2(USAGE_POLL_MS * failures, signal);
+      continue;
+    }
+    if (signal.aborted) return;
+    failures = 0;
+    hooks.onMeter(meter);
+    if (meter.state !== "counting" && !meter.refreshing) return;
+    await wait2(USAGE_POLL_MS, signal);
+  }
 }
 const NAMES = {
   codex: "Codex",
@@ -6089,7 +6136,6 @@ const ROWS = [
   ["requests", "Model requests"],
   ["compactions", "Chat summaries"]
 ];
-const POLL_MS$1 = 3e3;
 const exact = new Intl.NumberFormat();
 const compact = new Intl.NumberFormat(void 0, { notation: "compact", maximumFractionDigits: 1 });
 function usageNumber(value) {
@@ -6168,20 +6214,9 @@ function CigarUsagePanel() {
   reactExports.useEffect(() => {
     if (demo) return;
     const controller = new AbortController();
-    let timer;
     setError(null);
-    const load = () => readUsageMeter(controller.signal).then((next) => {
-      setMeter(next);
-      if (next.state === "counting" || next.refreshing) timer = setTimeout(load, POLL_MS$1);
-    }, (cause) => {
-      if (controller.signal.aborted) return;
-      setError(cause instanceof ContextAssistanceApiError ? cause.message : "Guard could not read usage right now. Try again in a moment.");
-    });
-    void load();
-    return () => {
-      controller.abort();
-      if (timer) clearTimeout(timer);
-    };
+    void pollUsage(controller.signal, { read: readUsageMeter, onMeter: setMeter, onError: setError });
+    return () => controller.abort();
   }, [demo, attempt]);
   if (demo) return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Usage is not shown in the demo" }),
