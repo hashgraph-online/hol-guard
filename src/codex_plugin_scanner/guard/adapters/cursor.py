@@ -15,7 +15,6 @@ and the frozen hook script also stay here.
 from __future__ import annotations
 
 import json
-import sys
 from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
@@ -46,7 +45,6 @@ def _dumps(value: object) -> str:
 def _facts(context: HarnessContext) -> str:
     """What this process knows about the Guard CLI the hooks launch."""
     from ..frozen_runtime_commands import frozen_daemon_recovery_command
-    from ..stable_guard_cli import frozen_cli_path_is_runnable, frozen_launcher_is_prune_safe, resolve_frozen_guard_cli
     from .guard_cli_attestation import resolve_attested_guard_cli
     from .isolated_hook_python import isolated_cursor_hook_python
     from .native_hook_bridge import native_hook_bridge_executable
@@ -73,20 +71,12 @@ def _facts(context: HarnessContext) -> str:
         }
         if python is None:
             recovery = list(frozen_daemon_recovery_command(context.guard_home, context.home_dir))
-    frozen = bool(getattr(sys, "frozen", False))
-    launcher = resolve_frozen_guard_cli() if frozen else None
     return _dumps(
         {
             "bridge": None if bridge is None else str(bridge),
             "attestation": attestation,
             "interpreter": isolated_cursor_hook_python(),
-            "frozen": frozen,
-            "frozen_launcher": launcher,
-            "executable": sys.executable,
             "frozen_recovery": recovery,
-            "can_rebind": launcher is not None
-            and frozen_launcher_is_prune_safe(launcher)
-            and frozen_cli_path_is_runnable(Path(launcher)),
         }
     )
 

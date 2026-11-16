@@ -5,7 +5,7 @@
 use serde_json::{json, Map, Value};
 
 use super::cursor::{get, malformed, runtime, BRIDGE_UNAVAILABLE};
-use super::{hook_render, Ctx, Failure, Step};
+use super::{caller, hook_render, Ctx, Failure, Step};
 use crate::pyjson::{self, PyVal};
 /// The Python interpreter the attested Guard CLI runs on.
 pub(super) struct HookPython {
@@ -107,11 +107,6 @@ impl Ask<'_> {
         let Ok(PyVal::Dict(facts)) = pyjson::parse(raw) else {
             return Err(Failure::Invalid);
         };
-        let flag = |key: &str| match get(&facts, key) {
-            None => Ok(false),
-            Some(PyVal::Bool(value)) => Ok(*value),
-            Some(_) => Err(Failure::Invalid),
-        };
         let pinned = self.ctx.env("HOL_GUARD_CURSOR_HOOK_BRIDGE") == Some("python")
             && self.ctx.env("HOL_GUARD_TEST_MODE") == Some("1");
         let bridge = optional_text(get(&facts, "bridge"))?.filter(|_| !pinned);
@@ -124,11 +119,11 @@ impl Ask<'_> {
             pinned,
             attestation: attestation(get(&facts, "attestation"))?,
             interpreter: optional_text(get(&facts, "interpreter"))?,
-            frozen: flag("frozen")?,
-            frozen_launcher: optional_text(get(&facts, "frozen_launcher"))?,
-            executable: optional_text(get(&facts, "executable"))?.ok_or(Failure::Invalid)?,
+            frozen: caller::frozen(self.ctx)?,
+            frozen_launcher: caller::optional_frozen_launcher(self.ctx)?.map(str::to_owned),
+            executable: caller::executable(self.ctx)?.to_owned(),
             frozen_recovery,
-            can_rebind: flag("can_rebind")?,
+            can_rebind: caller::can_rebind(self.ctx)?,
         })
     }
 

@@ -25,17 +25,26 @@ def caller_identity() -> dict[str, object]:
     """This process's interpreter, frozen state, launchers, package root and version."""
     from ..version import __version__
     from .frozen_runtime_commands import is_frozen_guard_runtime
-    from .stable_guard_cli import guard_cli_launcher, prune_safe_cli_executable, resolve_frozen_guard_cli
+    from .stable_guard_cli import (
+        frozen_cli_path_is_runnable,
+        frozen_launcher_is_prune_safe,
+        guard_cli_launcher,
+        prune_safe_cli_executable,
+        resolve_frozen_guard_cli,
+    )
 
     executable = Path(sys.executable).expanduser()
     frozen = _frozen_contract or is_frozen_guard_runtime()
     absolute = str(executable.absolute())
+    frozen_launcher = resolve_frozen_guard_cli() if frozen else None
     return {
         "executable": absolute,
         "executable_resolved": str(executable.resolve(strict=frozen)),
         "frozen": frozen,
         "launcher": guard_cli_launcher(),
-        "frozen_launcher": resolve_frozen_guard_cli() if frozen else None,
+        "frozen_launcher": frozen_launcher,
+        "launcher_prune_safe": frozen_launcher is not None and frozen_launcher_is_prune_safe(frozen_launcher),
+        "launcher_runnable": frozen_launcher is not None and frozen_cli_path_is_runnable(Path(frozen_launcher)),
         "cli_executable": prune_safe_cli_executable(absolute) if frozen else absolute,
         "package_root": str(Path(__file__).resolve().parents[2]),
         "version": __version__,

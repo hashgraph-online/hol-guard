@@ -14,11 +14,7 @@ fn facts(bridge: Value) -> String {
         "bridge": bridge,
         "attestation": {"command": ["/g/bin/hol-guard"], "identity": {"sha256": "ab12cd"}, "python": null},
         "interpreter": null,
-        "frozen": false,
-        "frozen_launcher": null,
-        "executable": "/usr/bin/python3",
         "frozen_recovery": ["/g/bin/hol-guard", "cursor", "recover"],
-        "can_rebind": true,
     })
     .to_string()
 }
@@ -165,6 +161,43 @@ fn cursor_without_hooks_is_inactive_and_not_rebound() {
     assert!(run(&home, "health", bridge()).unwrap()["verified"].is_null());
     let rebind = run(&home, "rebind", bridge()).unwrap();
     assert_eq!(rebind["rebound"], false);
+}
+
+fn rebind_with_caller(caller: Value) -> Value {
+    let home = Home::new();
+    let mut request = json!({
+        "harness": "cursor",
+        "op": "rebind",
+        "context": home.context(json!({"PATH": ""})),
+    });
+    request["context"]["caller"] = caller;
+    request["facts"] = json!(facts(bridge()));
+    dispatch(&request).unwrap()
+}
+
+fn frozen_caller(prune_safe: bool, runnable: bool) -> Value {
+    json!({
+        "executable": "/g/core",
+        "executable_resolved": "/g/core",
+        "frozen": true,
+        "launcher": "/g/bin/hol-guard-core",
+        "frozen_launcher": "/g/bin/hol-guard-core",
+        "launcher_prune_safe": prune_safe,
+        "launcher_runnable": runnable,
+        "cli_executable": "/g/core",
+        "package_root": "/opt/guard/site",
+        "version": "0.0.0",
+    })
+}
+
+#[test]
+fn a_rebind_needs_a_prune_safe_runnable_frozen_launcher_from_the_caller() {
+    for (prune_safe, runnable) in [(false, true), (true, false), (false, false)] {
+        let answer = rebind_with_caller(frozen_caller(prune_safe, runnable));
+        assert_eq!(answer["reason"], "stable_frozen_cli_unavailable");
+    }
+    let answer = rebind_with_caller(frozen_caller(true, true));
+    assert_eq!(answer["reason"], "cursor_hook_script_absent");
 }
 
 #[test]

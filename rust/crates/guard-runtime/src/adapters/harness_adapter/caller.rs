@@ -60,6 +60,30 @@ pub(super) fn frozen_launcher(ctx: &Ctx) -> Step<&str> {
     text(ctx, "frozen_launcher")
 }
 
+/// `resolve_frozen_guard_cli()` of a frozen caller, `None` for any other.
+pub(super) fn optional_frozen_launcher(ctx: &Ctx) -> Step<Option<&str>> {
+    match ctx.caller.get("frozen_launcher") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(launcher)) => Ok(Some(launcher)),
+        Some(_) => Err(Failure::Invalid),
+    }
+}
+
+fn flag(ctx: &Ctx, key: &str) -> Step<bool> {
+    match ctx.caller.get(key) {
+        None => Ok(false),
+        Some(value) => value.as_bool().ok_or(Failure::Invalid),
+    }
+}
+
+/// Whether a frozen caller's launcher survives a Desktop update and can be
+/// spawned directly, so installed hooks can rebind to it.
+pub(super) fn can_rebind(ctx: &Ctx) -> Step<bool> {
+    Ok(optional_frozen_launcher(ctx)?.is_some()
+        && flag(ctx, "launcher_prune_safe")?
+        && flag(ctx, "launcher_runnable")?)
+}
+
 /// The interpreter a Codex hook relaunches: a frozen binary by its resolved
 /// bytes, since the hook manifest authenticates exactly those, else the
 /// caller's interpreter.
