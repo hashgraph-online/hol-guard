@@ -273,14 +273,27 @@ fn version_probe(segment: &CommandSegment, arguments: &[String]) -> bool {
 }
 
 /// A script that calls itself `node` runs whatever it holds, `--version`
-/// included. Only a compiled build answers the flag itself, so a file that
-/// starts with `#!`, or cannot be read, stays a launch.
+/// included. Only a compiled build answers the flag itself, so only a regular
+/// file that opens as ELF, Mach-O or PE is one. A FIFO or device is never
+/// opened, and text without `#!` (which a shell still runs) stays a launch.
 fn script(path: &Path) -> bool {
     use std::io::Read;
-    let mut head = [0u8; 2];
+    if !std::fs::metadata(path).is_ok_and(|meta| meta.is_file()) {
+        return true;
+    }
+    let mut head = [0u8; 4];
     std::fs::File::open(path)
         .and_then(|mut file| file.read_exact(&mut head))
-        .map_or(true, |()| head == *b"#!")
+        .map_or(true, |()| {
+            !matches!(
+                head,
+                [0x7f, b'E', b'L', b'F']
+                    | [0xfe, 0xed, 0xfa, 0xce | 0xcf]
+                    | [0xce | 0xcf, 0xfa, 0xed, 0xfe]
+                    | [0xca, 0xfe, 0xba, 0xbe]
+                    | [b'M', b'Z', _, _]
+            )
+        })
 }
 
 fn is_runtime_name(executable: &str) -> bool {

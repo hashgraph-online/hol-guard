@@ -323,6 +323,50 @@ fn a_version_probe_is_not_a_launch_the_advisories_reach() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn only_a_compiled_build_answers_the_version_flag_itself() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let launches = |name: &str| {
+        let path = root.path().join(name).join("node");
+        runtime_launches(
+            &format!("{} --version", path.display()),
+            Some(root.path()),
+            root.path(),
+            None,
+        )
+        .len()
+    };
+    for (name, head) in [
+        ("mach", &b"\xcf\xfa\xed\xfe\x07\0"[..]),
+        ("pe", &b"MZ\x90\0"[..]),
+        ("text", &b"exec /opt/node/bin/node app.js\n"[..]),
+        ("short", &b"\x7f"[..]),
+    ] {
+        let dir = root.path().join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("node"), head).unwrap();
+        std::fs::set_permissions(dir.join("node"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    assert_eq!(launches("mach"), 0);
+    assert_eq!(launches("pe"), 0);
+    // Text without `#!` still runs through the shell, and a cut-off file
+    // proves nothing.
+    assert_eq!(launches("text"), 1);
+    assert_eq!(launches("short"), 1);
+    // A FIFO is never opened, so the check cannot hang on it.
+    let fifo = root.path().join("fifo");
+    std::fs::create_dir_all(&fifo).unwrap();
+    let status = std::process::Command::new("mkfifo")
+        .arg(fifo.join("node"))
+        .status()
+        .unwrap();
+    assert!(status.success());
+    std::fs::set_permissions(fifo.join("node"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(launches("fifo"), 1);
+}
+
 #[test]
 fn runtime_names_cover_node_and_its_windows_spelling_only() {
     assert!(is_runtime_name("node"));
