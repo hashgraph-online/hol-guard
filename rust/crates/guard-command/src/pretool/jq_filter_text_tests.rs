@@ -36,6 +36,9 @@ fn any_other_spelling_keeps_the_whole_text() {
         // The same quoted word twice: which one is the filter is not known.
         ("jq '.secret' '.secret'", 0),
         ("jq --arg k '.secret' '.secret'", 3),
+        // The quoted copy sits inside a double-quoted `--arg` value; the
+        // filter itself is spelled another way.
+        ("jq -n --arg note \" '.secret' \" .se''cret", 4),
     ] {
         let step = segment(command, 0);
         assert_eq!(without_jq_filter(&step, index), None, "{command}");
