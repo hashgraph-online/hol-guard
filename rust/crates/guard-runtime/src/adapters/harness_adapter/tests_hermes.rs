@@ -67,9 +67,7 @@ fn yaml_json(text: &str) -> Value {
         .ok()
         .and_then(Result::ok)
         .expect("config.yaml loads");
-    let rendered = super::super::files::render(&doc)
-        .ok()
-        .expect("config renders");
+    let rendered = super::super::files::render(&doc).expect("config renders");
     serde_json::from_str(&rendered).unwrap()
 }
 
