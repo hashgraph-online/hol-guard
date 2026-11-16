@@ -280,6 +280,57 @@ fn a_busy_lock_keeps_the_last_project_context_choice() {
         "a choice turned off reads as off while the lock is busy"
     );
     drop(guard);
+    settings.effective.features.agent_context = true;
+    service.configure(settings.clone()).unwrap();
     service.stop().unwrap();
-    assert!(!service.prompt_context_chosen());
+    let guard = lock(&service.state).unwrap();
+    assert!(
+        !service.prompt_context_chosen(),
+        "stop publishes off for a prompt that finds the lock busy"
+    );
+    drop(guard);
+    let closing = Service::default();
+    saved_on(&closing);
+    closing.configure(settings).unwrap();
+    closing.shutdown();
+    let guard = lock(&closing.state).unwrap();
+    assert!(!closing.prompt_context_chosen(), "so does shutdown");
+    drop(guard);
+}
+
+fn chosen_on(service: &Service) {
+    let mut settings = saved_on(service);
+    settings.effective.features.agent_context = true;
+    settings.effective.sources.workspace_documents = true;
+    settings.verification_permitted = true;
+    service.configure(settings).unwrap();
+}
+
+#[test]
+fn a_prompt_never_waits_on_a_busy_lock_to_wake_the_worker() {
+    let home = home();
+    let service = Service::default();
+    chosen_on(&service);
+    assert!(wake::resting(&lock(&service.state).unwrap()));
+    let (sent, got) = std::sync::mpsc::channel();
+    std::thread::scope(|scope| {
+        let guard = lock(&service.state).unwrap();
+        scope.spawn(|| {
+            service.warm_prompt_lane(home.path());
+            let soon = Instant::now() + Duration::from_millis(150);
+            let lane = service.prompt_lane(home.path(), soon);
+            sent.send(matches!(lane, Err(LaneMiss::Starting))).unwrap();
+        });
+        let answered = got.recv_timeout(Duration::from_secs(2));
+        drop(guard);
+        assert_eq!(
+            answered,
+            Ok(true),
+            "the prompt gave up at its deadline instead of queueing on the lock"
+        );
+    });
+    assert!(
+        lock(&service.state).unwrap().woke.is_none(),
+        "nothing was woken while the lock was busy; a later prompt wakes it"
+    );
 }

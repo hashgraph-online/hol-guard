@@ -55,8 +55,29 @@ impl Service {
     /// is up by the time a prompt asks. Does nothing unless project context
     /// is on, and never turns it on.
     pub(crate) fn warm_prompt_lane(&self, guard_home: &std::path::Path) {
-        if self.prompt_context_chosen() {
+        if self.prompt_may_wake() {
             self.wake(guard_home, chosen);
+        }
+    }
+
+    /// Whether a prompt should wake a resting worker now. Waits for a busy
+    /// lock no longer than [`CHOSEN_WAIT`]: a lock still held means "not
+    /// now", so the prompt goes on to its bounded wait (or skips) instead of
+    /// queueing behind whatever holds it, and a later prompt wakes the worker.
+    fn prompt_may_wake(&self) -> bool {
+        let until = Instant::now() + CHOSEN_WAIT;
+        loop {
+            match self.state.try_lock() {
+                Ok(state) => {
+                    return wake::resting(&state)
+                        && chosen(&state.settings)
+                        && state.woke.is_none_or(|at| at.elapsed() >= wake::RETRY);
+                }
+                Err(std::sync::TryLockError::WouldBlock) if Instant::now() < until => {
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+                Err(_) => return false,
+            }
         }
     }
 
@@ -67,7 +88,9 @@ impl Service {
         guard_home: &std::path::Path,
         deadline: Instant,
     ) -> Result<PromptLane, LaneMiss> {
-        self.wake(guard_home, chosen);
+        if self.prompt_may_wake() {
+            self.wake(guard_home, chosen);
+        }
         self.lane_watch().wait(deadline)
     }
 
