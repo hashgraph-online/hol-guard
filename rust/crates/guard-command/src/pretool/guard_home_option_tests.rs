@@ -178,10 +178,12 @@ fn a_set_aside_home_must_keep_the_original_windows_launcher_check() {
         );
         // A direct executable avoids cmd.exe's second parse; the enclosing
         // command model still applies every other normal Guard check.
-        assert!(super::super::guard_diagnostics::arguments_reach_the_launcher(
-            "hol-guard.exe",
-            &arguments,
-            true,
-        ));
+        assert!(
+            super::super::guard_diagnostics::arguments_reach_the_launcher(
+                "hol-guard.exe",
+                &arguments,
+                true,
+            )
+        );
     }
 }
