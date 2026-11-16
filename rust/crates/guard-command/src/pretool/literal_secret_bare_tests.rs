@@ -304,6 +304,10 @@ fn a_random_url_password_on_a_remote_host_is_a_secret() {
             "MAIL_URL=smtps://user:{}@smtp.examplebank.com:465\n",
             joined(&["qzvt", "kmbr"])
         ),
+        format!(
+            "REDIS_URL=redis://:{}@cache.corp.net:6379/0\n",
+            joined(&["qzvt", "kmbr"])
+        ),
     ] {
         assert!(holds_bare_secret(&text), "{text}");
     }
