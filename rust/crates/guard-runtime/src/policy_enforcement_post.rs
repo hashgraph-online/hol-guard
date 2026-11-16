@@ -182,12 +182,34 @@ pub(crate) fn apply_post_tool_policy_with_witness(
         return Err("native_post_tool_policy_invalid_result".to_owned());
     }
     let harness = normalized_harness(&request.harness);
-    let facts = payload_facts(
+    let mut facts = payload_facts(
         &request.payload,
         &harness,
         action_type,
         &response.reason_code,
     )?;
+    // The operator's exact-tool allow answers the unreviewed-tool setting for
+    // the call's output as it does for the call.
+    let operator_allowed_mcp_tool = action_type == PreToolActionTypeV1::McpTool
+        && !facts.sensitive_target
+        && !facts.changed_hash
+        && super::policy_enforcement_mcp_provider::outer_tool_name(&request.payload)?.is_some_and(
+            |tool| {
+                super::policy_enforcement_mcp_provider::operator_allows_tool(
+                    &snapshot.effective_policy.mcp_tool_actions,
+                    &harness,
+                    &tool,
+                )
+            },
+        );
+    // As on the call, the allow is the review a `review` unknown-publisher
+    // setting asks for; a stronger setting still holds.
+    if operator_allowed_mcp_tool
+        && facts.publisher.is_none()
+        && snapshot.effective_policy.unknown_publisher_action == "review"
+    {
+        facts.publisher_relevant = false;
+    }
     let floor_reason = if (task_metadata || omp_output_action == Some(PreToolActionTypeV1::Harness))
         && matches!(
             response.reason_code.as_str(),
@@ -209,6 +231,7 @@ pub(crate) fn apply_post_tool_policy_with_witness(
                 prompt_classes: &[],
                 benign_prompt: false,
                 package_scripts_disabled: false,
+                operator_allowed_mcp_tool,
             },
             verified,
         )
