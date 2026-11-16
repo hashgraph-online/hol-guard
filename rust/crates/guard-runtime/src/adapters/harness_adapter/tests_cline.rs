@@ -449,3 +449,21 @@ fn the_hook_spec_names_a_home_other_than_the_users() {
     assert_eq!(args[args.len() - 2], "--home");
     assert_eq!(args[args.len() - 1], json!(home.home()));
 }
+
+#[test]
+fn a_transport_install_attests_the_guard_cli_itself() {
+    let home = Home::new();
+    let answer = home.ask(
+        "cline",
+        "install_transport",
+        json!({"transport": "plugin", "frozen": false}),
+    );
+    assert_eq!(
+        answer["runtime_error"],
+        json!(super::super::attested_cli::REINSTALL)
+    );
+    assert!(!home
+        .home()
+        .join(".cline/plugins/hol-guard/package.json")
+        .exists());
+}

@@ -24,18 +24,6 @@ _DISPLAY_NAME = "Cline CLI"
 _PROBE_TIMEOUT_SECONDS = 20.0
 
 
-def _facts(context: HarnessContext) -> dict[str, object]:
-    """The attested Guard CLI the managed transport runs."""
-    from .guard_cli_attestation import guard_hook_command, resolve_attested_guard_cli
-
-    attested = resolve_attested_guard_cli(context)
-    return {
-        "identity": attested.manifest_payload(),
-        "guard_cli": list(guard_hook_command(attested, harness=_HARNESS)[:-3]),
-        "python": attested.python is not None,
-    }
-
-
 def _reconcile(context: HarnessContext, transport: str, *, frozen: bool) -> dict[str, Any]:
     """Install one transport, run its probe and let the kind confirm it."""
     installed = ask(
@@ -45,7 +33,6 @@ def _reconcile(context: HarnessContext, transport: str, *, frozen: bool) -> dict
         timeout_seconds=_PROBE_TIMEOUT_SECONDS,
         transport=transport,
         frozen=frozen,
-        facts=_facts(context),
     )
     probe = installed["probe"]
     fields = {"canary": probe["canary"]} if "canary" in probe else {"verdict": probe["result"]}

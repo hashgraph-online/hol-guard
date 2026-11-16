@@ -11,7 +11,6 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import guard_cli_attestation
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.native_harness import ask
 from tests.cline_test_support import hook_state, install_plugin, uninstall
@@ -97,8 +96,7 @@ def _install_hooks(
     else:
         runtime.write_bytes(b"")
     stamp_native_runtime(monkeypatch, runtime, (*BOUNDED_FEATURES, "cline-hook-worker-v1"))
-    facts = {"python": True, "identity": None}
-    return ask("install_transport", context, harness="cline", transport="hooks", frozen=False, facts=facts)
+    return ask("install_transport", context, harness="cline", transport="hooks", frozen=False)
 
 
 def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, monkeypatch) -> None:
@@ -106,8 +104,8 @@ def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, 
     executable = tmp_path / "HOL Guard"
     executable.write_bytes(b"signed-frozen-core")
     executable.chmod(0o755)
-    monkeypatch.setattr(guard_cli_attestation.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(guard_cli_attestation.sys, "executable", str(executable))
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(executable))
 
     manifest = install_plugin(context)
     source = Path(str(manifest["managed_plugin_path"])).read_text(encoding="utf-8")
