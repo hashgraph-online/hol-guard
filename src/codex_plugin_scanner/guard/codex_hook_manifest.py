@@ -7,6 +7,7 @@ construction at the harness boundary and prevents a circular dependency.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import uuid
 from collections.abc import Mapping
@@ -308,7 +309,14 @@ def prepare_authenticated_hook_manifest_repair(spec: CodexHookManifestSpec) -> P
         raise CodexHookIntegrityError(str(state["integrity_reason"]), str(state["integrity_message"]))
     manifest = authenticate_hook_manifest_text(spec.guard_home, receipt.manifest_bytes.decode("utf-8"))
     check_hook_validation_deadline()
-    answer = publication("repair_files", spec.guard_home, config=str(config), manifest=manifest)
+    answer = publication(
+        "repair_files",
+        spec.guard_home,
+        config=str(config),
+        manifest=manifest,
+        receipt_sha256=hashlib.sha256(receipt.receipt_bytes).hexdigest(),
+        config_sha256=hashlib.sha256(receipt.config_bytes).hexdigest(),
+    )
     pinned = answer.get("files") if isinstance(answer, dict) else None
     if not isinstance(pinned, list) or not all(isinstance(item, dict) for item in pinned):
         raise TransitionError("native_transition_invalid")

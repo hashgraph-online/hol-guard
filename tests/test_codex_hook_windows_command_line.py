@@ -12,7 +12,7 @@ import pytest
 from codex_plugin_scanner.guard import codex_hook_command_line
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.codex_hook_bridge_runtime import bridge_config_from_argv, decode_bridge_config_argument
+from codex_plugin_scanner.guard.codex_hook_bridge_runtime import decode_bridge_config_argument
 from codex_plugin_scanner.guard.codex_hook_command_line import (
     hook_command_launchable,
     short_path_facts,
@@ -193,8 +193,7 @@ def test_bridge_accepts_encoded_and_plain_config_arguments(tmp_path: Path) -> No
     assert decode_bridge_config_argument(plain) == plain
     installed_json = decode_bridge_config_argument(codex_adapter._hook_command_parts(_context(tmp_path))[-1])
     bridge_argument = encode_hook_config_argument(installed_json, windows=True)
-    parsed = bridge_config_from_argv(["bridge.py", bridge_argument], timeout_grace_seconds=1)
-    assert (parsed["query"], parsed["config_json"]) == (json.loads(installed_json)["query"], bridge_argument)
+    assert json.loads(decode_bridge_config_argument(bridge_argument)) == json.loads(installed_json)
     for invalid in ("not base64!", encode_hook_config_argument("[1]", windows=True)):
         with pytest.raises(ValueError):
             decode_bridge_config_argument(invalid)

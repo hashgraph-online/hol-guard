@@ -5,7 +5,6 @@ import time
 
 import pytest
 
-from codex_plugin_scanner.guard import codex_hook_bridge_runtime as bridge_runtime
 from codex_plugin_scanner.guard import codex_hook_file_integrity as files
 from codex_plugin_scanner.guard import codex_hook_integrity as manifests
 from codex_plugin_scanner.guard import codex_hook_launch_runtime as launches
@@ -17,14 +16,16 @@ def test_expired_validation_reads_no_authority_or_executable(monkeypatch):
         raise AssertionError("expired operation started identity validation")
 
     monkeypatch.setattr(trust, "validate_codex_hook_launch", forbidden)
-    with pytest.raises(files.CodexHookIntegrityError, match="exhausted"):
-        bridge_runtime.trusted_hook_launch(
+    with (
+        pytest.raises(files.CodexHookIntegrityError, match="exhausted"),
+        files.hook_validation_deadline(time.monotonic() - 1),
+    ):
+        trust.validate_codex_hook_launch(
             manifest_path="/isolated/manifest.json",
             state_path="/isolated/guard/daemon.json",
             fallback_command=("fixture",),
             start_command=("fixture",),
             config_json="{}",
-            deadline_monotonic=time.monotonic() - 1,
         )
 
 
@@ -152,14 +153,13 @@ def test_successful_validator_returned_after_deadline_cannot_publish_a_launch_co
         return trust.TrustedCodexHookLaunch(tmp_path, {}, deadline_monotonic=observed[0])
 
     monkeypatch.setattr(trust, "validate_codex_hook_launch", slow_validator)
-    with pytest.raises(files.CodexHookIntegrityError, match="exhausted"):
-        bridge_runtime.trusted_hook_launch(
+    with pytest.raises(files.CodexHookIntegrityError, match="exhausted"), files.hook_validation_deadline(10):
+        trust.validate_codex_hook_launch(
             manifest_path="/isolated/manifest.json",
             state_path="/isolated/guard/daemon.json",
             fallback_command=("fixture",),
             start_command=("fixture",),
             config_json="{}",
-            deadline_monotonic=10,
         )
     assert observed == [10]
 

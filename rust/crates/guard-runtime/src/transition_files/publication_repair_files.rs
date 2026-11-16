@@ -103,7 +103,8 @@ fn pin_generations(
 }
 
 /// Request: `home`, `config` (the publication slot), the authenticated
-/// `manifest` the receipt sealed, and `package_roots`. Answer:
+/// `manifest` the receipt sealed, the `receipt_sha256` and `config_sha256`
+/// the caller verified, and `package_roots`. Answer:
 /// `{"files": [...]}`, every dependency once, in the order first pinned.
 pub(super) fn files(call: &mut Call<'_>) -> Step<Value> {
     let home = call.home()?;
@@ -120,9 +121,23 @@ pub(super) fn files(call: &mut Call<'_>) -> Step<Value> {
     let roots = roots(call)?;
     let mut files: Vec<Object> = Vec::new();
     let manifest_slot = resolve_lenient(&manifest_path);
-    for path in [codex_hook_key::key_path(&home), receipt_path, config] {
-        let dependency = identity_dependency(call, &path)?;
-        add(&mut files, as_object(dependency)?, Some(&manifest_slot))?;
+    let pinned = [
+        (codex_hook_key::key_path(&home), None),
+        (receipt_path, Some("receipt_sha256")),
+        (config, Some("config_sha256")),
+    ];
+    for (path, captured) in pinned {
+        let dependency = as_object(identity_dependency(call, &path)?)?;
+        // The receipt and config must still be the bytes the caller verified.
+        if let Some(key) = captured {
+            let expected = call.args.get(key).and_then(Value::as_str);
+            if expected.is_none()
+                || dependency.get("expected_digest").and_then(Value::as_str) != expected
+            {
+                return Err(Fault::Transition("authority_repair_dependency_changed"));
+            }
+        }
+        add(&mut files, dependency, Some(&manifest_slot))?;
     }
     pin_generations(
         call,
