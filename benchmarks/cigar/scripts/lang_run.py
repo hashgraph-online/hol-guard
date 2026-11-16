@@ -46,7 +46,9 @@ def plan(seed, lang):
         if k == "bug":
             m = muts.pop(0)
             p = rng.choice(R.BUG_PROMPTS)
-            tasks.append({"kind": k, "setup": [m], "prompt": p.format(test="`" + m["failing"][0] + "`", qual=f"`{m['qual']}`")})
+            # ufo has a test named with a null byte, which no command line can carry.
+            test = next((f for f in m["failing"] if f.isprintable()), m["failing"][0])
+            tasks.append({"kind": k, "setup": [m], "prompt": p.format(test=f"`{test}`", qual=f"`{m['qual']}`")})
         else:
             tasks.append({"kind": k, "setup": [muts.pop(0), muts.pop(0)], "prompt": R.BUG2_PROMPT})
     tasks.append({"kind": "review", "prompt": R.REVIEW_PROMPT})

@@ -353,7 +353,7 @@ Gates:
 | Do-no-harm at most 10% | Met: 0.0–8.2% across all runs |
 | No step kind under 35% cost saved | Codex and Oh My Pi met. Claude Code missed on doc in runs 1 and 2 (25.7–29.2%; run 3 38.4–38.9%) and on stub in runs 2 and 3 (21.0–25.3%, 32.9–36.6%) |
 | Full Guard within 5 points of CIGAR only on cost | Codex met: CIGAR only (the prompt note, no other hook) saves 63.3%, full Guard 66.7%. Claude Code met: CIGAR only 62.6–64.0%, full Guard 60.6–62.1% (run 1) and 61.7–63.1% (run 2), 2.0 points apart at the low end. Oh My Pi met: CIGAR only 70.2%, full Guard 69.3%. Guard ships one Oh My Pi extension for the note and the checks; the rig's CIGAR-only arm is that extension with its tool-call and tool-result handlers skipped (`make_omp_note_arm.py`) |
-| No language under 40%, long set at least the short set | Long set: Codex met (67.0% against 66.7%), Claude Code met (66.2% against 60.6–66.2%), Oh My Pi missed by 7.7 points (61.6% against 69.3%; see the long set below). Languages: Go, TypeScript and Rust runs in progress |
+| No language under 40%, long set at least the short set | Long set: Codex met (67.0% against 66.7%), Claude Code met (66.2% against 60.6–66.2%), Oh My Pi missed by 7.7 points (61.6% against 69.3%; see the long set below). Languages: Codex and Oh My Pi met in all three (lowest 51.8%, Oh My Pi TypeScript). Claude Code met on TypeScript (58.6%) and Rust (44.4%), missed on Go by 32.6 points (7.4%): one seed lost 121 requests to holds on `git stash` and `git checkout`; without it Go saves 54.9% (see Languages below). Do-no-harm 15% on Claude Code Go and Rust, one seed each |
 
 Why Claude Code's doc steps sit near 35% (under it in runs 1 and 2, 38.4–38.9% in run 3): with Guard, in runs 1 and 2, 8 of 10 doc steps take Claude Code's minimum of read, edit and one test run (its Edit tool refuses a file the session has not read, so a note that shows the code cannot save the read). The no-Guard run often takes the same four requests, at the same fixed context per request (about 20k cached tokens of harness prompt and tool list), and the CIGAR note on a doc step is about 1.3k characters. Few requests are left to remove, so the result on this kind depends on how many requests the no-Guard run happened to take on the same steps. The run 2 stub figure comes from one session that spent 15 calls debugging `TLRUCache.popitem`; the other 11 stub steps took read, edit and one test run.
 
@@ -392,7 +392,40 @@ Codex's one missed step (seed 3351, a two-bug step left with 12 failing tests th
 
 Oh My Pi saves less over a long session: steps 1–12 save 63.5–68.5%, steps 13–24 56–59%. This is not provider cache: both arms hit the cache on about 98% of input. CIGAR cuts the requests that mostly re-read history from cache, which is cheap; the new, uncached input each step adds (tool output, the note) stays. Over the four sessions CIGAR cut cached input 66% but uncached input 40%, and uncached input costs ten times as much. The longer the session, the larger the cached history every request re-reads in both arms, so both pay more per request and the share CIGAR removes falls. On Oh My Pi the long set misses "long set at least the short set" by 7.7 points.
 
-Claude Code's lower step count is mostly one session that stopped early, not failed work. On seed 816 the agent's rewrite of `TLRUCache.popitem` at step 3 added a second copy of a line step 9's setup changes, and the rig gave up on a setup that matched twice, ending the session after 8 passed steps. Setup now changes the copy nearest the recorded line, as stub setup already did; replayed on that agent's tree, the old code refuses and the new one applies. Seed 3351 lost steps 16–20 after a rename at step 16 left the suite with one collection error that the later steps inherited; the no-Guard run missed two renames on the same seed. Three commands were held across the 71 paired steps: a `git checkout` of tracked files chained after `cd` (it throws away changes, so review is defensible), `pkill -f "python -m pytest" || true`, and a `python3` heredoc under `timeout`. Do-no-harm is 3 of 71 steps (4.2%).
+Claude Code's lower step count is mostly one session that stopped early, not failed work. On seed 816 the agent's rewrite of `TLRUCache.popitem` at step 3 added a second copy of a line step 9's setup changes, and the rig gave up on a setup that matched twice, ending the session after 8 passed steps. Setup now changes the copy nearest the recorded line, as stub setup already did; replayed on that agent's tree, the old code refuses and the new one applies. Rerun on seed 816 with the fixed setup, the full-Guard session ran all 20 of the no-Guard run's paired steps and passed: 71.2% of cost and 76.8% of tokens saved against the same no-Guard run, no holds, and no step costing 20% more. Seed 3351 lost steps 16–20 after a rename at step 16 left the suite with one collection error that the later steps inherited; the no-Guard run missed two renames on the same seed. Three commands were held across the 71 paired steps: a `git checkout` of tracked files chained after `cd` (it throws away changes, so review is defensible), `pkill -f "python -m pytest" || true`, and a `python3` heredoc under `timeout`. Do-no-harm is 3 of 71 steps (4.2%).
+
+### Workflow set (fix, changelog, dependency, wheel build)
+
+One session per seed (816, 2491, 3351, 7374) on the flit-built Python repos: fix a bug, add a changelog entry, declare a runtime dependency, build a wheel offline into `dist/`. It is not a gate; it shows where the chores around a fix cost Guard users money.
+
+| harness | tokens saved | cost saved | passed (no Guard) | holds | do-no-harm | bug | changelog | dependency | build |
+|---|---|---|---|---|---|---|---|---|---|
+| Codex | -5.5% | -5.2% | 4 (4) | 4 | 18.8% | 42.1% | 41.7% | -2.1% | -120.2% |
+| Oh My Pi | 25.0% | 22.6% | 3 (4) | 19 | 18.8% | 56.9% | 62.5% | 23.4% | -29.6% |
+| Claude Code | 23.8% | 20.8% | 3 (4) | 7 | 31.2% | 64.1% | 9.0% | -13.6% | -60.8% |
+
+The fix step saves as much as in the main set; the build step is where Guard costs money. Agents probe for build tools and build in ways Guard holds for review: Python heredocs that import `flit_core` (Codex, three holds), `uv build --wheel --out-dir dist --offline` and then the same build through Bun's `eval` (Oh My Pi: 17 of its 19 holds are on the build step; seed 816 ended with no wheel), and `pip list` or `ls <venv>/lib/python*/site-packages | grep flit` (Claude Code, held as not proven read-only; seed 7374 ended with no wheel). Holding `pip install --upgrade build` and an edit that adds a dependency to `pyproject.toml` is expected. The read-only probes are false positives for the false-positive work; nothing here changes what Guard allows.
+
+### Languages (Go, TypeScript, Rust)
+
+One five-step session per seed (816, 2491, 3351, 7374): two single-bug fixes, a two-bug fix, another fix, and a review of the last commit, in a Go, TypeScript or Rust repo. Every Guard hook plus CIGAR against no Guard in the same batch, same build and models as above. TypeScript seed 3351 crashed in the rig before its first step (a test name with a null byte, which no command line can carry; fixed in `lang_run.py`), so its first TypeScript run has three seeds.
+
+| harness | language | tokens saved | cost saved | passed (no Guard) | holds | do-no-harm | bug | two bugs | review |
+|---|---|---|---|---|---|---|---|---|---|
+| Codex | Go | 64.7% | 59.9% | 4 (4) | 3 | 0.0% | | | |
+| Codex | TypeScript | 70.7% | 67.4% | 3 (3) | 0 | 0.0% | | | |
+| Codex | Rust | 74.2% | 67.4% | 4 (4) | 0 | 5.0% | 65.0% | 78.1% | 61.8% |
+| Oh My Pi | Go | 76.1% | 68.8% | 4 (4) | 12 | 0.0% | | | |
+| Oh My Pi | TypeScript | 58.9% | 51.8% | 3 (3) | 8 | 6.7% | | | 22.7% |
+| Oh My Pi | Rust | 81.7% | 76.1% | 4 (4) | 0 | 0.0% | 75.3% | 73.3% | 81.6% |
+| Claude Code | Go | 9.3% | 7.4% | 4 (4) | 4 | 15.0% | | | |
+| Claude Code | TypeScript | 64.1% | 58.6% | 3 (3) | 2 | 0.0% | | | 27.7% |
+| Claude Code | Rust | 54.4% | 44.4% | 4 (4) | 0 | 15.0% | 28.5% | 55.4% | 61.2% |
+
+Every session passed in both arms. Codex and Oh My Pi save 52–76% of cost in all three languages. Claude Code is the outlier, and in both of its misses the loss sits in one seed:
+
+- Go, seed 816, step 1: the Guard run took 121 requests and $1.16 against 14 requests and $0.15 with no Guard. It was held on `git stash && git checkout <commit>`, `git checkout main` and a chained `git add && git commit`, then spent 172 shell calls working around them. Without seed 816, Claude Code saves 54.9% on Go. The other two steps that cost 20% more are on the same seed.
+- Rust, seed 3351: all three steps that cost 20% more are in this session, with no hold. On step 1 the Guard run searched the parser with `grep` for 31 requests where the no-Guard run read the last commit with `git show` and fixed it in 18. Both arms re-ran most shell commands with `cd <project> &&` in front, so that is the harness, not Guard.
 
 ### Replay: CIGAR never changes a Guard decision
 
