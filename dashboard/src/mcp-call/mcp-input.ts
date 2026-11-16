@@ -114,7 +114,8 @@ function inputFromToolCalls(raw: Record<string, unknown>): SelectedToolInput | n
     const name = call?.name;
     if (call === null || typeof name !== "string" || name.trim().length === 0) continue;
     const args = recordOf(call.args);
-    chosen ??= args;
+    // The first named call stays the fallback even when it has no input, as it does in Core.
+    if (chosen === undefined) chosen = args;
     if (expected === undefined || expected.trim() === name.trim()) {
       chosen = args;
       break;
@@ -133,15 +134,21 @@ function inputFromRecord(record: Record<string, unknown>): SelectedToolInput {
 
 /**
  * Core skips a string under these keys when it is not an object once decoded.
- * A string that does not decode and is shorter than Core's cut length cannot
- * be a cut copy of an object, so Core skipped it. A longer one may be.
+ * A string that does not decode is skipped too, unless it looks like an object
+ * Core cut: Core ends a cut string with an ellipsis at exactly its cut length,
+ * and an object starts with a brace. Core read the full text before the cut,
+ * so such a string may be the input it chose.
  */
 function coreSkipsString(text: string): boolean {
   try {
     return recordOf(JSON.parse(text)) === null;
   } catch {
-    return text.length < CORE_STRING_LIMIT;
+    return !looksLikeCutObject(text);
   }
+}
+
+function looksLikeCutObject(text: string): boolean {
+  return text.endsWith("…") && text.trimStart().startsWith("{") && Array.from(text).length === CORE_STRING_LIMIT;
 }
 
 /** Writes bidi controls as `\uXXXX` so the disclosure shows what they are instead of reordering the text. */

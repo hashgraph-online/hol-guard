@@ -14910,7 +14910,7 @@ function inputFromToolCalls(raw) {
     const name = call?.name;
     if (call === null || typeof name !== "string" || name.trim().length === 0) continue;
     const args = recordOf(call.args);
-    chosen ??= args;
+    if (chosen === void 0) chosen = args;
     if (expected === void 0 || expected.trim() === name.trim()) {
       chosen = args;
       break;
@@ -14929,8 +14929,11 @@ function coreSkipsString(text2) {
   try {
     return recordOf(JSON.parse(text2)) === null;
   } catch {
-    return text2.length < CORE_STRING_LIMIT;
+    return !looksLikeCutObject(text2);
   }
+}
+function looksLikeCutObject(text2) {
+  return text2.endsWith("…") && text2.trimStart().startsWith("{") && Array.from(text2).length === CORE_STRING_LIMIT;
 }
 function escapeBidi(text2) {
   return text2.replace(BIDI_CONTROLS, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);

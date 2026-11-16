@@ -305,6 +305,20 @@ const SEARCH_INPUT = {
   assert(long?.truncated === true, "T-MCP-73: a cut input string is called shortened");
 }
 
+// A long string that is not a cut object is skipped, and the first named toolCalls item stays the fallback.
+{
+  const name = "mcp__acme__list_things";
+  const notObject = `not an object ${"a".repeat(225)}…`;
+  const skipped = explainMcpCall(
+    request(envelope(name, null, { raw_payload_redacted: { tool_name: name, tool_input: notObject, toolInput: { q: "x" } } })),
+  );
+  assert(notObject.length === 240 && skipped?.rawInput === JSON.stringify({ q: "x" }, null, 2), "T-MCP-81: a long string that does not start like an object is skipped");
+  const noArgsFirst = explainMcpCall(
+    request(envelope(name, null, { raw_payload_redacted: { tool_name: "c", toolCalls: [{ name: "a" }, { name: "b", args: { q: "x" } }] } })),
+  );
+  assert(noArgsFirst?.rawInput === null && noArgsFirst?.facts.length === 0, "T-MCP-82: the first named call stays the fallback even with no args");
+}
+
 // Bidirectional controls show as escapes in the exact input.
 {
   const explained = explainMcpCall(request(envelope("mcp__acme__list_things", { file: "invoice\u202etxt.exe" })));
