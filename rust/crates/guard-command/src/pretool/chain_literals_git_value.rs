@@ -87,26 +87,27 @@ pub(super) fn in_git_command(
 /// A whole double-quoted word (`"$(...)"`) becomes an empty argument, and a
 /// range end (`$(...)..HEAD`, `main..$(...)`) stays a range.
 pub(super) fn standalone(chars: &[char], substitution: &ShellCommandSubstitution) -> bool {
-    if super::double_quoted_word(chars, substitution) {
-        return true;
-    }
-    // Part of a longer quoted word: the value is spliced into that word.
-    if inside_double_quotes(&chars[..substitution.start]) {
-        return false;
-    }
+    let (start, end) = (substitution.start, substitution.end);
+    let opened = start
+        .checked_sub(1)
+        .filter(|&quote| chars[quote] == '"' && !inside_double_quotes(&chars[..quote]));
+    let (word_start, word_end, ranged) = match opened {
+        // The whole quoted word: the quote must close right after it.
+        Some(quote) if chars.get(end) == Some(&'"') => (quote, end + 1, false),
+        // Part of a longer quoted word: the value is spliced into that word.
+        _ if inside_double_quotes(&chars[..start]) => return false,
+        _ => (start, end, true),
+    };
     let boundary = |character: Option<&char>, operators: &[char]| {
         character.is_none_or(|character| {
             character.is_ascii_whitespace() || operators.contains(character)
         })
     };
-    let range = |from: usize| chars.get(from..from + 2) == Some(&['.', '.'][..]);
-    let before = substitution
-        .start
-        .checked_sub(1)
-        .and_then(|at| chars.get(at));
-    let after_range = substitution.start >= 2 && range(substitution.start - 2);
+    let range = |from: usize| ranged && chars.get(from..from + 2) == Some(&['.', '.'][..]);
+    let before = word_start.checked_sub(1).and_then(|at| chars.get(at));
+    let after_range = word_start >= 2 && range(word_start - 2);
     (boundary(before, &[';', '|', '&', '(']) || after_range)
-        && (boundary(chars.get(substitution.end), &[';', '|', '&', ')']) || range(substitution.end))
+        && (boundary(chars.get(word_end), &[';', '|', '&', ')']) || range(word_end))
 }
 
 fn body_character(character: char) -> bool {

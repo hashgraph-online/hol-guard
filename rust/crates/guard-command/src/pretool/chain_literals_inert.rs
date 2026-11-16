@@ -94,6 +94,9 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         }
     }
     let mut out = String::with_capacity(command.len());
+    // The command as it runs when every Git lookup prints nothing.
+    let mut unfound = String::with_capacity(command.len());
+    let mut looked_up = false;
     // The projection's shell text, heredoc bodies still blanked.
     let mut shell = String::with_capacity(command.len());
     let mut cursor = 0usize;
@@ -140,13 +143,23 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
             judged.push(judged_text);
         }
         temporary |= value == TEMPORARY_VALUE;
+        looked_up |= value == git_value::COMMIT_VALUE;
         out.extend(&chars[cursor..substitution.start]);
+        unfound.extend(&chars[cursor..substitution.start]);
         out.push_str(&value);
+        if value != git_value::COMMIT_VALUE {
+            unfound.push_str(&value);
+        }
         shell.extend(&masked[cursor..substitution.start]);
         cursor = substitution.end;
     }
     out.extend(&chars[cursor..]);
+    unfound.extend(&chars[cursor..]);
     shell.extend(&masked[cursor..]);
+    // An empty lookup shifts the words after it, so that command must pass too.
+    if looked_up {
+        judged.push(unfound);
+    }
     // A substitution the scan did not delimit is still in the text.
     if shell.contains("$(") || shell.contains('`') {
         return None;

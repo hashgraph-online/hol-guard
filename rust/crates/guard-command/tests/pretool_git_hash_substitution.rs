@@ -92,6 +92,7 @@ fn a_git_read_of_a_looked_up_commit_proceeds() {
             "git diff $(git rev-parse --short HEAD~1) $(git rev-parse HEAD) --stat",
             "git log --oneline $(git merge-base HEAD main)..HEAD",
             r#"git diff "$(git merge-base HEAD main)" --stat"#,
+            r#"git show --stat "$(git rev-parse HEAD~1)"; git status"#,
         ] {
             let verdict = classify(&home, harness, command);
             assert_eq!(

@@ -88,6 +88,8 @@ fn the_value_stands_in_only_for_a_whole_word_or_a_range_end() {
         "git log main..$(git rev-parse HEAD)",
         "git diff \"$(git merge-base HEAD main)\" --stat",
         "(git show $(git rev-parse HEAD))",
+        "git show \"$(git rev-parse HEAD)\"; git status",
+        "(git show \"$(git rev-parse HEAD)\")",
         "git show $(git rev-parse HEAD); git status",
     ] {
         assert!(own_word(command), "{command}");
@@ -99,7 +101,21 @@ fn the_value_stands_in_only_for_a_whole_word_or_a_range_end() {
         "git show x$(git rev-parse HEAD)",
         "git show \"HEAD:$(git rev-parse HEAD)\"",
         "git show \"x $(git rev-parse HEAD) y\"",
+        "git show \"$(git rev-parse HEAD)\"env",
+        "git log \"$(git rev-parse HEAD)\"..HEAD",
     ] {
         assert!(!own_word(command), "{command}");
     }
+}
+
+#[test]
+fn the_command_with_an_empty_lookup_is_judged_too() {
+    let command = "git show --stat $(git rev-parse HEAD)";
+    let projected = super::super::project(command, |_| true);
+    assert_eq!(projected, Some(format!("git show --stat {COMMIT_VALUE}")));
+    // Refusing what runs when the lookup prints nothing refuses the stand-in.
+    assert_eq!(
+        super::super::project(command, |text| text != "git show --stat "),
+        None
+    );
 }
