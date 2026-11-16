@@ -107,3 +107,44 @@ def test_idle_only_never_waits_without_a_live_busy_stream(tmp_path: Path, monkey
             pool._retiring.add(client)
     monkeypatch.setattr(pool._condition, "wait", _unexpected)
     assert pool.request(b"{}", deadline_monotonic=time.monotonic() + 5, idle_only=True, idle_wait_seconds=5.0) is None
+
+
+def test_stop_during_idle_wait_keeps_parked_lease(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A canceled waiter must not remove the only lease keeping the resident alive."""
+    pool = _pool(tmp_path, monkeypatch)
+    client = _Client()
+    pool._clients.add(client)  # Busy until another request returns it.
+    stop = threading.Event()
+    waiting = threading.Event()
+    original_wait = pool._condition.wait
+
+    def noticed_wait(timeout=None):
+        waiting.set()
+        return original_wait(timeout=timeout)
+
+    monkeypatch.setattr(pool._condition, "wait", noticed_wait)
+
+    def stop_and_park() -> None:
+        if not waiting.wait(timeout=2.0):
+            return
+        stop.set()
+        with pool._condition:
+            pool._idle.append(client)
+            pool._condition.notify_all()
+
+    worker = threading.Thread(target=stop_and_park, daemon=True)
+    worker.start()
+    with native_process_stop_scope(stop):
+        answer = pool.request(
+            b"{}", deadline_monotonic=time.monotonic() + 3,
+            idle_only=True, idle_wait_seconds=2.0,
+        )
+    worker.join(timeout=2.0)
+    assert not worker.is_alive()
+    assert waiting.is_set()
+    assert answer is None
+    assert clients._LAST_FAILURE_CODE.get() == "native_client_timed_out"
+    assert pool._idle == [client]
+    assert pool._clients == {client}
+    assert client.calls == 0
+    assert client.closed == 0
