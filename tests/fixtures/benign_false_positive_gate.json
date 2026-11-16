@@ -29647,6 +29647,39 @@
       "expect": "allow"
     },
     {
+      "id": "grep-quoted-backslash-alternation-with-url-pattern",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n \"staging.hol\\|STAGING_URL\\|https://.*staging\" docs/review-notes.md | head -8"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grep-quoted-backslash-alternation-reads-ssh-key",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n \"staging\\|/.*s\" ~/.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
       "id": "grep-quoted-star-pattern-on-piped-text",
       "fix_area": "read",
       "harnesses": [

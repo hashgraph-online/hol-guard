@@ -12,15 +12,37 @@ pub(super) struct Word {
 /// Split segment text into shell words, tracking where glob characters sit.
 /// `None` for anything beyond plain words and simple quotes, which makes the
 /// caller treat every glob character as unquoted.
+///
+/// A backslash inside quotes is read as the shell reads it. Inside single
+/// quotes it is an ordinary character. Inside double quotes it escapes only
+/// `$`, a backtick, `"`, `\` and a newline; before anything else it stays in
+/// the word, so `"a\|b"` hands the program `a\|b`, the alternation `grep`
+/// reads. A backslash outside quotes still yields `None`.
 pub(super) fn quoted_words(text: &str) -> Option<Vec<Word>> {
     let mut words = Vec::new();
     let mut current: Option<Word> = None;
     let mut quote: Option<char> = None;
-    for character in text.chars() {
+    let mut characters = text.chars().peekable();
+    while let Some(character) = characters.next() {
         match quote {
             Some(open) if character == open => quote = None,
             Some(open) => {
-                if character == '\\' || (open == '"' && matches!(character, '$' | '`')) {
+                let mut character = character;
+                if open == '"' && character == '\\' {
+                    match characters.peek() {
+                        Some('\n') => {
+                            characters.next();
+                            continue;
+                        }
+                        // None of these is a glob character, and an escaped
+                        // `$` or backtick substitutes nothing.
+                        Some(&escaped @ ('$' | '`' | '"' | '\\')) => {
+                            characters.next();
+                            character = escaped;
+                        }
+                        _ => {}
+                    }
+                } else if open == '"' && matches!(character, '$' | '`') {
                     return None;
                 }
                 let word = current.get_or_insert_with(|| Word {
@@ -99,3 +121,7 @@ pub(in crate::pretool) fn literal_words(text: &str) -> Vec<String> {
 fn shared_text(left: &str, right: &str) -> bool {
     left.ends_with(right) || right.ends_with(left)
 }
+
+#[cfg(test)]
+#[path = "listing_words_tests.rs"]
+mod tests;
