@@ -9,13 +9,13 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 
 use super::reads::ReadConfig;
 use crate::onefile_open_paths::{isolate_group, kill_group};
@@ -85,10 +85,13 @@ pub(in crate::daemon_edge) fn serve_args(guard_home: &str) -> [String; 4] {
 /// One `desktop library-serve` child. Each call goes in as one line carrying
 /// an `id`, and its answer comes back as one line with the same `id`, in
 /// whatever order the calls finish, so a slow call (a browser sign-in
-/// starting) never holds up the others.
+/// starting) never holds up the others. Call lines go to the process through
+/// one writer thread, so a caller hands its line over and waits only on its
+/// own deadline, never on the pipe: a burst of calls cannot hold every
+/// connection thread in a write while the process catches up.
 struct Resident {
     child: Mutex<Option<Child>>,
-    input: Mutex<ChildStdin>,
+    input: mpsc::Sender<Vec<u8>>,
     pending: Arc<Mutex<Pending>>,
     next_id: AtomicU64,
 }
@@ -182,9 +185,10 @@ fn call_resident_once(
         }
     };
     let id = resident.next_id.fetch_add(1, Ordering::Relaxed);
-    let mut request = serde_json::to_vec(&json!({"id": id, "call": name, "args": args}))
-        .map_err(|_| CallError::Unavailable)?;
-    request.push(b'\n');
+    let expires_in = deadline
+        .saturating_duration_since(Instant::now())
+        .min(CALL_TIMEOUT);
+    let request = request_line(id, expires_in, name, &args).ok_or(CallError::Unavailable)?;
     let (sender, receiver) = mpsc::channel();
     let registered = match resident
         .pending
@@ -198,16 +202,7 @@ fn call_resident_once(
         }
         None => false,
     };
-    let written = registered && {
-        let mut input = resident
-            .input
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        input
-            .write_all(&request)
-            .and_then(|()| input.flush())
-            .is_ok()
-    };
+    let written = registered && resident.input.send(request).is_ok();
     let answer = if written {
         receiver
             .recv_timeout(
@@ -272,6 +267,23 @@ fn start_resident(config: &ReadConfig) -> Option<Resident> {
         stop(child);
         return None;
     };
+    let (lines, queued) = mpsc::channel::<Vec<u8>>();
+    let writer = thread::Builder::new()
+        .name("daemon-library-writer".into())
+        .spawn(move || {
+            let mut input = input;
+            for line in queued {
+                if input.write_all(&line).and_then(|()| input.flush()).is_err() {
+                    break;
+                }
+            }
+            // Returning closes the process's input; ending early also drops
+            // the queue, so the next caller is told the process is gone.
+        });
+    if writer.is_err() {
+        stop(child);
+        return None;
+    }
     let pending: Arc<Mutex<Pending>> = Arc::new(Mutex::new(Some(HashMap::new())));
     let answers = Arc::clone(&pending);
     thread::spawn(move || {
@@ -304,10 +316,25 @@ fn start_resident(config: &ReadConfig) -> Option<Resident> {
     });
     Some(Resident {
         child: Mutex::new(Some(child)),
-        input: Mutex::new(input),
+        input: lines,
         pending,
         next_id: AtomicU64::new(1),
     })
+}
+
+/// One call line: `expires_in_ms` comes before the arguments so the process
+/// can drop a call its caller has stopped waiting for without decoding it.
+fn request_line(id: u64, expires_in: Duration, name: &str, args: &Value) -> Option<Vec<u8>> {
+    let mut line = format!(
+        "{{\"id\":{id},\"expires_in_ms\":{},\"call\":",
+        expires_in.as_millis()
+    )
+    .into_bytes();
+    serde_json::to_writer(&mut line, name).ok()?;
+    line.extend_from_slice(b",\"args\":");
+    serde_json::to_writer(&mut line, args).ok()?;
+    line.extend_from_slice(b"}\n");
+    Some(line)
 }
 
 /// The call id an answer line names.
