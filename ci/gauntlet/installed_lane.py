@@ -132,6 +132,9 @@ def harness_pass(
     result["startup"] = startup_timeline(guard_home, since_ns=installed_ns, not_before_ns=install_started_ns)
     if replay_started_ns is not None:
         result["startup"]["replay_started_ms"] = round((replay_started_ns - installed_ns) / 1_000_000, 1)
+    # A user runs one daemon. Left running, this home's daemon would compete
+    # with every later harness's cold start and inflate its readiness timings.
+    result["startup"]["daemon_stop_exit_code"] = stop_daemon(runtime, home=home, guard_home=guard_home)
     result["failures"] = failures
     result["passed"] = not failures
     return result
