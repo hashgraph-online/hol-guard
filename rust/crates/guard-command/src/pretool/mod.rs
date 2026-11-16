@@ -302,6 +302,7 @@ mod package_scripts_disabled;
 pub use package_scripts_disabled::{held_command_installs, no_script_install_command};
 
 pub use generic::bindable_setting;
+pub use generic::prompt_asks_for_local_secrets;
 pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
