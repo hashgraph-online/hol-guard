@@ -5,10 +5,12 @@ each file through held directory handles and checks its owner and DACL, and
 creates or repairs the private directories they live in; these wrappers
 encode the request and raise its failure code.
 
-Each request starts a runtime process. Idle workers recheck the same handful
-of files every second, so a read the runtime verified is remembered for a
-short window while the file, and the directory it was read from, keep the
-identity they had on both sides of that read. Any write or delete through
+A process that already talks to the resident runtime for the Guard home the
+file lives in asks that resident; elsewhere each request starts a runtime
+process. Idle workers recheck the same handful of files every second, so a
+read the runtime verified is remembered for a short window while the file,
+and the directory it was read from, keep the identity they had on both sides
+of that read. Any write or delete through
 these wrappers forgets the file, and a replaced, rewritten, created or
 removed file misses at once.
 """
@@ -54,11 +56,16 @@ def _private_state_answer(
     feature: str,
 ) -> dict[str, object] | None:
     from .mdm.runtime_request import runtime_answer
+    from .native_windows_private_state_resident import resident_private_state_answer
 
+    body = {"schema": _PRIVATE_STATE_SCHEMA, **request}
+    answer = resident_private_state_answer(body, output_limit=output_limit)
+    if answer is not None:
+        return answer
     return runtime_answer(
         feature,
         _PRIVATE_STATE_COMMAND,
-        {"schema": _PRIVATE_STATE_SCHEMA, **request},
+        body,
         output_limit=output_limit,
         timeout_seconds=_PRIVATE_STATE_TIMEOUT_SECONDS,
     )

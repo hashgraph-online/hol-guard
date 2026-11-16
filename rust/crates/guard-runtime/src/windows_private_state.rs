@@ -33,9 +33,9 @@ const MAX_REQUEST_BYTES: u64 = 2 * MAX_CONTENT_BYTES;
 const MAX_NAME_CHARS: usize = 200;
 const MAX_PATH_CHARS: usize = 32_767;
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Request {
+pub(crate) struct Request {
     schema: String,
     op: String,
     directory: String,
@@ -391,6 +391,9 @@ mod system {
         ensure_private_directory_under(directory, root, true).map(|_| ())
     }
 }
+
+#[path = "windows_private_state_resident.rs"]
+pub(crate) mod resident;
 
 #[cfg(test)]
 #[path = "windows_private_state_tests.rs"]
