@@ -63,10 +63,9 @@ fn planned(answer: &Value, name: &str) -> Value {
 
 /// A rendered `config.yaml` read back as JSON.
 fn yaml_json(text: &str) -> Value {
-    let doc = crate::hermes_yaml::load(text)
-        .ok()
-        .and_then(Result::ok)
-        .expect("config.yaml loads");
+    let Ok(Ok(doc)) = crate::hermes_yaml::load(text) else {
+        panic!("config.yaml loads");
+    };
     let rendered = super::super::files::render(&doc).expect("config renders");
     serde_json::from_str(&rendered).unwrap()
 }
