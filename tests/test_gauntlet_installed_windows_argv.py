@@ -6,7 +6,12 @@ import subprocess
 
 import pytest
 
-from ci.gauntlet.installed_registration import handler_argv, split_command_line, split_windows_command_line
+from ci.gauntlet.installed_registration import (
+    handler_argv,
+    split_command_line,
+    split_powershell_call,
+    split_windows_command_line,
+)
 
 ARGVS = [
     [r"D:\a\_temp\wheel-venv\Scripts\hol-guard.exe", "hook", "--harness", "claude-code"],
@@ -39,3 +44,21 @@ def test_an_unbalanced_windows_quote_yields_no_argv(monkeypatch):
     monkeypatch.setattr("ci.gauntlet.installed_registration.os.name", "nt")
 
     assert handler_argv({"command": '"C:\\guard\\hol-guard.exe hook'}) == []
+
+
+def test_a_powershell_call_with_a_spaced_path_keeps_the_path_whole():
+    command = "& 'C:\\Program Files\\HOL Guard\\hol-guard-runtime.exe' hook --harness codex 'it''s'"
+
+    assert split_command_line(command, windows=True) == [
+        "C:\\Program Files\\HOL Guard\\hol-guard-runtime.exe",
+        "hook",
+        "--harness",
+        "codex",
+        "it's",
+    ]
+
+
+@pytest.mark.parametrize("command", ["& 'C:\\unterminated", "&", "& 'a'b", "& a'b"])
+def test_an_unreadable_powershell_call_is_refused(command):
+    with pytest.raises(ValueError):
+        split_powershell_call(command)

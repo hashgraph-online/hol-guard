@@ -205,10 +205,62 @@ def split_windows_command_line(command: str) -> list[str]:
     return argv
 
 
+def split_powershell_call(command: str) -> list[str]:
+    """Split a PowerShell call-operator line such as ``& 'C:\\Program Files\\x.exe' hook``.
+
+    Codex runs its hook command through PowerShell on Windows, and Guard writes
+    this form when the program path needs quoting. Each token is either a
+    single-quoted literal, where ``''`` stands for one quote, or a bare word.
+    Anything else is a line this lane cannot read, so it raises.
+    """
+
+    rest = command.strip()
+    if not rest.startswith("&"):
+        raise ValueError("not a PowerShell call-operator line")
+    rest = rest[1:]
+    argv: list[str] = []
+    index = 0
+    while True:
+        while index < len(rest) and rest[index] in " \t":
+            index += 1
+        if index == len(rest):
+            break
+        if rest[index] == "'":
+            index += 1
+            literal: list[str] = []
+            while True:
+                if index >= len(rest):
+                    raise ValueError("unbalanced quote in PowerShell call")
+                if rest[index] == "'":
+                    if index + 1 < len(rest) and rest[index + 1] == "'":
+                        literal.append("'")
+                        index += 2
+                        continue
+                    index += 1
+                    break
+                literal.append(rest[index])
+                index += 1
+            argv.append("".join(literal))
+        else:
+            start = index
+            while index < len(rest) and rest[index] not in " \t":
+                if rest[index] in "'\"":
+                    raise ValueError("quote inside a bare PowerShell token")
+                index += 1
+            argv.append(rest[start:index])
+        if index < len(rest) and rest[index] not in " \t":
+            raise ValueError("PowerShell token runs into the next one")
+    if not argv:
+        raise ValueError("empty PowerShell call")
+    return argv
+
+
 def split_command_line(command: str, *, windows: bool | None = None) -> list[str]:
     """Split a registered hook command line by the rules of this host's shell."""
 
     if os.name == "nt" if windows is None else windows:
+        if command.lstrip().startswith("&"):
+            return split_powershell_call(command)
         return split_windows_command_line(command)
     return shlex.split(command)
 
@@ -440,5 +492,6 @@ __all__ = [
     "read_config",
     "runnable_handlers",
     "split_command_line",
+    "split_powershell_call",
     "split_windows_command_line",
 ]
