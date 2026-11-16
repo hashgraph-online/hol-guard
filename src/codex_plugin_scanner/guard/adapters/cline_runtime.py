@@ -4,22 +4,19 @@ The kind owns Cline's paths, host and MCP discovery, both enforcement
 transports (native hooks and the managed AgentPlugin), their state and
 removal, the transport choice and the MCP settings rewrite. This module keeps
 what must run in the Guard process: the attested Guard CLI the transports
-run, the ``--version`` probe, the launcher shim and Guard's own MCP proxy
-entries. The kind runs the hook canary and ``node --check`` itself.
+run, the ``--version`` probe and the launcher shim. The kind builds Guard's
+MCP proxy entries, and runs the hook canary and ``node --check`` itself.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ..models import HarnessDetection
 from .base import HarnessContext, PreparedHarnessInstall, _run_command_probe
 from .native_harness import NativeHarnessAdapter, ask, detection_from
-
-if TYPE_CHECKING:
-    from .mcp_servers import ManagedMcpServer
 
 _HARNESS = "cline"
 _DISPLAY_NAME = "Cline CLI"
@@ -64,38 +61,9 @@ def _reconcile(context: HarnessContext, transport: str, *, frozen: bool) -> dict
     )
 
 
-def proxy_entry(context: HarnessContext, server: ManagedMcpServer) -> dict[str, object]:
-    """Guard's MCP proxy launcher in Cline's settings shape."""
-    from .mcp_servers import proxy_launcher_entry
-
-    return {**proxy_launcher_entry(proxy_command="cline-mcp-proxy", context=context, server=server), "type": "stdio"}
-
-
 def install_mcp_proxies(context: HarnessContext) -> dict[str, Any]:
     """Route every local Cline MCP server through Guard's proxy."""
-    from .mcp_servers import ManagedMcpServer
-
-    entries: list[dict[str, object]] = []
-    for found in ask("mcp_scan", context, harness=_HARNESS)["candidates"]:
-        replacements = {
-            row["name"]: proxy_entry(
-                context,
-                ManagedMcpServer(
-                    harness=_HARNESS,
-                    name=row["name"],
-                    source_scope="global",
-                    config_path=found["path"],
-                    command=row["command"],
-                    args=tuple(row["args"]),
-                    transport=row["transport"],
-                    env=row["env"],
-                    enabled=True,
-                ),
-            )
-            for row in found["managed"]
-        }
-        entries.append({**found, "replacements": json.dumps(replacements)})
-    return ask("mcp_apply", context, harness=_HARNESS, entries=json.dumps(entries))
+    return ask("mcp_install", context, harness=_HARNESS)
 
 
 class ClineHarnessAdapter(NativeHarnessAdapter):

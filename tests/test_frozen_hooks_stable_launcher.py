@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_caller, stable_guard_cli
-from codex_plugin_scanner.guard.adapters import claude_code, cline_runtime
+from codex_plugin_scanner.guard.adapters import claude_code
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.hook_python import guard_cli_command
 from codex_plugin_scanner.guard.adapters.mcp_relay_native import mcp_proxy_launch
@@ -95,7 +95,6 @@ def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_co
     commands = [
         proxy_launcher_entry(proxy_command="cursor-mcp-proxy", context=context, server=server)["command"],
         mcp_proxy_launch(stable_guard_cli.guard_cli_launcher(), list(python_args))[0],
-        cline_runtime.proxy_entry(context, server)["command"],
     ]
 
     assert commands == [launcher] * len(commands)

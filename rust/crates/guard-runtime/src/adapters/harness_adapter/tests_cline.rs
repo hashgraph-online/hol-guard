@@ -295,23 +295,16 @@ fn mcp_proxies_keep_remote_servers_and_restore_the_exact_text() {
         .join(".cline/data/settings/cline_mcp_settings.json");
     let original = "{\n  \"mcpServers\": {\n    \"local\": {\"command\": \"node\", \"args\": [\"server.js\"]},\n    \"remote\": {\"url\": \"https://example.invalid/mcp\"}\n  }\n}\n";
     write(&settings, original);
-    let scan = home.ask("cline", "mcp_scan", json!({}));
-    let found = &scan["candidates"][0];
-    assert_eq!(found["managed"][0]["name"], "local");
-    assert_eq!(found["remote"], json!(["remote"]));
-    let replacements =
-        json!({"local": {"command": "/py", "args": ["cline-mcp-proxy"], "type": "stdio"}});
-    let mut entry = found.clone();
-    entry["replacements"] = json!(replacements.to_string());
-    let applied = home.ask(
-        "cline",
-        "mcp_apply",
-        json!({"entries": json!([entry]).to_string()}),
-    );
+    let applied = home.ask("cline", "mcp_install", json!({}));
     assert_eq!(applied["managed_servers"], json!(["local"]));
     assert_eq!(applied["skipped_remote_servers"], json!(["remote"]));
     let managed: Value = serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
-    assert_eq!(managed["mcpServers"]["local"]["command"], "/py");
+    let local = &managed["mcpServers"]["local"];
+    assert_eq!(local["type"], "stdio");
+    assert!(local["args"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("cline-mcp-proxy")));
     assert_eq!(
         managed["mcpServers"]["remote"],
         json!({"url": "https://example.invalid/mcp"})
@@ -337,35 +330,13 @@ fn two_spellings_of_one_settings_file_plan_it_once() {
     let alias = home
         .home()
         .join(".cline/settings/../data/settings/cline_mcp_settings.json");
-    let scan = home.ask_env(
+    let applied = home.ask_env(
         "cline",
-        "mcp_scan",
+        "mcp_install",
         json!({}),
         json!({"CLINE_MCP_SETTINGS_PATH": alias}),
     );
-    assert_eq!(scan["candidates"].as_array().unwrap().len(), 1);
-}
-
-#[test]
-fn a_changed_settings_file_is_not_rewritten_from_a_stale_scan() {
-    let home = Home::new();
-    let settings = home
-        .home()
-        .join(".cline/data/settings/cline_mcp_settings.json");
-    write(
-        &settings,
-        r#"{"mcpServers": {"local": {"command": "node", "args": []}}}"#,
-    );
-    let scan = home.ask("cline", "mcp_scan", json!({}));
-    let mut entry = scan["candidates"][0].clone();
-    entry["replacements"] = json!(json!({"local": {"command": "/py"}}).to_string());
-    write(&settings, r#"{"mcpServers": {}}"#);
-    let answer = home.ask(
-        "cline",
-        "mcp_apply",
-        json!({"entries": json!([entry]).to_string()}),
-    );
-    assert_eq!(answer["integrity"], "target_changed");
+    assert_eq!(applied["changed_config_paths"].as_array().unwrap().len(), 1);
 }
 
 #[test]

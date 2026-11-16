@@ -354,8 +354,7 @@ pub(crate) fn dispatch(
         "runtime_probe" => runtime_probe(ctx, fields),
         "hook_spec" => Ok(hook_spec(ctx)),
         "diagnostic_warnings" => diagnostic_warnings(fields),
-        "mcp_scan" => cline_mcp::scan(ctx),
-        "mcp_apply" => cline_mcp::apply(ctx, fields),
+        "mcp_install" => cline_mcp::install(ctx),
         "install_plan" | "install_transport" | "confirm_transport" | "finish_install"
         | "uninstall" => cline_install::dispatch(op, ctx, fields),
         _ => common(spec, op, ctx),
