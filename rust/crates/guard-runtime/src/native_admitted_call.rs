@@ -7,9 +7,12 @@
 //! again and withhold the output of the action the user just approved.
 //!
 //! The witness is one `guard_continuation_effects` row keyed by the harness's
-//! own call id and the exact tool name and input. `PostToolUse` reads it back
-//! for the same call id and the same input. A harness that documents no call
-//! id shared by both events gets no witness, so its output keeps the floor.
+//! own call id and the tool name. `PostToolUse` reads it back for the same
+//! call id and tool. The input is not part of the key: a host may present the
+//! executed input differently afterwards (Oh My Pi reports a read's relative
+//! path as an absolute one), and the call id already names that one
+//! execution. A harness that documents no call id shared by both events gets
+//! no witness, so its output keeps the floor.
 
 use std::path::Path;
 
@@ -45,7 +48,7 @@ const CALL_ID_FIELDS: [(&str, &str); 6] = [
 ];
 
 /// The witness key for `payload`, or `None` when the call carries no proven
-/// call id, tool name or object input.
+/// call id or tool name.
 pub(crate) fn call_key(harness: &str, payload: &Map<String, Value>) -> Option<String> {
     let harness = harness.trim().to_ascii_lowercase().replace('_', "-");
     let field = CALL_ID_FIELDS
@@ -60,16 +63,12 @@ pub(crate) fn call_key(harness: &str, payload: &Map<String, Value>) -> Option<St
         .get("tool_name")?
         .as_str()
         .filter(|value| !value.is_empty())?;
-    let tool_input = payload
-        .get("tool_input")
-        .filter(|value| value.is_object())?;
     let mut canonical = Vec::new();
     write_canonical_json(
         &json!({
             "harness": harness,
             "call_id": call_id,
             "tool_name": tool_name,
-            "tool_input": tool_input,
         }),
         &mut canonical,
     )

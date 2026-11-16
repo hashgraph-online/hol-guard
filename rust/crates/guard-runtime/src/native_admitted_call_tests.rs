@@ -63,7 +63,7 @@ fn call(home: &std::path::Path, method: &str, payload: &Map<String, Value>, now:
 const AT: &str = "2026-01-01T00:00:00+00:00";
 
 #[test]
-fn key_needs_a_proven_call_id_name_and_object_input() {
+fn key_needs_a_proven_call_id_and_tool_name() {
     let base = payload("call-1", "ls -la");
     assert!(call_key("omp", &base).is_some());
     assert_eq!(call_key("OMP", &base), call_key("omp", &base));
@@ -75,13 +75,17 @@ fn key_needs_a_proven_call_id_name_and_object_input() {
     let mut long = base.clone();
     long.insert("tool_call_id".to_owned(), json!("x".repeat(513)));
     assert!(call_key("omp", &long).is_none());
-    let mut text_input = base.clone();
-    text_input.insert("tool_input".to_owned(), json!("ls -la"));
-    assert!(call_key("omp", &text_input).is_none());
+    let mut nameless = base.clone();
+    nameless.remove("tool_name");
+    assert!(call_key("omp", &nameless).is_none());
     assert_ne!(call_key("omp", &base), call_key("pi", &base));
-    assert_ne!(
+    let mut other_tool = base.clone();
+    other_tool.insert("tool_name".to_owned(), json!("read"));
+    assert_ne!(call_key("omp", &base), call_key("omp", &other_tool));
+    // The host may present the executed input differently afterwards.
+    assert_eq!(
         call_key("omp", &base),
-        call_key("omp", &payload("call-1", "ls -l"))
+        call_key("omp", &payload("call-1", "ls -la ."))
     );
 }
 
@@ -101,10 +105,9 @@ fn post_tool_use_finds_only_the_admitted_call() {
         call(&home, LOOKUP_METHOD, &payload("call-2", "ls -la"), AT),
         json!(false)
     );
-    assert_eq!(
-        call(&home, LOOKUP_METHOD, &payload("call-1", "cat .env"), AT),
-        json!(false)
-    );
+    let mut other_tool = admitted.clone();
+    other_tool.insert("tool_name".to_owned(), json!("write"));
+    assert_eq!(call(&home, LOOKUP_METHOD, &other_tool, AT), json!(false));
 }
 
 #[test]
