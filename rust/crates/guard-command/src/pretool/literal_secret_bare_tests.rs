@@ -206,3 +206,179 @@ fn word_and_placeholder_secret_fields_are_not_secrets() {
         assert!(!holds_bare_secret(text), "{text}");
     }
 }
+
+#[test]
+fn a_quoted_run_of_random_four_character_groups_is_a_secret() {
+    for text in [
+        format!(
+            "const secret = '{}'.replace(/ /g, '');\n",
+            joined(&["qzvt kmbr wplh ", "snxj gdfk tzvq bnwm hrcl"])
+        ),
+        format!(
+            "otp_seed = \"{}\"\n",
+            joined(&["wkzq 7vtm prbx ", "2hnd lcjw ghvz"])
+        ),
+    ] {
+        assert!(holds_bare_secret(&text), "{text}");
+    }
+}
+
+#[test]
+fn spaced_words_digests_and_masks_are_not_secrets() {
+    for text in [
+        "msg = 'that will have been some more text here'\n",
+        "digest = '9e10 7d9d 372b b682 6bd8 1d35'\n",
+        "pw = 'xxxx xxxx xxxx xxxx xxxx xxxx'\n",
+        "otp = 'test demo seed code from docs page'\n",
+        "keys = 'cvzx cvzx cvzx cvzx cvzx cvzx'\n",
+        "keys = 'qwzx cvbn mjkl pqzx cvhj klmn'\n",
+    ] {
+        assert!(!holds_bare_secret(text), "{text}");
+    }
+}
+
+#[test]
+fn random_words_joined_by_underscores_under_a_secret_name_are_a_secret() {
+    for text in [
+        format!(
+            "    \"OAUTH_CLIENT_SECRET\": \"{}\",\n",
+            joined(&["qzvb_kmtrwx", "_plhsnz_gdfktv"])
+        ),
+        format!(
+            "client_secret = '{}'\n",
+            joined(&["wrtk_pmzqvh", "_dlxnbj"])
+        ),
+    ] {
+        assert!(holds_bare_secret(&text), "{text}");
+    }
+}
+
+#[test]
+fn readable_names_under_a_secret_name_are_not_secrets() {
+    for text in [
+        "SECRET_SOURCE = \"load_from_environment_variable\"\n",
+        "\"secret_name\": \"my_app_name\"\n",
+        "client_secret = 'read_from_vault_store'\n",
+    ] {
+        assert!(!holds_bare_secret(text), "{text}");
+    }
+}
+
+#[test]
+fn a_random_letter_value_passed_to_a_secret_setter_is_a_secret() {
+    for text in [
+        format!(
+            "config.setJwtSecretKey(\"{}\");\n",
+            joined(&["qzvtKm", "brwPlhs"])
+        ),
+        format!("store.setPassword(\"{}\");\n", joined(&["wkzqv", "tmprb"])),
+    ] {
+        assert!(holds_bare_secret(&text), "{text}");
+    }
+}
+
+#[test]
+fn word_and_placeholder_setter_values_are_not_secrets() {
+    for text in [
+        "user.setPassword(\"password\");\n",
+        "session.setToken(\"refreshing\");\n",
+        "cfg.setSecretKey(\"changeme\");\n",
+        "cfg.setTokenName(\"Authorization\");\n",
+    ] {
+        assert!(!holds_bare_secret(text), "{text}");
+    }
+}
+
+#[test]
+fn a_random_url_password_on_a_remote_host_is_a_secret() {
+    for text in [
+        format!(
+            "MAIL_URL=smtps://user@mail.org:{}@smtp.mail.org:465\n",
+            joined(&["qzvt", "kmbr"])
+        ),
+        format!(
+            "broker = \"amqp://svc:{}@mq.corp.net:5672/\"\n",
+            joined(&["wkzq", "vtmp"])
+        ),
+        format!(
+            "MAIL_URL=smtps://user:{}@smtp.examplebank.com:465\n",
+            joined(&["qzvt", "kmbr"])
+        ),
+        format!(
+            "REDIS_URL=redis://:{}@cache.corp.net:6379/0\n",
+            joined(&["qzvt", "kmbr"])
+        ),
+        format!(
+            "REDIS_URL=redis://:{}@CACHE.CORP.NET:6379/0\n",
+            joined(&["qzvt", "kmbr"])
+        ),
+        format!(
+            "REDIS_URL=REDIS://:{}@CACHE.CORP.NET:6379/0\n",
+            joined(&["qzvt", "kmbr"])
+        ),
+    ] {
+        assert!(holds_bare_secret(&text), "{text}");
+    }
+}
+
+#[test]
+fn local_hosts_and_word_url_passwords_are_not_secrets() {
+    for text in [
+        format!(
+            "DATABASE_URL=postgres://app:{}@localhost:5432/app\n",
+            joined(&["qzvt", "kmbr"])
+        ),
+        "DATABASE_URL=postgres://app:pass@db.company.com/app\n".to_string(),
+        "AMQP_URL=amqp://guest:guest@rabbitmq.internal:5672\n".to_string(),
+        "url = 'https://admin:hunter@service.company.com/'\n".to_string(),
+        format!(
+            "see https://service.company.com?label=:{}@smtp.mail.org:465\n",
+            joined(&["qzvt", "kmbr"])
+        ),
+        format!(
+            "see https://service.company.com#note:{}@smtp.mail.org:465\n",
+            joined(&["qzvt", "kmbr"])
+        ),
+        format!(
+            "url = 'smtps://user:{}@mail.example.org:465'\n",
+            joined(&["qzvt", "kmbr"])
+        ),
+        format!(
+            "url = 'https://user:{}@example.com/'\n",
+            joined(&["qzvt", "kmbr"])
+        ),
+    ] {
+        assert!(!holds_bare_secret(&text), "{text}");
+    }
+}
+
+#[test]
+fn a_line_keyed_by_a_random_fifteen_letter_name_is_a_secret() {
+    for text in [
+        format!(
+            "  {}: let the worker handle it\n",
+            joined(&["qzvtkmbr", "wplhsnx"])
+        ),
+        format!("{}:\n  enabled: true\n", joined(&["qzvtkmbr", "wplhsnx"])),
+        format!(
+            "  {}: {}\n",
+            joined(&["ersiupan", "sqetzrm"]),
+            joined(&["k3jd8", "sl2qp"])
+        ),
+    ] {
+        assert!(holds_bare_secret(&text), "{text}");
+    }
+}
+
+#[test]
+fn word_keys_and_word_values_are_not_secret_keys() {
+    for text in [
+        "troubleshooting: see the docs\n".to_string(),
+        "representations: v2abc3\n".to_string(),
+        format!("  troubleshooting: {}\n", joined(&["k3jd8", "sl2qp"])),
+        format!("  {}: deadbeefcafe\n", joined(&["ersiupan", "sqetzrm"])),
+        "xxxxxxxxxxxxxxx: value\n".to_string(),
+    ] {
+        assert!(!holds_bare_secret(&text), "{text}");
+    }
+}

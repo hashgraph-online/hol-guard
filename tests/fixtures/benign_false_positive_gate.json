@@ -32755,6 +32755,156 @@
       "expect": "allow"
     },
     {
+      "id": "neg-write-spaced-app-password",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/test/mailer.js",
+        "content": "const secret = 'qzvt kmbr wplh snxj gdfk tzvq bnwm hrcl'.replace(/ /g, '');\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-write-secret-name-word-groups",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/tests/settings.py",
+        "content": "OAUTH_CLIENT_SECRET = \"qzvb_kmtrwx_plhsnz_gdfktv\"\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-write-secret-setter-random-letters",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/src/AppConfig.java",
+        "content": "        config.setJwtSecretKey(\"qzvtKmbrwPlhs\");\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-write-url-random-password",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/config/mail.yml",
+        "content": "mail_url: smtps://user@mail.org:qzvtkmbr@smtp.mail.org:465\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-write-random-fifteen-letter-key",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/conf/app.yaml",
+        "content": "  ersiupansqetzrm: k3jd8sl2qp\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "write-spaced-words-string",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/src/messages.js",
+        "content": "const note = 'that will have been some more text here';\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "write-secret-name-readable-words",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/settings.py",
+        "content": "SECRET_SOURCE = \"load_from_environment_variable\"\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "write-token-setter-word",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/src/Session.java",
+        "content": "        session.setToken(\"refreshing\");\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "write-url-word-password",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/config/db.yml",
+        "content": "url: postgres://app:pass@db.company.com/app\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "write-word-yaml-key",
+      "fix_area": "write",
+      "harnesses": [
+        "claude-code",
+        "omp"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${WORKTREE}/docs/help.yaml",
+        "content": "troubleshooting: see the docs\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-write-oauth-header-token",
       "fix_area": "write",
       "harnesses": [

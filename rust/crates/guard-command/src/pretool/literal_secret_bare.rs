@@ -11,11 +11,19 @@
 //! - an `…_API_…_ID` name assigned a value that mixes letters and digits;
 //! - an SQL `IDENTIFIED … AS '…'` clause under a password plugin, which
 //!   writes a stored password hash;
-//! - a `"secret"` field given a short random lowercase value.
+//! - a `"secret"` field given a short random lowercase value;
+//! - a quoted value of six to eight space-separated four-character groups
+//!   that read as noise, the way app passwords and OTP seeds are written;
+//! - a `secret` name given random lowercase words joined by underscores;
+//! - a `set…Secret/Password/Token("…")` call with a random letter value;
+//! - a URL whose password part is random letters and whose host is not local;
+//! - a line keyed by a random fifteen-letter name, the shape of an app
+//!   secret written as a YAML or Markdown key.
 //!
 //! Each screen is held to words, counting runs, hex digests and placeholders
 //! staying out: `- troubleshooting`, `API: v2`, `max_tokens = "100000000"`,
-//! `VOICE_ID = "…"` and `"secret": "changeme"` are ordinary text.
+//! `VOICE_ID = "…"`, `"secret": "changeme"`, `setToken("refreshing")` and
+//! `postgres://app:pass@db.company.com` are ordinary text.
 
 use std::sync::LazyLock;
 
@@ -45,12 +53,23 @@ patterns! {
     WORD_THEN_DIGITS = r"^(?:[A-Za-z]+[0-9]+|[0-9]+[A-Za-z]+)$";
     HASH_PLUGIN = r"(?i)^(?:mysql_native_password|caching_sha2_password|sha256_password|mysql_old_password)$";
     FILLER = r"(?i)x{3,}|\*{3,}|change_?me|example|dummy|fake|placeholder|redacted|password|secret|your";
+    SPACED_GROUPS = r#"["'](?P<v>(?:[a-z0-9]{4} ){5,7}[a-z0-9]{4})["']"#;
+    SECRET_WORD_GROUPS = r#"(?i)["']?\w*secret\w*["']?\s*[:=]\s*["'](?P<v>[a-z]{3,}(?:_[a-z]{3,}){2,})["']"#;
+    SECRET_SETTER = r#"\bset\w*(?:Secret|Password|Token)\w*\(\s*["'](?P<v>[A-Za-z]{8,16})["']\s*\)"#;
+    URL_PASSWORD = r#"\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s/?#"'<>]*:(?P<v>[a-z]{4,})@(?P<h>[A-Za-z0-9.-]+\.[A-Za-z]{2,})"#;
+    LOCAL_HOST = r"localhost|127\.|0\.0\.0\.0|\.local$|\.test$|\.invalid$|\.internal$|\.example$|(?:^|\.)example\.(?:com|net|org)$";
+    RANDOM_KEY = r"(?m)^\s*(?P<k>[a-z]{15}):\s";
+    RANDOM_KEY_VALUE = r"(?m)^[ \t]*(?P<k>[a-z]{15}):[ \t]+(?P<v>[A-Za-z0-9]{8,32})[ \t\r]*$";
+    WIDE_FILLER = r"(?i)test|sample|demo|abc|foo|bar|zxcv|hjkl";
 }
 
 /// Below this mean letter-pair score a token does not read as words.
 const RANDOM_TOKEN: i32 = -770;
 /// A short field value needs a stronger signal: fewer pairs, more noise.
 const RANDOM_SHORT_VALUE: i32 = -750;
+/// A fifteen-letter key next to a mixed value may read a little more like
+/// words; the value carries the rest of the signal.
+const RANDOM_KEY_NAME: i32 = -700;
 
 fn count(value: &str, test: fn(&u8) -> bool) -> usize {
     value.bytes().filter(test).count()
@@ -175,6 +194,78 @@ fn any_value(shape: &Regex, text: &str, keep: fn(&str) -> bool) -> bool {
     shape.captures_iter(text).any(|found| keep(&found["v"]))
 }
 
+/// A key a template or a person would type: a placeholder, a counting or
+/// keyboard run, or a test word.
+fn typed_value(value: &str) -> bool {
+    FILLER.is_match(value) || WIDE_FILLER.is_match(value) || SEQUENTIAL.is_match(value)
+}
+
+fn letters_only(value: &str) -> String {
+    value.chars().filter(char::is_ascii_alphabetic).collect()
+}
+
+fn random_letters(value: &str, cut: i32) -> bool {
+    english_score(&letters_only(value)) <= cut
+}
+
+/// Placeholders and keyboard runs are checked on the joined value too, so a
+/// run split across groups (`cvzx cvzx …`) still reads as typed; a value
+/// that repeats one group is a sample, not a generated password.
+fn spaced_groups(value: &str) -> bool {
+    let joined = value.replace(' ', "");
+    let letters = letters_only(value);
+    let groups = value.split(' ').collect::<Vec<_>>();
+    let distinct = groups
+        .iter()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    !HEX.is_match(&joined)
+        && letters.len() >= 16
+        && distinct == groups.len()
+        && !typed_value(value)
+        && !typed_value(&joined)
+        && english_score(&letters) <= RANDOM_TOKEN
+}
+
+fn random_word_value(value: &str) -> bool {
+    !typed_value(value) && random_letters(value, RANDOM_TOKEN)
+}
+
+/// A URL password counts only off a local or documentation host.
+fn url_password(found: &Captures) -> bool {
+    !LOCAL_HOST.is_match(&found["h"].to_ascii_lowercase()) && random_word_value(&found["v"])
+}
+
+fn random_key(found: &Captures) -> bool {
+    let key = &found["k"];
+    !typed_value(key) && english_score(key) <= RANDOM_TOKEN && vowel_share(key) <= 0.40
+}
+
+/// A slightly word-like key still marks a secret when its value mixes
+/// letters and digits the way a generated key does.
+fn random_key_with_mixed_value(found: &Captures) -> bool {
+    let (key, value) = (&found["k"], &found["v"]);
+    !typed_value(key)
+        && english_score(key) <= RANDOM_KEY_NAME
+        && value.bytes().any(|byte| byte.is_ascii_digit())
+        && value.bytes().any(|byte| byte.is_ascii_alphabetic())
+        && !typed_value(value)
+        && !HEX.is_match(&value.to_ascii_lowercase())
+}
+
+fn holds_shaped_secret(text: &str) -> bool {
+    (text.contains(' ') && any_value(&SPACED_GROUPS, text, spaced_groups))
+        || any_value(&SECRET_WORD_GROUPS, text, random_word_value)
+        || (text.contains("set") && any_value(&SECRET_SETTER, text, random_word_value))
+        || (text.contains("://") && URL_PASSWORD.captures_iter(text).any(|f| url_password(&f)))
+        || RANDOM_KEY
+            .captures_iter(text)
+            .any(|found| random_key(&found))
+        || RANDOM_KEY_VALUE
+            .captures_iter(text)
+            .any(|found| random_key_with_mixed_value(&found))
+}
+
 /// Whether `text` writes a credential that only its surroundings identify.
 pub(super) fn holds_bare_secret(text: &str) -> bool {
     any_value(&LIST_TOKEN, text, random_list_token)
@@ -187,6 +278,7 @@ pub(super) fn holds_bare_secret(text: &str) -> bool {
             .captures_iter(text)
             .any(|found| hashed_auth_string(&found))
         || (text.contains("secret") && any_value(&SECRET_FIELD, text, short_secret))
+        || holds_shaped_secret(text)
 }
 
 #[cfg(test)]
