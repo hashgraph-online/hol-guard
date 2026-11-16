@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shlex
 import subprocess
@@ -11,12 +10,19 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field
 from functools import cached_property, wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from ...path_support import resolves_within_root
 from ..models import GuardArtifact, HarnessDetection
 from .contracts import HarnessCoverageSummary, HarnessSetupContract, HarnessSetupStep, setup_contract_for
 from .diagnostic_probes import skipped_command_probe
+from .harness_diagnostics_bridge import (
+    _detection_request,
+    _diagnostic_setup_status,
+    _harness_diagnostics,
+    _launcher_artifact,
+    artifacts_use_guard,
+)
 
 if TYPE_CHECKING:
     from ..inventory_contract import GuardAgentInventorySnapshot
@@ -65,20 +71,15 @@ class PreparedHarnessInstall:
         return self.manifest
 
 
-def _json_payload(path: Path) -> dict[str, object]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        return payload if isinstance(payload, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
 def detection_request(harness: str, context: HarnessContext) -> dict[str, object]:
     """The home and workspace a native detection kind reads, as Python holds them.
 
     The working directory always travels with the request: relative paths,
     including ones read from harness-written files, resolve against Python's
     cwd and never the resident's.
+
+    TODO(process-fact): ``cwd`` is a fact of the calling Python process. Drop it
+    here when the resident request envelope stamps it.
     """
 
     workspace = context.workspace_dir
@@ -132,7 +133,11 @@ def _run_command_probe(
     cwd: Path | None = None,
     env: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
-    """Run a harness CLI's ``--help`` or ``--version`` through the native ``command_probe`` kind."""
+    """Run a harness CLI's ``--help`` or ``--version`` through the native ``command_probe`` kind.
+
+    TODO(process-fact): the working directory and the probe environment are facts of the
+    calling Python process. Drop them here when the resident request envelope stamps them.
+    """
 
     skipped = skipped_command_probe(command)
     if skipped is not None:
@@ -158,7 +163,6 @@ def _ensure_path_within_root(root: Path, path: Path, *, label: str) -> None:
 
 
 _MutationResult = TypeVar("_MutationResult")
-_T = TypeVar("_T")
 
 
 def _owned_adapter_mutation(method: Callable[..., _MutationResult]) -> Callable[..., _MutationResult]:
@@ -323,12 +327,6 @@ class HarnessAdapter:
         del context
         return None
 
-    def guard_launcher_paths(self, context: HarnessContext) -> tuple[Path, ...]:
-        shim_name = self.launcher_name or self.harness
-        shim_dir = context.guard_home / "bin"
-        names = (shim_name, *self.legacy_launcher_names)
-        return tuple(shim_dir / f"guard-{name}{suffix}" for name in names for suffix in ("", ".cmd"))
-
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
         return [self.resolved_executable(context) or self.executable, *passthrough_args]
 
@@ -462,101 +460,26 @@ class HarnessAdapter:
         context: HarnessContext,
         detection: HarnessDetection,
     ) -> HarnessDetection:
-        paths = self.guard_launcher_paths(context)
-        index = _harness_diagnostics(
-            "launcher_shim",
-            lambda value: value is None or (type(value) is int and 0 <= value < len(paths)),
-            paths=[str(path.absolute()) for path in paths],
-        )
-        if index is None:
-            return detection
-        shim_path = paths[index]
-        artifact = GuardArtifact(
-            artifact_id=f"{self.harness}:guard-launcher-shim",
-            name=shim_path.name,
+        # TODO(process-fact): the caller's working directory, for a relative Guard home, comes from the
+        # resident request envelope once it stamps it; until then a relative home is refused natively.
+        artifact = _harness_diagnostics(
+            "launcher_artifact",
+            lambda value: value is None or isinstance(value, dict),
             harness=self.harness,
-            artifact_type="guard_launcher_shim",
-            source_scope="guard",
-            config_path=str(shim_path),
-            command=str(shim_path),
-            metadata={"shim_dir": str(shim_path.parent)},
+            guard_home=str(context.guard_home),
+            names=[self.launcher_name or self.harness, *self.legacy_launcher_names],
         )
+        if artifact is None:
+            return detection
+        launcher = _launcher_artifact(artifact)
         return HarnessDetection(
             harness=detection.harness,
             installed=True,
             command_available=detection.command_available,
             config_paths=detection.config_paths,
-            artifacts=(*detection.artifacts, artifact),
+            artifacts=(*detection.artifacts, launcher),
             warnings=detection.warnings,
         )
-
-
-# The native request parser refuses any JSON array wider than 4096 entries, so
-# every list crosses in chunks that the runtime joins back in order.
-_NATIVE_JSON_WIDTH = 4096
-_SETUP_STATUSES = ("active", "broken", "partial", "not_found")
-
-
-def _chunks(items: Sequence[_T]) -> list[list[_T]]:
-    return [list(items[start : start + _NATIVE_JSON_WIDTH]) for start in range(0, len(items), _NATIVE_JSON_WIDTH)]
-
-
-def _artifacts_request(artifacts: Sequence[GuardArtifact]) -> list[list[dict[str, object]]]:
-    return _chunks(
-        [
-            {
-                "artifact_type": artifact.artifact_type,
-                "command": artifact.command,
-                "args": _chunks(artifact.args),
-                "harness": artifact.harness,
-            }
-            for artifact in artifacts
-        ]
-    )
-
-
-def _detection_request(detection: HarnessDetection) -> dict[str, object]:
-    return {
-        "config_paths": _chunks(detection.config_paths),
-        "command_available": detection.command_available,
-        "artifacts": _artifacts_request(detection.artifacts),
-    }
-
-
-def _harness_diagnostics(op: str, valid: Callable[[object], bool], **fields: object) -> Any:
-    """The native ``harness_diagnostics`` answer to ``op``, which it returns under the op's own name."""
-
-    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
-
-    value = native_runner_authority("harness_diagnostics", {"op": op, **fields}).get(op)
-    if not valid(value):
-        raise NativeRunnerAuthorityError("harness diagnostics answer is malformed")
-    return value
-
-
-def _diagnostic_setup_status(
-    detection: HarnessDetection,
-    warnings: list[str],
-    *,
-    command_absence_proves_uninstalled: bool = True,
-) -> str:
-    return _harness_diagnostics(
-        "setup_status",
-        lambda value: value in _SETUP_STATUSES,
-        command_absence_proves_uninstalled=command_absence_proves_uninstalled,
-        detection=_detection_request(detection),
-        warnings=_chunks(warnings),
-    )
-
-
-def artifacts_use_guard(artifacts: Sequence[GuardArtifact]) -> bool:
-    """Whether any artifact is Guard's launcher, Guard's command, or a command line naming Guard."""
-
-    if not artifacts:
-        return False
-    return _harness_diagnostics(
-        "uses_guard", lambda value: isinstance(value, bool), artifacts=_artifacts_request(artifacts)
-    )
 
 
 __all__ = [
@@ -564,7 +487,6 @@ __all__ = [
     "HarnessAdapter",
     "HarnessContext",
     "_ensure_path_within_root",
-    "_json_payload",
     "_run_command_probe",
     "artifacts_use_guard",
 ]
