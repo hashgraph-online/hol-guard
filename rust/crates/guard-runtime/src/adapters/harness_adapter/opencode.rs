@@ -14,7 +14,7 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::files::{self, path_value, text, Doc};
-use super::{detection, path_answer, path_text, Ctx, Failure, Spec, Step};
+use super::{detection, hook_config, path_answer, path_text, Ctx, Failure, Spec, Step};
 use crate::aibom_paths::py_path;
 use crate::copilot_detect::{strip_jsonc, universal_newlines};
 use crate::opencode_plugin_render::{dumps, dumps_unmapping};
@@ -25,6 +25,8 @@ pub(super) const COMPANION_PREFIX: &str = "hol-guard::";
 pub(super) const PROXY: &str = "opencode-mcp-proxy";
 const PLUGIN_FILE: &str = "hol-guard-pretool.ts";
 pub(super) const RUNTIME_ENV_VAR: &str = "OPENCODE_CONFIG_CONTENT";
+/// The budget the plugin's bounded bridge answers a hook within.
+const HOOK_TIMEOUT_SECONDS: i64 = 25;
 
 pub(crate) fn dispatch(
     spec: &Spec,
@@ -47,6 +49,31 @@ pub(crate) fn dispatch(
         "refresh_apply" => super::opencode_checks::refresh_apply(ctx),
         _ => super::common(spec, op, ctx),
     }
+}
+
+/// The plugin render arguments Python attested, with the bounded native hook
+/// argv `[runtime, "bounded-hook-bridge", config]` the plugin starts. A
+/// frozen caller names none: the plugin runs its frozen launcher. Any other
+/// caller needs the native runtime that carries the bridge.
+pub(super) fn plugin_args(ctx: &Ctx, plugin: &Value) -> Step<Value> {
+    let mut args = plugin.clone();
+    let fields = args.as_object_mut().ok_or(Failure::Invalid)?;
+    let frozen = fields
+        .get("frozen")
+        .and_then(Value::as_bool)
+        .ok_or(Failure::Invalid)?;
+    let bridge = if frozen {
+        Value::Null
+    } else {
+        json!(hook_config::hook_argv(
+            ctx,
+            "opencode",
+            &[],
+            HOOK_TIMEOUT_SECONDS
+        )?)
+    };
+    fields.insert("native_bridge_argv".to_owned(), bridge);
+    Ok(args)
 }
 
 pub(super) fn global_dir(ctx: &Ctx) -> PathBuf {

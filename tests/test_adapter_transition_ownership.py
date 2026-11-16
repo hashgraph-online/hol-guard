@@ -136,7 +136,6 @@ def test_frozen_preparation_hands_the_hook_to_the_runtime(tmp_path, monkeypatch,
     ctx = context(tmp_path)
     monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
     use_bounded_runtime(monkeypatch, tmp_path / "hol-guard-runtime")
-    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
     prepared = get_adapter(harness).prepare_install(ctx)
     assert len(prepared.files) == expected
     assert not any(change.path.suffix == ".py" for change in prepared.files)
@@ -192,7 +191,6 @@ def test_frozen_copilot_preparation_plans_no_helper_and_publishes_nothing(
     )
     monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
     use_bounded_runtime(monkeypatch, tmp_path / "hol-guard-runtime")
-    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
     prepared = CopilotHarnessAdapter().prepare_install(ctx)
     assert len(prepared.files) == (12 if workspace_enabled else 7)
     assert not any(change.path.suffix == ".py" for change in prepared.files)

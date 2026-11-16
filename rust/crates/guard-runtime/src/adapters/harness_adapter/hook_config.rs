@@ -63,7 +63,7 @@ fn arguments(value: &Value) -> Step<Vec<String>> {
         .collect()
 }
 
-/// `bounded_hook_command_for_config`: the command a harness runs for a bounded
+/// The command a harness runs for a bounded
 /// hook config. A frozen Desktop Core with a verified signed proxy runs
 /// through it; otherwise the native runtime that carries the bounded bridge
 /// feature, which a frozen caller names by its durable copy.

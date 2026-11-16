@@ -990,7 +990,6 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
 
         monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
         use_bounded_runtime(monkeypatch, runtime.home.parent / "hol-guard-runtime")
-        monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
     prepared = adapter.prepare_install(ctx)
     # A frozen Guard hands the hook to its runtime and plans no helper script.
     assert len(prepared.files) == (12 if workspace_enabled else 7)

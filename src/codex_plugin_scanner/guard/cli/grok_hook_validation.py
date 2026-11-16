@@ -36,14 +36,15 @@ def _native_client(args: tuple[str, ...], *, trusted: bool, guard_home: Path | N
     native runtime when ``trusted`` is required. A frozen build's runtime is
     its durable copy under ``guard_home``.
     """
-    from ..adapters.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND, native_bridge_executable
+    from ..adapters.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND, NATIVE_BOUNDED_HOOK_FEATURE
+    from ..adapters.native_hook_bridge import native_hook_bridge_executable
 
     if len(args) < 2 or args[1] != NATIVE_BOUNDED_HOOK_COMMAND:
         return args
     if len(args) not in {3, 6} or (len(args) == 6 and args[3] != "-I") or not Path(args[0]).is_absolute():
         return None
     if trusted:
-        runtime = native_bridge_executable("grok", guard_home=guard_home)
+        runtime = native_hook_bridge_executable(NATIVE_BOUNDED_HOOK_FEATURE, guard_home=guard_home)
         if runtime is None or Path(args[0]).resolve() != runtime.resolve():
             return None
     return args if len(args) == 3 else args[2:]

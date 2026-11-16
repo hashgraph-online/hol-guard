@@ -347,7 +347,8 @@ pub(super) fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
                 path_value(&ctx.resolved(workspace))
             }),
         );
-    let source = crate::opencode_plugin_render::render(plugin)
+    let plugin = opencode::plugin_args(ctx, plugin)?;
+    let source = crate::opencode_plugin_render::render(&plugin)
         .map_err(|error| {
             Failure::Refusal(format!(
                 "Guard could not render the OpenCode plugin: {error}"

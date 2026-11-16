@@ -24,20 +24,24 @@ fn ask(home: &Home, op: &str, extra: Value) -> KindResult {
     context["workspace"] = json!(workspace(home));
     let mut request = json!({"harness": "copilot", "op": op, "context": context});
     for (key, value) in extra.as_object().unwrap() {
-        request[key] = value.clone();
+        // A test's own `caller` replaces the context's default one.
+        if key == "caller" {
+            request["context"]["caller"] = value.clone();
+        } else {
+            request[key] = value.clone();
+        }
     }
     dispatch(&request)
 }
 
-/// The fields Python sends with `prepare_install` after `install_detection`.
+/// The fields Python sends with `prepare_install` after `install_detection`:
+/// no hook argv, which the native runtime builds from the caller stamp.
 fn install_fields(found: &Value) -> Value {
     let mut fields = Map::new();
     for (key, value) in [
         ("create_key", json!(true)),
         ("digest", found["digest"].clone()),
         ("shim", json!(shim())),
-        ("config_argv", json!(["/py", "hook"])),
-        ("workspace_argv", json!(["/py", "hook", "--workspace"])),
     ] {
         fields.insert(key.to_owned(), value);
     }
@@ -79,7 +83,48 @@ fn copilot_install_plans_both_workspace_mcp_targets() {
         .iter()
         .find(|change| change["path"] == json!(home.home().join(".copilot/config.json")))
         .unwrap();
-    assert!(after(config).contains("/py hook"));
+    assert!(after(config).contains("/g/hol-guard-runtime bounded-hook-bridge '"));
+    let workspace_hook = answer["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|change| change["path"] == json!(ws.join(".github/hooks/hol-guard-copilot.json")))
+        .unwrap();
+    let hook = after(workspace_hook);
+    assert!(hook.contains("/g/hol-guard-runtime bounded-hook-bridge '"));
+    assert!(hook.contains("--workspace"));
+}
+
+#[test]
+fn copilot_install_names_a_frozen_callers_durable_runtime_copy() {
+    let home = Home::new();
+    let found = ask(&home, "install_detection", json!({})).unwrap();
+    let (stamp, copy) = super::frozen_with_runtime(&home);
+    let mut fields = install_fields(&found);
+    fields["caller"] = stamp;
+    let answer = ask(&home, "prepare_install", fields).unwrap();
+    let config = answer["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|change| change["path"] == json!(home.home().join(".copilot/config.json")))
+        .unwrap();
+    assert!(after(config).contains(&format!("{copy} bounded-hook-bridge '")));
+}
+
+#[test]
+fn copilot_install_without_a_native_runtime_asks_for_repair() {
+    let home = Home::new();
+    let found = ask(&home, "install_detection", json!({})).unwrap();
+    let mut stamp = super::caller(false);
+    stamp["native_runtime"] = Value::Null;
+    let mut fields = install_fields(&found);
+    fields["caller"] = stamp;
+    let answer = ask(&home, "prepare_install", fields).unwrap();
+    assert!(answer["runtime_error"]
+        .as_str()
+        .unwrap()
+        .contains("hol-guard repair"));
 }
 
 #[test]

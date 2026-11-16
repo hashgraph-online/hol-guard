@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -12,14 +13,10 @@ import pytest
 from codex_plugin_scanner.guard import native_caller
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.copilot import (
-    _hook_fields as copilot_hook_fields,  # pyright: ignore[reportPrivateUsage]
-)
-from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter
-from tests.native_bounded_runtime import use_bounded_runtime
+from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter, ask
+from tests.native_bounded_runtime import durable_copy, use_bounded_runtime
 
 CommandFactory = Callable[[HarnessContext], tuple[str, ...]]
-_BRIDGE = "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge"
 
 
 @pytest.fixture
@@ -44,7 +41,7 @@ def _context(tmp_path: Path) -> HarnessContext:
 
 
 def _copilot_command(context: HarnessContext) -> tuple[str, ...]:
-    return tuple(cast(list[str], copilot_hook_fields(context)["workspace_argv"]))
+    return tuple(cast(list[str], ask("hook_spec", context, harness="copilot")["workspace_hook_argv"]))
 
 
 def _native_command(harness: str) -> CommandFactory:
@@ -118,12 +115,13 @@ def test_frozen_managed_cli_hooks_run_the_durable_runtime(
     factory: CommandFactory,
 ) -> None:
     monkeypatch.setattr("sys.frozen", True, raising=False)
-    monkeypatch.setattr(f"{_BRIDGE}._trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
 
     context = _context(tmp_path)
     command = factory(context)
 
-    assert command[:2] == (str(runtime), "bounded-hook-bridge")
+    # A frozen Guard names the verified durable copy of its runtime.
+    digest = hashlib.sha256(runtime.read_bytes()).hexdigest()
+    assert command[:2] == (str(durable_copy(context.guard_home, runtime, digest)), "bounded-hook-bridge")
     assert not (context.guard_home / "managed" / "bounded-hooks" / f"{harness}.py").exists()
     config = cast(dict[str, object], json.loads(command[-1]))
     assert config["harness"] == harness
@@ -134,7 +132,6 @@ def test_frozen_managed_cli_hooks_run_the_durable_runtime(
 def test_a_hook_install_without_a_runtime_asks_for_repair(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
 ) -> None:
-    monkeypatch.setattr(f"{_BRIDGE}.native_bridge_executable", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(native_caller, "_native_runtime", lambda: None)
     factory = _copilot_command if harness == "copilot" else _native_command(harness)
 

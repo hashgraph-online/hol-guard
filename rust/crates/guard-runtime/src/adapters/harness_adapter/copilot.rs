@@ -18,7 +18,8 @@ use sha2::{Digest, Sha256};
 
 use super::files::{self, Object};
 use super::{
-    common, detection, path_answer, path_text, resolved_executable, Ctx, Failure, Spec, Step,
+    common, detection, hook_config, path_answer, path_text, resolved_executable, Ctx, Failure,
+    Spec, Step,
 };
 use super::{copilot_install, which};
 use crate::copilot_detect::strip_jsonc;
@@ -279,6 +280,15 @@ fn hook_spec(ctx: &Ctx) -> Value {
         "workspace_cli_args": workspace,
         "timeout_seconds": HOOK_TIMEOUT_SECONDS,
     })
+}
+
+/// The commands the CLI config's and the workspace hook file's entries run:
+/// the `hook_argv` and `workspace_hook_argv` a `hook_spec` answers, with the
+/// workspace one `null` when there is no workspace.
+pub(super) fn hook_argvs(spec: &Spec, ctx: &Ctx) -> Step<(Value, Value)> {
+    let answer = hook_config::with_config(spec, ctx, hook_spec(ctx))?;
+    let argv = |key: &str| answer.get(key).cloned().ok_or(Failure::Invalid);
+    Ok((argv("hook_argv")?, argv("workspace_hook_argv")?))
 }
 
 pub(crate) fn dispatch(

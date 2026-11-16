@@ -8,12 +8,16 @@ use serde_json::{json, Value};
 use super::super::dispatch;
 use super::{after, caller, frozen_with_runtime, shim, Home};
 
+/// The plugin render arguments Python sends: the attested facts, with no
+/// native bridge argv, which the native runtime builds from the caller stamp.
 fn plugin() -> Value {
     let vectors: Value = serde_json::from_str(include_str!(
         "../../../testdata/opencode/plugin_render_vectors.json"
     ))
     .unwrap();
-    vectors["cases"][0]["args"].clone()
+    let mut args = vectors["cases"][0]["args"].clone();
+    args.as_object_mut().unwrap().remove("native_bridge_argv");
+    args
 }
 
 fn global(home: &Home) -> std::path::PathBuf {
@@ -55,10 +59,13 @@ fn launch() -> Value {
 /// An install with managed servers, built from `stamp` and an environment
 /// that sets the import path and one native binding.
 fn install_with(home: &Home, stamp: Value) -> Value {
+    // Python attests the same frozen state the caller stamp carries.
+    let mut args = plugin();
+    args["frozen"] = stamp["frozen"].clone();
     home.ask_env(
         "opencode",
         "prepare_install",
-        json!({"shim": shim(), "plugin": plugin(), "caller": stamp}),
+        json!({"shim": shim(), "plugin": args, "caller": stamp}),
         json!({"PATH": "", "PYTHONPATH": "/g/lib", "HOL_GUARD_NATIVE": "1"}),
     )
 }
@@ -223,6 +230,45 @@ fn plugin_refresh_is_current_once_both_copies_match() {
 }
 
 #[test]
+fn plugin_names_the_native_bridge_from_the_caller_stamp() {
+    let home = Home::new();
+    let answer = home.ask("opencode", "plugin_refresh", json!({"plugin": plugin()}));
+    let source = answer["source"].as_str().unwrap();
+    assert!(source.contains("/g/hol-guard-runtime"));
+    assert!(source.contains(r#""harness": "opencode", "timeout_seconds": 25"#));
+}
+
+#[test]
+fn plugin_of_a_frozen_caller_names_no_native_bridge() {
+    let home = Home::new();
+    let (stamp, copy) = frozen_with_runtime(&home);
+    let mut args = plugin();
+    args["frozen"] = json!(true);
+    let answer = home.ask(
+        "opencode",
+        "plugin_refresh",
+        json!({"plugin": args, "caller": stamp}),
+    );
+    assert!(!answer["source"].as_str().unwrap().contains(&copy));
+}
+
+#[test]
+fn plugin_without_a_native_runtime_asks_for_repair() {
+    let home = Home::new();
+    let mut stamp = caller(false);
+    stamp["native_runtime"] = Value::Null;
+    let answer = home.ask(
+        "opencode",
+        "plugin_refresh",
+        json!({"plugin": plugin(), "caller": stamp}),
+    );
+    assert!(answer["runtime_error"]
+        .as_str()
+        .unwrap()
+        .contains("hol-guard repair"));
+}
+
+#[test]
 fn refresh_skips_an_invalid_config_with_a_warning() {
     let home = Home::new();
     write(&global(&home).join("opencode.json"), "{oops");
@@ -336,7 +382,7 @@ fn install_launches_the_proxy_through_the_native_relay_when_one_is_selected() {
     let home = Home::new();
     write(&global(&home).join("opencode.json"), SERVERS);
     let mut stamp = launch();
-    stamp["native_runtime"]["features"] = json!(["mcp-stdio-relay-v1"]);
+    stamp["native_runtime"]["features"] = json!(["mcp-stdio-relay-v1", "bounded-hook-bridge-v1"]);
     let config = managed_config(&home, &install_with(&home, stamp));
     assert_eq!(
         json!(

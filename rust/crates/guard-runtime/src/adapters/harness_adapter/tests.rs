@@ -25,6 +25,8 @@ mod cursor_family;
 mod grok_zcode;
 #[path = "tests_hermes.rs"]
 mod hermes_family;
+#[path = "tests_hook_config.rs"]
+mod hook_config_family;
 #[path = "tests_install_apply.rs"]
 mod install_apply_family;
 #[path = "tests_mcp_servers.rs"]

@@ -12,9 +12,9 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::copilot::{
-    config_path, detect_sources, digest_path, global_mcp_path, hook_dir_files, hook_entry,
-    hook_path, inline_hooks, parse_object, plan_hooks, scope_for, sources, target_mcp_paths,
-    workspace_mcp_paths,
+    config_path, detect_sources, digest_path, global_mcp_path, hook_argvs, hook_dir_files,
+    hook_entry, hook_path, inline_hooks, parse_object, plan_hooks, scope_for, sources,
+    target_mcp_paths, workspace_mcp_paths,
 };
 use super::copilot_mcp::{apply_plan, plan_targets};
 use super::copilot_state::{self as state, Held};
@@ -43,7 +43,7 @@ pub(super) fn dispatch(
             Some(reason) => transition_error(reason),
             None => prepare_install(spec, ctx, fields),
         },
-        "uninstall" => copilot_uninstall::uninstall(ctx, fields),
+        "uninstall" => copilot_uninstall::uninstall(spec, ctx),
         "finish_uninstall" => copilot_uninstall::finish_uninstall(ctx, fields),
         _ => Err(Failure::Invalid),
     }
@@ -218,14 +218,13 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
         }
         _ => None,
     };
-    let config_argv = fields.get("config_argv").ok_or(Failure::Invalid)?;
-    let workspace_argv = fields.get("workspace_argv").unwrap_or(&Value::Null);
+    let (config_argv, workspace_argv) = hook_argvs(spec, ctx)?;
     let (config_plan, workspace_plan) = plan_hooks(
         ctx,
-        (hooks.as_slice(), config_argv),
+        (hooks.as_slice(), &config_argv),
         workspace_payload
             .as_ref()
-            .map(|payload| (payload, workspace_argv)),
+            .map(|payload| (payload, &workspace_argv)),
     )?;
     let listing = snapshot.hook_listing(ctx);
     let detected = detect_sources(spec, ctx, &sources(ctx, &listing), Some(&snapshot.contents))?;

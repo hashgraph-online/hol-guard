@@ -15,8 +15,8 @@ use serde_json::{json, Map, Value};
 
 use super::files::{self, text, Doc};
 use super::opencode::{
-    config_paths, global_plugin, managed_config_path, managed_plugin, overlay_path, read_config,
-    wire_payload, COMPANION_PREFIX, PROXY,
+    self, config_paths, global_plugin, managed_config_path, managed_plugin, overlay_path,
+    read_config, wire_payload, COMPANION_PREFIX, PROXY,
 };
 use super::opencode_servers::MODULE_PREFIX;
 use super::{caller, path_text, proxy_launch, Ctx, Failure, Step};
@@ -28,9 +28,9 @@ const CHANGED: &str = "OpenCode config changed during launcher refresh";
 const INVALID_WARNING: &str =
     "An invalid OpenCode config was left unchanged; other configs were checked.";
 
-fn render_plugin(fields: &Map<String, Value>) -> Step<String> {
+fn render_plugin(ctx: &Ctx, fields: &Map<String, Value>) -> Step<String> {
     let plugin = fields.get("plugin").ok_or(Failure::Invalid)?;
-    crate::opencode_plugin_render::render(plugin)
+    crate::opencode_plugin_render::render(&opencode::plugin_args(ctx, plugin)?)
         .map_err(|error| {
             Failure::Refusal(format!(
                 "Guard could not render the OpenCode plugin: {error}"
@@ -56,7 +56,7 @@ fn installed_text(ctx: &Ctx, path: &Path) -> Step<String> {
 /// `plugin_refresh`: the plugin this Guard renders and whether both installed
 /// copies already hold it.
 pub(super) fn plugin_refresh(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let source = render_plugin(fields)?;
+    let source = render_plugin(ctx, fields)?;
     let global = installed_text(ctx, &global_plugin(ctx))?;
     let managed = installed_text(ctx, &managed_plugin(ctx))?;
     Ok(json!({

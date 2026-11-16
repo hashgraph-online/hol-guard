@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from ..store import GuardStore
 
 _HARNESS = "opencode"
-_HOOK_TIMEOUT_SECONDS = 25
 _REPLY_LIMIT = 32
 _INSTALL_OPS = frozenset({"prepare_install", "apply_install"})
 
@@ -56,23 +55,16 @@ def opencode_config_lock(home_dir: Path, *, timeout: float = 5.0) -> Iterator[No
 def plugin_render_args(context: HarnessContext) -> dict[str, object]:
     """The attested Guard CLI facts the native kind renders the pretool plugin from."""
     from ..codex_hook_windows_job import windows_system_executable_path
-    from .bounded_cli_hook_bridge import bounded_hook_command_for_config
     from .guard_cli_attestation import executable_identity_payload, resolve_attested_guard_cli
 
     guard_cli = resolve_attested_guard_cli(context)
     identity = guard_cli.frozen_identity or (guard_cli.python.identity if guard_cli.python is not None else None)
     if identity is None:
         raise RuntimeError("Guard could not attest the OpenCode hook runtime.")
-    native_bridge_argv: list[str] | None = None
     import_roots: list[str] = []
     if guard_cli.python is not None:
         # The plugin fills in the interpreter and the per-workspace CLI argv
-        # when it runs a hook; the native kind keeps this argv only when it is
-        # the bounded native bridge.
-        config = ask("hook_config", context, harness=_HARNESS, cli_args=[], timeout_seconds=_HOOK_TIMEOUT_SECONDS)[
-            "config"
-        ]
-        native_bridge_argv = list(bounded_hook_command_for_config(str(config)))
+        # when it runs a hook; the native kind adds the bounded bridge argv.
         import_roots = [str(root) for root in guard_cli.python.import_roots]
     try:
         taskkill_path = windows_system_executable_path("taskkill.exe") if os.name == "nt" else None
@@ -82,7 +74,6 @@ def plugin_render_args(context: HarnessContext) -> dict[str, object]:
         "guard_home": str(context.guard_home.resolve()),
         "python": executable_identity_payload(identity),
         "frozen": guard_cli.frozen,
-        "native_bridge_argv": native_bridge_argv,
         "import_roots": import_roots,
         "taskkill_path": taskkill_path,
     }

@@ -1,8 +1,9 @@
 """Hook command for harnesses whose hooks the native runtime answers.
 
 The native runtime reads the install-time config, asks the daemon and fails
-closed on its own. Python only writes the config and names the runtime; when
-there is no runtime it refuses the install and asks for ``hol-guard repair``.
+closed on its own. The native ``harness_adapter`` kind writes the config and
+names the runtime. Python keeps the frozen ``__guard-bounded-hook`` entry,
+which hands a stored launch to the runtime or refuses it with a repair message.
 """
 
 from __future__ import annotations
@@ -15,19 +16,15 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 
-from ..stable_guard_cli import prune_safe_cli_executable
 from .bounded_cli_hook_failure import failure_payload
 from .bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_COMMAND,
     NATIVE_BOUNDED_HOOK_FEATURE,
     NATIVE_MUSE_HOOK_FEATURE,
-    native_bridge_executable,
 )
-from .desktop_hook_proxy import _trusted_desktop_hook_proxy_command
 
 RUNTIME_MISSING = "HOL Guard's native runtime is missing, so Guard blocked this hook. Run `hol-guard repair`."
 _TRAILING_MANAGED_MARKERS = frozenset({"HOL_GUARD_MANAGED_ZCODE"})
-_FROZEN_BRIDGE_COMMAND = "__guard-bounded-hook"
 _BOUNDED_HOOK_SCRIPT_DIR = ("managed", "bounded-hooks")
 # The native bridge answers within the hook deadline; this only bounds a
 # runtime that stopped answering.
@@ -41,57 +38,6 @@ def bounded_hook_script_path(guard_home: Path, harness: str) -> Path | None:
     if not stem or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789-" for character in stem):
         return None
     return guard_home.joinpath(*_BOUNDED_HOOK_SCRIPT_DIR, f"{stem}.py")
-
-
-def bounded_cli_hook_command(
-    *,
-    python_executable: str,
-    package_root: Path,
-    guard_home: Path,
-    cli_args: Sequence[str],
-    harness: str,
-    timeout_seconds: float,
-    require_desktop_proxy: bool = False,
-) -> tuple[str, ...]:
-    """The ``[runtime, "bounded-hook-bridge", config]`` hook command, or the signed Desktop proxy."""
-
-    frozen_launcher = bool(getattr(sys, "frozen", False))
-    if frozen_launcher:
-        python_executable = prune_safe_cli_executable(python_executable)
-    config = {
-        "python_executable": python_executable,
-        "package_root": str(package_root.resolve()),
-        "guard_home": str(guard_home.resolve(strict=False)),
-        "cli_args": list(cli_args),
-        "harness": harness,
-        "timeout_seconds": timeout_seconds,
-        "frozen_launcher": frozen_launcher,
-    }
-    config_json = json.dumps(config, ensure_ascii=True, separators=(",", ":"))
-    return bounded_hook_command_for_config(config_json, require_desktop_proxy=require_desktop_proxy)
-
-
-def bounded_hook_command_for_config(config_json: str, *, require_desktop_proxy: bool = False) -> tuple[str, ...]:
-    """Wrap a hook config the native runtime built in the bounded bridge or the signed Desktop proxy."""
-
-    config = json.loads(config_json)
-    frozen_launcher = config["frozen_launcher"] is True
-    harness = str(config["harness"])
-    guard_home = Path(str(config["guard_home"]))
-    if frozen_launcher:
-        desktop_proxy = _trusted_desktop_hook_proxy_command(
-            str(config["python_executable"]), config_json, require_proxy=require_desktop_proxy
-        )
-        if desktop_proxy is not None:
-            return desktop_proxy
-        if require_desktop_proxy:
-            raise RuntimeError("trusted Desktop hook proxy is unavailable")
-    elif require_desktop_proxy:
-        raise RuntimeError("trusted Desktop hook proxy requires a frozen launcher")
-    native = native_bridge_executable(harness, guard_home=guard_home if frozen_launcher else None)
-    if native is None:
-        raise RuntimeError(RUNTIME_MISSING)
-    return (str(native), NATIVE_BOUNDED_HOOK_COMMAND, config_json)
 
 
 def _config_argv(argv: Sequence[str]) -> dict[str, object] | None:
@@ -164,9 +110,6 @@ __all__ = [
     "NATIVE_BOUNDED_HOOK_COMMAND",
     "NATIVE_BOUNDED_HOOK_FEATURE",
     "RUNTIME_MISSING",
-    "_FROZEN_BRIDGE_COMMAND",
-    "bounded_cli_hook_command",
-    "bounded_hook_command_for_config",
     "bounded_hook_script_path",
     "main_from_argv",
 ]

@@ -12,6 +12,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_FEATURE
+from tests.native_runtime_stamp import stamp_native_runtime
 from tests.opencode_test_support import pretool_plugin_source
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="the native bounded bridge is POSIX-only")
@@ -28,14 +29,8 @@ def _bun() -> str:
 
 
 def _offer_native(monkeypatch: pytest.MonkeyPatch, runtime: Path) -> None:
-    # Fake only the bridge lookup: a faked runtime status would also reach the
-    # native runner authority that renders the plugin.
-    from codex_plugin_scanner.guard.adapters import native_hook_bridge
-
-    def executable(feature: str, *, guard_home: Path | None = None) -> Path | None:
-        return runtime if feature == NATIVE_BOUNDED_HOOK_FEATURE else None
-
-    monkeypatch.setattr(native_hook_bridge, "native_hook_bridge_executable", executable)
+    # The native kind that renders the plugin names the runtime from the caller stamp.
+    stamp_native_runtime(monkeypatch, runtime, (NATIVE_BOUNDED_HOOK_FEATURE,))
 
 
 def _context(tmp_path: Path) -> HarnessContext:

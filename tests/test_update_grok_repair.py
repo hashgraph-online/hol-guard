@@ -271,10 +271,6 @@ def test_grok_repair_rewrites_versioned_desktop_core_when_shim_exists(
         True,
         raising=False,
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command",
-        lambda *_args, **_kwargs: None,
-    )
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     now = "2026-08-17T00:00:00+00:00"

@@ -12,12 +12,15 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard import native_caller
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge, native_hook_bridge
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND
 
 from .bounded_cli_hook_test_support import config as _config
 from .bounded_cli_hook_test_support import json_object as _json_object
 from .bounded_cli_hook_test_support import run_hook as _run_hook
+from .native_bounded_runtime import hook_config_argv, use_bounded_runtime
 
 
 def _runtime(monkeypatch: pytest.MonkeyPatch, path: Path | None) -> None:
@@ -124,18 +127,12 @@ def test_cmd_exe_passes_zcode_marker_comment_as_arguments(
 
 
 def _command(tmp_path: Path, harness: str) -> tuple[str, ...]:
-    return bounded_cli_hook_bridge.bounded_cli_hook_command(
-        python_executable=sys.executable,
-        package_root=tmp_path,
-        guard_home=tmp_path / "g",
-        cli_args=["guard", "hook", "--harness", harness],
-        harness=harness,
-        timeout_seconds=20,
-    )
+    context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
+    return hook_config_argv(context, harness, ["guard", "hook", "--harness", harness])
 
 
 def test_install_without_a_native_runtime_asks_for_repair(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(bounded_cli_hook_bridge, "native_bridge_executable", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(native_caller, "_native_runtime", lambda: None)
 
     with pytest.raises(RuntimeError, match="hol-guard repair"):
         _command(tmp_path, "copilot")
@@ -143,7 +140,7 @@ def test_install_without_a_native_runtime_asks_for_repair(monkeypatch: pytest.Mo
 
 def test_install_names_the_native_runtime_and_the_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     native = tmp_path / "hol-guard-runtime"
-    monkeypatch.setattr(bounded_cli_hook_bridge, "native_bridge_executable", lambda *_args, **_kwargs: native)
+    use_bounded_runtime(monkeypatch, native)
 
     argv = _command(tmp_path, "devin")
 

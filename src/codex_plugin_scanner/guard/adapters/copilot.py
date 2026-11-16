@@ -1,9 +1,9 @@
 """Microsoft Copilot through the native ``harness_adapter`` kind.
 
 The kind owns Copilot's paths, detection, the lifecycle locks and signed
-state, which hook entries are Guard's, the MCP plan, the install file plan
-and the uninstall restores and rewrites. This module keeps what must run in
-the Guard process: the bounded hook argv, the launcher environment, Guard's
+state, the bounded hook argv, which hook entries are Guard's, the MCP plan,
+the install file plan and the uninstall restores and rewrites. This module
+keeps what must run in the Guard process: the launcher environment, Guard's
 proxy argv for each server, the shim and the ``--help`` probe subprocess.
 """
 
@@ -21,13 +21,12 @@ if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
 
 _HARNESS = "copilot"
-_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
 _UNANSWERED = (
     "Guard could not read which Copilot hooks it installed; the native Guard runtime did not answer. "
     "Run `hol-guard doctor copilot` and try again."
 )
 # Ops that read or rewrite Guard's hook entries; without the runtime none of them may touch a file.
-_HOOK_OPS = frozenset({"hook_spec", "install_detection", "prepare_install", "uninstall"})
+_HOOK_OPS = frozenset({"install_detection", "prepare_install", "uninstall"})
 
 
 class CopilotHookOwnershipError(RuntimeError):
@@ -45,18 +44,6 @@ def _ask(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
         if str(error) == _UNANSWERED:
             raise CopilotHookOwnershipError(_UNANSWERED) from error
         raise
-
-
-def _hook_fields(context: HarnessContext) -> dict[str, object]:
-    """Guard's bounded hook argv for each hooks object."""
-    from .bounded_cli_hook_bridge import bounded_hook_command_for_config
-
-    spec = _ask("hook_spec", context)
-    workspace = spec["workspace_config"]
-    return {
-        "config_argv": list(bounded_hook_command_for_config(str(spec["config"]))),
-        "workspace_argv": None if workspace is None else list(bounded_hook_command_for_config(str(workspace))),
-    }
 
 
 class CopilotHarnessAdapter(NativeHarnessAdapter):
@@ -79,7 +66,6 @@ class CopilotHarnessAdapter(NativeHarnessAdapter):
         found = _ask("install_detection", context, create_key=create_key)
         if set(found) == {"transition_error"}:
             raise TransitionError(str(found["transition_error"]))
-        fields = _hook_fields(context)
         shim = prepare_guard_shim(_HARNESS, context)
         answer = _ask(
             "prepare_install",
@@ -87,7 +73,6 @@ class CopilotHarnessAdapter(NativeHarnessAdapter):
             create_key=create_key,
             digest=found["digest"],
             shim=json.dumps(shim.manifest, default=str),
-            **fields,
         )
         if set(answer) == {"transition_error"}:
             raise TransitionError(str(answer["transition_error"]))
@@ -104,7 +89,7 @@ class CopilotHarnessAdapter(NativeHarnessAdapter):
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         from ..shims import remove_guard_shim
 
-        finish = _ask("uninstall", context, **_hook_fields(context))["finish"]
+        finish = _ask("uninstall", context)["finish"]
         shim = remove_guard_shim(_HARNESS, context)
         answer = _ask("finish_uninstall", context, shim=json.dumps(shim, default=str), finish=finish)
         return json.loads(str(answer["manifest"]))
