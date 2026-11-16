@@ -43,7 +43,7 @@ fn text<'a>(args: &'a Map<String, Value>, key: &str) -> Step<&'a str> {
     args.get(key).and_then(Value::as_str).ok_or(INVALID)
 }
 
-fn canonical_uuid(value: &str) -> bool {
+pub(super) fn canonical_uuid(value: &str) -> bool {
     value.len() == 36
         && value.bytes().enumerate().all(|(index, byte)| match index {
             8 | 13 | 18 | 23 => byte == b'-',

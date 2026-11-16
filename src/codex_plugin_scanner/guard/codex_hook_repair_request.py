@@ -7,9 +7,8 @@ Factors and grants are deliberately absent from this protocol.
 
 from __future__ import annotations
 
-import hashlib
+import base64
 import math
-import os
 import time
 import uuid
 from dataclasses import replace
@@ -26,13 +25,8 @@ from .codex_publication_inverse_plan import (
     bind_codex_publication_inverse_verification,
     prepare_authenticated_hook_publication_inverse,
 )
-from .durable_io import fsync_directory
 from .native_runtime import NativeRuntimeIdentity
-from .private_file_io import (
-    _private_directory_metadata_is_valid,
-    _stable_directory_metadata,
-    read_private_regular_bytes,
-)
+from .native_transition_files import publication
 from .runtime_transition import (
     RuntimeTransition,
     TransitionError,
@@ -186,6 +180,15 @@ def _compare(plan: RepairPlan, deadline: float) -> None:
     _check_deadline(deadline)
 
 
+def _read(path: Path, home: Path, expected_sha256: str, deadline: float) -> bytes:
+    """The artifact's bytes, only while they still carry the reviewed digest."""
+    with inverse_recovery_budget(deadline):
+        raw = publication("request_read", home, path=str(path), expected_sha256=expected_sha256)
+    if not isinstance(raw, str):
+        raise TransitionError("authority_repair_request_changed")
+    return base64.b64decode(raw)
+
+
 def write_codex_hook_repair_request(
     path: Path,
     plan: RepairPlan,
@@ -194,11 +197,6 @@ def write_codex_hook_repair_request(
 ) -> str:
     """Exclusively create a private review artifact; return its exact digest."""
     _check_deadline(deadline_monotonic)
-    if not path.is_absolute() or path.parent.resolve(strict=True) != path.parent:
-        raise TransitionError("authority_repair_request_path_invalid")
-    parent_before = path.parent.lstat()
-    if not _private_directory_metadata_is_valid(parent_before):
-        raise TransitionError("authority_repair_request_path_invalid")
     inverse = isinstance(plan, PreparedCodexPublicationInverse)
     if not inverse:
         plan = _plan_from_payload(plan.payload(), home=plan.guard_home, config=plan.config_path)
@@ -225,43 +223,17 @@ def write_codex_hook_repair_request(
         # The read-back below is capped at the same size.
         raise TransitionError("authority_repair_request_too_large")
     _compare(plan, deadline_monotonic)
-    parent_fd = None
-    descriptor = None
-    try:
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
-        if os.name != "nt":
-            parent_fd = os.open(
-                path.parent,
-                os.O_RDONLY
-                | getattr(os, "O_DIRECTORY", 0)
-                | getattr(os, "O_NOFOLLOW", 0)
-                | getattr(os, "O_CLOEXEC", 0),
-            )
-            if not _stable_directory_metadata(parent_before, os.fstat(parent_fd)):
-                raise TransitionError("authority_repair_request_path_invalid")
-            descriptor = os.open(path.name, flags, 0o600, dir_fd=parent_fd)
-        else:
-            descriptor = os.open(path, flags, 0o600)
-        offset = 0
-        while offset < len(encoded):
-            _check_deadline(deadline_monotonic)
-            written = os.write(descriptor, encoded[offset : offset + 64 * 1024])
-            if written <= 0:
-                raise OSError("Repair request write made no progress")
-            offset += written
-        os.fsync(descriptor)
-        if not _stable_directory_metadata(parent_before, path.parent.lstat()):
-            raise TransitionError("authority_repair_request_path_invalid")
-        fsync_directory(path.parent)
-    finally:
-        if descriptor is not None:
-            os.close(descriptor)
-        if parent_fd is not None:
-            os.close(parent_fd)
-    if read_private_regular_bytes(path, max_bytes=_MAX_REQUEST, require_private_parent=True) != encoded:
+    with inverse_recovery_budget(deadline_monotonic):
+        digest = publication(
+            "request_create",
+            plan.guard_home,
+            path=str(path),
+            encoded=base64.b64encode(encoded).decode("ascii"),
+        )
+    if not isinstance(digest, str):
         raise TransitionError("authority_repair_request_changed")
     _compare(plan, deadline_monotonic)
-    return hashlib.sha256(encoded).hexdigest()
+    return digest
 
 
 def load_codex_hook_repair_request(
@@ -275,17 +247,9 @@ def load_codex_hook_repair_request(
 ) -> RepairPlan:
     """Authenticate and compare the captured plan; never regenerate or grant."""
     _check_deadline(deadline_monotonic)
-    if (
-        not isinstance(expected_sha256, str)
-        or len(expected_sha256) != 64
-        or any(char not in "0123456789abcdef" for char in expected_sha256)
-    ):
+    if not isinstance(expected_sha256, str):
         raise TransitionError("authority_repair_request_digest_invalid")
-    if not path.is_absolute() or path.parent.resolve(strict=True) != path.parent:
-        raise TransitionError("authority_repair_request_path_invalid")
-    raw = read_private_regular_bytes(path, max_bytes=_MAX_REQUEST, require_private_parent=True)
-    if raw is None or hashlib.sha256(raw).hexdigest() != expected_sha256:
-        raise TransitionError("authority_repair_request_changed")
+    raw = _read(path, guard_home, expected_sha256, deadline_monotonic)
     _check_deadline(deadline_monotonic)
     home = guard_home.resolve(strict=False)
     config = config_path.parent.resolve(strict=False) / config_path.name
@@ -309,7 +273,7 @@ def load_codex_hook_repair_request(
     if signed_at != plan.operation_id or payload["subject"] != plan.subject():
         raise TransitionError("authority_repair_request_plan_invalid")
     _compare(plan, deadline_monotonic)
-    if read_private_regular_bytes(path, max_bytes=_MAX_REQUEST, require_private_parent=True) != raw:
+    if _read(path, guard_home, expected_sha256, deadline_monotonic) != raw:
         raise TransitionError("authority_repair_request_changed")
     if not created <= time.monotonic() < expires:
         raise TransitionError("authority_repair_request_expired")

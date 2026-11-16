@@ -326,35 +326,18 @@ def merge_transition_dependency(previous: TransitionFile, change: TransitionFile
     the strongest exact invocation contract, rather than duplicate targets.
     Mutable writes and authority-only dependencies never use this merge.
     """
-    before, after = previous.payload(), change.payload()
-    if before == after:
+    from .native_transition_files import merge_dependency
+
+    merged = merge_dependency(previous.payload(), change.payload())
+    if merged.get("same") is True:
         return previous
-    for payload in (before, after):
-        if (
-            payload.get("expected_digest") is None
-            or not isinstance(payload.get("artifact_identity"), dict)
-            or payload["before"] is not None
-            or payload["after"] is not None
-        ):
-            raise TransitionError("adapter_preparation_generation_conflict")
-    normalized = []
-    for payload in (before, after):
-        item = dict(payload)
-        identity = dict(cast(dict[str, object], item["artifact_identity"]))
-        identity["role"] = "artifact"
-        item["artifact_identity"] = identity
-        item.pop("invocation_identity", None)
-        normalized.append(item)
-    if normalized[0] != normalized[1] or (
-        previous.invocation_identity is not None
-        and change.invocation_identity is not None
-        and previous.invocation_identity != change.invocation_identity
-    ):
-        raise TransitionError("adapter_preparation_generation_conflict")
+    artifact, invocation = merged.get("artifact_identity"), merged.get("invocation_identity")
+    if not isinstance(artifact, dict) or not (invocation is None or isinstance(invocation, dict)):
+        raise TransitionError("native_transition_invalid")
     return replace(
         previous,
-        artifact_identity=cast(dict[str, object], normalized[0]["artifact_identity"]),
-        invocation_identity=previous.invocation_identity or change.invocation_identity,
+        artifact_identity=cast(dict[str, object], artifact),
+        invocation_identity=cast(dict[str, object] | None, invocation),
     )
 
 

@@ -136,3 +136,52 @@ fn a_dependency_that_writes_bytes_is_refused() {
     let error = home.ask(OPERATION, files).unwrap_err();
     assert!(error.contains("authority_repair_plan_invalid"), "{error}");
 }
+
+fn merge(previous: &Value, change: &Value) -> Result<Value, String> {
+    dispatch(&json!({
+        "op": "publication_merge_dependency",
+        "previous": previous,
+        "change": change,
+    }))
+    .map_err(|error| format!("{error:?}"))
+    .and_then(|answer| match answer.get("error") {
+        Some(error) => Err(error.to_string()),
+        None => Ok(answer["value"].clone()),
+    })
+}
+
+fn artifact(role: &str, invocation: Option<Value>) -> Value {
+    let mut item = dependency(Path::new("/opt/guard/bin/runtime"));
+    item["artifact_identity"] = json!({ "size": 10, "owner_uid": 0, "role": role });
+    if let Some(invocation) = invocation {
+        item["invocation_identity"] = invocation;
+    }
+    item
+}
+
+#[test]
+fn two_roles_of_one_artifact_merge_with_the_one_invocation_contract() {
+    let contract = json!({ "path": "/usr/bin/runtime", "mode": 0o755 });
+    let merged = merge(
+        &artifact("bridge", None),
+        &artifact("launch_runtime", Some(contract.clone())),
+    )
+    .unwrap();
+    assert_eq!(merged["artifact_identity"]["role"], "artifact");
+    assert_eq!(merged["invocation_identity"], contract);
+    let same = artifact("bridge", None);
+    assert_eq!(merge(&same, &same).unwrap()["same"], true);
+}
+
+#[test]
+fn different_invocation_contracts_or_bytes_do_not_merge() {
+    let one = artifact("bridge", Some(json!({ "path": "/a" })));
+    let two = artifact("launch_runtime", Some(json!({ "path": "/b" })));
+    assert!(merge(&one, &two)
+        .unwrap_err()
+        .contains("adapter_preparation_generation_conflict"));
+    let mut written = artifact("bridge", None);
+    written["after"] = json!(STANDARD.encode(b"x"));
+    let error = merge(&artifact("bridge", None), &written).unwrap_err();
+    assert!(error.contains("adapter_preparation_generation_conflict"));
+}

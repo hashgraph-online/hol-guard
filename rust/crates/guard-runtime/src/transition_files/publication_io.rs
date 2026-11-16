@@ -102,7 +102,7 @@ pub(crate) fn encode(value: Option<&[u8]>) -> Step<Value> {
 }
 
 #[cfg(unix)]
-fn private_metadata(metadata: &fs::Metadata, directory: bool) -> bool {
+pub(super) fn private_metadata(metadata: &fs::Metadata, directory: bool) -> bool {
     use std::os::unix::fs::MetadataExt;
     let kind = if directory {
         metadata.file_type().is_dir()
@@ -113,7 +113,7 @@ fn private_metadata(metadata: &fs::Metadata, directory: bool) -> bool {
 }
 
 #[cfg(not(unix))]
-fn private_metadata(metadata: &fs::Metadata, directory: bool) -> bool {
+pub(super) fn private_metadata(metadata: &fs::Metadata, directory: bool) -> bool {
     if directory {
         metadata.file_type().is_dir()
     } else {

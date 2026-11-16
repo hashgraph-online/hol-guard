@@ -20,6 +20,7 @@ mod inspect;
 mod journal;
 mod lease;
 mod lock_files;
+mod merge_dependency;
 mod output;
 mod publication;
 mod publication_abort;
@@ -27,12 +28,17 @@ mod publication_baseline;
 mod publication_commit;
 mod publication_files;
 mod publication_generation;
+mod publication_inverse_plan;
 mod publication_io;
 mod publication_receipt;
 mod publication_repair_plan;
+mod publication_request;
 mod publication_target;
+mod repair_claims;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_publication_inverse_plan;
 #[cfg(test)]
 mod tests_publication_repair_plan;
 #[cfg(test)]

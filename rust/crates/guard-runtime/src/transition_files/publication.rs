@@ -19,7 +19,7 @@ use crate::codex_hook_authority_record;
 use crate::codex_hook_key;
 
 pub(super) const SCHEMA: &str = "hol-guard.codex-hook-recovery.v1";
-const MAX_RECORD: usize = 24 * 1024 * 1024;
+pub(super) const MAX_RECORD: usize = 24 * 1024 * 1024;
 const AUTHORITY_SCHEMA: &str = "codex-hook-authority-record.v1";
 const KEY_MISSING: &str =
     "The private Codex hook authentication key is missing; run `hol-guard install codex` to repair it.";

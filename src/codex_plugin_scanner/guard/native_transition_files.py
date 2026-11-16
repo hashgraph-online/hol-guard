@@ -126,6 +126,17 @@ def publication(op: str, home: Path, **fields: object) -> object:
     return _ask(request).get("value")
 
 
+def merge_dependency(previous: dict[str, object], change: dict[str, object]) -> Mapping[str, object]:
+    """``merge_transition_dependency``: one pin of a shared artifact, or ``same``."""
+
+    value = _ask({"op": "publication_merge_dependency", "previous": previous, "change": change}).get("value")
+    if not isinstance(value, Mapping):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return value
+
+
 def compare_files(files: list[object], generation: str, *, inverse: bool = False) -> None:
     """``RuntimeTransition._compare``: every file still holds ``generation``."""
 

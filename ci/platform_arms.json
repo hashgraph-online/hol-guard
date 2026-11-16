@@ -2766,9 +2766,9 @@
    "verdict": "windows-permissive",
    "note": "Owner uid and mode bits do not exist on Windows; the arm checks only the file kind, as `private_file_io.read_private_regular_bytes` did on Windows, where the Guard home's ACL is what keeps the receipt and records private.",
    "file": "rust/crates/guard-runtime/src/transition_files/publication_io.rs",
-   "item": "fn private_metadata(metadata: &fs::Metadata, directory: bool) -> bool",
+   "item": "pub(super) fn private_metadata(metadata: &fs::Metadata, directory: bool) -> bool",
    "cfg": "not(unix)",
-   "body": "17b843631b58"
+   "body": "ee55343af8b6"
   },
   {
    "verdict": "other-platform",
