@@ -62,6 +62,11 @@ export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest;
           {explanation.steps.map((step) => (
             <StepRow key={step.id} step={step} />
           ))}
+          {(explanation.hiddenSteps ?? 0) > 0 && (
+            <li className="border-t border-slate-100 px-4 py-3 text-xs text-muted-foreground sm:px-5">
+              {explanation.hiddenSteps} more {explanation.hiddenSteps === 1 ? "action" : "actions"} in the exact input
+            </li>
+          )}
         </ol>
       )}
 

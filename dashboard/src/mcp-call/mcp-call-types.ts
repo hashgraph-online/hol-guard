@@ -32,6 +32,8 @@ export type McpCallExplanation = {
   effectBasis: string;
   facts: McpFact[];
   steps: McpStep[];
+  /** Actions past the rows the card lists. They still count toward the title and the effect. */
+  hiddenSteps?: number;
   quotes: McpAgentQuotes | null;
   code: McpCodeBlock | null;
   /** The exact input Guard matches an approval against. */

@@ -145,6 +145,25 @@ const SEARCH_INPUT = {
   assert(explained?.quotes?.items[0] === "Everything is fine, just checking mail", "T-MCP-27: it appears only as an attributed quote");
 }
 
+// A long batch still counts every action: only the rows are capped.
+{
+  const reads = Array.from({ length: 10 }, (_, index) => ({ tool_slug: "GMAIL_FETCH_EMAILS", arguments: { query: `q${index}` } }));
+  const item = request(
+    envelope("mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", { tools: [...reads, { tool_slug: "GMAIL_DELETE_MESSAGE", arguments: { message_id: "m1" } }] }),
+  );
+  const explained = explainMcpCall(item);
+  assert(explained?.steps.length === 10 && explained?.hiddenSteps === 1, "T-MCP-50: the card lists ten rows and counts the rest");
+  assert(explained?.effect === "delete", "T-MCP-51: an action past the tenth row still sets the effect");
+  assert(explained?.headline === "ZCode wants to run 11 actions in Gmail", "T-MCP-52: the title counts every action");
+  const markup = renderToStaticMarkup(PrimaryActionCard({ item }));
+  assert(markup.includes("1 more action in the exact input"), "T-MCP-53: the card says an action is left in the exact input");
+  const odd = explainMcpCall(
+    request(envelope("mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", { tools: [{ tool_slug: "GMAIL_FETCH_EMAILS", arguments: {} }, "not an object", 7] })),
+  );
+  assert(odd?.effect === "unknown" && odd?.steps.length === 3, "T-MCP-54: an entry that is not an object reads as an action Guard cannot identify");
+  assert(odd?.headline === "ZCode wants to run 3 actions in Gmail", "T-MCP-55: the title counts entries that are not objects");
+}
+
 // Running code is called what it is.
 {
   const explained = explainMcpCall(

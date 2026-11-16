@@ -1,6 +1,6 @@
 import type { McpCallExplanation, McpStep } from "./mcp-call-types";
 import { classifyMcpEffect, worstMcpEffect } from "./mcp-effects";
-import { codeOf, joinList, recordList, scalarFacts, textList, textOf, unique } from "./mcp-input";
+import { codeOf, joinList, recordList, recordOf, scalarFacts, textList, textOf, unique } from "./mcp-input";
 import { serviceDisplayName, splitToolSlug } from "./mcp-services";
 
 export type McpCallBody = Omit<McpCallExplanation, "connector" | "rawInput" | "truncated" | "toolId" | "whyAsked">;
@@ -112,30 +112,21 @@ function manageConnections({ harness, input }: ComposioContext): McpCallBody {
   };
 }
 
+const STEP_ROW_LIMIT = 10;
+
 function multiExecute({ harness, input }: ComposioContext): McpCallBody {
-  const steps = recordList(input?.tools, 10).map((tool, index): McpStep => {
-    const slug = textOf(tool.tool_slug, 120) ?? "";
-    const { app, action } = slug.length > 0 ? splitToolSlug(slug) : { app: null, action: "Unnamed action" };
-    const { facts, hidden } = scalarFacts(
-      typeof tool.arguments === "object" && tool.arguments !== null && !Array.isArray(tool.arguments)
-        ? (tool.arguments as Record<string, unknown>)
-        : null,
-      { max: 5 },
-    );
-    return {
-      id: `${index}-${slug}`,
-      app,
-      action,
-      effect: slug.length > 0 ? classifyMcpEffect(slug) : "unknown",
-      details: facts,
-      hiddenDetails: hidden,
-    };
-  });
-  const apps = unique(steps.map((step) => step.app).filter((app): app is string => app !== null));
+  // Every entry counts toward the title, the apps and the effect. Only the rows are capped,
+  // and an entry that is not an object reads as an action Guard cannot identify.
+  const toolsValue: unknown = input?.tools;
+  const entries: unknown[] = Array.isArray(toolsValue) ? toolsValue : [];
+  const all = entries.map((entry, index) => toStep(recordOf(entry), index));
+  const steps = all.slice(0, STEP_ROW_LIMIT);
+  const hiddenSteps = all.length - steps.length;
+  const apps = unique(all.map((step) => step.app).filter((app): app is string => app !== null));
   const where = apps.length > 0 ? joinList(apps) : "Composio";
-  const count = steps.length;
+  const count = all.length;
   const thought = textOf(input?.thought, 300);
-  const first = steps[0];
+  const first = all[0];
   return {
     headline: `${harness} wants to run ${count === 1 ? "an action" : `${count || "some"} actions`} in ${where}`,
     title:
@@ -145,14 +136,29 @@ function multiExecute({ harness, input }: ComposioContext): McpCallBody {
     summary: `Composio will carry out ${count === 1 ? "this action" : "these actions"} in your connected ${
       apps.length === 1 ? `${apps[0]} account` : "accounts"
     }, using the inputs below.`,
-    effect: worstMcpEffect(steps.map((step) => step.effect)),
+    effect: worstMcpEffect(all.map((step) => step.effect)),
     effectBasis: STEP_BASIS,
     facts: [],
     steps,
+    hiddenSteps,
     quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
     code: null,
     queueTitle: `Composio · ${first?.action ?? "Run actions"}${count > 1 ? ` and ${count - 1} more` : ""}`,
     queueDetail: apps.length > 0 ? joinList(apps) : null,
+  };
+}
+
+function toStep(tool: Record<string, unknown> | null, index: number): McpStep {
+  const slug = textOf(tool?.tool_slug, 120) ?? "";
+  const { app, action } = slug.length > 0 ? splitToolSlug(slug) : { app: null, action: "Unnamed action" };
+  const { facts, hidden } = scalarFacts(recordOf(tool?.arguments), { max: 5 });
+  return {
+    id: `${index}-${slug}`,
+    app,
+    action,
+    effect: slug.length > 0 ? classifyMcpEffect(slug) : "unknown",
+    details: facts,
+    hiddenDetails: hidden,
   };
 }
 

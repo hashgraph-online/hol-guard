@@ -15019,40 +15019,44 @@ function manageConnections({ harness, input }) {
     queueDetail: accounts.length > 0 ? joinList(accounts) : null
   };
 }
+const STEP_ROW_LIMIT = 10;
 function multiExecute({ harness, input }) {
-  const steps = recordList(input?.tools, 10).map((tool, index) => {
-    const slug = textOf(tool.tool_slug, 120) ?? "";
-    const { app, action } = slug.length > 0 ? splitToolSlug(slug) : { app: null, action: "Unnamed action" };
-    const { facts, hidden } = scalarFacts(
-      typeof tool.arguments === "object" && tool.arguments !== null && !Array.isArray(tool.arguments) ? tool.arguments : null,
-      { max: 5 }
-    );
-    return {
-      id: `${index}-${slug}`,
-      app,
-      action,
-      effect: slug.length > 0 ? classifyMcpEffect(slug) : "unknown",
-      details: facts,
-      hiddenDetails: hidden
-    };
-  });
-  const apps = unique(steps.map((step) => step.app).filter((app) => app !== null));
+  const toolsValue = input?.tools;
+  const entries = Array.isArray(toolsValue) ? toolsValue : [];
+  const all = entries.map((entry, index) => toStep(recordOf(entry), index));
+  const steps = all.slice(0, STEP_ROW_LIMIT);
+  const hiddenSteps = all.length - steps.length;
+  const apps = unique(all.map((step) => step.app).filter((app) => app !== null));
   const where = apps.length > 0 ? joinList(apps) : "Composio";
-  const count2 = steps.length;
+  const count2 = all.length;
   const thought = textOf(input?.thought, 300);
-  const first = steps[0];
+  const first = all[0];
   return {
     headline: `${harness} wants to run ${count2 === 1 ? "an action" : `${count2 || "some"} actions`} in ${where}`,
     title: count2 === 1 && first !== void 0 ? `${first.action}${first.app !== null ? ` in ${first.app}` : ""}` : `Run ${count2 || "some"} actions${apps.length > 0 ? ` in ${joinList(apps)}` : ""}`,
     summary: `Composio will carry out ${count2 === 1 ? "this action" : "these actions"} in your connected ${apps.length === 1 ? `${apps[0]} account` : "accounts"}, using the inputs below.`,
-    effect: worstMcpEffect(steps.map((step) => step.effect)),
+    effect: worstMcpEffect(all.map((step) => step.effect)),
     effectBasis: STEP_BASIS,
     facts: [],
     steps,
+    hiddenSteps,
     quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
     code: null,
     queueTitle: `Composio · ${first?.action ?? "Run actions"}${count2 > 1 ? ` and ${count2 - 1} more` : ""}`,
     queueDetail: apps.length > 0 ? joinList(apps) : null
+  };
+}
+function toStep(tool, index) {
+  const slug = textOf(tool?.tool_slug, 120) ?? "";
+  const { app, action } = slug.length > 0 ? splitToolSlug(slug) : { app: null, action: "Unnamed action" };
+  const { facts, hidden } = scalarFacts(recordOf(tool?.arguments), { max: 5 });
+  return {
+    id: `${index}-${slug}`,
+    app,
+    action,
+    effect: slug.length > 0 ? classifyMcpEffect(slug) : "unknown",
+    details: facts,
+    hiddenDetails: hidden
   };
 }
 function remoteCode(context, title, field, label) {
@@ -33250,7 +33254,15 @@ function McpCallCard({ item, explanation }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-[68ch] text-xs leading-snug text-muted-foreground", children: explanation.effectBasis }),
       reason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-[68ch] text-sm leading-snug text-brand-dark/80", children: reason })
     ] }),
-    explanation.steps.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "border-t border-slate-100", "aria-label": "Actions in this call", children: explanation.steps.map((step) => /* @__PURE__ */ jsxRuntimeExports.jsx(StepRow, { step }, step.id)) }),
+    explanation.steps.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "border-t border-slate-100", "aria-label": "Actions in this call", children: [
+      explanation.steps.map((step) => /* @__PURE__ */ jsxRuntimeExports.jsx(StepRow, { step }, step.id)),
+      (explanation.hiddenSteps ?? 0) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "border-t border-slate-100 px-4 py-3 text-xs text-muted-foreground sm:px-5", children: [
+        explanation.hiddenSteps,
+        " more ",
+        explanation.hiddenSteps === 1 ? "action" : "actions",
+        " in the exact input"
+      ] })
+    ] }),
     facts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FactList, { facts }) }),
     explanation.quotes !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("figure", { className: "mx-4 mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 sm:mx-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("figcaption", { className: "text-xs font-medium text-brand-dark/70", children: explanation.quotes.caption }),
