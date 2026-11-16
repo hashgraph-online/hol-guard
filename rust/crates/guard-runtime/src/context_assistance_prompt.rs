@@ -15,7 +15,7 @@ use crate::context_assistance_prompt_words::{marked_terms, spellings};
 use crate::context_assistance_savings as savings;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
-use lookup::{lookup, Miss, Request};
+use lookup::{anchored, lookup, truncated, Miss, Request};
 use names::held_names;
 use seen::{Session, Span};
 use serde_json::Value;
@@ -324,6 +324,12 @@ fn attach(
         add_context(response, &context.text);
         return;
     }
+    // With nothing mapped, excerpts ranked on plain words alone ("keep
+    // going", "so is it fixed?") are a guess: mostly a README or changelog.
+    // They need the prompt to name a file, a quoted phrase or code by name.
+    if !anchored(prompt) {
+        return;
+    }
     // An excerpt holding only the quoted text is still about the request.
     words.extend(quoted);
     let request = Request {
@@ -441,14 +447,6 @@ fn waiting_time(budget_ms: Option<u64>) -> Duration {
             .saturating_sub(HOOK_MARGIN)
             .min(MAX_WAIT)
     })
-}
-
-fn truncated(text: &str, max_bytes: usize) -> String {
-    let mut end = text.len().min(max_bytes);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    text[..end].to_owned()
 }
 
 fn add_context(response: &mut Value, context: &str) {
