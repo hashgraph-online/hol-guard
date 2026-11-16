@@ -6,10 +6,9 @@
 //! hook script it stages, the isolated hook interpreter, the launcher
 //! environment, Guard's proxy argv for each server, the shim and the runtime
 //! probe subprocess. Install is two asks: `install_detection` answers the
-//! detection Python derives the managed servers from, with a digest of what it
-//! read and the proxy relaunches the plan needs, and `prepare_install` holds
-//! the lifecycle locks, re-reads and refuses when the digest moved, and plans
-//! the files. `uninstall` holds the same locks while it restores the MCP
+//! detection with a digest of what it read, and `prepare_install` holds the
+//! lifecycle locks, re-reads and refuses when the digest moved, chooses the
+//! managed servers and their proxy launches, and plans the files. `uninstall` holds the same locks while it restores the MCP
 //! configs and rewrites the hooks.
 
 use std::path::{Path, PathBuf};

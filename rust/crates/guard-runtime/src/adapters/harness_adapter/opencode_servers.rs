@@ -88,6 +88,13 @@ pub(super) struct Launched {
     pub(super) launches: [PyVal; 2],
 }
 
+fn pair(value: &Value) -> Option<(String, String)> {
+    match value.as_array().map(Vec::as_slice) {
+        Some([Value::String(key), Value::String(item)]) => Some((key.clone(), item.clone())),
+        _ => None,
+    }
+}
+
 fn pairs(value: &Value) -> Option<Vec<(String, String)>> {
     value.as_array()?.iter().map(pair).collect()
 }

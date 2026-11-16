@@ -126,7 +126,7 @@ fn source_labels(fields: &Map<String, Value>) -> Step<Value> {
 /// `request` is the `select` row Python built, or null for one it could not
 /// encode; an entry with a blank name is not considered. Python keeps the
 /// names themselves. No `select` runs when no request is left.
-fn skipped(fields: &Map<String, Value>) -> Step<Value> {
+pub(super) fn skipped(fields: &Map<String, Value>) -> Step<Value> {
     let mut named: Vec<(usize, Option<&Value>)> = Vec::new();
     for (position, entry) in list(fields, "entries")?.iter().enumerate() {
         let entry = object(entry)?;

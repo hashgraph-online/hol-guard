@@ -38,8 +38,6 @@ fn install_fields(found: &Value) -> Value {
         ("shim", json!(shim())),
         ("config_argv", json!(["/py", "hook"])),
         ("workspace_argv", json!(["/py", "hook", "--workspace"])),
-        ("managed", json!("[]")),
-        ("skipped", json!("[]")),
     ] {
         fields.insert(key.to_owned(), value);
     }
@@ -73,6 +71,8 @@ fn copilot_install_plans_both_workspace_mcp_targets() {
     let targets: Vec<PathBuf> =
         serde_json::from_value(manifest["managed_config_paths"].clone()).unwrap();
     assert_eq!(targets, [ws.join(".mcp.json"), ws.join(".vscode/mcp.json")]);
+    assert_eq!(manifest["managed_servers"], json!(["cli_lab"]));
+    assert_eq!(manifest["skipped_servers"], json!([]));
     let config = answer["files"]
         .as_array()
         .unwrap()

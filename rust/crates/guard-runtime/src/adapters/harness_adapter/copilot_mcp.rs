@@ -91,32 +91,6 @@ pub(super) fn plan_servers<'a>(plan: &Value, payload: &'a Object) -> Step<&'a [(
     }
 }
 
-pub(super) fn parsed_field(fields: &Map<String, Value>, key: &str) -> Step<PyVal> {
-    let raw = fields
-        .get(key)
-        .and_then(Value::as_str)
-        .ok_or(Failure::Invalid)?;
-    pyjson::parse(raw).map_err(|_| Failure::Invalid)
-}
-
-/// `[[name, source_scope, config_path, proxy entry], ...]` from Python.
-pub(super) fn managed_servers(
-    fields: &Map<String, Value>,
-) -> Step<Vec<(String, String, String, PyVal)>> {
-    let managed = parsed_field(fields, "managed")?;
-    managed
-        .as_list()
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|row| match row.as_list() {
-            Some(
-                [PyVal::Str(name), PyVal::Str(scope), PyVal::Str(path), entry @ PyVal::Dict(_)],
-            ) => Ok((name.clone(), scope.clone(), path.clone(), entry.clone())),
-            _ => Err(Failure::Invalid),
-        })
-        .collect()
-}
-
 /// `merge_guard_launcher_env(env)` over a server's own env dict. A value
 /// that is not a string passes through where the config set it.
 fn relaunch_env(ctx: &Ctx, env: &[(String, PyVal)]) -> PyVal {

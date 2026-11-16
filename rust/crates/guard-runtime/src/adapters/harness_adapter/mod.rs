@@ -102,6 +102,7 @@ mod install_apply;
 mod isolated_python;
 mod kimi;
 mod managed_record;
+mod managed_servers;
 mod mcp_servers;
 mod openclaw;
 mod opencode;

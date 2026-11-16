@@ -1,9 +1,8 @@
 //! Copilot's install and uninstall plans, under the lifecycle locks.
 //!
-//! `install_detection` answers the detection Python derives the managed
-//! servers from, a digest of every file it read, and the proxy argv of each
-//! Guard entry an MCP config already holds, so Python can relaunch it.
-//! `prepare_install` refuses when the digest moved and plans the backup,
+//! `install_detection` answers the detection and a digest of every file it
+//! read. `prepare_install` refuses when the digest moved, chooses the managed
+//! and skipped MCP servers from the same snapshot, and plans the backup,
 //! config and signed state of each MCP config, the CLI config's inline hooks
 //! and the workspace hook file.
 
@@ -17,14 +16,17 @@ use super::copilot::{
     hook_path, inline_hooks, parse_object, plan_hooks, scope_for, sources, target_mcp_paths,
     workspace_mcp_paths,
 };
-use super::copilot_mcp::{apply_plan, managed_servers, parsed_field, plan_targets};
+use super::copilot_mcp::{apply_plan, plan_targets};
 use super::copilot_state::{self as state, Held};
 use super::copilot_uninstall;
 use super::files::{self, Change, Doc, Object};
+use super::managed_servers;
 use super::{path_text, Ctx, Failure, Spec, Step};
 use crate::pyjson::{self, PyVal};
 
 const KEY_FILE: &str = "adapter-state.key";
+/// The proxy subcommand each managed Copilot server launches through.
+const PROXY: &str = "copilot-mcp-proxy";
 
 pub(super) fn dispatch(
     spec: &Spec,
@@ -39,7 +41,7 @@ pub(super) fn dispatch(
         },
         "prepare_install" => match rebind_refusal(ctx, fields)? {
             Some(reason) => transition_error(reason),
-            None => prepare_install(ctx, fields),
+            None => prepare_install(spec, ctx, fields),
         },
         "uninstall" => copilot_uninstall::uninstall(ctx, fields),
         "finish_uninstall" => copilot_uninstall::finish_uninstall(ctx, fields),
@@ -196,7 +198,7 @@ fn rebind_refusal(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Option<&'stati
 }
 
 /// `prepare_install`: every file of the install, planned under the locks.
-fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let create_key = create_key(fields)?;
     let _locks = install_locks(ctx)?;
     let targets = target_mcp_paths(ctx);
@@ -225,7 +227,16 @@ fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
             .as_ref()
             .map(|payload| (payload, workspace_argv)),
     )?;
-    let managed = managed_servers(fields)?;
+    let listing = snapshot.hook_listing(ctx);
+    let detected = detect_sources(spec, ctx, &sources(ctx, &listing), Some(&snapshot.contents))?;
+    let artifacts = detected["artifacts"].as_array().ok_or(Failure::Invalid)?;
+    let managed = managed_servers::managed(ctx, artifacts, PROXY)?;
+    let skipped = PyVal::List(
+        managed_servers::skipped(artifacts)?
+            .into_iter()
+            .map(files::text)
+            .collect(),
+    );
     let root = ctx.workspace.clone().unwrap_or_else(|| ctx.home.clone());
     let mut gathered = Vec::new();
     for target in &targets {
@@ -345,7 +356,6 @@ fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let shim = files::shim_manifest(fields)?;
     let mut all_notes = notes;
     all_notes.extend(files::shim_notes(&shim));
-    let skipped = parsed_field(fields, "skipped")?;
     let mut doc = Doc::default();
     doc.set("harness", files::text(super::copilot::HARNESS))
         .set("active", PyVal::Bool(true))

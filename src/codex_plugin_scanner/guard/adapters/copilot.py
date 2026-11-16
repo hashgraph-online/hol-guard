@@ -15,13 +15,12 @@ from typing import TYPE_CHECKING, Any
 
 from ..native_runner_authority import NativeRunnerAuthorityError
 from .base import HarnessContext, PreparedHarnessInstall, _run_command_probe
-from .native_harness import NativeHarnessAdapter, ask, detection_from, planned_files
+from .native_harness import NativeHarnessAdapter, ask, planned_files
 
 if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
 
 _HARNESS = "copilot"
-_PROXY = "copilot-mcp-proxy"
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
 _UNANSWERED = (
     "Guard could not read which Copilot hooks it installed; the native Guard runtime did not answer. "
@@ -60,26 +59,6 @@ def _hook_fields(context: HarnessContext) -> dict[str, object]:
     }
 
 
-def _server_fields(context: HarnessContext, found: dict[str, Any]) -> dict[str, object]:
-    """Guard's entry for each managed server; the runtime relaunches proxy entries itself."""
-    from .mcp_servers import managed_stdio_servers, proxy_launcher_entry, skipped_stdio_server_names
-
-    detection = detection_from(_HARNESS, context, found)
-    managed = [
-        [
-            server.name,
-            server.source_scope,
-            server.config_path,
-            proxy_launcher_entry(proxy_command=_PROXY, context=context, server=server),
-        ]
-        for server in managed_stdio_servers(detection)
-    ]
-    return {
-        "managed": json.dumps(managed),
-        "skipped": json.dumps(list(skipped_stdio_server_names(detection))),
-    }
-
-
 class CopilotHarnessAdapter(NativeHarnessAdapter):
     """Copilot CLI's inline hooks, the VS Code workspace hook file and the MCP configs."""
 
@@ -100,7 +79,7 @@ class CopilotHarnessAdapter(NativeHarnessAdapter):
         found = _ask("install_detection", context, create_key=create_key)
         if set(found) == {"transition_error"}:
             raise TransitionError(str(found["transition_error"]))
-        fields = {**_hook_fields(context), **_server_fields(context, found)}
+        fields = _hook_fields(context)
         shim = prepare_guard_shim(_HARNESS, context)
         answer = _ask(
             "prepare_install",
