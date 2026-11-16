@@ -1011,7 +1011,12 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
 ) -> Result<PreToolDecisionV1, String> {
     // Literal and offline callers cannot claim a hook-reported Guard home.
     evaluate_pre_tool_with_reported_guard_home(
-        request, home_dir, cwd, deadline, execution_environment, None,
+        request,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+        None,
     )
 }
 
@@ -1038,7 +1043,13 @@ pub(super) fn evaluate_pre_tool_with_reported_guard_home(
     // reading returns.
     let _budget = search_scope_budget::begin_include_scope_budget();
     let decision = evaluate_rewritten(
-        request, home_dir, cwd, deadline, execution_environment, guard_home, 0,
+        request,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+        guard_home,
+        0,
     )?;
     Ok(literal_secrets::review_command(request, decision))
 }
@@ -1073,8 +1084,14 @@ fn evaluate_rewritten(
     guard_home: Option<&str>,
     round: usize,
 ) -> Result<PreToolDecisionV1, String> {
-    let decision =
-        evaluate_single_command(request, home_dir, cwd, deadline, execution_environment, guard_home)?;
+    let decision = evaluate_single_command(
+        request,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+        guard_home,
+    )?;
     if request.dialect != "posix" || decision.minimum_action != "review" {
         return Ok(decision);
     }
@@ -1196,7 +1213,14 @@ fn ungrouped_decision(
         command,
         ..request.clone()
     };
-    match evaluate_single_command(&ungrouped, home_dir, cwd, deadline, execution_environment, guard_home) {
+    match evaluate_single_command(
+        &ungrouped,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+        guard_home,
+    ) {
         Ok(plain) if matches!(plain.minimum_action.as_str(), "allow" | "review" | "block") => plain,
         _ => decision,
     }
