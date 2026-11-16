@@ -484,7 +484,9 @@ mod repair;
 
 #[path = "native_review_link_relay.rs"]
 mod relay;
-pub(crate) use relay::{with_relay_note, RELAY_SIGNED_LINK};
+pub(crate) use relay::with_relay_note;
+#[cfg(test)]
+pub(crate) use relay::RELAY_SIGNED_LINK;
 
 #[cfg(test)]
 #[path = "native_review_link_tests.rs"]
