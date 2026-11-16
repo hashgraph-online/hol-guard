@@ -57,11 +57,21 @@ fn dynamic_version(project: &Project) -> Vec<String> {
             shown(attr)
         )];
     }
-    let module = (project.py(&["tool", "flit", "module", "name"]))
-        .or_else(|| project.py(&["project", "name"]))
+    // flit's module name is a dotted import path; a distribution name maps
+    // its dashes and dots to underscores.
+    let flit = project.py(&["tool", "flit", "module", "name"]);
+    let module = (flit
         .and_then(|v| v.as_str())
-        .map(|name| name.replace(['-', '.'], "_"));
-    let Some(module) = module.filter(|m| m.chars().all(|c| c.is_alphanumeric() || c == '_')) else {
+        .map(|name| name.replace('.', "/")))
+    .or_else(|| {
+        let name = project.py(&["project", "name"])?.as_str()?;
+        Some(name.replace(['-', '.'], "_"))
+    });
+    let plain = |m: &String| {
+        m.split('/')
+            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_alphanumeric() || c == '_'))
+    };
+    let Some(module) = module.filter(plain) else {
         return Vec::new();
     };
     let places = [

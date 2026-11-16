@@ -5,8 +5,7 @@
 //! lookup share what is left of the hook's budget, the lookup runs on its own
 //! thread, a repeat of the same prompt joins the lookup already running, a
 //! prompt CIGAR cannot answer yet gets the matched files, and anything failed
-//! or off adds nothing.
-//! Only an allowed prompt gets context, and only for harnesses that show
+//! or off adds nothing. Only an allowed prompt gets context, and only for harnesses that show
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
 use crate::context_assistance_engine::{project_context_on, quick_excerpts};
@@ -269,7 +268,8 @@ fn attach(
     if let Some(changed) = &changed {
         add_context(response, &changed.text);
     }
-    if chores::added(response, &root, prompt, &context_on) {
+    let chores_by = Instant::now() + left() / 3;
+    if chores::added(response, &root, prompt, &context_on, chores_by) && changed.is_none() {
         return;
     }
     let Some(budget) = left().checked_sub(MIN_WAIT) else {
