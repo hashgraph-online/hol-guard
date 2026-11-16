@@ -15,8 +15,8 @@ from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAda
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
-from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.consumer import artifact_hash
+from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 
 
 def _context(tmp_path: Path) -> HarnessContext:

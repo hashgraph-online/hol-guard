@@ -11,14 +11,14 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cline_runtime import ClineHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cline_runtime import install_mcp_proxies as install_cline_mcp_proxies
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
-from codex_plugin_scanner.guard.adapters.mcp_servers import (
+from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
+from codex_plugin_scanner.guard.mcp_discovery_client import discover_harness_mcp_servers
+from codex_plugin_scanner.guard.mcp_server_client import (
     ManagedMcpServer,
     is_guard_proxy_command,
     managed_stdio_servers,
     proxy_cli_args,
 )
-from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from tests.cursor_test_support import cursor_mcp_state_path
 

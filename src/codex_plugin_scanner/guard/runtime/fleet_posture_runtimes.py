@@ -135,7 +135,7 @@ def _cache_scope(
 def _observe(
     context: HarnessContext, now: datetime, advisory: tuple[Mapping[str, object] | None, str | None]
 ) -> Mapping[str, Any]:
-    from ..adapters.harness_mcp_discovery import configured_harness_detections
+    from ..mcp_discovery_client import configured_harness_detections
     from ..runtime_posture import build_runtime_posture
 
     skipped: list[str] = []

@@ -6,8 +6,8 @@ from dataclasses import replace
 import pytest
 
 from codex_plugin_scanner.guard.adapters import codex as adapter
-from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer
 from codex_plugin_scanner.guard.codex_config import dump_toml
+from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer
 from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionError
 from tests import codex_plan_segments as segments
 

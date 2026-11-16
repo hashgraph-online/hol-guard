@@ -6,8 +6,8 @@ import json
 
 import pytest
 
+from codex_plugin_scanner.guard import mcp_server_client as mcp_servers
 from codex_plugin_scanner.guard import native_runner_authority as authority
-from codex_plugin_scanner.guard.adapters import mcp_servers
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 _IDENTITY = {

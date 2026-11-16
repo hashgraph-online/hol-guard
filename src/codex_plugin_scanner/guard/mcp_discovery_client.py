@@ -1,4 +1,9 @@
-"""Read configured MCP servers, stdio and remote, from detected harnesses."""
+"""Thin client of the native ``harness_mcp_discovery`` kind: configured MCP servers of detected harnesses.
+
+The native runtime groups, labels, matches and chooses launch env; this module
+gathers the detections, projects them into requests and rebuilds the answers
+into the dataclasses its callers use.
+"""
 
 from __future__ import annotations
 
@@ -11,23 +16,28 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from ..models import HarnessDetection
-from ..native_runner_authority import NativeRunnerAuthorityError
-from ..runtime.local_cli_identity import UnlistedCliIdentity
-from ..runtime.local_mcp_probe import mcp_launch_tokens
-from ..runtime.mcp_connection_identity import McpConnectionIdentity
-from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
-from .contracts import display_name_for
-from .harness_mcp_remote import (
+from .mcp_remote_client import (
     MAX_DISCOVERED_MCP_SERVERS,
     DiscoveredRemoteMcpServer,
     _remote_servers,
     remote_scan_harnesses,
 )
-from .mcp_servers import ManagedMcpServer, adapter_op, observable_stdio_servers_with_proxy, proxy_process_env, wire_text
+from .mcp_server_client import (
+    ManagedMcpServer,
+    adapter_op,
+    observable_stdio_servers_with_proxy,
+    proxy_process_env,
+    wire_text,
+)
+from .models import HarnessDetection
+from .native_runner_authority import NativeRunnerAuthorityError
+from .runtime.local_cli_identity import UnlistedCliIdentity
+from .runtime.local_mcp_probe import mcp_launch_tokens
+from .runtime.mcp_connection_identity import McpConnectionIdentity
+from .runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 
 if TYPE_CHECKING:
-    from .base import HarnessContext
+    from .adapters.base import HarnessContext
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +160,7 @@ def _stdio_servers(loaded: Sequence[HarnessDetection]) -> tuple[DiscoveredHarnes
             continue
     if not entries:
         return ()
-    from ..native_runner_authority import native_runner_authority
+    from .native_runner_authority import native_runner_authority
 
     request = {"op": "group", "windows": os.name == "nt", "limit": MAX_DISCOVERED_MCP_SERVERS, "servers": entries}
     # A refused answer raises: an explicit scan reports it instead of caching an empty list.
@@ -159,6 +169,8 @@ def _stdio_servers(loaded: Sequence[HarnessDetection]) -> tuple[DiscoveredHarnes
 
 
 def _group_entry(server: ManagedMcpServer, identity: McpServerIdentity) -> dict[str, object]:
+    from .adapters.contracts import display_name_for
+
     return {
         "harness": server.harness,
         "label": display_name_for(server.harness),
@@ -333,7 +345,7 @@ def discovered_server_for_observation(
 
     if not servers:
         return None
-    from ..native_runner_authority import native_runner_authority
+    from .native_runner_authority import native_runner_authority
 
     observed = [
         {
@@ -371,7 +383,7 @@ def extra_env_for_mcp_launch(
 ) -> dict[str, str]:
     """Return harness-configured env for a listing probe. Values stay in memory."""
 
-    from ..native_runner_authority import native_runner_authority
+    from .native_runner_authority import native_runner_authority
 
     matched = None
     if cli_id:
@@ -435,8 +447,8 @@ def apply_source_labels(items: list[dict[str, object]], labels: dict[str, str]) 
 def _safe_detections(
     home_dir: Path, guard_home: Path, workspace_dir: Path | None, skipped: list[str] | None = None
 ) -> list[HarnessDetection]:
-    from . import list_adapters
-    from .base import HarnessContext
+    from .adapters import list_adapters
+    from .adapters.base import HarnessContext
 
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
     detections: list[HarnessDetection] = []

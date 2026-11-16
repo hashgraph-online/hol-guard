@@ -1,18 +1,18 @@
-"""Shared managed MCP server helpers for harness adapters."""
+"""Thin client of the native MCP server selection, proxy argv and identity ops.
+
+Every decision lives in the native ``harness_mcp_discovery`` and
+``harness_adapter`` kinds. This module projects detected artifacts into one
+request, sends it, and rebuilds the answer into ``ManagedMcpServer`` values.
+"""
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, cast
 
-from ..launcher import merge_guard_launcher_env
-from ..models import GuardArtifact, HarnessDetection
-from ..runtime.mcp_protection import McpServerIdentity
-from ..stable_guard_cli import guard_cli_launcher
-from .base import HarnessContext
-from .mcp_relay_native import mcp_proxy_launch
+from .models import GuardArtifact, HarnessDetection
+from .runtime.mcp_protection import McpServerIdentity
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +78,7 @@ def skipped_stdio_server_names(detection: HarnessDetection) -> tuple[str, ...]:
     entries = [{"name": wire_text(artifact.name), "request": _select_request(artifact)} for artifact in servers]
     if not entries:
         return ()
-    from ..native_runner_authority import NativeRunnerAuthorityError
+    from .native_runner_authority import NativeRunnerAuthorityError
 
     try:
         positions = adapter_op("mcp_skipped", entries=entries)["skipped"]
@@ -153,32 +153,6 @@ def proxy_process_env(server_env: dict[str, str]) -> dict[str, str]:
         return {_text(key): _text(value) for key, value in cast(list[list[object]], pairs)}
     except (TypeError, ValueError) as error:
         raise ValueError("native_mcp_server_select_malformed") from error
-
-
-def proxy_launcher_entry(
-    *,
-    proxy_command: str,
-    context: HarnessContext,
-    server: ManagedMcpServer,
-) -> dict[str, object]:
-    """Build the shared command/args/env mapping that launches a Guard MCP proxy."""
-
-    args = proxy_cli_args(
-        proxy_command=proxy_command,
-        guard_home=str(context.guard_home),
-        server=server,
-        home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
-        workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
-    )
-    command, launch_args = mcp_proxy_launch(guard_cli_launcher(), args)
-    entry: dict[str, object] = {
-        "command": command,
-        "args": launch_args,
-    }
-    env = merge_guard_launcher_env(proxy_process_env(getattr(server, "env", {})))
-    if env:
-        entry["env"] = env
-    return entry
 
 
 def _kept(detection: HarnessDetection, *, include_guard_managed_proxy: bool) -> tuple[ManagedMcpServer, ...]:
@@ -300,7 +274,7 @@ def _selected_server(artifact: GuardArtifact, found: object) -> ManagedMcpServer
 def adapter_op(op: str, **fields: object) -> dict[str, Any]:
     """One context-free MCP op of the ``harness_adapter`` kind."""
 
-    from ..native_runner_authority import native_runner_authority
+    from .native_runner_authority import native_runner_authority
 
     return native_runner_authority("harness_adapter", {"op": op, **fields})
 
@@ -314,7 +288,7 @@ def wire_text(value: str) -> str:
 def _native(request: dict[str, object], field: str) -> list[object]:
     """One ``harness_mcp_discovery`` call; a native failure aborts as identity unavailable."""
 
-    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     try:
         answer = native_runner_authority("harness_mcp_discovery", request)[field]
@@ -336,7 +310,7 @@ def _text(value: object) -> str:
 def is_guard_proxy_command(command: str | None, args: tuple[str, ...]) -> bool:
     """Whether the launch is a Guard MCP proxy, as the native runtime reads it."""
 
-    from .codex_install_plan import guard_proxy_server_names
+    from .adapters.codex_install_plan import guard_proxy_server_names
 
     return bool(guard_proxy_server_names({"launch": {"command": command, "args": list(args)}}))
 
@@ -350,7 +324,6 @@ __all__ = [
     "managed_stdio_servers",
     "observable_stdio_servers_with_proxy",
     "proxy_cli_args",
-    "proxy_launcher_entry",
     "proxy_process_env",
     "skipped_stdio_server_names",
     "stable_mcp_server_identifier",

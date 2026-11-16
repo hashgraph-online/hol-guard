@@ -10,13 +10,8 @@ import pytest
 from codex_plugin_scanner.guard import native_caller, stable_guard_cli
 from codex_plugin_scanner.guard.adapters import claude_code
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.mcp_relay_native import mcp_proxy_launch
-from codex_plugin_scanner.guard.adapters.mcp_servers import (
-    ManagedMcpServer,
-    is_guard_proxy_command,
-    proxy_cli_args,
-    proxy_launcher_entry,
-)
+from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer, is_guard_proxy_command, proxy_cli_args
+from tests.mcp_proxy_launcher import python_proxy_launcher_entry
 
 
 def _write_launcher(path: Path) -> Path:
@@ -92,8 +87,8 @@ def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_co
     python_args = proxy_cli_args(proxy_command="cursor-mcp-proxy", guard_home=str(context.guard_home), server=server)
 
     commands = [
-        proxy_launcher_entry(proxy_command="cursor-mcp-proxy", context=context, server=server)["command"],
-        mcp_proxy_launch(stable_guard_cli.guard_cli_launcher(), list(python_args))[0],
+        python_proxy_launcher_entry(proxy_command="cursor-mcp-proxy", context=context, server=server)["command"],
+        stable_guard_cli.guard_cli_launcher(),
     ]
 
     assert commands == [launcher] * len(commands)

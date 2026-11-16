@@ -63,7 +63,7 @@ def run_runtime_posture_command(
     context: HarnessContext,
     output_stream: TextIO | None = None,
 ) -> int:
-    from ..adapters.harness_mcp_discovery import configured_harness_detections
+    from ..mcp_discovery_client import configured_harness_detections
     from ..runtime_advisory_bundle import BUNDLE_UNREADABLE, cached_advisory_bundle
     from ..runtime_posture import build_runtime_posture
     from ..store import GuardStore

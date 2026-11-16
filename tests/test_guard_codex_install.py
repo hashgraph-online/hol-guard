@@ -19,7 +19,6 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.codex_hook_file_integrity import (
     CodexHookIntegrityError,
@@ -34,6 +33,7 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
     write_hook_manifest,
 )
 from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 from tests import codex_hook_publication_helpers as publication_helpers
 from tests.native_runtime_stamp import stamp_native_runtime
 from tests.transition_fault_support import interrupt_publication_at

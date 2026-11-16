@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_mcp_tool_policy
-from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
@@ -1330,7 +1330,10 @@ def test_mcp_tool_schema_follows_local_refs_for_risk_categories(native_context_d
         },
     )
 
-    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == (
+        "command_execution",
+        "tool_schema_mismatch",
+    )
 
 
 def test_mcp_tool_schema_follows_local_anchor_refs_for_risk_categories(native_context_digest: Path) -> None:
@@ -1356,7 +1359,10 @@ def test_mcp_tool_schema_follows_local_anchor_refs_for_risk_categories(native_co
         },
     )
 
-    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == (
+        "command_execution",
+        "tool_schema_mismatch",
+    )
 
 
 def test_mcp_tool_schema_ignores_unreferenced_schema_definitions(native_context_digest: Path) -> None:
@@ -1498,7 +1504,10 @@ def test_mcp_tool_schema_mismatch_warns_when_benign_name_has_dangerous_schema(na
         tool_schema={"type": "object", "properties": {"script": {"type": "string"}}},
     )
 
-    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == (
+        "command_execution",
+        "tool_schema_mismatch",
+    )
 
 
 @pytest.mark.parametrize(

@@ -20,11 +20,12 @@ from codex_plugin_scanner.guard.adapters.codex import (
     _reply_text,
     _runtime_guard_home,
 )
-from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer, proxy_launcher_entry
 from codex_plugin_scanner.guard.adapters.native_harness import planned_files
 from codex_plugin_scanner.guard.codex_config import _restore_native, _Wire
 from codex_plugin_scanner.guard.codex_hook_self_binding import install_fields, short_path_fields
+from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
+from tests.mcp_proxy_launcher import python_proxy_launcher_entry
 
 
 def _one_planned_file(answer: dict[str, Any]) -> TransitionFile:
@@ -82,7 +83,7 @@ def render_codex_managed_mcp(
 ) -> tuple[dict[str, object], tuple[str, ...]]:
     """Render proxy refresh and workspace precedence from captured payloads."""
     entries = [
-        (server, proxy_launcher_entry(proxy_command="codex-mcp-proxy", context=context, server=server))
+        (server, python_proxy_launcher_entry(proxy_command="codex-mcp-proxy", context=context, server=server))
         for server in managed_servers
     ]
     wire = _Wire(payload, workspace_payload, *(entry for _server, entry in entries))

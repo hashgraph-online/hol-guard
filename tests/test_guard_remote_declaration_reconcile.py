@@ -8,19 +8,20 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import harness_mcp_discovery, harness_mcp_remote
+from codex_plugin_scanner.guard import mcp_discovery_client as harness_mcp_discovery
+from codex_plugin_scanner.guard import mcp_remote_client as harness_mcp_remote
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
+from codex_plugin_scanner.guard.local_clis import local_cli_api
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.mcp_discovery_client import (
     observe_configured_mcp_servers,
     persist_discovered_harness_mcp_servers,
 )
-from codex_plugin_scanner.guard.adapters.harness_mcp_remote import (
+from codex_plugin_scanner.guard.mcp_remote_client import (
     MAX_DISCOVERED_MCP_SERVERS,
     _remote_servers,
     remote_scan_harnesses,
 )
-from codex_plugin_scanner.guard.local_clis import local_cli_api
-from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 
@@ -183,6 +184,30 @@ def test_a_capped_scan_is_not_a_full_scan() -> None:
     servers = tuple((f"echo-mcp-{index}", origin) for index in range(MAX_DISCOVERED_MCP_SERVERS))
     detections = [_detection("codex", *servers)]
     assert remote_scan_harnesses(detections, _remote_servers(detections)) is None
+
+
+def test_the_native_runtime_decides_which_harnesses_a_scan_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _record_native_calls(monkeypatch)
+    detections = [_detection("cursor"), _detection("codex"), _detection("cursor")]
+    assert remote_scan_harnesses(detections, ()) == ("codex", "cursor")
+    assert calls == [
+        {
+            "op": "remote_scan",
+            "harnesses": ["cursor", "codex", "cursor"],
+            "remote_count": 0,
+            "limit": MAX_DISCOVERED_MCP_SERVERS,
+        }
+    ]
+
+
+@pytest.mark.parametrize("answer", [{}, {"harnesses": "codex"}, {"harnesses": [1]}])
+def test_an_unusable_scan_answer_is_refused(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
+    def native(*_args: object, **_kwargs: object) -> object:
+        return answer
+
+    monkeypatch.setattr(harness_mcp_remote, "native_runner_authority", native)
+    with pytest.raises(NativeRunnerAuthorityError):
+        _ = remote_scan_harnesses([_detection("codex")], ())
 
 
 class _FailingReconcileStore(_Store):

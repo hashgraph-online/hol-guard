@@ -262,7 +262,7 @@
           "src/codex_plugin_scanner/guard/local_clis/local_cli_profiles_api.py",
           "src/codex_plugin_scanner/guard/local_clis/mcp_discovery_jobs.py",
           "src/codex_plugin_scanner/guard/routes/mcp_policy_decisions.py",
-          "src/codex_plugin_scanner/guard/adapters/harness_mcp_discovery.py"
+          "src/codex_plugin_scanner/guard/mcp_discovery_client.py"
         ]
       },
       {
@@ -602,12 +602,11 @@
           "src/codex_plugin_scanner/guard/adapters/codex_detect_sources.py",
           "src/codex_plugin_scanner/guard/adapters/codex_lifecycle_lock.py",
           "src/codex_plugin_scanner/guard/adapters/codex_remote_control.py",
-          "src/codex_plugin_scanner/guard/adapters/mcp_relay_native.py",
-          "src/codex_plugin_scanner/guard/adapters/mcp_servers.py",
+          "src/codex_plugin_scanner/guard/mcp_server_client.py",
           "src/codex_plugin_scanner/guard/contained_sink_command.py",
           "src/codex_plugin_scanner/guard/windows_paths.py"
         ],
-        "reason": "Reviewed: adapters: harness registry targets (codex, the Grok approval resume, mcp_servers and the MCP proxy launcher selection, cursor native approval, attestation and path helpers). guard/contained_sink_command.py builds the contained test sink command hook routes hand to the native runtime. Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope. guard/windows_paths.py is the trusted Windows profile lookup codex_lifecycle_lock uses to place its lock."
+        "reason": "Reviewed: adapters: harness registry targets (codex, the Grok approval resume, the thin MCP server client, cursor native approval, attestation and path helpers). guard/contained_sink_command.py builds the contained test sink command hook routes hand to the native runtime. Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope. guard/windows_paths.py is the trusted Windows profile lookup codex_lifecycle_lock uses to place its lock."
       },
       {
         "path": [

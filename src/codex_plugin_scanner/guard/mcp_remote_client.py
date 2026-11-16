@@ -1,9 +1,9 @@
-"""Remote MCP servers declared in harness configs. Guard never connects to them.
+"""Thin client of the native remote MCP server ops. Guard never connects to them.
 
-The native ``harness_mcp_discovery`` kind (``remote`` and ``remote_rank``)
-parses each declared server into its recorded origin and tool namespace and
-ranks one server per connector; this module only gathers the candidates and
-wraps the answer.
+The native ``harness_mcp_discovery`` kind (``remote``, ``remote_rank`` and
+``remote_scan``) parses each declared server into its recorded origin and tool
+namespace, ranks one server per connector and decides which harnesses a scan
+read in full; this module only gathers the candidates and wraps the answers.
 """
 
 from __future__ import annotations
@@ -13,10 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from ..models import GuardArtifact, HarnessDetection
-from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
-from ..runtime.observed_mcp_tools import ObservedMcpTool
-from .contracts import display_name_for
+from .models import GuardArtifact, HarnessDetection
+from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+from .runtime.observed_mcp_tools import ObservedMcpTool
 
 MAX_DISCOVERED_MCP_SERVERS = 100
 # Servers per native request, far below its count and byte limits, so a config
@@ -46,6 +45,8 @@ def _native(request: dict[str, object], key: str, guard_home: Path | None) -> li
 
 
 def _parsed(artifact: GuardArtifact, item: object) -> DiscoveredRemoteMcpServer | None:
+    from .adapters.contracts import display_name_for
+
     if item is None:
         return None
     if not isinstance(item, dict):
@@ -119,11 +120,26 @@ def _remote_servers(
 def remote_scan_harnesses(
     detections: Sequence[HarnessDetection], remote: Sequence[DiscoveredRemoteMcpServer]
 ) -> tuple[str, ...] | None:
-    """Harnesses a scan read in full, or ``None`` when the remote list hit its cap."""
+    """Harnesses a scan read in full, or ``None`` when the remote list hit its cap.
 
-    if len(remote) >= MAX_DISCOVERED_MCP_SERVERS:
+    The native runtime decides; an unusable answer raises ``NativeRunnerAuthorityError``.
+    """
+
+    request = {
+        "op": "remote_scan",
+        "harnesses": [detection.harness for detection in detections],
+        "remote_count": len(remote),
+        "limit": MAX_DISCOVERED_MCP_SERVERS,
+    }
+    reply = native_runner_authority("harness_mcp_discovery", request)
+    if "harnesses" not in reply:
+        raise NativeRunnerAuthorityError("remote MCP servers are malformed")
+    answer = reply["harnesses"]
+    if answer is None:
         return None
-    return tuple(sorted({detection.harness for detection in detections}))
+    if not isinstance(answer, list) or not all(isinstance(harness, str) for harness in cast(list[object], answer)):
+        raise NativeRunnerAuthorityError("remote MCP servers are malformed")
+    return tuple(cast(list[str], answer))
 
 
 __all__ = [

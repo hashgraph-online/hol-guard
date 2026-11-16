@@ -7,7 +7,9 @@ import pytest
 import codex_plugin_scanner.guard.adapters as adapters_module
 import codex_plugin_scanner.guard.local_clis.local_cli_api as local_cli_api_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.mcp_discovery_client import (
     MAX_DISCOVERED_MCP_SERVERS,
     _safe_detections,
     apply_source_labels,
@@ -15,9 +17,7 @@ from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     discovered_server_for_observation,
     persist_discovered_harness_mcp_servers,
 )
-from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
-from codex_plugin_scanner.guard.local_cli_trust import utc_now
-from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand

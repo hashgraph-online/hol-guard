@@ -188,21 +188,6 @@ def _fetch_pi_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.Mo
     monkeypatch.setenv("HOL_GUARD_PI_HOOK_BRIDGE", "fetch")
 
 
-@pytest.fixture(autouse=True)
-def _python_mcp_proxy_launcher(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Install MCP proxies with the Python launcher argv unless a test opts in.
-
-    Most install and refresh tests pin the Python proxy entry. Tests marked
-    ``native_mcp_relay`` keep the native relay selection.
-    """
-
-    if request.node.get_closest_marker("native_mcp_relay") is not None:
-        return
-    from codex_plugin_scanner.guard.adapters import mcp_relay_native
-
-    monkeypatch.setattr(mcp_relay_native, "native_mcp_relay", lambda guard_home=None: None)
-
-
 _session_daemon_runtime_fingerprint: list[str] = []
 _daemon_runtime_fingerprint_attempts: list[None] = []
 

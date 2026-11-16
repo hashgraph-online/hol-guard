@@ -11,7 +11,15 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from ..adapters.harness_mcp_discovery import (
+from ..approval_gate import (
+    ApprovalGateError,
+    consume_local_cli_trust_grant,
+    input_from_mapping,
+    require_local_cli_trust,
+)
+from ..local_cli_errors import LocalCliCatalogLimitError
+from ..local_cli_trust import utc_now
+from ..mcp_discovery_client import (
     DiscoveredHarnessMcpServer,
     DiscoveredRemoteMcpServer,
     apply_source_labels,
@@ -24,14 +32,6 @@ from ..adapters.harness_mcp_discovery import (
     persist_discovered_harness_mcp_servers,
     remote_scan_harnesses,
 )
-from ..approval_gate import (
-    ApprovalGateError,
-    consume_local_cli_trust_grant,
-    input_from_mapping,
-    require_local_cli_trust,
-)
-from ..local_cli_errors import LocalCliCatalogLimitError
-from ..local_cli_trust import utc_now
 from ..native_skill_workflow_preflight import (
     NativeSkillWorkflowPreflightError,
     native_skill_preflight,

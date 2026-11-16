@@ -138,6 +138,10 @@ mod tests;
 #[path = "codex_owners_tests.rs"]
 mod codex_owners_tests;
 
+#[cfg(test)]
+#[path = "tests_mcp_launch.rs"]
+mod tests_mcp_launch;
+
 pub(crate) use codex_detect_legacy::DetectLegacy;
 pub(crate) use describe::Spec;
 
