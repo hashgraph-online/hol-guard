@@ -514,6 +514,7 @@
       "src/pretool/jq_filter_budget.rs",
       "src/pretool/jq_filter_program.rs",
       "src/pretool/jq_filter_terms.rs",
+      "src/pretool/jq_filter_text.rs",
       "src/pretool/kubeconfig_trust.rs",
       "src/pretool/kubectl_logs.rs",
       "src/pretool/kubectl_reads.rs",
