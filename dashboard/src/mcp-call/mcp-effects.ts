@@ -50,22 +50,22 @@ const READ_WORDS = new Set([
 ]);
 // Words that are a noun as often as a verb (`get_label`, `list_orders`). They
 // count as a change only when no read word comes before them.
-const NOUN_OR_VERB: Record<string, McpEffectKind> = {
-  comment: "send",
-  label: "write",
-  tag: "write",
-  star: "write",
-  pin: "write",
-  order: "write",
-  schedule: "write",
-  book: "write",
-  link: "connect",
-  react: "send",
-  build: "write",
-  fork: "write",
-  new: "write",
-  watch: "write",
-};
+const NOUN_OR_VERB = new Map<string, McpEffectKind>([
+  ["comment", "send"],
+  ["label", "write"],
+  ["tag", "write"],
+  ["star", "write"],
+  ["pin", "write"],
+  ["order", "write"],
+  ["schedule", "write"],
+  ["book", "write"],
+  ["link", "connect"],
+  ["react", "send"],
+  ["build", "write"],
+  ["fork", "write"],
+  ["new", "write"],
+  ["watch", "write"],
+]);
 
 /** Lower-case words of an identifier such as `GMAIL_SEND_EMAIL` or `createIssue`. */
 export function nameWords(identifier: string): string[] {
@@ -79,9 +79,11 @@ export function nameWords(identifier: string): string[] {
 export function classifyMcpEffect(identifier: string): McpEffectKind {
   const words = nameWords(identifier);
   const firstRead = words.findIndex((word) => READ_WORDS.has(word));
-  const ambiguous = words
-    .map((word, index) => (NOUN_OR_VERB[word] !== undefined && (firstRead === -1 || index < firstRead) ? NOUN_OR_VERB[word] : null))
-    .filter((kind): kind is McpEffectKind => kind !== null);
+  const ambiguous: McpEffectKind[] = [];
+  words.forEach((word, index) => {
+    const kind = NOUN_OR_VERB.get(word);
+    if (kind !== undefined && (firstRead === -1 || index < firstRead)) ambiguous.push(kind);
+  });
   const has = (kind: McpEffectKind, set: Set<string>) => ambiguous.includes(kind) || words.some((word) => set.has(word));
   // Strongest first, so a name that mixes a read word with a change word is
   // never presented as a read.
@@ -124,6 +126,6 @@ export function firstActionWordIndex(words: string[]): number {
       CONNECT_WORDS.has(word) ||
       WRITE_WORDS.has(word) ||
       READ_WORDS.has(word) ||
-      NOUN_OR_VERB[word] !== undefined,
+      NOUN_OR_VERB.has(word),
   );
 }

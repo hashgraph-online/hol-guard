@@ -164,6 +164,44 @@ const SEARCH_INPUT = {
   assert(odd?.headline === "ZCode wants to run 3 actions in Gmail", "T-MCP-55: the title counts entries that are not objects");
 }
 
+// The rows and the exact input come from the same value, chosen the way Core chooses it.
+{
+  const raw = { tool_input: '{"first":"value"}', toolInput: { second: "other" } };
+  const item = request(envelope("mcp__acme__list_things", null, { raw_payload_redacted: { tool_name: "mcp__acme__list_things", ...raw } }));
+  const explained = explainMcpCall(item);
+  assert(explained?.facts.length === 0, "T-MCP-56: rows never come from a later key when Core's input is a JSON string");
+  assert(explained?.rawInput === '{"first":"value"}', "T-MCP-57: the exact input is the one Core uses");
+  const empty = explainMcpCall(request(envelope("mcp__acme__list_things", {})));
+  assert(empty?.rawInput === "{}", "T-MCP-58: an empty object Core accepts is shown as the input");
+  const skipped = explainMcpCall(
+    request(envelope("mcp__acme__list_things", null, { raw_payload_redacted: { tool_name: "mcp__acme__list_things", tool_input: "42", toolInput: { q: "x" } } })),
+  );
+  assert(skipped?.facts[0]?.value === "x" && skipped?.rawInput === JSON.stringify({ q: "x" }, null, 2), "T-MCP-59: a string Core skips does not hide the next key");
+}
+
+// Names that match object-prototype members are ordinary names.
+{
+  const item = request(envelope("mcp__constructor__constructor", { x: 1 }));
+  const explained = explainMcpCall(item);
+  assert(explained?.connector === "Constructor", "T-MCP-60: a server named constructor reads as a name");
+  assert(typeof explained?.title === "string" && explained.title === "Constructor", "T-MCP-61: a tool named constructor reads as a name");
+  assert(renderToStaticMarkup(PrimaryActionCard({ item })).includes("Tool from Constructor"), "T-MCP-62: the card renders for such a name");
+  assert(classifyMcpEffect("toString") === "unknown" && classifyMcpEffect("hasOwnProperty") === "unknown", "T-MCP-63: prototype member names stay unclear");
+}
+
+// Codex reaches connectors through codex_apps; the connector is the service the user knows.
+{
+  const item = request(
+    envelope("mcp__codex_apps__composio__COMPOSIO_MULTI_EXECUTE_TOOL", {
+      tools: [{ tool_slug: "GMAIL_SEND_EMAIL", arguments: { recipient_email: "a@example.com" } }],
+    }),
+  );
+  assert(item.action_envelope_json?.mcp_server === "codex_apps", "T-MCP-64: the recorded server is the Codex wrapper");
+  const explained = explainMcpCall(item);
+  assert(explained?.connector === "Composio" && explained?.steps.length === 1, "T-MCP-65: the connector and its actions are read through the wrapper");
+  assert(explained?.headline === "ZCode wants to run an action in Gmail", "T-MCP-66: the title names the connector's app");
+}
+
 // Running code is called what it is.
 {
   const explained = explainMcpCall(

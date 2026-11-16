@@ -14,6 +14,7 @@ import {
 } from "./mcp-services";
 
 const UNKNOWN_SERVER = "a connected server";
+const CODEX_APPS_SERVER = "codex_apps";
 // Core cuts every string in the recorded input at this length.
 const CORE_STRING_LIMIT = 240;
 
@@ -63,12 +64,32 @@ function resolveMcpRef(envelope: GuardActionEnvelope): McpServerRef | null {
   const isMcp =
     envelope.action_type === "mcp_tool" || fromToolName !== null || fromMcpTool !== null || isPlainNamePart(envelope.mcp_server);
   if (!isMcp) return null;
-  const tool =
-    fromMcpTool?.tool ?? (isPlainNamePart(envelope.mcp_tool) ? envelope.mcp_tool : (fromToolName?.tool ?? null));
+  const tool = recordedTool(envelope, fromToolName, fromMcpTool);
   if (tool === null) return null;
-  const server =
-    (isPlainNamePart(envelope.mcp_server) ? envelope.mcp_server : null) ?? fromMcpTool?.server ?? fromToolName?.server ?? "";
-  return { server, tool };
+  return unwrapCodexApps({ server: recordedServer(envelope, fromToolName, fromMcpTool), tool });
+}
+
+function recordedTool(envelope: GuardActionEnvelope, fromToolName: McpServerRef | null, fromMcpTool: McpServerRef | null): string | null {
+  if (fromMcpTool !== null) return fromMcpTool.tool;
+  if (isPlainNamePart(envelope.mcp_tool)) return envelope.mcp_tool;
+  return fromToolName?.tool ?? null;
+}
+
+function recordedServer(envelope: GuardActionEnvelope, fromToolName: McpServerRef | null, fromMcpTool: McpServerRef | null): string {
+  if (isPlainNamePart(envelope.mcp_server)) return envelope.mcp_server;
+  return fromMcpTool?.server ?? fromToolName?.server ?? "";
+}
+
+/**
+ * Codex reaches connectors through `codex_apps`, and Core records that as the
+ * server with `connector__tool` as the tool. The connector is the service the
+ * user knows, so it takes the server's place.
+ */
+function unwrapCodexApps(ref: McpServerRef): McpServerRef {
+  if (ref.server !== CODEX_APPS_SERVER) return ref;
+  const separator = ref.tool.indexOf("__");
+  if (separator <= 0 || separator + 2 >= ref.tool.length) return ref;
+  return { server: ref.tool.slice(0, separator), tool: ref.tool.slice(separator + 2) };
 }
 
 function explainGenericTool(context: {

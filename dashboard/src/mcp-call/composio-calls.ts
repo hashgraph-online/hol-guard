@@ -128,14 +128,9 @@ function multiExecute({ harness, input }: ComposioContext): McpCallBody {
   const thought = textOf(input?.thought, 300);
   const first = all[0];
   return {
-    headline: `${harness} wants to run ${count === 1 ? "an action" : `${count || "some"} actions`} in ${where}`,
-    title:
-      count === 1 && first !== undefined
-        ? `${first.action}${first.app !== null ? ` in ${first.app}` : ""}`
-        : `Run ${count || "some"} actions${apps.length > 0 ? ` in ${joinList(apps)}` : ""}`,
-    summary: `Composio will carry out ${count === 1 ? "this action" : "these actions"} in your connected ${
-      apps.length === 1 ? `${apps[0]} account` : "accounts"
-    }, using the inputs below.`,
+    headline: `${harness} wants to run ${actionCountPhrase(count)} in ${where}`,
+    title: batchTitle(first, count, apps),
+    summary: `Composio will carry out ${count === 1 ? "this action" : "these actions"} in your connected ${accountPhrase(apps)}, using the inputs below.`,
     effect: worstMcpEffect(all.map((step) => step.effect)),
     effectBasis: STEP_BASIS,
     facts: [],
@@ -146,6 +141,25 @@ function multiExecute({ harness, input }: ComposioContext): McpCallBody {
     queueTitle: `Composio · ${first?.action ?? "Run actions"}${count > 1 ? ` and ${count - 1} more` : ""}`,
     queueDetail: apps.length > 0 ? joinList(apps) : null,
   };
+}
+
+function actionCountPhrase(count: number): string {
+  if (count === 1) return "an action";
+  if (count === 0) return "some actions";
+  return `${count} actions`;
+}
+
+function accountPhrase(apps: string[]): string {
+  if (apps.length === 1) return `${apps[0]} account`;
+  return "accounts";
+}
+
+function batchTitle(first: McpStep | undefined, count: number, apps: string[]): string {
+  if (count === 1 && first !== undefined) {
+    return first.app !== null ? `${first.action} in ${first.app}` : first.action;
+  }
+  const where = apps.length > 0 ? ` in ${joinList(apps)}` : "";
+  return `Run ${count === 0 ? "some" : count} actions${where}`;
 }
 
 function toStep(tool: Record<string, unknown> | null, index: number): McpStep {

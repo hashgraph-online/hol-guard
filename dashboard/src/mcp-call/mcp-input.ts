@@ -1,4 +1,4 @@
-import { cleanAgentText } from "../agent-stated-intent";
+import { cleanAgentText, firstToolInput } from "../agent-stated-intent";
 import type { McpFact } from "./mcp-call-types";
 import { sentenceCase } from "./mcp-services";
 
@@ -65,34 +65,46 @@ export function codeOf(value: unknown): string | null {
 }
 
 /**
- * The tool input as an object. A string input is never decoded: Core redacts
- * the encoded text, so decoding it could surface a secret the redaction hid.
+ * The tool input as an object, chosen the way Core chooses it. A string input
+ * is never decoded: Core redacts the encoded text, so decoding it could surface
+ * a secret the redaction hid. When Core's input is a string the card shows no
+ * rows rather than rows from a different key.
  */
 export function toolInputRecord(raw: Record<string, unknown> | null): Record<string, unknown> | null {
-  if (raw === null) return null;
-  for (const key of TOOL_INPUT_KEYS) {
-    const input = recordOf(raw[key]);
-    if (input !== null) return input;
-  }
-  return null;
+  return firstToolInput(raw);
 }
 
-/** The input exactly as Guard holds it, for the disclosure that shows what an approval matches. */
+/**
+ * The input exactly as Guard holds it, for the disclosure that shows what an
+ * approval matches. It follows the same order as `toolInputRecord`, so the rows
+ * and the disclosure always describe the same value.
+ */
 export function rawInputText(raw: Record<string, unknown> | null): string | null {
   if (raw === null) return null;
   for (const key of TOOL_INPUT_KEYS) {
     const value = raw[key];
-    if (typeof value === "string" && value.trim().length > 0) return value;
     const input = recordOf(value);
-    if (input !== null && Object.keys(input).length > 0) {
+    if (input !== null) {
       try {
         return JSON.stringify(input, null, 2);
       } catch {
         return null;
       }
     }
+    if (typeof value !== "string" || value.trim().length === 0) continue;
+    if (isNonObjectJson(value)) continue;
+    return value;
   }
   return null;
+}
+
+/** Core skips a string under these keys only when it parses as JSON that is not an object. */
+function isNonObjectJson(text: string): boolean {
+  try {
+    return recordOf(JSON.parse(text)) === null;
+  } catch {
+    return false;
+  }
 }
 
 /** A value short enough for a one-line row, or null when it needs the full input to make sense. */

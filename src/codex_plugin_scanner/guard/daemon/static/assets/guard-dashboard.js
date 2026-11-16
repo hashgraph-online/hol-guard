@@ -14590,29 +14590,33 @@ const READ_WORDS = /* @__PURE__ */ new Set([
   "load",
   "poll"
 ]);
-const NOUN_OR_VERB = {
-  comment: "send",
-  label: "write",
-  tag: "write",
-  star: "write",
-  pin: "write",
-  order: "write",
-  schedule: "write",
-  book: "write",
-  link: "connect",
-  react: "send",
-  build: "write",
-  fork: "write",
-  new: "write",
-  watch: "write"
-};
+const NOUN_OR_VERB = /* @__PURE__ */ new Map([
+  ["comment", "send"],
+  ["label", "write"],
+  ["tag", "write"],
+  ["star", "write"],
+  ["pin", "write"],
+  ["order", "write"],
+  ["schedule", "write"],
+  ["book", "write"],
+  ["link", "connect"],
+  ["react", "send"],
+  ["build", "write"],
+  ["fork", "write"],
+  ["new", "write"],
+  ["watch", "write"]
+]);
 function nameWords(identifier2) {
   return identifier2.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 0);
 }
 function classifyMcpEffect(identifier2) {
   const words = nameWords(identifier2);
   const firstRead = words.findIndex((word) => READ_WORDS.has(word));
-  const ambiguous = words.map((word, index) => NOUN_OR_VERB[word] !== void 0 && (firstRead === -1 || index < firstRead) ? NOUN_OR_VERB[word] : null).filter((kind) => kind !== null);
+  const ambiguous = [];
+  words.forEach((word, index) => {
+    const kind = NOUN_OR_VERB.get(word);
+    if (kind !== void 0 && (firstRead === -1 || index < firstRead)) ambiguous.push(kind);
+  });
   const has = (kind, set) => ambiguous.includes(kind) || words.some((word) => set.has(word));
   if (has("delete", DELETE_WORDS)) return "delete";
   if (has("send", SEND_WORDS)) return "send";
@@ -14641,7 +14645,7 @@ function worstMcpEffect(effects) {
 }
 function firstActionWordIndex(words) {
   return words.findIndex(
-    (word) => DELETE_WORDS.has(word) || SEND_WORDS.has(word) || RUN_WORDS.has(word) || CONNECT_WORDS.has(word) || WRITE_WORDS.has(word) || READ_WORDS.has(word) || NOUN_OR_VERB[word] !== void 0
+    (word) => DELETE_WORDS.has(word) || SEND_WORDS.has(word) || RUN_WORDS.has(word) || CONNECT_WORDS.has(word) || WRITE_WORDS.has(word) || READ_WORDS.has(word) || NOUN_OR_VERB.has(word)
   );
 }
 const INTENT_FIELDS = ["description", "justification"];
@@ -14735,59 +14739,59 @@ function shellToolName(toolName) {
 function recordValue(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
-const SERVICE_NAMES = {
-  composio: "Composio",
-  gmail: "Gmail",
-  googlecalendar: "Google Calendar",
-  googledrive: "Google Drive",
-  googledocs: "Google Docs",
-  googlesheets: "Google Sheets",
-  googleslides: "Google Slides",
-  googlemeet: "Google Meet",
-  googletasks: "Google Tasks",
-  github: "GitHub",
-  gitlab: "GitLab",
-  slack: "Slack",
-  discord: "Discord",
-  notion: "Notion",
-  linear: "Linear",
-  jira: "Jira",
-  asana: "Asana",
-  trello: "Trello",
-  airtable: "Airtable",
-  hubspot: "HubSpot",
-  salesforce: "Salesforce",
-  stripe: "Stripe",
-  shopify: "Shopify",
-  youtube: "YouTube",
-  linkedin: "LinkedIn",
-  twitter: "X (Twitter)",
-  reddit: "Reddit",
-  facebook: "Facebook",
-  instagram: "Instagram",
-  dropbox: "Dropbox",
-  outlook: "Outlook",
-  zoom: "Zoom",
-  figma: "Figma",
-  sentry: "Sentry",
-  posthog: "PostHog",
-  supabase: "Supabase",
-  vercel: "Vercel",
-  cloudflare: "Cloudflare",
-  openai: "OpenAI",
-  perplexity: "Perplexity",
-  firecrawl: "Firecrawl",
-  context7: "Context7",
-  playwright: "Playwright",
-  filesystem: "Filesystem",
-  postgres: "Postgres",
-  sqlite: "SQLite",
-  brave: "Brave Search",
-  exa: "Exa",
-  tavily: "Tavily"
-};
+const SERVICE_NAMES = /* @__PURE__ */ new Map([
+  ["composio", "Composio"],
+  ["gmail", "Gmail"],
+  ["googlecalendar", "Google Calendar"],
+  ["googledrive", "Google Drive"],
+  ["googledocs", "Google Docs"],
+  ["googlesheets", "Google Sheets"],
+  ["googleslides", "Google Slides"],
+  ["googlemeet", "Google Meet"],
+  ["googletasks", "Google Tasks"],
+  ["github", "GitHub"],
+  ["gitlab", "GitLab"],
+  ["slack", "Slack"],
+  ["discord", "Discord"],
+  ["notion", "Notion"],
+  ["linear", "Linear"],
+  ["jira", "Jira"],
+  ["asana", "Asana"],
+  ["trello", "Trello"],
+  ["airtable", "Airtable"],
+  ["hubspot", "HubSpot"],
+  ["salesforce", "Salesforce"],
+  ["stripe", "Stripe"],
+  ["shopify", "Shopify"],
+  ["youtube", "YouTube"],
+  ["linkedin", "LinkedIn"],
+  ["twitter", "X (Twitter)"],
+  ["reddit", "Reddit"],
+  ["facebook", "Facebook"],
+  ["instagram", "Instagram"],
+  ["dropbox", "Dropbox"],
+  ["outlook", "Outlook"],
+  ["zoom", "Zoom"],
+  ["figma", "Figma"],
+  ["sentry", "Sentry"],
+  ["posthog", "PostHog"],
+  ["supabase", "Supabase"],
+  ["vercel", "Vercel"],
+  ["cloudflare", "Cloudflare"],
+  ["openai", "OpenAI"],
+  ["perplexity", "Perplexity"],
+  ["firecrawl", "Firecrawl"],
+  ["context7", "Context7"],
+  ["playwright", "Playwright"],
+  ["filesystem", "Filesystem"],
+  ["postgres", "Postgres"],
+  ["sqlite", "SQLite"],
+  ["brave", "Brave Search"],
+  ["exa", "Exa"],
+  ["tavily", "Tavily"]
+]);
 function serviceDisplayName(key) {
-  const known = SERVICE_NAMES[key.trim().toLowerCase().replace(/[\s_-]+/g, "")];
+  const known = SERVICE_NAMES.get(key.trim().toLowerCase().replace(/[\s_-]+/g, ""));
   if (known !== void 0) return known;
   const words = nameWords(key);
   if (words.length === 0) return key.trim();
@@ -14873,28 +14877,32 @@ function codeOf(value) {
   return text2.length > 0 ? text2 : null;
 }
 function toolInputRecord(raw) {
-  if (raw === null) return null;
-  for (const key of TOOL_INPUT_KEYS) {
-    const input = recordOf(raw[key]);
-    if (input !== null) return input;
-  }
-  return null;
+  return firstToolInput(raw);
 }
 function rawInputText(raw) {
   if (raw === null) return null;
   for (const key of TOOL_INPUT_KEYS) {
     const value = raw[key];
-    if (typeof value === "string" && value.trim().length > 0) return value;
     const input = recordOf(value);
-    if (input !== null && Object.keys(input).length > 0) {
+    if (input !== null) {
       try {
         return JSON.stringify(input, null, 2);
       } catch {
         return null;
       }
     }
+    if (typeof value !== "string" || value.trim().length === 0) continue;
+    if (isNonObjectJson(value)) continue;
+    return value;
   }
   return null;
+}
+function isNonObjectJson(text2) {
+  try {
+    return recordOf(JSON.parse(text2)) === null;
+  } catch {
+    return false;
+  }
 }
 function scalarText(value) {
   if (typeof value === "string") return textOf(value);
@@ -15032,9 +15040,9 @@ function multiExecute({ harness, input }) {
   const thought = textOf(input?.thought, 300);
   const first = all[0];
   return {
-    headline: `${harness} wants to run ${count2 === 1 ? "an action" : `${count2 || "some"} actions`} in ${where}`,
-    title: count2 === 1 && first !== void 0 ? `${first.action}${first.app !== null ? ` in ${first.app}` : ""}` : `Run ${count2 || "some"} actions${apps.length > 0 ? ` in ${joinList(apps)}` : ""}`,
-    summary: `Composio will carry out ${count2 === 1 ? "this action" : "these actions"} in your connected ${apps.length === 1 ? `${apps[0]} account` : "accounts"}, using the inputs below.`,
+    headline: `${harness} wants to run ${actionCountPhrase(count2)} in ${where}`,
+    title: batchTitle(first, count2, apps),
+    summary: `Composio will carry out ${count2 === 1 ? "this action" : "these actions"} in your connected ${accountPhrase(apps)}, using the inputs below.`,
     effect: worstMcpEffect(all.map((step) => step.effect)),
     effectBasis: STEP_BASIS,
     facts: [],
@@ -15045,6 +15053,22 @@ function multiExecute({ harness, input }) {
     queueTitle: `Composio · ${first?.action ?? "Run actions"}${count2 > 1 ? ` and ${count2 - 1} more` : ""}`,
     queueDetail: apps.length > 0 ? joinList(apps) : null
   };
+}
+function actionCountPhrase(count2) {
+  if (count2 === 1) return "an action";
+  if (count2 === 0) return "some actions";
+  return `${count2} actions`;
+}
+function accountPhrase(apps) {
+  if (apps.length === 1) return `${apps[0]} account`;
+  return "accounts";
+}
+function batchTitle(first, count2, apps) {
+  if (count2 === 1 && first !== void 0) {
+    return first.app !== null ? `${first.action} in ${first.app}` : first.action;
+  }
+  const where = apps.length > 0 ? ` in ${joinList(apps)}` : "";
+  return `Run ${count2 === 0 ? "some" : count2} actions${where}`;
 }
 function toStep(tool, index) {
   const slug = textOf(tool?.tool_slug, 120) ?? "";
@@ -15081,6 +15105,7 @@ function slugLabel(slug) {
   return app !== null ? `${app} · ${action}` : action;
 }
 const UNKNOWN_SERVER = "a connected server";
+const CODEX_APPS_SERVER = "codex_apps";
 const CORE_STRING_LIMIT = 240;
 function explainMcpCall(item) {
   const envelope = item.action_envelope_json;
@@ -15113,10 +15138,24 @@ function resolveMcpRef(envelope) {
   const fromMcpTool = parseNamespacedMcpName(envelope.mcp_tool);
   const isMcp = envelope.action_type === "mcp_tool" || fromToolName !== null || fromMcpTool !== null || isPlainNamePart(envelope.mcp_server);
   if (!isMcp) return null;
-  const tool = fromMcpTool?.tool ?? (isPlainNamePart(envelope.mcp_tool) ? envelope.mcp_tool : fromToolName?.tool ?? null);
+  const tool = recordedTool(envelope, fromToolName, fromMcpTool);
   if (tool === null) return null;
-  const server = (isPlainNamePart(envelope.mcp_server) ? envelope.mcp_server : null) ?? fromMcpTool?.server ?? fromToolName?.server ?? "";
-  return { server, tool };
+  return unwrapCodexApps({ server: recordedServer(envelope, fromToolName, fromMcpTool), tool });
+}
+function recordedTool(envelope, fromToolName, fromMcpTool) {
+  if (fromMcpTool !== null) return fromMcpTool.tool;
+  if (isPlainNamePart(envelope.mcp_tool)) return envelope.mcp_tool;
+  return fromToolName?.tool ?? null;
+}
+function recordedServer(envelope, fromToolName, fromMcpTool) {
+  if (isPlainNamePart(envelope.mcp_server)) return envelope.mcp_server;
+  return fromMcpTool?.server ?? fromToolName?.server ?? "";
+}
+function unwrapCodexApps(ref) {
+  if (ref.server !== CODEX_APPS_SERVER) return ref;
+  const separator = ref.tool.indexOf("__");
+  if (separator <= 0 || separator + 2 >= ref.tool.length) return ref;
+  return { server: ref.tool.slice(0, separator), tool: ref.tool.slice(separator + 2) };
 }
 function explainGenericTool(context) {
   const { harness, connector, shortTool, input } = context;
