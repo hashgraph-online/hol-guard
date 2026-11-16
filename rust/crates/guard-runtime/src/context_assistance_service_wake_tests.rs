@@ -257,3 +257,29 @@ fn changed_settings_may_wake_the_worker_again_at_once() {
         "turning a feature on or off starts a new retry window"
     );
 }
+
+#[test]
+fn a_busy_lock_keeps_the_last_project_context_choice() {
+    let service = Service::default();
+    let mut settings = saved_on(&service);
+    settings.effective.features.agent_context = true;
+    settings.effective.sources.workspace_documents = true;
+    settings.verification_permitted = true;
+    service.configure(settings.clone()).unwrap();
+    let guard = lock(&service.state).unwrap();
+    assert!(
+        service.prompt_context_chosen(),
+        "a prompt that lands while other hooks hold the lock still gets its note"
+    );
+    drop(guard);
+    settings.effective.features.agent_context = false;
+    service.configure(settings).unwrap();
+    let guard = lock(&service.state).unwrap();
+    assert!(
+        !service.prompt_context_chosen(),
+        "a choice turned off reads as off while the lock is busy"
+    );
+    drop(guard);
+    service.stop().unwrap();
+    assert!(!service.prompt_context_chosen());
+}

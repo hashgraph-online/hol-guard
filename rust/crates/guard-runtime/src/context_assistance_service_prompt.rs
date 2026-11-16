@@ -20,7 +20,7 @@ pub(crate) enum LaneMiss {
 /// How long [`Service::prompt_context_chosen`] waits for a busy lock.
 const CHOSEN_WAIT: Duration = Duration::from_millis(40);
 
-fn chosen(settings: &AssistanceSettings) -> bool {
+pub(super) fn chosen(settings: &AssistanceSettings) -> bool {
     settings.requested.enabled
         && settings.effective.enabled
         && settings.verification_permitted
@@ -31,8 +31,10 @@ fn chosen(settings: &AssistanceSettings) -> bool {
 
 impl Service {
     /// Whether someone turned on project context for their AI apps. Cheap:
-    /// a busy lock is waited for a few milliseconds at most, so a prompt that
-    /// lands while another hook holds it still gets its context.
+    /// a busy lock is waited for a few milliseconds at most. When it stays
+    /// busy, the answer is the value last published under the lock, so a
+    /// prompt that lands while other hooks hold it still gets its context
+    /// and a turned-off choice still reads as off.
     pub(crate) fn prompt_context_chosen(&self) -> bool {
         let until = Instant::now() + CHOSEN_WAIT;
         loop {
@@ -40,6 +42,9 @@ impl Service {
                 Ok(state) => return !state.closed && chosen(&state.settings),
                 Err(std::sync::TryLockError::WouldBlock) if Instant::now() < until => {
                     std::thread::sleep(Duration::from_millis(2));
+                }
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    return self.chosen.load(Ordering::Acquire);
                 }
                 Err(_) => return false,
             }
