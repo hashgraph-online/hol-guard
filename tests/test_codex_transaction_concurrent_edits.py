@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path, hook_secret_path
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
+from tests import codex_hook_publication_helpers as publication_helpers
 from tests import codex_publication_steps as publication_steps
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.transition_fault_support import interrupt_publication_at
@@ -220,7 +221,9 @@ def test_invalid_utf8_snapshot_is_rejected_before_manifest_or_secret_writes(
     config_path.write_bytes(b"\xff")
 
     with pytest.raises(RuntimeError, match="codex_hook_config_invalid"):
-        adapter._write_authenticated_hook_config(context, config_path=config_path, payload={}, previous_manifest=None)
+        publication_helpers.write_authenticated_hook_config(
+            context, config_path=config_path, payload={}, previous_manifest=None
+        )
     assert config_path.read_bytes() == b"\xff"
     assert manifest_path.read_bytes() == manifest_before
     assert secret_path.read_bytes() == secret_before
@@ -253,7 +256,9 @@ def test_substituted_target_during_snapshot_is_reported_as_invalid_not_conflict(
     config_path.unlink()
     os.link(target, config_path)
     with pytest.raises(RuntimeError, match="codex_hook_config_invalid"):
-        adapter._write_authenticated_hook_config(context, config_path=config_path, payload={}, previous_manifest=None)
+        publication_helpers.write_authenticated_hook_config(
+            context, config_path=config_path, payload={}, previous_manifest=None
+        )
     assert config_path.stat().st_ino == target.stat().st_ino
     assert config_path.stat().st_nlink == 2
     assert target.read_bytes() == b'owner = "other-writer"\n'

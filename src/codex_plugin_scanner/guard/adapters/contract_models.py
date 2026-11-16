@@ -211,12 +211,6 @@ class HarnessProtectionContract:
     icon_label: str | None = None
     capability_events: tuple[HarnessEventCapability, ...] = ()
 
-    @property
-    def capability_report(self) -> tuple[HarnessEventCapability, ...]:
-        """Compatibility alias for the additive per-event report rows."""
-
-        return self.capability_events
-
 
 @dataclass(frozen=True, slots=True)
 class HarnessSetupStep:

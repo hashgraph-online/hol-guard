@@ -108,6 +108,7 @@ mod pi;
 mod pi_extension;
 mod proof;
 mod settings_hooks;
+mod shim_profile;
 mod shim_remove;
 mod simple;
 mod uninstall_apply;
@@ -282,6 +283,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     }
     if op == "prepare_guard_shim" {
         return answer(guard_shim::prepare(&ctx, fields));
+    }
+    if op == "prepare_guard_shim_shell_profile" {
+        return answer(shim_profile::prepare(&ctx, fields));
     }
     if op == "prepare_guard_shim_removal" {
         return answer(shim_remove::prepare(&ctx, fields));

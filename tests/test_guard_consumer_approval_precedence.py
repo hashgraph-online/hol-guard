@@ -34,6 +34,7 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
     build_runtime_launch_identity,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import codex_hook_publication_helpers as publication_helpers
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
@@ -182,9 +183,9 @@ def _write_test_executable(path: Path, body: str = "#!/bin/sh\nexit 0\n") -> Pat
 def _install_codex_native_hooks(context: HarnessContext) -> None:
     payload: dict[str, object] = {"features": {"hooks": True}}
     config_path = CodexHarnessAdapter._hook_config_path(context)
-    CodexHarnessAdapter._install_config_hooks(payload, context, config_path=config_path)
+    publication_helpers.install_config_hooks(payload, context, config_path=config_path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    CodexHarnessAdapter._write_authenticated_hook_config(
+    publication_helpers.write_authenticated_hook_config(
         context,
         config_path=config_path,
         payload=payload,

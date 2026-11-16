@@ -9,7 +9,8 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_hook_file_integrity as integrity
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError, validate_regular_file
-from codex_plugin_scanner.guard.codex_hook_manifest import CodexHookManifestSpec, prepare_authenticated_hook_publication
+from codex_plugin_scanner.guard.codex_hook_manifest import CodexHookManifestSpec
+from tests import codex_hook_publication_helpers as publication_helpers
 from tests.codex_hook_private_group_support import group_is_private_to_owner
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX ownership and permission semantics are required")
@@ -202,10 +203,12 @@ def test_manifest_build_accepts_private_group_pipx_style_packaged_files(
 
     if not group_is_private_to_owner(packaged_files[0][1]):
         with pytest.raises(CodexHookIntegrityError) as error:
-            prepare_authenticated_hook_publication(spec, rendered_config='model = "gpt-5"\n', create_key=True)
+            publication_helpers.prepare_authenticated_hook_publication(
+                spec, rendered_config='model = "gpt-5"\n', create_key=True
+            )
         assert error.value.reason == "codex_hook_bridge_permissions_unsafe"
         return
-    manifest = prepare_authenticated_hook_publication(
+    manifest = publication_helpers.prepare_authenticated_hook_publication(
         spec, rendered_config='model = "gpt-5"\n', create_key=True
     ).manifest
 

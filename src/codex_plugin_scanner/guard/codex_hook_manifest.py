@@ -25,7 +25,6 @@ from .codex_hook_integrity import (
     _MANIFEST_MESSAGES,
     authenticate_hook_manifest_text,
     hook_manifest_path,
-    hook_secret_path,
     load_authenticated_hook_manifest,
 )
 from .native_codex_hook_manifest_verify import native_codex_hook_manifest_verify
@@ -121,77 +120,6 @@ def generation_request(
         "previous_manifest": None if previous_manifest is None else dict(previous_manifest),
         "create_key": create_key,
     }
-
-
-def prepare_authenticated_hook_publication(
-    spec: CodexHookManifestSpec,
-    *,
-    rendered_config: str,
-    previous_manifest: Mapping[str, object] | None = None,
-    create_key: bool = False,
-) -> PreparedCodexHookPublication:
-    """Capture a signed config/manifest generation without enrolling by default.
-
-    The native runtime authenticates the baseline, signs the manifest and
-    captures every file; see
-    ``rust/crates/guard-runtime/src/transition_files/publication_generation.rs``.
-    Enrollment runs under the install owner, which also guards the key."""
-    import base64
-    import json
-
-    from .codex_hook_integrity import _ordinary_hook_writer
-    from .native_transition_files import publication
-    from .runtime_transition import RuntimeTransition, TransitionError, TransitionFile
-
-    request = generation_request(spec, previous_manifest=previous_manifest, create_key=create_key)
-    request["rendered_config"] = rendered_config
-    check_hook_validation_deadline()
-    if create_key:
-        with _ordinary_hook_writer(spec.guard_home, hook_secret_path(spec.guard_home), actor="codex.authority-key"):
-            answer = publication("generation", spec.guard_home, **request)
-    else:
-        answer = publication("generation", spec.guard_home, **request)
-    changes = answer.get("files") if isinstance(answer, dict) else None
-    if not isinstance(changes, list) or len(changes) != 4:
-        raise TransitionError("native_transition_invalid")
-    # The prior bytes come in a second answer, which keeps each under the
-    # resident's response cap; the runtime refuses any that changed since.
-    named = [change for change in changes if "before_sha256" in change]
-    prior = publication(
-        "generation_before",
-        spec.guard_home,
-        files=[{"path": change["path"], "sha256": change["before_sha256"]} for change in named],
-    )
-    befores = prior.get("before") if isinstance(prior, dict) else None
-    if not isinstance(befores, list) or len(befores) != len(named):
-        raise TransitionError("native_transition_invalid")
-    for change, before in zip(named, befores, strict=True):
-        change["before"] = before
-    check_hook_validation_deadline()
-
-    def decoded(value: object) -> bytes | None:
-        return None if value is None else base64.b64decode(str(value))
-
-    config_change, manifest_change, authority, receipt_change = (
-        TransitionFile(
-            Path(change["path"]),
-            decoded(change["before"]),
-            decoded(change["after"]),
-            before_mode=change["before_mode"],
-            after_mode=change["after_mode"],
-            no_follow=True,
-            expected_digest=change.get("expected_digest"),
-        )
-        for change in changes
-    )
-    manifest = json.loads(manifest_change.after or b"null")
-    if not isinstance(manifest, dict):
-        raise TransitionError("native_transition_invalid")
-    prepared = PreparedCodexHookPublication(
-        manifest, rendered_config, config_change, manifest_change, authority, receipt_change
-    )
-    RuntimeTransition._compare({"files": [change.payload() for change in prepared.files]}, "before")
-    return prepared
 
 
 def load_hook_manifest_baseline(spec: CodexHookManifestSpec) -> dict[str, object] | None:
@@ -427,6 +355,5 @@ __all__ = [
     "PreparedCodexHookPublication",
     "load_hook_manifest_baseline",
     "manifest_bindings",
-    "prepare_authenticated_hook_publication",
     "verify_live_hook_manifest",
 ]

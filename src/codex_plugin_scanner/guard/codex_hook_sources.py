@@ -7,26 +7,7 @@ from pathlib import Path
 from .codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_SOURCE_DUPLICATE,
     CODEX_HOOK_INVENTORY_SOURCE_MALFORMED,
-    CODEX_HOOK_INVENTORY_SOURCE_UNREADABLE,
 )
-
-
-def strict_toml_object(path: Path, *, label: str) -> dict[str, object]:
-    if path.is_symlink() or (path.exists() and not path.is_file()):
-        raise RuntimeError(
-            f"{CODEX_HOOK_INVENTORY_SOURCE_UNREADABLE}: Guard refused to overwrite non-file {label} at {path}. "
-            "Replace it with a readable regular file before retrying install."
-        )
-    if not path.is_file():
-        return {}
-    try:
-        data = path.read_bytes()
-    except OSError as exc:
-        raise RuntimeError(
-            f"{CODEX_HOOK_INVENTORY_SOURCE_UNREADABLE}: Guard could not read {label} at {path}. Repair file "
-            "permissions before retrying install."
-        ) from exc
-    return parse_toml_object(data, path=path, label=label)
 
 
 def parse_toml_object(data: bytes | None, *, path: Path, label: str) -> dict[str, object]:

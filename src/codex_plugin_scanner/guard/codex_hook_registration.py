@@ -12,32 +12,6 @@ from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_self_binding import answer_text, ask_hook_owners, install_fields
 
 
-def remove_unlaunchable_guard_hook_events(
-    hooks: dict[str, object],
-    *,
-    legacy_status_messages: Collection[str],
-    windows: bool | None = None,
-) -> tuple[dict[str, object], bool]:
-    """Remove legacy Guard handlers whose launcher cannot run on this machine.
-
-    A pre-manifest registration spelled a Guard hook as a plain command plus
-    its ``--harness codex`` arguments (or as a native bridge launcher) and
-    carried one of the status messages Guard wrote for that generation. When
-    the program such a handler names no longer exists, the registration is a
-    leftover from an install that is gone. The native ``codex_hook_owners``
-    kind removes exactly that shape and leaves every other handler alone.
-    """
-
-    wire = _Wire(hooks)
-    answer = ask_hook_owners(
-        "unlaunchable",
-        windows=windows,
-        hooks=wire.text(hooks),
-        statuses=sorted(legacy_status_messages),
-    )
-    return wire.decode(answer_text(answer, "hooks")), answer.get("changed") is True
-
-
 def legacy_binding_fields(
     *,
     expected_bindings: Sequence[Mapping[str, object]],

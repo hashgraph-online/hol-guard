@@ -172,14 +172,6 @@ def check_transition_files(changes: Sequence[Mapping[str, object]], *, each: boo
     _record_request(op, payload={"files": [dict(change) for change in changes]})
 
 
-def checked_files(changes: Sequence[TransitionFile]) -> list[dict[str, object]]:
-    """Each change's payload, checked on its own in one runtime call."""
-    payloads = [change.payload() for change in changes]
-    if payloads:
-        check_transition_files(payloads, each=True)
-    return payloads
-
-
 def assert_transition_mutation_allowed(home: Path) -> None:
     canonical_home = home.resolve(strict=False)
     path = canonical_home / "managed" / "runtime-transition.json"

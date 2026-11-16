@@ -44,6 +44,7 @@ from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, re
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import codex_hook_publication_helpers as publication_helpers
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
@@ -4368,7 +4369,7 @@ args = ["workspace-skill.js", "--changed"]
                 }
             },
         }
-        guard_update_commands_module.CodexHarnessAdapter._install_config_hooks(
+        publication_helpers.install_config_hooks(
             config_payload, context, config_path=home_dir / ".codex" / "config.toml"
         )
         hooks = config_payload["hooks"]
@@ -4382,7 +4383,7 @@ args = ["workspace-skill.js", "--changed"]
         entry = entries[0]
         assert isinstance(entry, dict)
         config_path = home_dir / ".codex" / "config.toml"
-        guard_update_commands_module.CodexHarnessAdapter._write_authenticated_hook_config(
+        publication_helpers.write_authenticated_hook_config(
             context,
             config_path=config_path,
             payload=config_payload,

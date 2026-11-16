@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegr
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction, require_codex_install_owner
+from tests import codex_hook_publication_helpers as publication_helpers
 
 
 def test_copied_context_cannot_borrow_another_threads_publication_owner(tmp_path):
@@ -518,9 +519,9 @@ def test_uninstall_preserves_key_needed_by_other_authenticated_target(tmp_path: 
     # public install gate for an absent manifest beside an existing key.
     config = second.home_dir / ".codex/config.toml"
     payload = {"features": {"hooks": True}}
-    adapter._install_config_hooks(payload, second, config_path=config)
+    publication_helpers.install_config_hooks(payload, second, config_path=config)
     with codex_install_transaction(guard_home, config, actor="fixture-second-target"):
-        state = adapter._write_authenticated_hook_config(
+        state = publication_helpers.write_authenticated_hook_config(
             second, config_path=config, payload=payload, previous_manifest=None
         )
     assert state["protection_active"]

@@ -34,6 +34,7 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
     write_hook_manifest,
 )
 from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from tests import codex_hook_publication_helpers as publication_helpers
 from tests.transition_fault_support import interrupt_publication_at
 
 
@@ -655,7 +656,7 @@ def test_guard_codex_launch_uses_remote_control_for_dashboard_continuation(tmp_p
         guard_home=tmp_path / "guard-home",
     )
     hook_config: dict[str, object] = {"features": {"hooks": True}}
-    CodexHarnessAdapter._install_config_hooks(hook_config, context, config_path=home_dir / ".codex" / "config.toml")
+    publication_helpers.install_config_hooks(hook_config, context, config_path=home_dir / ".codex" / "config.toml")
     _write_text(home_dir / ".codex" / "config.toml", dump_toml(hook_config))
     captured: dict[str, object] = {}
 
