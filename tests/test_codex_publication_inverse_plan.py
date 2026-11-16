@@ -37,20 +37,25 @@ def test_inverse_plan_is_read_only_and_binds_foreign_config_for_review(installed
         script = r"""
 import os, sys
 from pathlib import Path
+from codex_plugin_scanner.guard import native_transition_files
 from codex_plugin_scanner.guard.adapters import codex
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 home = Path(sys.argv[1])
 context = HarnessContext(home, None, home / '.hol-guard', home_override_explicit=True)
-original = codex.mark_owned_hook_publication_conflict
+original = native_transition_files.publication
 def conflict_after_publication(*args, **kwargs):
     config = home / '.codex/config.toml'
     config.write_bytes(config.read_bytes() + b'\n# intervening writer\n')
     raise OSError('injected readback failure with foreign config')
-def exit_after_signed_conflict(*args, **kwargs):
-    original(*args, **kwargs)
-    os._exit(17)
+def exit_after_signed_conflict(op, *args, **kwargs):
+    if op != 'abort':
+        return original(op, *args, **kwargs)
+    try:
+        original(op, *args, **kwargs)
+    finally:
+        os._exit(17)
 codex._require_hook_semantics_readback = conflict_after_publication
-codex.mark_owned_hook_publication_conflict = exit_after_signed_conflict
+native_transition_files.publication = exit_after_signed_conflict
 codex.CodexHarnessAdapter().install(context)
 raise RuntimeError('signed conflict boundary was not reached')
 """

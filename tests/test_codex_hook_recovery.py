@@ -166,6 +166,7 @@ from pathlib import Path
 from codex_plugin_scanner.guard import codex_hook_recovery as recovery
 from codex_plugin_scanner.guard.adapters import codex
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 home, substitution = Path(sys.argv[1]), sys.argv[2]
 config = home / '.codex/config.toml'
 from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
@@ -176,7 +177,7 @@ def competing_write(*args):
         return original_write(*args)
     manifest = codex.hook_manifest_path(home / '.hol-guard', config)
     receipt = manifest.with_name(manifest.name.replace('.manifest.json', '.authority-receipt.json'))
-    participants = [manifest, receipt, codex.hook_secret_path(home / '.hol-guard')]
+    participants = [manifest, receipt, hook_secret_path(home / '.hol-guard')]
     hashes = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in participants}
     snapshot = home / 'participant-digests.json'
     snapshot.write_text(json.dumps(hashes))
@@ -197,13 +198,16 @@ def competing_write(*args):
         config.write_bytes(b'# competing config\n')
     raise OSError('injected publication failure')
 RuntimeTransition._write_file = staticmethod(competing_write)
-original_record_op = recovery._publication
+from codex_plugin_scanner.guard import native_transition_files
+original_record_op = native_transition_files.publication
 def crash_after_conflict_record(op, *args, **kwargs):
-    value = original_record_op(op, *args, **kwargs)
-    if op == 'conflict':
+    if op != 'abort':
+        return original_record_op(op, *args, **kwargs)
+    try:
+        original_record_op(op, *args, **kwargs)
+    finally:
         os._exit(17)
-    return value
-recovery._publication = crash_after_conflict_record
+native_transition_files.publication = crash_after_conflict_record
 context = HarnessContext(home_dir=home, guard_home=home / '.hol-guard', workspace_dir=None)
 codex.CodexHarnessAdapter().install(context)
 raise RuntimeError('conflict record boundary was not reached')

@@ -93,7 +93,7 @@ fn changes(home: &Path, payload: &Map<String, Value>, config: &Path) -> Step<Vec
 
 /// `recover_hook_publication`: the idempotent inverse, checked across every
 /// file before any is touched. Answers whether files were restored.
-fn recover(call: &mut Call<'_>) -> Step<Value> {
+pub(super) fn recover(call: &mut Call<'_>) -> Step<Value> {
     let home = call.home()?;
     if !path_present(&Call::record_path(&home)) {
         return Ok(json!(false));
@@ -264,6 +264,7 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_generation" => super::publication_generation::generation(call),
         "publication_generation_before" => super::publication_generation::snapshot(call),
         "publication_target" => super::publication_target::target(call),
+        "publication_abort" => super::publication_abort::abort(call),
         "publication_remove" => remove_record(&call.home()?).map(|()| Value::Null),
         "publication_prepare" => publication::prepare(call),
         "publication_assert_repair" => publication::assert_repair(call),

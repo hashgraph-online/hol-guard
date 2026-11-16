@@ -47,8 +47,6 @@ from ..codex_hook_manifest import (
 )
 from ..codex_hook_recovery import (
     commit_hook_publication,
-    hook_publication_pending,
-    mark_owned_hook_publication_conflict,
     prepare_hook_publication,
     recover_hook_publication,
 )
@@ -57,7 +55,7 @@ from ..codex_hook_registration import (
     legacy_binding_fields,
     overlay_live_owned_event_matches,
 )
-from ..codex_hook_rollback import require_unchanged_config_for_rollback, rollback_file_identity
+from ..codex_hook_rollback import rollback_file_identity
 from ..codex_hook_self_binding import (
     install_fields,
     settle_short_paths,
@@ -1244,34 +1242,44 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             commit_hook_publication(context.guard_home)
             return state
         except BaseException as transaction_error:
-            # An unknown config cannot safely be paired with the old manifest.
-            # Preserve participant files and report the unresolved transaction.
-            use_durable_inverse = prepared or hook_publication_pending(context.guard_home)
-            if use_durable_inverse:
-                try:
-                    require_unchanged_config_for_rollback(
-                        config_path,
-                        original_config,
-                        rendered_config,
-                        original_identity=original_config_identity,
-                        written_identity=written_config_identity,
-                    )
-                except BaseException as conflict:
-                    # Persist the ownership refusal even for matching bytes:
-                    # a later recovery must not mistake a replaced inode for
-                    # this writer's publication and restore its participants.
-                    mark_owned_hook_publication_conflict(context.guard_home, config_path)
-                    raise conflict from transaction_error
+            # The runtime undoes a prepared publication, or marks the record as
+            # a config conflict when the config is no longer this writer's.
+            from ..codex_hook_recovery import _owned
+            from ..native_transition_files import _exception
+
+            def encoded(value: bytes | None) -> str | None:
+                return None if value is None else base64.b64encode(value).decode("ascii")
+
+            try:
+                operation_id: str | None = _owned(context.guard_home)
+            except RuntimeError:
+                operation_id = None
             rollback_error: BaseException | None = None
             try:
-                if use_durable_inverse:
-                    recover_hook_publication(context.guard_home)
-                elif not original_secret_present:
-                    # Preparation has not published either file. Restoring their
-                    # snapshots here would overwrite an intervening user edit.
+                aborted = publication_op(
+                    "abort",
+                    context.guard_home,
+                    config=os.path.abspath(config_path.expanduser()),
+                    prepared=prepared,
+                    original=encoded(original_config),
+                    written=encoded(rendered_config),
+                    original_identity=list(original_config_identity) if original_config_identity else None,
+                    written_identity=list(written_config_identity) if written_config_identity else None,
+                    operation_id=operation_id,
+                )
+            except BaseException as conflict:
+                raise conflict from transaction_error
+            if not isinstance(aborted, dict):
+                raise TransitionError("native_transition_invalid") from transaction_error
+            if aborted.get("rollback_error") is not None:
+                rollback_error = _exception(aborted["rollback_error"])
+            elif aborted.get("durable") is not True and not original_secret_present:
+                # Preparation has not published either file. Restoring their
+                # snapshots here would overwrite an intervening user edit.
+                try:
                     remove_hook_secret_if_unused(context.guard_home)
-            except BaseException as exc:  # pragma: no cover - catastrophic local I/O failure
-                rollback_error = exc
+                except BaseException as exc:  # pragma: no cover - catastrophic local I/O failure
+                    rollback_error = exc
             if rollback_error is not None:
                 failure = RuntimeError(
                     "Codex hook transaction failed and rollback could not be completed: "

@@ -91,3 +91,19 @@ fn non_utf8_config_and_pending_publication_are_refused() {
         .ask()
         .is_err_and(|error| error.contains("codex_hook_publication_pending")));
 }
+
+#[test]
+fn an_abort_before_any_record_leaves_the_config_alone() {
+    let home = Home::new();
+    fs::write(home.config(), b"model = \"fixture\"\n").unwrap();
+    let answer = dispatch(&json!({
+        "op": "publication_abort",
+        "home": home.0.join("guard").to_string_lossy(),
+        "config": home.config().to_string_lossy(),
+        "prepared": false,
+        "written": STANDARD.encode(b"other"),
+    }))
+    .unwrap();
+    assert_eq!(answer["value"], json!({ "durable": false }));
+    assert_eq!(fs::read(home.config()).unwrap(), b"model = \"fixture\"\n");
+}
