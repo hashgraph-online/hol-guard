@@ -24,6 +24,8 @@ use std::time::{Duration, Instant};
 
 #[path = "context_assistance_prompt_changes.rs"]
 mod changes;
+#[path = "context_assistance_prompt_chores.rs"]
+mod chores;
 #[path = "context_assistance_prompt_excerpts.rs"]
 mod excerpts;
 use excerpts::render;
@@ -267,6 +269,9 @@ fn attach(
     if let Some(changed) = &changed {
         add_context(response, &changed.text);
     }
+    if chores::added(response, &root, prompt, &context_on) {
+        return;
+    }
     let Some(budget) = left().checked_sub(MIN_WAIT) else {
         return;
     };
@@ -444,11 +449,8 @@ fn waiting_time(budget_ms: Option<u64>) -> Duration {
 }
 
 fn truncated(text: &str, max_bytes: usize) -> String {
-    let mut end = text.len().min(max_bytes);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    text[..end].to_owned()
+    let end = (0..=text.len().min(max_bytes)).rfind(|&at| text.is_char_boundary(at));
+    text[..end.unwrap_or(0)].to_owned()
 }
 
 fn add_context(response: &mut Value, context: &str) {
