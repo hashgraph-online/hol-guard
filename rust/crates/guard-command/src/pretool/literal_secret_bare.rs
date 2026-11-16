@@ -141,7 +141,7 @@ fn metadata_segment(segment: &str) -> bool {
         )
 }
 
-fn metadata_name(name: &str) -> bool {
+pub(super) fn metadata_name(name: &str) -> bool {
     let mut start = 0;
     let mut previous: Option<char> = None;
     for (index, current) in name.char_indices() {

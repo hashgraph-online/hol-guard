@@ -110,12 +110,25 @@ fn a_long_array_named_key_spelled_in_hex_is_a_secret() {
         joined(&["0x41d8e6b2", "07c95fa3L"])
     );
     assert!(holds_code_secret(&text), "{text}");
-    let bare = format!(
-        "long[] SIGNING_KEY_WORDS = {{{}, {}}};\n",
-        joined(&["9f3c2a7d", "5e1b4c86"]),
-        joined(&["41d8e6b2", "07c95fa3"])
+    let trailing = format!(
+        "long[] SIGNING_KEY_WORDS = {{\n    {},\n    {},\n}};\n",
+        joined(&["0x9f3c2a7d", "5e1b4c86"]),
+        joined(&["-0x41d8e6b2", "07c95fa3L"])
     );
-    assert!(holds_code_secret(&bare), "{bare}");
+    assert!(holds_code_secret(&trailing), "{trailing}");
+}
+
+#[test]
+fn filler_decimal_and_repeated_long_keys_are_not_secrets() {
+    for text in [
+        "long[] KEY = {0x0000000000000000L, 0x0000000000000000L};\n".to_string(),
+        "long[] KEY = {0xFFFFFFFFFFFFFFFFL, 0xffffffffffffffffL};\n".to_string(),
+        format!("long[] KEY = {{0x{0}L, 0x{0}L}};\n", "deadbeef".repeat(2)),
+        "long[] KEY_ROTATION_TIMES = {1700000000000L, 1700086400000L};\n".to_string(),
+        "long[] KEY_ROTATION_TIMES = {170000000000000, 170008640000000};\n".to_string(),
+    ] {
+        assert!(!holds_code_secret(&text), "{text}");
+    }
 }
 
 #[test]
@@ -154,6 +167,26 @@ fn uuid_word_and_placeholder_api_keys_are_not_secrets() {
         "api_key: 'v2-read-only-scope'\n".to_string(),
         "API_KEY = \"dead-beef-cafe\"\n".to_string(),
         "api_key: 'sk-proj-placeholder'\n".to_string(),
+        format!("API_KEY_ID = \"{}\"\n", joined(&["wq8-zvtk", "-mbr4-plhs"])),
+        format!("apiKeyId: '{}',\n", joined(&["wq8-zvtk", "-mbr4-plhs"])),
+        format!(
+            "API_KEY_IDS = \"{}\"\n",
+            joined(&["wq8-zvtk", "-mbr4-plhs"])
+        ),
+    ] {
+        assert!(!holds_code_secret(&text), "{text}");
+    }
+}
+
+#[test]
+fn a_secret_name_setter_and_filler_auth_tokens_are_not_secrets() {
+    for text in [
+        "cfg.setSecretName(new Name(\"q7ZvT2kMbR\"));\n".to_string(),
+        "cfg.setTokenEndpoint(new Url(\"q7ZvT2kMbR\"));\n".to_string(),
+        format!("// auth token {}\n", "0".repeat(64)),
+        format!("// auth token {}\n", "f".repeat(64)),
+        format!("// auth token {}\n", "0123456789abcdef".repeat(4)),
+        format!("// auth token {}\n", "ab".repeat(32)),
     ] {
         assert!(!holds_code_secret(&text), "{text}");
     }

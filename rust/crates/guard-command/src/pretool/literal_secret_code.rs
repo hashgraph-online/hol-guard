@@ -23,7 +23,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::bare::{letters_only, typed_value};
+use super::bare::{letters_only, metadata_name, typed_value};
 use super::letters::english_score;
 
 fn pattern(source: &str) -> Regex {
@@ -37,11 +37,11 @@ macro_rules! patterns {
 }
 
 patterns! {
-    WRAPPED_SETTER = r#"\bset\w*(?:Secret|Password|Token)\w*\(\s*new\s+\w+\(\s*["'](?P<v>[A-Za-z0-9]{8,40})["']\s*\)\s*\)"#;
+    WRAPPED_SETTER = r#"\bset\w*(?:Secret|Password|Token)\(\s*new\s+\w+\(\s*["'](?P<v>[A-Za-z0-9]{8,40})["']\s*\)\s*\)"#;
     DASHED_SETTER = r#"\bset\w*(?:Secret|Password|Token)\w*\(\s*["'](?P<v>[a-z0-9]{4}(?:-[a-z0-9]{4}){3,})["']\s*\)"#;
-    AUTH_TOKEN_COMMENT = r"(?i)\bauth(?:entication)?[ _-]token\s+[0-9a-f]{64}\b";
-    LONG_KEY = r"\blong\[\]\s+\w*KEY\w*\s*=\s*\{\s*(?:-?(?:0x)?[0-9a-fA-F]{12,}L?\s*,\s*)+-?(?:0x)?[0-9a-fA-F]{12,}L?\s*\}";
-    DASHED_API_KEY = r#"(?i:["']?\w*api_?key\w*["']?\]?)\s*[:=]\s*["'](?P<v>[a-z0-9]{2,}(?:-[a-z0-9]{3,}){2,})["']"#;
+    AUTH_TOKEN_COMMENT = r"(?i)\bauth(?:entication)?[ _-]token\s+(?P<v>[0-9a-f]{64})\b";
+    LONG_KEY = r"\blong\[\]\s+\w*KEY\w*\s*=\s*\{(?P<v>\s*(?:-?0[xX][0-9a-fA-F]{12,}L?\s*,\s*)+-?0[xX][0-9a-fA-F]{12,}L?\s*,?\s*)\}";
+    DASHED_API_KEY = r#"(?i:["']?(?P<n>\w*api_?key\w*)["']?\]?)\s*[:=]\s*["'](?P<v>[a-z0-9]{2,}(?:-[a-z0-9]{3,}){2,})["']"#;
     UUID_TAIL = r"[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
     HEX = r"^[0-9a-f]+$";
 }
@@ -68,9 +68,12 @@ fn dashed_value(value: &str) -> bool {
         && english_score(&letters) <= RANDOM_TOKEN
 }
 
-fn dashed_api_key(value: &str) -> bool {
+fn dashed_api_key(found: &regex::Captures) -> bool {
+    let value = &found["v"];
     let joined = value.replace('-', "");
-    mixed(value)
+    !metadata_name(&found["n"])
+        && !found["n"].to_ascii_lowercase().ends_with("ids")
+        && mixed(value)
         && !HEX.is_match(&joined)
         && !UUID_TAIL.is_match(value)
         && !typed_value(value)
@@ -82,14 +85,54 @@ fn any_value(shape: &Regex, text: &str, keep: fn(&str) -> bool) -> bool {
     shape.captures_iter(text).any(|found| keep(&found["v"]))
 }
 
+/// A value that is one short unit said over and over (`0000…`, `deadbeef…`,
+/// `0123…f0123…f`) is filler, not key material.
+fn repeated_unit(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    (1..=bytes.len() / 2).any(|unit| {
+        bytes.len() % unit == 0 && bytes.chunks(unit).all(|chunk| chunk == &bytes[..unit])
+    })
+}
+
+fn auth_token_value(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    let distinct = lower
+        .bytes()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    distinct >= 8 && !repeated_unit(&lower) && !typed_value(&lower)
+}
+
+/// Every element of the `long[]` body carries key material, not filler.
+fn long_key_body(body: &str) -> bool {
+    body.split(',')
+        .map(str::trim)
+        .filter(|element| !element.is_empty())
+        .all(|element| {
+            let digits = element
+                .trim_start_matches('-')
+                .get(2..)
+                .unwrap_or_default()
+                .trim_end_matches(['L', 'l'])
+                .to_ascii_lowercase();
+            let distinct = digits
+                .bytes()
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+            distinct >= 4 && !repeated_unit(&digits)
+        })
+}
+
 /// Whether `text` writes a credential as a code literal its surroundings name.
 pub(super) fn holds_code_secret(text: &str) -> bool {
     (text.contains("set")
         && (any_value(&WRAPPED_SETTER, text, wrapped_value)
             || any_value(&DASHED_SETTER, text, dashed_value)))
-        || AUTH_TOKEN_COMMENT.is_match(text)
-        || (text.contains("long[]") && LONG_KEY.is_match(text))
-        || any_value(&DASHED_API_KEY, text, dashed_api_key)
+        || any_value(&AUTH_TOKEN_COMMENT, text, auth_token_value)
+        || (text.contains("long[]") && any_value(&LONG_KEY, text, long_key_body))
+        || DASHED_API_KEY
+            .captures_iter(text)
+            .any(|found| dashed_api_key(&found))
 }
 
 #[cfg(test)]
