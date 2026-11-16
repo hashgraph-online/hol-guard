@@ -363,3 +363,60 @@ fn observed_namespace_blocks_apply_to_wrapped_calls() {
     .unwrap();
     assert_eq!(output.minimum_action, "block");
 }
+
+#[test]
+fn grok_dispatched_calls_take_the_choice_for_the_tool_they_name() {
+    let tool = "mcp__ads_api__list_ads";
+    let call = |name: &str, other: &str| {
+        json!({
+            "toolName": "use_tool",
+            "tool_input": {"tool_name": name, "tool_input": {"limit": 5}},
+            "toolInput": {"tool_name": other, "tool_input": {"limit": 5}},
+        })
+    };
+    for (choice, expected) in [("allow", "allow"), ("block", "block")] {
+        let mut policy = policy("allow");
+        policy
+            .mcp_tool_actions
+            .insert(format!("grok:{tool}"), choice.into());
+        let snapshot = snapshot(policy);
+        let mut result = generic_result("review");
+        result.action.harness = "grok".into();
+        result.action.action_type = PreToolActionTypeV1::McpTool;
+        result.reason_code = "native_mcp_tool_review".into();
+        let named = apply_pre_tool_policy(
+            &snapshot,
+            &call("ads_api__list_ads", "ads_api__list_ads"),
+            result.clone(),
+        )
+        .unwrap();
+        assert_eq!(named.minimum_action, expected, "{choice}");
+        let prepared = |tool: &str| {
+            json!({
+                "toolName": "MCPTool", "mcp_server": "ads_api", "mcp_tool": tool,
+                "tool_input": {"tool_name": "ads_api__list_ads"},
+            })
+        };
+        let output = apply_pre_tool_policy(&snapshot, &prepared("list_ads"), result.clone());
+        assert_eq!(output.unwrap().minimum_action, expected, "{choice}");
+        // Another tool, two different names, or another harness's dispatcher
+        // keep the review.
+        for payload in [
+            call("ads_api__delete_ads", "ads_api__delete_ads"),
+            call("ads_api__list_ads", "ads_api__delete_ads"),
+            json!({"toolName": "use_tool", "toolInput": {"tool_name": "list_ads"}}),
+            prepared("delete_ads"),
+        ] {
+            let output = apply_pre_tool_policy(&snapshot, &payload, result.clone()).unwrap();
+            assert_eq!(output.minimum_action, "review", "{choice} {payload}");
+        }
+        result.action.harness = "codex".into();
+        let codex = apply_pre_tool_policy(
+            &snapshot,
+            &call("ads_api__list_ads", "ads_api__list_ads"),
+            result,
+        )
+        .unwrap();
+        assert_eq!(codex.minimum_action, "review", "{choice}");
+    }
+}

@@ -29,6 +29,64 @@ pub(super) fn outer_tool_name(payload: &Value) -> Result<Option<String>, String>
     }))
 }
 
+/// The MCP tool a hook payload calls, under the name the operator's choices
+/// use. Grok calls every MCP tool through one dispatcher, `use_tool`, whose
+/// input names the tool as `<server>__<tool>`; Grok runs exactly that tool, so
+/// it is the call's identity, written `mcp__<server>__<tool>` as the observed
+/// tool list records it. The adapter's prepared form says the same in
+/// `mcp_server` and `mcp_tool`. Two different names name no tool.
+pub(super) fn mcp_tool_name(payload: &Value, harness: &str) -> Result<Option<String>, String> {
+    let outer = outer_tool_name(payload)?;
+    let dispatcher = outer.as_deref().is_some_and(|name| {
+        matches!(
+            name.to_ascii_lowercase().as_str(),
+            "use_tool" | "callmcptool" | "mcptool"
+        )
+    });
+    if harness != "grok" || !dispatcher {
+        return Ok(outer);
+    }
+    let pair = |record: &Map<String, Value>, server: &str, tool: &str| match (
+        record.get(server),
+        record.get(tool),
+    ) {
+        (Some(Value::String(server)), Some(Value::String(tool))) => {
+            Some(format!("{server}__{tool}"))
+        }
+        _ => None,
+    };
+    let mut names = Vec::new();
+    if let Some(record) = payload.as_object() {
+        names.extend(pair(record, "mcp_server", "mcp_tool"));
+    }
+    for key in ["tool_input", "toolInput"] {
+        let Some(record) = payload.get(key).and_then(Value::as_object) else {
+            continue;
+        };
+        match pair(record, "server", "tool")
+            .or_else(|| preferred_tool_name(&[record]).ok().flatten())
+        {
+            Some(name) => names.push(name),
+            None => return Ok(None),
+        }
+    }
+    let named = names
+        .first()
+        .filter(|first| names.iter().all(|name| name == *first))
+        .cloned();
+    Ok(named.and_then(|name| {
+        let qualified = if name.starts_with("mcp__") {
+            name
+        } else {
+            format!("mcp__{name}")
+        };
+        let rest = &qualified["mcp__".len()..];
+        rest.split_once("__")
+            .is_some_and(|(server, tool)| !server.is_empty() && !tool.is_empty())
+            .then_some(qualified)
+    }))
+}
+
 /// Whether the operator's custom allow covers this exact tool. A Composio
 /// executor runs whichever provider action its arguments name, so its tool
 /// name cannot stand for those actions. A renamed or flattened connector can
@@ -40,7 +98,11 @@ pub(super) fn operator_allows_tool(
     harness: &str,
     tool: &str,
 ) -> bool {
-    let name = tool.rsplit("__").next().unwrap_or(tool).to_ascii_lowercase();
+    let name = tool
+        .rsplit("__")
+        .next()
+        .unwrap_or(tool)
+        .to_ascii_lowercase();
     let executor = name.rfind("composio_").is_some_and(|start| {
         !matches!(
             &name[start..],
