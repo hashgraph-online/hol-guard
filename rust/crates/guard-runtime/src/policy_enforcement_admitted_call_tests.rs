@@ -180,3 +180,59 @@ fn guard_home_must_match_for_the_inspection_witness() {
         Some("/home/test/fixture"),
     ));
 }
+
+fn post_for(
+    request: &NativeHookRequestV1,
+    admitted: impl FnOnce() -> bool,
+) -> HookReviewResponseV1 {
+    let mut response = HookReviewResponseV1::allow("output_scan_allow");
+    response.model_output_action = "allow_original".into();
+    response.reviewed_output_sha256 =
+        guard_hook_core::canonical_observed_output_sha256(&request.payload);
+    crate::policy_enforcement::apply_post_tool_policy_with_witness(
+        &AdmittedPolicySnapshot::new(subprocess_review()).unwrap(),
+        request,
+        GuardHookPayloadKindV2::Inline,
+        response,
+        None,
+        admitted,
+        false,
+    )
+    .unwrap()
+}
+
+#[test]
+fn approved_call_shell_result_object_is_released_but_an_excerpt_is_not() {
+    let mut request = approved_ls_output();
+    request.payload["tool_response"] = json!({"stdout": "total 0", "exit_code": 0});
+    assert_eq!(post_for(&request, || false).decision, "deny");
+    assert_eq!(post_for(&request, || true).decision, "allow");
+
+    request.payload["tool_response_summary"] = json!({"output_sha256": "ab".repeat(32)});
+    assert_eq!(post_for(&request, || true).decision, "deny");
+}
+
+#[test]
+fn own_approval_wait_result_is_not_held_by_the_subprocess_floor() {
+    let mut request = post_request(json!({
+        "tool_call_id": "call-wait",
+        "tool_name": "bash",
+        "tool_input": {
+            "command": "hol-guard approvals wait abc123 --json --home /home/test/fixture/guard-home"
+        },
+        "tool_response": "{\"resolved\": true}"
+    }));
+    request.harness = "omp".into();
+    request.guard_home = "/home/test/fixture/guard-home".into();
+    request.cwd = Some("/home/test/fixture".into());
+    assert!(crate::policy_enforcement::post::own_approval_wait(&request));
+    let passed = post_for(&request, || {
+        crate::policy_enforcement::post::own_approval_wait(&request)
+    });
+    assert_eq!(passed.decision, "allow");
+
+    request.guard_home = "/home/test/other".into();
+    assert!(!crate::policy_enforcement::post::own_approval_wait(
+        &request
+    ));
+}

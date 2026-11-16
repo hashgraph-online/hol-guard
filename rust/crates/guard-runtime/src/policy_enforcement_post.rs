@@ -73,15 +73,18 @@ pub(crate) fn apply_post_tool_policy_for_hook(
     recording_only: bool,
 ) -> Result<HookReviewResponseV1, String> {
     let delivery = origin_store.and_then(|store| crate::bash_post_delivery::verify(request, store));
+    // Guard's own approval wait on this hook's Guard home passed `PreToolUse`
+    // on the same proof, so its result is not held either.
     let admitted_call = || {
         origin_store.is_some_and(|store| store.require_guard_home(&request.guard_home).is_ok())
-            && request.payload.as_object().is_some_and(|payload| {
-                crate::native_admitted_call::admitted_for_post(
-                    &request.guard_home,
-                    &request.harness,
-                    payload,
-                )
-            })
+            && (own_approval_wait(request)
+                || request.payload.as_object().is_some_and(|payload| {
+                    crate::native_admitted_call::admitted_for_post(
+                        &request.guard_home,
+                        &request.harness,
+                        payload,
+                    )
+                }))
     };
     apply_post_tool_policy_with_witness(
         snapshot,
@@ -91,6 +94,16 @@ pub(crate) fn apply_post_tool_policy_for_hook(
         delivery.as_ref(),
         admitted_call,
         recording_only,
+    )
+}
+
+/// Whether this output is Guard's own approval wait on the hook's Guard
+/// home, the same proof that let its `PreToolUse` through.
+pub(crate) fn own_approval_wait(request: &NativeHookRequestV1) -> bool {
+    super::guard_approval_inspection(
+        &request.payload,
+        &request.guard_home,
+        request.cwd.as_deref(),
     )
 }
 
@@ -113,8 +126,10 @@ pub(crate) fn apply_post_tool_policy_with_witness(
     }
     // Only a complete native output scan may reuse the execution admission.
     // A host-supplied marker alone cannot construct this opaque witness.
-    let clean_scan = payload_kind == GuardHookPayloadKindV2::Inline
-        && plain_inline_output(&request.payload)
+    // The approval witness needs the same complete scan of this exact output,
+    // but not the plain text shape the owner delivery ACK requires: a shell
+    // result object such as `{"stdout": ..., "exit_code": 0}` is scanned whole.
+    let scanned = payload_kind == GuardHookPayloadKindV2::Inline
         && response.decision == "allow"
         && response.model_output_action == "allow_original"
         && matches!(
@@ -124,6 +139,12 @@ pub(crate) fn apply_post_tool_policy_with_witness(
         && response.reviewed_output_sha256.is_some()
         && response.reviewed_output_sha256
             == guard_hook_core::canonical_observed_output_sha256(&request.payload);
+    let clean_scan = scanned && plain_inline_output(&request.payload);
+    // A digest the host declared for an excerpt or a source reference proves
+    // less than the whole output, so those payloads never carry the witness.
+    let full_scan = scanned
+        && request.payload.get("guard_source_ref").is_none()
+        && request.payload.get("tool_response_summary").is_none();
     let verified_delivery = delivery.is_some() && clean_scan;
     let task_metadata = payload_kind == GuardHookPayloadKindV2::Inline
         && guard_command::pretool::bounded_task_metadata_output(&request.payload, &request.harness);
@@ -189,7 +210,7 @@ pub(crate) fn apply_post_tool_policy_with_witness(
     // `delivery_floor` lowers are lifted, so a secret, a network or a risk
     // floor on the output still holds.
     if !verified_delivery
-        && clean_scan
+        && full_scan
         && action_rank(&floor) > action_rank(&intrinsic)
         && admitted_call()
     {

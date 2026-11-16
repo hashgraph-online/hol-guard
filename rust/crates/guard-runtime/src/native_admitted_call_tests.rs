@@ -125,3 +125,26 @@ fn witness_lasts_one_hour() {
         json!(false)
     );
 }
+
+#[test]
+fn recording_a_witness_prunes_expired_ones() {
+    let home = seeded_home("admitted-call-prune");
+    let old = payload("call-1", "ls -la");
+    let fresh = payload("call-2", "ls -1");
+    assert_eq!(call(&home, RECORD_METHOD, &old, AT), json!(true));
+    assert_eq!(
+        call(&home, RECORD_METHOD, &fresh, "2026-01-01T01:00:00+00:00"),
+        json!(true)
+    );
+    assert_eq!(call(&home, LOOKUP_METHOD, &old, AT), json!(true));
+    let next = payload("call-3", "pwd");
+    assert_eq!(
+        call(&home, RECORD_METHOD, &next, "2026-01-01T01:00:01+00:00"),
+        json!(true)
+    );
+    assert_eq!(call(&home, LOOKUP_METHOD, &old, AT), json!(false));
+    assert_eq!(
+        call(&home, LOOKUP_METHOD, &fresh, "2026-01-01T01:30:00+00:00"),
+        json!(true)
+    );
+}

@@ -167,7 +167,7 @@ Changing any of these produces a new command, and Guard asks again.
 - `rust/crates/guard-runtime/src/hook_decision_containment_route_tests.rs` (`a_review_keeps_allow_once_and_always_allow`, `a_host_with_no_sink_says_so`, `the_edge_carries_the_route_the_query_answers`)
 - `tests/test_containment_route_wire.py` (`test_a_review_keeps_allow_once_and_always_allow`, `test_a_malformed_route_is_an_outage_not_a_route`, `test_a_host_without_a_sink_keeps_the_receipt_and_says_so`)
 - `rust/crates/guard-runtime/src/native_admitted_call_tests.rs` and `rust/crates/guard-runtime/src/policy_enforcement_admitted_call_tests.rs` (`approved_call_output_is_not_held_again_by_the_subprocess_floor`, `approval_witness_never_releases_secret_output_or_a_block_floor`, `own_approval_wait_passes_the_subprocess_floor`)
-- `ci/gauntlet/approval_retry.json` (`approved-retry-subprocess-review-command`)
+- `ci/gauntlet/approval_retry.json` (`approved-retry-waited-command`)
 - `dashboard/src/approval-retry-ux.test.ts`, `dashboard/e2e/approval-scope-ui.spec.ts`
 
 If one of these fails after a change, fix the change. Do not relax the test.

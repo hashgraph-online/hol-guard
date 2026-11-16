@@ -30,6 +30,7 @@ pub(crate) const LOOKUP_METHOD: &str = "native_admitted_call";
 const WINDOW_MICROS: i64 = 60 * 60 * 1_000_000;
 const MAX_CALL_ID_BYTES: usize = 512;
 const BUSY_TIMEOUT_MS: u64 = 250;
+const PRUNE_BATCH: i64 = 64;
 
 /// The top-level call id each harness sends unchanged on both `PreToolUse`
 /// and `PostToolUse` (`hook_evidence_correlation::PROVEN_REQUEST_ID_FIELDS`).
@@ -100,6 +101,7 @@ pub(crate) fn record(connection: &Connection, args: &Args) -> StoreResult<Value>
     let Some((key, now)) = args_key(args)? else {
         return Ok(json!(false));
     };
+    prune_expired(connection, &now)?;
     let inserted = exec(
         connection,
         "insert or ignore into guard_continuation_effects \
@@ -114,6 +116,34 @@ pub(crate) fn record(connection: &Connection, args: &Args) -> StoreResult<Value>
         ],
     )?;
     Ok(json!(inserted == 1))
+}
+
+/// Deletes up to `PRUNE_BATCH` of the oldest witnesses that have left the
+/// window, so every approved call keeps the table bounded.
+fn prune_expired(connection: &Connection, now: &str) -> StoreResult<()> {
+    let Some((current, _)) = crate::guard_store_native_review_consume::instant(Some(now)) else {
+        return Ok(());
+    };
+    let rows = query_all(
+        connection,
+        "select effect_key, created_at from guard_continuation_effects \
+         where event_name = ? order by created_at limit ?",
+        &[Value::from(EVENT_NAME), Value::from(PRUNE_BATCH)],
+    )?;
+    for row in rows {
+        let expired = crate::guard_store_native_review_consume::instant(
+            row.get("created_at").and_then(Value::as_str),
+        )
+        .is_none_or(|(at, _)| current - at > WINDOW_MICROS);
+        if let (true, Some(key)) = (expired, row.get("effect_key").and_then(Value::as_str)) {
+            exec(
+                connection,
+                "delete from guard_continuation_effects where effect_key = ? and event_name = ?",
+                &[Value::from(key), Value::from(EVENT_NAME)],
+            )?;
+        }
+    }
+    Ok(())
 }
 
 /// `native_admitted_call`: whether this exact call was admitted on an
