@@ -4,8 +4,9 @@
 //!
 //! Requests that render the extension carry `runtime`, the facts only the
 //! Guard process holds: `installing_cli` (its own `hol-guard` entry points),
-//! `native_hook_runtime` and, on Windows, `windows` with the interpreter,
-//! package root, contained sink argv, request root and `taskkill` path.
+//! `native_hook_runtime` and, on Windows, `windows` with the contained sink
+//! argv, request root and `taskkill` path. The interpreter and package root
+//! come from the caller stamp.
 
 use std::path::{Path, PathBuf};
 
@@ -14,7 +15,7 @@ use serde_json::{json, Map, Value};
 
 use super::desktop_core;
 use super::kimi::expand_user;
-use super::{path_text, which, Ctx, Failure, Step};
+use super::{caller, path_text, which, Ctx, Failure, Step};
 use crate::guard_store_json::py_repr_str;
 
 pub(super) const EXTENSION_NAME: &str = "hol-guard.ts";
@@ -167,8 +168,8 @@ fn render_request(
                 .and_then(Value::as_str)
                 .ok_or(Failure::Invalid)
         };
-        let python = field("python")?;
-        let root = field("package_root")?;
+        let python = caller::executable(ctx)?;
+        let root = caller::package_root(ctx)?;
         request["cli_command"] = json!(python);
         request["cli_args"] = json!([
             "-I",

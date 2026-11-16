@@ -44,7 +44,7 @@ def pi_native_hook_runtime(*, guard_home: Path, platform_name: str = os.name) ->
 
 
 def _windows_facts(platform_name: str = os.name) -> dict[str, object] | None:
-    """The interpreter, sink and request root Claude Code's Windows route uses."""
+    """The sink, request root and ``taskkill`` path the Windows route uses."""
     if platform_name != "nt":
         return None
     from ..codex_hook_windows_job import windows_system_executable_path
@@ -64,8 +64,6 @@ def _windows_facts(platform_name: str = os.name) -> dict[str, object] | None:
         request_root = ""
     sink = [*contained_sink_command_prefix(python, package_root), "guard"] if request_root else []
     return {
-        "python": python,
-        "package_root": str(package_root),
         "sink_command": sink,
         "request_root": request_root,
         "taskkill": taskkill,
