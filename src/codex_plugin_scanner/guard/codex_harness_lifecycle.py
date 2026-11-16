@@ -254,7 +254,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             workspace_dir=context.workspace_dir,
         )
 
-    def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
+    def prepare_install(self, context: HarnessContext, *, surface: str | None = None) -> PreparedHarnessInstall:
         """Prepare the enrolled native installation, including retirements, without publication."""
         return self._prepare_plan(context, enroll=False).prepared
 

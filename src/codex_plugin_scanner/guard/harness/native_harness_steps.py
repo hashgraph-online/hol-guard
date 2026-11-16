@@ -172,8 +172,8 @@ def install_delegated(adapter: NativeHarnessAdapter, context: HarnessContext) ->
     from ..codex_hook_integrity import atomic_write_text
     from ..shims import install_guard_shim
     from ..store import GuardStore
-    from . import get_adapter
     from .native_harness import _native_context, _text
+    from .registry import get_adapter
 
     # Repeat preparation under the shared owner; the earlier read-only
     # check does not authorize mutation.

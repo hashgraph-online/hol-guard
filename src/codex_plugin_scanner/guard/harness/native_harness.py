@@ -452,7 +452,7 @@ class NativeHarnessAdapter(HarnessAdapter):
         """Which native runtimes Paseo could hand a session to on this host."""
         if self._spec.get("install") != "delegated":
             return {}
-        from . import get_adapter
+        from .registry import get_adapter
 
         native = _native_context(context)
         return {

@@ -23,8 +23,9 @@ Search [open adapter PRs](https://github.com/hashgraph-online/hol-guard/pulls?q=
 
 | Responsibility | Location |
 | --- | --- |
-| Public Python adapter classes and registrations | `src/codex_plugin_scanner/guard/adapters/<harness>.py` and `adapters/__init__.py` |
-| Shared adapter context and install ownership | `adapters/base.py` |
+| Harness registration | `_ADAPTER_SPECS` in `src/codex_plugin_scanner/guard/harness/registry.py` and `NATIVE_HARNESSES` in `harness/native_harness.py` |
+| Generic Python client and shared context | `harness/native_harness.py`, `harness/native_harness_steps.py` and `harness/base.py` |
+| Native harness description (launchers, flags) | `rust/crates/guard-runtime/src/adapters/harness_adapter/describe.rs` |
 | Static setup, event coverage, and known blind spots | `guard/contracts/harness-protection-contracts.v1.json`, loaded by `harness/contract_registry.py` and served by `harness/contracts.py` |
 | Native harness install, render and hook decisions | `rust/crates/guard-runtime/src/adapters/harness_adapter/<harness>.rs` |
 | Native harness discovery | `rust/crates/guard-runtime/src/adapters/detection/<harness>_detect.rs` |
@@ -33,15 +34,15 @@ Search [open adapter PRs](https://github.com/hashgraph-online/hol-guard/pulls?q=
 | Wire contracts | `rust/crates/guard-contracts/src/hook_adapter.rs` |
 | Existing adapter tests | `tests/test_<harness>_adapter.py`, `tests/test_guard_harness_*.py`, and native vector tests |
 
-Public harness classes stay at their existing adapter entrypoints. Harness logic belongs in the native runtime: the Python adapter sends its context to the `harness_adapter` kind and applies the answer. Do not add Python helper packages under `adapters/`.
+Every harness except Codex resolves to the generic `NativeHarnessAdapter`. Harness logic belongs in the native runtime: the generic client sends its context to the `harness_adapter` kind and applies the answer. Do not add a per-harness Python adapter class.
 
-Begin with [Gemini and Antigravity](../../rust/crates/guard-runtime/src/adapters/harness_adapter/simple.rs) for discovery-only examples, and [Cline](../../rust/crates/guard-runtime/src/adapters/harness_adapter/cline.rs) or [Cursor](../../src/codex_plugin_scanner/guard/adapters/cursor.py) for hook installation. Review the actual host contract before copying a strategy.
+Begin with [Gemini and Antigravity](../../rust/crates/guard-runtime/src/adapters/harness_adapter/simple.rs) for discovery-only examples, and [Cline](../../rust/crates/guard-runtime/src/adapters/harness_adapter/cline.rs) or [Cursor](../../rust/crates/guard-runtime/src/adapters/harness_adapter/cursor_apply.rs) for hook installation. Review the actual host contract before copying a strategy.
 
 ## 3. Add discovery and registration
 
-1. Implement a `HarnessAdapter` subclass in `src/codex_plugin_scanner/guard/adapters/<harness>.py`. Specify `harness`, executable, aliases, and `detect(context)` as appropriate. Return a `HarnessDetection` with observed paths, artifacts, and warnings; do not infer enforcement from an executable being present.
+1. Add the harness to the native `harness_adapter` kind: its spec, the `describe` answer (launcher, aliases, legacy launchers and install flags) and its install and uninstall plans. Detection returns observed paths, artifacts, and warnings; do not infer enforcement from an executable being present.
 2. Implement the bounded native discovery operation in `rust/crates/guard-runtime/src/adapters/detection/` and wire it into the resident's operation dispatch. Python calls it through `native_adapter_detection_with_warnings`, using `detection_request` to preserve home, workspace, and cwd boundaries.
-3. Add the class to `_ADAPTER_SPECS` in `adapters/__init__.py`. Use the exact import path and class name. Check that `get_adapter` resolves canonical names and aliases without collision.
+3. Add the harness to `NATIVE_HARNESSES` in `harness/native_harness.py` and `_ADAPTER_SPECS` in `harness/registry.py`. Check that `get_adapter` resolves canonical names and aliases without collision.
 4. Add a contract to `src/codex_plugin_scanner/guard/contracts/harness-protection-contracts.v1.json`: installation aliases, observed config paths, event surfaces, smoke command, and **specific** known blind spots. Declare real event capabilities in its `capability_events` list. An aspirational hook is not a supported capability. Each capability row names its `surface` (`foreground`, `background`, `editor`, `cli`, `cloud-agent`, or `terminal`), its `failure_behavior` (`fail_closed`, `fail_open`, `observe_only`, or `unsupported`), and a `claim`. `failure_behavior` is what happens to a state-changing action when Guard cannot answer. If some actions continue anyway, such as read-only inspection a harness lets through in a degraded mode, name them in `known_blind_spots`; the row is then listed under **Not covered** in the published claims. A new row's claim is `configured`, `observe_only`, or `unsupported`. A claim that says more, such as `live_block_proven`, needs the exact Guard and harness versions, the platform, an evidence reference (a run or artifact name such as `gauntlet-run-1234`, or a page in this repository on GitHub; never a local path), and UTC `observed_at` and `expires_at` times. The native runtime checks these rules (`harness_protection_contract.rs`), and a row that breaks them fails the build. After editing the contract, run `python scripts/generate_harness_claims.py` to regenerate [the published claims](harness-claims.md), which the hosted coverage pages read.
 5. Update [harness support](harness-support.md) with tested behavior and limits. If the host has version-specific coverage, follow [version coverage](harness-version-coverage.md) rather than claiming support for untested versions.
 
