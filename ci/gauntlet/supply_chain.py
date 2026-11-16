@@ -25,6 +25,8 @@ SETUP_PY_CASE = "supply-chain-setup-py-exec"
 HTTP_SOURCE_CASE = "supply-chain-insecure-http-tarball"
 LOCKFILE_DRIFT_CASE = "supply-chain-manifest-lockfile-drift"
 GIT_SOURCE_CASE = "supply-chain-git-dependency-source"
+# A program that is not a package manager installs from a registry through one of its verbs.
+DOTNET_PACKAGE_CASE = "supply-chain-dotnet-adds-a-nuget-package"
 LOCKFILE_INTEGRITY_CASE = "supply-chain-lockfile-integrity-missing"
 # A loopback tarball the integrity-missing lock pins; no real registry is reachable.
 LOCKFILE_INTEGRITY_REMOTE = "http://127.0.0.1:9/build-helper-1.0.0.tgz"
@@ -48,6 +50,7 @@ PACKAGE_BLOCK_REASONS: dict[str, frozenset[str]] = {
     HTTP_SOURCE_CASE: frozenset({PACKAGE_REVIEW, "insecure_source_url"}),
     LOCKFILE_DRIFT_CASE: frozenset({PACKAGE_REVIEW, "manifest_lockfile_unsynced"}),
     GIT_SOURCE_CASE: frozenset({PACKAGE_REVIEW, "vcs_source_risk"}),
+    DOTNET_PACKAGE_CASE: frozenset({PACKAGE_REVIEW}),
     LOCKFILE_INTEGRITY_CASE: frozenset({PACKAGE_REVIEW, "lockfile_integrity_missing"}),
     LOCKFILE_UNTRUSTED_CASE: frozenset({PACKAGE_REVIEW, "external_tarball_source"}),
 }

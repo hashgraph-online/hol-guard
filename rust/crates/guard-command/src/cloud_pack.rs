@@ -13,11 +13,12 @@
 //! projection reads a response the host already received.
 
 use crate::cloud_action_binding::{ActionEffect, TargetCapability};
-use crate::effect_decision::GuardAction;
 use guard_contracts::{ActionClassV2, SensitivityV2};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
+
+pub use crate::cloud_pack_fixtures::{Fixture, FixtureExpect, FixtureKind, PresetDecisions};
 
 pub const PACK_SCHEMA: &str = "guard.cloud-action-pack.v1";
 /// Largest pack document accepted, fixtures included.
@@ -35,10 +36,25 @@ pub const MAX_PAGES: u32 = 10;
 pub struct CloudActionPack {
     pub schema: String,
     pub provider: Provider,
-    /// Exact API host names; requests may reach no other host.
+    /// Exact API host names; requests may reach no other host. A host may
+    /// begin with one connection value label, as in `{subdomain}.example.com`.
     pub hosts: Vec<String>,
     pub auth: Auth,
     pub actions: Vec<PackAction>,
+    /// Sign-in brokers that may carry this pack's requests. Absent means none.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::cloud_pack_transport::present"
+    )]
+    pub transports: Option<crate::cloud_pack_transport::Transports>,
+    /// Values each connection supplies, such as a tenant subdomain. Absent means none.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::cloud_pack_connection::present"
+    )]
+    pub connection: Option<crate::cloud_pack_connection::Connection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -82,11 +98,22 @@ pub struct PackAction {
     pub link: Option<ActionLink>,
     pub executor: Executor,
     pub arguments: BTreeMap<String, ArgumentSpec>,
+    /// Undeclared arguments a `remote-mcp` tool may also take, bounded in
+    /// total size. They feed no fact, so every fact they could move stays
+    /// a constant or unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_arguments: Option<OpenArguments>,
     pub facts: FactSpec,
     pub response: ResponseSpec,
     pub safety: Safety,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fixtures: Vec<Fixture>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OpenArguments {
+    pub max_bytes: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -195,6 +222,8 @@ pub enum Template {
         key: String,
         value: Box<Template>,
     },
+    /// A form-encoded body of scalar fields; only as the whole body.
+    Form(Vec<TemplateField>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -229,6 +258,15 @@ pub enum ArgumentSpec {
         max_items: u32,
         items: TextRule,
     },
+    /// An opaque JSON value a `remote-mcp` tool takes, bounded by its
+    /// serialized size; with `maxItems` it must be an array Guard can count.
+    #[serde(rename_all = "camelCase")]
+    Json {
+        required: bool,
+        max_bytes: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_items: Option<u32>,
+    },
 }
 
 impl ArgumentSpec {
@@ -246,7 +284,7 @@ impl ArgumentSpec {
                 forbidden: forbidden.clone(),
             }),
             Self::Array { items, .. } => Some(items.clone()),
-            Self::Integer { .. } | Self::Boolean { .. } => None,
+            Self::Integer { .. } | Self::Boolean { .. } | Self::Json { .. } => None,
         }
     }
 
@@ -255,7 +293,8 @@ impl ArgumentSpec {
             Self::String { required, .. }
             | Self::Integer { required, .. }
             | Self::Boolean { required }
-            | Self::Array { required, .. } => *required,
+            | Self::Array { required, .. }
+            | Self::Json { required, .. } => *required,
         }
     }
 }
@@ -285,8 +324,19 @@ pub struct FactSpec {
     pub recipient_domains: Option<Extractor>,
     pub environment: Option<Extractor>,
     pub sensitivity: Option<Extractor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub money: Option<crate::cloud_pack_money::MoneySpec>,
+    /// A string argument holding SQL whose statements can raise the class.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sql: Option<crate::cloud_pack_sql::SqlSpec>,
     /// A read action in this pack the gateway may run to learn the volume.
     pub count_readback: Option<String>,
+    /// A read action in this pack, called with the same arguments, that finds
+    /// what a write left behind. It must accept every argument the write
+    /// carries under the same bounds and require none the write may omit. The gateway runs it only for a write whose
+    /// outcome it does not know, and never resends the write.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reconcile_read: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -386,47 +436,6 @@ pub struct Safety {
 pub struct ResourceRef {
     pub kind: String,
     pub argument: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum FixtureKind {
-    Safe,
-    Risky,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Fixture {
-    pub name: String,
-    pub kind: FixtureKind,
-    pub arguments: Value,
-    pub expect: FixtureExpect,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct FixtureExpect {
-    /// The argument error code the call is refused with.
-    pub error: Option<String>,
-    /// Facts to compare by top-level key with the extracted facts.
-    pub facts: Option<serde_json::Map<String, Value>>,
-    /// The exact request the executor sends (`declarative-http` only).
-    pub request: Option<Value>,
-    /// A recorded provider response body and the projection it yields.
-    pub response: Option<String>,
-    pub projection: Option<Value>,
-    /// The policy decision under each shipped preset, from the extracted
-    /// facts with a clean session and zeroed usage windows.
-    pub decisions: Option<PresetDecisions>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PresetDecisions {
-    pub relaxed: Option<GuardAction>,
-    pub balanced: Option<GuardAction>,
-    pub strict: Option<GuardAction>,
 }
 
 /// A pack error: a stable code and the JSON pointer it applies to.

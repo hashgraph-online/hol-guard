@@ -320,12 +320,18 @@ pub fn classify(name: &str, input_schema: Option<&Value>) -> Proposal {
     }
     Proposal {
         class,
-        destructive: matches!(
-            class,
-            ActionClassV2::Delete | ActionClassV2::Admin | ActionClassV2::Pay
-        ),
+        destructive: destructive_class(class),
         evidence,
     }
+}
+
+/// Whether a proposed class reads as destructive. A proposal's `destructive`
+/// is exactly this, so a stored class-only call recovers it from its class.
+pub const fn destructive_class(class: ActionClassV2) -> bool {
+    matches!(
+        class,
+        ActionClassV2::Delete | ActionClassV2::Admin | ActionClassV2::Pay
+    )
 }
 
 /// A schema whose top-level properties name both an amount and a currency.

@@ -150,6 +150,14 @@ fn a_bodiless_success_projects_only_where_the_pack_accepts_it() {
             assert_eq!(projection.data, json!({"message": false}), "{id}");
         }
     }
+    // Mailchimp answers an archived member with 204 and no body.
+    let mailchimp = crate::cloud_pack_explain::SHIPPED_SOURCES
+        .iter()
+        .map(|source| pack_from_value(serde_json::from_str(source).unwrap()).unwrap())
+        .find(|pack| pack.provider.id == "mailchimp")
+        .unwrap();
+    let archive = mailchimp.action("mailchimp.members.archive").unwrap();
+    assert!(project(archive, b"").is_ok());
     // A read that comes back empty is still an error, not an empty result.
     let list = pack.action("github.issues.list").unwrap();
     assert_eq!(project(list, b"").unwrap_err(), "response_json_invalid");

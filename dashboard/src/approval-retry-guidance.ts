@@ -11,9 +11,14 @@ export function retryCannotReuseApproval(item: GuardApprovalRequest): boolean {
     item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
 }
 
-/** Native one-time approvals are honoured for 5 minutes (store_native_review_approvals.py); others for 15. */
+/** Native one-time approvals are honoured for an hour (guard_store_native_review_consume.rs); others for 15 minutes. */
 export function oneTimeRetryWindowMinutes(item: GuardApprovalRequest): number {
-  return item.artifact_id.includes(":native-pretool:") ? 5 : 15;
+  return item.artifact_id.includes(":native-pretool:") ? 60 : 15;
+}
+
+/** "an hour" or "15 minutes", for the sentence that tells the user how long a retry is covered. */
+export function retryWindowText(minutes: number): string {
+  return minutes === 60 ? "an hour" : `${minutes} minutes`;
 }
 
 /** Labels of the Extensions permissions Guard verified would let this command run, or null when none would. */

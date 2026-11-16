@@ -208,7 +208,7 @@ def test_cursor_attestation_unavailable_is_unproven_not_inactive(
     store = GuardStore(tmp_path / "guard-home")
     installs = [{"harness": "cursor", "active": True, "manifest": {}}]
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cursor_hook_health.cursor_runtime_hooks_verified",
+        "codex_plugin_scanner.guard.adapters.cursor.cursor_runtime_hooks_verified",
         lambda _context: None,
     )
     assert approvals_module._live_hook_verification(installs, store) == {}

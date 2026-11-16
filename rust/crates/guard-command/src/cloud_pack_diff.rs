@@ -10,6 +10,8 @@
 
 use crate::cloud_action_v2::effect_rank;
 use crate::cloud_pack::*;
+use crate::cloud_pack_connection::connection_values;
+use crate::cloud_pack_transport::partner_labels;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -100,6 +102,32 @@ pub fn diff(old: &CloudActionPack, new: &CloudActionPack) -> Result<PackDiff, Pa
         None,
         false,
     );
+    let old_transports = partner_labels(old);
+    let new_transports = partner_labels(new);
+    for label in new_transports.difference(&old_transports) {
+        changes.push("transport_added", Some(label), true);
+    }
+    for label in old_transports.difference(&new_transports) {
+        changes.push("transport_removed", Some(label), false);
+    }
+    // A connection value decides which tenant a request reaches, so any change to one is reviewed.
+    let old_values = connection_values(old);
+    let new_values = connection_values(new);
+    for (name, bounds) in &new_values {
+        match old_values.get(name) {
+            None => changes.push("connection_value_added", Some(*name), true),
+            Some(old_bounds) if old_bounds != bounds => {
+                changes.push("connection_value_changed", Some(*name), true);
+            }
+            Some(_) => {}
+        }
+    }
+    for name in old_values
+        .keys()
+        .filter(|name| !new_values.contains_key(*name))
+    {
+        changes.push("connection_value_removed", Some(*name), true);
+    }
     let old_actions: BTreeMap<_, _> = old
         .actions
         .iter()
@@ -136,7 +164,20 @@ fn compare_action(changes: &mut Changes, old: &PackAction, new: &PackAction) {
     changes.when(old.title != new.title, "title_changed", None, false);
     changes.when(old.link != new.link, "link_changed", None, true);
     changes.when(old.executor != new.executor, "executor_changed", None, true);
-    compare_arguments(changes, &old.arguments, &new.arguments);
+    compare_arguments(
+        changes,
+        &old.arguments,
+        &new.arguments,
+        new.open_arguments.is_some(),
+    );
+    let open_looser = match (&old.open_arguments, &new.open_arguments) {
+        (None, Some(_)) => true,
+        (Some(before), Some(after)) => after.max_bytes > before.max_bytes,
+        _ => false,
+    };
+    if old.open_arguments != new.open_arguments {
+        changes.push("open_arguments_changed", None, open_looser);
+    }
     // Any class change can move the action into a different policy bucket.
     changes.when(
         old.facts.class != new.facts.class,
@@ -155,6 +196,7 @@ fn compare_arguments(
     changes: &mut Changes,
     old: &BTreeMap<String, ArgumentSpec>,
     new: &BTreeMap<String, ArgumentSpec>,
+    open: bool,
 ) {
     for (name, spec) in new {
         match old.get(name) {
@@ -175,7 +217,9 @@ fn compare_arguments(
         }
     }
     for name in old.keys().filter(|name| !new.contains_key(*name)) {
-        changes.push("argument_removed", Some(name), false);
+        // Under open arguments a removed name is still accepted, now with only
+        // the shared size bound, so the removal widens the action.
+        changes.push("argument_removed", Some(name), open);
     }
 }
 
@@ -211,6 +255,18 @@ fn argument_looser(old: &ArgumentSpec, new: &ArgumentSpec) -> bool {
                 ..
             },
         ) => min_items < lo || max_items > hi || text_looser(before, items),
+        (
+            ArgumentSpec::Json {
+                max_bytes: before,
+                max_items: hi,
+                ..
+            },
+            ArgumentSpec::Json {
+                max_bytes,
+                max_items,
+                ..
+            },
+        ) => max_bytes > before || items_looser(*hi, *max_items),
         (ArgumentSpec::String { .. }, ArgumentSpec::String { .. }) => {
             match (old.text_rule(), new.text_rule()) {
                 (Some(before), Some(after)) => text_looser(&before, &after),
@@ -218,6 +274,15 @@ fn argument_looser(old: &ArgumentSpec, new: &ArgumentSpec) -> bool {
             }
         }
         _ => true,
+    }
+}
+
+/// An unbounded array (`None`) is looser than any bound.
+fn items_looser(old: Option<u32>, new: Option<u32>) -> bool {
+    match (old, new) {
+        (Some(before), Some(after)) => after > before,
+        (Some(_), None) => true,
+        (None, _) => false,
     }
 }
 

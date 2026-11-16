@@ -77,7 +77,14 @@ scripts/batch.sh <tag> "base cigar gfull" 116 117 118      # Codex and Claude Co
 scripts/batch_omp.sh <tag> "ompbase ompcigar" 116 117 118  # Oh My Pi arms
 python3 scripts/compare.py <tag>                            # base vs CIGAR against the reference
 python3 scripts/pair.py <tag> --base clbase --cigar clgfull  # paired savings for any two arms
+python3 scripts/report.py <tag> --arm gfull --base base      # requests, tool calls and Guard holds per step kind
 ```
+
+`report.py` counts, per step kind: requests, tool calls by type (test, read,
+search, edit, git), calls Guard held and calls made after a hold in the same
+step. With `--base` it adds cost and tokens saved and the share of steps where
+the Guard arm cost 20% more than the base. Pass `--base-tag` once per extra
+no-Guard run of the same seeds to print savings as a low-high range.
 
 Results land in `$CIGAR_GAUNTLET_WORK/runs/<tag>/results.jsonl`, one row per
 session: arm, seed, repo, `passed`, `cost.usd`, `tokens` (input, cached,
@@ -130,7 +137,8 @@ and session copies. `--all` deletes the whole rig.
 - `scripts/setup.sh`, `cigar_setup.py`, `make_arms.py`, `make_full_arms.py`,
   `make_omp_arms.py`, `setup_repos.py`: rig setup.
 - `scripts/omp_exec.py`: the Oh My Pi command and environment.
-- `scripts/compare.py`, `pair.py`, `steps.py`, `notes.py`: reports and checks.
+- `scripts/compare.py`, `pair.py`, `report.py`, `steps.py`, `notes.py`: reports
+  and checks.
 - `scripts/prep.py`: rebuilds a task pool from verified mutations; only needed
   to add a repo.
 - `references/repos.json`: repo URLs, tags and test folders.

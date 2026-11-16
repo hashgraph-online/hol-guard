@@ -21,6 +21,7 @@ from .restricted_pytest_model import (
     _DEFAULT_OPEN_FILES,
     _DEFAULT_PROCESSES,
     PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
+    READ_ONLY_ROOT_PROFILES,
     READ_ONLY_TEST_PROFILES,
     RestrictedPytestError,
     RestrictedPytestPlan,
@@ -103,7 +104,7 @@ def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path, user_site_r
 
         for path in plan.output_roots:
             validate_build_output_root(path, workspace=plan.workspace, cwd=plan.cwd, arguments=plan.command)
-    if plan.read_only_roots and plan.profile_version != "git-readonly-v1":
+    if plan.read_only_roots and plan.profile_version not in READ_ONLY_ROOT_PROFILES:
         raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected extra read grants.")
     if plan.backend == "macos-seatbelt":
         profile = _macos_profile(plan, private_root=private_root, user_site_root=user_site_root)

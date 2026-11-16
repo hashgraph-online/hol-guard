@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
 from ..adapters.diagnostic_probes import without_command_probes
 from ..approval_gate_nudge import approval_gate_posture
+from ..harness_version_api import compatibility_or_unknown
 from ..native_aibom_summaries import NativeAibomSummariesError
 from ..native_daemon_peer import load_guard_daemon_endpoint_url
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
@@ -346,6 +347,9 @@ def _run_guard_doctor_command(
         adapter = get_adapter(args.harness)
         payload: dict[str, object] = adapter.diagnostics(context)
         payload["runtime_readiness"] = doctor_runtime_readiness(payload)
+        # The native runtime decides the per-event proof states; a failure
+        # reports version_unknown, never a proven state.
+        payload["version_compatibility"] = compatibility_or_unknown(adapter.harness, context)
         payload["runtime_detector_registry"] = _runtime_detector_registry_payload(config)
         payload["connect_health"] = _guard_doctor_connect_health_payload(store)
         if args.harness == "codex":

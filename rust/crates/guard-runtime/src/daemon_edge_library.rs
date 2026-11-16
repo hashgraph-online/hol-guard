@@ -322,22 +322,49 @@ pub(in crate::daemon_edge) fn run_host(
     // Held, never written: the host stops when this end closes.
     let _input = child.stdin.take();
     if let Some(output) = child.stdout.take() {
+        let journal = std::path::PathBuf::from(guard_home);
         let _ = thread::Builder::new()
             .name("daemon-worker-host-output".into())
             .spawn(move || {
                 let mut lines = BufReader::new(output);
-                let mut line = String::new();
-                if lines.read_line(&mut line).is_ok() && line.trim_end() == "ready" {
-                    if let Some(ready) = ready {
-                        let _ = ready.send(());
-                    }
-                }
+                read_host_start(&mut lines, &journal, ready);
                 // Anything later is drained so the host never blocks on it.
                 let _ = std::io::copy(&mut lines, &mut std::io::sink());
             });
     }
     let _ = child.wait();
     Some(())
+}
+
+/// The most start steps one host may journal before it says `ready`.
+const MAX_HOST_PHASES: usize = 16;
+
+/// Reads the host's start lines up to `ready`. Each `phase <step>` line is
+/// journaled as `host_<step>`, so a slow start names the step that spent it;
+/// `ready` is heard once, and any other line ends the start without it.
+pub(in crate::daemon_edge) fn read_host_start(
+    lines: &mut impl BufRead,
+    guard_home: &std::path::Path,
+    ready: Option<mpsc::Sender<()>>,
+) {
+    let mut line = String::new();
+    for _ in 0..=MAX_HOST_PHASES {
+        line.clear();
+        if !matches!(lines.read_line(&mut line), Ok(read) if read > 0) {
+            return;
+        }
+        let text = line.trim_end();
+        if text == "ready" {
+            if let Some(ready) = ready {
+                let _ = ready.send(());
+            }
+            return;
+        }
+        let Some(step) = text.strip_prefix("phase ") else {
+            return;
+        };
+        super::lifecycle::record(guard_home, &format!("host_{step}"), None, None, None);
+    }
 }
 
 fn stop(mut child: Child) {

@@ -116,3 +116,102 @@ fn an_apostrophe_in_a_substituted_commit_message_is_message_text() {
         );
     }
 }
+
+fn cursor_verdict(
+    session: &crate::pretool_git_session_ops::Session,
+    command: &str,
+    cwd: &std::path::Path,
+) -> guard_contracts::PreToolResultV1 {
+    crate::git_helper_fixture::evaluate_with_node(
+        "cursor",
+        "PreToolUse",
+        &serde_json::json!({"tool_name":"bash", "tool_input":{"command":command}}),
+        Some(&crate::pretool_git_session_ops::default_controls()),
+        &session.home,
+        cwd.to_str(),
+    )
+}
+
+/// Cursor has no workspace sandbox, so a commit there is quiet only when the
+/// local Git write proof settles it. The message an agent writes in a quoted
+/// heredoc, and the author it names with `-c user.name` and `-c user.email`,
+/// change nothing the commit runs, so those spellings settle like a plain
+/// `git commit -m`.
+#[test]
+fn cursor_settles_a_heredoc_message_and_a_named_author() {
+    let session = session("heredoc-message-cursor");
+    let worktree = session.worktree.to_str().unwrap().to_owned();
+    let id = "-c user.name=Agent -c user.email=agent@example.com";
+    let msg = "\"$(cat <<'EOF'\nchore: reset the lane\n\nit's the second line\nEOF\n)\"";
+    for (command, cwd) in [
+        (format!("git commit -m {msg}"), &session.primary),
+        (
+            format!("git add -A && git commit -m {msg}"),
+            &session.primary,
+        ),
+        (format!("git {id} commit -m 'fix: thing'"), &session.primary),
+        (
+            format!("git -c User.Email=agent@example.com commit -m {msg}"),
+            &session.primary,
+        ),
+        (format!("git merge origin/main -m {msg}"), &session.primary),
+        (
+            format!("git -C {worktree} {id} commit -m {msg}"),
+            &session.primary,
+        ),
+        (
+            format!("git {id} -C {worktree} commit -m 'fix: thing'"),
+            &session.primary,
+        ),
+        (
+            format!("git -C {worktree} merge origin/main -m {msg}"),
+            &session.primary,
+        ),
+        (format!("git commit -m {msg}"), &session.worktree),
+        // A multi-line message written straight into the quotes.
+        (
+            "git commit -m 'fix: thing\n\nSecond line.'".to_owned(),
+            &session.primary,
+        ),
+    ] {
+        let result = cursor_verdict(&session, &command, cwd);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("allow", WRITE),
+            "{command}"
+        );
+    }
+}
+
+/// Only the author's name and address are dropped. A setting that can run a
+/// program, sign with a chosen key or move the hooks keeps the review, and so
+/// does a heredoc whose body expands or is run as a script.
+#[test]
+fn cursor_keeps_reviewing_settings_that_change_what_a_commit_runs() {
+    let session = session("heredoc-message-cursor-refused");
+    let worktree = session.worktree.to_str().unwrap().to_owned();
+    for command in [
+        "git -c core.hooksPath=/tmp/hooks commit -m 'fix: thing'".to_owned(),
+        "git -c user.name=Agent -c core.hooksPath=/tmp/hooks commit -m 'fix: thing'".to_owned(),
+        "git -c commit.gpgsign=true commit -m 'fix: thing'".to_owned(),
+        "git -c user.signingkey=/tmp/key commit -m 'fix: thing'".to_owned(),
+        "git -c gpg.program=/tmp/run commit -m 'fix: thing'".to_owned(),
+        "git -c user.name commit -m 'fix: thing'".to_owned(),
+        format!("git -C {worktree} -c core.fsmonitor=/tmp/run commit -m 'fix: thing'"),
+        "git commit -m \"$(cat <<EOF\nit's $(cat ~/.ssh/id_rsa)\nEOF\n)\"".to_owned(),
+        "git commit -m \"$(cat <<'EOF' | sh\nrm -rf src\nEOF\n)\"".to_owned(),
+        "git commit -m \"$(sh <<'EOF'\ncat ~/.ssh/id_rsa\nEOF\n)\"".to_owned(),
+        "git commit -m \"$(cat <<'EOF'\nx\nEOF\n)\" && cat ~/.ssh/id_rsa".to_owned(),
+        "git commit -m \"$(cat ~/.ssh/id_rsa)\"".to_owned(),
+        // A line break outside quotes ends the commit and starts a command.
+        "git commit -m 'fix: thing'\nrm -rf src".to_owned(),
+        "git commit -m fix\nrm -rf src".to_owned(),
+    ] {
+        let result = cursor_verdict(&session, &command, &session.primary);
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}

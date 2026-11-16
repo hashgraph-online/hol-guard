@@ -27,6 +27,10 @@ use crate::local_store_read::{
 };
 use crate::policy_decision_lookup_op::{normalized_workspace_path, workspace_policy_key};
 use crate::policy_enforcement::{ActionFloor, AdmittedPolicySnapshot};
+use risk_group::Hit;
+
+#[path = "edge_risk_group_rule.rs"]
+mod risk_group;
 
 const POLICY_REVIEW: &str = "policy_exact_command_review";
 const SAVED_REVIEW: &str = "saved_exact_command_review";
@@ -51,6 +55,7 @@ pub(crate) fn is_review_finding(reason_code: &str) -> bool {
         SAVED_REVIEW,
         UNREADABLE_REVIEW,
         UNREAD_LINE_REVIEW,
+        risk_group::GROUP_REVIEW,
     ]
     .contains(&reason_code)
 }
@@ -179,13 +184,13 @@ pub(crate) fn apply_with_sources(
     };
     match matching_rules(&connection, &result.action.harness, call, now_micros) {
         Ok(Rules {
-            block: Some(source),
+            block: Some(hit),
             ..
-        }) => block(result, block_reason(&source)),
+        }) => block(result, block_reason(&hit)),
         Ok(Rules {
-            review: Some(source),
+            review: Some(hit),
             ..
-        }) if reviewable => raise(result, rule_reason(&source)),
+        }) if reviewable => raise(result, rule_reason(&hit)),
         Ok(Rules {
             incomplete: true, ..
         }) if reviewable => raise(
@@ -249,11 +254,11 @@ fn is_shell_action(action_type: &PreToolActionTypeV1) -> bool {
 /// The store exists but a read of it failed.
 struct Unreadable;
 
-/// The sources of the first live block and review rules.
+/// The first live block and review rules.
 #[derive(Default)]
 struct Rules {
-    block: Option<String>,
-    review: Option<String>,
+    block: Option<Hit>,
+    review: Option<Hit>,
     /// Part of the line could not be read, so a rule may name a step that
     /// was not looked up.
     incomplete: bool,
@@ -313,15 +318,29 @@ fn matching_rules(
                     block: true,
                     source,
                 }) => {
-                    rules.block = Some(source.clone());
+                    rules.block = Some(Hit {
+                        source: source.clone(),
+                        group: None,
+                    });
                     return Ok(rules);
                 }
                 Some(LiveRule { source, .. }) if rules.review.is_none() => {
-                    rules.review = Some(source.clone());
+                    rules.review = Some(Hit {
+                        source: source.clone(),
+                        group: None,
+                    });
                 }
                 _ => {}
             }
         }
+    }
+    let group = risk_group::matching(&live, &texts);
+    if group.block.is_some() {
+        rules.block = group.block;
+        return Ok(rules);
+    }
+    if rules.review.is_none() {
+        rules.review = group.review;
     }
     Ok(rules)
 }
@@ -355,8 +374,10 @@ fn live_rules(
         .prepare_cached(
             "select artifact_id, action, coalesce(source, ''), expires_at from policy_decisions \
              where harness in (?1, '*') and action in ('block', 'review') \
-             and artifact_id like 'memory:exact-%' \
-             and (scope = 'artifact' or (scope = 'workspace' and workspace in (?2, ?3)))",
+             and ((artifact_id like 'memory:exact-%' and scope = 'artifact') \
+               or (artifact_id like 'risk-group:%' and scope in ('harness', 'global')) \
+               or ((artifact_id like 'memory:exact-%' or artifact_id like 'risk-group:%') \
+                 and scope = 'workspace' and workspace in (?2, ?3)))",
         )
         .map_err(|_| Unreadable)?;
     let mut rows = statement
@@ -402,8 +423,11 @@ pub(crate) fn expired(expires_at: Option<&str>, now_micros: Option<i64>) -> bool
     guard_contracts::utc_timestamp_micros(&normalized).is_some_and(|at| at <= now)
 }
 
-fn rule_reason(source: &str) -> (&'static str, &'static str) {
-    if CLOUD_SOURCES.contains(&source) {
+fn rule_reason(hit: &Hit) -> (&'static str, &'static str) {
+    if let Some(group) = hit.group {
+        return (risk_group::GROUP_REVIEW, risk_group::review_reason(group));
+    }
+    if CLOUD_SOURCES.contains(&hit.source.as_str()) {
         (
             POLICY_REVIEW,
             "Your Guard Cloud policy asks a person to approve this exact command before it runs.",
@@ -416,8 +440,11 @@ fn rule_reason(source: &str) -> (&'static str, &'static str) {
     }
 }
 
-fn block_reason(source: &str) -> (&'static str, &'static str) {
-    if CLOUD_SOURCES.contains(&source) {
+fn block_reason(hit: &Hit) -> (&'static str, &'static str) {
+    if let Some(group) = hit.group {
+        return (risk_group::GROUP_BLOCK, risk_group::block_reason(group));
+    }
+    if CLOUD_SOURCES.contains(&hit.source.as_str()) {
         (
             POLICY_BLOCK,
             "Your Guard Cloud policy blocks this command, however it is spelled.",

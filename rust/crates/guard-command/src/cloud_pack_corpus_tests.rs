@@ -13,20 +13,13 @@ use guard_contracts::{ActionFactsV2, Fact, FindingV2, PiiKindV2, SensitivityV2, 
 use serde_json::{json, Value};
 
 use crate::cloud_action_inspect::{inspect, INSPECT_REQUEST_SCHEMA};
-use crate::cloud_pack::{parse_pack, CloudActionPack, PackAction};
+use crate::cloud_pack::{parse_pack, CloudActionPack, Executor, PackAction};
 use crate::cloud_pack_facts::extract;
-use crate::cloud_pack_request::{check_arguments, render};
+use crate::cloud_pack_request::{check_arguments, render_connected};
 use crate::cloud_policy_pack::{shipped, FactCall, Preset};
 use crate::effect_decision::GuardAction;
 
-const PACKS: [&str; 6] = [
-    include_str!("../../../../contributions/cloud-actions/calendar.json"),
-    include_str!("../../../../contributions/cloud-actions/drive.json"),
-    include_str!("../../../../contributions/cloud-actions/github.json"),
-    include_str!("../../../../contributions/cloud-actions/gmail.json"),
-    include_str!("../../../../contributions/cloud-actions/notion.json"),
-    include_str!("../../../../contributions/cloud-actions/slack.json"),
-];
+use crate::cloud_pack_explain::SHIPPED_SOURCES as PACKS;
 const BENIGN: &str = include_str!("../../../../tests/fixtures/cloud_benign_corpus.json");
 const ATTACK: &str = include_str!("../../../../tests/fixtures/cloud_attack_corpus.json");
 const REFUSED: &str = "invalid_argument";
@@ -79,14 +72,14 @@ fn packs() -> Vec<CloudActionPack> {
         .collect()
 }
 
-fn find<'a>(packs: &'a [CloudActionPack], id: &str) -> (&'a str, &'a PackAction) {
+fn find<'a>(packs: &'a [CloudActionPack], id: &str) -> (&'a CloudActionPack, &'a PackAction) {
     packs
         .iter()
         .find_map(|pack| {
             pack.actions
                 .iter()
                 .find(|action| action.action_id == id)
-                .map(|action| (pack.provider.id.as_str(), action))
+                .map(|action| (pack, action))
         })
         .unwrap_or_else(|| panic!("no shipped action {id}"))
 }
@@ -137,13 +130,23 @@ fn session(case: &Value) -> Option<SessionFlowV2> {
 /// The decision for one case, or [`REFUSED`] when the pack refuses its
 /// arguments before any decision is made.
 fn decide(packs: &[CloudActionPack], case: &Value) -> String {
-    let (provider, action) = find(packs, case["actionId"].as_str().unwrap());
+    let (pack, action) = find(packs, case["actionId"].as_str().unwrap());
+    let provider = pack.provider.id.as_str();
     let mut arguments = case["arguments"].clone();
     fill_secrets(&mut arguments);
     let Ok(record) = check_arguments(action, &arguments) else {
         return REFUSED.to_string();
     };
-    if render(action, &arguments).is_err() {
+    // A remote MCP call has no HTTP request to render; its arguments were
+    // checked above. Values the connection holds, such as a company id,
+    // come from the case's connection, never from the arguments.
+    let http = matches!(action.executor, Executor::DeclarativeHttp { .. });
+    let values = case
+        .get("connection")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    if http && render_connected(pack.connection.as_ref(), action, &arguments, &values).is_err() {
         return REFUSED.to_string();
     }
     let facts = with_findings(
@@ -161,9 +164,12 @@ fn decide(packs: &[CloudActionPack], case: &Value) -> String {
         provider,
         action_id: &action.action_id,
         effect: action.safety.effect,
+        connection_id: "fixture",
+        resource_id: None,
         facts: &facts,
         session: flow.as_ref(),
         windows: Some(&windows),
+        unclassified: None,
     };
     shipped(Preset::Balanced).decide(&call).as_str().to_string()
 }
@@ -200,7 +206,7 @@ fn mismatches(decided: &[(Value, String)]) -> Vec<String> {
 fn benign_tasks_rarely_ask_and_are_never_blocked() {
     let (corpus, decided) = corpus(BENIGN, "benign");
     assert!(
-        decided.len() >= 150,
+        decided.len() >= 400,
         "benign corpus has {} cases",
         decided.len()
     );
@@ -226,13 +232,94 @@ fn benign_tasks_rarely_ask_and_are_never_blocked() {
         rate <= limit,
         "benign review rate {rate:.3} exceeds {limit}"
     );
+    // Near-copies of one call would dilute the rate, so it must also hold
+    // when each distinct call shape counts once and asks if any copy asks.
+    let shapes = shapes(&decided);
+    let asking = shapes
+        .iter()
+        .filter(|members| {
+            members
+                .iter()
+                .any(|&i| decided[i].1 != GuardAction::Allow.as_str())
+        })
+        .count();
+    let rate = asking as f64 / shapes.len() as f64;
+    assert!(
+        rate <= limit,
+        "benign review rate over {} distinct calls {rate:.3} exceeds {limit}",
+        shapes.len()
+    );
+}
+
+/// Two calls are near-copies when they name the same action and arguments
+/// and differ only in numbers or in at most two characters of equal-length
+/// text, such as the page size or the last digit of an id.
+fn near_copies(a: &Value, b: &Value) -> bool {
+    let (Some(x), Some(y)) = (a["arguments"].as_object(), b["arguments"].as_object()) else {
+        return false;
+    };
+    a["actionId"] == b["actionId"]
+        && x.len() == y.len()
+        && x.iter().all(|(name, left)| match (left, y.get(name)) {
+            (_, None) => false,
+            (Value::Number(_), Some(Value::Number(_))) => true,
+            (Value::String(l), Some(Value::String(r))) => {
+                l.len() == r.len() && l.bytes().zip(r.bytes()).filter(|(p, q)| p != q).count() <= 2
+            }
+            (left, Some(right)) => left == right,
+        })
+}
+
+/// Groups cases into distinct call shapes, joining near-copies transitively.
+fn shapes(decided: &[(Value, String)]) -> Vec<Vec<usize>> {
+    let mut root: Vec<usize> = (0..decided.len()).collect();
+    fn find(root: &mut [usize], mut i: usize) -> usize {
+        while root[i] != i {
+            root[i] = root[root[i]];
+            i = root[i];
+        }
+        i
+    }
+    for i in 0..decided.len() {
+        for j in i + 1..decided.len() {
+            if near_copies(&decided[i].0, &decided[j].0) {
+                let (a, b) = (find(&mut root, i), find(&mut root, j));
+                root[b] = a;
+            }
+        }
+    }
+    let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for i in 0..decided.len() {
+        let top = find(&mut root, i);
+        groups.entry(top).or_default().push(i);
+    }
+    groups.into_values().collect()
+}
+
+#[test]
+fn near_copies_count_once_toward_the_review_rate() {
+    let case = |id: &str, args: Value| {
+        (
+            json!({"actionId": "x.get", "arguments": args, "id": id}),
+            "allow".to_string(),
+        )
+    };
+    let decided = vec![
+        case("a", json!({"id": "18c2f0a1b2c30000", "max": 10})),
+        case("b", json!({"id": "18c2f0a1b2c30001", "max": 25})),
+        case("c", json!({"id": "18c2f0a1b2c3000b", "max": 25})),
+        case("d", json!({"id": "a-different-record", "max": 25})),
+        case("e", json!({"id": "18c2f0a1b2c30000"})),
+    ];
+    let sizes: Vec<usize> = shapes(&decided).iter().map(Vec::len).collect();
+    assert_eq!(sizes, vec![3, 1, 1]);
 }
 
 #[test]
 fn no_attack_runs_without_the_user() {
     let (_, decided) = corpus(ATTACK, "attack");
     assert!(
-        decided.len() >= 80,
+        decided.len() >= 200,
         "attack corpus has {} cases",
         decided.len()
     );

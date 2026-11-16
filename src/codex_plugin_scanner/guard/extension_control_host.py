@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
@@ -57,7 +57,29 @@ WORKER_MIGRATION_TURN_WAIT_SECONDS = 180.0
 _SLOW_MIGRATION_SECONDS = 5.0
 
 
-def migrate_installed_authority(store: GuardStore, *, wait_seconds: float = WORKER_MIGRATION_TURN_WAIT_SECONDS) -> bool:
+def _verify_installed_bundle_early() -> None:
+    """Verify the installed release bundle before waiting for the migration turn.
+
+    At a cold start the daemon's artifact reconcile usually holds the turn
+    while the worker host waits for it. Verification is native and its answer
+    is reused only while the installed files stay the same, so doing it here
+    overlaps that wait instead of following it. The migration loads the bundle
+    again under the turn; a failure here is left for that load to raise and
+    record.
+    """
+
+    from .catalog_delivery.preparation_authority import load_installed_bundle
+
+    with suppress(Exception):
+        load_installed_bundle()
+
+
+def migrate_installed_authority(
+    store: GuardStore,
+    *,
+    wait_seconds: float = WORKER_MIGRATION_TURN_WAIT_SECONDS,
+    on_phase: Callable[[str], None] | None = None,
+) -> bool:
     """Admit the installed release's command packs, recording why when it cannot.
 
     A runtime upgrade changes the command engine, and the resident refuses any
@@ -68,14 +90,32 @@ def migrate_installed_authority(store: GuardStore, *, wait_seconds: float = WORK
     Only one process migrates at a time. A caller that finds another process
     migrating waits up to ``wait_seconds`` for its turn and otherwise returns
     False without recording a failure, leaving the migration pending.
+
+    ``on_phase`` hears ``bundle_checked`` once the early bundle check is done
+    (only when ``wait_seconds`` is positive)
+    and ``turn_held`` once this process holds the turn, so a cold start shows
+    which of them it waited on.
     """
 
+    def report(step: str) -> None:
+        # Progress is optional: a reporter that fails must not skip admission.
+        if on_phase is not None:
+            with suppress(Exception):
+                on_phase(step)
+
     started = time.monotonic()
+    if wait_seconds > 0:
+        # Only a caller that will wait has a wait to overlap. One that gives
+        # up at once (an extension-control host) would pay the check and then
+        # fall back anyway.
+        _verify_installed_bundle_early()
+        report("bundle_checked")
     try:
         with installed_authority_migration_turn(store.guard_home, wait_seconds=wait_seconds) as held:
             if not held:
                 _LOGGER.info("Installed command-pack authority is being migrated by another Guard process")
                 return False
+            report("turn_held")
             store.migrate_installed_command_pack_authority()
     except Exception as error:
         elapsed_ms = round((time.monotonic() - started) * 1000)

@@ -116,11 +116,17 @@ fn authenticate(request: &AdapterStateIntegrityRequestV1) -> Result<Value, &'sta
     let create = request.create_key.unwrap_or(true);
     let key = signing_key(request, create)
         .map_err(|_| "native_adapter_state_integrity_key_unavailable")?;
-    let mut payload = object(&request.payload)?.clone();
+    stamp(&key, &request.harness, object(&request.payload)?.clone())
+}
+
+fn stamp(
+    key: &AdapterStateKey,
+    harness: &str,
+    mut payload: Map<String, Value>,
+) -> Result<Value, &'static str> {
     payload.remove(ADAPTER_STATE_AUTHENTICATION_KEY);
-    let mac = mac_hex(&key.bytes, &request.harness, &payload)?;
-    let mut authenticated = payload;
-    authenticated.insert(
+    let mac = mac_hex(&key.bytes, harness, &payload)?;
+    payload.insert(
         ADAPTER_STATE_AUTHENTICATION_KEY.to_owned(),
         json!({
             "algorithm": ADAPTER_STATE_INTEGRITY_MAC_ALGORITHM,
@@ -129,7 +135,7 @@ fn authenticate(request: &AdapterStateIntegrityRequestV1) -> Result<Value, &'sta
             "schema_version": ADAPTER_STATE_INTEGRITY_SCHEMA_VERSION,
         }),
     );
-    Ok(Value::Object(authenticated))
+    Ok(Value::Object(payload))
 }
 
 /// `adapter_state_is_authenticated` (:89-128). Every mismatch is the same
@@ -276,6 +282,85 @@ fn signing_key(
         .clone()
         .ok_or("adapter_state_key_unavailable")?;
     Ok(AdapterStateKey { id, bytes })
+}
+
+/// An in-process request against the key under `key_home`, for adapters the
+/// runtime itself drives.
+fn local_request(
+    key_home: &std::path::Path,
+    harness: &str,
+    action: &str,
+    payload: Value,
+    field: Option<&str>,
+    create: bool,
+) -> AdapterStateIntegrityRequestV1 {
+    AdapterStateIntegrityRequestV1 {
+        schema: ADAPTER_STATE_INTEGRITY_REQUEST_SCHEMA.to_owned(),
+        request_id: String::new(),
+        action: action.to_owned(),
+        harness: harness.to_owned(),
+        payload,
+        field: field.map(str::to_owned),
+        integrity_key_b64: None,
+        integrity_key_id: None,
+        key_home: Some(key_home.to_string_lossy().into_owned()),
+        create_key: Some(create),
+    }
+}
+
+/// `authenticate_adapter_state`. The error is the key loader's code, so the
+/// caller can tell a missing key from an unusable one.
+pub(crate) fn sign_state(
+    key_home: &std::path::Path,
+    harness: &str,
+    payload: Map<String, Value>,
+    create: bool,
+) -> Result<Value, &'static str> {
+    let request = local_request(
+        key_home,
+        harness,
+        ADAPTER_STATE_ACTION_AUTHENTICATE,
+        Value::Object(payload),
+        None,
+        create,
+    );
+    let key = signing_key(&request, create)?;
+    stamp(&key, harness, object(&request.payload)?.clone())
+}
+
+/// `adapter_state_is_authenticated`.
+pub(crate) fn state_verified(key_home: &std::path::Path, harness: &str, payload: &Value) -> bool {
+    let request = local_request(
+        key_home,
+        harness,
+        ADAPTER_STATE_ACTION_VERIFY,
+        payload.clone(),
+        None,
+        false,
+    );
+    let key = signing_key(&request, false).ok();
+    is_authenticated(&request, key.as_ref())
+}
+
+/// `authenticated_adapter_path` before its final resolve.
+pub(crate) fn state_field(
+    key_home: &std::path::Path,
+    harness: &str,
+    payload: &Value,
+    field: &str,
+) -> Option<String> {
+    let request = local_request(
+        key_home,
+        harness,
+        ADAPTER_STATE_ACTION_FIELD,
+        payload.clone(),
+        Some(field),
+        false,
+    );
+    let key = signing_key(&request, false).ok();
+    authenticated_field(&request, key.as_ref())
+        .as_str()
+        .map(str::to_owned)
 }
 
 fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {

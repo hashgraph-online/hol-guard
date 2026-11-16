@@ -517,5 +517,9 @@ mod surrogate_tests;
 mod unparsed_tests;
 
 #[cfg(all(test, unix))]
+#[path = "cursor_hook_bridge_fail_safe_tests.rs"]
+mod fail_safe_tests;
+
+#[cfg(all(test, unix))]
 #[path = "cursor_hook_bridge_frozen_tests.rs"]
 mod frozen_tests;

@@ -91,6 +91,7 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,

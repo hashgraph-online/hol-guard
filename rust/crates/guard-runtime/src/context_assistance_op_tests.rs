@@ -223,3 +223,31 @@ fn the_project_picker_lists_folders_through_the_resident_without_changing_anythi
         "native_context_assistance_folder_not_absolute"
     );
 }
+
+#[test]
+fn the_savings_estimate_is_read_through_the_resident_and_takes_no_input() {
+    assert!(crate::resident_protocol::capabilities()
+        .features
+        .iter()
+        .any(|feature| feature == SAVINGS_FEATURE));
+    let fixture = Fixture::new();
+    let payload = json!({"session_id": "s1", "transcript_path": "/elsewhere/r.jsonl"});
+    let files = vec!["src/lib.rs".to_owned()];
+    crate::context_assistance_savings::noted(&fixture.home, &payload, "codex", 400, files);
+    let answer = fixture.ask("savings");
+    assert_eq!(answer["status"], "ok", "{answer}");
+    assert_eq!(answer["payload"]["data"]["data_role"], true);
+    let data = &answer["payload"]["data"]["result"];
+    assert_eq!(data["schema"], "guard-cigar-savings.v1");
+    assert_eq!(data["estimate"], true);
+    assert_eq!(data["total"]["sessions"], 1);
+    assert_eq!(data["total"]["context_tokens"], 100);
+    // A record Guard may not read gives no estimate.
+    assert_eq!(data["total"]["estimated_saved_tokens"], 0);
+    assert_eq!(data["apps"][0]["app"], "codex");
+    let refused = fixture.ask_input("savings", json!({"path": "/"}));
+    assert_eq!(
+        refused["code"],
+        "native_context_assistance_control_input_invalid"
+    );
+}

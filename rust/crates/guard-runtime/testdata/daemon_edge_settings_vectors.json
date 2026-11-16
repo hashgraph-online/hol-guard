@@ -471,6 +471,7 @@
           "changed_hash_action": "require-reapproval",
           "context_assistance": null,
           "context_assistance_diagnostic": null,
+          "cigar_apps": ["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"],
           "context_assistance_effective_ready": false,
           "context_assistance_requested": null,
           "default_action": "warn",
@@ -1157,6 +1158,7 @@
           "changed_hash_action": "require-reapproval",
           "context_assistance": null,
           "context_assistance_diagnostic": null,
+          "cigar_apps": ["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"],
           "context_assistance_effective_ready": false,
           "context_assistance_requested": null,
           "default_action": "warn",
@@ -1847,6 +1849,7 @@
           "changed_hash_action": "require-reapproval",
           "context_assistance": null,
           "context_assistance_diagnostic": null,
+          "cigar_apps": ["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"],
           "context_assistance_effective_ready": false,
           "context_assistance_requested": null,
           "default_action": "warn",
@@ -2592,6 +2595,7 @@
             }
           },
           "context_assistance_diagnostic": "context_assistance_runtime_id_invalid",
+          "cigar_apps": ["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"],
           "context_assistance_effective_ready": false,
           "context_assistance_requested": {
             "enabled": false,

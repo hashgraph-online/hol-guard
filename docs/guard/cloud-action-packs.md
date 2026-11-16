@@ -14,14 +14,14 @@ them. Nothing in it sends a request.
 The language is small on purpose, so a pack from a third party can be reviewed as data:
 
 - No expressions, scripts or loops. A body is built from constants, whole arguments, one bounded copy of an
-  array argument (`each`), one field named by an argument (`keyed`), and the `rfc822` mail template described
-  below.
+  array argument (`each`), one field named by an argument (`keyed`), the `rfc822` mail template described
+  below, and a flat `form` body described below.
 - No URL outside the declared `hosts`. The scheme is always `https`, the host is fixed per action, and an argument
   can fill only whole path segments.
 - No credential headers. Header names are lowercase constants. Names containing `auth`, `cookie`, `token`,
   `secret`, `key`, `session`, `password` or `credential`, and framing headers such as `host`, `content-length`,
   `forwarded`, `proxy-*` and `x-forwarded-*`, are refused. `content-type` is refused too, because rendering
-  always sets it for the JSON body. The host adds the credential and the `user-agent`.
+  sets it from the body: JSON, or `application/x-www-form-urlencoded` for a `form` body. The host adds the credential and the `user-agent`.
 - No unbounded input. Every string has a `maxLength`, every integer a range, every array an item limit. Patterns
   must start with `^` and end with `$`, compile on the linear-time `regex` engine within 1 MiB, and are matched
   against the whole value, so an alternation such as `^a|b$` cannot match a value that only starts with `a`.
@@ -34,6 +34,22 @@ recipient domains, environment and sensitivity. An extractor is a constant, a bo
 argument, a bounded integer argument, or the domains of address arguments. Extraction is total: a value that is
 missing, malformed or out of range becomes `unknown`, never a guess. The facts feed the version 2 evaluator in
 [Cloud Action Evaluator](cloud-action-evaluator.md).
+
+An action that moves money adds `money`: the integer argument holding the amount in the currency's minor unit
+(`amount`), either a string argument holding the ISO 4217 code (`currencyArgument`, pattern-bound and at most three
+characters) or a fixed code (`currency`), and a `direction` of `out` or `in`. The code is uppercased. A missing
+amount or currency, or one that is not a three-letter code, leaves the money fact `unknown`, which a rule with
+`min_amount_minor` treats as the stricter branch. A Stripe refund takes no currency argument, so its money fact stays
+`unknown` and it is reviewed like any other money out.
+
+## Form bodies
+
+Some APIs, Stripe's among them, accept only `application/x-www-form-urlencoded` bodies. A `form` body is a flat list
+of fields, allowed only as the whole body. Each value is a string, integer or boolean argument, or a scalar
+constant of at most 256 characters; a field whose argument is absent is left out. Field names use letters, digits and
+`_ . - [ ]`, so the bracket notation such APIs read as nesting (`metadata[order]`) is available, and both names and
+values are percent-encoded with spaces as `+`, so a tab or other control character in a value travels as `%09` and
+so on. Rendering stops as soon as the body passes 1 MiB.
 
 ## Mail messages
 
@@ -67,6 +83,27 @@ one-field object whose name is a string argument:
 The key argument must be required, carry a pattern, and allow at most 256 characters. The name is written as a
 JSON string, so it cannot add a sibling field. A call without the key is refused rather than rendered.
 
+## SQL statements
+
+An action that runs SQL adds `sql`: the argument holding the statement text, and `field` when the text is one key of
+a JSON argument. The value may be one string or an array of strings. Guard reads the text without running it and
+raises the declared class when a statement does more:
+
+- `SELECT`, `WITH`, `VALUES`, `SHOW`, `DESCRIBE`, `EXPLAIN` without `ANALYZE`, and transaction control read.
+- `INSERT`, `MERGE`, `CREATE`, `ALTER` that adds, `SET`, and `UPDATE` or `DELETE` with a real top-level `WHERE`
+  write. A write that a `WHERE` narrows reports scope `query_selected`.
+- `DROP`, `TRUNCATE`, `UPDATE` or `DELETE` without a `WHERE` (or with a constant-true one such as `WHERE 1=1`),
+  `ALTER ... DROP`, `CREATE OR REPLACE`, `EXPLAIN ANALYZE` of a write, and any statement the reader does not know
+  (`CALL`, `DO`, `COPY`, `EXECUTE`) are a permanent delete on a table, or on a database for `DROP DATABASE` and
+  `DROP SCHEMA`. A delete with no `WHERE` reports scope `all`.
+- `GRANT`, `REVOKE`, `SET ROLE` and changes to users, roles and policies are `admin`.
+
+Every statement in a batch is read, and the strictest one decides. Write and side-effect functions inside a query
+(`nextval`, `dblink`, `pg_terminate_backend`) count as the statement they cause. Text the reader cannot follow the
+way every dialect would is destructive: an unclosed quote or comment, a backslash inside a string, a `#` comment,
+`--` without a following space, nested or MySQL executable comments (`/*! ... */`), more than 64 statements, an empty
+batch, or a value that is not text. The SQL can only raise the declared class, never lower it.
+
 ## Rendering and projection
 
 Rendering checks every argument against its rule, then builds the request. Path segments and query values are
@@ -83,6 +120,61 @@ it an empty body is `response_json_invalid`, which keeps a read that comes back 
 result. Turning `emptyOk` on is a widening change in `diff`. Size `maxBytes` for the largest response the provider
 can send back, including any argument it echoes: GitHub returns the full issue or pull request body, so those
 actions allow 512 KiB.
+
+## Brokered sign-in
+
+A pack may name the sign-in brokers whose toolkits can carry its requests, so a hosted gateway can use a provider
+whose sign-in a broker holds instead of the gateway itself
+([ADR 0016](adr/0016-brokered-sign-in-transport.md)):
+
+```json
+"transports": {"partner": [{"partner": "composio", "toolkit": "outlook"}]}
+```
+
+`partner` comes from a closed list (today only `composio`), and `toolkit` is a lowercase slug of 2 to 64 letters,
+digits and underscores that starts with a letter. A pack names each partner once, at most four in total. A pack
+whose `auth.mode` is `none` has no sign-in to broker, and a broker proxy carries only plain HTTP requests, so
+neither that pack nor one with any `remote-mcp` or `broker` action can declare one.
+
+The block grants nothing by itself. It changes no fact, decision or rendered request: a brokered call sends the same
+absolute `https` URL on the same declared host as a direct one. A pack without the block serializes and digests
+exactly as before. Adding a transport, or changing its toolkit, is a widening change in `diff`.
+
+The shipped packs that name a toolkit are Outlook (`outlook`), OneDrive (`one_drive`), Teams (`microsoft_teams`),
+Dropbox (`dropbox`), HubSpot (`hubspot`), Figma (`figma`), Discord (`discordbot`), Linear (`linear`), Airtable
+(`airtable`), monday.com (`monday`), Zoom (`zoom`), QuickBooks (`quickbooks`), Zendesk (`zendesk`), Intercom
+(`intercom`), Mailchimp (`mailchimp`), Trello (`trello`), ClickUp (`clickup`) and Calendly (`calendly`). Discord
+names the broker's bot toolkit because its actions post and delete messages with bot permissions, which a Discord
+user sign-in does not carry. The broker
+proxy refuses a host on a different registrable domain from its toolkit's, but may accept a sibling host on the same
+domain and attach the credential there. It is not the check that keeps a call on the right host: the gateway sends
+only to the exact host the pack declares, after the provider host check on the rendered URL, so a toolkit whose base
+URL is on another domain fails closed and a sibling host is never reached through a pack.
+
+## Connection values
+
+Some services address one customer's data by a value that belongs to the connection, not the call: a help desk's
+subdomain, an accounting company id, a cloud site id, the server a chat bot was added to. A pack declares each such
+value once, with bounds:
+
+```json
+"connection": {"values": {"subdomain": {"title": "Help desk subdomain", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$", "maxLength": 63}}}
+```
+
+A request template uses a value by name wherever it can use a required string argument: a path placeholder, a query
+value or a body field. A value may also be the leftmost label of a host, as in `{subdomain}.example.com`; the rest of
+that host must be an exact DNS name of two or more labels, and the value must then render as one lowercase DNS label.
+
+The host fills every value from the verified connection when it renders a request (`render_connected`, or the
+`connection` object of the CLI `render` operation and of a fixture). A caller can never supply one: a value may not
+share a name with any action argument, an argument with that name is `unknown_argument`, and rendering refuses a
+missing value (`connection_value_missing`), an undeclared one (`connection_value_unknown`) and one outside its
+bounds (`connection_value_invalid`). So no argument can move a request to another customer's tenant.
+
+A pack declares one to four values, each with a snake_case name, a display `title`, an anchored `pattern` and a
+`maxLength` of 1 to 128. As with transports, a pack whose `auth.mode` is `none`, or with any non-HTTP action, may not
+declare one. A pack without the block serializes and digests exactly as before. Adding, changing or removing a
+value is a widening change in `diff`, since each one changes which tenant a request can reach.
 
 ## Fixtures
 
@@ -117,7 +209,7 @@ activates an artifact.
 
 `diff` compares two packs or artifacts for the same provider and lists each change with a code. A change is
 widening when it lets a pack do more than before: a new host, scope or action, a looser argument, a weaker effect,
-a dropped capability, a new response field, a removed untrusted label, looser limits, a changed executor or
+a dropped capability, a new brokered transport, a changed connection value, a new response field, a removed untrusted label, looser limits, a changed executor or
 link, or any changed fact extractor. Any edit to a pattern or forbidden rule counts as widening, because whether a new pattern accepts less
 cannot be decided in general. A widening pack version needs fresh review.
 
@@ -136,13 +228,20 @@ Both read one JSON request per line on standard input and write one JSON result 
 | `test` | `pack` | fixture `report` |
 | `compile` | `pack` | `artifact` |
 | `diff` | `old`, `new` (pack or artifact) | `diff` |
-| `render` | `pack` or `artifact`, `actionId`, `arguments` | `request` |
+| `render` | `pack` or `artifact`, `actionId`, `arguments`, optional `connection` values | `request` |
 | `extract` | `pack` or `artifact`, `actionId`, `arguments` | `facts` |
 | `project` | `pack` or `artifact`, `actionId`, `response` | `projection` |
 | `policy` | `preset` name or `policyPack` | `preset`, `packDigest`, `factRules`, `unclassified` |
-| `classify` | `name`, optional `inputSchema`, optional `preset` or `policyPack` | `proposal`, and `action` when a preset is named |
+| `classify` | `name`, optional `inputSchema`, optional `class`, optional `preset` or `policyPack` | `proposal`; `facts` that claim only one class (the proposal's, or `class` when a workspace admin approved one for the tool); and `action` when a preset is named |
 | `explain` | `actionId`, `arguments`, optional `pack` or `artifact` (defaults to the shipped packs) | `providerId`, `effect`, `facts`, `decisions` by preset |
+| `simulate` | `preset` or `policyPack`, and `calls`: up to 1000 stored calls, each `provider`, `actionId`, `facts`, optional `effect`, `connectionId`, `resourceId`, `sessionFlow` and `usageWindows` | `results`: per call `action`, `matchedRuleIds`, `unknownRuleIds` |
 | `generate` | `providerId`; `openapi` or `mcpTools`, or `from` and `document` text; optional `providerName`, `publisher`, `host`, `authMode` | draft `pack`, `proposals`, `notes` |
+
+`simulate` reads only the facts a host stored when it decided each call, never arguments or payloads. A call with
+no stored session flow reads as a clean session, and one with no stored usage reads every window at zero. When a
+rule that covers a call is scoped to a connection or resource the call does not carry, the request is refused with
+`scope_unknown`; a call that named no resource sends `resourceId: null`, so a resource-scoped rule cannot match it. A host
+adding a draft rule to a preset names it with the preset prefix (for example `balanced.workspace.r0`).
 
 A result is `{"ok": true, ...}` or `{"ok": false, "error": {"code": ..., "pointer" | "argument": ...}}`.
 
@@ -206,7 +305,114 @@ actions that match an existing hosted tool link to its name; the others have no 
 `drive.json` and `calendar.json` cover Google Workspace: reading, drafting and sending mail, archiving, trashing and
 deleting messages, mail forwarding and filters, file search, export, sharing with a person, a domain or anyone with
 the link, trash and permanent delete, and calendar events with and without guests. Their actions link to the matching
-Google Workspace command permissions. Known limits of the format, compared with hand-written adapters:
+Google Workspace command permissions. `sheets.json` and `docs.json` read, write and export Google Sheets and Docs:
+reading tabs and ranges, writing down a column, appending a row, clearing a range and deleting a tab, and appending,
+replacing and deleting document text. `outlook.json`, `onedrive.json` and `teams.json` cover Microsoft 365 through
+Microsoft Graph: listing, drafting, sending, forwarding, moving and deleting mail (to Deleted Items or permanently),
+calendar events with and without attendees, OneDrive and SharePoint files with organization and anyone links,
+invitations, the recycle bin and permanent delete, and Teams channel and chat messages, soft deletes and channel
+deletes. `airtable.json` lists, reads, adds, updates and deletes records, at most ten per call as Airtable allows.
+`dropbox.json` lists, moves and deletes files one at a time or in batches, deletes permanently, creates public and
+team links, shares with people and makes four-hour download links.
+
+Twenty-three packs cover provider-hosted MCP servers rather than REST APIs. `salesforce-mcp.json` and `notion-mcp.json` name
+each tool argument: Salesforce queries, searches, record reads, creates, updates and deletes (recoverable from the
+Recycle Bin), and Notion search, fetch, data source queries, page creation (at most twenty per call), updates, moves,
+duplicates, trash, version restore and comments. A record body or page list is a bounded JSON argument. `asana.json`,
+`atlassian.json`, `hubspot-mcp.json`, `box.json` and `stripe-mcp.json` cover providers that do not document their tool
+arguments, so each tool is one action whose arguments are open but bounded in total size, and whose facts are
+constants: the class and object the tool works on, never a count it cannot prove. HubSpot is read-only. Stripe money
+movement (`send_money`, `transfer_money`, `convert_currency`) is class `pay` and adding a payout recipient is `admin`.
+Tools that multiplex several operations behind one name (Stripe `stripe_api_write`, Atlassian `executeRead`,
+`executeWrite` and `executeDestructive`, HubSpot `manage_*`) and Linear's MCP server, whose tool names are not published,
+are not covered; `linear.json` covers Linear's API instead, as described below.
+
+Fourteen more tool-level packs follow the same pattern for developer, operations and support servers:
+`github-mcp.json` (GitHub's hosted MCP server), `gitlab-mcp.json`, `azure-devops-mcp.json`, `buildkite-mcp.json`,
+`vercel-mcp.json`, `render-mcp.json`, `sentry-mcp.json`, `pagerduty-mcp.json`, `postman-mcp.json`,
+`huggingface-mcp.json`, `webflow-mcp.json`, `monday-mcp.json`, `paypal-mcp.json` and `intercom-mcp.json`. Each tool
+name comes from the provider's published tool list. Reads are class `read`. Tools that start a deployment, run a
+pipeline, run a command in a sandbox, merge a pull or merge request, or roll a release forward or back are class
+`execute`. Tools that write an environment variable, a project secret, a DSN or an SDK key are writes on a `secret`.
+Tools that change who can reach a project or a workspace (firewall rules, deployment protection and bypasses,
+signing keys, team roles, private networks, governance rules, webhooks and log drains) are class `admin`, which
+every preset blocks. Buying a domain and PayPal money movement are class `pay`. A tool whose single name covers
+several operations takes the class of its riskiest one. Every tool's arguments are open but bounded in total size,
+and a key that no tool argument could have (such as `$where`) is refused. monday.com's `all_monday_api`, which sends
+any GraphQL query, is not covered.
+
+`supabase-mcp.json` and `neon-mcp.json` cover the Supabase and Neon MCP servers. Their SQL tools (`execute_sql`,
+`apply_migration`, `run_sql`, `run_sql_transaction`, `explain_sql_statement` and `prepare_database_migration`) carry
+an `sql` fact, so a query is allowed, a narrowed write is reviewed in Balanced, and dropping or emptying a table is
+blocked in Balanced and Strict and needs a fresh approval in Relaxed. Deleting a Neon project, which removes every
+branch and backup, and deleting or resetting a Supabase or Neon branch are permanent deletes on a database. Deploying
+a Supabase Edge Function is a production deployment.
+
+`bigquery.json` and `cloudflare.json` cover data stores over REST. BigQuery lists datasets and tables, reads a table
+schema, runs a GoogleSQL query through `jobs.query` with the `sql` fact, and deletes a table or a dataset (with or
+without `deleteContents`). Cloudflare lists and queries D1 databases with the `sql` fact, lists Workers KV namespaces
+and Workers scripts, and deletes a D1 database, a KV namespace or a Worker. Every delete is permanent: a dataset, D1
+database or KV namespace is a database-wide delete, so Balanced and Strict block it and Relaxed needs a fresh
+approval. Deleting a Worker removes one production deployment: Relaxed and Balanced review it and Strict blocks it. Cloudflare's OAuth scopes are the ones Wrangler
+requests (`d1:write`, `workers_kv:write`, `workers_scripts:write`); R2 has no OAuth scope there and is not packed.
+Snowflake (a host per account), MongoDB Atlas (service-account credentials without OAuth scopes), Railway (one
+GraphQL endpoint) and AWS (SigV4 request signing) are not packed.
+
+`quickbooks.json` and `monday.json` cover accounting and work management. QuickBooks Online reads an invoice, emails
+it to one named address, and voids or deletes it; deleting an invoice is permanent, so Relaxed and Balanced review
+it and Strict blocks it. The QuickBooks company id is a connection value, so every call goes to the company the
+connection was made for. monday.com creates and deletes items and deletes boards through fixed GraphQL mutations
+whose ids travel only as variables, so an argument cannot add a second operation. A deleted board takes every item
+with it, so Balanced and Strict block it. `linear.json` covers Linear's GraphQL API the same way: it lists a team's
+first 50 issues, creates an issue and comments on one. Each operation is a fixed query whose team and issue ids must
+be UUIDs (an issue may also be named by its short id, such as `ENG-123`) and travel only as variables. Deleting an
+issue is not packed: Linear also moves the issue's sub-issues to the trash, so one call can change records the review
+never saw. Shopify (a host per account and no broker that pins it) and Xero (a tenant header per call) are not
+packed.
+
+`zendesk.json`, `intercom.json`, `trello.json`, `clickup.json`, `mailchimp.json` and `calendly.json` cover support,
+task and audience tools. Each one reads a single record, and its writes touch one record per call:
+
+- Zendesk adds a private note to a ticket and moves a ticket between open, pending, on hold and solved; closing a
+  ticket for good is not packed. Its host is `{subdomain}.zendesk.com`, filled from the connection.
+- Intercom adds an internal note to a conversation and closes one. A closed conversation can be reopened.
+- Trello comments on a card and archives one. The broker adds Trello's key and token itself, so the rendered request
+  carries neither.
+- ClickUp comments on a task without notifying anyone and changes a task's status.
+- Mailchimp reads an audience and one member, named by the MD5 hash of the address, and archives a member, which can
+  be added back. Sending a campaign is not packed. Its host is `{dc}.api.mailchimp.com`, with the data centre filled
+  from the connection.
+- Calendly reads a scheduled event and cancels one with a reason. A cancel cannot be undone and tells the invitee,
+  so Relaxed and Balanced review it and Strict blocks it.
+
+Intercom, ClickUp, Mailchimp and Calendly sign-ins carry no scopes Guard can name: the sign-in can do whatever the
+person can, and the pack is the only limit on what an agent may do. Those packs use the scope `api` for the whole
+sign-in.
+
+`sendgrid.json`, `zoom.json`, `figma.json` and `discord.json` cover messaging and collaboration. SendGrid sends one
+plain-text message whose recipients come only from the `to` argument, so the recipient facts name every address.
+Zoom lists upcoming meetings, deletes a meeting, and moves a meeting's recordings to the trash or deletes them
+permanently as separate actions with different reversibility. Figma reads, adds and deletes file comments. Discord
+posts with every mention turned off, deletes one message, and bulk-deletes up to 100; a bulk delete of 100 needs a
+fresh approval in Balanced. Twilio, DocuSign and Zapier are not packed: their credentials carry no scopes Guard
+can name, or the action needs a per-account host.
+
+`stripe.json` covers the Stripe REST API for money movement the MCP server multiplexes: reading the balance,
+refunds, payouts, transfers to connected accounts and new prices, all with form bodies. Payouts, transfers and
+prices carry money facts, so a workspace limit on `min_amount_minor` applies to the exact amount. `hubspot.json`
+covers HubSpot CRM records over REST: listing contacts, companies and deals, setting one property on up to 100 records
+in a call, archiving up to 100 records (restorable for 90 days), permanently erasing a contact under GDPR, and deleting
+a custom object type, which is a delete on a table. Salesforce REST is not packed: its API host is per org, and a
+pack's hosts are fixed.
+
+Pack authors choose reversibility from what the provider can undo. An Airtable record delete is marked permanent: the
+API has no undo, even where a plan keeps a history in the web app. Deletes that land in a trash, recycle bin or
+version history (Dropbox, OneDrive, Outlook mail in Deleted Items, Teams soft delete, cleared Sheets ranges) are
+marked recoverable. An action that can tell other people something is judged by that notice: deleting an Outlook
+meeting sends cancellations to its attendees, so `outlook.events.delete` is permanent with a named audience, and
+moving a meeting sends updates, so `outlook.events.update` is a send.
+
+Known limits of the format, compared with hand-written adapters:
 
 - An argument cannot be normalized before use (for example, removing dashes from an id). The pattern accepts only
   the canonical form.
@@ -215,12 +421,27 @@ Google Workspace command permissions. Known limits of the format, compared with 
 - Responses are projected from JSON only. Drive export therefore uses the `files/{id}/download` operation, whose
   JSON result carries a download link, rather than `files/{id}/export`, which returns the file bytes. When the
   export is still running, `drive.operations.get` reads the same operation until it carries the link.
-- A Drive file id does not say whether it names a folder, and trashing or deleting a folder takes everything
-  inside it. Drive trash, restore and delete therefore leave the scope and record count unknown, and Guard
-  treats them as it treats any action of unknown size.
+- A Drive, Dropbox or OneDrive id or path does not say whether it names a folder, and deleting a folder takes
+  everything inside it. Their trash, restore and delete actions therefore leave the scope and record count
+  unknown, and Guard treats them as it treats any action of unknown size.
 - A Calendar event delete is permanent whether or not guests are told: the quiet delete and the cancellation
   differ only in the notice. A rename and a reschedule are separate actions because an object field is always
   written, so one action cannot leave the event times unchanged when only the title changes.
 - `gmail.messages.modify` changes user labels and the star, importance and unread marks only. Archive, trash
   and spam have their own actions with their own facts.
+- A response path is split on dots. A step that starts with `@` reads the rest of the path as one key, so
+  Graph's `@odata.nextLink` is projected as `next_link`. Any other key that contains a dot, or one that starts
+  with a dot (such as Dropbox's `.tag`), cannot be projected. A digit step reads an array element, so
+  `values.0` and `roles.0` work.
+- An optional object field is still written as `{}` when its arguments are left out. OneDrive rename and move
+  are therefore separate actions, as Calendar rename and reschedule are.
+- A list page must be bounded by the request. Dropbox listings require a page size, and `sheets.values.get`
+  requires a range with explicit row bounds in columns A to Z; a read longer than 1,000 rows is refused, so read
+  a long tab in ranges.
+- A placeholder fills a whole path segment, optionally followed by a Google-style custom method such as
+  `{document_id}:batchUpdate`. Graph's inline function syntax (`search(q='...')`) is not expressible.
+- An array argument in the query repeats the parameter (`records[]=a&records[]=b`), and a parameter name may start
+  with one `$` for OData options such as `$top`.
+- Response fields are scalars. Airtable records project their id, creation time and `Name`, `Status` and `Notes`
+  fields when present; other columns are dropped.
 - A secret pasted into an argument is not a fact. Guard's inspection finds it at call time, not the pack.

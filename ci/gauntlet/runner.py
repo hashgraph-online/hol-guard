@@ -67,6 +67,7 @@ from .native_tools import CREDENTIAL_REPORT_CASE, TASK_SCHEMA_CASE, cleanup_priv
 from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
+from .release_budgets import attempt_observations, release_budgets
 from .review_fixtures import GITHUB_ENABLED_CASES, GITHUB_STUB_CASES, WORKTREE_CASES, configure_github_review_controls
 from .runtime_cases import stage_runtime_cases
 from .script_cases import stage_script_cases
@@ -443,7 +444,7 @@ def run_case(
         case["execution_error_chain"] = chain
         (private / "execution-error.txt").write_text("\n".join(chain) + "\n", encoding="utf-8")
     finally:
-        case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+        case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id, scenario.path)
         remove_scratch_checkout(fixture.root)
         if daemon is not None:
             case.update(cleanup_case_resources(daemon, identity, fixture.root / "guard-home", private))
@@ -691,6 +692,14 @@ def run_suite(
     report["case_coverage"] = run_coverage(selected, catalog, completed)
     report["stopped_early"] = len(report["cases"]) < len(selected)
     report.update(report_sections(report["cases"]))
+    report["release_budgets"] = release_budgets(
+        report["cases"],
+        report["interruptions"],
+        summarize_hook_latency(
+            attempt_observations(output, [row["id"] for row in report["cases"]], report.get("case_retries") or [])
+        ),
+        report["known_gaps"],
+    )
     report["pass"] = (
         report["full_profile"]
         and len(report["cases"]) == len(selected)

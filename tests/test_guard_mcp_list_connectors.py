@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import cast
 
@@ -23,7 +24,9 @@ from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = [pytest.mark.usefixtures("native_hook_force")]
 
-_NOW = "2026-10-17T12:00:00Z"
+# A day before the run. `mcp list` ages out an observed server after 30 days,
+# so a fixed date makes these tests fail a month after it was written.
+_NOW = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _run(capsys: pytest.CaptureFixture[str], *argv: str) -> tuple[int, str]:

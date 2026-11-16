@@ -25,6 +25,8 @@ mod metadata;
 mod ordered;
 #[path = "policy_document_projection.rs"]
 mod projection;
+#[path = "policy_document_risk_groups.rs"]
+mod risk_groups;
 #[path = "policy_document_starters.rs"]
 mod starters;
 #[cfg(test)]

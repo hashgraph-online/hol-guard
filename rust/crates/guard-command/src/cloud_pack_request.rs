@@ -8,6 +8,7 @@
 //! prefix, so no argument can move the request elsewhere.
 
 use crate::cloud_pack::*;
+use crate::cloud_pack_validate_request::custom_method;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -43,11 +44,24 @@ pub fn check_arguments<'a>(
     let record = args
         .as_object()
         .ok_or_else(|| error("not_an_object", None))?;
-    if let Some(name) = record
-        .keys()
-        .find(|name| !action.arguments.contains_key(*name))
-    {
-        return Err(error("unknown_argument", Some(name)));
+    let mut open_bytes = 0_usize;
+    for (name, value) in record {
+        if action.arguments.contains_key(name) {
+            continue;
+        }
+        let Some(open) = &action.open_arguments else {
+            return Err(error("unknown_argument", Some(name)));
+        };
+        if !crate::cloud_pack_validate::mcp_name(name) {
+            return Err(error("unknown_argument", Some(name)));
+        }
+        // Count each entry as it is encoded, name and separators included,
+        // so many empty values under long names still add up.
+        let entry = json_len(&Value::String(name.clone())) + json_len(value) + 2;
+        open_bytes = open_bytes.saturating_add(entry);
+        if open_bytes > open.max_bytes as usize {
+            return Err(error("open_arguments_too_large", Some(name)));
+        }
     }
     for (name, spec) in &action.arguments {
         let Some(value) = record.get(name) else {
@@ -71,6 +85,20 @@ fn check_value(spec: &ArgumentSpec, value: &Value) -> Result<(), &'static str> {
             .map(|_| ())
             .ok_or("invalid_argument"),
         ArgumentSpec::Boolean { .. } => value.as_bool().map(|_| ()).ok_or("invalid_argument"),
+        ArgumentSpec::Json {
+            max_bytes,
+            max_items,
+            ..
+        } => {
+            let shaped = value.is_object() || value.is_array();
+            let fits = shaped && json_len(value) <= *max_bytes as usize;
+            let counted = max_items.is_none_or(|max| {
+                value
+                    .as_array()
+                    .is_some_and(|list| list.len() <= max as usize)
+            });
+            (fits && counted).then_some(()).ok_or("invalid_argument")
+        }
         ArgumentSpec::String { .. } => check_text(spec.text_rule().as_ref(), value),
         ArgumentSpec::Array {
             min_items,
@@ -86,6 +114,11 @@ fn check_value(spec: &ArgumentSpec, value: &Value) -> Result<(), &'static str> {
                 .try_for_each(|item| check_text(Some(items), item))
         }
     }
+}
+
+/// The serialized size of a value; one that cannot be written counts as too large.
+fn json_len(value: &Value) -> usize {
+    serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
 }
 
 pub(crate) fn check_text(rule: Option<&TextRule>, value: &Value) -> Result<(), &'static str> {
@@ -110,20 +143,48 @@ pub(crate) fn check_text(rule: Option<&TextRule>, value: &Value) -> Result<(), &
     Ok(())
 }
 
-/// Render the exact request for checked arguments.
+/// Whether a request template names anything that is not an action argument.
+/// A validated pack only allows that for a connection value, so rendering it
+/// without the connection would drop the tenant from a query or body.
+fn uses_connection_values(action: &PackAction, request: &RequestTemplate) -> bool {
+    let hosts = std::collections::BTreeSet::from([request.host.as_str()]);
+    crate::cloud_pack_validate_request::validate_request(action, request, &hosts, None).is_err()
+}
+
+/// Render the exact request for checked arguments, for a pack that declares
+/// no connection values.
 pub fn render(action: &PackAction, args: &Value) -> Result<RenderedRequest, ArgumentError> {
+    render_connected(None, action, args, &Map::new())
+}
+
+/// Render the exact request for checked arguments and the values of the
+/// connection it is sent on. `values` must hold every value `connection`
+/// declares and nothing else; callers can never supply one.
+pub fn render_connected(
+    connection: Option<&crate::cloud_pack_connection::Connection>,
+    action: &PackAction,
+    args: &Value,
+    values: &Map<String, Value>,
+) -> Result<RenderedRequest, ArgumentError> {
     let Executor::DeclarativeHttp { request } = &action.executor else {
         return Err(error("executor_not_renderable", None));
     };
-    let record = check_arguments(action, args)?;
+    let checked = check_arguments(action, args)?;
+    if connection.is_none() && uses_connection_values(action, request) {
+        return Err(error("connection_value_missing", None));
+    }
+    let (bound, host) =
+        crate::cloud_pack_connection::bind(connection, &request.host, checked, values)
+            .map_err(|(code, argument)| ArgumentError { code, argument })?;
+    let record = bound.as_ref();
     let path = render_path(&request.path, record)?;
-    let mut url = format!("https://{}{}", request.host, path);
+    let mut url = format!("https://{host}{path}");
     let query = render_query(&request.query, record)?;
     if !query.is_empty() {
         url.push('?');
         url.push_str(&query);
     }
-    confine(&url, request)?;
+    confine(&url, request, &host)?;
     let mut headers: Vec<[String; 2]> = request
         .headers
         .iter()
@@ -131,10 +192,11 @@ pub fn render(action: &PackAction, args: &Value) -> Result<RenderedRequest, Argu
         .collect();
     let body = match &request.body {
         Some(template) => {
-            headers.push([
-                "content-type".into(),
-                "application/json; charset=utf-8".into(),
-            ]);
+            let content_type = match template {
+                Template::Form(_) => "application/x-www-form-urlencoded",
+                _ => "application/json; charset=utf-8",
+            };
+            headers.push(["content-type".into(), content_type.into()]);
             Some(render_body(template, record)?)
         }
         None => None,
@@ -155,7 +217,8 @@ fn refused(argument: Option<&str>) -> ArgumentError {
 fn render_path(template: &str, args: &Map<String, Value>) -> Result<String, ArgumentError> {
     let mut out = String::new();
     for segment in template[1..].split('/') {
-        let Some(inner) = segment
+        let (inner, verb) = custom_method(segment).ok_or_else(|| refused(None))?;
+        let Some(inner) = inner
             .strip_prefix('{')
             .and_then(|rest| rest.strip_suffix('}'))
         else {
@@ -183,6 +246,10 @@ fn render_path(template: &str, args: &Map<String, Value>) -> Result<String, Argu
             out.push('/');
             out.push_str(&encode(part, false));
         }
+        if let Some(verb) = verb {
+            out.push(':');
+            out.push_str(verb);
+        }
     }
     Ok(out)
 }
@@ -207,6 +274,22 @@ fn render_query(params: &[QueryParam], args: &Map<String, Value>) -> Result<Stri
             ValueSource::Arg { name, default } => args.get(name).or(default.as_ref()),
         };
         let Some(value) = value else { continue };
+        if let Value::Array(items) = value {
+            for item in items {
+                let Value::String(text) = item else {
+                    return Err(refused(Some(&param.name)));
+                };
+                if text.chars().any(char::is_control) {
+                    return Err(refused(Some(&param.name)));
+                }
+                pairs.push(format!(
+                    "{}={}",
+                    query_name(&param.name),
+                    encode(text, true)
+                ));
+            }
+            continue;
+        }
         let text = match value {
             Value::String(text) if !text.chars().any(char::is_control) => text.clone(),
             Value::Number(number) if number.as_i64().is_some() => number.to_string(),
@@ -215,11 +298,19 @@ fn render_query(params: &[QueryParam], args: &Map<String, Value>) -> Result<Stri
         };
         pairs.push(format!(
             "{}={}",
-            encode(&param.name, true),
+            query_name(&param.name),
             encode(&text, true)
         ));
     }
     Ok(pairs.join("&"))
+}
+
+/// A declared parameter name as sent; an OData `$` prefix stays literal.
+fn query_name(name: &str) -> String {
+    match name.strip_prefix('$') {
+        Some(rest) => format!("${}", encode(rest, true)),
+        None => encode(name, true),
+    }
 }
 
 /// Percent-encode one path segment, or one form value when `form` is set
@@ -244,12 +335,12 @@ pub(crate) fn encode(text: &str, form: bool) -> String {
     out
 }
 
-/// Refuse a rendered URL that is not HTTPS on the declared host under the literal prefix.
-fn confine(rendered: &str, request: &RequestTemplate) -> Result<(), ArgumentError> {
+/// Refuse a rendered URL that is not HTTPS on the resolved host under the literal prefix.
+fn confine(rendered: &str, request: &RequestTemplate, host: &str) -> Result<(), ArgumentError> {
     let parsed = url::Url::parse(rendered).map_err(|_| refused(None))?;
     let prefix = request.path.split('{').next().unwrap_or("/");
     let ok = parsed.scheme() == "https"
-        && parsed.host_str() == Some(request.host.as_str())
+        && parsed.host_str() == Some(host)
         && parsed.port().is_none()
         && parsed.username().is_empty()
         && parsed.password().is_none()
@@ -273,6 +364,7 @@ fn write_template(
         Template::Arg(name) => write_json(args.get(name).unwrap_or(&Value::Null), out),
         Template::Const(value) => write_json(value, out),
         Template::Element(_) => write_json(element.ok_or_else(|| refused(None))?, out),
+        Template::Form(_) => Err(refused(None)),
         Template::Rfc822(mail) => {
             let encoded =
                 crate::cloud_pack_mail::render(mail, args).ok_or_else(|| refused(None))?;
@@ -352,7 +444,13 @@ pub(crate) fn render_body(
     args: &Map<String, Value>,
 ) -> Result<String, ArgumentError> {
     let mut out = String::new();
-    write_template(template, args, None, &mut out)?;
+    match template {
+        Template::Form(fields) => {
+            out = crate::cloud_pack_form::render(fields, args, MAX_BODY_BYTES)
+                .ok_or_else(|| refused(None))?;
+        }
+        _ => write_template(template, args, None, &mut out)?,
+    }
     if out.len() > MAX_BODY_BYTES {
         return Err(refused(None));
     }

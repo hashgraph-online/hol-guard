@@ -230,7 +230,7 @@ def is_missing_grok_hook_command(command: str, replacement: str) -> bool:
 def _isolated_stdlib_client(args: tuple[str, ...], context: HarnessContext | None) -> bool:
     """Accept the managed stdlib client that posts to the running daemon."""
     from ..adapters.bounded_cli_hook_bridge import bounded_hook_script_path
-    from ..adapters.cursor_hook_config import isolated_cursor_hook_python
+    from ..adapters.isolated_hook_python import isolated_cursor_hook_python
 
     interpreter = isolated_cursor_hook_python()
     if interpreter is None:

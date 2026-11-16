@@ -54,6 +54,15 @@ The draft errs toward strict and is incomplete on purpose. Work through its outp
   Replace every guess with the provider's documented value.
 - `reversibility`: the draft proposes `permanent` for every action that is not a read. Change it only when the
   provider documents a restore path, such as a trash that keeps items for a stated period.
+- Remote MCP tools keep their own argument names, including camelCase and hyphenated ones. An object argument, or
+  an array of non-strings, becomes a `json` argument bounded by `maxBytes` (and `maxItems` for an array); a call
+  must pass an object or array there. When a provider does not document a tool's arguments, declare the ones you
+  can bound and set `openArguments.maxBytes` to allow the rest within a total size that counts each name and value
+  as encoded; facts must then come from constants or declared arguments only. Under `openArguments`, removing a
+  declared argument is a widening change, since the name is still accepted with only the shared bound. Neither
+  `json` nor `openArguments` is accepted for an HTTP executor.
+- Leave out a tool that acts on a record reached through another one, such as a related-record update, when the
+  pack's `resource` argument can only name the starting record.
 - Drop actions you do not intend to support. A smaller pack is easier to review and widen later.
 
 ## 3. Write fixtures

@@ -4,14 +4,7 @@
 use crate::cloud_pack_cli::answer;
 use serde_json::{json, Value};
 
-const SHIPPED: [&str; 6] = [
-    include_str!("../../../../contributions/cloud-actions/calendar.json"),
-    include_str!("../../../../contributions/cloud-actions/drive.json"),
-    include_str!("../../../../contributions/cloud-actions/github.json"),
-    include_str!("../../../../contributions/cloud-actions/gmail.json"),
-    include_str!("../../../../contributions/cloud-actions/notion.json"),
-    include_str!("../../../../contributions/cloud-actions/slack.json"),
-];
+use crate::cloud_pack_explain::SHIPPED_SOURCES as SHIPPED;
 
 fn line(request: Value) -> Value {
     answer(request.to_string().as_bytes())
@@ -98,7 +91,10 @@ fn explain_refuses_an_action_no_shipped_pack_declares() {
 
 #[test]
 fn explain_uses_a_supplied_pack_instead_of_the_shipped_one() {
-    let mut pack: Value = serde_json::from_str(SHIPPED[5]).unwrap();
+    let mut pack: Value = serde_json::from_str(include_str!(
+        "../../../../contributions/cloud-actions/slack.json"
+    ))
+    .unwrap();
     pack["provider"]["id"] = json!("slack-fork");
     for action in pack["actions"].as_array_mut().unwrap() {
         let id = action["actionId"]

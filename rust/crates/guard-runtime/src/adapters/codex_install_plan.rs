@@ -92,7 +92,7 @@ fn trailing_line_break(content: &[u8]) -> usize {
 /// The removal runs over the shrinking content exactly as Python ran it, so a
 /// separator that only touches a block after an earlier removal is judged the
 /// same way; each remaining byte keeps its original offset.
-fn shell_block_ranges(original: &[u8]) -> Vec<[usize; 2]> {
+pub(crate) fn shell_block_ranges(original: &[u8]) -> Vec<[usize; 2]> {
     let mut content = original.to_vec();
     let mut origin: Vec<usize> = (0..original.len()).collect();
     let mut removed = vec![false; original.len()];

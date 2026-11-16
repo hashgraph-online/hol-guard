@@ -272,7 +272,6 @@
    "id": "harness_launchers",
    "class": "python_transport",
    "paths": [
-    "src/codex_plugin_scanner/guard/adapters/*argv*.py",
     "src/codex_plugin_scanner/guard/adapters/*bridge*.py",
     "src/codex_plugin_scanner/guard/adapters/*resume*.py",
     "src/codex_plugin_scanner/guard/adapters/*script_template*.py",
@@ -290,9 +289,7 @@
    "paths": [
     "src/codex_plugin_scanner/guard/adapters/*_hooks.py",
     "src/codex_plugin_scanner/guard/adapters/_modules/*/*_hooks.py",
-    "src/codex_plugin_scanner/guard/adapters/*hook_config.py",
     "src/codex_plugin_scanner/guard/adapters/*hook_payload*.py",
-    "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py",
     "src/codex_plugin_scanner/guard/adapters/codex.py",
     "src/codex_plugin_scanner/guard/adapters/contracts.py",
     "src/codex_plugin_scanner/guard/adapters/copilot.py",
@@ -329,6 +326,7 @@
    "class": "python_transport",
    "paths": [
     "src/codex_plugin_scanner/guard/native_archive_inspection.py",
+    "src/codex_plugin_scanner/guard/native_swarm.py",
     "src/codex_plugin_scanner/guard/native_hook_edge.py",
     "src/codex_plugin_scanner/guard/native_hook_render.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_fail_closed.py",
@@ -517,6 +515,7 @@
     "src/codex_plugin_scanner/guard/native_command_effect.py",
     "src/codex_plugin_scanner/guard/native_mode.py",
     "src/codex_plugin_scanner/guard/native_daemon_manage.py",
+    "src/codex_plugin_scanner/guard/native_daemon_failure.py",
     "src/codex_plugin_scanner/guard/native_daemon_client.py",
     "src/codex_plugin_scanner/guard/native_daemon_peer.py",
     "src/codex_plugin_scanner/guard/native_recovery_store.py",
@@ -661,6 +660,7 @@
     "rust/crates/guard-rule-contract/**",
     "rust/crates/guard-rules/**",
     "rust/crates/guard-runtime/**",
+    "rust/crates/guard-swarm/**",
     "rust/crates/guard-context-assistance/**",
     "rust/crates/guard-cigar-release/**",
     "rust/crates/guard-scanner/**",

@@ -411,12 +411,10 @@ class HookWorker(HookWorkerNativeMixin):
         if answered is not None or op == "claude_turn_stop":
             return answered
         if op == "claude_permission_request":
-            from ..adapters.claude_hook_config import CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY
-
             # Without the resident there is no pending review to present, so
             # the dialog stays Claude's own, as for a session with none.
             return {
-                CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY: True,
+                "guard_permission_passthrough": True,
                 "hookSpecificOutput": {"hookEventName": "PermissionRequest"},
             }
         return {

@@ -8,18 +8,19 @@
 //! module lists the texts a rule author would have written for each program
 //! the line runs, so the rule applies to all of them.
 //!
-//! The list only ever adds texts to look up. Each one is the program and
-//! arguments of a step the shell runs, so a rule can only match a step that
-//! runs the command it names. The list has no length cap: a cap let a line
-//! padded with harmless steps push the ruled step off the end. The command's
-//! byte limit bounds it instead.
+//! The list only ever adds texts to look up, each the program and arguments
+//! of a step the shell runs. The command's byte limit bounds it; a length cap
+//! let a line padded with harmless steps push the ruled step off the end.
 
 use std::collections::HashSet;
 
 use guard_command::{parse_command, CommandModelRequestV1, CommandSegmentV1, MAX_COMMAND_BYTES};
 
-/// Nesting followed through `bash -c` scripts and grouped steps. A line
-/// nested deeper than this is reported as not fully read.
+#[path = "edge_exact_command_spelling_words.rs"]
+mod words;
+use words::words;
+
+/// Nesting followed through `bash -c` scripts and groups; deeper is not fully read.
 const MAX_DEPTH: usize = 8;
 const INLINE_SHELLS: &[&str] = &["bash", "sh", "zsh", "dash", "ash", "ksh"];
 /// Words that start a step without being its program.
@@ -72,6 +73,7 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
         out.complete = false;
         return;
     }
+    let commented = guard_command::rich_command_model_api::mask_shell_comments(text) != text;
     let parsed = parse_command(&CommandModelRequestV1 {
         command: text.to_owned(),
         dialect: "posix".into(),
@@ -80,9 +82,22 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
     });
     match parsed {
         Ok(model) if model.confidence == "exact" && !model.segments.is_empty() => {
+            // Comments off, bash runs `#` text line by line, even before a bad quote.
+            let plain = commented.then(|| steps(text, true, false).0);
+            for step in plain.iter().flatten().filter(|s| *s != text.trim()) {
+                out.push(seen, collapse(step));
+                visit(step, depth + 1, out, seen);
+            }
             for segment in &model.segments {
-                for spelling in segment_spellings(segment) {
-                    out.push(seen, spelling);
+                let cut =
+                    words::comment_cut(&segment.text, &segment.arguments).unwrap_or_else(|()| {
+                        out.complete = false;
+                        None
+                    });
+                for end in [segment.arguments.len()].into_iter().chain(cut) {
+                    for spelling in segment_spellings(segment, &segment.arguments[..end]) {
+                        out.push(seen, spelling);
+                    }
                 }
                 out.push(seen, collapse(&segment.text));
                 out.push(seen, bare_step(&collapse(&segment.text)));
@@ -100,8 +115,7 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
         }
         _ => {
             // The parser does not model groups such as `(npm publish)` or
-            // heredocs. Each step outside quotes and heredoc bodies is read on
-            // its own instead.
+            // heredocs. Each step outside quotes and heredoc bodies is read.
             let words = guard_command::rich_command_model_api::shell_tokens_without_redirects(
                 text.trim(),
                 0,
@@ -122,12 +136,9 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
                 }
             }
             // Bash reads `((` as arithmetic only when it parses as one, and
-            // runs `((npm publish); true)` as nested groups. A `#` starts a
-            // comment, except inside `${…}` and similar words. Every reading
-            // is listed; an extra text can only add a match. A shell can mix
-            // the two comment readings on one line, so a quote either one
-            // leaves open may hide a step: the line is read through only
-            // when both close their quotes.
+            // runs `((npm publish); true)` as nested groups. Every reading,
+            // with `#` comments and without, is listed; an extra text only
+            // adds a match. The line is complete only when both close.
             let (mut found, closed) = steps(text, true, true);
             let (plain, plain_closed) = steps(text, true, false);
             out.complete &= closed && plain_closed;
@@ -146,8 +157,7 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
             }
             for step in found {
                 out.push(seen, collapse(&step));
-                // `(( i++ ))` read as groups lists itself; reading it again
-                // would only repeat this pass.
+                // `(( i++ ))` read as groups lists itself; skip a repeat pass.
                 if step != text.trim() {
                     visit(&step, depth + 1, out, seen);
                 }
@@ -157,8 +167,8 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
 }
 
 /// `program arg …` with the program's file name, quoted the ways a person
-/// writes a word that needs quotes.
-fn segment_spellings(segment: &CommandSegmentV1) -> Vec<String> {
+/// writes a word that needs quotes. `Spellings::push` drops a repeat.
+fn segment_spellings(segment: &CommandSegmentV1, arguments: &[String]) -> Vec<String> {
     let Some(executable) = segment.executable.as_deref() else {
         return Vec::new();
     };
@@ -168,17 +178,11 @@ fn segment_spellings(segment: &CommandSegmentV1) -> Vec<String> {
     }
     let join = |quote: fn(&str) -> String| {
         std::iter::once(program.to_owned())
-            .chain(segment.arguments.iter().map(|word| quote(word.as_str())))
+            .chain(arguments.iter().map(|word| quote(word.as_str())))
             .collect::<Vec<_>>()
             .join(" ")
     };
-    let single = join(single_quoted);
-    let double = join(double_quoted);
-    if single == double {
-        vec![single]
-    } else {
-        vec![single, double]
-    }
+    vec![join(single_quoted), join(double_quoted)]
 }
 
 /// What an inline shell runs from its arguments.
@@ -256,10 +260,9 @@ fn double_quoted(word: &str) -> String {
 }
 
 /// The steps of `text` split at `;`, `&`, `|`, parentheses and line breaks
-/// outside quotes, each without the keyword or brace that opens it and
-/// without its redirections. Heredoc bodies are skipped up to their closing
-/// line; a body that never closes is read as steps, so nothing after an
-/// unclosed `<<` is hidden.
+/// outside quotes, without the keyword or brace that opens each or its
+/// redirections. Heredoc bodies are skipped to their closing line; a body that
+/// never closes is read as steps, so nothing after an unclosed `<<` hides.
 fn steps(text: &str, read_arithmetic: bool, read_comments: bool) -> (Vec<String>, bool) {
     let chars: Vec<char> = text.chars().collect();
     let mut steps = Vec::new();
@@ -417,44 +420,6 @@ fn skip_heredoc_bodies(chars: &[char], start: usize, heredocs: &mut Vec<(String,
         }
     }
     i
-}
-
-/// The words of `text` split at whitespace outside quotes, quotes kept.
-fn words(text: &str) -> Vec<&str> {
-    let mut words = Vec::new();
-    let mut start: Option<usize> = None;
-    let mut quote: Option<char> = None;
-    let mut escaped = false;
-    for (index, c) in text.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        match (quote, c) {
-            (Some('\''), '\'') | (Some('"'), '"') => quote = None,
-            (Some('"') | None, '\\') => {
-                start.get_or_insert(index);
-                escaped = true;
-            }
-            (Some(_), _) => {}
-            (None, '\'' | '"') => {
-                start.get_or_insert(index);
-                quote = Some(c);
-            }
-            (None, c) if c.is_whitespace() => {
-                if let Some(begin) = start.take() {
-                    words.push(&text[begin..index]);
-                }
-            }
-            (None, _) => {
-                start.get_or_insert(index);
-            }
-        }
-    }
-    if let Some(begin) = start {
-        words.push(&text[begin..]);
-    }
-    words
 }
 
 fn bare_step(step: &str) -> String {

@@ -1,6 +1,6 @@
 use super::{
-    executable_basename, pure_expression, safe_directory_target, safe_gh_arguments,
-    safe_git_arguments, safe_reads, search, sensitive_path_argument,
+    executable_basename, safe_directory_target, safe_gh_arguments, safe_git_arguments, safe_reads,
+    search, sensitive_path_argument,
 };
 use crate::CanonicalCommandV1;
 
@@ -10,6 +10,8 @@ pub(crate) use super::stderr_merge::without_stderr_merge;
 mod cwd;
 #[path = "github_metadata_text.rs"]
 mod github_metadata_text;
+#[path = "jq_filter_text.rs"]
+mod jq_filter_text;
 pub(super) use cwd::{
     after_read_prefix, cwd_read_executable, exact_safe_absolute_cd_chain, exact_safe_cwd_compound,
     git_read_cwd_compound_context, verified_cwd_compound_context, verified_cwd_list_context,
@@ -51,6 +53,30 @@ pub(crate) fn benign_command_segments(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
 ) -> Vec<usize> {
+    segment_proofs(model, context, false)
+}
+
+/// The segments that would pass as a command of their own, judged as if no
+/// other step ran before them.
+///
+/// [`benign_command_segments`] also asks that every earlier step be proven
+/// safe, since an earlier step could change the file a later read opens. A
+/// user who explicitly allowed every other step of a compound has answered
+/// that question: each step passes alone, so the compound passes. Only the
+/// explicit-Allow coverage reads this, after the user's permissions have
+/// covered every step that is not proven here.
+pub(crate) fn segments_safe_alone(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> Vec<usize> {
+    segment_proofs(model, context, true)
+}
+
+fn segment_proofs(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+    alone: bool,
+) -> Vec<usize> {
     let cwd = verified_cwd_compound_context(model, context);
     if model.confidence != "exact"
         || model.path_overridden
@@ -74,6 +100,7 @@ pub(crate) fn benign_command_segments(
         cargo_config_inert: context.cargo_config_inert,
         npm_config_inert: context.npm_config_inert,
         pip_config_inert: context.pip_config_inert,
+        python_environment_inert: context.python_environment_inert,
         shell_home_matches: context.shell_home_matches,
         ripgrep_config_absent: context.ripgrep_config_absent,
         gem_config_absent: context.gem_config_absent,
@@ -97,6 +124,7 @@ pub(crate) fn benign_command_segments(
         })
         .collect();
     let mut all_previous_benign = true;
+    let mut tree_may_change = false;
     model
         .segments
         .iter()
@@ -161,6 +189,7 @@ pub(crate) fn benign_command_segments(
                         | "od"
                         | "stat"
                         | "test"
+                        | "["
                         | "find"
                         | "du"
                         | "diff"
@@ -236,15 +265,23 @@ pub(crate) fn benign_command_segments(
             };
             // Earlier extension-approved segments may rewrite the tree (checkout/pull);
             // a pre-execution path proof only holds while every predecessor is benign.
+            // Judged alone, `ls` with no target lists the working directory,
+            // which is proven only when that directory is verified.
+            let path_context_verified =
+                || safe_reads::verified_path_context(proof_context.home_dir, proof_context.cwd);
             let covered = benign
-                && ls_has_explicit_target
-                && (!requires_path_context
-                    || safe_reads::verified_path_context(
-                        proof_context.home_dir,
-                        proof_context.cwd,
-                    ))
-                && (path_free || all_previous_benign);
+                && (ls_has_explicit_target || (alone && path_context_verified()))
+                && (!requires_path_context || path_context_verified())
+                // Judged alone, a file step needs no proven predecessor unless
+                // one before it may have changed files (a checkout that swaps
+                // a file for a symlink). A step that runs code, such as a
+                // container start, still needs every predecessor proven.
+                && (path_free
+                    || all_previous_benign
+                    || (alone && requires_path_context && !tree_may_change));
             all_previous_benign = all_previous_benign && benign;
+            tree_may_change =
+                tree_may_change || (!benign && super::tree_writers::may_rewrite_tree(original));
             covered.then_some(index)
         })
         .collect()
@@ -360,10 +397,8 @@ pub(super) fn exact_safe_segment_with_context(
     let output_templates = super::kubectl_reads::output_template_positions(segment);
     let sensitive_text = secret_namespace
         .map(|index| github_metadata_text::without_namespace(segment, index))
-        .or_else(|| {
-            (!output_templates.is_empty())
-                .then(|| super::kubectl_reads::without_output_templates(segment, &output_templates))
-        });
+        .or_else(|| super::kubectl_reads::without_templates(segment, &output_templates))
+        .or_else(|| jq_filter.and_then(|index| jq_filter_text::without_jq_filter(segment, index)));
     if (!inert_search
         && !super::source_file_read_segment(segment)
         && super::git_search_text::segment_sensitive(model, segment, sensitive_text, context.cwd))
@@ -490,6 +525,9 @@ pub(super) fn exact_safe_segment_with_context(
         "cmp" => super::metadata_reads::safe_cmp_arguments(segment, context),
         "file" => super::metadata_reads::safe_file_arguments(&segment.arguments, context),
         "stat" => super::metadata_reads::safe_stat_arguments(&segment.arguments, context),
+        "unzip" => super::archive_listing::safe_unzip_arguments(&segment.arguments, context),
+        "zipinfo" => super::archive_listing::safe_zipinfo_arguments(&segment.arguments, context),
+        "xattr" => super::archive_listing::safe_xattr_arguments(&segment.arguments, context),
         "dirname" | "basename" => {
             super::path_word_reads::safe_path_word_arguments(basename, &segment.arguments)
                 && super::glob_words::printed_globs_listable(model, segment, context)
@@ -517,6 +555,8 @@ pub(super) fn exact_safe_segment_with_context(
                 || (matches!(basename, "mkdir" | "touch")
                     && super::chain_temporary::creation_chain(model))
                 || (basename == "mkdir" && super::chain_temporary::mkdir_chain(model))
+                || (matches!(basename, "mkdir" | "touch" | "rm")
+                    && super::chain_temporary::removal_chain(model, context))
                 || (basename == "ln" && super::symlink_writes::link_chain(model, context)))
                 && (basename != "ln" && basename != "rm"
                     || super::directory_targets::home_targets_unquoted(segment))
@@ -558,7 +598,7 @@ pub(super) fn exact_safe_segment_with_context(
         "doctl" => super::doctl_reads::safe_doctl_arguments(&segment.arguments),
         "docker" => super::docker_reads::safe_docker_segment(model, segment),
         "helm" => super::helm_usage::safe_helm_segment(model, segment),
-        "nc" | "netcat" => super::port_probes::safe_nc_segment(model, segment),
+        n if super::port_probes::proves(n) => super::port_probes::safe(n, model, segment, context),
         "brew" => super::brew_reads::safe_brew_segment(model, segment),
         "gem" => super::gem_reads::safe_gem_segment(model, segment, context),
         "pg_ctl" => super::postgres_reads::safe_pg_ctl_arguments(&segment.arguments),
@@ -666,7 +706,7 @@ pub(super) fn exact_safe_segment_with_context(
         ),
         "python" | "python3" | "node" | "nodejs" => {
             super::safe_scalar::version_probe_arguments(basename, &segment.arguments)
-                || pure_expression::safe_inline_expression(basename, &segment.arguments)
+                || super::python_filter::inline_program(basename, model, segment, context)
                 || (matches!(basename, "node" | "nodejs")
                     && super::safe_scalar::node_syntax_check_arguments(
                         &segment.arguments,

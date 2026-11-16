@@ -25,34 +25,6 @@ def _malformed() -> Exception:
     return NativeRunnerAuthorityError("Codex install plan answer is malformed")
 
 
-def remove_managed_shell_guard_blocks(content: bytes) -> bytes:
-    """Remove only legacy Guard marker blocks while preserving every other byte.
-
-    The native runtime names the byte ranges the blocks occupy. A file without
-    the begin marker holds no block, so it is not sent.
-    """
-
-    if SHELL_GUARD_BEGIN.encode("utf-8") not in content:
-        return content
-    ranges = _install_plan("shell_blocks", content=content.decode("latin-1")).get("ranges")
-    if not isinstance(ranges, list):
-        raise _malformed()
-    kept = bytearray()
-    position = 0
-    for item in ranges:
-        if (
-            not isinstance(item, list)
-            or len(item) != 2
-            or not all(isinstance(value, int) and not isinstance(value, bool) for value in item)
-            or not position <= item[0] < item[1] <= len(content)
-        ):
-            raise _malformed()
-        kept += content[position : item[0]]
-        position = item[1]
-    kept += content[position:]
-    return bytes(kept)
-
-
 def guard_proxy_server_names(servers: Mapping[str, object]) -> frozenset[str]:
     """The servers whose launch is a Guard MCP proxy, as the native runtime reads it.
 

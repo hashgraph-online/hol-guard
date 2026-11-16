@@ -366,6 +366,7 @@ pub(crate) fn update(
     managed: Option<&ManagedInput>,
     cloud_sync_entitled: bool,
     now: &str,
+    cigar_apps: &[&str],
 ) -> Result<SettingsWrite, String> {
     if has(payload, WATCH_STAMP_REPAIR_KEY) {
         return Ok(repair_watch_stamp(stored, current, now));
@@ -448,6 +449,7 @@ pub(crate) fn update(
         untimed,
         cigar: &cigar_patch,
         context_changed: has(payload, "context_assistance"),
+        apps: cigar_apps,
     };
     settle_untimed_watch(&mut next, now, &save, managed);
     let next_json = table_to_json(&next);

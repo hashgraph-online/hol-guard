@@ -151,6 +151,10 @@ fn decide(request: &SessionRequest<'_>) -> (bool, Option<String>) {
 /// (other requests, bulk approval, policy, settings, repair) needs a session
 /// opened from Guard itself.
 fn bound_request_allowed(method: &str, path: &str, bound: &str) -> bool {
+    // An agent-relayed review link cannot enumerate the person's other agents.
+    if path == "/v1/swarm" || path.starts_with("/v1/swarm/") {
+        return false;
+    }
     if !session_path(method, path) {
         return false;
     }

@@ -6,14 +6,60 @@
 //! provider response, and the decision each shipped policy preset gives. A
 //! pack whose fixtures fail is not compiled.
 
-use crate::cloud_pack::{CloudActionPack, Fixture, FixtureKind, PackAction, PresetDecisions};
+use crate::cloud_pack::{CloudActionPack, PackAction};
 use crate::cloud_pack_facts::extract;
-use crate::cloud_pack_request::{check_arguments, render};
+use crate::cloud_pack_request::{check_arguments, render_connected};
 use crate::cloud_pack_response::project;
 use crate::cloud_policy_pack::{shipped, FactCall, Preset};
+use crate::effect_decision::GuardAction;
 use guard_contracts::ActionFactsV2;
+use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FixtureKind {
+    Safe,
+    Risky,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Fixture {
+    pub name: String,
+    pub kind: FixtureKind,
+    pub arguments: Value,
+    /// Values of the connection the call is sent on, for a pack that declares them.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub connection: serde_json::Map<String, Value>,
+    pub expect: FixtureExpect,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FixtureExpect {
+    /// The argument error code the call is refused with.
+    pub error: Option<String>,
+    /// Facts to compare by top-level key with the extracted facts.
+    pub facts: Option<serde_json::Map<String, Value>>,
+    /// The exact request the executor sends (`declarative-http` only).
+    pub request: Option<Value>,
+    /// A recorded provider response body and the projection it yields.
+    pub response: Option<String>,
+    pub projection: Option<Value>,
+    /// The policy decision under each shipped preset, from the extracted
+    /// facts with a clean session and zeroed usage windows.
+    pub decisions: Option<PresetDecisions>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PresetDecisions {
+    pub relaxed: Option<GuardAction>,
+    pub balanced: Option<GuardAction>,
+    pub strict: Option<GuardAction>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,7 +88,7 @@ pub fn run(pack: &CloudActionPack) -> FixtureReport {
         .iter()
         .flat_map(|action| action.fixtures.iter().map(move |fixture| (action, fixture)))
         .map(|(action, fixture)| {
-            let failure = check(&pack.provider.id, action, fixture).err();
+            let failure = check(pack, action, fixture).err();
             FixtureResult {
                 action_id: action.action_id.clone(),
                 fixture: fixture.name.clone(),
@@ -61,8 +107,12 @@ pub fn run(pack: &CloudActionPack) -> FixtureReport {
     }
 }
 
-fn check(provider: &str, action: &PackAction, fixture: &Fixture) -> Result<(), String> {
+fn check(pack: &CloudActionPack, action: &PackAction, fixture: &Fixture) -> Result<(), String> {
+    let provider = pack.provider.id.as_str();
     let expect = &fixture.expect;
+    let render = |action: &PackAction, args: &Value| {
+        render_connected(pack.connection.as_ref(), action, args, &fixture.connection)
+    };
     let checked = check_arguments(action, &fixture.arguments);
     if let Some(code) = &expect.error {
         let got = match &checked {
@@ -126,9 +176,12 @@ fn check_decisions(
         provider,
         action_id: &action.action_id,
         effect: action.safety.effect,
+        connection_id: "fixture",
+        resource_id: None,
         facts,
         session: None,
         windows: None,
+        unclassified: None,
     };
     for (preset, want) in [
         (Preset::Relaxed, expected.relaxed),

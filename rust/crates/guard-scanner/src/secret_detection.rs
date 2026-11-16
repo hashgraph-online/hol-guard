@@ -35,6 +35,11 @@ use encoded::{encoded_payload_findings, ENCODED_PAYLOAD_POLICY_VERSION};
 #[path = "secret_detection_shell.rs"]
 mod shell;
 
+#[path = "secret_detection_assignment.rs"]
+mod assignment;
+
+use assignment::assignment_captures;
+
 use shell::{
     shell_credential_findings, shell_credential_material_line, SHELL_RULE_DESCRIPTION,
     SHELL_RULE_META,
@@ -2151,7 +2156,7 @@ pub fn scan_secret_text(
         .iter()
         .map(|finding| candidate_digest(&finding.candidate))
         .collect();
-    for captures in ASSIGNMENT.captures_iter(text) {
+    for captures in assignment_captures(&ASSIGNMENT, text) {
         let candidate = captures
             .name("secret")
             .or_else(|| captures.name("secret_sq"))

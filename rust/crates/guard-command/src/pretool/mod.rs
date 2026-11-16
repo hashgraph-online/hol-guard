@@ -23,6 +23,11 @@ pub struct PathContext<'a> {
     /// directory can add an index query, a log file or another option to a
     /// pip command that names none. Literal contexts leave this false.
     pub pip_config_inert: bool,
+    /// No inherited `PYTHON*` variable other than a fixed list of output
+    /// and diagnostics switches can add a module path, a startup file or
+    /// another interpreter option to a `python3 -c` filter. Literal contexts
+    /// leave this false.
+    pub python_environment_inert: bool,
     /// The shell expands `~` to `home_dir`: its HOME names the same
     /// directory. Literal contexts leave this false.
     pub shell_home_matches: bool,
@@ -110,6 +115,7 @@ pub(crate) mod directory_targets;
 pub(crate) mod workspace_git_config;
 pub(crate) mod workspace_git_environment;
 pub(crate) use directory_targets::safe_directory_target;
+mod archive_listing;
 mod awk_reads;
 mod base64_reads;
 mod brace_words;
@@ -175,6 +181,8 @@ mod guard_home_option;
 mod guard_names;
 mod helm_usage;
 pub(crate) mod help_probes;
+mod home_program_metadata;
+mod hook_neutering;
 mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;
@@ -186,8 +194,10 @@ mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
 mod npmrc_keys;
+mod path_lookup_program;
 mod path_word_reads;
 mod pip_reads;
+mod piped_group;
 mod pnpm_reads;
 mod postgres_reads;
 mod printf_words;
@@ -204,11 +214,15 @@ pub(crate) use git_routes::{
 mod apply_patch_writes;
 mod ci_workflow_writes;
 mod data_heredocs;
+mod install_script_writes;
+mod literal_secrets;
 mod lockfile_install;
 mod omp_file_url;
 mod omp_hashline_writes;
 pub(crate) mod pipe_attacks;
+mod planted_instructions;
 mod pure_expression;
+mod python_filter;
 mod read_paths;
 mod source_reads;
 use source_reads::{plain_source_code_path, sensitive_command_input, source_file_read_segment};
@@ -219,6 +233,7 @@ pub(crate) use restricted_test_commands::{manager_local_bin_arguments, manager_s
 mod rust_toolchain;
 mod rustfmt_writes;
 mod safe_links;
+pub(crate) use safe_links::{every_removal_temporary, temporary_removal_segments};
 pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
@@ -236,6 +251,7 @@ mod search_scope_budget;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
+mod search_scope_plain_skips;
 pub(crate) mod search_scope_tracked;
 mod search_scope_walk;
 mod secret_aliases;
@@ -252,6 +268,7 @@ mod stdin_filters;
 mod symlink_writes;
 mod tool_inventory_reads;
 mod tree_reads;
+mod tree_writers;
 pub(crate) mod version_probes;
 pub(crate) mod wget_reads;
 #[cfg(test)]
@@ -288,6 +305,7 @@ pub use generic::bindable_setting;
 pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
+pub use generic::prompt_asks_for_local_secrets;
 pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
@@ -305,7 +323,9 @@ pub(crate) use script_content::{
     sole_program_sources, sourced_program_sources, sourcing_bounded_sources,
 };
 pub use search_scope_tracked::proven_project_document;
-pub(crate) use segment_proof::{benign_command_segments, leading_cd_segment, without_stderr_merge};
+pub(crate) use segment_proof::{
+    benign_command_segments, leading_cd_segment, segments_safe_alone, without_stderr_merge,
+};
 pub(crate) use worktree_add::entered_checkouts;
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
@@ -365,9 +385,10 @@ pub(crate) fn removes_a_root(command: &str) -> bool {
 }
 
 /// Floors no extension permission can settle: Guard self-protection, secret
-/// exfiltration, a glob that could name a secret file, and Git configuration
-/// that runs a program Guard cannot read. An unproven model has no segments
-/// to screen, so it is a floor itself rather than passing every screen.
+/// exfiltration, a spelled-out key, token or password, a glob that could name
+/// a secret file, and Git configuration that runs a program Guard cannot
+/// read. An unproven model has no segments to screen, so it is a floor itself
+/// rather than passing every screen.
 pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
     model.confidence != "exact"
         || model.segments.is_empty()
@@ -386,6 +407,9 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
             names_guard_outside_message(segment, &guard_names::moved_by(&model.segments[..index]))
         })
         || model.segments.iter().any(selects_secret_outside_message)
+        // A spelled-out key, token or password is in the transcript and the
+        // shell history the moment the command runs, whatever the program.
+        || literal_secrets::holds_literal_secret(&model.normalized_text)
 }
 
 /// A Git alias, hook or config value can carry a program the parser never
@@ -734,6 +758,8 @@ fn sensitive_location_text(value: &str) -> bool {
     let needles = [
         "/.ssh/",
         "~/.ssh",
+        // A `.secrets` directory is a credential store (see guard-secure-fs).
+        "/.secrets/",
         "/.aws/credentials",
         "~/.aws/credentials",
         "/.docker/config.json",
@@ -990,21 +1016,28 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     // starting one of its own, and the budget ends when the outermost
     // reading returns.
     let _budget = search_scope_budget::begin_include_scope_budget();
-    evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)
+    let decision = evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)?;
+    Ok(literal_secrets::review_command(request, decision))
 }
 
 /// How many rewrites one submission may go through. A wrapper around a loop
-/// needs two - the wrapper comes off, then the loop unrolls - and the bound
-/// stops a recognizer whose output another recognizer reads from running
-/// without end.
+/// needs two (the wrapper comes off, then the loop unrolls); the bound stops
+/// recognizers that read each other's output from running without end.
 const MAX_REWRITE_ROUNDS: usize = 3;
 
 /// The command list a rewrite reads this text as, in the order the
 /// recognizers are tried.
 fn rewritten_command_list(command: &str) -> Option<String> {
-    for_loop_unroll::unroll(command)
+    rewritten_command_list_at(command, None)
+}
+
+/// [`rewritten_command_list`] with a known home, so a `~/` loop word unrolls,
+/// read without its comments, as the parser reads every step.
+fn rewritten_command_list_at(command: &str, home_dir: Option<&str>) -> Option<String> {
+    let command = &crate::shell_comment_lines::mask_comments(command);
+    for_loop_unroll::unroll_at(command, home_dir)
         .or_else(|| control_flow_flatten::flatten(command))
-        .or_else(|| control_flow_chain::spliced(command))
+        .or_else(|| control_flow_chain::spliced(command, home_dir))
         .or_else(|| list_wrapper::unwrapped(command))
 }
 
@@ -1027,7 +1060,21 @@ fn evaluate_rewritten(
     // through the same proofs and replaces the construct's decision: an allow
     // there admits the construct, a block is never softened, and a review
     // carries the rewritten model so later layers judge modeled commands.
-    let Some(rewritten) = rewritten_command_list(&request.command) else {
+    if let Some(allowed) = piped_group::decision(
+        request,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+        round,
+    ) {
+        return Ok(allowed);
+    }
+    // A loop word spelled `~/` names the home the shell expands, so it is
+    // written out only when that is shown to be the declared home.
+    let loop_home =
+        home_dir.filter(|_| PathContext::shell_home_matches_for(home_dir, execution_environment));
+    let Some(rewritten) = rewritten_command_list_at(&request.command, loop_home) else {
         return Ok(ungrouped_decision(
             request,
             decision,
@@ -1359,7 +1406,10 @@ fn evaluate_single_command(
             "The Rust command authority proved this push sends the checked-out branch to a credential-free GitHub HTTPS origin through trusted Git, credential helpers and hooks.",
         ));
     }
-    if exact_safe_command_with_context(&model, false, context)
+    // A full path to the file the bare name finds on `PATH` is proven as that bare name.
+    if (exact_safe_command_with_context(&model, false, context)
+        || path_lookup_program::bare_name_model(&model, execution_environment)
+            .is_some_and(|bare| exact_safe_command_with_context(&bare, false, context)))
         && !bun_eval::inherited_preload_configured(&model, execution_environment)
     {
         let reason_code = docker_start::proven_reason_code(&model)

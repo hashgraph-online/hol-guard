@@ -500,6 +500,9 @@ impl CompiledNativeCommandControls {
             .into_iter()
             .collect();
         let mut covered = benign.clone();
+        // Steps a permission the user enabled covers, as opposed to a proof
+        // Guard made itself about the directory the command started in.
+        let mut permitted = BTreeSet::new();
         for observation in observations {
             if observation.effective_segment_indexes.is_empty() {
                 continue;
@@ -521,17 +524,28 @@ impl CompiledNativeCommandControls {
                 return false;
             }
             covered.extend(observation.effective_segment_indexes.iter().copied());
+            permitted.extend(observation.effective_segment_indexes.iter().copied());
         }
         // GitHub permission-only owners run last so they never hide an
         // ungranted rule.
-        covered.extend(self.github_granted_segments(permission_observations));
+        let granted = self.github_granted_segments(permission_observations);
+        permitted.extend(granted.iter().copied());
+        covered.extend(granted);
+        let full = self.fully_allowed_extension_segments(command, &benign, context);
+        permitted.extend(full.iter().copied());
         // A `cd` into the checkout a `git worktree add` of this command
         // creates, and the `head`/`tail`/`wc` stages after it, are covered
-        // when the Git and GitHub steps after it are.
+        // when the Git and GitHub steps after it are, and any other step
+        // after it is an action the user's own permission covers. A step
+        // Guard proved benign in the starting directory does not count: its
+        // proof read a directory the step no longer runs in.
+        let permitted_action =
+            |index: usize| permitted.contains(&index) && !benign.contains(&index);
         covered.extend(crate::pretool::entered_checkouts(
             command,
             context,
             environment,
+            &permitted_action,
         ));
         // A Git ref read after covered steps keeps the proof it has alone.
         covered.extend(crate::pretool::git_reads_after_allowed_steps(
@@ -547,7 +561,12 @@ impl CompiledNativeCommandControls {
         // covers the programs it watches, including the spellings no rule
         // models. It runs last so it never hides a rule the user left off and
         // never changes what the proofs above read.
-        covered.extend(self.fully_allowed_extension_segments(command, &benign, context));
+        covered.extend(full);
+        // A step that passes as a command of its own passes inside a compound
+        // whose other steps the user allowed: each step is judged alone, and
+        // the compound passes when every step does. The check below that a
+        // Git step's output stays clear of `.git` still applies to it.
+        covered.extend(crate::pretool::segments_safe_alone(command, context));
         // A Git step that points its own output over `.git` or out of the
         // workspace writes whichever route covered it: a `git log` rule the
         // user enabled reads the verb, not the `--output=.git/config` that
@@ -681,6 +700,7 @@ mod full_allow;
 mod precedence;
 #[path = "native_command_unmodeled.rs"]
 mod unmodeled;
+pub(crate) use floor::explain_expired_proof;
 use floor::{add_authority_repair_hint, evaluation_error_reason, rank, rule_floor, strengthen};
 pub(crate) use precedence::settle_with_explicit_allow;
 pub(crate) use unmodeled::{
@@ -723,3 +743,7 @@ mod powershell_regressions;
 #[cfg(test)]
 #[path = "native_command_read_permission_tests.rs"]
 mod read_permission_regressions;
+
+#[cfg(all(test, unix))]
+#[path = "native_command_contributed_allow_tests.rs"]
+mod contributed_allow_regressions;

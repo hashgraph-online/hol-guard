@@ -148,6 +148,9 @@ pub(crate) fn apply_post_tool_policy_with_delivery(
             || (response.decision == "allow"
                 && response.model_output_action == "replace_with_reviewed_excerpt")
         {
+            if response.decision == "deny" {
+                response.observe_mode = true;
+            }
             return Ok(response);
         }
         response.decision = "allow".to_owned();

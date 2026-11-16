@@ -26,7 +26,11 @@ fn a_conditional_in_a_list_is_written_out_in_place() {
             "gh pr view 1 --jq '.x | if . then 1 else 2 end' || true; ls",
         ),
     ] {
-        assert_eq!(spliced(command).as_deref(), Some(expected), "{command}");
+        assert_eq!(
+            spliced(command, None).as_deref(),
+            Some(expected),
+            "{command}"
+        );
     }
 }
 
@@ -63,7 +67,7 @@ fn other_lists_are_not_spliced() {
         "echo a && if [ -f a ]; then echo a",
         "echo 'open && if [ -f a ]; then echo a; fi",
     ] {
-        assert_eq!(spliced(command), None, "{command}");
+        assert_eq!(spliced(command, None), None, "{command}");
     }
 }
 
@@ -87,7 +91,11 @@ fn a_negated_item_keeps_the_negation_the_surrounding_list_reads() {
             "[ -f a ]; ! npm test && echo b",
         ),
     ] {
-        assert_eq!(spliced(command).as_deref(), Some(expected), "{command}");
+        assert_eq!(
+            spliced(command, None).as_deref(),
+            Some(expected),
+            "{command}"
+        );
     }
 }
 
@@ -97,7 +105,90 @@ fn a_negated_item_keeps_the_negation_the_surrounding_list_reads() {
 #[test]
 fn a_negated_directory_change_is_not_spliced() {
     assert_eq!(
-        spliced("git status --short && if ! cd src; then touch ../escape.txt; fi"),
+        spliced(
+            "git status --short && if ! cd src; then touch ../escape.txt; fi",
+            None
+        ),
         None
     );
+}
+
+/// A loop over literal words inside a longer list is written out in place,
+/// once per word, and the commands around it are kept as written.
+#[test]
+fn a_loop_in_a_list_is_written_out_in_place() {
+    for (command, expected) in [
+        (
+            "echo a; for n in 1 2; do echo $n; done",
+            "echo a; echo 1; echo 2",
+        ),
+        (
+            "for n in 1 2; do echo $n; done; echo a",
+            "echo 1; echo 2 ; echo a",
+        ),
+        (
+            "echo a && for n in 1 2; do echo $n; done && echo b",
+            "echo a && echo 1; echo 2 && echo b",
+        ),
+        (
+            "echo a\nfor n in 1 2; do echo $n; done\necho b",
+            "echo a\necho 1; echo 2 \necho b",
+        ),
+        (
+            "gh pr list; for n in 1 2; do gh pr view $n; done; for f in a b; do cat $f; done",
+            "gh pr list; gh pr view 1; gh pr view 2 ; cat a; cat b",
+        ),
+    ] {
+        assert_eq!(
+            spliced(command, None).as_deref(),
+            Some(expected),
+            "{command}"
+        );
+    }
+}
+
+/// A loop that is piped into or out of, followed by a redirect or a
+/// background `&`, mixed with a conditional, or skipped by `&&`/`||` while its
+/// body changes the directory keeps its review. So does a `!` on the body's
+/// last command when `&&` or `||` after `done` reads it.
+#[test]
+fn other_loops_in_a_list_are_not_written_out() {
+    for command in [
+        "echo a | for n in 1 2; do echo $n; done",
+        "echo a; for n in 1 2; do echo $n; done | sh",
+        "echo a; for n in 1 2; do echo $n; done > out",
+        "echo a; for n in 1 2; do echo $n; done &",
+        "echo a; for n in $(ls); do echo $n; done",
+        "echo a; for n in 1 2; do echo $n; done; if true; then ls; fi",
+        "false || for d in a b; do cd $d; done; rm -f build",
+        "false && for d in a; do echo $d; cd $d; done; rm -f build",
+        "echo a; for n in 1 2; do ! grep -q $n f; done && rm -f f",
+        "echo a; for n in 1 2; do echo $n; done echo b",
+        "echo a; for n in 1 2; do echo $n; done;; echo b",
+    ] {
+        assert_eq!(spliced(command, None), None, "{command}");
+    }
+}
+
+/// A loop gated by `&&` is written out when a pipe inside a quoted filter is
+/// only text, and still keeps its review when a body item changes the shell.
+#[test]
+fn a_quoted_pipe_does_not_make_a_gated_loop_change_the_shell() {
+    let filter = "jq -c '{n:.number,c:[.checks[]?|select(.c!=null)|{n:.name}]}'";
+    let command = format!(
+        "gh pr view 1 && for n in 1 2; do gh pr view \"$n\" --json number | {filter}; done"
+    );
+    let written = spliced(&command, None).expect("written out");
+    assert_eq!(
+        written.matches("--json number | jq -c").count(),
+        2,
+        "{written}"
+    );
+    for command in [
+        "gh pr view 1 && for n in 1 2; do echo 'a|b' | cd /tmp; done",
+        "gh pr view 1 && for n in 1 2; do echo \"a|b\"; cd /tmp; done",
+        "gh pr view 1 && for n in 1 2; do gh pr view \"$n\" | jq '.a|.b' | x=1 cat; done",
+    ] {
+        assert_eq!(spliced(command, None), None, "{command}");
+    }
 }

@@ -5,9 +5,10 @@
 //! target is safe to lose. A plain `rm` or `rmdir` in the workspace is ordinary
 //! cleanup, `truncate` empties or resizes a file the same way `> file` does,
 //! and `sed -i` or `perl -i` is the same file edit an agent's own edit tool
-//! makes: the sandbox keeps all of them off the network, credentials, the home
-//! directory and `.git`, so this module accepts that uncertainty for those
-//! programs only. command_shape screens sed scripts so shell execution cannot
+//! makes, whether it names its files or `find -exec` hands them over: the
+//! sandbox keeps all of them off the network, credentials, the home directory
+//! and `.git`, so this module accepts that uncertainty for those programs
+//! only. command_shape screens sed scripts so shell execution cannot
 //! hide behind containment; perl's runs in the sandbox like any perl. A
 //! recursive removal could take uncommitted work, so its targets must be missing
 //! or Git-ignored, and it must run before any other command, perl included.
@@ -39,8 +40,10 @@ fn segment_indexes(observation: &NativeCommandObservationV1) -> impl Iterator<It
 fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)> {
     let segment = model.segments.get(index)?;
     let program = segment.executable.as_deref()?;
-    if !matches!(program, "rm" | "rmdir" | "sed" | "perl" | "truncate")
-        || segment.path_overridden
+    if !matches!(
+        program,
+        "rm" | "rmdir" | "sed" | "perl" | "truncate" | "find"
+    ) || segment.path_overridden
         || !segment.wrapper_chain.is_empty()
         || !segment.environment_names.is_empty()
     {
@@ -48,6 +51,13 @@ fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)
     }
     if program == "sed" {
         return in_place_edit(&segment.arguments).then(|| (false, Vec::new()));
+    }
+    // `find ... -type f -exec sed -i ... {} +` makes the same edit over each
+    // file the walk found; the reach check holds the walk to the workspace.
+    if program == "find" {
+        return crate::find_exec_sed(&segment.arguments)
+            .is_some_and(|edit| in_place_edit(&edit[1..]))
+            .then(|| (false, Vec::new()));
     }
     // Perl runs its script in the sandbox whatever the switches; the reach
     // check still holds every operand to the workspace.
@@ -389,6 +399,30 @@ fn broad_target(argument: &str, workspace: &Path, below: usize) -> bool {
     workspace.starts_with(&normal) || (root_glob && normal.parent() == Some(workspace.as_path()))
 }
 
+/// The files a `find ... -exec sed -i ... {} +` edits, spelled as the glob
+/// that names them: each root joined with the walk's first name test, or the
+/// bare root when it has none. `find . -name '*.py' -exec sed -i` then reads
+/// as `sed -i ./*.py`, an edit the wipe screen lets through, and `find .
+/// -type f -exec sed -i` as an edit of the whole root, which it does not.
+fn found_targets(segment: &crate::CommandSegmentV1) -> Option<Vec<String>> {
+    if segment.executable.as_deref() != Some("find") {
+        return None;
+    }
+    crate::find_exec_sed(&segment.arguments)?;
+    let at = segment.arguments.iter().position(|word| word == "-exec")?;
+    let shape = crate::read_only_fanout::find_shape(&segment.arguments[..at])?;
+    Some(
+        shape
+            .roots
+            .iter()
+            .map(|root| match shape.patterns.first() {
+                Some(pattern) => format!("{}/{pattern}", root.trim_end_matches('/')),
+                None => root.clone(),
+            })
+            .collect(),
+    )
+}
+
 pub(super) fn destroys_workspace(
     result: &PreToolResultV1,
     model: &CanonicalCommandV1,
@@ -406,6 +440,11 @@ pub(super) fn destroys_workspace(
         .any(|index| {
             model.segments.get(index).is_none_or(|segment| {
                 let below = below.get(index).copied().unwrap_or(0);
+                if let Some(targets) = found_targets(segment) {
+                    return targets
+                        .iter()
+                        .any(|target| broad_target(target, workspace, below));
+                }
                 let scripts = edit_scripts::edit_scripts(segment);
                 segment
                     .arguments

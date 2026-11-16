@@ -1,0 +1,7550 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "sentry-mcp",
+    "name": "Sentry MCP",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "mcp.sentry.dev"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "org:read",
+      "project:read",
+      "project:write",
+      "team:read",
+      "team:write",
+      "event:read",
+      "event:write"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "sentry-mcp.add_issue_note",
+      "title": "Add issue note",
+      "link": {
+        "tool": "add_issue_note"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "add_issue_note"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "send",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls add_issue_note",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "issueId": "PROJ-123"
+          },
+          "expect": {
+            "facts": {
+              "class": "send",
+              "object": {
+                "state": "known",
+                "value": "message"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.add_team_to_project",
+      "title": "Add team to project",
+      "link": {
+        "tool": "add_team_to_project"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "add_team_to_project"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "admin",
+        "object": {
+          "const": "user"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "admin",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls add_team_to_project",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "admin",
+              "object": {
+                "state": "known",
+                "value": "user"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "block",
+              "relaxed": "block",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.analyze_issue_with_seer",
+      "title": "Analyze issue with seer",
+      "link": {
+        "tool": "analyze_issue_with_seer"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "analyze_issue_with_seer"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "execute",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls analyze_issue_with_seer",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "issueId": "PROJ-123"
+          },
+          "expect": {
+            "facts": {
+              "class": "execute",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.create_alert_rule",
+      "title": "Create alert rule",
+      "link": {
+        "tool": "create_alert_rule"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_alert_rule"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_alert_rule",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.create_dsn",
+      "title": "Create dsn",
+      "link": {
+        "tool": "create_dsn"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_dsn"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "secret"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_dsn",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "secret"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.create_metric_monitor",
+      "title": "Create metric monitor",
+      "link": {
+        "tool": "create_metric_monitor"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_metric_monitor"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_metric_monitor",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.create_monitor",
+      "title": "Create monitor",
+      "link": {
+        "tool": "create_monitor"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_monitor"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_monitor",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.create_project",
+      "title": "Create project",
+      "link": {
+        "tool": "create_project"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_project"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_project",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.create_team",
+      "title": "Create team",
+      "link": {
+        "tool": "create_team"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_team"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_team",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.create_uptime_monitor",
+      "title": "Create uptime monitor",
+      "link": {
+        "tool": "create_uptime_monitor"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_uptime_monitor"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_uptime_monitor",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.delete_alert_rule",
+      "title": "Delete alert rule",
+      "link": {
+        "tool": "delete_alert_rule"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "delete_alert_rule"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls delete_alert_rule",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.delete_metric_monitor",
+      "title": "Delete metric monitor",
+      "link": {
+        "tool": "delete_metric_monitor"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "delete_metric_monitor"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls delete_metric_monitor",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.delete_monitor_environment",
+      "title": "Delete monitor environment",
+      "link": {
+        "tool": "delete_monitor_environment"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "delete_monitor_environment"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls delete_monitor_environment",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.delete_uptime_monitor",
+      "title": "Delete uptime monitor",
+      "link": {
+        "tool": "delete_uptime_monitor"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "delete_uptime_monitor"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls delete_uptime_monitor",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.find_alert_rules",
+      "title": "Find alert rules",
+      "link": {
+        "tool": "find_alert_rules"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "find_alert_rules"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls find_alert_rules",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.find_dashboards",
+      "title": "Find dashboards",
+      "link": {
+        "tool": "find_dashboards"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "find_dashboards"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls find_dashboards",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.find_dropped_events",
+      "title": "Find dropped events",
+      "link": {
+        "tool": "find_dropped_events"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "find_dropped_events"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls find_dropped_events",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.find_dsns",
+      "title": "Find dsns",
+      "link": {
+        "tool": "find_dsns"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "find_dsns"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "secret"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls find_dsns",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "secret"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.find_metric_monitors",
+      "title": "Find metric monitors",
+      "link": {
+        "tool": "find_metric_monitors"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "find_metric_monitors"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls find_metric_monitors",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.find_monitors",
+      "title": "Find monitors",
+      "link": {
+        "tool": "find_monitors"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "find_monitors"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls find_monitors",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.find_organizations",
+      "title": "Find organizations",
+      "link": {
+        "tool": "find_organizations"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "find_organizations"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls find_organizations",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.find_projects",
+      "title": "Find projects",
+      "link": {
+        "tool": "find_projects"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "find_projects"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls find_projects",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.find_releases",
+      "title": "Find releases",
+      "link": {
+        "tool": "find_releases"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "find_releases"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls find_releases",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.find_teams",
+      "title": "Find teams",
+      "link": {
+        "tool": "find_teams"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "find_teams"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "user"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls find_teams",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "user"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.find_uptime_monitors",
+      "title": "Find uptime monitors",
+      "link": {
+        "tool": "find_uptime_monitors"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "find_uptime_monitors"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls find_uptime_monitors",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_agent_conversation_details",
+      "title": "Get agent conversation details",
+      "link": {
+        "tool": "get_agent_conversation_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_agent_conversation_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_agent_conversation_details",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_alert_options",
+      "title": "Get alert options",
+      "link": {
+        "tool": "get_alert_options"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_alert_options"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_alert_options",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_alert_rule",
+      "title": "Get alert rule",
+      "link": {
+        "tool": "get_alert_rule"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_alert_rule"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_alert_rule",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_dashboard_details",
+      "title": "Get dashboard details",
+      "link": {
+        "tool": "get_dashboard_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_dashboard_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_dashboard_details",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_doc",
+      "title": "Get doc",
+      "link": {
+        "tool": "get_doc"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_doc"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_doc",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_event_attachment",
+      "title": "Get event attachment",
+      "link": {
+        "tool": "get_event_attachment"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_event_attachment"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "export",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_event_attachment",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "export",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_event_stacktrace",
+      "title": "Get event stacktrace",
+      "link": {
+        "tool": "get_event_stacktrace"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_event_stacktrace"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_event_stacktrace",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_issue_activity",
+      "title": "Get issue activity",
+      "link": {
+        "tool": "get_issue_activity"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_issue_activity"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_issue_activity",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "issueId": "PROJ-123"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_issue_breadcrumbs",
+      "title": "Get issue breadcrumbs",
+      "link": {
+        "tool": "get_issue_breadcrumbs"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_issue_breadcrumbs"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_issue_breadcrumbs",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "issueId": "PROJ-123"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_issue_details",
+      "title": "Get issue details",
+      "link": {
+        "tool": "get_issue_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_issue_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_issue_details",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "issueId": "PROJ-123"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_issue_tag_values",
+      "title": "Get issue tag values",
+      "link": {
+        "tool": "get_issue_tag_values"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_issue_tag_values"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_issue_tag_values",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "issueId": "PROJ-123"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_issue_user_reports",
+      "title": "Get issue user reports",
+      "link": {
+        "tool": "get_issue_user_reports"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_issue_user_reports"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_issue_user_reports",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "issueId": "PROJ-123"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_latest_base_snapshot",
+      "title": "Get latest base snapshot",
+      "link": {
+        "tool": "get_latest_base_snapshot"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_latest_base_snapshot"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_latest_base_snapshot",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_metric_monitor_details",
+      "title": "Get metric monitor details",
+      "link": {
+        "tool": "get_metric_monitor_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_metric_monitor_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_metric_monitor_details",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_monitor_details",
+      "title": "Get monitor details",
+      "link": {
+        "tool": "get_monitor_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_monitor_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_monitor_details",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_profile_details",
+      "title": "Get profile details",
+      "link": {
+        "tool": "get_profile_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_profile_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_profile_details",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_profile",
+      "title": "Get profile",
+      "link": {
+        "tool": "get_profile"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_profile"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_profile",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_release_details",
+      "title": "Get release details",
+      "link": {
+        "tool": "get_release_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_release_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_release_details",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_replay_details",
+      "title": "Get replay details",
+      "link": {
+        "tool": "get_replay_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_replay_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_replay_details",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_sentry_mcp_info",
+      "title": "Get sentry mcp info",
+      "link": {
+        "tool": "get_sentry_mcp_info"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_sentry_mcp_info"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_sentry_mcp_info",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_sentry_resource",
+      "title": "Get sentry resource",
+      "link": {
+        "tool": "get_sentry_resource"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_sentry_resource"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_sentry_resource",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_snapshot_image",
+      "title": "Get snapshot image",
+      "link": {
+        "tool": "get_snapshot_image"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_snapshot_image"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_snapshot_image",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_snapshot",
+      "title": "Get snapshot",
+      "link": {
+        "tool": "get_snapshot"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_snapshot"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_snapshot",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_span_details",
+      "title": "Get span details",
+      "link": {
+        "tool": "get_span_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_span_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_span_details",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_trace_details",
+      "title": "Get trace details",
+      "link": {
+        "tool": "get_trace_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_trace_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_trace_details",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.get_uptime_monitor_details",
+      "title": "Get uptime monitor details",
+      "link": {
+        "tool": "get_uptime_monitor_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "get_uptime_monitor_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls get_uptime_monitor_details",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.link_issue",
+      "title": "Link issue",
+      "link": {
+        "tool": "link_issue"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "link_issue"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls link_issue",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "issueId": "PROJ-123"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.onboarding_status_update",
+      "title": "Onboarding status update",
+      "link": {
+        "tool": "onboarding_status_update"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "onboarding_status_update"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls onboarding_status_update",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.remove_team_from_project",
+      "title": "Remove team from project",
+      "link": {
+        "tool": "remove_team_from_project"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "remove_team_from_project"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "admin",
+        "object": {
+          "const": "user"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "admin",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls remove_team_from_project",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "admin",
+              "object": {
+                "state": "known",
+                "value": "user"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "block",
+              "relaxed": "block",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.search_agent_conversations",
+      "title": "Search agent conversations",
+      "link": {
+        "tool": "search_agent_conversations"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "search_agent_conversations"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls search_agent_conversations",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "naturalLanguageQuery": "errors in checkout last day"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.search_attributes",
+      "title": "Search attributes",
+      "link": {
+        "tool": "search_attributes"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "search_attributes"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls search_attributes",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "naturalLanguageQuery": "errors in checkout last day"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.search_docs",
+      "title": "Search docs",
+      "link": {
+        "tool": "search_docs"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "search_docs"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls search_docs",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "naturalLanguageQuery": "errors in checkout last day"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.search_errors",
+      "title": "Search errors",
+      "link": {
+        "tool": "search_errors"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "search_errors"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls search_errors",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "naturalLanguageQuery": "errors in checkout last day"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.search_events",
+      "title": "Search events",
+      "link": {
+        "tool": "search_events"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "search_events"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls search_events",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "naturalLanguageQuery": "errors in checkout last day"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.search_issue_events",
+      "title": "Search issue events",
+      "link": {
+        "tool": "search_issue_events"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "search_issue_events"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls search_issue_events",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "naturalLanguageQuery": "errors in checkout last day"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.search_issues",
+      "title": "Search issues",
+      "link": {
+        "tool": "search_issues"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "search_issues"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls search_issues",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "naturalLanguageQuery": "errors in checkout last day"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.search_logs",
+      "title": "Search logs",
+      "link": {
+        "tool": "search_logs"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "search_logs"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls search_logs",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "naturalLanguageQuery": "errors in checkout last day"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.search_metrics",
+      "title": "Search metrics",
+      "link": {
+        "tool": "search_metrics"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "search_metrics"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls search_metrics",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "naturalLanguageQuery": "errors in checkout last day"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.search_profiles",
+      "title": "Search profiles",
+      "link": {
+        "tool": "search_profiles"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "search_profiles"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls search_profiles",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "naturalLanguageQuery": "errors in checkout last day"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.search_replays",
+      "title": "Search replays",
+      "link": {
+        "tool": "search_replays"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "search_replays"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls search_replays",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "naturalLanguageQuery": "errors in checkout last day"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.search_traces",
+      "title": "Search traces",
+      "link": {
+        "tool": "search_traces"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "search_traces"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls search_traces",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "naturalLanguageQuery": "errors in checkout last day"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.submit_feedback_to_sentry_team",
+      "title": "Submit feedback to sentry team",
+      "link": {
+        "tool": "submit_feedback_to_sentry_team"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "submit_feedback_to_sentry_team"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "send",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls submit_feedback_to_sentry_team",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "send",
+              "object": {
+                "state": "known",
+                "value": "message"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.unlink_issue",
+      "title": "Unlink issue",
+      "link": {
+        "tool": "unlink_issue"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "unlink_issue"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls unlink_issue",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "issueId": "PROJ-123"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.update_alert_rule",
+      "title": "Update alert rule",
+      "link": {
+        "tool": "update_alert_rule"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "update_alert_rule"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls update_alert_rule",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.update_dsn",
+      "title": "Update dsn",
+      "link": {
+        "tool": "update_dsn"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "update_dsn"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "secret"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls update_dsn",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "secret"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.update_issue",
+      "title": "Update issue",
+      "link": {
+        "tool": "update_issue"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "update_issue"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls update_issue",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme",
+            "issueId": "PROJ-123"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.update_metric_monitor",
+      "title": "Update metric monitor",
+      "link": {
+        "tool": "update_metric_monitor"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "update_metric_monitor"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls update_metric_monitor",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.update_project",
+      "title": "Update project",
+      "link": {
+        "tool": "update_project"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "update_project"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls update_project",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.update_uptime_monitor",
+      "title": "Update uptime monitor",
+      "link": {
+        "tool": "update_uptime_monitor"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "update_uptime_monitor"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls update_uptime_monitor",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "sentry-mcp.whoami",
+      "title": "Whoami",
+      "link": {
+        "tool": "whoami"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "whoami"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "user"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "org:read",
+          "project:read",
+          "project:write",
+          "team:read",
+          "team:write",
+          "event:read",
+          "event:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls whoami",
+          "kind": "safe",
+          "arguments": {
+            "organizationSlug": "acme"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "user"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

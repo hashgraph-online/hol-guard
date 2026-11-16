@@ -36,7 +36,6 @@ from .bounded_cli_hook_native import (
     native_bridge_executable,
 )
 from .bounded_cli_hook_script_template import BOUNDED_HOOK_SCRIPT_TEMPLATE
-from .cursor_hook_config import isolated_cursor_hook_python
 from .desktop_hook_proxy import (
     _DESKTOP_PROXY_LAUNCH_SCRIPT as _DESKTOP_PROXY_LAUNCH_SCRIPT,
 )
@@ -44,6 +43,7 @@ from .desktop_hook_proxy import (
     _trusted_desktop_hook_proxy_command,
 )
 from .hook_input_reader import read_hook_input
+from .isolated_hook_python import isolated_cursor_hook_python
 
 if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile

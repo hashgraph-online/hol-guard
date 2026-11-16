@@ -14,6 +14,7 @@
         "prompt",
         "mcp_tool",
         "file_read",
+        "file_write",
         "tool_result"
       ],
       "native_approval": true,
@@ -24,8 +25,18 @@
       "capability_events": [
         {
           "event": "PreToolUse",
+          "tools": [
+            "Bash",
+            "Read",
+            "mcp__*"
+          ],
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -39,9 +50,68 @@
           "source_reference": "src/codex_plugin_scanner/guard/adapters/codex.py:_managed_hook_groups"
         },
         {
+          "event": "PreToolUse",
+          "tools": [
+            "apply_patch"
+          ],
+          "transport": "native_hook",
+          "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Malformed payload, transport failure, or unavailable Guard authority fails closed before the file is written.",
+          "mandatory_compatibility": "Codex must send each apply_patch call to the Guard-managed native hook and honor its response before writing.",
+          "known_blind_spots": [
+            "Edits the model applies without an apply_patch tool call are not visible to Guard.",
+            "PostToolUse does not match apply_patch, so the written result is not observed.",
+            "A source declaration does not prove that a live Codex process honored a deny response."
+          ],
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/codex.rs:TOOL_MATCHER"
+        },
+        {
+          "event": "PreToolUse",
+          "tools": [
+            "Write",
+            "Edit",
+            "MultiEdit"
+          ],
+          "transport": "native_hook",
+          "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Malformed payload, transport failure, or unavailable Guard authority fails closed before the file is written.",
+          "mandatory_compatibility": "Codex must send each Write, Edit, or MultiEdit call to the Guard-managed native hook and honor its response before writing.",
+          "known_blind_spots": [
+            "Codex applies its own file edits through apply_patch; these names cover only tools that report them, and no live Codex run on record shows a version that emits them.",
+            "PostToolUse does not match these tools, so the written result is not observed.",
+            "A source declaration does not prove that a live Codex process honored a deny response."
+          ],
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/codex.rs:TOOL_MATCHER"
+        },
+        {
           "event": "PermissionRequest",
           "transport": "native_hook",
           "mode": "approval",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -58,6 +128,11 @@
           "event": "UserPromptSubmit",
           "transport": "native_hook",
           "mode": "screening",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -74,6 +149,11 @@
           "event": "PostToolUse",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -113,6 +193,11 @@
           "event": "PreToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -123,12 +208,17 @@
           "known_blind_spots": [
             "Background sessions without an active terminal may not surface hook events."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/claude_settings.rs:sync"
         },
         {
           "event": "PermissionRequest",
           "transport": "native_hook",
           "mode": "approval",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -139,12 +229,17 @@
           "known_blind_spots": [
             "Guard adds pending review context and defers to Claude's own permission dialog; the native PreToolUse verdict remains the decision boundary."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/claude_settings.rs:sync"
         },
         {
           "event": "PostToolUse",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -153,12 +248,17 @@
           "known_blind_spots": [
             "Native PostToolUse is not a general model-visible result replacement boundary."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/claude_settings.rs:sync"
         },
         {
           "event": "UserPromptSubmit",
           "transport": "native_hook",
           "mode": "screening",
+          "surface": "foreground",
+          "failure_behavior": "fail_open",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -195,6 +295,11 @@
           "event": "shell",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -209,6 +314,11 @@
           "event": "mcp_tool",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -223,6 +333,11 @@
           "event": "UserPromptSubmit",
           "transport": "none",
           "mode": "unsupported",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "unavailable"
           ],
@@ -257,6 +372,11 @@
           "event": "shell",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -271,6 +391,11 @@
           "event": "prompt",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -324,6 +449,11 @@
           "event": "beforeShellExecution",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "editor",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -334,12 +464,17 @@
           "known_blind_spots": [
             "Cursor terminal actions outside an agent hook path remain outside this boundary."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:BLOCKING_EVENTS"
         },
         {
           "event": "beforeMCPExecution",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "editor",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -350,12 +485,17 @@
           "known_blind_spots": [
             "Only MCP traffic entering Cursor's declared hook surface is covered."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:BLOCKING_EVENTS"
         },
         {
           "event": "beforeReadFile",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "editor",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -366,12 +506,17 @@
           "known_blind_spots": [
             "Reads outside the Cursor hook path are not covered."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:BLOCKING_EVENTS"
         },
         {
           "event": "preToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "editor",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -382,12 +527,17 @@
           "known_blind_spots": [
             "Inline edits that bypass the declared Cursor hook are not covered."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:BLOCKING_EVENTS"
         },
         {
           "event": "afterShellExecution",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "editor",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -396,12 +546,17 @@
           "known_blind_spots": [
             "Observation does not block or undo the completed shell command."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_OBSERVER_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:SUPPORTED_EVENTS"
         },
         {
           "event": "afterMCPExecution",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "editor",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -410,12 +565,17 @@
           "known_blind_spots": [
             "Observation does not block or replace a result already returned by Cursor."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_OBSERVER_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:SUPPORTED_EVENTS"
         },
         {
           "event": "UserPromptSubmit",
           "transport": "none",
           "mode": "unsupported",
+          "surface": "editor",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "unavailable"
           ],
@@ -425,6 +585,64 @@
             "Prompt submission is not surfaced through the declared Cursor hooks."
           ],
           "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:cursor.known_blind_spots"
+        },
+        {
+          "event": "*",
+          "transport": "none",
+          "mode": "unsupported",
+          "surface": "cli",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
+          "declared_actions": [
+            "unavailable"
+          ],
+          "error_behavior": "The guard-cursor-agent and guard-cursor shims route a Cursor CLI launch through Guard; no per-action boundary inside the CLI agent is qualified.",
+          "mandatory_compatibility": "Publish Cursor CLI action coverage only after a live CLI session shows its hooks reaching Guard.",
+          "known_blind_spots": [
+            "Actions inside a Cursor CLI agent session are not claimed until a live CLI session shows Guard answering them.",
+            "Running cursor-agent directly instead of the Guard shim skips the launch check."
+          ],
+          "source_reference": "docs/guard/cursor-local-cloud-contract.md:Cursor CLI entry points"
+        },
+        {
+          "event": "*",
+          "transport": "none",
+          "mode": "unsupported",
+          "surface": "cloud-agent",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
+          "declared_actions": [
+            "unavailable"
+          ],
+          "error_behavior": "Cloud agents run on Cursor's machines, where no local Guard runtime answers the project hooks.",
+          "mandatory_compatibility": "Publish cloud-agent coverage only after a Guard runtime answers project hooks inside the cloud agent.",
+          "known_blind_spots": [
+            "Cloud agents load the project .cursor/hooks.json but not the user hooks file, and no Guard runtime answers them there."
+          ],
+          "source_reference": "docs/guard/cursor-local-cloud-contract.md:Known blind spots"
+        },
+        {
+          "event": "*",
+          "transport": "none",
+          "mode": "unsupported",
+          "surface": "terminal",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
+          "declared_actions": [
+            "unavailable"
+          ],
+          "error_behavior": "Commands typed into Cursor's built-in terminal outside the agent loop reach no hook.",
+          "mandatory_compatibility": "Guard installs no built-in terminal wrapper; publish terminal coverage only after its design and uninstall path are reviewed.",
+          "known_blind_spots": [
+            "Commands typed into Cursor's built-in terminal outside an agent session bypass Guard."
+          ],
+          "source_reference": "docs/guard/cursor-local-cloud-contract.md:Known blind spots"
         }
       ]
     },
@@ -493,6 +711,11 @@
           "event": "PreToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -510,6 +733,11 @@
           "event": "PreToolUse",
           "transport": "agent_plugin",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -526,6 +754,11 @@
           "event": "PostToolUse",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -540,6 +773,11 @@
           "event": "PostToolUse",
           "transport": "agent_plugin",
           "mode": "replace_or_withhold",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -556,6 +794,11 @@
           "event": "UserPromptSubmit",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -570,6 +813,11 @@
           "event": "TaskStart",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -584,6 +832,11 @@
           "event": "TaskError",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -598,6 +851,11 @@
           "event": "SessionShutdown",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -632,6 +890,11 @@
           "event": "shell",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -646,6 +909,11 @@
           "event": "mcp_tool",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -679,6 +947,11 @@
           "event": "shell",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -693,6 +966,11 @@
           "event": "mcp_tool",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -707,6 +985,11 @@
           "event": "prompt",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -740,6 +1023,11 @@
           "event": "mcp_tool",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -776,6 +1064,11 @@
           "event": "mcp_tool",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "editor",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -790,6 +1083,11 @@
           "event": "prompt",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "editor",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -826,6 +1124,11 @@
           "event": "shell",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -840,6 +1143,11 @@
           "event": "prompt",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -882,6 +1190,11 @@
           "event": "PreToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -898,6 +1211,11 @@
           "event": "UserPromptSubmit",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_open",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block"
@@ -913,6 +1231,11 @@
           "event": "PostToolUse",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -955,6 +1278,11 @@
           "event": "UserPromptSubmit",
           "transport": "managed_extension",
           "mode": "screening",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -971,6 +1299,11 @@
           "event": "PreToolUse",
           "transport": "managed_extension",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -987,6 +1320,11 @@
           "event": "PostToolUse",
           "transport": "managed_extension",
           "mode": "replace_or_withhold",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1030,6 +1368,11 @@
           "event": "UserPromptSubmit",
           "transport": "managed_extension",
           "mode": "screening",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1046,6 +1389,11 @@
           "event": "PreToolUse",
           "transport": "managed_extension",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1062,6 +1410,11 @@
           "event": "PostToolUse",
           "transport": "managed_extension",
           "mode": "replace_or_withhold",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1104,6 +1457,11 @@
           "event": "shell",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1118,6 +1476,11 @@
           "event": "prompt",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1132,6 +1495,11 @@
           "event": "mcp_tool",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1146,6 +1514,11 @@
           "event": "file_read",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1191,6 +1564,11 @@
           "event": "PreToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1207,6 +1585,11 @@
           "event": "PermissionRequest",
           "transport": "native_hook",
           "mode": "approval",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1223,6 +1606,11 @@
           "event": "UserPromptSubmit",
           "transport": "native_hook",
           "mode": "screening",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1239,6 +1627,11 @@
           "event": "PostToolUse",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1282,6 +1675,11 @@
           "event": "PreToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1298,6 +1696,11 @@
           "event": "PermissionRequest",
           "transport": "native_hook",
           "mode": "approval",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1314,6 +1717,11 @@
           "event": "UserPromptSubmit",
           "transport": "native_hook",
           "mode": "screening",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1330,6 +1738,11 @@
           "event": "PostToolUse",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1344,6 +1757,11 @@
           "event": "SessionStart",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1358,6 +1776,11 @@
           "event": "Stop",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1391,6 +1814,11 @@
           "event": "*",
           "transport": "none",
           "mode": "unsupported",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "unavailable"
           ],

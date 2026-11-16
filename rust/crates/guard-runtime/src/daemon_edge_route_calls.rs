@@ -163,6 +163,7 @@ const WORKSPACE_ASSESSMENT_WRITES: [&str; 7] = [
     "/v1/supply-chain/workspace-assessments/resume",
 ];
 const FIX_PROPOSALS_PREFIX: &str = "/v1/supply-chain/workspace-fix-proposals/";
+const SWARM_WRITES: [&str; 3] = ["/v1/swarm/launch", "/v1/swarm/action", "/v1/swarm/events"];
 
 /// Whether `route.handler_post` runs the daemon's own handler for `path`
 /// (`routes/calls.py`).
@@ -175,7 +176,8 @@ fn pulse_action(path: &str) -> Option<&str> {
 const PULSE_ACTIONS: [&str; 5] = ["enroll", "confirm", "poll", "disable", "recover"];
 
 fn runs_handler(path: &str) -> bool {
-    if CONTEXT_ASSISTANCE_WRITES.contains(&path)
+    if SWARM_WRITES.contains(&path)
+        || CONTEXT_ASSISTANCE_WRITES.contains(&path)
         || HARNESS_VERSION_WRITES.contains(&path)
         || WORKSPACE_ASSESSMENT_WRITES.contains(&path)
     {

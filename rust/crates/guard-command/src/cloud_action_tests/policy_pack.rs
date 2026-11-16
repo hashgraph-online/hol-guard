@@ -102,8 +102,23 @@ fn the_json_lines_tools_answer_policy_and_classify() {
         line(json!({"op": "classify", "name": "deleteRepository", "preset": "strict"}));
     assert_eq!(classified["proposal"]["destructive"], json!(true));
     assert_eq!(classified["action"], json!("block"));
+    assert_eq!(classified["facts"]["class"], json!("delete"));
     let plain = line(json!({"op": "classify", "name": "list_issues"}));
     assert!(plain.get("action").is_none());
+    // An unknown tool is at least a write, and its facts claim nothing else.
+    assert_eq!(plain["facts"]["class"], json!("update"));
+    assert_eq!(plain["facts"]["schema"], json!("guard.action-facts.v2"));
+    for key in ["object", "scope", "record_count", "money", "sensitivity"] {
+        assert_eq!(plain["facts"][key], json!({"state": "unknown"}), "{key}");
+    }
+    // A class a workspace admin approved replaces the proposal in the facts only.
+    let approved = line(json!({"op": "classify", "name": "deleteRepository", "class": "read"}));
+    assert_eq!(approved["facts"]["class"], json!("read"));
+    assert_eq!(approved["proposal"]["class"], json!("delete"));
+    assert_eq!(
+        line(json!({"op": "classify", "name": "x", "class": "erase"}))["error"]["code"],
+        json!("request_invalid")
+    );
     assert_eq!(
         line(json!({"op": "classify"}))["error"]["code"],
         json!("request_invalid")

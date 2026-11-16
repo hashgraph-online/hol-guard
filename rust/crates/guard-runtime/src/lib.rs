@@ -105,6 +105,7 @@ mod business_document_compile;
 mod business_review_page;
 mod business_source_codec;
 mod catalog_provenance;
+mod cigar_apps;
 mod cisco_containment;
 mod cisco_evidence;
 mod cisco_plan;
@@ -238,6 +239,7 @@ mod command_envelope_op;
 mod command_expression_validate_op;
 mod command_policy_decide_op;
 mod command_policy_repair;
+mod command_risk_groups;
 mod composio_role_op;
 mod compound_git_args;
 mod compound_git_chain;
@@ -294,6 +296,7 @@ mod context_assistance_prompt;
 mod context_assistance_prompt_files;
 mod context_assistance_prompt_ignore;
 mod context_assistance_prompt_words;
+mod context_assistance_savings;
 mod context_assistance_service;
 mod context_digest;
 mod context_digest_json;
@@ -685,6 +688,7 @@ mod harness_mcp_discovery;
 #[cfg(test)]
 #[path = "adapters/harness_mcp_discovery_tests.rs"]
 mod harness_mcp_discovery_tests;
+mod harness_protection_contract;
 #[path = "adapters/harness_settings_file.rs"]
 mod harness_settings_file;
 #[path = "adapters/harness_shim_refresh.rs"]
@@ -772,6 +776,7 @@ mod mcp_config_discovery_tests;
 mod muse_detect;
 mod pack_lifecycle;
 mod pack_preparation;
+mod swarm_op;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
 mod codex_hook_identity_op;
@@ -921,6 +926,7 @@ mod native_decision_receipt;
 mod native_exact_action_op;
 mod native_hook_receipt;
 mod native_install_verdict;
+mod native_readiness;
 mod native_review_link;
 mod native_runtime_admission;
 mod native_runtime_resilience;

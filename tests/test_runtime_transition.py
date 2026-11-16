@@ -758,7 +758,7 @@ def test_openclaw_complete_plan_recovers_overlay_hook_manifest_and_launchers(tra
 def test_grok_plan_restores_config_hooks_state_and_backup_lifetime(transition, previous_exists):
     from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.cursor_hook_config import isolated_cursor_hook_python
+    from codex_plugin_scanner.guard.adapters.isolated_hook_python import isolated_cursor_hook_python
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -994,7 +994,12 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
     authenticate_adapter_state(runtime.home, harness="copilot", payload={"enrollment": "fixture"})
     authority = runtime.home / "managed/adapter-state.key"
     authority_before = authority.stat()
-    for target in adapter._target_mcp_paths(ctx):
+    targets = (
+        [workspace / ".mcp.json", workspace / ".vscode" / "mcp.json"]
+        if workspace is not None
+        else [ctx.home_dir / ".copilot" / "mcp-config.json"]
+    )
+    for target in targets:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text('{"user_setting": true, "mcpServers": {"user": {"command": "node", "args": ["user.js"]}}}')
         target.chmod(0o640)
@@ -1098,18 +1103,18 @@ def test_authority_dependency_rejects_mutating_or_invalid_contracts(tmp_path, kw
 def test_cursor_editor_plan_restores_native_and_legacy_bindings(transition, previous_exists, legacy):
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-    from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
+    from tests.cursor_test_support import (
         HOOK_SCRIPT_NAME,
-        _hooks_backup_path,
-        _hooks_state_path,
+        cursor_hooks_backup_path,
+        cursor_hooks_state_path,
+        enroll_cursor_hook_key,
+        managed_cursor_hook_script,
     )
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import ensure_cursor_hook_attestation_secret
 
     runtime, plan, _, _ = transition
     workspace = runtime.home.parent / "workspace"
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=workspace, guard_home=runtime.home)
-    ensure_cursor_hook_attestation_secret(runtime.home)
+    enroll_cursor_hook_key(runtime.home)
     adapter = CursorHarnessAdapter()
     config = ctx.home_dir / ".cursor/mcp.json"
     config.parent.mkdir(parents=True)
@@ -1125,18 +1130,16 @@ def test_cursor_editor_plan_restores_native_and_legacy_bindings(transition, prev
         entries = [user_entry]
         if legacy in {"managed", "backup"}:
             legacy_script.parent.mkdir(parents=True, exist_ok=True)
-            legacy_script.write_text(
-                cursor_hook_script_source(ctx, guard_cli=["/previous/core"], recovery_command=["true"])
-            )
+            legacy_script.write_text(managed_cursor_hook_script(["/previous/core"]))
             legacy_script.chmod(0o750)
             entries.append({"command": str(legacy_script.resolve())})
         legacy_hooks.write_text(json.dumps({"version": 1, "hooks": {"beforeShellExecution": entries}}))
         legacy_hooks.chmod(0o640)
         if legacy == "backup":
-            backup = _hooks_backup_path(legacy_hooks, ctx)
+            backup = cursor_hooks_backup_path(legacy_hooks, ctx.guard_home)
             backup.parent.mkdir(parents=True, exist_ok=True)
             backup.write_text(json.dumps({"existed": True, "content": '{"original_user_hooks": true}'}))
-            _hooks_state_path(legacy_hooks, ctx).write_text('{"legacy_state": true}')
+            cursor_hooks_state_path(legacy_hooks, ctx.guard_home).write_text('{"legacy_state": true}')
     prepared = adapter.prepare_install(ctx)
     assert len(prepared.files) == 14
     plan = replace(plan, files=(*plan.files, *prepared.files))
@@ -1159,7 +1162,7 @@ def test_cursor_editor_plan_restores_native_and_legacy_bindings(transition, prev
 def test_cursor_foreign_workspace_config_prevents_any_transition_publication(transition):
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import ensure_cursor_hook_attestation_secret
+    from tests.cursor_test_support import enroll_cursor_hook_key
 
     runtime, plan, bindings, pointer = transition
     workspace = runtime.home.parent / "workspace"
@@ -1167,7 +1170,7 @@ def test_cursor_foreign_workspace_config_prevents_any_transition_publication(tra
     source.parent.mkdir(parents=True)
     source.write_text('{"mcpServers": {"user": {"command": "node", "args": ["user.js"]}}}')
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=workspace, guard_home=runtime.home)
-    ensure_cursor_hook_attestation_secret(runtime.home)
+    enroll_cursor_hook_key(runtime.home)
     prepared = CursorHarnessAdapter().prepare_install(ctx)
     dependency = next(change for change in prepared.files if change.path == source)
     assert dependency.before == dependency.after == source.read_bytes()
@@ -1190,12 +1193,12 @@ def test_cursor_all_surfaces_restore_launchers_and_shell_profile(transition, mon
     from codex_plugin_scanner.guard import shims
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import ensure_cursor_hook_attestation_secret
+    from tests.cursor_test_support import enroll_cursor_hook_key
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, guard_home=runtime.home, workspace_dir=None)
     if surface == "all":
-        ensure_cursor_hook_attestation_secret(runtime.home)
+        enroll_cursor_hook_key(runtime.home)
     monkeypatch.setattr(shims, "_is_transient_path", lambda path: False)
     monkeypatch.setenv("SHELL", "/bin/zsh")
     profile = ctx.home_dir / ".zshrc"

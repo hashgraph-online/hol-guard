@@ -252,7 +252,8 @@ impl NativeReads {
             .elapsed()
     }
 
-    fn touch(&self) {
+    /// Restarts the idle clock, as a connection beginning or ending does.
+    pub(super) fn touch(&self) {
         *self
             .touched
             .lock()

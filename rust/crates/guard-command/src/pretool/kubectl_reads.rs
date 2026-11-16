@@ -317,6 +317,14 @@ pub(super) fn without_output_templates(
         .join(" ")
 }
 
+/// [`without_output_templates`] when the step holds a template at all.
+pub(super) fn without_templates(
+    segment: &crate::CommandSegmentV1,
+    positions: &[usize],
+) -> Option<String> {
+    (!positions.is_empty()).then(|| without_output_templates(segment, positions))
+}
+
 /// A template whose words are field names and nothing else.
 fn removable_template(value: &str) -> bool {
     value.split_once('=').is_some_and(|(format, expression)| {

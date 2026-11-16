@@ -395,6 +395,9 @@ class TestPiInstall:
         assert "if (response.observe_mode === true) return undefined;" in tool_call
         tool_result = source.split('  pi.on("tool_result", async (event, ctx) => {', 1)[1]
         assert "WATCH_WITHHELD_OUTPUT_CODES" in tool_result
+        assert "response.observe_mode === true && WATCH_WITHHELD_OUTPUT_CODES.has(response.reason_code)" in tool_result
+        assert "The protected text was not shown to the model." in tool_result
+        assert "return reviewedToolResult([{ type: 'text', text: watchNotice }], event.details, false, hookDeadlineAt);" in tool_result
 
     def test_install_writes_managed_extension_that_denies_on_hook_errors(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)

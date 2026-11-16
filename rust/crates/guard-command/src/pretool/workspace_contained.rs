@@ -254,7 +254,7 @@ pub(crate) fn command_shape(
             return None;
         }
         let name = super::executable_basename(executable);
-        if matches!(name, "sed" | "gsed") && !sed::arguments_without_execution(&segment.arguments) {
+        if !sed::segment_without_execution(name, &segment.arguments) {
             return None;
         }
         // A scratch script outside the workspace is read as that one file.
@@ -527,6 +527,13 @@ pub(super) fn convert(
             PreToolActionTypeV1::Command | PreToolActionTypeV1::Package
         )
         || result.action.sensitive_target
+        // A spelled-out key, token or password is already in the transcript,
+        // and the sandbox still lets the command write it into the workspace.
+        || model.is_some_and(|model| super::literal_secrets::holds_literal_secret(&model.normalized_text))
+        // The sandbox writes anywhere in the workspace, so a hook overwritten
+        // with a do-nothing script, or renamed away, stays switched off once
+        // the contained run ends.
+        || model.is_some_and(|model| super::hook_neutering::neuters_git_hooks(&model.normalized_text))
     {
         return;
     }
@@ -654,6 +661,17 @@ pub(super) fn convert(
     }
     // Last, so a check above that keeps the review keeps its own reason.
     if super::script_content::keeps_network_review(result, issued, sent_text, launch_context) {
+        return;
+    }
+    if super::script_content::keeps_system_file_review(result, issued, sent_text, launch_context) {
+        return;
+    }
+    if super::script_content::keeps_destructive_git_review(
+        result,
+        issued,
+        sent_text,
+        launch_context,
+    ) {
         return;
     }
     if launch::outside(shaped, &workspace, context, execution_environment) {

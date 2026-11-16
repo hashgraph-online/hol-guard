@@ -115,6 +115,7 @@ fn textconv_driver_is_reviewed_only_where_git_can_run_it() {
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,

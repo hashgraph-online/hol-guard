@@ -11,10 +11,20 @@ use tempfile::TempDir;
 
 use super::dispatch;
 
+#[path = "tests_claude.rs"]
+mod claude_family;
 #[path = "tests_cline.rs"]
 mod cline_family;
+#[path = "tests_codex.rs"]
+mod codex_family;
+#[path = "tests_copilot.rs"]
+mod copilot_family;
+#[path = "tests_cursor.rs"]
+mod cursor_family;
 #[path = "tests_grok_zcode.rs"]
 mod grok_zcode;
+#[path = "tests_hermes.rs"]
+mod hermes_family;
 #[path = "tests_opencode.rs"]
 mod opencode_family;
 #[path = "tests_pi.rs"]
@@ -42,7 +52,12 @@ impl Home {
         self.root.join("guard")
     }
 
-    fn context(&self, env: Value) -> Value {
+    fn context(&self, mut env: Value) -> Value {
+        // Never read the host's real Claude Code managed policy.
+        if let Some(env) = env.as_object_mut() {
+            env.entry("HOL_GUARD_TEST_CLAUDE_MANAGED_SETTINGS")
+                .or_insert_with(|| json!(self.root.join("managed-settings.json")));
+        }
         json!({
             "home": self.home(),
             "workspace": null,
@@ -99,7 +114,12 @@ fn describe_lists_every_adapter_this_kind_owns() {
             "pi",
             "omp",
             "opencode",
-            "cline"
+            "cline",
+            "copilot",
+            "cursor",
+            "claude-code",
+            "hermes",
+            "codex"
         ]
     );
 }

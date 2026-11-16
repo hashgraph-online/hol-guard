@@ -77,7 +77,10 @@ pub use trusted_directories::{
 };
 
 #[cfg(windows)]
-pub use owner::{create_owner_only_directory, owned_by_current_user, writable_only_by_trusted};
+pub use owner::{
+    create_owner_only_directory, owned_by_current_user, owned_exactly_by_current_user,
+    writable_only_by_trusted,
+};
 
 #[cfg(windows)]
 pub use windows::{

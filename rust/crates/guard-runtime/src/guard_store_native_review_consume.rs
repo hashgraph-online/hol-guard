@@ -1,5 +1,6 @@
 //! `consume_native_review_approval` — spends the chronologically latest
-//! matching five-minute allow of a verified harness-native Accept.
+//! matching allow of a verified harness-native Accept, for up to one hour
+//! after it was given.
 //!
 //! A resolved inbox row is not a permanent capability: it is bound to the
 //! newly computed request identity and consumed at most once, in the same
@@ -26,7 +27,14 @@ use sha2::{Digest, Sha256};
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_all, StoreResult};
 
-const WINDOW_MICROS: i64 = 5 * 60 * 1_000_000;
+/// How long an Allow once covers the next identical try. An hour, so an
+/// answer given after the agent stopped waiting still lets the user say "try
+/// again"; it is still spent once, on this machine, for this exact request.
+const ALLOW_WINDOW_MICROS: i64 = 60 * 60 * 1_000_000;
+/// How long a Block once keeps answering identical retries. It stays five
+/// minutes: a refusal only stops a retry loop, and a later try is a new
+/// question the user should see again.
+const BLOCK_WINDOW_MICROS: i64 = 5 * 60 * 1_000_000;
 const EVENT_NAME: &str = "native-review.once-consumed";
 
 pub(crate) fn binding_pattern() -> &'static Regex {
@@ -290,7 +298,12 @@ fn matching_decision(
             )
     });
     let elapsed = current - approved_at;
-    if !allowed || !(0..=WINDOW_MICROS).contains(&elapsed) {
+    let window = if action == "allow" {
+        ALLOW_WINDOW_MICROS
+    } else {
+        BLOCK_WINDOW_MICROS
+    };
+    if !allowed || !(0..=window).contains(&elapsed) {
         return Ok(json!(false));
     }
     if !spend {

@@ -1,6 +1,8 @@
 //! Heredoc scanner regression tests.
 
-use crate::shell_structure::{extract_heredocs, mask_complete_heredocs, mask_heredoc_bodies};
+use crate::shell_structure::{
+    extract_heredocs, mask_complete_heredocs, mask_heredoc_bodies, mask_shell_comments,
+};
 
 #[test]
 fn here_strings_do_not_mask_following_package_commands() {
@@ -388,5 +390,53 @@ fn heredoc_bodies_inside_a_substitution_are_text() {
         let mut all = found;
         all.extend(nested);
         assert_eq!(all, expected, "{command}");
+    }
+}
+
+#[test]
+fn word_start_comments_are_blanked_in_place() {
+    for (command, expected) in [
+        ("# list\ngh pr list", "       gh pr list"),
+        ("ls\n  # c\npwd", "ls\n      pwd"),
+        ("ls # a; b", "ls       "),
+        ("ls # a\nrm y", "ls    \nrm y"),
+        ("ls;#x\npwd", "ls;   pwd"),
+        ("ls \\\n# x\nrm y", "ls \\\n   \nrm y"),
+        ("ls|# x\nwc", "ls|   \nwc"),
+        ("ls\t# x", "ls\t   "),
+        ("ls #\npwd", "ls  \npwd"),
+        ("echo #x '\nrm y\n#x '", "echo     \nrm y\n    "),
+        ("ls #x\"y\nrm y", "ls     \nrm y"),
+    ] {
+        let masked = mask_shell_comments(command);
+        assert_eq!(masked, expected, "{command:?}");
+        assert_eq!(masked.chars().count(), command.chars().count());
+    }
+}
+
+#[test]
+fn a_hash_that_opens_no_comment_is_kept() {
+    for command in [
+        "echo a#b; rm y",
+        "echo $#; rm y",
+        "echo 'x'#y; rm y",
+        "echo \\#y; rm y",
+        "echo a\\\n#x; rm y",
+        "ls \\\n#x; rm y",
+        "agi-memory delete #3 --hard",
+        "ls \u{a0}#; rm y",
+        "echo ok\r#; rm y",
+        "echo 'a # b'; rm y",
+        "echo \"a # b\"; rm y",
+        "echo $'a\\'b # x'; rm y",
+        "ls *(#q.); rm y",
+        "(( 1 # 2 )); rm y",
+        "echo $(ls) # x; rm y",
+        "echo ${#x} # x; rm y",
+        "echo `ls` # x; rm y",
+        "echo $[1] # x; rm y",
+        "echo 'open # x; rm y",
+    ] {
+        assert_eq!(mask_shell_comments(command), command, "{command:?}");
     }
 }

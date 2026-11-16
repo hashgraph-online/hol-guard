@@ -4,6 +4,11 @@ Local harness protection works without signing in to Guard Cloud. Cloud adds syn
 history, visibility, and team controls around the same adapters. See
 [Local Guard vs Guard Cloud](./local-vs-cloud.md).
 
+The per-event claims, including what happens when Guard cannot answer and what is
+not covered, are generated from the harness protection contract in
+[Harness protection claims](./harness-claims.md). Where this page and that one
+differ, the generated page is current.
+
 ## Hook verdict exit codes
 
 `guard/cli/native_hook_exit_code.py::native_hook_verdict_exit_code` is the
@@ -45,7 +50,7 @@ Current Guard support in this repo:
   - when no Codex thread binding is available, returns an explicit manual fallback instead of a false resume success
 - `claude-code`
   - detects global and project settings, hooks, `.mcp.json`, and workspace agents
-  - supports local hook install and uninstall in `.claude/settings.local.json`
+  - installs and removes Guard's hook entries in the user file `~/.claude/settings.json`, also when installed from a workspace (see [Claude Code settings](./claude-code-settings.md))
   - has native `PreToolUse`, `PermissionRequest` and `UserPromptSubmit` Guard hook coverage, so a typed prompt is screened before Claude reads it
   - when CIGAR project context is on, the `UserPromptSubmit` answer also carries short excerpts from the project files that match the prompt (see [CIGAR runtime and settings](./cigar-integration/runtime-and-settings.md#prompt-context-in-claude-code-and-codex))
   - carries package-manager shell intent and pre-execution block state through the shared Guard runtime envelope before Claude sees the denied tool response
