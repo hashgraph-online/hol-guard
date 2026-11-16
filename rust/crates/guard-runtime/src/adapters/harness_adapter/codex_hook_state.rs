@@ -8,7 +8,7 @@ use std::path::Path;
 use serde_json::{json, Map, Value};
 
 use super::codex::{
-    compact, dict, flag, registered, text, ENFORCEMENT_BOUNDARY, EVENTS, HOOK_UNAVAILABLE,
+    compact, flag, registered, text, ENFORCEMENT_BOUNDARY, EVENTS, HOOK_UNAVAILABLE,
 };
 use super::codex_live_hooks::{event_matches, FALLBACK_REASONS};
 use super::codex_merge::Entries;
@@ -18,12 +18,19 @@ use super::{codex_config_hooks, Ctx, Failure, Step};
 use crate::cursor_hook_command::Syntax;
 use crate::pyjson::PyVal;
 
-/// `codex_native_hook_state` over what Python read and verified.
-pub(super) fn hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let read = dict(fields, "read")?;
+/// The state from the files read (`features`, `toml_hooks`, `json_hooks`),
+/// the manifest's integrity state and the tokens standing for the TOML
+/// values JSON cannot carry. `fields` holds `config_path`, `hooks_path` and
+/// the command syntax.
+pub(super) fn decide(
+    ctx: &Ctx,
+    fields: &Map<String, Value>,
+    read: Vec<(String, PyVal)>,
+    integrity: Vec<(String, PyVal)>,
+    tokens: Option<&Map<String, Value>>,
+) -> Step<Value> {
     let read = PyVal::Dict(read);
     let features = read.get("features").and_then(PyVal::as_dict);
-    let integrity = dict(fields, "integrity")?;
     let held = |event: &str| {
         let recorded = integrity.iter().find(|(key, _)| key == "event_matches");
         let found = recorded.and_then(|(_, matches)| matches.get(event));
@@ -64,10 +71,7 @@ pub(super) fn hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> 
     let shell_active = enabled && shell && valid;
     let trust_stale = match read.get("toml_hooks") {
         Some(PyVal::Dict(hooks)) => {
-            let tokens = fields
-                .get("tokens")
-                .and_then(Value::as_object)
-                .ok_or(Failure::Invalid)?;
+            let tokens = tokens.ok_or(Failure::Invalid)?;
             // `fields` carries the `windows` and `long_paths` the owner check splits with.
             codex_config_hooks::trust_stale(ctx, fields, hooks, tokens, Path::new(config))?
         }

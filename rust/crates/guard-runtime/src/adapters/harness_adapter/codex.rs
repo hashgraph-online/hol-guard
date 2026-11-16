@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256};
 
 use super::files::{self, Doc};
 use super::{
-    codex_alternate_plan, codex_config_hooks, codex_files, codex_hook_state, codex_main_plan,
+    codex_alternate_plan, codex_config_hooks, codex_files, codex_live_state, codex_main_plan,
     codex_merge, codex_migration, codex_servers, codex_sources, codex_uninstall,
     codex_uninstall_config, codex_uninstall_plan, common, hook_render, path_answer, path_text, Ctx,
     Failure, Spec, Step,
@@ -65,10 +65,10 @@ pub(super) fn dispatch(
 ) -> Step<Value> {
     match op {
         "policy_path" => path_answer(&config_path(ctx)),
+        "backup_path" => path_answer(&backup_path(ctx)),
         "paths" => Ok(paths(ctx)),
         "argv" => argv(ctx, fields),
         "groups" => groups(ctx, fields),
-        "hook_state" => codex_hook_state::hook_state(ctx, fields),
         "doctor_status" => doctor_status(fields),
         "migration_backup" => codex_files::migration_backup(ctx, fields),
         "hook_migration" => codex_migration::migration(ctx, fields),
@@ -86,6 +86,7 @@ pub(super) fn dispatch(
         "uninstall_restore" => codex_uninstall::uninstall_restore(fields),
         "uninstall_config" => codex_uninstall_config::uninstall_config(ctx, fields),
         "uninstall_plan" => codex_uninstall_plan::uninstall_plan(ctx, fields),
+        "live_hook_state" => codex_live_state::live_hook_state(ctx, fields),
         _ => common(spec, op, ctx),
     }
 }

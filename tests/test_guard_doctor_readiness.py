@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.diagnostic_probes import without_command_probes
 from codex_plugin_scanner.guard.cli.doctor_readiness import doctor_runtime_readiness
 from codex_plugin_scanner.guard.cli.render import _render_doctor, emit_guard_payload
+from tests.codex_hook_state_support import fixed_hook_state
 
 
 @pytest.mark.parametrize(
@@ -254,12 +255,8 @@ def test_global_doctor_validates_registration_without_executable_probes(tmp_path
     )
     monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda *_args: True)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.codex._verify_live_hook_manifest",
-        lambda _context, **_kwargs: {
-            "event_matches": {"PreToolUse": False, "PermissionRequest": False},
-            "integrity_status": "tampered",
-            "integrity_reason": "codex_hook_interpreter_path_mismatch",
-        },
+        "codex_plugin_scanner.guard.adapters.codex.codex_native_hook_state",
+        fixed_hook_state(verified=False, reason="codex_hook_interpreter_path_mismatch"),
     )
     rc = main(
         [

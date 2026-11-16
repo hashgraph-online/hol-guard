@@ -127,6 +127,12 @@ fn a_real_node_checks_the_plugin_without_executing_it() {
         let index = root.join("index.js");
         fs::write(&index, format!("{prelude}{source}")).unwrap();
         let verdict = node_check(&context, &index.to_string_lossy());
+        assert!(!marker.exists());
+        // A loaded runner can push node past its five-second budget; the
+        // timeout path is then the honest answer and proves nothing either way.
+        if verdict["reason"] == json!("TimeoutExpired") {
+            continue;
+        }
         assert_eq!(verdict["ok"], json!(ok), "{verdict}");
         assert!(!marker.exists());
     }

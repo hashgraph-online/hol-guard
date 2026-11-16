@@ -46,6 +46,7 @@ mod codex_detect_legacy;
 mod codex_files;
 mod codex_hook_state;
 mod codex_live_hooks;
+mod codex_live_state;
 mod codex_main_plan;
 mod codex_merge;
 mod codex_migration;

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from tests.codex_hook_state_support import fixed_hook_state
 from tests.cursor_test_support import cursor_agent_on_path
 
 
@@ -55,17 +56,8 @@ def test_codex_doctor_keeps_live_bridge_hooks_when_interpreter_is_stale(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.codex._verify_live_hook_manifest",
-        lambda _context, **_kwargs: {
-            "event_matches": {
-                "PreToolUse": False,
-                "PermissionRequest": False,
-                "UserPromptSubmit": False,
-                "PostToolUse": False,
-            },
-            "integrity_status": "tampered",
-            "integrity_reason": "codex_hook_interpreter_path_mismatch",
-        },
+        "codex_plugin_scanner.guard.adapters.codex.codex_native_hook_state",
+        fixed_hook_state(verified=False, reason="codex_hook_interpreter_path_mismatch"),
     )
 
     from codex_plugin_scanner.guard.adapters import get_adapter
@@ -259,12 +251,8 @@ def test_codex_doctor_reports_leftover_hooks_for_an_uninstalled_codex(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.codex._verify_live_hook_manifest",
-        lambda _context, **_kwargs: {
-            "event_matches": dict.fromkeys(events, True),
-            "integrity_status": "valid",
-            "integrity_reason": None,
-        },
+        "codex_plugin_scanner.guard.adapters.codex.codex_native_hook_state",
+        fixed_hook_state(verified=True),
     )
 
     from codex_plugin_scanner.guard.adapters import get_adapter

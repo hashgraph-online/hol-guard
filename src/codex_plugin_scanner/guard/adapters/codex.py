@@ -10,10 +10,10 @@ hook manifest, the ownership strips over existing hooks and every publication.
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import os
 import sys
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -40,7 +40,6 @@ from ..codex_hook_manifest import (
     CodexHookManifestSpec,
     load_hook_manifest_baseline,
     prepare_authenticated_hook_publication,
-    verify_live_hook_manifest,
 )
 from ..codex_hook_manifest import (
     manifest_bindings as _manifest_bindings,
@@ -107,6 +106,9 @@ _LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
 _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON = "codex_authoritative_hook_unavailable"
+_LIVE_STATE_TIMEOUT_SECONDS = 10.0
+# A spent budget still needs the runtime to read the files and decide.
+_LIVE_STATE_MIN_SECONDS = 5.0
 
 
 def _codex(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
@@ -598,43 +600,34 @@ def prepare_codex_shell_cleanup(context: HarnessContext) -> tuple[TransitionFile
     return files
 
 
-def _verify_live_hook_manifest(
-    context: HarnessContext,
-    *,
-    config_path: Path,
-    hooks: object,
-) -> dict[str, object]:
-    spec = _hook_manifest_spec(context)
-    if spec.config_path != config_path:
-        raise RuntimeError("Codex hook verification received a non-canonical config target.")
-    return verify_live_hook_manifest(spec, hooks=hooks)
-
-
 def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
-    config_path = CodexHarnessAdapter._hook_config_path(context)
-    hooks_path = CodexHarnessAdapter._hooks_path(context)
-    config_payload = _read_toml(config_path)
-    features = config_payload.get("features") if isinstance(config_payload, dict) else None
-    toml_hooks = config_payload.get("hooks") if isinstance(config_payload, dict) else None
-    hooks_payload = _json_object(hooks_path)
-    json_hooks = hooks_payload.get("hooks") if isinstance(hooks_payload, dict) else None
-    hooks = toml_hooks if isinstance(toml_hooks, dict) else json_hooks
-    integrity = _verify_live_hook_manifest(context, config_path=config_path, hooks=hooks)
-    read = {"features": features, "toml_hooks": toml_hooks, "json_hooks": json_hooks}
-    wire = _Wire(read, integrity)
-    read_text = wire.text(read)
-    integrity_text = wire.text(integrity)
+    """The runtime reads the config and hooks files, authenticates and verifies
+    the hook manifest, and decides which managed events Guard owns."""
+    from ..codex_hook_file_integrity import _python_package_roots, active_hook_validation_deadline
+    from ..codex_hook_manifest import _spec_payload
+
+    # Verification gets ten seconds, or what is left of a hook's budget; a
+    # spent budget leaves the installation unverified.
+    timeout = _LIVE_STATE_TIMEOUT_SECONDS
+    deadline = active_hook_validation_deadline()
+    if deadline is not None:
+        timeout = min(timeout, deadline - time.monotonic())
     request: dict[str, Any] = {
-        "read": read_text,
-        "integrity": integrity_text,
-        "tokens": wire.meanings,
-        "config_path": str(config_path),
-        "hooks_path": str(hooks_path),
+        "spec": _spec_payload(_hook_manifest_spec(context)),
+        "package_roots": [str(root) for root in _python_package_roots()],
+        "budget_spent": timeout <= 0,
         **short_path_fields(),
     }
-    # The runtime also decides which managed events Guard owns and whether Codex still trusts them.
-    answer = settle_short_paths(lambda: _codex("hook_state", context, **request), request, "hook_state")
-    return wire.decode(_reply_text(answer, "state"))
+    timeout = max(timeout, _LIVE_STATE_MIN_SECONDS)
+    answer = settle_short_paths(
+        lambda: ask("live_hook_state", context, harness="codex", timeout_seconds=timeout, **request),
+        request,
+        "live_hook_state",
+    )
+    state = json.loads(_reply_text(answer, "state"))
+    if not isinstance(state, dict):
+        raise ValueError("Harness adapter answer is malformed")
+    return state
 
 
 def _require_codex_authoritative_shell_hook(context: HarnessContext) -> None:
@@ -1046,9 +1039,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
 
     @staticmethod
     def _backup_path(context: HarnessContext) -> Path:
-        target_path = str(CodexHarnessAdapter._target_config_path(context).resolve())
-        digest = hashlib.sha256(target_path.encode("utf-8")).hexdigest()[:12]
-        return context.guard_home / "managed" / "codex" / f"{digest}.backup.toml"
+        return Path(str(_codex("backup_path", context)["path"]))
 
     def _proxy_server_entry(self, context: HarnessContext, server: ManagedMcpServer) -> dict[str, object]:
         return proxy_launcher_entry(
