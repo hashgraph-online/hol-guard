@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.local_clis.local_cli_api as local_cli_api_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.mcp_discovery_client import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.store import GuardStore
@@ -26,7 +26,7 @@ def test_configured_inventory_retains_one_hundred_servers_without_probing(
     )
     guard_home = tmp_path / "guard-home"
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home)
-    detection = CursorHarnessAdapter().detect(context)
+    detection = get_adapter("cursor").detect(context)
     assert len(detection.artifacts) == 100
     monkeypatch.setattr(local_cli_api_module.Path, "home", staticmethod(lambda: home))
 

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import managed_install_record
 from codex_plugin_scanner.guard.cli.install_commands import _apply_managed_install_owned, apply_managed_install
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 PROBE = r"""
 import sys, time

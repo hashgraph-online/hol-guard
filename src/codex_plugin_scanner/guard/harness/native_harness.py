@@ -179,12 +179,24 @@ class NativeHarnessAdapter(HarnessAdapter):
     def __init__(self, harness: str, aliases: tuple[str, ...], launcher_name: str) -> None:
         self.harness = harness
         self.aliases = aliases
-        self.executable = harness
+        self.executable = launcher_name or harness
         self.launcher_name = launcher_name
 
     @property
     def _spec(self) -> dict[str, Any]:
         return _description(self.harness)
+
+    @property
+    def legacy_launcher_names(self) -> tuple[str, ...]:
+        return tuple(str(name) for name in self._spec.get("legacy_launchers", ()))
+
+    @property
+    def command_absence_proves_uninstalled(self) -> bool:
+        return self._spec.get("absence_proves_uninstalled") is not False
+
+    def run_op(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
+        """One op of this harness, with the replies only this process can give answered."""
+        return self._ask(op, context, **fields)
 
     def _ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
         if op in _EXTENSION_OPS and self._spec.get("extension"):
@@ -298,7 +310,7 @@ class NativeHarnessAdapter(HarnessAdapter):
     def _hook_argv(self, context: HarnessContext) -> list[str]:
         return [str(part) for part in self._ask("hook_spec", context)["hook_argv"]]
 
-    def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
+    def prepare_install(self, context: HarnessContext, *, surface: str | None = None) -> PreparedHarnessInstall:
         from ..runtime_transition import TransitionError
         from ..shims import prepare_guard_shim
 
@@ -309,6 +321,10 @@ class NativeHarnessAdapter(HarnessAdapter):
             from .native_harness_steps import prepared_from_detection
 
             return prepared_from_detection(self, context, create_key=False)
+        if self._spec.get("prepare") == "surfaces":
+            from .native_harness_steps import prepared_surfaces
+
+            return prepared_surfaces(self, context, **_surface(surface))
         shim = prepare_guard_shim(self.harness, context, **self._shim_names())
         if mode == "shim":
             manifest = {"harness": self.harness, "active": True, "config_path": shim.manifest["shim_path"]}

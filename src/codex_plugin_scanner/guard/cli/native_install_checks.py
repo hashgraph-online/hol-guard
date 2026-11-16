@@ -6,14 +6,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..adapters.base import HarnessContext
+from ..harness.base import HarnessContext
 from ..store import GuardStore
 
 
 def _opencode_protection_checks(context: HarnessContext, store: GuardStore | None) -> dict[str, object]:
     """Verify the managed OpenCode plugin, launcher, and MCP routing configuration."""
-    from ..adapters import get_adapter
-    from ..adapters.native_harness import ask
+    from ..harness.native_harness import ask
+    from ..harness.registry import get_adapter
 
     managed = store.get_managed_install("opencode") if store is not None else None
     answer = ask(
@@ -101,7 +101,7 @@ def _grok_event_has_command_hook(entries: object, context: HarnessContext | None
 
 def grok_protection(context: HarnessContext) -> dict[str, Any]:
     """Grok's protection paths, deny rules and hook timeouts, as the native adapter names them."""
-    from ..adapters.native_harness import ask
+    from ..harness.native_harness import ask
 
     return ask("protection", context, harness="grok")
 

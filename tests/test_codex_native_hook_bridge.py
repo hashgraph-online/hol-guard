@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_compatibility import (
     NATIVE_CODEX_HOOK_COMMAND,
     NATIVE_CODEX_HOOK_FEATURE,
@@ -18,6 +17,7 @@ from codex_plugin_scanner.guard.codex_hook_registration import (
     is_live_guard_codex_hook_command,
     missing_guard_hook_program,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 
 def _native_status(features: tuple[str, ...], path: Path) -> object:

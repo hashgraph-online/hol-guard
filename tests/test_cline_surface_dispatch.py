@@ -4,10 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter, ask
 from codex_plugin_scanner.guard.cli.install_commands import _apply_adapter_management
+from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
+from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter, ask
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -36,8 +35,11 @@ class _RecordingCline(NativeHarnessAdapter):
         return {"harness": "cline", "active": False, "surface": surface}
 
 
-class _RecordingCursor(CursorHarnessAdapter):
+class _RecordingCursor(NativeHarnessAdapter):
     seen: tuple[str, str] | None = None
+
+    def __init__(self) -> None:
+        super().__init__("cursor", (), "cursor-agent")
 
     def install(self, context: HarnessContext, *, surface: str = "all") -> dict[str, object]:
         del context

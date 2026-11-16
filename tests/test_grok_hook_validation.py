@@ -9,12 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_command
 from codex_plugin_scanner.guard.cli.native_install_checks import (
     _grok_managed_config_is_active,
     _grok_protection_checks,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
 from tests.native_bounded_runtime import use_bounded_runtime
 
 from .grok_test_support import _ctx, grok_hook_command_parts

@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_bridge_runtime import decode_bridge_config_argument
 from codex_plugin_scanner.guard.codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS
 from codex_plugin_scanner.guard.codex_hook_registration import (
@@ -21,6 +20,7 @@ from codex_plugin_scanner.guard.codex_hook_registration import (
     require_codex_hook_owner,
 )
 from codex_plugin_scanner.guard.frozen_runtime_commands import FROZEN_CODEX_BRIDGE_ARG
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 _PYTHON = r"C:\Users\tester\.venv\Scripts\python.exe"
 _SPACED_PYTHON = r"C:\Program Files\HOL Guard's\.venv\Scripts\python.exe"

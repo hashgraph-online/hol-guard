@@ -4,6 +4,10 @@
 //! two CLI launchers with the shell profile's PATH block, and the combined
 //! manifest when both surfaces change.
 //!
+//! `prepare_surfaces` plans the same surfaces without a write: the editor's
+//! plan and attestation key, both launchers and the PATH block, and the
+//! manifest the install would record.
+//!
 //! An install answers `manifest`, the last `publish` answer and each earlier
 //! one under `published`, in order; the caller journals and checks each. A
 //! failure after a publish succeeded comes back under `failure`, so the
@@ -12,7 +16,8 @@
 use serde_json::{json, Map, Value};
 
 use super::files::render;
-use super::{answer, route, shim_remove, shims_apply, Ctx, Failure, Spec, Step};
+use super::{answer, guard_shim, route, shim_profile, shim_remove, shims_apply};
+use super::{Ctx, Failure, Spec, Step};
 use crate::pyjson::PyVal;
 
 /// The `cursor-agent` launcher and the `cursor agent` one.
@@ -175,4 +180,82 @@ pub(super) fn uninstall(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> 
     }
     let editor = editor(ctx)?;
     Ok(json!({ "manifest": combined(spec, ctx, &editor, &cli, false)? }))
+}
+
+fn files(answer: &Value) -> Step<Vec<Value>> {
+    answer
+        .get("files")
+        .and_then(Value::as_array)
+        .cloned()
+        .ok_or(Failure::Invalid)
+}
+
+/// A manifest as the JSON text the manifest ops read.
+fn manifest_text(answer: &Value) -> Step<String> {
+    match answer.get("manifest") {
+        Some(Value::String(text)) => Ok(text.clone()),
+        Some(manifest @ Value::Object(_)) => {
+            serde_json::to_string(manifest).map_err(|_| Failure::Invalid)
+        }
+        _ => Err(Failure::Invalid),
+    }
+}
+
+/// `_prepare_cli`: both launchers and the PATH block, planned.
+fn prepare_cli(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    let mut planned = Vec::new();
+    let mut manifests = Vec::new();
+    for (launcher, label) in SHIMS {
+        let mut asked = Map::new();
+        asked.insert("harness".into(), json!(spec.harness));
+        asked.insert("launcher_name".into(), json!(launcher));
+        asked.insert("display_name".into(), json!(label));
+        asked.insert(
+            "interpreter".into(),
+            fields.get("interpreter").cloned().unwrap_or(Value::Null),
+        );
+        let shim = guard_shim::prepare(ctx, &asked)?;
+        planned.extend(files(&shim)?);
+        manifests.push(manifest_text(&shim)?);
+    }
+    let shell = fields
+        .get("shell_profile")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let profile = shim_profile::prepare(ctx, &shell)?;
+    planned.extend(files(&profile)?);
+    let mut cli_fields = Map::new();
+    cli_fields.insert("agent_shim".into(), json!(manifests[0]));
+    cli_fields.insert("cursor_shim".into(), json!(manifests[1]));
+    cli_fields.insert("profile".into(), json!(manifest_text(&profile)?));
+    let manifest = text(&route(spec, "cli_manifest", ctx, &cli_fields)?, "manifest")?;
+    Ok(json!({ "files": planned, "manifest": manifest, "identity": [] }))
+}
+
+/// `prepare_install(context, surface=...)`.
+pub(super) fn prepare(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    let surface = selected(spec, ctx, fields)?;
+    if surface == "cli" {
+        return prepare_cli(spec, ctx, fields);
+    }
+    let editor = route(spec, "prepare_install", ctx, &Map::new())?;
+    if surface == "editor" || editor.get("transition_error").is_some() {
+        return Ok(editor);
+    }
+    let cli = prepare_cli(spec, ctx, fields)?;
+    let mut planned = files(&editor)?;
+    planned.extend(files(&cli)?);
+    let manifest = combined(
+        spec,
+        ctx,
+        &text(&editor, "manifest")?,
+        &text(&cli, "manifest")?,
+        true,
+    )?;
+    Ok(json!({
+        "files": planned,
+        "manifest": manifest,
+        "identity": editor.get("identity").cloned().unwrap_or_else(|| json!([])),
+    }))
 }

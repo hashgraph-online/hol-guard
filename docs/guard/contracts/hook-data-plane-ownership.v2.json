@@ -261,7 +261,6 @@
    "id": "harness_adapter_registry_and_installation",
    "class": "python_control",
    "paths": [
-    "src/codex_plugin_scanner/guard/adapters/*.py",
     "src/codex_plugin_scanner/guard/harness/*.py"
    ],
    "current": "harness registry, detection, installation, and adapter control surfaces; transport and semantic subsets are classified below",
@@ -271,7 +270,6 @@
    "id": "harness_launchers",
    "class": "python_transport",
    "paths": [
-    "src/codex_plugin_scanner/guard/adapters/*bridge*.py",
     "src/codex_plugin_scanner/guard/harness/*bridge*.py",
     "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
     "src/codex_plugin_scanner/guard/codex_hook_process_runtime.py",
@@ -692,7 +690,6 @@
   "rust/**",
   "rust/crates/*/src/approval*.rs",
   "rust/crates/guard-runtime/src/resident_protocol.rs",
-  "src/codex_plugin_scanner/guard/adapters/*.py",
   "src/codex_plugin_scanner/guard/harness/*.py",
   "src/codex_plugin_scanner/guard/hook_review/*hook*.py",
   "src/codex_plugin_scanner/guard/evidence_drains/*hook*.py",

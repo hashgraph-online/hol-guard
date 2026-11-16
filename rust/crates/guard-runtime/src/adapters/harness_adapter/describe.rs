@@ -433,6 +433,8 @@ impl Spec {
             "prepare": match self.harness {
                 "hermes" | "cline" => "unavailable",
                 "copilot" => "detected",
+                // Cursor plans the editor and CLI surfaces in one op.
+                "cursor" => "surfaces",
                 _ => "plan",
             },
             // Copilot names its own launch argv and previews only that one.
@@ -453,6 +455,16 @@ impl Spec {
             // OpenCode launches through its own runner kind, which renders the
             // inline config overlay and the argv around the caller's arguments.
             "launch_runner": if self.harness == "opencode" { "opencode_launch" } else { "" },
+            // Cursor's editor runs Guard's hooks on its own, so a missing
+            // `cursor-agent` says nothing about whether Cursor is installed;
+            // an uninstall also removes the older `cursor` launcher, and
+            // Claude's the `claude-code` one.
+            "absence_proves_uninstalled": self.harness != "cursor",
+            "legacy_launchers": match self.harness {
+                "cursor" => json!(["cursor"]),
+                "claude-code" => json!(["claude-code"]),
+                _ => json!([]),
+            },
             "trusted_launcher": self.harness == "grok",
             "retired_hooks": self.harness == "grok",
             // Paseo and the Pi family add to the generic doctor report.

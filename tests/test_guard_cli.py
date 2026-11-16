@@ -28,9 +28,6 @@ except ModuleNotFoundError:
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import claude_hook_entry as claude_adapter_module
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter_module
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_connect as guard_connect_support_module
@@ -42,6 +39,8 @@ from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import codex_hook_publication_helpers as publication_helpers
@@ -2963,7 +2962,7 @@ args = ["workspace-skill.js", "--changed"]
             workspace_dir=workspace_dir,
             guard_home=home_dir,
         )
-        expected_session_start_argv = ClaudeCodeHarnessAdapter._session_start_command_parts(context)
+        expected_session_start_argv = claude_adapter_module.claude_argv("session_start", context)
         assert (
             guard_pretool_entry["matcher"]
             == "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
@@ -2972,7 +2971,7 @@ args = ["workspace-skill.js", "--changed"]
             _command_handler_argv(install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0])
             == expected_session_start_argv
         )
-        expected_hook_argv = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)
+        expected_hook_argv = claude_adapter_module.claude_argv("daemon", context)
         assert guard_pretool_entry["hooks"][0]["type"] == "command"
         assert _command_handler_argv(guard_pretool_entry["hooks"][0]) == expected_hook_argv
         assert "url" not in guard_pretool_entry["hooks"][0]
@@ -2996,7 +2995,7 @@ args = ["workspace-skill.js", "--changed"]
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         settings_path = home_dir / ".claude" / "settings.json"
-        expected_hook_command = ClaudeCodeHarnessAdapter._hook_command(
+        expected_hook_command = claude_adapter_module.claude_hook_command(
             HarnessContext(
                 home_dir=home_dir,
                 workspace_dir=workspace_dir,
@@ -3173,7 +3172,7 @@ args = ["workspace-skill.js", "--changed"]
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         settings_path = home_dir / ".claude" / "settings.json"
-        legacy_command = ClaudeCodeHarnessAdapter._hook_command(
+        legacy_command = claude_adapter_module.claude_hook_command(
             HarnessContext(
                 home_dir=home_dir,
                 workspace_dir=workspace_dir,

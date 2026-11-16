@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import cast
 
-from ..adapters.base import HarnessContext, _shell_command
+from ..harness.base import HarnessContext, _shell_command
 from ..stable_guard_cli import prune_safe_cli_executable
 
 

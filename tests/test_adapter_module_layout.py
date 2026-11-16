@@ -40,7 +40,7 @@ def test_adapter_sources_remain_in_native_ownership_contract(monkeypatch: pytest
 
 
 def test_native_harness_registry_matches_the_runtime_description() -> None:
-    from codex_plugin_scanner.guard.adapters.native_harness import NATIVE_HARNESSES, describe
+    from codex_plugin_scanner.guard.harness.native_harness import NATIVE_HARNESSES, describe
 
     described = {entry["harness"]: entry for entry in describe()["adapters"]}
     assert list(described) == [harness for harness, _aliases, _launcher in NATIVE_HARNESSES]

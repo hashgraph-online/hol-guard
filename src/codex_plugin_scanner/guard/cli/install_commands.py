@@ -7,11 +7,10 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from ..adapters import get_adapter, list_adapters
-from ..adapters.base import HarnessAdapter, HarnessContext
-from ..adapters.cursor import CursorHarnessAdapter
 from ..codex_install_transaction import codex_install_transaction
+from ..harness.base import HarnessAdapter, HarnessContext
 from ..harness.contracts import contract_for
+from ..harness.registry import get_adapter, list_adapters
 from ..managed_install_proof import verify_managed_install_proof
 from ..native_mcp_tool_evidence import NativeMcpToolEvidenceError, native_skill_firewall_metadata_patch
 from ..native_runner_authority import NativeRunnerAuthorityError
@@ -63,7 +62,7 @@ def _apply_adapter_management(
     """Apply one adapter mutation while honoring declared surface capabilities."""
 
     if surface is None:
-        if isinstance(adapter, CursorHarnessAdapter):
+        if adapter.harness == "cursor":
             selected_surface = cursor_install_surface(None)
             return (
                 adapter.install(context, surface=selected_surface)
@@ -75,7 +74,7 @@ def _apply_adapter_management(
     setup_contract = adapter.setup_contract()
     if surface not in setup_contract.surface_capabilities:
         raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
-    if isinstance(adapter, CursorHarnessAdapter):
+    if adapter.harness == "cursor":
         selected_surface = cursor_install_surface(surface)
         return (
             adapter.install(context, surface=selected_surface)

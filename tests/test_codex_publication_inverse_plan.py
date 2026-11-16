@@ -40,7 +40,7 @@ from pathlib import Path
 from codex_plugin_scanner.guard import native_transition_files
 from codex_plugin_scanner.guard import codex_harness_client as codex
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 home = Path(sys.argv[1])
 context = HarnessContext(home, None, home / '.hol-guard', home_override_explicit=True)
 original = native_transition_files.publication

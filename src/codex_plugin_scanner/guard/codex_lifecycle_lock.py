@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .adapters.base import HarnessContext
+    from .harness.base import HarnessContext
 
 _TargetOwnerKey = tuple[str, int, int]
 _HELD_TARGETS: ContextVar[dict[_TargetOwnerKey, str] | None] = ContextVar("codex_lifecycle_targets", default=None)

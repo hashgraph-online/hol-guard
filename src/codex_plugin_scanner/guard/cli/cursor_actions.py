@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..adapters.base import HarnessContext
-from ..adapters.cursor import cursor_cli_detected, cursor_cli_shim_installed
 from ..codex_harness_client import guard_proxy_server_names
+from ..harness.base import HarnessContext
+from ..harness.cursor_client import cursor_cli_detected, cursor_cli_shim_installed
 from ..store import GuardStore
 
 

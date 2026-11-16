@@ -10,13 +10,11 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from codex_plugin_scanner.guard.cli.install_commands import list_harness_setup_items
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -46,7 +44,7 @@ def test_gr091_cursor_adapter_detects_workspace_mcp_smoke(tmp_path: Path) -> Non
         encoding="utf-8",
     )
 
-    detection = CursorHarnessAdapter().detect(context)
+    detection = get_adapter("cursor").detect(context)
 
     assert detection.installed is True
     assert detection.artifacts[0].harness == "cursor"
@@ -113,7 +111,7 @@ def test_gr096_managed_hook_json_matches_each_harness_schema(tmp_path: Path) -> 
     context = _context(tmp_path)
 
     codex_manifest = CodexHarnessAdapter().install(context)
-    ClaudeCodeHarnessAdapter().install(context)
+    get_adapter("claude-code").install(context)
     opencode_config = context.home_dir / ".config" / "opencode" / "opencode.json"
     opencode_config.parent.mkdir(parents=True, exist_ok=True)
     opencode_config.write_text(
@@ -142,7 +140,7 @@ def test_gr099_managed_hooks_use_lightweight_cli_entrypoints(tmp_path: Path) -> 
     context = _context(tmp_path)
 
     codex_manifest = CodexHarnessAdapter().install(context)
-    ClaudeCodeHarnessAdapter().install(context)
+    get_adapter("claude-code").install(context)
     get_adapter("copilot").install(context)
 
     codex_hooks = _read_codex_hooks(Path(str(codex_manifest["managed_hook_config_path"])))

@@ -20,14 +20,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from .adapters.base import HarnessContext
-from .adapters.native_harness import ask
 from .codex_hook_compatibility import python_bridge_argv
 from .codex_hook_integrity import hook_manifest_path
 from .codex_hook_manifest import CodexHookManifestSpec
 from .codex_hook_registration import legacy_binding_fields
 from .codex_hook_self_binding import short_path_fields
 from .config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
+from .harness.base import HarnessContext
+from .harness.native_harness import ask
 
 if TYPE_CHECKING:
     from .runtime_transition import TransitionFile

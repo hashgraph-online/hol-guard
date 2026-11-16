@@ -70,7 +70,7 @@ def prepare_guard_shim(
     display_name: str | None = None,
 ) -> PreparedGuardShim:
     """Render and snapshot both launchers without creating or changing files."""
-    from .adapters.native_harness import ask, planned_files
+    from .harness.native_harness import ask, planned_files
 
     answer = ask(
         "prepare_guard_shim",
@@ -127,7 +127,7 @@ def apply_guard_shims(
     order and the profile manifest (or ``None``).
     """
     from . import native_transition_files
-    from .adapters.native_harness import ask
+    from .harness.native_harness import ask
 
     profile_fields = shell_profile_facts(context) if profile else None
     answer = ask(
@@ -205,7 +205,7 @@ def prepare_guard_shim_removal(
     display_name: str | None = None,
 ) -> PreparedGuardShim:
     """Snapshot every launcher an uninstall deletes, without changing files."""
-    from .adapters.native_harness import ask, planned_files
+    from .harness.native_harness import ask, planned_files
 
     answer = ask(
         "prepare_guard_shim_removal",
@@ -220,7 +220,7 @@ def prepare_guard_shim_removal(
 
 def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardShim:
     """Capture the selected shell profile and render its PATH block without writes."""
-    from .adapters.native_harness import ask, planned_files
+    from .harness.native_harness import ask, planned_files
 
     answer = ask(
         "prepare_guard_shim_shell_profile",

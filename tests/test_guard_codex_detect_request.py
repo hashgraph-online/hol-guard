@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import cast
 
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.native_codex_hook_identity import wire_codex_hook_bindings
 

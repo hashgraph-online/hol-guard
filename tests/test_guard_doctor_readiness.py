@@ -10,12 +10,12 @@ import pytest
 from rich.console import Console
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters import list_adapters
-from codex_plugin_scanner.guard.adapters.base import _run_command_probe
 from codex_plugin_scanner.guard.cli.doctor_readiness import doctor_runtime_readiness
 from codex_plugin_scanner.guard.cli.render import _render_doctor, emit_guard_payload
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
+from codex_plugin_scanner.guard.harness.base import _run_command_probe
 from codex_plugin_scanner.guard.harness.diagnostic_probes import without_command_probes
+from codex_plugin_scanner.guard.harness.registry import list_adapters
 from tests.codex_hook_state_support import fixed_hook_state
 
 

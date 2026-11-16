@@ -6,8 +6,8 @@ import json
 import re
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
-from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter
+from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter
+from codex_plugin_scanner.guard.harness.registry import get_adapter, list_adapters
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
 from codex_plugin_scanner.guard.models import HarnessDetection
 from tests.native_bounded_runtime import durable_copy, use_bounded_runtime

@@ -7,9 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_caller, stable_guard_cli
-from codex_plugin_scanner.guard.adapters import claude_code
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import claude_hook_entry, native_caller, stable_guard_cli
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer, is_guard_proxy_command, proxy_cli_args
 from tests.mcp_proxy_launcher import python_proxy_launcher_entry
 
@@ -66,18 +65,16 @@ def test_claude_frozen_hooks_use_the_stable_launcher(
     _, launcher = versioned_core
 
     monkeypatch.setattr(native_caller, "_native_runtime", lambda: None)
-    monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
+    monkeypatch.setattr(claude_hook_entry, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = _context(tmp_path)
-    adapter = claude_code.ClaudeCodeHarnessAdapter
-
-    hook = adapter._hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
-    session = adapter._session_start_command_parts(context)  # pyright: ignore[reportPrivateUsage]
+    hook = claude_hook_entry.claude_argv("hook", context)
+    session = claude_hook_entry.claude_argv("session_start", context)
 
     assert [hook[0], session[0]] == [launcher, launcher]
     assert hook[1] == "hook"
     assert session[1] == "__guard-claude-hook"
     with pytest.raises(RuntimeError, match="hol-guard repair"):
-        adapter._daemon_hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
+        claude_hook_entry.claude_argv("daemon", context)
 
 
 def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_core: tuple[Path, str]) -> None:

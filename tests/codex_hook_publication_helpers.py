@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 from codex_plugin_scanner.guard import codex_harness_client as adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_config import _Wire, dump_toml
 from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, hook_secret_path
 from codex_plugin_scanner.guard.codex_hook_manifest import (
@@ -30,6 +29,7 @@ from codex_plugin_scanner.guard.codex_hook_self_binding import (
     short_path_fields,
 )
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 
 def prepare_authenticated_hook_publication(

@@ -30,8 +30,6 @@ from typing import Protocol, TextIO
 from ...argparse_utils import FriendlyArgumentParser
 from ...models import ScanOptions
 from ..action_lattice import guard_action_severity
-from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
 from ..aibom_cli import (
     AibomCliOptions,
     build_aibom_export_payload,
@@ -102,6 +100,8 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
+from ..harness.base import HarnessContext
+from ..harness.registry import get_adapter
 from ..local_dashboard_session import build_local_dashboard_session_token
 from ..local_supply_chain import (
     _resolve_guard_sync_auth_context,

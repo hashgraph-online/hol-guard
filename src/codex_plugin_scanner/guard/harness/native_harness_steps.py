@@ -75,6 +75,30 @@ def prepared_from_detection(
     return prepared
 
 
+def prepared_surfaces(
+    adapter: NativeHarnessAdapter, context: HarnessContext, **surface: object
+) -> PreparedHarnessInstall:
+    """Every surface the runtime selects, planned in one op before any publication."""
+    from ..runtime_transition import RuntimeTransition, TransitionError, TransitionFile
+    from ..shims import shell_profile_facts, shim_interpreter
+    from .base import PreparedHarnessInstall
+    from .native_harness import planned_files
+
+    answer = adapter._ask(
+        "prepare_surfaces",
+        context,
+        interpreter=shim_interpreter(),
+        shell_profile=shell_profile_facts(context),
+        **surface,
+    )
+    if set(answer) == {"transition_error"}:
+        raise TransitionError(str(answer["transition_error"]))
+    keys = [TransitionFile.identity_dependency(Path(path)) for path in answer.get("identity", ())]
+    prepared = PreparedHarnessInstall((*keys, *planned_files(answer)), json.loads(str(answer["manifest"])))
+    RuntimeTransition._compare({"files": [change.payload() for change in prepared.files]}, "before")
+    return prepared
+
+
 def detection_from(harness: str, context: HarnessContext, answer: dict[str, Any]) -> HarnessDetection:
     """The detection a ``detect``-shaped answer describes."""
     from ..aibom_detection import _artifacts_from_payload, extend_detection_with_workspace_aibom

@@ -13,6 +13,11 @@ import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .harness.base import HarnessContext
+    from .harness.native_harness import NativeHarnessAdapter
 
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 CLAUDE_GUARD_SESSION_START_HOOK_MARKER = "HOL_GUARD_CLAUDE_SESSION_START_HOOK"
@@ -46,23 +51,53 @@ def claude_facts(guard_home: Path) -> str:
     )
 
 
+def _claude_adapter() -> NativeHarnessAdapter:
+    from .harness.native_harness import NativeHarnessAdapter
+    from .harness.registry import get_adapter
+
+    adapter = get_adapter(_HARNESS)
+    if not isinstance(adapter, NativeHarnessAdapter):
+        raise RuntimeError("claude-code adapter is not registered")
+    return adapter
+
+
+def claude_argv(which: str, context: HarnessContext) -> tuple[str, ...]:
+    """One of Claude's hook argv (``hook``, ``daemon``, ``session_start``) as an install writes it."""
+    return tuple(str(part) for part in _claude_adapter().run_op("argv", context, which=which)["argv"])
+
+
+def claude_hook_command(context: HarnessContext) -> str:
+    """The fallback hook argv as one shell command line."""
+    from .harness.base import _shell_command
+
+    return _shell_command(claude_argv("hook", context))
+
+
+def _refresh_owned(adapter: NativeHarnessAdapter, context: HarnessContext) -> None:
+    from .harness.base import _owned_adapter_mutation
+
+    # The native SessionStart lane hands off to this refresh whenever its
+    # recorded runtime build differs from the installed one, which is true
+    # after every package upgrade. The runtime rewrites the entries, which
+    # moves the next session back onto the native lane.
+    def refresh_runtime_hook_urls(adapter: NativeHarnessAdapter, context: HarnessContext) -> None:
+        adapter.run_op("refresh", context)
+
+    _owned_adapter_mutation(refresh_runtime_hook_urls)(adapter, context)
+
+
 def refresh_claude_hooks(*, home_dir: Path, workspace_dir: Path | None, guard_home: Path) -> None:
     """Rewrite the managed Claude hooks with this build's argv, under the install lock."""
-    from .adapters import get_adapter
-    from .adapters.base import HarnessContext
-    from .adapters.claude_code import ClaudeCodeHarnessAdapter
+    from .harness.base import HarnessContext
 
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
-    adapter = get_adapter(_HARNESS)
-    if not isinstance(adapter, ClaudeCodeHarnessAdapter):
-        raise RuntimeError("claude-code adapter is not registered")
-    adapter.refresh_runtime_hook_urls(context)
+    _refresh_owned(_claude_adapter(), context)
 
 
 def _run_session_start_from_argv(argv: Sequence[str]) -> int:
     """Start the daemon and refresh the managed hooks from the hook's path vector."""
-    from .adapters.base import HarnessContext
-    from .adapters.native_harness import ask
+    from .harness.base import HarnessContext
+    from .harness.native_harness import ask
     from .native_context import bound_context_digest_home
 
     home = Path.home()

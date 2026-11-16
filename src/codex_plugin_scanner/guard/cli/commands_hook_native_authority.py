@@ -11,7 +11,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any, TextIO
 
-from ..adapters.base import HarnessContext
+from ..harness.base import HarnessContext
 from ..harness.bounded_cli_hook_failure import failure_payload
 from ..hook_deadline import RuntimeHookDeadline
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment

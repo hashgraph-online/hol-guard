@@ -250,7 +250,7 @@ def test_signed_repair_file_inverse_restores_missing_manifest_state(
 
 @pytest.fixture
 def retained_installation(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
 
     context = HarnessContext(
         home_dir=tmp_path / "home", guard_home=tmp_path / "guard-home", workspace_dir=None, home_override_explicit=True
@@ -311,7 +311,7 @@ def test_retained_artifact_loss_refuses_repair_without_publishing(retained_insta
 
 @pytest.mark.usefixtures("frozen_codex_contract")
 def test_frozen_retained_repair_pins_both_physical_executables(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionError
 
     context = HarnessContext(

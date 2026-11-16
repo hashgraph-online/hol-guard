@@ -11,7 +11,6 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_adapter_lifecycle
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
 from codex_plugin_scanner.guard.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_MALFORMED_GROUP,
@@ -19,6 +18,7 @@ from codex_plugin_scanner.guard.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE,
     enumerate_codex_hooks,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 
 def _write(path: Path, content: str) -> None:

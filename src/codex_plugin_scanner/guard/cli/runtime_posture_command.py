@@ -30,7 +30,7 @@ from ...argparse_utils import FriendlyArgumentParser
 from .commands_parser_helpers import _add_guard_common_args
 
 if TYPE_CHECKING:
-    from ..adapters.base import HarnessContext
+    from ..harness.base import HarnessContext
 
 
 def configure_runtime_parser(guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

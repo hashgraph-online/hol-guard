@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 
 
 @pytest.fixture(autouse=True)
@@ -24,11 +25,11 @@ def _claude_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
 
 
-def _installed(tmp_path: Path) -> tuple[ClaudeCodeHarnessAdapter, HarnessContext, Path]:
+def _installed(tmp_path: Path) -> tuple[NativeHarnessAdapter, HarnessContext, Path]:
     home = tmp_path / "home"
     (home / ".claude").mkdir(parents=True)
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
     adapter.install(context)
     return adapter, context, home / ".claude" / "settings.json"
 

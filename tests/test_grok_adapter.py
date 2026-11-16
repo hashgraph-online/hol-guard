@@ -10,10 +10,10 @@ import sys
 from contextlib import redirect_stderr
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter
 from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 
 from .grok_test_support import _ctx, _fixture
@@ -31,7 +31,7 @@ class TestGrokAdapterIdentity:
         assert isinstance(get_adapter("grok"), NativeHarnessAdapter)
 
     def test_grok_is_registered_in_adapter_list(self) -> None:
-        from codex_plugin_scanner.guard.adapters import list_adapters
+        from codex_plugin_scanner.guard.harness.registry import list_adapters
 
         assert "grok" in {item.harness for item in list_adapters()}
 

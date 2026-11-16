@@ -133,10 +133,10 @@ def _validated_bundle(store: GuardStore, payload: dict[str, object], policy_bund
 
 
 def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, object]:
-    from ..adapters import get_adapter
     from ..approval_gate import ApprovalGateError, require_high_risk
     from ..approval_gate import input_from_mapping as gate_input_from_mapping
     from ..config import VALID_RECEIPT_REDACTION_LEVELS
+    from ..harness.registry import get_adapter
     from ..native_policy_bundle import (
         NATIVE_UNAVAILABLE_REJECTION,
         PolicyBundleNativeError,

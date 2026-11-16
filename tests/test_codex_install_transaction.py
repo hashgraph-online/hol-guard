@@ -12,12 +12,12 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_caller
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction, require_codex_install_owner
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from tests import codex_hook_publication_helpers as publication_helpers
 
 
@@ -236,7 +236,7 @@ import sys, time
 from pathlib import Path
 from codex_plugin_scanner.guard import codex_harness_client as codex
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 root = Path(sys.argv[1])
 actor = sys.argv[2]
 context = HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "home/.hol-guard")

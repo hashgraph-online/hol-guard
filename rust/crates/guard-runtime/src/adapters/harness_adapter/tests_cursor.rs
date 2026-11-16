@@ -327,3 +327,81 @@ fn cursor_uninstall_keeps_a_file_whose_guard_hooks_are_already_gone() {
     run(&home, "uninstall", bridge()).unwrap();
     assert_eq!(fs::read_to_string(&hooks).unwrap(), edited);
 }
+
+fn surfaces(home: &Home, surface: &str, bridge: Value) -> Value {
+    let mut fields = Map::new();
+    fields.insert("surface".into(), json!(surface));
+    fields.insert(
+        "interpreter".into(),
+        json!({
+            "executable": "/opt/python/bin/python3",
+            "frozen": false,
+            "package_interpreter": "/opt/python/bin/python3",
+            "python_flags": ["-I", "-P"],
+            "import_root": "/opt/site",
+            "launcher_env": [],
+        }),
+    );
+    fields.insert(
+        "shell_profile".into(),
+        json!({"shell": "", "shim_dir_transient": false}),
+    );
+    ask_with(home, "prepare_surfaces", &fields, &bridge).unwrap()
+}
+
+#[test]
+fn cursor_prepares_both_cli_launchers_without_writing_one() {
+    let home = Home::new();
+    let answer = surfaces(&home, "cli", bridge());
+    let files = answer["files"].as_array().unwrap();
+    let bin = home.guard().join("bin");
+    for name in ["guard-cursor-agent", "guard-cursor"] {
+        assert!(
+            files
+                .iter()
+                .any(|file| file["path"] == json!(bin.join(name))),
+            "{name} missing from {answer}"
+        );
+    }
+    assert_eq!(answer["identity"], json!([]));
+    let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
+    assert!(manifest.is_object(), "{manifest}");
+    assert!(!bin.exists());
+}
+
+#[test]
+fn cursor_editor_and_all_surfaces_stop_at_the_editor_transition_error() {
+    let home = Home::new();
+    for surface in ["editor", "all"] {
+        let answer = surfaces(&home, surface, bridge());
+        assert_eq!(
+            answer,
+            json!({"transition_error": "adapter_preparation_authority_missing"}),
+            "{surface}"
+        );
+    }
+    assert!(!home.guard().join("bin").exists());
+}
+
+#[test]
+fn describe_names_the_cursor_and_claude_launcher_flags() {
+    let answer = dispatch(&json!({"op": "describe"})).unwrap();
+    let spec = |name: &str| {
+        answer["adapters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|adapter| adapter["harness"] == name)
+            .unwrap()
+            .clone()
+    };
+    let cursor = spec("cursor");
+    assert_eq!(cursor["prepare"], "surfaces");
+    assert_eq!(cursor["absence_proves_uninstalled"], false);
+    assert_eq!(cursor["legacy_launchers"], json!(["cursor"]));
+    assert_eq!(cursor["executable"], "cursor-agent");
+    let claude = spec("claude-code");
+    assert_eq!(claude["legacy_launchers"], json!(["claude-code"]));
+    assert_eq!(claude["absence_proves_uninstalled"], true);
+    assert_eq!(spec("devin")["legacy_launchers"], json!([]));
+}

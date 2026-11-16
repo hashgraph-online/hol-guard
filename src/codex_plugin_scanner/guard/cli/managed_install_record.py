@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..adapters.base import HarnessContext
 from ..codex_install_transaction import codex_install_transaction
+from ..harness.base import HarnessContext
 from ..managed_install_revision import bump_managed_install_revision
 from ..runtime_transition import TransitionError
 from ..store import GuardStore
@@ -18,7 +18,7 @@ from ..store import GuardStore
 
 def _native_install_ask(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
     """One managed-install op; a pending runtime transition refuses as before."""
-    from ..adapters.native_harness import ask
+    from ..harness.native_harness import ask
 
     try:
         return ask(op, context, **fields)

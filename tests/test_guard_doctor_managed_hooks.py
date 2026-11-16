@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from tests.codex_hook_state_support import fixed_hook_state
 from tests.cursor_test_support import cursor_agent_on_path
 
@@ -60,7 +60,7 @@ def test_codex_doctor_keeps_live_bridge_hooks_when_interpreter_is_stale(
         fixed_hook_state(verified=False, reason="codex_hook_interpreter_path_mismatch"),
     )
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     payload = get_adapter("codex").diagnostics(context)
 
@@ -104,7 +104,7 @@ def test_doctor_treats_managed_cursor_hooks_as_guard_install(
     )
     cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     payload = get_adapter("cursor").diagnostics(context)
 
@@ -135,7 +135,7 @@ def test_doctor_ignores_name_only_cursor_hook_marker(
     )
     cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     payload = get_adapter("cursor").diagnostics(context)
 
@@ -165,7 +165,7 @@ def test_doctor_ignores_disabled_or_missing_cursor_hook_script(
     )
     cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     adapter = get_adapter("cursor")
     missing_payload = adapter.diagnostics(context)
@@ -255,7 +255,7 @@ def test_codex_doctor_reports_leftover_hooks_for_an_uninstalled_codex(
         fixed_hook_state(verified=True),
     )
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     payload = get_adapter("codex").diagnostics(context)
 

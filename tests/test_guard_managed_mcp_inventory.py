@@ -7,10 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.native_harness import ask
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.native_harness import ask
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.mcp_discovery_client import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.mcp_server_client import (
     ManagedMcpServer,
@@ -163,7 +162,7 @@ def test_cursor_config_discovery_recovers_frozen_proxy(tmp_path: Path) -> None:
         json.dumps({"mcpServers": {"fixture": {"command": server.command, "args": server.args, "env": server.env}}})
     )
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=tmp_path / "guard")
-    detection = CursorHarnessAdapter().detect(context)
+    detection = get_adapter("cursor").detect(context)
     assert managed_stdio_servers(detection) == ()
     servers = discover_harness_mcp_servers(home_dir=home, guard_home=context.guard_home, detections=(detection,))
     assert len(servers) == 1 and servers[0].launch_command == "python fixture_server.py --stdio"
@@ -245,7 +244,7 @@ def test_cursor_reinstall_refreshes_launcher_without_adding_proxy_layers(tmp_pat
     )
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=tmp_path / "guard")
     for _ in range(2):
-        CursorHarnessAdapter().install(context)
+        get_adapter("cursor").install(context)
         entry = json.loads(config.read_text())["mcpServers"]["fixture"]
         assert entry["command"] == sys.executable
         assert entry["args"] == args
@@ -253,7 +252,7 @@ def test_cursor_reinstall_refreshes_launcher_without_adding_proxy_layers(tmp_pat
     servers = discover_harness_mcp_servers(
         home_dir=home,
         guard_home=context.guard_home,
-        detections=(CursorHarnessAdapter().detect(context),),
+        detections=(get_adapter("cursor").detect(context),),
     )
     assert len(servers) == 1 and servers[0].launch_command == "python fixture_server.py --stdio"
 
@@ -281,13 +280,13 @@ def test_cursor_install_inventory_keeps_only_effective_server_env(
             }
         )
     )
-    CursorHarnessAdapter().install(context)
+    get_adapter("cursor").install(context)
     installed = json.loads(config.read_text())["mcpServers"]["fixture"]
     assert f"--server-env-key={blocked}" not in installed["args"]
     servers = discover_harness_mcp_servers(
         home_dir=context.home_dir,
         guard_home=context.guard_home,
-        detections=(CursorHarnessAdapter().detect(context),),
+        detections=(get_adapter("cursor").detect(context),),
     )
     assert len(servers) == 1 and dict(servers[0].env) == {"FIXTURE_ACCOUNT": "one"}
     # Earlier installations advertised blocked keys even though their values
@@ -297,7 +296,7 @@ def test_cursor_install_inventory_keeps_only_effective_server_env(
     legacy = discover_harness_mcp_servers(
         home_dir=context.home_dir,
         guard_home=context.guard_home,
-        detections=(CursorHarnessAdapter().detect(context),),
+        detections=(get_adapter("cursor").detect(context),),
     )
     assert len(legacy) == 1 and legacy[0].identity.identity_hash == servers[0].identity.identity_hash
 
@@ -326,23 +325,23 @@ def test_cursor_global_copy_recovers_saved_workspace_origin(tmp_path: Path) -> N
         home_dir=context.home_dir,
         workspace_dir=context.workspace_dir,
         guard_home=context.guard_home,
-        detections=(CursorHarnessAdapter().detect(context),),
+        detections=(get_adapter("cursor").detect(context),),
     )
     assert len(before) == 1
-    CursorHarnessAdapter().install(context)
+    get_adapter("cursor").install(context)
     global_context = replace(context, workspace_dir=None)
     # Simulate the state format written by earlier published installations.
     state_path = cursor_mcp_state_path(context.home_dir / ".cursor/mcp.json", context.guard_home)
     state = json.loads(state_path.read_text())
     state.pop("managed_origins")
     state_path.write_text(json.dumps(state))
-    CursorHarnessAdapter().install(global_context)
+    get_adapter("cursor").install(global_context)
     assert json.loads(state_path.read_text())["managed_origins"]["fixture"] == ["project", str(project_config)]
-    CursorHarnessAdapter().install(global_context)
+    get_adapter("cursor").install(global_context)
     after = discover_harness_mcp_servers(
         home_dir=context.home_dir,
         guard_home=context.guard_home,
-        detections=(CursorHarnessAdapter().detect(global_context),),
+        detections=(get_adapter("cursor").detect(global_context),),
     )
     assert len(after) == 1
     assert after[0].identity.identity_hash == before[0].identity.identity_hash
@@ -351,7 +350,7 @@ def test_cursor_global_copy_recovers_saved_workspace_origin(tmp_path: Path) -> N
         discover_harness_mcp_servers(
             home_dir=context.home_dir,
             guard_home=tmp_path / "other-guard",
-            detections=(CursorHarnessAdapter().detect(replace(global_context, guard_home=tmp_path / "other-guard")),),
+            detections=(get_adapter("cursor").detect(replace(global_context, guard_home=tmp_path / "other-guard")),),
         )
         == ()
     )
@@ -364,7 +363,7 @@ def test_cursor_global_copy_recovers_saved_workspace_origin(tmp_path: Path) -> N
         discover_harness_mcp_servers(
             home_dir=context.home_dir,
             guard_home=context.guard_home,
-            detections=(CursorHarnessAdapter().detect(global_context),),
+            detections=(get_adapter("cursor").detect(global_context),),
         )
         == ()
     )

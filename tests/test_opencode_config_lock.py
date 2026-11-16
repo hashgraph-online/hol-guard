@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.cli.update_opencode import refresh_opencode_proxy_launchers
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 
 LOCK = Path(".config") / "opencode" / ".hol-guard-config.lock"
 

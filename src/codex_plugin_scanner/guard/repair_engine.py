@@ -24,8 +24,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .adapters import get_adapter
-from .adapters.base import HarnessContext
+from .harness.base import HarnessContext
+from .harness.registry import get_adapter
 
 if TYPE_CHECKING:
     from .store import GuardStore

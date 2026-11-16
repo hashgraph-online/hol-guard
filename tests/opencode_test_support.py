@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.native_harness import ask
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.native_harness import ask
 
 _PLUGIN_FILE = "hol-guard-pretool.ts"
 

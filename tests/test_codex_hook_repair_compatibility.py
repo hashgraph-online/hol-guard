@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 
 def _command(config: dict[str, object], name: str) -> list[str]:

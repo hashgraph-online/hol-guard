@@ -6,8 +6,8 @@ import json
 import sqlite3
 from pathlib import Path
 
-from ..adapters.base import HarnessContext
-from ..adapters.native_harness import ask
+from ..harness.base import HarnessContext
+from ..harness.native_harness import ask
 from ..store import GuardStore
 from .managed_install_context import managed_install_context as _repair_context_from_managed_install
 

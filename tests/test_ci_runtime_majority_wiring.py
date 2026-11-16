@@ -354,7 +354,7 @@ def test_the_shipped_scope_needs_no_dynamic_import_declarations() -> None:
     # The adapter registry table, the cli lazy-export helper and the runtime package
     # __getattr__ are the registries that used to need a hand-written declaration.
     assert {
-        "codex_plugin_scanner.guard.adapters.cursor",
+        "codex_plugin_scanner.guard.codex_harness_lifecycle",
         "codex_plugin_scanner.guard.runtime.wrapper_run",
     } <= _in_scope(result)
 

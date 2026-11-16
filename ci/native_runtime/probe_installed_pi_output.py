@@ -495,7 +495,7 @@ def _generate_extension(
     home: Path,
     settings_path: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.native_extension import extension_source
 
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home)

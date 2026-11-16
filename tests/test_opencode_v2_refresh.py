@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from tests.opencode_test_support import pretool_plugin_source
 from tests.test_opencode_pretool import _bun_executable, _ctx
 
@@ -194,7 +194,7 @@ def test_refresh_companion_launcher_preserves_permissions_and_binding(
     before = json.loads(config.read_text(encoding="utf-8"))
 
     if frozen_runtime:
-        from codex_plugin_scanner.guard.adapters import native_harness
+        from codex_plugin_scanner.guard.harness import native_harness
 
         stamp = native_harness.caller_identity()
         monkeypatch.setattr(

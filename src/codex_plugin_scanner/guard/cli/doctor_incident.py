@@ -12,11 +12,11 @@ from pathlib import Path
 from typing import TextIO, cast
 
 from ...version import __version__
-from ..adapters.base import HarnessContext
 from ..codex_config import TomlRefusedError, loads_toml
 from ..codex_harness_client import _hook_manifest_spec
 from ..codex_harness_lifecycle import CodexHarnessAdapter
 from ..codex_hook_manifest import verify_live_hook_manifest
+from ..harness.base import HarnessContext
 from ..native_daemon_manage import load_authenticated_daemon_state, load_bounded_incident_lifecycle_events
 
 _MAX_CONFIG_BYTES = 1024 * 1024

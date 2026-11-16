@@ -6,13 +6,13 @@ import pytest
 import tomlkit
 import tomllib
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.native_install_checks import (
     _grok_protection_checks,
     grok_protection,
     grok_runtime_hooks_verified,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.shims import PreparedGuardShim
 
 from .grok_test_support import grok_paths

@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import uninstall_commands
 from codex_plugin_scanner.guard.cli.render import _render_managed_install
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.native_resident_update_lock import NativeResidentUpdateLockError
 from codex_plugin_scanner.guard.store import GuardStore
 

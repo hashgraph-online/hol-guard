@@ -11,9 +11,9 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard import native_caller
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter, ask
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter, ask
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from tests.native_bounded_runtime import durable_copy, use_bounded_runtime
 
 CommandFactory = Callable[[HarnessContext], tuple[str, ...]]

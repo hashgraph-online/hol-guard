@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
 from ..agent_safety_guidance import install_agent_safety_guidance
 from ..codex_install_transaction import codex_install_transaction
 from ..config import GuardConfig
+from ..harness.base import HarnessContext
+from ..harness.registry import get_adapter
 from ..native_daemon_manage import ensure_guard_daemon
 from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore

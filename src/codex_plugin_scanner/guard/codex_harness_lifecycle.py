@@ -17,8 +17,6 @@ from pathlib import Path
 from typing import Any
 
 from . import codex_harness_client
-from .adapters.base import HarnessContext, PreparedHarnessInstall
-from .adapters.native_harness import NativeHarnessAdapter
 from .aibom_detection import (
     detection_from_payload,
     extend_codex_runtime_inventory,
@@ -60,6 +58,8 @@ from .codex_remote_client import (
     guarded_codex_launch_command_candidates,
     guarded_codex_launch_command_from_prefix,
 )
+from .harness.base import HarnessContext, PreparedHarnessInstall
+from .harness.native_harness import NativeHarnessAdapter
 from .models import GuardArtifact, HarnessDetection
 from .native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
 from .native_path_anchor import anchor_to_process_directory

@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_integrity, codex_hook_recovery
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
@@ -23,6 +22,7 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
 from codex_plugin_scanner.guard.codex_hook_recovery import recover_hook_publication
 from codex_plugin_scanner.guard.codex_hook_rollback import rollback_file_identity
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.transition_fault_support import STEPWISE_PUBLICATION
@@ -34,7 +34,7 @@ import os, sys
 from pathlib import Path
 from codex_plugin_scanner.guard import codex_harness_client as codex
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 home = Path(sys.argv[1])
 phase = sys.argv[2]
 context = HarnessContext(home_dir=home, guard_home=home / ".hol-guard", workspace_dir=None)
@@ -76,7 +76,7 @@ import os, sys
 from pathlib import Path
 from codex_plugin_scanner.guard import codex_harness_client as codex
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 home = Path(sys.argv[1])
 context = HarnessContext(home_dir=home, guard_home=home / '.hol-guard', workspace_dir=None)
 # Drop the installed hooks so this install must publish a new config inode.
@@ -172,7 +172,7 @@ from pathlib import Path
 from codex_plugin_scanner.guard import codex_hook_recovery as recovery
 from codex_plugin_scanner.guard import codex_harness_client as codex
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 home, substitution = Path(sys.argv[1]), sys.argv[2]
 config = home / '.codex/config.toml'

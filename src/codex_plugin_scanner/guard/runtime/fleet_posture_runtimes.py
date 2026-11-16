@@ -26,7 +26,7 @@ from .fleet_posture_common import iso, keyed_digest, parse_timestamp
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..adapters.base import HarnessContext
+    from ..harness.base import HarnessContext
     from ..store import GuardStore
 
 _LOGGER = logging.getLogger(__name__)

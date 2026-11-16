@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 import tomlkit
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.cli.grok_hook_validation import is_missing_grok_hook_command
+from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
 from tests.grok_test_support import prepare_user_config_text
 from tests.native_bounded_runtime import hook_config_argv, use_bounded_runtime
 

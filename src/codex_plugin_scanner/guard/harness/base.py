@@ -199,16 +199,25 @@ class HarnessAdapter:
     aliases: tuple[str, ...] = ()
     executable = ""
     launcher_name = ""
-    legacy_launcher_names: tuple[str, ...] = ()
     approval_tier = "approval-center"
     approval_summary = "Guard pauses the launch and routes approval through the local approval center."
     fallback_hint = "Use the Guard approval center or native harness prompt to resolve pending requests."
     approval_prompt_channel = "browser"
     approval_auto_open_browser = True
-    #: Whether an unavailable command is enough to conclude the tool itself is gone.
-    #: A harness whose Guard hooks keep running without its CLI sets this False, so
-    #: leftover configuration is never mistaken for an absent tool.
-    command_absence_proves_uninstalled = True
+
+    @property
+    def legacy_launcher_names(self) -> tuple[str, ...]:
+        """Older launcher names an uninstall also removes."""
+        return ()
+
+    @property
+    def command_absence_proves_uninstalled(self) -> bool:
+        """Whether an unavailable command is enough to conclude the tool itself is gone.
+
+        A harness whose Guard hooks keep running without its CLI answers False, so
+        leftover configuration is never mistaken for an absent tool.
+        """
+        return True
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)

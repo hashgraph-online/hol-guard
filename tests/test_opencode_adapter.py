@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 
 CONFIG_FILENAMES = ("opencode.json", "opencode.jsonc")
 
@@ -874,13 +874,13 @@ class TestOpenCodeScopeDetection:
         assert target.read_text(encoding="utf-8") == original_text
 
     def test_get_adapter_returns_opencode_instance(self) -> None:
-        from codex_plugin_scanner.guard.adapters import get_adapter
+        from codex_plugin_scanner.guard.harness.registry import get_adapter
 
         adapter = get_adapter("opencode")
         assert adapter.harness == "opencode"
 
     def test_harness_name_round_trips_through_adapter_factory(self) -> None:
-        from codex_plugin_scanner.guard.adapters import get_adapter
+        from codex_plugin_scanner.guard.harness.registry import get_adapter
 
         adapter = get_adapter("opencode")
         assert adapter.harness == "opencode"

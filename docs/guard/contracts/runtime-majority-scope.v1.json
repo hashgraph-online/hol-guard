@@ -544,9 +544,7 @@
           "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
           "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
-          "src/codex_plugin_scanner/guard/adapters/*hook*.py",
           "src/codex_plugin_scanner/guard/harness/*hook*.py",
-          "src/codex_plugin_scanner/guard/adapters/_modules/*/*hook*.py",
           "src/codex_plugin_scanner/guard/native_*.py",
           "src/codex_plugin_scanner/guard/proxy/*",
           "src/codex_plugin_scanner/guard/runtime/restricted_*.py",
@@ -692,17 +690,16 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/adapters/cursor.py",
+          "src/codex_plugin_scanner/guard/harness/cursor_client.py",
           "src/codex_plugin_scanner/guard/harness/native_extension.py",
-          "src/codex_plugin_scanner/guard/adapters/native_harness.py",
-          "src/codex_plugin_scanner/guard/adapters/native_harness_steps.py",
+          "src/codex_plugin_scanner/guard/harness/native_harness.py",
+          "src/codex_plugin_scanner/guard/harness/native_harness_steps.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
         "reason": "Reviewed: adapter implementations behind the harness registry. Adapters normalize harness payloads into hook requests, so they sit on the hook path, and hook-path authority is never excluded. Install and setup methods that have a function_exclusions entry are excluded as install_config, not hook path; install helpers without an entry (for example in the Cline support modules) stay counted, which understates the Rust share."
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/adapters/claude_code.py",
           "src/codex_plugin_scanner/guard/aibom_detection.py",
           "src/codex_plugin_scanner/guard/artifact_native_fields.py",
           "src/codex_plugin_scanner/guard/codex_config.py",
@@ -824,14 +821,10 @@
     },
     "generated": {
       "path": [
-        "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py",
-        "src/codex_plugin_scanner/guard/adapters/_modules/*/grok_hook_*_template.py"
       ]
     },
     "adapters": {
       "path": [
-        "src/codex_plugin_scanner/guard/adapters/*.py",
-        "src/codex_plugin_scanner/guard/adapters/_modules/*/*.py",
         "src/codex_plugin_scanner/guard/harness/*.py"
       ]
     },
@@ -1053,7 +1046,7 @@
       {
         "id": "adapter-base-setup",
         "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/base.py",
+        "path": "src/codex_plugin_scanner/guard/harness/base.py",
         "symbols": [
           "HarnessAdapter.prepare_install",
           "HarnessAdapter.install",
@@ -1062,17 +1055,6 @@
         "entry_points": [],
         "reason": "HarnessAdapter default install, prepare_install and uninstall implementations used when an adapter does not override them.",
         "evidence": "The default prepare_install, install and uninstall are invoked only from the excluded install, uninstall and repair command dispatchers. No retained runtime code reads these attributes. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
-        "id": "adapter-claude-code-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/claude_code.py",
-        "symbols": [
-          "ClaudeCodeHarnessAdapter.prepare_install"
-        ],
-        "entry_points": [],
-        "reason": "Claude Code settings install; the native harness_adapter kind plans the settings write, the hook entry prune and merge, handler identity and the hook argv. Python keeps the shim and the facts this process answers.",
-        "evidence": "prepare_install has no caller in any in-scope module; it is invoked by the excluded install and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "adapter-codex-setup",
@@ -1158,7 +1140,7 @@
       {
         "id": "adapter-inventory-snapshot",
         "category": "offline_reporting",
-        "path": "src/codex_plugin_scanner/guard/adapters/base.py",
+        "path": "src/codex_plugin_scanner/guard/harness/base.py",
         "symbols": [
           "HarnessAdapter.inventory_snapshot"
         ],
@@ -1169,19 +1151,10 @@
       {
         "id": "adapter-cursor-setup",
         "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/cursor.py",
+        "path": "src/codex_plugin_scanner/guard/harness/cursor_client.py",
         "symbols": [
-          "CursorHarnessAdapter.install",
-          "CursorHarnessAdapter.prepare_install",
-          "CursorHarnessAdapter.uninstall",
-          "CursorHarnessAdapter._all",
-          "CursorHarnessAdapter._install_cli",
-          "CursorHarnessAdapter._prepare_cli",
-          "CursorHarnessAdapter._cli_manifest",
-          "CursorHarnessAdapter._uninstall_cli",
           "install_cursor_hooks",
           "_install_hooks",
-          "_prepared",
           "rebind_stale_cursor_hooks"
         ],
         "entry_points": [],
@@ -1597,7 +1570,7 @@
       {
         "id": "adapter-native-harness-setup",
         "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/native_harness.py",
+        "path": "src/codex_plugin_scanner/guard/harness/native_harness.py",
         "symbols": [
           "NativeHarnessAdapter.prepare_install",
           "NativeHarnessAdapter.install",
@@ -1615,9 +1588,10 @@
       {
         "id": "adapter-native-harness-detected-rebind",
         "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/native_harness_steps.py",
+        "path": "src/codex_plugin_scanner/guard/harness/native_harness_steps.py",
         "symbols": [
-          "prepared_from_detection"
+          "prepared_from_detection",
+          "prepared_surfaces"
         ],
         "entry_points": [],
         "reason": "The rebind Copilot plans from what the native runtime detected: the launcher shim, the enrolled state key dependency and the native file plan.",

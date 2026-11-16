@@ -347,6 +347,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     if op == "apply_install" {
         return answer(install_apply::apply(spec, &ctx, fields));
     }
+    if op == "prepare_surfaces" && spec.harness == "cursor" {
+        return answer(cursor_apply::prepare(spec, &ctx, fields));
+    }
     if op == "apply_plan" {
         return answer(shims_apply::apply_plan(spec, &ctx, fields));
     }

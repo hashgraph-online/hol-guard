@@ -13,11 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.native_harness import planned_files
 from codex_plugin_scanner.guard.codex_config import _restore_native, _Wire
 from codex_plugin_scanner.guard.codex_harness_client import _codex, _legacy_fields, _reply_text, _runtime_guard_home
 from codex_plugin_scanner.guard.codex_hook_self_binding import install_fields, short_path_fields
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.native_harness import planned_files
 from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 from tests.mcp_proxy_launcher import python_proxy_launcher_entry

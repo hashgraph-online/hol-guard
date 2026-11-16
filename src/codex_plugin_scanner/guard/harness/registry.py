@@ -13,9 +13,9 @@ if TYPE_CHECKING:
 # for one the native ``harness_adapter`` kind answers.
 _ADAPTER_SPECS: tuple[tuple[str, str], ...] = (
     ("codex_plugin_scanner.guard.codex_harness_lifecycle", "CodexHarnessAdapter"),
-    (".claude_code", "ClaudeCodeHarnessAdapter"),
+    (".native_harness", "claude-code"),
     (".native_harness", "copilot"),
-    (".cursor", "CursorHarnessAdapter"),
+    (".native_harness", "cursor"),
     (".native_harness", "cline"),
     (".native_harness", "devin"),
     (".native_harness", "antigravity"),
@@ -67,7 +67,7 @@ def list_adapters() -> tuple[HarnessAdapter, ...]:
 
 def __getattr__(name: str) -> Any:
     if name in {"HarnessAdapter", "HarnessContext"}:
-        value = getattr(import_module(".base", __name__), name)
+        value = getattr(import_module(".base", __package__), name)
         globals()[name] = value
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

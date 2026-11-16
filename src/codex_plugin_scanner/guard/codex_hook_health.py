@@ -7,7 +7,7 @@ PermissionRequest on the live Codex config; the runtime reads and decides it.
 
 from __future__ import annotations
 
-from .adapters.base import HarnessContext
+from .harness.base import HarnessContext
 
 
 def codex_runtime_hooks_verified(context: HarnessContext) -> bool:

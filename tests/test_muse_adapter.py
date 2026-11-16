@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter, ask
 from codex_plugin_scanner.guard.harness import muse_hook_render
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.harness.muse_hook_render import muse_bridge_response
+from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter, ask
+from codex_plugin_scanner.guard.harness.registry import get_adapter, list_adapters
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 

@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.native_harness import ask
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.harness.contracts import setup_contract_for
+from codex_plugin_scanner.guard.harness.native_harness import ask
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from tests.paseo_test_support import paseo_providers, receipt_path
 from tests.test_paseo_adapter import configure
 from tests.test_paseo_adapter import context as context

@@ -9,12 +9,10 @@ from unittest import mock
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.consumer import artifact_hash
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 
 
@@ -49,7 +47,7 @@ def _detect_server(
             ),
             encoding="utf-8",
         )
-        detection = ClaudeCodeHarnessAdapter().detect(context)
+        detection = get_adapter("claude-code").detect(context)
     elif adapter_name == "codex":
         config_path = context.home_dir / ".codex" / "config.toml"
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -83,7 +81,7 @@ def _detect_server(
             ),
             encoding="utf-8",
         )
-        detection = CursorHarnessAdapter().detect(context)
+        detection = get_adapter("cursor").detect(context)
     artifact = next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
     return detection, artifact
 
@@ -205,7 +203,7 @@ def _claude_header_artifact(
         ),
         encoding="utf-8",
     )
-    detection = ClaudeCodeHarnessAdapter().detect(context)
+    detection = get_adapter("claude-code").detect(context)
     return next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
 
 
