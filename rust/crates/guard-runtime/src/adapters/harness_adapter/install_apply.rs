@@ -13,7 +13,7 @@
 
 use serde_json::{json, Map, Value};
 
-use super::{guard_shim, route, Ctx, Failure, Spec, Step};
+use super::{guard_shim, route, shims_apply, Ctx, Failure, Spec, Step};
 use crate::transition_files::resolve_lenient;
 
 /// `normalized_after_mode`: a published mode never keeps group/world write.
@@ -100,6 +100,9 @@ pub(super) fn publish(
 }
 
 pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    if spec.harness == "copilot" {
+        return copilot(spec, ctx, fields);
+    }
     let mut shim_fields = Map::new();
     shim_fields.insert("harness".into(), json!(spec.harness));
     for key in ["launcher_name", "display_name", "interpreter"] {
@@ -123,6 +126,79 @@ pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step
         return Ok(refused("file_target_invalid"));
     };
     files.extend(planned);
+    let manifest = plan
+        .get("manifest")
+        .and_then(Value::as_str)
+        .ok_or(Failure::Invalid)?
+        .to_owned();
+    let published = publish(files, false, fields)?;
+    Ok(json!({ "manifest": manifest, "publish": published }))
+}
+
+/// The only reason an answer of just `transition_error` names.
+fn transition_refusal(answer: &Value) -> Option<&str> {
+    let answer = answer.as_object()?;
+    if answer.len() != 1 {
+        return None;
+    }
+    answer.get("transition_error")?.as_str()
+}
+
+/// Copilot's `_prepared_install(create_key=True).publish(...)`: the detection
+/// digest, both launcher shims with their default names, the plan made from
+/// that digest, and the enrolled state key pinned beside them. A path two
+/// sources plan differently refuses the install before any write.
+fn copilot(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    let mut asked = Map::new();
+    asked.insert("create_key".into(), json!(true));
+    let found = route(spec, "install_detection", ctx, &asked)?;
+    if let Some(reason) = transition_refusal(&found) {
+        return Ok(refused(reason));
+    }
+    let mut shim_fields = Map::new();
+    shim_fields.insert("harness".into(), json!(spec.harness));
+    shim_fields.insert("launcher_name".into(), Value::Null);
+    shim_fields.insert("display_name".into(), Value::Null);
+    shim_fields.insert(
+        "interpreter".into(),
+        fields.get("interpreter").cloned().unwrap_or(Value::Null),
+    );
+    let shim = guard_shim::prepare(ctx, &shim_fields)?;
+    let shim_manifest = shim
+        .get("manifest")
+        .and_then(Value::as_str)
+        .ok_or(Failure::Invalid)?;
+    asked.insert(
+        "digest".into(),
+        found.get("digest").cloned().ok_or(Failure::Invalid)?,
+    );
+    asked.insert("shim".into(), json!(shim_manifest));
+    let plan = route(spec, "prepare_install", ctx, &asked)?;
+    if let Some(reason) = transition_refusal(&plan) {
+        return Ok(refused(reason));
+    }
+    let key = ctx.guard_home.join("managed").join("adapter-state.key");
+    let key = match shims_apply::identity_dependency(ctx, &super::path_text(&key))? {
+        Ok(key) => key,
+        Err(reason) => return Ok(refused(reason)),
+    };
+    let (Some(planned), Some(shims)) = (payloads(&plan)?, payloads(&shim)?) else {
+        return Ok(refused("file_target_invalid"));
+    };
+    let mut files: Vec<Value> = Vec::new();
+    for change in std::iter::once(key).chain(planned).chain(shims) {
+        let path = change.get("path").cloned();
+        match files
+            .iter()
+            .find(|known| known.get("path").cloned() == path)
+        {
+            Some(known) if *known != change => {
+                return Ok(refused("adapter_preparation_generation_conflict"));
+            }
+            Some(_) => {}
+            None => files.push(change),
+        }
+    }
     let manifest = plan
         .get("manifest")
         .and_then(Value::as_str)

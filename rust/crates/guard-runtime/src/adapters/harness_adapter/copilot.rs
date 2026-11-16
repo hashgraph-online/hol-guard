@@ -311,7 +311,7 @@ pub(crate) fn dispatch(
             "argv": command_path(spec, ctx).map(|path| json!([path, "--help"])),
         })),
         "hook_spec" => Ok(hook_spec(ctx)),
-        "install_detection" | "prepare_install" | "uninstall" | "finish_uninstall" => {
+        "install_detection" | "prepare_install" | "prepare_uninstall" | "finish_uninstall" => {
             copilot_install::dispatch(spec, op, ctx, fields)
         }
         _ => common(spec, op, ctx),

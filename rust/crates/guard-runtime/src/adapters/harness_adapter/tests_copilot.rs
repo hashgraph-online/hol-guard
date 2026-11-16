@@ -142,3 +142,50 @@ fn copilot_install_refuses_a_malformed_later_config_before_planning_any_write() 
     assert!(ask(&home, "install_detection", json!({})).is_err());
     assert_eq!((fs::read(&cli).unwrap(), fs::read(&ide).unwrap()), before);
 }
+
+/// `apply_install` and `apply_uninstall` as the generic adapter sends them.
+fn apply_fields() -> Value {
+    json!({
+        "interpreter": {
+            "executable": "/opt/python/bin/python3",
+            "frozen": false,
+            "package_interpreter": "/opt/python/bin/python3",
+            "python_flags": ["-I", "-P"],
+            "import_root": "/opt/site",
+            "launcher_env": [],
+        },
+        "transition": {"package_roots": [], "budget": null},
+    })
+}
+
+#[test]
+fn copilot_apply_install_publishes_the_plan_shims_and_key_then_uninstall_restores() {
+    let home = Home::new();
+    let ws = workspace(&home);
+    for dir in [ws.join(".github/hooks"), ws.join(".vscode")] {
+        fs::create_dir_all(dir).unwrap();
+    }
+    fs::create_dir_all(home.guard().join("bin")).unwrap();
+    write(
+        &home.home().join(".copilot/config.json"),
+        r#"{"hooks": {"preToolUse": [{"command": "python existing-pre.py"}]}}"#,
+    );
+    let answer = ask(&home, "apply_install", apply_fields()).unwrap();
+    assert_eq!(answer["publish"]["ok"], json!(true), "{answer}");
+    assert!(home.guard().join("managed/adapter-state.key").is_file());
+    assert!(home.guard().join("bin/guard-copilot").is_file());
+    let config = fs::read_to_string(home.home().join(".copilot/config.json")).unwrap();
+    assert!(config.contains("bounded-hook-bridge"), "{config}");
+    assert!(config.contains("existing-pre.py"), "{config}");
+    assert!(ws.join(".github/hooks/hol-guard-copilot.json").is_file());
+    let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
+    assert_eq!(manifest["active"], json!(true));
+
+    let removed = ask(&home, "apply_uninstall", json!({})).unwrap();
+    let manifest: Value = serde_json::from_str(removed["manifest"].as_str().unwrap()).unwrap();
+    assert_eq!(manifest["active"], json!(false), "{removed}");
+    assert!(!home.guard().join("bin/guard-copilot").exists());
+    let config = fs::read_to_string(home.home().join(".copilot/config.json")).unwrap();
+    assert!(!config.contains("bounded-hook-bridge"), "{config}");
+    assert!(config.contains("existing-pre.py"), "{config}");
+}

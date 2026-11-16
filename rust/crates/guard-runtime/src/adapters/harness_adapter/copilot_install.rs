@@ -43,7 +43,9 @@ pub(super) fn dispatch(
             Some(reason) => transition_error(reason),
             None => prepare_install(spec, ctx, fields),
         },
-        "uninstall" => copilot_uninstall::uninstall(spec, ctx),
+        // The uninstall writes its restores under the locks, so the plan the
+        // generic `apply_uninstall` executes after the shims go is empty.
+        "prepare_uninstall" => copilot_uninstall::uninstall(spec, ctx),
         "finish_uninstall" => copilot_uninstall::finish_uninstall(ctx, fields),
         _ => Err(Failure::Invalid),
     }

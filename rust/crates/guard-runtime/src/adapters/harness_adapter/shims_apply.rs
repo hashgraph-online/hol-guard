@@ -77,7 +77,7 @@ fn answered(shims: Vec<Value>, profile: Value, publish: Value) -> Value {
 /// `TransitionFile.identity_dependency(path).payload()`: existing authority
 /// pinned by digest, never rewritten. `Err` carries the transition reason
 /// that refuses the plan before any write.
-fn identity_dependency(ctx: &Ctx, path: &str) -> Step<Result<Value, &'static str>> {
+pub(super) fn identity_dependency(ctx: &Ctx, path: &str) -> Step<Result<Value, &'static str>> {
     let path = ctx.absolute(std::path::Path::new(path));
     let data = match files::snapshot(ctx, &path) {
         Ok(Some(data)) => data,

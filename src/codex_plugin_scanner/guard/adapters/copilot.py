@@ -2,9 +2,9 @@
 
 The kind owns Copilot's paths, detection, the lifecycle locks and signed
 state, the bounded hook argv, which hook entries are Guard's, the MCP plan,
-the install file plan and the uninstall restores and rewrites. This module
-keeps what must run in the Guard process: the launcher environment, Guard's
-proxy argv for each server, the shim and the ``--help`` probe subprocess.
+the shim and the install and uninstall publishes (``apply_install`` and
+``apply_uninstall``). This module maps an unanswered hook op to the doctor
+error, prepares a rebind and runs the ``--help`` probe subprocess.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ _UNANSWERED = (
     "Run `hol-guard doctor copilot` and try again."
 )
 # Ops that read or rewrite Guard's hook entries; without the runtime none of them may touch a file.
-_HOOK_OPS = frozenset({"install_detection", "prepare_install", "uninstall"})
+_HOOK_OPS = frozenset({"install_detection", "prepare_install", "apply_install", "apply_uninstall"})
 
 
 class CopilotHookOwnershipError(RuntimeError):
@@ -52,8 +52,8 @@ class CopilotHarnessAdapter(NativeHarnessAdapter):
     def __init__(self) -> None:
         super().__init__(_HARNESS, (), "")
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
-        return self._prepared_install(context, create_key=True).publish(context.guard_home)
+    def _ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
+        return _ask(op, context, **fields)
 
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
         """Prepare a rebind using existing enrolled lifecycle authority; never create a key."""
@@ -85,14 +85,6 @@ class CopilotHarnessAdapter(NativeHarnessAdapter):
         prepared = PreparedHarnessInstall(tuple(unique.values()), json.loads(str(answer["manifest"])))
         RuntimeTransition._compare({"files": [change.payload() for change in prepared.files]}, "before")
         return prepared
-
-    def uninstall(self, context: HarnessContext) -> dict[str, object]:
-        from ..shims import remove_guard_shim
-
-        finish = _ask("uninstall", context)["finish"]
-        shim = remove_guard_shim(_HARNESS, context)
-        answer = _ask("finish_uninstall", context, shim=json.dumps(shim, default=str), finish=finish)
-        return json.loads(str(answer["manifest"]))
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
         return [str(part) for part in _ask("launch_command", context, args=passthrough_args)["argv"]]
