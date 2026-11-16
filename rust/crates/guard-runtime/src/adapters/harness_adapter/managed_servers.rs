@@ -226,6 +226,32 @@ pub(super) fn skipped(artifacts: &[Value]) -> Step<Vec<String>> {
         .collect()
 }
 
+/// The managed servers of the detected `artifacts` field, as the Codex
+/// install plan reads them: `[{name, source_scope, config_path, entry}]`
+/// with each entry as JSON text, then the managed and skipped names.
+pub(super) fn wired(
+    ctx: &Ctx,
+    fields: &Map<String, Value>,
+    proxy_command: &str,
+) -> Step<(Vec<Value>, Vec<String>, Vec<String>)> {
+    let artifacts = fields
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .ok_or(Failure::Invalid)?;
+    let mut servers = Vec::new();
+    let mut names = Vec::new();
+    for (name, scope, path, entry) in managed(ctx, artifacts, proxy_command)? {
+        servers.push(json!({
+            "name": name,
+            "source_scope": scope,
+            "config_path": path,
+            "entry": super::files::render(&entry)?,
+        }));
+        names.push(name);
+    }
+    Ok((servers, names, skipped(artifacts)?))
+}
+
 #[cfg(test)]
 #[path = "tests_managed_servers.rs"]
 mod tests;

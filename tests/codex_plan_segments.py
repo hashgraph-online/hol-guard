@@ -15,13 +15,12 @@ from typing import Any
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import (
-    CodexHarnessAdapter,
     _codex,
     _legacy_fields,
     _reply_text,
     _runtime_guard_home,
 )
-from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer
+from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer, proxy_launcher_entry
 from codex_plugin_scanner.guard.adapters.native_harness import planned_files
 from codex_plugin_scanner.guard.codex_config import _restore_native, _Wire
 from codex_plugin_scanner.guard.codex_hook_self_binding import install_fields, short_path_fields
@@ -82,8 +81,10 @@ def render_codex_managed_mcp(
     workspace_payload: dict[str, object],
 ) -> tuple[dict[str, object], tuple[str, ...]]:
     """Render proxy refresh and workspace precedence from captured payloads."""
-    adapter = CodexHarnessAdapter()
-    entries = [(server, adapter._proxy_server_entry(context, server)) for server in managed_servers]
+    entries = [
+        (server, proxy_launcher_entry(proxy_command="codex-mcp-proxy", context=context, server=server))
+        for server in managed_servers
+    ]
     wire = _Wire(payload, workspace_payload, *(entry for _server, entry in entries))
     fields: dict[str, object] = {
         "payload": wire.text(payload),

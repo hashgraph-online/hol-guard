@@ -55,7 +55,7 @@ from ..codex_hook_self_binding import (
 from ..codex_hook_trust import apply_codex_hook_trust_doctor
 from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
-from ..models import HarnessDetection
+from ..models import GuardArtifact, HarnessDetection
 from ..native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
 from ..native_path_anchor import anchor_to_process_directory
 from ..shims import shim_interpreter
@@ -66,12 +66,6 @@ from .codex_remote_control import (
     guarded_codex_launch_command,
     guarded_codex_launch_command_candidates,
     guarded_codex_launch_command_from_prefix,
-)
-from .mcp_servers import (
-    ManagedMcpServer,
-    managed_stdio_servers,
-    proxy_launcher_entry,
-    skipped_stdio_server_names,
 )
 from .native_harness import NativeHarnessAdapter, ask
 
@@ -366,13 +360,14 @@ def _ask_install_plan(
     return answer
 
 
-def _plan_report(
-    answer: Mapping[str, Any], detection: Any, managed_servers: Any
-) -> tuple[dict[str, Any], dict[str, object]]:
+def _plan_report(answer: Mapping[str, Any], detection: HarnessDetection) -> tuple[dict[str, Any], dict[str, object]]:
     """The launcher manifest and the reported fields of a planned install."""
     fields = {
         "backup_path": str(answer["backup_path"]),
-        **_server_fields(detection, managed_servers, [str(name) for name in answer["migrated"]]),
+        "managed": [str(name) for name in answer["managed_servers"]],
+        "migrated": [str(name) for name in answer["migrated"]],
+        "skipped": [str(name) for name in answer["skipped_servers"]],
+        "source_config_paths": list(detection.config_paths),
     }
     return json.loads(str(answer["shim_manifest"])), fields
 
@@ -458,15 +453,9 @@ def _install_manifest(
     return json.loads(_reply_text(answer, "manifest"))
 
 
-def _server_fields(
-    detection: HarnessDetection, managed_servers: Sequence[ManagedMcpServer], migrated: Sequence[str]
-) -> dict[str, object]:
-    return {
-        "managed": [server.name for server in managed_servers],
-        "migrated": list(migrated),
-        "skipped": list(skipped_stdio_server_names(detection)),
-        "source_config_paths": list(detection.config_paths),
-    }
+def _wire_artifact(artifact: GuardArtifact) -> dict[str, object]:
+    """A detected MCP server as the runtime reads it, private launch metadata included."""
+    return {**artifact.to_dict(), "runtime_private_metadata": dict(artifact.runtime_private_metadata)}
 
 
 class CodexHarnessAdapter(NativeHarnessAdapter):
@@ -605,14 +594,15 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         """The whole install as one plan. ``enroll`` may create the hook key and
         checks every active handler's owner, as an ordinary install does; the
         runtime's ``install_plan`` op composes it."""
-        request, detection, managed_servers = self._plan_request(context, enroll=enroll)
+        request, detection = self._plan_request(context, enroll=enroll)
         enroll_home = _hook_manifest_spec(context).guard_home if enroll else None
         answer = _ask_install_plan(context, request, enroll_home)
-        return self._planned(context, answer, detection, managed_servers)
+        return self._planned(context, answer, detection)
 
-    def _plan_request(self, context: HarnessContext, *, enroll: bool) -> tuple[dict[str, Any], Any, Any]:
+    def _plan_request(self, context: HarnessContext, *, enroll: bool) -> tuple[dict[str, Any], HarnessDetection]:
         """The ``install_plan`` request over freshly captured sources, with the
-        detection and managed servers the prepared manifest reports."""
+        detection the prepared manifest reports. The runtime chooses the
+        managed servers and their proxy launches from the detected artifacts."""
         from ..codex_hook_recovery import _snapshot
 
         spec = _hook_manifest_spec(context)
@@ -620,7 +610,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         pairs = self._config_hook_pairs(context)
         contents = {path: _snapshot(path) for pair in pairs for path in pair}
         detection = self.detect(context, config_contents=contents)
-        managed_servers = managed_stdio_servers(detection)
         registration = _hook_registration(context)
         workspace = context.workspace_dir / ".codex/config.toml" if context.workspace_dir is not None else None
         generation = generation_request(spec, previous_manifest=previous_manifest, create_key=enroll)
@@ -634,14 +623,8 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             "owned": json.dumps(_manifest_bindings(previous_manifest), separators=(",", ":")),
             "managed": registration.groups,
             "require_owners": enroll,
-            "servers": [
-                {
-                    "name": server.name,
-                    "source_scope": server.source_scope,
-                    "config_path": str(Path(server.config_path)),
-                    "entry": json.dumps(self._proxy_server_entry(context, server)),
-                }
-                for server in managed_servers
+            "artifacts": [
+                _wire_artifact(artifact) for artifact in detection.artifacts if artifact.artifact_type == "mcp_server"
             ],
             "generation": {
                 "home": os.path.abspath(spec.guard_home),
@@ -652,10 +635,10 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             **install_fields(_runtime_guard_home(context), None),
             **short_path_fields(),
         }
-        return request, detection, managed_servers
+        return request, detection
 
     def _planned(
-        self, context: HarnessContext, answer: Mapping[str, Any], detection: Any, managed_servers: Any
+        self, context: HarnessContext, answer: Mapping[str, Any], detection: HarnessDetection
     ) -> _CodexInstallPlan:
         """The prepared install an ``install_plan`` answer describes."""
         files = tuple(_plan_file(item) for item in answer["files"])
@@ -669,7 +652,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             authority,
             receipt_change,
         )
-        shim_manifest, fields = _plan_report(answer, detection, managed_servers)
+        shim_manifest, fields = _plan_report(answer, detection)
         prepared = PreparedHarnessInstall(
             files,
             _install_manifest(
@@ -709,7 +692,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             raise RuntimeError("Codex hook authentication currently requires one canonical global config target.")
         # A source that is not a readable regular file refuses before the journal opens.
         _check_sources(context, self._config_hook_pairs(context))
-        request, detection, managed_servers = self._plan_request(context, enroll=True)
+        request, detection = self._plan_request(context, enroll=True)
         request.update(
             home=os.path.abspath(context.guard_home),
             config=os.path.abspath(spec.config_path.expanduser()),
@@ -717,7 +700,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             budget_spent=False,
         )
         answer = _ask_install_plan(context, request, spec.guard_home, op="install")
-        shim_manifest, fields = _plan_report(answer["plan"], detection, managed_servers)
+        shim_manifest, fields = _plan_report(answer["plan"], detection)
         hook_state = json.loads(_reply_text(answer, "state"))
         if not isinstance(hook_state, dict):
             raise TransitionError("native_transition_invalid")
@@ -801,10 +784,3 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
     @staticmethod
     def _backup_path(context: HarnessContext) -> Path:
         return Path(str(_codex("backup_path", context)["path"]))
-
-    def _proxy_server_entry(self, context: HarnessContext, server: ManagedMcpServer) -> dict[str, object]:
-        return proxy_launcher_entry(
-            proxy_command="codex-mcp-proxy",
-            context=context,
-            server=server,
-        )

@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 
 use super::super::Ctx;
-use super::{managed, select_request, skipped};
+use super::{managed, select_request, skipped, wired};
 use crate::pyjson::PyVal;
 
 fn ctx() -> Ctx {
@@ -97,4 +97,22 @@ fn no_server_artifacts_manage_and_skip_nothing() {
         .unwrap()
         .is_empty());
     assert!(skipped(&artifacts).unwrap().is_empty());
+}
+
+#[test]
+fn the_codex_plan_reads_managed_servers_from_the_detected_artifacts() {
+    let mut fields = serde_json::Map::new();
+    fields.insert(
+        "artifacts".into(),
+        json!([server("lab", json!("node")), server("broken", Value::Null)]),
+    );
+    let (servers, managed, skipped) = wired(&ctx(), &fields, "codex-mcp-proxy").unwrap();
+    assert_eq!(managed, vec!["lab".to_owned()]);
+    assert_eq!(skipped, vec!["broken".to_owned()]);
+    assert_eq!(servers.len(), 1);
+    assert_eq!(servers[0]["name"], json!("lab"));
+    assert_eq!(servers[0]["source_scope"], json!("global"));
+    let entry: Value = serde_json::from_str(servers[0]["entry"].as_str().unwrap()).unwrap();
+    assert_eq!(entry["command"], json!("/py/bin/python"));
+    assert!(wired(&ctx(), &serde_json::Map::new(), "codex-mcp-proxy").is_err());
 }
