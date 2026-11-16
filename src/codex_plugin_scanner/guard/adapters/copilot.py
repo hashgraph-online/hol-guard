@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..native_runner_authority import NativeRunnerAuthorityError
-from .base import HarnessContext, PreparedHarnessInstall, _run_command_probe
+from .base import HarnessContext, PreparedHarnessInstall
 from .native_harness import NativeHarnessAdapter, ask, planned_files
 
 if TYPE_CHECKING:
@@ -91,10 +91,6 @@ class CopilotHarnessAdapter(NativeHarnessAdapter):
 
     def preview_launch_commands(self, context: HarnessContext, passthrough_args: list[str]) -> tuple[list[str], ...]:
         return (self.launch_command(context, passthrough_args),)
-
-    def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        argv = _ask("runtime_probe", context)["argv"]
-        return None if argv is None else _run_command_probe([str(part) for part in argv])
 
 
 __all__ = ["CopilotHarnessAdapter", "CopilotHookOwnershipError"]

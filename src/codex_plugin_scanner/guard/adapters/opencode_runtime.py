@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
-from .base import HarnessContext, PreparedHarnessInstall, _run_command_probe
+from .base import HarnessContext, PreparedHarnessInstall
 from .native_harness import NativeHarnessAdapter, ask
 
 if TYPE_CHECKING:
@@ -132,12 +132,6 @@ class OpenCodeHarnessAdapter(NativeHarnessAdapter):
         if not isinstance(argv, str) or not isinstance(count, int) or len(command := argv.split("\0")) != count:
             raise NativeRunnerAuthorityError("native_opencode_launch_invalid")
         return command
-
-    def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        commands = self._ask("runtime_probe", context).get("commands")
-        if not isinstance(commands, list):
-            return None
-        return {str(name): _run_command_probe([str(part) for part in argv]) for name, argv in commands}
 
 
 __all__ = [

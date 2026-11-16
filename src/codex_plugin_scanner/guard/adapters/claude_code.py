@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from ..shims import prepare_guard_shim
-from .base import HarnessContext, PreparedHarnessInstall, _owned_adapter_mutation, _run_command_probe, _shell_command
+from .base import HarnessContext, PreparedHarnessInstall, _owned_adapter_mutation, _shell_command
 from .native_harness import NativeHarnessAdapter, ask, planned_files
 
 _HARNESS = "claude-code"
@@ -170,12 +170,6 @@ class ClaudeCodeHarnessAdapter(NativeHarnessAdapter):
         settings_path = Path(answer["path"])
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(text, encoding="utf-8")
-
-    def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        resolved_executable = self.resolved_executable(context)
-        if resolved_executable is None:
-            return None
-        return _run_command_probe([resolved_executable, "--help"], timeout_seconds=5)
 
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
         shim = prepare_guard_shim(self.harness, context, **self._shim_names())

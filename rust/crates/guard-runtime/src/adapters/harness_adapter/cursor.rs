@@ -4,8 +4,7 @@
 //!
 //! Python keeps what only the Guard process knows and answers it when an op
 //! replies `{"reply": {...}}` with one key: `facts` (the attested Guard CLI,
-//! the native hook bridge and the interpreters), `probe` (whether `cursor
-//! agent --help` runs), `expand` (8.3 short names), `render` (Windows hook
+//! the native hook bridge and the interpreters), `expand` (8.3 short names), `render` (Windows hook
 //! command lines) and `relaunch` (Guard's proxy argv). It merges each answer
 //! into the request and asks again. The servers Guard manages are chosen here
 //! from the detection.
@@ -140,6 +139,32 @@ impl CliEntry {
     }
 }
 
+/// `_cursor_agent_subcommand_available`: whether `cursor agent --help` runs.
+/// Like the `lru_cache` it replaces, one answer per path is kept, a few
+/// paths at most.
+fn agent_subcommand_available(ctx: &Ctx, cursor: &str) -> bool {
+    static SEEN: std::sync::Mutex<Vec<(String, bool)>> = std::sync::Mutex::new(Vec::new());
+    const KEPT: usize = 8;
+    if let Ok(seen) = SEEN.lock() {
+        if let Some((_, available)) = seen.iter().find(|(path, _)| path == cursor) {
+            return *available;
+        }
+    }
+    let argv = [cursor.to_owned(), "agent".into(), "--help".into()];
+    let record = super::probe_run::command(ctx, &argv, super::probe_run::DEFAULT_TIMEOUT);
+    let available = super::probe_run::succeeded(&record);
+    // A skipped probe answers nothing about the CLI, so it is not kept.
+    if record.get("skipped").is_none() {
+        if let Ok(mut seen) = SEEN.lock() {
+            if seen.len() >= KEPT {
+                seen.remove(0);
+            }
+            seen.push((cursor.to_owned(), available));
+        }
+    }
+    available
+}
+
 /// `resolve_cursor_cli_entry`.
 pub(super) fn cli_entry(ask: &Ask) -> Step<Option<CliEntry>> {
     if let Some(executable) = which::which(ask.ctx, "cursor-agent") {
@@ -151,15 +176,15 @@ pub(super) fn cli_entry(ask: &Ask) -> Step<Option<CliEntry>> {
     let Some(cursor) = which::which(ask.ctx, "cursor") else {
         return Ok(None);
     };
-    match ask.fields.get("cursor_probe") {
-        None => Err(Ask::reply("probe", json!(cursor))),
-        Some(Value::Bool(true)) => Ok(Some(CliEntry {
-            executable: cursor,
-            subcommand: true,
-        })),
-        Some(Value::Bool(false)) => Ok(None),
-        Some(_) => Err(Failure::Invalid),
-    }
+    let available = match ask.fields.get("cursor_probe") {
+        None => agent_subcommand_available(ask.ctx, &cursor),
+        Some(Value::Bool(available)) => *available,
+        Some(_) => return Err(Failure::Invalid),
+    };
+    Ok(available.then_some(CliEntry {
+        executable: cursor,
+        subcommand: true,
+    }))
 }
 
 /// `cursor_cli_command_available`.

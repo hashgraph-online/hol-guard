@@ -15,52 +15,26 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from .base import HarnessContext, PreparedHarnessInstall, _run_command_probe
+from .base import HarnessContext, PreparedHarnessInstall
 from .native_harness import NativeHarnessAdapter, ask, detection_from, planned_files
 
 _HARNESS = "cursor"
-# Each reply names something new, so an op settles within a handful of rounds.
-_REPLY_LIMIT = 32
 _AGENT_SHIM = {"launcher_name": "cursor-agent", "display_name": "Cursor CLI (cursor-agent)"}
 _CURSOR_SHIM = {"launcher_name": "cursor", "display_name": "Cursor CLI (cursor agent)"}
-
-
-@lru_cache(maxsize=8)
-def _cursor_agent_subcommand_available(cursor_path: str) -> bool:
-    probe = _run_command_probe([cursor_path, "agent", "--help"], timeout_seconds=5)
-    return probe.get("ok") is True or probe.get("return_code") == 0
 
 
 def _dumps(value: object) -> str:
     return json.dumps(value, default=str)
 
 
-def _answer(key: str, value: Any, fields: dict[str, Any]) -> None:
-    """Merge this process's answer to one reply into the request."""
-    if key == "probe":
-        fields["cursor_probe"] = _cursor_agent_subcommand_available(str(value))
-    else:
-        raise ValueError("Cursor adapter reply is malformed")
-
-
 def _cursor_ask(
     op: str, context: HarnessContext, *, timeout_seconds: float | None = None, **fields: Any
 ) -> dict[str, Any]:
-    """Run one op, answering each reply until it settles."""
-    for _ in range(_REPLY_LIMIT):
-        answer = ask(op, context, harness=_HARNESS, timeout_seconds=timeout_seconds, **fields)
-        reply = answer.get("reply")
-        if set(answer) != {"reply"}:
-            return answer
-        if not isinstance(reply, dict) or len(reply) != 1:
-            raise ValueError("Cursor adapter reply is malformed")
-        ((key, value),) = reply.items()
-        _answer(key, value, fields)
-    raise RuntimeError("Cursor adapter request did not settle")
+    """Run one op; the native runtime probes the Cursor CLI itself."""
+    return ask(op, context, harness=_HARNESS, timeout_seconds=timeout_seconds, **fields)
 
 
 def _prepared(answer: dict[str, Any]) -> PreparedHarnessInstall:
@@ -195,16 +169,6 @@ class CursorHarnessAdapter(NativeHarnessAdapter):
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
         return [str(part) for part in self._ask("launch_command", context, args=passthrough_args)["argv"]]
-
-    def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        argv = self._ask("runtime_probe", context)["argv"]
-        if argv is None:
-            return None
-        payload = _run_command_probe([str(part) for part in argv])
-        payload["reported_artifacts"] = self._ask("runtime_probe", context, stdout=payload.get("stdout"))[
-            "reported_artifacts"
-        ]
-        return payload
 
     def _surface(self, context: HarnessContext, surface: str) -> str:
         return str(self._ask("surface", context, surface=surface)["surface"])

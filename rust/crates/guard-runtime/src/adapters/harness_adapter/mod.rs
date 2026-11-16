@@ -117,6 +117,7 @@ mod paseo_install;
 mod paseo_paths;
 mod pi;
 mod pi_extension;
+mod probe_run;
 mod proof;
 mod proxy_launch;
 mod settings_hooks;
@@ -151,6 +152,8 @@ pub(crate) struct Ctx {
     pub(crate) env: BTreeMap<String, String>,
     pub(crate) executable_overrides: BTreeMap<String, String>,
     pub(crate) windows: bool,
+    /// Whether CLI probes may run; the passive global doctor turns them off.
+    pub(crate) probes: bool,
     /// `native_caller.caller_identity()`: the Guard process that asked.
     pub(crate) caller: Map<String, Value>,
 }
@@ -191,6 +194,10 @@ impl Ctx {
             env: strings("env")?,
             executable_overrides: strings("executable_overrides")?,
             windows: cfg!(windows),
+            probes: match map.get("probes") {
+                None => true,
+                Some(value) => value.as_bool().ok_or(ERR_INVALID)?,
+            },
             caller: match map.get("caller") {
                 None | Some(Value::Null) => Map::new(),
                 Some(Value::Object(caller)) => caller.clone(),
@@ -336,6 +343,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     }
     if op == "apply_plan" {
         return answer(shims_apply::apply_plan(spec, &ctx, fields));
+    }
+    if op == "probe_runtime" {
+        return answer(probe_run::runtime(spec, &ctx, fields));
     }
     answer(if op == "default_launch" {
         default_launch(spec, &ctx, fields)

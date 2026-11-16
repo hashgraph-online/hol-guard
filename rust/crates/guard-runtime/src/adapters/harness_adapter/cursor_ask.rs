@@ -51,10 +51,6 @@ pub(super) struct Ask<'a> {
 }
 
 impl Ask<'_> {
-    pub(super) fn reply(key: &str, value: Value) -> Failure {
-        Failure::Reply(json!({ key: value }))
-    }
-
     /// The attested Guard CLI, the isolated hook interpreter and the frozen
     /// recovery command (`_facts`), with the native hook bridge.
     pub(super) fn facts(&self) -> Step<Facts> {

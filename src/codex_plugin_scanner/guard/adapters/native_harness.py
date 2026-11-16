@@ -22,9 +22,12 @@ from typing import Any
 
 from ..models import HarnessDetection
 from ..native_caller import caller_identity
-from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _run_command_probe
+from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall
+from .diagnostic_probes import command_probes_enabled
 
 _KIND = "harness_adapter"
+# Room for every CLI probe one harness runs, each bounded at five seconds.
+_PROBE_RUNTIME_TIMEOUT_SECONDS = 60.0
 
 #: ``(harness, aliases, launcher_name)`` in registry order. The runtime's
 #: ``describe`` answer carries the same identity; a test keeps them in step,
@@ -109,6 +112,7 @@ def wire_context(context: HarnessContext) -> dict[str, object]:
         "env": _environment(),
         "executable_overrides": dict(getattr(context, "executable_overrides", {}) or {}),
         "caller": caller_identity(),
+        "probes": command_probes_enabled(),
     }
 
 
@@ -238,15 +242,9 @@ class NativeHarnessAdapter(HarnessAdapter):
         return {str(key): str(value) for key, value in environment.items()} if isinstance(environment, dict) else {}
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        if not self._spec.get("dynamic"):
-            return None
-        answer = self._ask("runtime_probe", context)
-        probe = answer.get("probe")
-        if not isinstance(probe, dict):
-            return None
-        argv = answer.get("command_argv")
-        command = _run_command_probe([str(part) for part in argv]) if isinstance(argv, list) else None
-        return {"command": command, **probe}
+        # The native runtime runs every CLI probe the harness names.
+        probe = self._ask("probe_runtime", context, timeout_seconds=_PROBE_RUNTIME_TIMEOUT_SECONDS)["probe"]
+        return probe if isinstance(probe, dict) else None
 
     def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
         if not self._spec.get("dynamic"):

@@ -132,10 +132,6 @@ class ClineHarnessAdapter(NativeHarnessAdapter):
             manifest["shim"] = remove_guard_shim(_HARNESS, context, launcher_name="cline", display_name=_DISPLAY_NAME)
         return manifest
 
-    def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        cli = self._cli(context)
-        return ask("runtime_probe", context, harness=_HARNESS, timeout_seconds=_PROBE_TIMEOUT_SECONDS, cli=cli)["probe"]
-
     def diagnostic_warnings(
         self,
         detection: HarnessDetection,

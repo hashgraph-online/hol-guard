@@ -35,6 +35,8 @@ mod mcp_servers_family;
 mod opencode_family;
 #[path = "tests_pi.rs"]
 mod pi_family;
+#[path = "tests_probe_run.rs"]
+mod probe_run_family;
 #[path = "tests_shims.rs"]
 mod shim_family;
 #[path = "tests_shims_apply.rs"]

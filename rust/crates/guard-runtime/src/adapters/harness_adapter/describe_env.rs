@@ -1,7 +1,7 @@
 //! The request environment the adapters this kind owns may read.
 
 /// Every variable a request's `env` may carry.
-pub(crate) const ENV_NAMES: [&str; 49] = [
+pub(crate) const ENV_NAMES: [&str; 50] = [
     "PATH",
     "PATHEXT",
     "NoDefaultCurrentDirectoryInExePath",
@@ -38,6 +38,8 @@ pub(crate) const ENV_NAMES: [&str; 49] = [
     "HOME",
     "USERPROFILE",
     "LANG",
+    // The locale a harness CLI probe runs with (`_PROBE_ENV_KEYS`).
+    "LC_ALL",
     "TEMP",
     "TMP",
     "TMPDIR",

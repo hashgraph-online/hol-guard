@@ -20,6 +20,12 @@ def without_command_probes() -> Iterator[None]:
         _COMMAND_PROBES_ENABLED.reset(token)
 
 
+def command_probes_enabled() -> bool:
+    """Whether this caller lets a harness CLI probe run."""
+
+    return _COMMAND_PROBES_ENABLED.get()
+
+
 def skipped_command_probe(command: list[str]) -> dict[str, object] | None:
     if _COMMAND_PROBES_ENABLED.get():
         return None
