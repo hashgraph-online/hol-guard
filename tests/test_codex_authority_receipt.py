@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import pytest
+import tomllib
 
 from codex_plugin_scanner.guard import codex_hook_integrity as integrity
 from codex_plugin_scanner.guard import codex_hook_manifest as manifests
@@ -150,6 +151,11 @@ def test_missing_manifest_repair_preparation_pins_authority_without_publication(
 ):
     context, config, manifest = installed
     expected = manifest.read_bytes()
+    # Install reads its live hook state in the runtime, so nothing has asked
+    # this Guard home's resident to verify a manifest yet. Verify once before
+    # the snapshot so the resident's own store is not counted as a write.
+    hooks = tomllib.loads(config.read_text(encoding="utf-8")).get("hooks")
+    manifests.verify_live_hook_manifest(adapter._hook_manifest_spec(context), hooks=hooks)
     manifest.unlink()
     before = _tree(tmp_path)
     prepared = manifests.prepare_authenticated_hook_manifest_repair(adapter._hook_manifest_spec(context))

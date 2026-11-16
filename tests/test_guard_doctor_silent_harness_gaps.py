@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from unittest import mock
 
 import pytest
+import tomli_w
 
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import _codex
+from codex_plugin_scanner.guard.adapters.codex import codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_trust import (
     CODEX_HOOK_TRUST_WARNING,
     apply_codex_hook_trust_doctor,
@@ -72,27 +72,20 @@ def _payload(trusted: str | None, config_path: Path) -> dict[str, object]:
 
 
 def stale_guard_hook_coordinates(payload: dict[str, object], config_path: Path) -> bool:
-    """Whether the native Codex hook state reads Guard's hooks as untrusted."""
+    """Whether the live Codex hook state reads Guard's hooks as untrusted.
 
-    home = config_path.parent
+    ``config_path`` is ``<home>/.codex/config.toml``, the one config Codex reads.
+    """
+
+    home = config_path.parent.parent
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(tomli_w.dumps({"hooks": payload["hooks"]}), encoding="utf-8")
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=home / "guard-home")
-    read = {"features": None, "toml_hooks": payload.get("hooks"), "json_hooks": None}
-    answer = _codex(
-        "hook_state",
-        context,
-        read=json.dumps(read),
-        integrity="{}",
-        tokens={},
-        config_path=str(config_path),
-        hooks_path=str(home / "hooks.json"),
-        windows=False,
-        long_paths={},
-    )
-    return json.loads(answer["state"])["hook_trust_stale"]
+    return bool(codex_native_hook_state(context)["hook_trust_stale"])
 
 
 def test_stale_trust_detection(tmp_path: Path) -> None:
-    config = tmp_path / "config.toml"
+    config = tmp_path / ".codex" / "config.toml"
     handler = {"type": "command", "command": GUARD_COMMAND, "timeout": 30}
     good = codex_command_hook_hash("PreToolUse", "Bash", handler)
     assert not stale_guard_hook_coordinates(_payload(good, config), config)
@@ -101,13 +94,13 @@ def test_stale_trust_detection(tmp_path: Path) -> None:
 
 
 def test_stale_trust_ignores_foreign_hooks(tmp_path: Path) -> None:
-    config = tmp_path / "config.toml"
+    config = tmp_path / ".codex" / "config.toml"
     payload = {"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "/usr/bin/other-tool"}]}]}}
     assert not stale_guard_hook_coordinates(payload, config)
 
 
 def test_stale_trust_skips_disabled_handlers(tmp_path: Path) -> None:
-    config = tmp_path / "config.toml"
+    config = tmp_path / ".codex" / "config.toml"
     handler = {"type": "command", "command": GUARD_COMMAND, "timeout": 30}
     disabled_group = {"hooks": {"PreToolUse": [{"matcher": "Bash", "enabled": False, "hooks": [handler]}]}}
     disabled_handler = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{**handler, "disabled": True}]}]}}
@@ -120,8 +113,8 @@ def test_stale_trust_skips_disabled_handlers(tmp_path: Path) -> None:
 def test_stale_trust_accepts_canonical_config_path(tmp_path: Path) -> None:
     real = tmp_path / "real"
     real.mkdir()
-    (tmp_path / "link").symlink_to(real)
-    config = tmp_path / "link" / "config.toml"
+    (tmp_path / ".codex").symlink_to(real)
+    config = tmp_path / ".codex" / "config.toml"
     handler = {"type": "command", "command": GUARD_COMMAND, "timeout": 30}
     good = codex_command_hook_hash("PreToolUse", "Bash", handler)
     payload = _payload(None, config)

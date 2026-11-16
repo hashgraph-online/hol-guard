@@ -21,6 +21,8 @@ from codex_plugin_scanner.guard.consumer.service import (
     diff_artifact,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from tests import codex_publication_steps
+from tests.codex_publication_steps import use_stepwise_publication
 from tests.transition_fault_support import interrupt_publication_at
 
 
@@ -322,7 +324,8 @@ def test_readback_failure_preserves_original_toml_and_legacy_json(
     def _fail_readback(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("injected canonical readback failure")
 
-    monkeypatch.setattr(codex_adapter, "_require_hook_semantics_readback", _fail_readback)
+    use_stepwise_publication(monkeypatch)
+    monkeypatch.setattr(codex_publication_steps, "readback", _fail_readback)
 
     with pytest.raises(RuntimeError, match="injected canonical readback failure"):
         codex_adapter.CodexHarnessAdapter().install(
@@ -378,21 +381,3 @@ def test_partial_unlink_failure_restores_every_legacy_source_and_keeps_toml_back
         original_workspace_config,
     }
     print("H4 pass stage=legacy_json_removal config_restored=true manifest_absent=true key_absent=true")
-
-
-def test_hook_comparisons_ignore_settings_too_large_to_send(tmp_path: Path) -> None:
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
-    unrelated = {"notes": "x" * (5 * 1024 * 1024), "features": {"hooks": True, "other": "y" * 1024}}
-    expected = {**unrelated, "hooks": {"PreToolUse": [_group()]}}
-    actual = {"hooks": {"PreToolUse": [_group()]}, **unrelated}
-    source = tmp_path / "config.toml"
-
-    codex_adapter._require_hook_semantics_readback(
-        expected, actual, source_scope="global", source_path=source, context=context
-    )
-
-    changed = {**unrelated, "hooks": {"PreToolUse": [_group("python3 other.py")]}}
-    with pytest.raises(Exception, match="codex_hook_migration_readback_mismatch"):
-        codex_adapter._require_hook_semantics_readback(
-            expected, changed, source_scope="global", source_path=source, context=context
-        )

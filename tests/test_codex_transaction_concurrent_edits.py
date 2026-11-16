@@ -13,6 +13,8 @@ from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path, hook_secret_path
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
+from tests import codex_publication_steps as publication_steps
+from tests.codex_publication_steps import use_stepwise_publication
 from tests.transition_fault_support import interrupt_publication_at
 
 
@@ -80,21 +82,22 @@ def test_deleted_config_after_publish_preserves_pending_manifest_and_secret(
     config_path = adapter._hook_config_path(context)
     manifest_path = hook_manifest_path(context.guard_home, config_path)
     secret_path = hook_secret_path(context.guard_home)
-    original_readback = adapter_module._strict_toml_object
+    use_stepwise_publication(monkeypatch)
+    original_readback = publication_steps.readback
     injected = False
     pending_participants: dict[Path, bytes] = {}
 
-    def deleting_readback(path: Path, *, label: str) -> dict[str, object]:
+    def deleting_readback(readback_context: HarnessContext) -> dict[str, object]:
         nonlocal injected
-        if path == config_path and label == "rendered Codex config file" and not injected:
+        if not injected:
             injected = True
             pending_participants[manifest_path] = manifest_path.read_bytes()
             pending_participants[secret_path] = secret_path.read_bytes()
-            path.unlink()
+            config_path.unlink()
             raise OSError("injected readback failure after a competing deletion")
-        return original_readback(path, label=label)
+        return original_readback(readback_context)
 
-    monkeypatch.setattr(adapter_module, "_strict_toml_object", deleting_readback)
+    monkeypatch.setattr(publication_steps, "readback", deleting_readback)
     with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
         adapter.install(context)
 
@@ -183,22 +186,20 @@ def test_matching_replacement_after_completed_write_is_preserved(
     if existing_installation:
         adapter.install(context)
     config_path = adapter._hook_config_path(context)
-    original_readback = adapter_module._strict_toml_object
+    use_stepwise_publication(monkeypatch)
     replacement: bytes | None = None
     replacement_identity = None
 
-    def replaced_readback(path: Path, *, label: str):
+    def replaced_readback(_context: HarnessContext) -> dict[str, object]:
         nonlocal replacement, replacement_identity
-        if path == config_path and label == "rendered Codex config file":
-            replacement = path.read_bytes()
-            previous_identity = path.stat().st_ino
-            adapter_module.atomic_write_text(path, replacement.decode("utf-8"), mode=0o600)
-            replacement_identity = path.stat().st_ino
-            assert replacement_identity != previous_identity
-            raise OSError("injected readback failure after a matching external replacement")
-        return original_readback(path, label=label)
+        replacement = config_path.read_bytes()
+        previous_identity = config_path.stat().st_ino
+        adapter_module.atomic_write_text(config_path, replacement.decode("utf-8"), mode=0o600)
+        replacement_identity = config_path.stat().st_ino
+        assert replacement_identity != previous_identity
+        raise OSError("injected readback failure after a matching external replacement")
 
-    monkeypatch.setattr(adapter_module, "_strict_toml_object", replaced_readback)
+    monkeypatch.setattr(publication_steps, "readback", replaced_readback)
     with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
         adapter.install(context)
     assert replacement is not None

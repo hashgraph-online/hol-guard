@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_integrity, codex_hook_recovery
-from codex_plugin_scanner.guard.adapters import codex
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter, codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
@@ -21,8 +20,10 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
     restore_private_file,
 )
 from codex_plugin_scanner.guard.codex_hook_recovery import recover_hook_publication
+from codex_plugin_scanner.guard.codex_hook_rollback import rollback_file_identity
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
+from tests.codex_publication_steps import use_stepwise_publication
 from tests.transition_fault_support import STEPWISE_PUBLICATION
 
 CRASHING_INSTALLER = (
@@ -37,6 +38,7 @@ phase = sys.argv[2]
 context = HarnessContext(home_dir=home, guard_home=home / ".hol-guard", workspace_dir=None)
 if phase == "commit_cleanup":
     from codex_plugin_scanner.guard import codex_hook_recovery
+    _stepwise_publication()
     codex_hook_recovery._remove_record = lambda *_: os._exit(17)
     codex.CodexHarnessAdapter().install(context)
     raise RuntimeError("commit cleanup was not reached")
@@ -51,7 +53,8 @@ if phase == "manifest":
     RuntimeTransition._write_file = staticmethod(crash_after_manifest)
 else:
     from codex_plugin_scanner.guard import codex_hook_recovery
-    owner = codex_hook_recovery if phase == "config" else codex
+    _stepwise_publication()
+    owner = codex_hook_recovery
     name = {"prepared": "prepare_hook_publication", "config": "record_owned_hook_config_publication",
             "committed": "commit_hook_publication"}[phase]
     original = getattr(owner, name)
@@ -382,7 +385,7 @@ def test_new_owner_cannot_register_a_previous_publishers_config_inode(installed)
     crash(context, "config")
     record = context.guard_home / "managed/codex/pending-hook-publication.json"
     before = record.read_bytes()
-    identity = codex.rollback_file_identity(config)
+    identity = rollback_file_identity(config)
     assert identity is not None
     with codex_install_transaction(context.guard_home, config, actor="foreign-publication-owner"):
         with pytest.raises(CodexHookIntegrityError) as failure:
@@ -454,13 +457,14 @@ def test_next_install_recovers_before_loading_manifest_baseline(installed):
 def test_preparation_failure_after_durable_write_uses_authenticated_inverse(installed, monkeypatch: pytest.MonkeyPatch):
     context, config, manifest = installed
     before = config.read_bytes(), manifest.read_bytes()
-    original_prepare = codex.prepare_hook_publication
+    original_prepare = codex_hook_recovery.prepare_hook_publication
 
     def prepared_then_failed(*args, **kwargs):
         original_prepare(*args, **kwargs)
         raise OSError("injected preparation completion failure")
 
-    monkeypatch.setattr(codex, "prepare_hook_publication", prepared_then_failed)
+    use_stepwise_publication(monkeypatch)
+    monkeypatch.setattr(codex_hook_recovery, "prepare_hook_publication", prepared_then_failed)
     with pytest.raises(OSError, match="completion failure"):
         CodexHarnessAdapter().install(context)
     assert (config.read_bytes(), manifest.read_bytes()) == before
@@ -479,14 +483,15 @@ def test_recovery_without_ownership_cannot_read_or_create_state(tmp_path: Path):
 def test_foreign_edit_during_preparation_is_preserved(installed, monkeypatch: pytest.MonkeyPatch):
     context, config, manifest = installed
     before_manifest = manifest.read_bytes()
-    original_prepare = codex.prepare_hook_publication
+    original_prepare = codex_hook_recovery.prepare_hook_publication
     edited_config = config.read_bytes() + b"\n# edit while install is preparing\n"
 
     def prepare_after_edit(*args, **kwargs):
         config.write_bytes(edited_config)
         return original_prepare(*args, **kwargs)
 
-    monkeypatch.setattr(codex, "prepare_hook_publication", prepare_after_edit)
+    use_stepwise_publication(monkeypatch)
+    monkeypatch.setattr(codex_hook_recovery, "prepare_hook_publication", prepare_after_edit)
     with pytest.raises(CodexHookIntegrityError) as failure:
         CodexHarnessAdapter().install(context)
     assert failure.value.reason == "codex_hook_recovery_generation_changed"

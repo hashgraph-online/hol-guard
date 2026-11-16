@@ -45,22 +45,18 @@ from ..codex_hook_manifest import (
     manifest_bindings as _manifest_bindings,
 )
 from ..codex_hook_recovery import (
-    commit_hook_publication,
-    prepare_hook_publication,
     recover_hook_publication,
 )
 from ..codex_hook_registration import (
     codex_doctor_result,
     legacy_binding_fields,
 )
-from ..codex_hook_rollback import rollback_file_identity
 from ..codex_hook_self_binding import (
     install_fields,
     settle_short_paths,
     short_path_fields,
 )
 from ..codex_hook_sources import parse_toml_object
-from ..codex_hook_sources import strict_toml_object as _strict_toml_object
 from ..codex_hook_trust import apply_codex_hook_trust_doctor
 from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
@@ -109,6 +105,8 @@ _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON = "codex_authoritative_hook_unavailable"
 _LIVE_STATE_TIMEOUT_SECONDS = 10.0
 # A spent budget still needs the runtime to read the files and decide.
 _LIVE_STATE_MIN_SECONDS = 5.0
+# Publication writes and verifies every file under the resident's lease.
+_PUBLISH_TIMEOUT_SECONDS = 60.0
 
 
 def _codex(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
@@ -119,6 +117,26 @@ def _command_available(context: HarnessContext) -> bool:
     """Whether the Codex CLI is on the caller's PATH or in a user install directory."""
 
     return _codex("command_available", context).get("available") is True
+
+
+def _publish_hooks(
+    context: HarnessContext, request: Mapping[str, Any], files: Sequence[TransitionFile]
+) -> dict[str, Any]:
+    """One ``publish_hooks`` request, its journal records replayed."""
+    from ..native_transition_files import _replay
+
+    answer = dict(ask("publish_hooks", context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request))
+    _replay(answer.get("events"), files, None)
+    return answer
+
+
+def _publication_fault(fault: object) -> BaseException:
+    """The exception a ``publish_hooks`` fault names."""
+    from ..native_transition_files import _exception
+
+    if isinstance(fault, Mapping) and isinstance(fault.get("runtime"), str):
+        return RuntimeError(fault["runtime"])
+    return _exception(fault)
 
 
 def _reply_text(answer: Mapping[str, object], key: str) -> str:
@@ -316,43 +334,6 @@ def _legacy_fields(context: HarnessContext, registration: _HookRegistration | No
         current_argv=current_argv,
         legacy_argv=[sys.executable, *legacy_tail],
         legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES,
-    )
-
-
-def _hook_tables(payload: Mapping[str, object]) -> dict[str, object]:
-    """The part of a config the hook comparisons read: its hooks and their feature flag.
-
-    The rest of a config can be arbitrarily large and would push the request
-    past the native size cap without changing the answer.
-    """
-
-    tables: dict[str, object] = {}
-    if "hooks" in payload:
-        tables["hooks"] = payload["hooks"]
-    features = payload.get("features")
-    if isinstance(features, Mapping) and "hooks" in features:
-        tables["features"] = {"hooks": features["hooks"]}
-    return tables
-
-
-def _require_hook_semantics_readback(
-    expected: Mapping[str, object],
-    actual: Mapping[str, object],
-    *,
-    source_scope: str,
-    source_path: Path,
-    context: HarnessContext,
-) -> None:
-    expected, actual = _hook_tables(expected), _hook_tables(actual)
-    wire = _Wire(expected, actual)
-    _codex(
-        "readback",
-        context,
-        expected=wire.text(expected),
-        actual=wire.text(actual),
-        tokens=wire.meanings,
-        scope=source_scope,
-        source_path=str(source_path),
     )
 
 
@@ -1114,139 +1095,77 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         the new manifest.  Codex never observes a newly registered hook before
         its complete authenticated identity has been durably committed. ``plan``
         prepares the generation in place of rendering ``payload``, with the
-        files written ahead of it.
+        files written ahead of it. The runtime's ``publish_hooks`` op prepares
+        the record, writes the files, reads the hooks back, verifies them and
+        commits, or runs the durable inverse.
         """
-        from ..codex_hook_rollback import _identity as rollback_identity_value
+        from ..codex_hook_file_integrity import _python_package_roots
+        from ..codex_hook_manifest import _spec_payload
+        from ..codex_hook_recovery import _owned
         from ..native_transition_files import publication as publication_op
         from ..runtime_transition import TransitionError
 
-        # The runtime refuses a pending publication and snapshots the config.
-        target = publication_op("target", context.guard_home, config=os.path.abspath(config_path.expanduser()))
-        if not isinstance(target, dict):
-            raise TransitionError("native_transition_invalid")
-        original_secret_present = target.get("key_present") is True
-        original_config_identity = rollback_identity_value(target.get("identity"))
-        before = target.get("before")
-        original_config = None if before is None else base64.b64decode(str(before))
-        prepared = False
-        rendered_config = b""
-        written_config_identity: tuple[int, int, int, int, int] | None = None
+        spec = _hook_manifest_spec(context)
+        config = os.path.abspath(config_path.expanduser())
+        if config_path.resolve(strict=False) != spec.config_path.resolve(strict=False):
+            raise RuntimeError("Codex authenticated publication requires its canonical config target.")
 
-        def remember_written_config(identity: tuple[int, int, int, int, int]) -> None:
-            from ..codex_hook_recovery import record_owned_hook_config_publication
-
-            nonlocal written_config_identity
-            written_config_identity = identity
-            record_owned_hook_config_publication(context.guard_home, config_path, identity)
-
-        try:
-            spec = _hook_manifest_spec(context)
-            if config_path.resolve(strict=False) != spec.config_path.resolve(strict=False):
-                raise RuntimeError("Codex authenticated publication requires its canonical config target.")
+        def publish() -> dict[str, Any]:
+            # The runtime refuses a pending publication and snapshots the config.
+            target = publication_op("target", context.guard_home, config=config)
+            if not isinstance(target, dict):
+                raise TransitionError("native_transition_invalid")
+            before = target.get("before")
             if plan is not None:
                 publication, ahead = plan()
             else:
                 assert payload is not None
-                publication, ahead = (
-                    prepare_authenticated_hook_publication(
-                        spec,
-                        rendered_config=dump_toml(payload, original=original_config),
-                        previous_manifest=previous_manifest,
-                        create_key=True,
-                    ),
-                    (),
+                original = None if before is None else base64.b64decode(str(before))
+                publication = prepare_authenticated_hook_publication(
+                    spec,
+                    rendered_config=dump_toml(payload, original=original),
+                    previous_manifest=previous_manifest,
+                    create_key=True,
                 )
-            config_change = publication.config_change
-            if config_change.before != original_config or config_change.after is None:
-                raise TransitionError("adapter_preparation_generation_conflict")
-            rendered_config = config_change.after
-            prepare_hook_publication(
-                context.guard_home,
-                config_path,
-                before_config=config_change.before,
-                before_manifest=publication.manifest_change.before,
-                after_config=rendered_config,
-                after_manifest=canonical_manifest_bytes(publication.manifest) + b"\n",
-                key_created=not original_secret_present,
-                before_receipt=publication.receipt_change.before,
-                after_receipt=publication.receipt_change.after,
+                ahead = ()
+            files = (*ahead, *publication.files)
+            request.update(
+                home=os.path.abspath(context.guard_home),
+                config=config,
+                operation_id=_owned(context.guard_home),
+                original=before,
+                original_identity=target.get("identity"),
+                key_present=target.get("key_present") is True,
+                files=[change.payload() for change in files],
+                config_index=files.index(publication.config_change),
+                manifest_index=files.index(publication.manifest_change),
+                receipt_index=files.index(publication.receipt_change),
+                after_manifest=base64.b64encode(canonical_manifest_bytes(publication.manifest) + b"\n").decode(),
             )
-            prepared = True
+            return _publish_hooks(context, request, files)
 
-            def remember(change: TransitionFile) -> None:
-                if change is config_change:
-                    identity = rollback_file_identity(config_path)
-                    if identity is None:
-                        raise RuntimeError("codex_hook_config_invalid: Codex configuration vanished after publication.")
-                    remember_written_config(identity)
-
-            # The journal restores the authenticated files; backups stay, as
-            # they always have.
-            PreparedHarnessInstall((*ahead, *publication.files), {}).publish(
-                context.guard_home, rollback=False, on_write=remember
-            )
-            written_payload = _strict_toml_object(config_path, label="rendered Codex config file")
-            _require_hook_semantics_readback(
-                parse_toml_object(rendered_config, path=config_path, label="rendered Codex config file"),
-                written_payload,
-                source_scope=CodexHarnessAdapter._scope_for(context, config_path),
-                source_path=config_path,
-                context=context,
-            )
-            state = codex_native_hook_state(context)
-            if not bool(state.get("protection_active")):
-                reason = str(state.get("integrity_reason") or "codex_hook_integrity_readback_failed")
-                raise RuntimeError(
-                    f"{_AUTHORITATIVE_HOOK_UNAVAILABLE_REASON}: Codex hook authentication readback failed: {reason}"
-                )
-            commit_hook_publication(context.guard_home)
-            return state
-        except BaseException as transaction_error:
-            # The runtime undoes a prepared publication, or marks the record as
-            # a config conflict when the config is no longer this writer's.
-            from ..codex_hook_recovery import _owned
-            from ..native_transition_files import _exception
-
-            def encoded(value: bytes | None) -> str | None:
-                return None if value is None else base64.b64encode(value).decode("ascii")
-
-            try:
-                operation_id: str | None = _owned(context.guard_home)
-            except RuntimeError:
-                operation_id = None
-            rollback_error: BaseException | None = None
-            try:
-                aborted = publication_op(
-                    "abort",
-                    context.guard_home,
-                    config=os.path.abspath(config_path.expanduser()),
-                    prepared=prepared,
-                    original=encoded(original_config),
-                    written=encoded(rendered_config),
-                    original_identity=list(original_config_identity) if original_config_identity else None,
-                    written_identity=list(written_config_identity) if written_config_identity else None,
-                    operation_id=operation_id,
-                )
-            except BaseException as conflict:
-                raise conflict from transaction_error
-            if not isinstance(aborted, dict):
-                raise TransitionError("native_transition_invalid") from transaction_error
-            if aborted.get("rollback_error") is not None:
-                rollback_error = _exception(aborted["rollback_error"])
-            elif aborted.get("durable") is not True and not original_secret_present:
-                # Preparation has not published either file. Restoring their
-                # snapshots here would overwrite an intervening user edit.
-                try:
-                    remove_hook_secret_if_unused(context.guard_home)
-                except BaseException as exc:  # pragma: no cover - catastrophic local I/O failure
-                    rollback_error = exc
-            if rollback_error is not None:
-                failure = RuntimeError(
+        request: dict[str, Any] = {
+            "spec": _spec_payload(spec),
+            "package_roots": [str(root) for root in _python_package_roots()],
+            "budget_spent": False,
+            **short_path_fields(),
+        }
+        answer = settle_short_paths(publish, request, "publish_hooks")
+        error, rollback = answer.get("error"), answer.get("rollback_error")
+        if error is not None:
+            failure = _publication_fault(error)
+            if rollback is not None:
+                rollback_error = _publication_fault(rollback)
+                raised = RuntimeError(
                     "Codex hook transaction failed and rollback could not be completed: "
                     f"{type(rollback_error).__name__}: {rollback_error}"
                 )
-                add_note = getattr(failure, "add_note", None)
+                add_note = getattr(raised, "add_note", None)
                 if callable(add_note):
                     add_note(f"rollback error: {rollback_error!r}")
-                raise failure from transaction_error
-            raise
+                raise raised from failure
+            raise failure
+        state = json.loads(_reply_text(answer, "state"))
+        if not isinstance(state, dict):
+            raise TransitionError("native_transition_invalid")
+        return state

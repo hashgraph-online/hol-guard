@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from io import StringIO
+from typing import Any
 
 import pytest
 from rich.console import Console
@@ -16,6 +17,13 @@ from codex_plugin_scanner.guard.adapters.diagnostic_probes import without_comman
 from codex_plugin_scanner.guard.cli.doctor_readiness import doctor_runtime_readiness
 from codex_plugin_scanner.guard.cli.render import _render_doctor, emit_guard_payload
 from tests.codex_hook_state_support import fixed_hook_state
+
+
+def _doctor_json(rc: int, capsys: pytest.CaptureFixture[str]) -> Any:
+    """Doctor's JSON report; an empty report names the exit code and stderr."""
+    captured = capsys.readouterr()
+    assert captured.out.strip(), f"doctor printed no report (rc={rc}): {captured.err[-2000:]}"
+    return json.loads(captured.out)
 
 
 @pytest.mark.parametrize(
@@ -73,7 +81,7 @@ def test_doctor_json_does_not_promote_registration_or_cli_success_to_readiness(
             str(tmp_path / "workspace"),
         ]
     )
-    payload = json.loads(capsys.readouterr().out)
+    payload = _doctor_json(rc, capsys)
 
     assert rc == 0
     assert payload["setup_status"] == setup_status
@@ -96,7 +104,7 @@ def test_global_doctor_reports_readiness_for_every_registered_harness(tmp_path, 
             str(tmp_path / "workspace"),
         ]
     )
-    payload = json.loads(capsys.readouterr().out)
+    payload = _doctor_json(rc, capsys)
 
     assert rc == 0
     assert {item["harness"] for item in payload["adapters"]} == {item.harness for item in list_adapters()}
@@ -271,7 +279,7 @@ def test_global_doctor_validates_registration_without_executable_probes(tmp_path
             str(tmp_path / "workspace"),
         ]
     )
-    payload = json.loads(capsys.readouterr().out)
+    payload = _doctor_json(rc, capsys)
     codex = next(item for item in payload["adapters"] if item["harness"] == "codex")
 
     assert rc == 0

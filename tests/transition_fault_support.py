@@ -35,6 +35,11 @@ def interrupt_publication_at(
     error: BaseException,
     interfere: Callable[[TransitionFile], None] | None = None,
 ) -> None:
+    from tests.codex_publication_steps import use_stepwise_publication
+
+    # A Codex hook generation publishes inside one runtime op; step it from
+    # Python so its file writes go through ``publish_files`` here.
+    use_stepwise_publication(monkeypatch)
     original = native_transition_files.publish_files
     pending = True
 
@@ -106,4 +111,9 @@ def _stepwise_publication():
             raise
 
     native_transition_files.publish_files = publish
+    # The hook generation goes through ``publish_files`` too.
+    from codex_plugin_scanner.guard.adapters import codex
+    from tests.codex_publication_steps import stepwise_publish_hooks
+
+    codex._publish_hooks = stepwise_publish_hooks
 """

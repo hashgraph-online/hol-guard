@@ -54,6 +54,7 @@ mod codex_migration;
 mod codex_owner_home;
 mod codex_owners;
 mod codex_preactivation;
+mod codex_publish;
 mod codex_python_hook;
 mod codex_python_imports;
 mod codex_python_values;
