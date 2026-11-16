@@ -7,89 +7,15 @@ use std::path::{Component, Path, PathBuf};
 
 use super::{contains_symlink_component, resolve_candidate, SourcePathDecision};
 
-const SOURCE_INSPECTION_PARTS: &[&str] = &[
-    "__tests__",
-    "app",
-    "constants",
-    "dashboard",
-    "docs",
-    "lib",
-    "packages",
-    "scripts",
-    "src",
-    "test",
-    "tests",
-    "workers",
-];
-const SOURCE_EXTENSIONS: &[&str] = &[
-    "c", "cc", "cpp", "css", "go", "h", "hpp", "html", "java", "js", "jsx", "json", "md", "mjs",
-    "py", "rs", "sh", "toml", "ts", "tsx", "yaml", "yml",
-];
-const BENIGN_SOURCE_DOTFILES: &[&str] = &[".nvmrc", ".worktrees"];
-/// Ordinary project config files. They are benign only as the final path
-/// component, so a directory spelled `.gitignore/` opens no hidden tree.
-const BENIGN_PROJECT_DOTFILES: &[&str] = &[
-    ".dockerignore",
-    ".editorconfig",
-    ".eslintignore",
-    ".gitignore",
-    ".prettierignore",
-];
-const SENSITIVE_SEARCH_BASENAMES: &[&str] = &[
-    ".aws",
-    ".docker",
-    ".env",
-    ".git-credentials",
-    ".kube",
-    ".netrc",
-    ".npmrc",
-    ".pypirc",
-    ".ssh",
-    "credentials",
-    "id_rsa",
-];
-/// Path components that mark credential/secret material when a read
-/// escapes the workspace. Shared with the native PreToolUse read floor.
-pub const EXTERNAL_SENSITIVE_PARTS: &[&str] = &[
-    ".aws",
-    ".docker",
-    ".env",
-    ".git-credentials",
-    ".kube",
-    ".netrc",
-    ".npmrc",
-    ".pypirc",
-    ".ssh",
-    "auth",
-    "authorization",
-    "credential",
-    "credentials",
-    "id_dsa",
-    "id_ecdsa",
-    "id_ed25519",
-    "id_rsa",
-    "kubeconfig",
-    "passwd",
-    "password",
-    "private-key",
-    "private_key",
-    "secret",
-    "secrets",
-    "token",
-    "tokens",
-];
-const KNOWN_SKILL_DOC_ROOTS: &[&str] = &[
-    ".codex/superpowers/skills",
-    ".codex/skills",
-    ".agents/skills",
-    ".agent/skills",
-    ".claude/skills",
-];
-/// Home roots where coding agents keep their own Markdown documents: OMP
-/// artifacts and the plan files Claude Code and Codex users write and read
-/// back. Only plain `.md` files below them qualify; see
-/// `known_artifact_doc_path`.
-const KNOWN_AGENT_DOC_ROOTS: &[&str] = &[".agent/artifacts", ".claude/plans", ".codex/plans"];
+#[path = "source_path_names.rs"]
+mod names;
+pub use names::EXTERNAL_SENSITIVE_PARTS;
+use names::{
+    BENIGN_PROJECT_DOTFILES, BENIGN_PROJECT_DOTFILE_STEMS, BENIGN_PROJECT_READ_DOTFILES,
+    BENIGN_SOURCE_DOTFILES, DOCUMENT_EXTENSIONS, KNOWN_AGENT_DOC_ROOTS, KNOWN_SKILL_DOC_ROOTS,
+    PROJECT_CONFIG_EXTENSIONS, PROJECT_DOCUMENT_EXTENSIONS, SENSITIVE_SEARCH_BASENAMES,
+    SOURCE_EXTENSIONS, SOURCE_INSPECTION_PARTS, TOOL_LOGIN_FILE_WORDS, TOOL_LOGIN_WORDS,
+};
 
 fn lowered_parts(path: &Path) -> Vec<String> {
     path.components()
@@ -102,7 +28,7 @@ fn lowered_parts(path: &Path) -> Vec<String> {
 
 fn hidden_parts_allowed(parts: &[String]) -> bool {
     match parts.split_last() {
-        Some((name, parents)) if BENIGN_PROJECT_DOTFILES.contains(&name.as_str()) => {
+        Some((name, parents)) if project_config_file_name(name) => {
             hidden_dir_parts_allowed(parents)
         }
         _ => hidden_dir_parts_allowed(parts),
@@ -184,7 +110,15 @@ pub fn credential_path_markers() -> &'static [&'static str] {
     EXTERNAL_SENSITIVE_PARTS
 }
 
-fn source_shape_allowed(path: &Path, parts: &[String]) -> bool {
+fn source_shape_allowed(path: &Path, parts: &[String], documents: bool) -> bool {
+    let document = |name: &str| {
+        Path::new(name)
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|suffix| {
+                DOCUMENT_EXTENSIONS.contains(&suffix.to_ascii_lowercase().as_str())
+            })
+    };
     parts
         .iter()
         .any(|part| SOURCE_INSPECTION_PARTS.contains(&part.as_str()))
@@ -199,6 +133,11 @@ fn source_shape_allowed(path: &Path, parts: &[String]) -> bool {
             .file_name()
             .and_then(|value| value.to_str())
             .is_some_and(source_extension)
+        || documents
+            && path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .is_some_and(document)
 }
 
 /// Whether `path`'s own name ends in one of the extensions a project's
@@ -364,6 +303,24 @@ pub fn classify_source_path(
     home: Option<&Path>,
     allow_external: bool,
 ) -> SourcePathDecision {
+    classify(target, cwd, home, allow_external, false)
+}
+
+/// [`classify_source_path`] for a project file read as context, which also
+/// admits a prose document such as `CHANGES.rst` or `README.rst` outside a
+/// docs folder. Every other check is the same. Command screening keeps the
+/// narrower list, since this one only widens what may be read as text.
+pub fn classify_project_document(target: &str, cwd: &Path) -> SourcePathDecision {
+    classify(target, cwd, None, false, true)
+}
+
+fn classify(
+    target: &str,
+    cwd: &Path,
+    home: Option<&Path>,
+    allow_external: bool,
+    documents: bool,
+) -> SourcePathDecision {
     let stripped = target.trim().trim_matches(['\'', '"']);
     if stripped.is_empty() {
         return SourcePathDecision::deny("empty_path");
@@ -453,7 +410,7 @@ pub fn classify_source_path(
         if !hidden_parts_allowed(&parts) {
             return SourcePathDecision::deny("unsafe_hidden_dir");
         }
-        if !source_shape_allowed(Path::new(stripped), &parts) {
+        if !source_shape_allowed(Path::new(stripped), &parts, documents) {
             return SourcePathDecision::deny("not_source_like");
         }
         return SourcePathDecision::allow("external_source_path", candidate);
@@ -476,7 +433,7 @@ pub fn classify_source_path(
     if !hidden_parts_allowed(&parts) {
         return SourcePathDecision::deny("unsafe_hidden_dir");
     }
-    if !source_shape_allowed(relative, &parts) {
+    if !source_shape_allowed(relative, &parts, documents) {
         return SourcePathDecision::deny("not_source_like");
     }
     let reason = if parts
@@ -517,6 +474,20 @@ pub fn hidden_read_parts_allowed(path: &Path) -> bool {
     hidden_parts_allowed(&lowered_parts(path))
 }
 
+/// The same screen for a write target. A write admits only
+/// [`BENIGN_PROJECT_DOTFILES`], never the read-only half, because reading a
+/// pinned toolchain version or an attribute table discloses a setting the
+/// checkout already states while writing one changes what later commands do.
+pub fn hidden_write_parts_allowed(path: &Path) -> bool {
+    let parts = lowered_parts(path);
+    match parts.split_last() {
+        Some((name, parents)) if BENIGN_PROJECT_DOTFILES.contains(&name.as_str()) => {
+            hidden_dir_parts_allowed(parents)
+        }
+        _ => hidden_dir_parts_allowed(&parts),
+    }
+}
+
 /// An existing, empty, regular hidden file (a marker such as a deploy
 /// sentinel) inside a git work tree. Only the final component may be hidden;
 /// every other hidden component must be on the benign list. Size zero bounds
@@ -546,75 +517,6 @@ pub fn hidden_empty_work_tree_file(path: &Path) -> bool {
         .skip(1)
         .any(|ancestor| fs::symlink_metadata(ancestor.join(".git")).is_ok())
 }
-
-/// Extensions a project writes its own configuration and prose under. A
-/// credential file conventionally carries none of them: `.netrc`, `.npmrc`,
-/// `.pgpass` and `.git-credentials` are named for what they hold and end
-/// there, so requiring one of these already separates a project's documents
-/// from a store of logins.
-const PROJECT_DOCUMENT_EXTENSIONS: &[&str] = &[
-    "cfg", "conf", "ini", "json", "jsonc", "markdown", "md", "toml", "txt", "yaml", "yml",
-];
-
-/// Words that name a tool's own login or keystore rather than a project's
-/// configuration, read over the name's parts so `.mcp.json` and
-/// `.claude.json` keep their review wherever they sit.
-const TOOL_LOGIN_WORDS: &[&str] = &[
-    "agent",
-    "agents",
-    "aider",
-    "aws",
-    "azure",
-    "claude",
-    "codex",
-    "copilot",
-    "cursor",
-    "docker",
-    "dockercfg",
-    "gcloud",
-    "gemini",
-    "gnupg",
-    "gpg",
-    "hgrc",
-    "htpasswd",
-    "keychain",
-    "keyring",
-    "keystore",
-    "kube",
-    "kubeconfig",
-    "mcp",
-    "netrc",
-    "npmrc",
-    "omp",
-    "pgpass",
-    "pypirc",
-    "ssh",
-    "vault",
-    "vscode",
-    "windsurf",
-];
-
-/// The entries of [`TOOL_LOGIN_WORDS`] that are a login file's whole name
-/// rather than a vendor's. The rest of that list -- `docker`, `claude`,
-/// `aws`, `agent` -- names a tool, and a repository names its own documents
-/// after the tools it uses: `.github/workflows/docker.yml` and
-/// `.well-known/agent.json` are the checkout's content, not a login. A caller
-/// that already knows the name is a plain file inside the work tree reads it
-/// against this half.
-const TOOL_LOGIN_FILE_WORDS: &[&str] = &[
-    "dockercfg",
-    "hgrc",
-    "htpasswd",
-    "keychain",
-    "keyring",
-    "keystore",
-    "kubeconfig",
-    "mcp",
-    "netrc",
-    "npmrc",
-    "pgpass",
-    "pypirc",
-];
 
 /// Whether `name` is the whole name of a tool's login file: `.netrc`,
 /// `mcp.json`, `.npmrc`. This is [`tool_login_name`] narrowed to
@@ -657,7 +559,23 @@ pub fn tool_login_name(name: &str) -> bool {
 /// keep the list's own rule: these names are benign as a file, so a directory
 /// spelled `.gitignore/` opens no hidden tree.
 pub fn project_config_file_name(name: &str) -> bool {
-    BENIGN_PROJECT_DOTFILES.contains(&name.to_ascii_lowercase().as_str())
+    let lowered = name.to_ascii_lowercase();
+    BENIGN_PROJECT_DOTFILES.contains(&lowered.as_str())
+        || BENIGN_PROJECT_READ_DOTFILES.contains(&lowered.as_str())
+        || project_config_rc_name(&lowered)
+}
+
+/// A formatter, linter or test-runner rc file: either the bare stem
+/// (`.prettierrc`) or the stem carrying one config extension
+/// (`.prettierrc.json`). `lowered` is already lowercased.
+fn project_config_rc_name(lowered: &str) -> bool {
+    if BENIGN_PROJECT_DOTFILE_STEMS.contains(&lowered) {
+        return true;
+    }
+    lowered.rsplit_once('.').is_some_and(|(stem, extension)| {
+        BENIGN_PROJECT_DOTFILE_STEMS.contains(&stem)
+            && PROJECT_CONFIG_EXTENSIONS.contains(&extension)
+    })
 }
 
 /// A hidden file at the leaf of a git work tree that a project keeps its own
@@ -750,5 +668,5 @@ pub fn source_like(path: &Path) -> bool {
     {
         return false;
     }
-    source_shape_allowed(path, &parts)
+    source_shape_allowed(path, &parts, false)
 }

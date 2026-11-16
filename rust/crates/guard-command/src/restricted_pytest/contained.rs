@@ -12,6 +12,7 @@ use std::os::unix::fs::OpenOptionsExt;
 
 #[path = "contained_bun.rs"]
 mod bun;
+pub use bun::planned_route_argv;
 
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]

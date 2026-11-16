@@ -44,7 +44,7 @@ _TIMEOUT_SECONDS: Final = 5.0
 # The resident client clamps a deadline to a per-operation ceiling
 # (``EXTENSION_CONTROL_TIMEOUT_CEILING_MS`` in ``managed_resident_client_timeout.rs``),
 # and the daemon client waits out every resident call a request makes
-# (``daemon/extension_control_timeouts.py``); raising this raises both.
+# (``native_daemon_client.py``); raising this raises both.
 _PREVIEW_TIMEOUT_SECONDS: Final = 15.0
 # The resident bounds one request to 4 MiB of canonical JSON, 4096 items and 64
 # scenarios; larger questions are split across requests below those bounds. The

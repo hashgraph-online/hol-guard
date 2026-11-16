@@ -3,6 +3,11 @@ use super::*;
 use guard_cigar_release::InterpreterBinding;
 pub(super) use store::Phase;
 const LIMIT: u64 = 32 * 1024;
+/// Unpacking and checking a few thousand interpreter files is the slowest setup
+/// step. On an x64 build under ARM64 emulation, with antivirus scanning every new
+/// file, it has taken over two minutes, so it gets a wider window than the
+/// two minutes other CIGAR jobs have.
+pub(super) const SETUP_WINDOW_MS: u64 = 300_000;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -49,7 +54,7 @@ impl Job {
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
             || self.updated_at_ms < self.created_at_ms
             || self.deadline_at_ms < self.created_at_ms
-            || self.deadline_at_ms - self.created_at_ms > 120_000
+            || self.deadline_at_ms - self.created_at_ms > SETUP_WINDOW_MS
         {
             return Err(error("python_setup_job_invalid"));
         }

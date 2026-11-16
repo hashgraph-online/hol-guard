@@ -21,7 +21,7 @@ use crate::guard_store_approval_request::ApprovalRequest;
 use crate::guard_store_approval_row::{insert, update, Derived};
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{
-    exec, placeholders, query_all, query_one, text, StoreError, StoreResult,
+    exec, placeholders, query_all, query_one, text, value_error, StoreError, StoreResult,
 };
 use crate::guard_store_json::py_strip;
 use crate::guard_store_outbox_binding::bind_events_for_request;
@@ -384,6 +384,42 @@ fn existing_request_id(
         }
     }
     Ok(None)
+}
+
+/// `GuardStore.clear_approval_requests`: drop the matching queue rows and
+/// their recorded resumes, answering the deleted row count.
+pub(crate) fn clear_approval_requests(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    let mut conditions = Vec::new();
+    let mut params = Vec::new();
+    for column in ["harness", "status"] {
+        match args.raw(column) {
+            None | Some(Value::Null) => {}
+            Some(Value::String(value)) => {
+                conditions.push(format!("{column} = ?"));
+                params.push(Value::from(value.as_str()));
+            }
+            Some(_) => return value_error("clear_approval_requests filters must be text"),
+        }
+    }
+    let filter = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" where {}", conditions.join(" and "))
+    };
+    exec(
+        connection,
+        &format!(
+            "delete from guard_request_resumes where request_id in \
+             (select request_id from approval_requests{filter})"
+        ),
+        &params,
+    )?;
+    let cleared = exec(
+        connection,
+        &format!("delete from approval_requests{filter}"),
+        &params,
+    )?;
+    Ok(Value::from(cleared))
 }
 
 #[cfg(test)]

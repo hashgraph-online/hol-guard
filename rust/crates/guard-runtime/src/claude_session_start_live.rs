@@ -1,7 +1,7 @@
 //! Live-daemon verification for the native Claude SessionStart lane.
 //!
 //! A read-only port of the gates `_live_guard_daemon_identity` in
-//! `daemon/manager.py` applies before it trusts a running daemon, run in
+//! the retired Python `manager.py` applies before it trusts a running daemon, run in
 //! process: the HMAC-authenticated `daemon-state.json`, a daemon of this
 //! package version on the IPv4 loopback, the private auth token bound to it
 //! (`identity_binding`), the state and pid gate (`live_state_gate`), a

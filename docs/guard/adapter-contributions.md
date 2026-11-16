@@ -35,7 +35,7 @@ Search [open adapter PRs](https://github.com/hashgraph-online/hol-guard/pulls?q=
 
 Public harness classes stay at their existing adapter entrypoints. Internal helpers use ordinary Python package imports, such as `codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_events`. Each family and `_modules/` has an `__init__.py`, so Python, static analysis, and frozen builds discover the same modules. Put a new public harness class at the adapter root and its supporting files in the corresponding family package; do not extend `__path__` or create a second import identity.
 
-Begin with [Gemini](../../src/codex_plugin_scanner/guard/adapters/gemini.py) or [Antigravity](../../src/codex_plugin_scanner/guard/adapters/antigravity.py) for discovery-only examples, and [Cline](../../src/codex_plugin_scanner/guard/adapters/cline.py) or [Cursor](../../src/codex_plugin_scanner/guard/adapters/cursor.py) for hook installation. Review the actual host contract before copying a strategy.
+Begin with [Gemini and Antigravity](../../rust/crates/guard-runtime/src/adapters/harness_adapter/simple.rs) for discovery-only examples, and [Cline](../../rust/crates/guard-runtime/src/adapters/harness_adapter/cline.rs) or [Cursor](../../src/codex_plugin_scanner/guard/adapters/cursor.py) for hook installation. Review the actual host contract before copying a strategy.
 
 ## 3. Add discovery and registration
 
@@ -79,9 +79,9 @@ uv run --no-sync python -m ruff format --check src tests
 uv run --no-sync pytest tests/test_adapter_module_layout.py tests/test_adapter_packaged_manifest.py tests/test_guard_harness_contracts.py tests/test_guard_harness_setup.py tests/test_guard_harness_smoke.py --tb=short
 uv run --no-sync pytest tests/test_<harness>_adapter.py --tb=short
 
-cargo +1.88.0 fmt --manifest-path rust/Cargo.toml --all --check
-cargo +1.88.0 clippy --locked --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-targets
+cargo +1.89.0 fmt --manifest-path rust/Cargo.toml --all --check
+cargo +1.89.0 clippy --locked --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-targets
 ```
 
 Replace `<harness>` with the actual test module name and add event-specific tests. Test requirements and native projections are described in [CONTRIBUTING.md](../../CONTRIBUTING.md). For hook or policy behavior changes, run the [Guard Gauntlet](../../ci/gauntlet/README.md) live-agent acceptance workflow and attach verifiable benign/security-pair evidence for the final PR head. Unit tests alone do not constitute live enforcement proof.

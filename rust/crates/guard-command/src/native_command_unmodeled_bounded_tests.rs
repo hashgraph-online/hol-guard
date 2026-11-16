@@ -21,6 +21,32 @@ fn an_xargs_that_names_its_program_is_reviewable() {
     }
 }
 
+/// A grouped `find` is not a read-only fan-out the parser models, so its
+/// `xargs` reaches this floor. Silencing the search's errors moves no data,
+/// so the redirect must not take the review away and block it outright.
+#[test]
+fn a_named_xargs_pipeline_that_discards_output_is_reviewable() {
+    let controls = controls(github("enabled", None), false);
+    for command in [
+        "find . -type f \\( -name \"*.ts\" -o -name \"*.json\" \\) -not -path \"*/node_modules/*\" | xargs grep -l canonical 2>/dev/null",
+        "find . -type f \"(\" -name \"*.ts\" -o -name \"*.json\" \")\" | xargs grep -l canonical 2>&1",
+        "find . -type f \\( -name \"*.ts\" \\) 2>/dev/null | xargs grep -l canonical",
+    ] {
+        let (action, code) = decision(&controls, command);
+        assert_ne!(code, FAILED, "{command}");
+        assert_eq!(action, "review", "{command}: {code}");
+    }
+    // Only a redirect that discards output is read past. A write to a file
+    // can follow a link the `xargs` program made from operands this text
+    // does not hold, and a parameter target is not a path at all.
+    for command in [
+        "find . \\( -name a -o -name b \\) | xargs grep -l x 2>\"$LOG\"",
+        "find /tmp/target \\( -type f \\) | xargs ln -s -t .; echo data >target",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+    }
+}
+
 /// Reading the program out of an `xargs` leaves the operands standard input
 /// supplies unread. An extension that owns that program judges arguments this
 /// text does not hold, so the read-through does not stand in for its rules.

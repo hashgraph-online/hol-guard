@@ -73,6 +73,8 @@ def test_unfrozen_bounded_hook_command_uses_isolated_python_script(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(bounded_cli_hook_bridge, "isolated_cursor_hook_python", lambda: sys.executable)
+    runtime = tmp_path / "hol-guard-runtime"
+    monkeypatch.setattr(bounded_cli_hook_bridge, "native_bridge_executable", lambda *_args, **_kwargs: runtime)
     versioned, shim = _versioned_core(tmp_path)
     guard_home = tmp_path / "guard-home"
     command = bounded_cli_hook_bridge.bounded_cli_hook_command(
@@ -90,10 +92,11 @@ def test_unfrozen_bounded_hook_command_uses_isolated_python_script(
         harness="grok",
         timeout_seconds=25,
     )
-    assert command[0] == bounded_cli_hook_bridge.isolated_cursor_hook_python()
-    assert command[1] == "-I"
-    assert Path(command[2]) == guard_home / "managed/bounded-hooks/grok.py"
-    script = Path(command[2]).read_text(encoding="utf-8")
+    assert command[:2] == (str(runtime), "bounded-hook-bridge")
+    assert command[2] == bounded_cli_hook_bridge.isolated_cursor_hook_python()
+    assert command[3] == "-I"
+    assert Path(command[4]) == guard_home / "managed/bounded-hooks/grok.py"
+    script = Path(command[4]).read_text(encoding="utf-8")
     assert 'HARNESS = "grok"' in script
     assert "TIMEOUT_SECONDS = 25" in script
     assert str(versioned) not in command

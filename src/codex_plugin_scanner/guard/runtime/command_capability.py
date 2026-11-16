@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import base64
+import functools
 import os
 import secrets
-from collections.abc import Mapping
+import threading
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import ParamSpec, TypeVar
 
 from ..native_command_capability import (
     CommandCapabilityUnavailableError,
@@ -22,6 +25,7 @@ from ..native_command_envelope import (
 from ..portable_command import render_portable_command
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..store import GuardStore
+from .command_replay_rows import replay_rows_naming
 from .time_support import parse_utc_timestamp
 
 COMMAND_CAPABILITY_STATE_KEY = "guard_command_capability_v1"
@@ -277,12 +281,20 @@ def _capability_verdict(
 
     Every comparison - the envelope's signature, its clock and binding checks,
     the job's identity and the replay rows - happens in the runtime. This side
-    only reads the inputs out of the store.
+    only reads the inputs out of the store. Replay rows only change a job or
+    replay-identity answer, so an operations-only question ships none and a
+    job question ships only the rows that could name that job.
     """
 
     home = _resident_home(store)
     key_b64, key_id = _signing_material_for_resident(store)
     device_id, workspace_id, oauth_error = _binding_for_resident(store)
+    subject = job if job is not None else replay_identity
+    replay_items = (
+        replay_rows_naming(_state_items(store.get_sync_payload(COMMAND_REPLAY_STATE_KEY)), subject)
+        if subject is not None
+        else []
+    )
     return native_command_capability(
         capability=store.get_sync_payload(COMMAND_CAPABILITY_STATE_KEY),
         integrity_key_b64=key_b64,
@@ -293,7 +305,7 @@ def _capability_verdict(
         now=now if now is not None else datetime.now(timezone.utc).isoformat(),
         job=job,
         schema_versions=dict(schema_versions or {}),
-        replay_items=_state_items(store.get_sync_payload(COMMAND_REPLAY_STATE_KEY)),
+        replay_items=replay_items,
         replay_identity=replay_identity,
         guard_home=home,
     )
@@ -430,6 +442,28 @@ def _identity_digest(store: GuardStore, identity: Mapping[str, object]) -> str:
     return digest
 
 
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+_COMMAND_STATE_LOCK = threading.RLock()
+
+
+def _holding_command_state_lock(function: Callable[_P, _R]) -> Callable[_P, _R]:
+    """Run ``function`` while holding the lock on the shared command state rows.
+
+    Pending approvals, local grants and replay rows are each read, changed and
+    written back whole. Review drain workers settle jobs on parallel threads,
+    so two writers that read the same rows would each drop the other's change.
+    """
+
+    @functools.wraps(function)
+    def locked(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+        with _COMMAND_STATE_LOCK:
+            return function(*args, **kwargs)
+
+    return locked
+
+
+@_holding_command_state_lock
 def register_pending_command(
     store: GuardStore,
     authorized: AuthorizedCommandJob,
@@ -468,6 +502,7 @@ def pending_command_approvals(store: GuardStore, *, now: str | None = None) -> l
     ]
 
 
+@_holding_command_state_lock
 def approve_pending_command(
     store: GuardStore,
     job_id: str,
@@ -533,6 +568,7 @@ def command_identity_digest(store: GuardStore, authorized: AuthorizedCommandJob)
     return _identity_digest(store, authorized.identity)
 
 
+@_holding_command_state_lock
 def consume_local_command_approval(
     store: GuardStore,
     authorized: AuthorizedCommandJob,
@@ -576,6 +612,7 @@ def consume_local_command_approval(
     return True
 
 
+@_holding_command_state_lock
 def mark_command_job_consumed(
     store: GuardStore,
     authorized: AuthorizedCommandJob,

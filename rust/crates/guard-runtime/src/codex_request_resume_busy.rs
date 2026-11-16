@@ -33,7 +33,7 @@ fn busy_sleeps() -> u32 {
 
 /// Give `connection` a busy handler that draws from a fresh budget of
 /// `busy_timeout_ms` for the call running on this thread.
-pub(crate) fn arm(connection: &Connection, busy_timeout_ms: u64) -> rusqlite::Result<()> {
+pub(crate) fn arm(connection: &mut Connection, busy_timeout_ms: u64) -> rusqlite::Result<()> {
     BUSY_BUDGET.with(|budget| budget.set(Duration::from_millis(busy_timeout_ms)));
     #[cfg(test)]
     BUSY_SLEEPS.with(|sleeps| sleeps.set(0));
@@ -72,8 +72,8 @@ mod tests {
         holder
             .execute_batch("CREATE TABLE t (v INTEGER); BEGIN EXCLUSIVE;")
             .unwrap();
-        let caller = Connection::open(&path).unwrap();
-        arm(&caller, 200).unwrap();
+        let mut caller = Connection::open(&path).unwrap();
+        arm(&mut caller, 200).unwrap();
 
         let mut sleeps = Vec::new();
         for _ in 0..3 {

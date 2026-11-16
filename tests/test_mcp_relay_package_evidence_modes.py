@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import mcp_relay_package_evidence_drain
-from codex_plugin_scanner.guard.daemon.mcp_relay_package_evidence_drain import (
+from codex_plugin_scanner.guard.evidence_drains import mcp_relay_package_evidence_drain
+from codex_plugin_scanner.guard.evidence_drains.mcp_relay_package_evidence_drain import (
     record_mcp_relay_package_evidence,
 )
 

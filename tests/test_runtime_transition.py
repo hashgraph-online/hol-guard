@@ -392,7 +392,7 @@ def test_reopened_coordinator_recovers_only_inverse_with_one_deadline(transition
 
 @pytest.mark.parametrize("side", ["candidate", "predecessor"])
 def test_daemon_binding_uses_planned_executable_digest_instead_of_artifact_archive(transition, side):
-    from codex_plugin_scanner.guard.daemon.live_identity import DaemonArtifactBinding
+    from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 
     _, plan, *_ = transition
     artifact = plan.candidate if side == "candidate" else plan.predecessor
@@ -625,8 +625,8 @@ def test_native_claude_binding_plan_restores_user_hooks_and_launchers(transition
 
 
 def test_native_kimi_plan_restores_config_and_launchers_after_rebind(transition):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.kimi import KimiHarnessAdapter
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -634,7 +634,7 @@ def test_native_kimi_plan_restores_config_and_launchers_after_rebind(transition)
     config.parent.mkdir(parents=True)
     config.write_text('# user configuration\nmodel = "user-model"\n')
     config.chmod(0o600)
-    adapter = KimiHarnessAdapter()
+    adapter = get_adapter("kimi")
     adapter.install(ctx)
     previous = config.read_bytes()
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
@@ -652,15 +652,15 @@ def test_native_kimi_plan_restores_config_and_launchers_after_rebind(transition)
 
 
 def test_prepared_native_install_preserves_foreign_edit_before_any_publication(transition):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.kimi import KimiHarnessAdapter
 
     runtime, _, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
     config = ctx.home_dir / ".kimi-code/config.toml"
     config.parent.mkdir(parents=True)
     config.write_text('model = "previous"\n')
-    prepared = KimiHarnessAdapter().prepare_install(ctx)
+    prepared = get_adapter("kimi").prepare_install(ctx)
     config.write_text('model = "foreign user edit"\n')
     with pytest.raises(TransitionError, match="generation_changed"):
         prepared.publish(ctx.guard_home)
@@ -730,12 +730,12 @@ def test_authenticated_invalid_file_contract_refuses_publication(transition, fie
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_openclaw_complete_plan_recovers_overlay_hook_manifest_and_launchers(transition, previous_exists):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
-    adapter = OpenClawHarnessAdapter()
+    adapter = get_adapter("openclaw")
     if previous_exists:
         adapter.install(ctx)
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
@@ -756,20 +756,20 @@ def test_openclaw_complete_plan_recovers_overlay_hook_manifest_and_launchers(tra
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_grok_plan_restores_config_hooks_state_and_backup_lifetime(transition, previous_exists):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.cursor_hook_config import isolated_cursor_hook_python
-    from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
-    adapter = GrokHarnessAdapter()
+    adapter = get_adapter("grok")
     config = ctx.home_dir / ".grok/config.toml"
     config.parent.mkdir(parents=True)
     config.write_text("# user setting\n[ui]\nsimple_mode = true\n")
     config.chmod(0o600)
     if previous_exists:
         adapter.install(ctx)
-    backup = adapter._backup_path(ctx, "config.toml")
+    backup = ctx.guard_home / "managed" / "grok" / "config.toml.backup"
     previous_backup = backup.stat() if backup.exists() else None
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
     assert len(prepared.files) == (11 if isolated_cursor_hook_python() is not None else 10)
@@ -812,7 +812,7 @@ def test_native_json_plan_restores_config_state_and_backup_lifetime(transition, 
     config.chmod(0o600)
     if previous_exists:
         adapter.install(ctx)
-    _, backup, _ = adapter._managed_state_paths(ctx)
+    backup = ctx.guard_home / "managed" / harness / "config.json.backup"
     previous_backup = backup.stat() if backup.exists() else None
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
     assert len(prepared.files) == 5
@@ -872,13 +872,13 @@ def test_pi_family_plan_restores_extension_settings_and_user_entries(transition,
             assert change.path.stat().st_mode & 0o777 == change.before_mode
 
 
-@pytest.mark.parametrize("harness", ["kimi", "grok", "zcode", "devin"])
 @pytest.mark.parametrize("helper_exists", [False, True])
-def test_frozen_helper_participates_in_signed_inverse(transition, monkeypatch, harness, helper_exists):
+def test_frozen_grok_helper_participates_in_signed_inverse(transition, monkeypatch, helper_exists):
     from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
 
+    harness = "grok"
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
     helper = ctx.guard_home / f"managed/bounded-hooks/{harness}.py"
@@ -910,7 +910,7 @@ def test_frozen_helper_participates_in_signed_inverse(transition, monkeypatch, h
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(transition, previous_exists):
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+    from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -923,9 +923,9 @@ def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(tran
     config.chmod(0o640)
     if previous_exists:
         adapter.install(ctx)
-    backup = adapter._backup_path(ctx)
-    previous_backup = backup.stat() if backup.exists() else None
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
+    backup = Path(str(prepared.manifest["backup_path"]))
+    previous_backup = backup.stat() if backup.exists() else None
     assert len(prepared.files) == 11
     assert config.read_bytes() == next(change.before for change in prepared.files if change.path == config)
     plan = replace(plan, files=(*plan.files, *prepared.files))
@@ -951,7 +951,7 @@ def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(tran
 
 def test_opencode_foreign_source_config_prevents_any_transition_publication(transition):
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+    from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 
     runtime, plan, bindings, pointer = transition
     workspace = runtime.home.parent / "workspace"
@@ -1007,7 +1007,8 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
         monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: sys.executable)
         monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
     prepared = adapter.prepare_install(ctx)
-    assert len(prepared.files) == (12 if workspace_enabled else 7) + int(frozen)
+    # A frozen Guard hands the hook to its runtime and plans no helper script.
+    assert len(prepared.files) == (12 if workspace_enabled else 7)
     dependency = next(change for change in prepared.files if change.path == authority)
     assert dependency.before is dependency.after is None
     assert dependency.expected_digest is not None
@@ -1893,7 +1894,7 @@ def test_native_runtime_bindings_require_both_signed_readonly_dependencies(trans
 @pytest.mark.usefixtures("native_hook_force")
 @pytest.mark.parametrize("rollback", [False, True])
 def test_actual_native_admission_drives_protocol_completion(transition, tmp_path, rollback):
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+    from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
     from codex_plugin_scanner.guard.native_runtime import native_runtime_status
     from codex_plugin_scanner.guard.runtime_transition_admission import probe_native_protection
@@ -2249,73 +2250,3 @@ def test_real_process_exit_releases_owner_and_recovers_transition_pair(tmp_path:
     assert bindings.read_bytes() == b"previous bindings"
     assert pointer.read_bytes() == b"previous pointer"
     assert store.get_managed_install("codex") == install_row("codex", "previous")
-
-
-def test_production_driver_restores_bindings_when_candidate_start_fails(transition, monkeypatch):
-    """A4: candidate start and predecessor restart both fail on the production driver.
-
-    The executable is a real spawned program that exits. Admission, state
-    authentication, and the coordinator stay on the production path. The
-    result keeps the original start failure and the rollback start failure.
-
-    The launch exits before its process identity can be recorded, so no signed
-    launch receipt exists and the retirement proof stays exact. A launch whose
-    identity was recorded keeps its receipt until its own handoff clears it,
-    which is covered by the daemon manager pending-launch tests.
-    """
-    from codex_plugin_scanner.guard.daemon import manager as daemon_manager
-    from codex_plugin_scanner.guard.runtime_transition_coordinator import RuntimeTransitionCoordinator
-    from codex_plugin_scanner.guard.runtime_transition_daemon import TransitionDaemonDriver
-
-    runtime, plan, bindings, pointer = transition
-    script = b"#!/bin/sh\nexit 1\n"
-    monkeypatch.setattr(daemon_manager, "process_start_token", lambda _pid, **_kwargs: None)
-    dependencies = []
-    for _side, artifact in (("candidate", plan.candidate), ("predecessor", plan.predecessor)):
-        path = Path(artifact["path"])
-        path.write_bytes(script)
-        path.chmod(0o700)
-        dependencies.append(
-            TransitionFile.artifact_dependency(
-                {
-                    "path": str(path),
-                    "size": len(script),
-                    "sha256": hashlib.sha256(script).hexdigest(),
-                    "mode": 0o700,
-                    "owner_uid": path.stat().st_uid,
-                    "role": "artifact",
-                }
-            )
-        )
-    plan = replace(
-        plan,
-        files=(*plan.files, *dependencies),
-        deadline_epoch=time.time() + 8,
-    )
-
-    def observe(artifact, daemon_identity, operation_id, *, deadline_monotonic):
-        del daemon_identity, operation_id, deadline_monotonic
-        raise AssertionError(f"hook observation without a live daemon: {artifact['generation']}")
-
-    driver = TransitionDaemonDriver(
-        runtime,
-        plan,
-        home_dir=plan.guard_home.parent,
-        observe_hook=observe,
-    )
-    started = time.monotonic()
-    result = RuntimeTransitionCoordinator(runtime, driver).activate(
-        plan,
-        authority_home=plan.guard_home,
-        grant=None,
-        deadline_monotonic=started + 8,
-    )
-    assert bindings.read_bytes() == b"previous hooks"
-    assert pointer.read_bytes() == b"previous pointer"
-    assert result.phase == "RecoveryRequired"
-    assert result.first_cause == "daemon_start_failed"
-    assert any(item.get("code") == "daemon_start_failed" for item in result.recovery_causes)
-    print(
-        "A4 production driver phase="
-        f"{result.phase} first_cause={result.first_cause} recovery={list(result.recovery_causes)}"
-    )

@@ -127,7 +127,7 @@ fn settles_enabled_uncertainty(
 }
 
 /// Records that the user's explicit Allow took precedence over Rust's review.
-pub(super) fn settle_with_explicit_allow(result: &mut PreToolResultV1) {
+pub(crate) fn settle_with_explicit_allow(result: &mut PreToolResultV1) {
     result.minimum_action = "allow".into();
     result.policy_action = "allow".into();
     result.decision = "allow".into();

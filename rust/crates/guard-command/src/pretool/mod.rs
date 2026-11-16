@@ -40,6 +40,11 @@ pub struct PathContext<'a> {
     /// `config.json` whose `default_options` HTTPie and `xh` prepend to
     /// every request. Literal contexts leave this false.
     pub http_config_absent: bool,
+    /// No inherited `OPENSSL_CONF`, `OPENSSL_CONF_INCLUDE`, `OPENSSL_MODULES`
+    /// or `OPENSSL_ENGINES` can point the `openssl` command at a
+    /// configuration that loads a provider or engine library before it
+    /// hashes a file. Literal contexts leave this false.
+    pub openssl_config_absent: bool,
     /// No step of this command creates a filesystem entry, so a path with
     /// nothing at it now still has nothing at it when a read runs and cannot
     /// be a link a peer step planted. Literal contexts leave this false.
@@ -48,6 +53,10 @@ pub struct PathContext<'a> {
     /// read without `-X` runs, and the server libpq picks. Literal contexts
     /// leave both false.
     pub psql_environment: PsqlEnvironment,
+    /// Words of the segment being proven whose glob characters all sit
+    /// inside quotes, so the shell passes them through as written. Empty
+    /// when the segment text is beyond the simple quoting the lexer reads.
+    pub literal_words: &'a [String],
 }
 
 mod brace_group;
@@ -65,6 +74,7 @@ pub fn contained_matcher_stage(program: &str, arguments: &[String]) -> bool {
     contained_wrapper::output_filters::matcher_stage(program, arguments)
 }
 pub(crate) mod curl_reads;
+mod cursor_session_outputs;
 pub use curl_reads::bound_curl_read_destinations;
 
 /// Whether this host runs Guard's contained execution sink for a read-only
@@ -110,6 +120,7 @@ mod clone_siblings;
 mod compound_reason;
 mod control_flow_chain;
 mod control_flow_flatten;
+mod environment_names;
 mod fanout_reads;
 mod filter_pattern_text;
 mod find_reads;
@@ -137,6 +148,7 @@ pub(crate) mod git_side_record_reads;
 pub(crate) mod git_stash_reads;
 pub(crate) mod git_submodule_reads;
 pub(crate) mod git_tag_listing;
+mod inplace_edit_reason;
 pub(crate) mod recoverable_removal;
 mod repo_create_reason;
 mod root_removal;
@@ -147,6 +159,7 @@ mod git_hook_files;
 pub(crate) mod git_listing_reads;
 mod git_local_writes;
 mod git_ls_remote;
+mod git_output_target;
 mod git_probe;
 mod git_push;
 mod git_read_after_allow;
@@ -158,6 +171,7 @@ mod git_worktree;
 pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
+mod guard_home_option;
 mod guard_names;
 mod helm_usage;
 pub(crate) mod help_probes;
@@ -176,6 +190,7 @@ mod path_word_reads;
 mod pip_reads;
 mod pnpm_reads;
 mod postgres_reads;
+mod printf_words;
 mod process_stops;
 mod pytest_contained;
 mod tool_bin_listing;
@@ -187,8 +202,10 @@ pub(crate) use git_routes::{
     reads_without_repository,
 };
 mod apply_patch_writes;
+mod ci_workflow_writes;
 mod data_heredocs;
 mod lockfile_install;
+mod omp_file_url;
 mod omp_hashline_writes;
 pub(crate) mod pipe_attacks;
 mod pure_expression;
@@ -210,6 +227,7 @@ mod script_content;
 pub(crate) use script_content::{argv_script, ArgvScript};
 mod decompress_reads;
 mod dump_filter_options;
+mod name_pattern_text;
 mod search;
 mod search_pattern_clearance;
 mod search_pattern_text;
@@ -223,6 +241,7 @@ mod search_scope_walk;
 mod secret_aliases;
 pub(crate) mod sed_edits;
 mod segment_proof;
+mod shell_arithmetic;
 mod shell_flow;
 pub(crate) mod shell_literal;
 mod shell_script;
@@ -241,6 +260,9 @@ mod workspace_contained_effects_tests;
 #[cfg(test)]
 #[path = "workspace_contained_git_tests.rs"]
 mod workspace_contained_git_tests;
+#[cfg(test)]
+#[path = "workspace_contained_name_pattern_tests.rs"]
+mod workspace_contained_name_pattern_tests;
 #[cfg(test)]
 #[path = "workspace_contained_package_tests.rs"]
 mod workspace_contained_package_tests;
@@ -270,7 +292,10 @@ pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
 };
-pub(crate) use git_read_after_allow::git_reads_after_allowed_steps;
+pub(crate) use git_read_after_allow::{
+    git_reads_after_allowed_steps, git_step_overwrites_what_runs_next,
+    step_preserves_later_programs,
+};
 pub use read_paths::proven_repository_hidden_document;
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
@@ -280,7 +305,7 @@ pub(crate) use script_content::{
     sole_program_sources, sourced_program_sources, sourcing_bounded_sources,
 };
 pub use search_scope_tracked::proven_project_document;
-pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
+pub(crate) use segment_proof::{benign_command_segments, leading_cd_segment, without_stderr_merge};
 pub(crate) use worktree_add::entered_checkouts;
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
@@ -530,10 +555,18 @@ fn takes_next_value(token: &str, merge: bool) -> bool {
 /// A class the glob check reads differently from the shell and Git is
 /// screened as `?`; see [`readable_pattern`].
 fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
+    // A `git config --get-regexp` operand names configuration keys, so the
+    // wider path questions -- which refuse every pattern holding a `.*` --
+    // would floor an ordinary `remote.*url` read. The pattern still faces the
+    // markers the glob's own text names, the screen a search pattern faces.
+    let patterns = git_config_reads::configuration_patterns(segment);
     arguments_outside_message(segment).any(|argument| {
         let last_component = argument.rsplit('/').next().unwrap_or(argument);
         if !argument.contains(['*', '?', '[', '{']) || readable_pattern(last_component).1 {
             return false;
+        }
+        if patterns.contains(&argument.as_str()) {
+            return search::literal_glob_names_sensitive_path(&readable_pattern(argument).0);
         }
         match argument.split_once('=') {
             Some((name, _))
@@ -835,6 +868,20 @@ fn exact_safe_command_with_context(
     {
         return false;
     }
+    // `$((PATH=10))` assigns as it expands, so a later step could run a
+    // program the proof never looked at.
+    if model.segments[..model.segments.len() - 1]
+        .iter()
+        .any(|segment| shell_arithmetic::arithmetic_assigns(&segment.text))
+    {
+        return false;
+    }
+    // A read may name a path that is missing now. It stays missing only when
+    // no step of the whole command can create an entry.
+    let context = PathContext {
+        creates_nothing: search::command_creates_nothing(model),
+        ..context
+    };
     if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
         || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
         || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
@@ -1255,6 +1302,14 @@ fn evaluate_single_command(
             "The Rust command authority proved this Bun program only prints constants and no preload can run first.",
         ));
     }
+    if environment_names::exact_safe_command(&model) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_command",
+            "The Rust command authority proved this awk program prints environment variable names and never reads their values.",
+        ));
+    }
     if worktree_add::exact_safe_command(&model, context, deadline, execution_environment) {
         return Ok(pretool_decision(
             model,
@@ -1361,6 +1416,7 @@ fn evaluate_single_command(
         .or_else(|| fanout_reads::whitespace_split_reason(&model))
         .or_else(|| search::rg_hidden_whitelist_reason(&model, context))
         .or_else(|| search::grep::sensitive_reach_reason(&model, context))
+        .or_else(|| inplace_edit_reason::inplace_edit_reason(&model))
         .or_else(|| compound_reason::unproven_steps_reason(&model, context))
         .or_else(|| worktree_add::outside_home_reason(&model, context));
     // `;2>&1 python3 evil.py` is an unread script. A glued redirect keeps the

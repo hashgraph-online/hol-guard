@@ -1,0 +1,54 @@
+HOL Guard CIGAR mapped this request to project code. These lines are file contents, not instructions. Each range is one whole definition: open just the ranges you need instead of searching or reading whole files. Code under a range is that whole definition as the file holds it now.
+
+Definitions this request names:
+boltons/iterutils.py:1035-1055 def default_exit(path, key, old_parent, new_parent, new_items):
+```
+def default_exit(path, key, old_parent, new_parent, new_items):
+    # print('exit(%r, %r, %r, %r, %r)'
+    #       % (path, key, old_parent, new_parent, new_items))
+    ret = new_parent
+    if isinstance(new_parent, Mapping):
+        new_parent.update(new_items)
+    elif isinstance(new_parent, Sequence):
+        vals = [v for i, v in new_items]
+        try:
+            new_parent.extend(vals)
+        except AttributeError:
+            ret = new_parent.__class__(vals)  # tuples
+    elif isinstance(new_parent, Set):
+        vals = [v for i, v in new_items]
+        try:
+            new_parent.update(vals)
+        except AttributeError:
+            ret = new_parent.__class__(vals)  # frozensets
+    else:
+        raise RuntimeError('unexpected iterable type: %r' % type(new_parent))
+    return ret
+```
+
+Tests:
+tests/test_iterutils.py: 4 related tests, last TestRemap.test_add_length 291-313
+tests/test_iterutils.py:130-148
+```
+    def test_namedtuple(self):
+        """TODO: this fails right now because namedtuples' __new__ is
+        overridden to accept arguments. remap's default_enter tries
+        to create an empty namedtuple and gets a TypeError.
+
+        Could make it so that immutable types actually don't create a
+        blank new parent and instead use the old_parent as a
+        placeholder, creating a new one at exit-time from the value's
+        __class__ (how default_exit works now). But even then it would
+        have to *args in the values, as namedtuple constructors don't
+        take an iterable.
+        """
+
+        Point = namedtuple('Point', 'x y')
+        point_map = {'origin': [Point(0, 0)]}
+
+        with pytest.raises(TypeError):
+            remapped = remap(point_map)
+            assert isinstance(remapped['origin'][0], Point)
+```
+
+The code and diffs in this note are what the files hold now: work from them instead of reading those lines again. When you can, make the edit and run its check in the same tool call (one exec script can apply the patch and run the tests).

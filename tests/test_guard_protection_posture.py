@@ -420,3 +420,5 @@ def test_guard_doctor_includes_protection_posture(tmp_path: Path, capsys: object
     assert payload["protection"] == "extra_careful"
     assert payload["protection_off"] is False
     assert payload["protection_label"] == "Extra careful"
+    assert payload["protection_basis"] == "configured_posture_and_hook_registration"
+    assert "separate runtime check" in payload["protection_health_note"]

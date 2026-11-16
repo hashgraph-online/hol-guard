@@ -13,9 +13,21 @@
 //! and `kubectl apply -f -` deploys it. None of them looks like an
 //! interpreter, so naming the programs that only read is the only test that
 //! stays correct as programs are added.
+//!
+//! `git commit -F -` reads those bytes as the message it records. It runs
+//! nothing from them and saves them nowhere else, so it belongs beside the
+//! filters. No other `git` subcommand does: `apply` and `am` apply a patch,
+//! `hash-object --stdin` writes an object and `fast-import` rewrites history,
+//! so the subcommand is named rather than the program. The commit itself is
+//! still the write it is, and keeps the proof every other spelling of it gets.
+//!
+//! Which segment of a chain the operator belongs to is not in the projected
+//! text, so every segment answers for it. A chain whose segments all only
+//! read leaves nothing that could run the bytes, whichever one the shell
+//! hands them to.
 
 use super::Quote;
-use crate::CanonicalCommandV1;
+use crate::{CanonicalCommandV1, CommandSegmentV1};
 
 /// Programs that read standard input as data. Each prints, counts, filters or
 /// reshapes what it reads; none runs, applies or installs it.
@@ -24,21 +36,117 @@ const FILTERS: &[&str] = &[
     "tail", "tee", "tr", "uniq", "wc", "yq",
 ];
 
-/// Whether the command is one plain filter spelled by name, with no wrapper,
-/// environment assignment or path override, so the bytes it reads on standard
-/// input are data and nothing else. The caller still proves every file the
-/// command writes on its own.
-pub(super) fn reads_data(model: &CanonicalCommandV1) -> bool {
-    model.wrapper_chain.is_empty()
-        && !model.path_overridden
-        && model.segments.len() == 1
-        && model.segments[0].wrapper_chain.is_empty()
-        && model.segments[0].environment_names.is_empty()
-        && !model.segments[0].path_overridden
-        && model.segments[0]
-            .executable
-            .as_deref()
-            .is_some_and(|executable| FILTERS.contains(&executable))
+/// Whether the command the bytes reach only reads them, so what arrives on
+/// standard input is data and nothing else. The caller still proves every
+/// file that command writes on its own.
+///
+/// The operator belongs to the command the shell was reading when it met it.
+/// With nothing separating that command from the end of the text, it is the
+/// last segment, and that segment alone answers for the bytes. With a
+/// separator after it, which segment the shell hands them to is no longer in
+/// the projected text, so every segment answers for them.
+pub(super) fn reads_data(model: &CanonicalCommandV1, separated_after: bool) -> bool {
+    if !model.wrapper_chain.is_empty() || model.path_overridden || model.segments.is_empty() {
+        return false;
+    }
+    if separated_after {
+        model.segments.iter().all(segment_reads_data)
+    } else {
+        model.segments.last().is_some_and(segment_reads_data)
+    }
+}
+
+/// Whether `segment` is one plain `git commit -F -`, which reads a quoted
+/// heredoc only as the message it records, with nothing else reading standard
+/// input. The decision's projection already lets such a commit take the
+/// bytes; the workspace sandbox's projection asks the same question of the
+/// segment a heredoc feeds, so a commit routed to the sandbox can be planned.
+pub(in crate::pretool) fn heredoc_records_commit_message(segment: &str) -> bool {
+    crate::parse_command(&crate::CommandModelRequestV1 {
+        command: segment.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    })
+    .is_ok_and(|model| {
+        model.confidence == "exact"
+            && model.uncertainty_reason.is_none()
+            && model.wrapper_chain.is_empty()
+            && !model.path_overridden
+            && model.segments.len() == 1
+            && segment_reads_data(&model.segments[0])
+            && model.segments[0].executable.as_deref() == Some("git")
+    })
+}
+
+/// The command a heredoc operator at the end of `out` belongs to: the text
+/// after the last unquoted separator. `None` when a comment is open there,
+/// because the shell then ignores the operator and runs the lines meant as
+/// its body as commands.
+pub(in crate::pretool) fn heredoc_segment(out: &str) -> Option<&str> {
+    let (mut quote, mut escaped, mut commented) = (Quote::None, false, false);
+    let (mut start, mut word_start) = (0, true);
+    for (position, value) in out.char_indices() {
+        let at_word_start = std::mem::replace(&mut word_start, false);
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        // A comment runs to the end of its line, quotes and all.
+        if commented {
+            if value == '\n' {
+                (commented, start, word_start) = (false, position + 1, true);
+            }
+            continue;
+        }
+        match (quote, value) {
+            (Quote::Single, '\'') | (Quote::Double, '"') => quote = Quote::None,
+            (Quote::Double | Quote::None, '\\') => escaped = true,
+            (Quote::Single | Quote::Double, _) => {}
+            (Quote::None, '\'') => quote = Quote::Single,
+            (Quote::None, '"') => quote = Quote::Double,
+            (Quote::None, '#') if at_word_start => commented = true,
+            (Quote::None, ';' | '|' | '&' | '\n' | '(' | ')' | '{' | '}') => {
+                (start, word_start) = (position + 1, true);
+            }
+            (Quote::None, value) => word_start = value.is_whitespace(),
+        }
+    }
+    (!commented).then(|| &out[start..])
+}
+
+/// Whether one segment, spelled plainly by name with no wrapper, environment
+/// assignment or path override, only reads what reaches it on standard input.
+fn segment_reads_data(segment: &CommandSegmentV1) -> bool {
+    segment.wrapper_chain.is_empty()
+        && segment.environment_names.is_empty()
+        && !segment.path_overridden
+        && segment.executable.as_deref().is_some_and(|executable| {
+            FILTERS.contains(&executable) || records_a_commit_message(executable, segment)
+        })
+}
+
+/// Whether the segment is a `git commit` that takes its message from standard
+/// input, which is the only commit form that reads the bytes at all. A message
+/// on the command line, a message file and an amended message all leave them
+/// untouched, so dropping the body in front of one of those would project a
+/// command the shell never ran.
+///
+/// The subcommand is the first word, so a global option such as `-C` or `-c`
+/// in front of it leaves the segment unrecognised and the projection closed.
+/// That is deliberate: those options choose the repository and the
+/// configuration the commit runs under, and this test answers only for what
+/// the bytes on standard input become.
+fn records_a_commit_message(executable: &str, segment: &CommandSegmentV1) -> bool {
+    if executable != "git" {
+        return false;
+    }
+    let words: Vec<&str> = segment.arguments.iter().map(String::as_str).collect();
+    matches!(
+        words.split_first(),
+        Some((&"commit", rest))
+            if crate::pretool::git_local_writes::forms::message_from_standard_input(rest)
+    )
 }
 
 /// The bare `cat` the caller may stand a no-op in for. Reading standard input
@@ -167,6 +275,37 @@ fn plain_expansion(chars: &[char], start: usize) -> Option<usize> {
     }
     if index == start || chars.get(index) != Some(&'}') {
         return None;
+    }
+    Some(index)
+}
+
+/// Skips the bodies of the pending heredocs in order, as
+/// `skip_heredoc_bodies` does. A body that feeds Python must use only its
+/// builtins, the same check the extension controls apply to such a program.
+pub(in crate::pretool) fn skip_bodies(
+    chars: &[char],
+    mut index: usize,
+    heredocs: &mut Vec<(String, bool)>,
+    programs: &mut Vec<bool>,
+) -> Option<usize> {
+    if heredocs.len() != programs.len() {
+        return None;
+    }
+    for (heredoc, program) in heredocs.drain(..).zip(programs.drain(..)) {
+        let start = index;
+        index = super::skip_heredoc_bodies(chars, index, &mut vec![heredoc])?;
+        if program {
+            let text: String = chars[start..index].iter().collect();
+            let text = text.strip_suffix('\n').unwrap_or(&text);
+            // The last line is the delimiter.
+            let body: Vec<&str> = match text.rsplit_once('\n') {
+                Some((body, _)) => body.split('\n').collect(),
+                None => Vec::new(),
+            };
+            if !crate::native_command_controls::python_is_builtin_only(&body) {
+                return None;
+            }
+        }
     }
     Some(index)
 }

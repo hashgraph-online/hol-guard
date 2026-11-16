@@ -50,8 +50,12 @@ impl Includes {
             return true;
         }
         let globs: Vec<&str> = self.unscreened.iter().map(String::as_str).collect();
+        let Some(targets) = shell_roots(targets, context) else {
+            return false;
+        };
+        let targets: Vec<&str> = targets.iter().map(String::as_str).collect();
         crate::pretool::search_scope::grep_include_scope_proven(
-            targets,
+            &targets,
             &globs,
             context.home_dir,
             context.cwd,
@@ -70,11 +74,35 @@ impl Includes {
             return false;
         }
         let globs: Vec<&str> = self.all.iter().map(String::as_str).collect();
+        let Some(target) = shell_roots(&[target], context) else {
+            return false;
+        };
         crate::pretool::search_scope::grep_include_walk_proven(
-            target,
+            &target[0],
             &globs,
             context.home_dir,
             context.cwd,
         )
     }
+}
+
+/// Each root as the shell hands it to `grep`. `~/code/docs` names the
+/// directory below the home once the shell expands the tilde, so the proof
+/// walks that directory. The shell expands it from its own `HOME`, so the
+/// expansion stands only when that home is the one Guard vetted, and never
+/// on Windows, where no shell expands it. `~` alone and `~user` stay
+/// unproven.
+fn shell_roots(targets: &[&str], context: ReadContext<'_>) -> Option<Vec<String>> {
+    targets
+        .iter()
+        .map(|target| {
+            if !target.starts_with('~') {
+                return Some((*target).to_owned());
+            }
+            if cfg!(windows) || !context.shell_home_matches || !target.starts_with("~/") {
+                return None;
+            }
+            crate::pretool::read_paths::expand_home_read_path(target, context.home_dir)
+        })
+        .collect()
 }

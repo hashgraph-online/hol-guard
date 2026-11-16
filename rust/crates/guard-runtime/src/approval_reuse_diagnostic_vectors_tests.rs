@@ -14,6 +14,77 @@ use crate::store_vectors_support_tests::{gunzip_json, seeded_store};
 
 const VECTORS: &[u8] = include_bytes!("../tests/fixtures/diag_vectors.json.gz");
 
+/// Vectors the recorded Python answered `approval_reuse_expired` and the
+/// current diagnosis answers with the mismatch that was already there.
+///
+/// The Python asked whether the row had expired before it compared the row's
+/// payload, workspace and publisher against the request. A row that had gone
+/// stale *and* named different content or a different workspace therefore came
+/// back as "expired", which tells the reader their approval lapsed when in
+/// truth it never covered this request. World 9 shows the cost plainly: one
+/// unclaimed row and one request produce `approval_reuse_identity_changed` at
+/// 12:00 and 13:00 and `approval_reuse_expired` at 18:00, though nothing moved
+/// but the clock.
+///
+/// Expiry is now the last question asked, so `approval_reuse_expired` is
+/// reserved for a row that matched on every other count. These are the recorded
+/// vectors that answer differently because of it; the other sixteen recorded
+/// `approval_reuse_expired` vectors are unchanged, and no other vector moves.
+const REORDERED_EXPIRY: &[(usize, &str)] = &[
+    (66, "approval_reuse_content_changed"),
+    (67, "approval_reuse_content_changed"),
+    (68, "approval_reuse_content_changed"),
+    (69, "approval_reuse_content_changed"),
+    (74, "approval_reuse_content_changed"),
+    (75, "approval_reuse_content_changed"),
+    (76, "approval_reuse_content_changed"),
+    (77, "approval_reuse_content_changed"),
+    (78, "approval_reuse_content_changed"),
+    (79, "approval_reuse_content_changed"),
+    (80, "approval_reuse_content_changed"),
+    (81, "approval_reuse_content_changed"),
+    (82, "approval_reuse_content_changed"),
+    (83, "approval_reuse_content_changed"),
+    (84, "approval_reuse_content_changed"),
+    (85, "approval_reuse_content_changed"),
+    (86, "approval_reuse_content_changed"),
+    (87, "approval_reuse_content_changed"),
+    (88, "approval_reuse_content_changed"),
+    (89, "approval_reuse_content_changed"),
+    (90, "approval_reuse_content_changed"),
+    (91, "approval_reuse_content_changed"),
+    (92, "approval_reuse_content_changed"),
+    (93, "approval_reuse_content_changed"),
+    (346, "approval_reuse_content_changed"),
+    (347, "approval_reuse_content_changed"),
+    (348, "approval_reuse_content_changed"),
+    (349, "approval_reuse_content_changed"),
+    (354, "approval_reuse_content_changed"),
+    (355, "approval_reuse_content_changed"),
+    (356, "approval_reuse_content_changed"),
+    (357, "approval_reuse_content_changed"),
+    (358, "approval_reuse_content_changed"),
+    (359, "approval_reuse_content_changed"),
+    (360, "approval_reuse_content_changed"),
+    (361, "approval_reuse_content_changed"),
+    (362, "approval_reuse_content_changed"),
+    (363, "approval_reuse_content_changed"),
+    (364, "approval_reuse_content_changed"),
+    (365, "approval_reuse_content_changed"),
+    (366, "approval_reuse_content_changed"),
+    (367, "approval_reuse_content_changed"),
+    (368, "approval_reuse_content_changed"),
+    (369, "approval_reuse_content_changed"),
+    (370, "approval_reuse_content_changed"),
+    (371, "approval_reuse_content_changed"),
+    (372, "approval_reuse_content_changed"),
+    (373, "approval_reuse_content_changed"),
+    (805, "approval_reuse_identity_changed"),
+    (806, "approval_reuse_identity_changed"),
+    (809, "approval_reuse_identity_changed"),
+    (810, "approval_reuse_identity_changed"),
+];
+
 fn text(value: &Value) -> Option<String> {
     value.as_str().map(str::to_owned)
 }
@@ -54,7 +125,7 @@ fn diagnostic_matches_every_recorded_vector() {
         .iter()
         .map(|world| seeded_store(&document["schema_sql"], &world["seed"]))
         .collect();
-    for vector in vectors {
+    for (index, vector) in vectors.iter().enumerate() {
         let world = vector["world"].as_u64().unwrap() as usize;
         let connection = &stores[world];
         if vector["request"]["artifact_id"].is_null() {
@@ -91,16 +162,57 @@ fn diagnostic_matches_every_recorded_vector() {
             );
         }
         let answered = diagnose(connection, &request(vector, true), now).unwrap();
+        let reordered = REORDERED_EXPIRY
+            .iter()
+            .find(|(recorded, _)| *recorded == index)
+            .map(|(_, reason)| *reason);
+        let expected_reason = match reordered {
+            Some(reason) => {
+                assert_eq!(
+                    vector["expected"]["reason"],
+                    json!("approval_reuse_expired"),
+                    "vector {index} is pinned as a reordered expiry but was not recorded expired"
+                );
+                json!(reason)
+            }
+            None => vector["expected"]["reason"].clone(),
+        };
         assert_eq!(
             answered,
             json!({
-                "reason": vector["expected"]["reason"],
+                "reason": expected_reason,
                 "stored_hash": vector["expected"]["stored_hash"],
             }),
-            "world {world} vector {:?} diverged",
+            "world {world} vector {index} {:?} diverged",
             vector["label"]
         );
     }
+}
+
+/// A row either covers a request or it does not, and the clock cannot change
+/// which. World 9 holds one unclaimed allow scoped to a workspace and a
+/// publisher the request never names, so the diagnosis is the same before and
+/// after that row goes stale.
+#[test]
+fn the_clock_alone_never_changes_why_a_row_was_rejected() {
+    let document = gunzip_json(VECTORS);
+    let world = &document["worlds"][9];
+    let connection = seeded_store(&document["schema_sql"], &world["seed"]);
+    let vectors = document["vectors"].as_array().unwrap();
+    let fresh = &vectors[803];
+    let stale = &vectors[809];
+    assert_eq!(
+        fresh["request"]["artifact_id"],
+        stale["request"]["artifact_id"]
+    );
+    let answer = |vector: &Value| {
+        let now =
+            guard_contracts::canonical_utc_timestamp(vector["request"]["now"].as_str().unwrap())
+                .expect("recorded now must canonicalize");
+        diagnose(&connection, &request(vector, true), now).unwrap()["reason"].clone()
+    };
+    assert_eq!(answer(fresh), json!("approval_reuse_identity_changed"));
+    assert_eq!(answer(stale), answer(fresh));
 }
 
 #[test]

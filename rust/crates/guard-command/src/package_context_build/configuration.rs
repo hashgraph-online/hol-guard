@@ -14,21 +14,16 @@ use super::configuration_names::{
 use super::fs::{ContextFiles, Fs, MAX_CONFIG_FILE_BYTES, MAX_TREE_FILES};
 use super::ports::Ports;
 use super::{object, text, BuildError, Built};
-
-const LIFECYCLE_NAMES: &[&str] = &[
-    "install",
-    "postinstall",
-    "preinstall",
-    "prepare",
-    "prepublish",
-    "prepublishOnly",
-];
+use crate::package_manifest_sections::{install_section_bytes, manifest_digest, LIFECYCLE_NAMES};
 
 pub(super) struct ConfigurationInput<'a> {
     pub(super) workspace: &'a str,
     pub(super) repository_root: Option<&'a str>,
     pub(super) manager: &'a str,
     pub(super) environment: &'a BTreeMap<String, String>,
+    /// The launch turns off `package.json` lifecycle scripts, so a hook there
+    /// cannot run during this install.
+    pub(super) lifecycle_scripts_disabled: bool,
 }
 
 pub(super) struct Configuration {
@@ -167,11 +162,23 @@ fn append_optional_config(
     if inspect.dynamic_code && dynamic_code_regex().is_match(&content) {
         return Err(dynamic());
     }
-    for captures in env_reference_regex().captures_iter(&content) {
+    // A `pyproject.toml` configures the manager only through its install
+    // sections; the rest of the file changes with every release, so neither
+    // its digest nor the variables it names come from there.
+    let install_sections = (PyPath::new(path).name() == "pyproject.toml")
+        .then(|| install_section_bytes(path, &normalized))
+        .flatten();
+    let scanned = install_sections.as_deref().unwrap_or(&content);
+    for captures in env_reference_regex().captures_iter(scanned) {
         collected.referenced.insert(captures[1].to_owned());
     }
+    let digest = if PyPath::new(path).name() == "pyproject.toml" {
+        manifest_digest(path, &normalized)
+    } else {
+        sha256_hex(&normalized)
+    };
     let entry = Entry {
-        digest: sha256_hex(&normalized),
+        digest,
         path: format!("{label}/{}", PyPath::new(path).name()),
     };
     match bucket {
@@ -202,6 +209,7 @@ fn append_package_json_sections(
     ports: &mut dyn Ports,
     path: &str,
     label: &str,
+    lifecycle_scripts_disabled: bool,
     collected: &mut Collected,
 ) -> Built<()> {
     let payload = files.read(fs, path, MAX_CONFIG_FILE_BYTES, false)?;
@@ -242,7 +250,9 @@ fn append_package_json_sections(
         digest: hook_digest,
         path: entry_path,
     });
-    if has_lifecycle {
+    // The hooks stay in the digest either way, so editing one still asks
+    // again. Only a launch that can run them is tied to this checkout.
+    if has_lifecycle && !lifecycle_scripts_disabled {
         return Err(BuildError::Unavailable("dynamic_lifecycle_hook"));
     }
     Ok(())
@@ -368,7 +378,15 @@ pub(super) fn configuration_material(
         }
         let package_json = base.join("package.json").to_string();
         if JS_MANAGERS.contains(&manager) && fs.exists(&package_json)? {
-            append_package_json_sections(fs, files, ports, &package_json, &label, &mut collected)?;
+            append_package_json_sections(
+                fs,
+                files,
+                ports,
+                &package_json,
+                &label,
+                input.lifecycle_scripts_disabled,
+                &mut collected,
+            )?;
         }
     }
     for (path, npmrc) in user_configuration_paths(fs, manager, input.environment)? {

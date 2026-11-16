@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
 )
 from codex_plugin_scanner.guard.cli.inventory_list_commands import mcp_list_payload
 from codex_plugin_scanner.guard.cli.render_connectors import connector_setup_line
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.connector_setup_items import connector_setup_href, connector_setup_status
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool

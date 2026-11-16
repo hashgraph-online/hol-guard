@@ -15,10 +15,13 @@
 //! next step -- the checks a commit, bootstrap, catalog migration or
 //! last-good restore must pass, the records it seals, and whether a prepared
 //! transition is resumed, committed or abandoned -- and the caller performs
-//! that step under the exclusive authority lease. `seal_anchor` and
-//! `seal_manifest` seal the anchor and catalog manifest records it stores,
-//! and `seal_managed_revision` and `seal_managed_activation` the managed
-//! controls publication epoch and activation. When a read finds work only a writer may do --
+//! that step under the exclusive authority lease. `write_anchor` writes an
+//! anchor the store has earned into the credential vault, and
+//! `seal_managed_revision` and `seal_managed_activation` seal the managed
+//! controls publication epoch and activation, `apply_policy` activates a
+//! verified policy bundle, `apply_review_memory` publishes Cloud Review
+//! policy memory and `clear_policy` removes the cached remote policy
+//! authority. When a read finds work only a writer may do --
 //! restoring the last-good export, resuming or abandoning a prepared
 //! transition, or committing a catalog migration -- it answers with an
 //! `action` naming that work and the authenticated inputs it needs. The caller
@@ -41,6 +44,14 @@ pub const EXTENSION_CONTROL_AUTHORITY_RESULT_SCHEMA: &str =
     "guard-extension-control-authority-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const EXTENSION_CONTROL_AUTHORITY_FEATURE: &str = "extension-control-authority-v1";
+/// Capability advertised when the `restore` and `roll_back` writer ops are
+/// available.
+pub const EXTENSION_CONTROL_AUTHORITY_WRITES_FEATURE: &str =
+    "extension-control-authority-writes-v1";
+/// Capability advertised when the `bootstrap`, `commit_prepare`, `resume`,
+/// `migrate` and `write_manifest` writer ops are available.
+pub const EXTENSION_CONTROL_AUTHORITY_COMMIT_FEATURE: &str =
+    "extension-control-authority-commit-v1";
 /// Largest canonical request the resident accepts. A request carries at most
 /// two catalog manifests, one fingerprint per catalog target.
 ///
@@ -64,8 +75,10 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `managed_activation`, `managed_revision`, `load_manifest`,
     /// `validate_chain`, `history`, `commit_plan`, `resume_plan`,
     /// `rollback_plan`, `bootstrap_plan`, `migrate_plan`, `restore_plan`,
-    /// `seal_anchor`, `seal_manifest`, `seal_managed_revision`,
-    /// `seal_managed_activation` or `anchor`.
+    /// `bootstrap`, `commit_prepare`, `resume`, `migrate`, `write_manifest`,
+    /// `queue_change`, `apply_policy`, `apply_review_memory`, `clear_policy`,
+    /// `write_anchor`, `seal_managed_revision`, `seal_managed_activation`,
+    /// `write_command_marker`, `write_private_state` or `anchor`.
     pub op: String,
     /// Authority authentication key bytes (base64url, no padding); absent
     /// when the credential store holds none.
@@ -108,12 +121,17 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `managed_activation` / `managed_revision`: the decoded state value.
     /// `managed_activation` checks it against `catalog_digest`, or against
     /// the catalog the state names when that is absent.
+    /// `write_command_marker`: the command-control authority marker to sign,
+    /// without its MAC.
+    /// `write_private_state`: `name`, one of the native runtime authority
+    /// files, and `content_b64`, its exact bytes (base64url, no padding).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<Value>,
     /// `validate_chain`: the committed head to validate up to.
     /// `resume_plan`: the prepared transition to resume.
     /// `rollback_plan`: the committed head the prepared transition sits on.
-    /// `seal_anchor`: the revision the anchor pins.
+    /// `write_anchor`: the revision the anchor pins.
+    /// `queue_change`: the committed head whose change event is queued.
     /// `seal_managed_revision`: the managed publication epoch to seal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<i64>,
@@ -125,26 +143,156 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// already given up.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub own_transition_digest: Option<String>,
-    /// `seal_anchor`: `prepared`, `anchored` or `committed`.
+    /// `write_anchor`: `anchored` or `committed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<String>,
     /// The caller's clock, as Python's `datetime.now(timezone.utc).isoformat()`
-    /// spells it, for the plan ops and `seal_manifest`.
+    /// spells it, for the plan ops and `write_manifest`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub now: Option<String>,
+    /// `resume`: the pending cloud-event capacity the change event is queued
+    /// under.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_queue_limit: Option<i64>,
+    /// `resume` from the commit that prepared the row: the hashed proof the
+    /// commit consumes in the same transaction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof_hash: Option<String>,
+    /// `resume` from a retry of a commit that found its own prepared row: the
+    /// proof the retry settles in the transaction that applies the verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_proof: Option<ExtensionControlRetryProofV1>,
     /// `history`: how many prior snapshots to list.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<i64>,
     /// `commit_plan`: the mutation the caller's proof was validated against.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<ExtensionControlCommitV1>,
-    /// `migrate_plan`: the rebinding a read's `migrate_catalog` action named.
+    /// `migrate_plan` / `migrate`: the rebinding a read's `migrate_catalog`
+    /// action named.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub catalog_migration: Option<ExtensionControlCatalogMigrationV1>,
+    /// `migrate`: what the migration event records beside the rebinding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub migration_record: Option<ExtensionControlMigrationRecordV1>,
+    /// `write_manifest`: replace the manifest recorded for `catalog_digest`
+    /// instead of recording its first one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest_replace: Option<bool>,
+    /// `resume` of a row whose commit activates a command pack: what the
+    /// caller read from the protected store for the resident to check.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_finish: Option<ExtensionControlPackFinishV1>,
+    /// `commit_prepare` of a commit that activates a command pack: the
+    /// staged activation and the protected state it was staged against.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_reserve: Option<ExtensionControlPackReserveV1>,
     /// `seal_managed_activation`: the verified policy to activate on the
     /// authority committed under `catalog_digest`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub managed_activation: Option<ExtensionControlManagedActivationV1>,
+    /// `reset`: why the authority is reset, and whether the catalog
+    /// manifests the lost key authenticated go with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset: Option<ExtensionControlResetV1>,
+    /// `clear_policy`: the remote policy authority a clear removes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_clear: Option<ExtensionControlPolicyClearV1>,
+    /// `apply_policy`: the verified policy bundle an activation writes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_apply: Option<ExtensionControlPolicyApplyV1>,
+    /// `apply_review_memory`: the Cloud Review policy memory a publish writes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_memory: Option<ExtensionControlReviewMemoryV1>,
+}
+
+/// `apply_review_policy_memory_state`. The caller verifies and seals the
+/// memory rules; the resident replaces the remote policy decisions with
+/// them and writes the memory cursor state in one transaction.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlReviewMemoryV1 {
+    /// The memory registry, policy version and acknowledgement, as JSON text
+    /// by `sync_state` key.
+    #[serde(default)]
+    pub payloads: BTreeMap<String, String>,
+    /// The remote policy decisions that replace the stored ones, each in
+    /// `policy_decisions` column order.
+    #[serde(default)]
+    pub rows: Vec<Vec<Value>>,
+}
+
+/// An authority reset: the rows whose chain cannot be verified are archived
+/// under `reason` and removed so a fresh authority can be bootstrapped.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlResetV1 {
+    pub reason: String,
+    /// The key that authenticated the catalog manifests was lost.
+    pub drop_manifest: bool,
+}
+
+/// `apply_policy_bundle_authority`. The caller verifies the bundle, seals the
+/// managed state and encodes every payload first; the resident writes them
+/// in one transaction only while the authority snapshot and each
+/// `sync_state` value the caller read are unchanged.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlPolicyApplyV1 {
+    /// The authority snapshot the caller read; both absent when there was
+    /// none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_revision: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_snapshot_digest: Option<String>,
+    /// The `sync_state` text the caller read, by key; `None` when the key
+    /// was absent.
+    #[serde(default)]
+    pub observed: BTreeMap<String, Option<String>>,
+    /// The `sync_state` payloads the activation writes, as JSON text by key.
+    #[serde(default)]
+    pub payloads: BTreeMap<String, String>,
+    /// Removes the managed-controls activation and its negotiated
+    /// capabilities: the bundle carries no managed controls.
+    #[serde(default)]
+    pub retire_managed: bool,
+    /// Also stores the bundle and the managed-controls activation it writes
+    /// as their last-good copies, so the request carries each only once.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub copy_last_good: bool,
+    /// The remote policy decisions that replace the stored ones, each in
+    /// `policy_decisions` column order.
+    #[serde(default)]
+    pub rows: Vec<Vec<Value>>,
+    /// The custom-extension continuity the activation carries, as the
+    /// `apply_custom_extension_continuity` store method takes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuity: Option<serde_json::Map<String, Value>>,
+}
+
+/// `clear_policy_bundle_authority`. Without `managed_revision` the resident
+/// answers the publication epoch the clear moves to and the acknowledgement
+/// stored now, and writes nothing. With it, the clear is written only while
+/// the authority snapshot, that epoch and that acknowledgement are still the
+/// ones the caller published from.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlPolicyClearV1 {
+    /// The authority snapshot the caller read before the clear; both absent
+    /// when there was none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_revision: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_snapshot_digest: Option<String>,
+    /// The publication epoch the plan answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_revision: Option<i64>,
+    /// The `policy_bundle_ack` text the plan answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stored_ack: Option<String>,
+    /// The `sync_state` payloads the clear writes, as JSON text by key.
+    #[serde(default)]
+    pub payloads: BTreeMap<String, String>,
 }
 
 /// A verified managed-controls policy and the local authority it activates
@@ -181,6 +329,114 @@ pub struct ExtensionControlCatalogMigrationV1 {
     /// Ordinary catalog migrations cannot change the active pack record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub installed_upgrade: Option<Value>,
+}
+
+/// What a committed catalog migration records: the provenance the caller
+/// settled before the store transaction opened, the older writer the store is
+/// handed back to when the migration is a downgrade, and the controls it
+/// retires.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlMigrationRecordV1 {
+    pub provenance: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub downgraded_from: Option<String>,
+    #[serde(default)]
+    pub retired_target_ids: Vec<String>,
+}
+
+/// The protected state a command-pack activation is checked against. The
+/// caller reads it from the policy-integrity store and writes the lifecycle
+/// floor the resident names; the resident authenticates and decides.
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlPackFinishV1 {
+    /// The command-pack verifier key, base64url without padding.
+    pub key_b64: String,
+    /// The protected lifecycle floor record, when one is stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor: Option<String>,
+    /// The active pack security record, when one is stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub security: Option<String>,
+    /// The retained evidence a link sealed before lifecycle binding needs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legacy_evidence: Option<Value>,
+}
+
+impl std::fmt::Debug for ExtensionControlPackFinishV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ExtensionControlPackFinishV1")
+            .field("security", &self.security.is_some())
+            .field("legacy_evidence", &self.legacy_evidence.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+/// The proof a commit retry settles with the verdict on its own prepared row:
+/// recorded as consumed when the row commits, released when it is abandoned.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlRetryProofV1 {
+    /// The hashed proof identifier the commit plan named.
+    pub proof_hash: String,
+    /// The mutation digest the proof was validated against.
+    pub mutation_digest: String,
+}
+
+/// A staged command-pack activation to reserve with the prepared row, and
+/// the protected state the caller read for the resident to check it against.
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlPackReserveV1 {
+    /// The command-pack verifier key, base64url without padding.
+    pub key_b64: String,
+    /// The protected lifecycle floor record, when one is stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor: Option<String>,
+    /// The active pack security record, when one is stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub security: Option<String>,
+    /// The sealed activation record.
+    pub record_json: String,
+    pub record_digest: String,
+    pub record_mac: String,
+    /// The active record the activation extends; none over a baseline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_digest: Option<String>,
+    pub lifecycle_before: String,
+    pub lifecycle_after: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub security_digest: Option<String>,
+    /// Unix seconds the activation is admitted at.
+    pub admitted_at: i64,
+    /// The legacy baseline a first activation retains, sealed by the
+    /// resident when the activation slot is still empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline: Option<ExtensionControlPackBaselineV1>,
+}
+
+/// The legacy catalog a first command-pack activation retains as its
+/// revision-0 baseline.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlPackBaselineV1 {
+    pub program_digest: String,
+    pub catalog_digest: String,
+    pub trust_digest: String,
+    pub recorded_at: String,
+}
+
+impl std::fmt::Debug for ExtensionControlPackReserveV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ExtensionControlPackReserveV1")
+            .field("record_digest", &self.record_digest)
+            .field("previous_digest", &self.previous_digest)
+            .field("admitted_at", &self.admitted_at)
+            .finish_non_exhaustive()
+    }
 }
 
 /// One requested extension-control commit. The identities are sent as the

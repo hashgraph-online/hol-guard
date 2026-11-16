@@ -8,15 +8,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TextIO
 
 if TYPE_CHECKING:
-    from ..daemon import GuardDaemonHookFailureKind
-    from ..daemon.manager import _guard_daemon_pid_is_running, _guard_daemon_pid_matches_command
+    from ..native_daemon_manage import GuardDaemonHookFailureKind
+    from ..native_daemon_manage import _guard_daemon_pid_is_running, _guard_daemon_pid_matches_command
     from ._commands_shared import _now
     from .commands_support_connect import _guard_service_runtime_profile
     from .commands_support_interaction import _emit, _resolve_cisco_scan_options
     from .commands_support_runtime_artifacts import _optional_string
 
-from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
-from ..daemon.start_classification import GuardDaemonStillStartingError
+from ..native_daemon_peer import load_guard_daemon_endpoint_url
+from ..native_daemon_manage import GuardDaemonStillStartingError
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -198,8 +198,10 @@ def _matching_advisories(store: GuardStore, publisher: object) -> list[dict[str,
 
 def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
     from codex_plugin_scanner.version import __version__
-    from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
-    from codex_plugin_scanner.guard.daemon.lifecycle_journal import load_daemon_lifecycle_events
+    from codex_plugin_scanner.guard.native_daemon_manage import (
+        load_authenticated_daemon_state,
+        load_daemon_lifecycle_events,
+    )
 
     running = False
     port: int | None = None
@@ -283,7 +285,7 @@ def _handle_daemon_recover(
     home_dir: Path | None,
     failure_kind: GuardDaemonHookFailureKind,
 ) -> int:
-    from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure
+    from codex_plugin_scanner.guard.native_daemon_manage import recover_guard_daemon_after_hook_failure
 
     try:
         _ = recover_guard_daemon_after_hook_failure(
@@ -357,24 +359,12 @@ def _dispatch_guard_daemon_command(
         return _handle_daemon_repair(guard_home, getattr(args, "json", False), home_dir=home_dir)
     if daemon_command == "stop":
         return _handle_daemon_stop(guard_home, getattr(args, "json", False))
-    if store is None:
-        store = GuardStore(
-            guard_home,
-            prime_policy_integrity=False,
-        )
-    workspace_dir = (
-        context.workspace_dir if context is not None and context.workspace_dir is not None else workspace
-    )
-    daemon = GuardDaemonServer(
-        store,
-        port=args.port or 0,
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-    )
     if args.serve:
-        daemon.serve()
-        return 0
-    _emit("doctor", {"daemon_url": f"http://127.0.0.1:{daemon.port}"}, getattr(args, "json", False))
+        from .daemon_serve import serve_native_daemon
+
+        return serve_native_daemon(guard_home, args.port or 0, user_home=home_dir)
+    daemon_url = ensure_guard_daemon(guard_home, home_dir=home_dir)
+    _emit("doctor", {"daemon_url": daemon_url}, getattr(args, "json", False))
     return 0
 
 __all__ = [

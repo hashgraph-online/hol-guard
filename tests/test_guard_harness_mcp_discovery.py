@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.adapters as adapters_module
-import codex_plugin_scanner.guard.daemon.local_cli_api as local_cli_api_module
+import codex_plugin_scanner.guard.local_clis.local_cli_api as local_cli_api_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     MAX_DISCOVERED_MCP_SERVERS,
@@ -16,8 +16,8 @@ from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     persist_discovered_harness_mcp_servers,
 )
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
@@ -537,7 +537,7 @@ def test_list_items_observes_without_probing_or_incrementing(tmp_path: Path, mon
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     detection = _detection(
@@ -559,7 +559,7 @@ def test_list_items_observes_without_probing_or_incrementing(tmp_path: Path, mon
         )
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers",
         _discover,
     )
     service = LocalCliApiService(store=GuardStore(home))
@@ -598,7 +598,7 @@ def test_recognize_reuses_harness_identity(tmp_path: Path, monkeypatch) -> None:
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     args = ("-y", "@modelcontextprotocol/server-github")
@@ -627,7 +627,7 @@ def test_recognize_reuses_harness_identity(tmp_path: Path, monkeypatch) -> None:
         ),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers",
         lambda **_kwargs: discover_harness_mcp_servers(
             home_dir=home,
             guard_home=home,
@@ -656,7 +656,7 @@ def test_recognize_reuses_harness_identity(tmp_path: Path, monkeypatch) -> None:
         )
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server",
         _probe,
     )
     store = GuardStore(home)
@@ -689,7 +689,7 @@ def test_recognize_cli_id_uses_live_launch_command(tmp_path: Path, monkeypatch) 
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     args = ("-y", "pkg", "--token", "sk-live-secret")
@@ -698,7 +698,7 @@ def test_recognize_cli_id_uses_live_launch_command(tmp_path: Path, monkeypatch) 
         _artifact(harness="codex", name="secret-server", command="npx", args=args),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers",
         lambda **_kwargs: discover_harness_mcp_servers(
             home_dir=home,
             guard_home=home,
@@ -725,7 +725,7 @@ def test_recognize_cli_id_uses_live_launch_command(tmp_path: Path, monkeypatch) 
         )
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server",
         _probe,
     )
     service = LocalCliApiService(store=GuardStore(home))

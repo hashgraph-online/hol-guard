@@ -2,7 +2,7 @@
 
 A release is decided from `qualification.json`, and that file used to carry a
 bare `qualified: true` for a run that drove Oh My Pi on the core profile and
-nothing else. Ten other lanes — the harness CLIs a person actually types
+nothing else. The other lanes — the harness CLIs a person actually types
 into, the full developer tasks — were never named, so a green record read as
 coverage it did not have. These tests hold the lane matrix to the runner's own
 options and keep the record honest about which single lane it drove, including
@@ -57,12 +57,24 @@ def test_only_oh_my_pi_on_core_qualifies_a_merge() -> None:
 
 
 def test_the_profiles_each_harness_owns() -> None:
-    """The runner refuses the two crossings; the matrix must not offer them."""
-    assert "approval-retry" not in lane_profiles("omp")
+    """The runner refuses the one omp crossing; the matrix must not offer it."""
+    assert "approval-retry" in lane_profiles("omp")
+    assert "connector-setup" not in lane_profiles("omp")
     assert "contained-bun-vitest" in lane_profiles("omp")
     for harness in ("claude-code", "codex", "cursor"):
         assert "approval-retry" in lane_profiles(harness)
+        assert "connector-setup" in lane_profiles(harness)
         assert "contained-bun-vitest" not in lane_profiles(harness)
+
+
+def test_an_omp_core_run_names_the_approval_retry_lane_it_left_alone() -> None:
+    """The omp session runner admits approval-retry serially, so a plain
+    qualification run's `not_driven` names that lane; the runner is the
+    authority on what it accepts (`__main__.py` refuses only `connector-setup`
+    on omp)."""
+    assert ("omp", "approval-retry") in lanes()
+    coverage = lane_coverage()
+    assert ("omp", "approval-retry") in {(lane["harness"], lane["profile"]) for lane in coverage["not_driven"]}
 
 
 def test_a_lane_the_full_task_runner_refuses_is_not_in_the_matrix() -> None:
@@ -97,6 +109,7 @@ def test_a_run_that_started_no_attempt_drove_no_lane() -> None:
 
 
 def test_an_unknown_lane_is_refused() -> None:
-    for harness, profile in (("omp", "approval-retry"), ("codex", "contained-bun-vitest"), ("zcode", "core")):
+    """The crossings the runner rejects, and unknown harnesses, stay out."""
+    for harness, profile in (("omp", "connector-setup"), ("codex", "contained-bun-vitest"), ("zcode", "core")):
         with pytest.raises(ValueError):
             lane_coverage(harness, profile)

@@ -40,7 +40,7 @@ def _run_rust_coverage(
             '"${CARGO_PROFILE_TEST_DEBUG:-}" "${CARGO_PROFILE_TEST_DEBUG_ASSERTIONS:-}" '
             '"${CARGO_PROFILE_TEST_OVERFLOW_CHECKS:-}" "${LLVM_PROFILE_FILE_NAME:-}" >> "$COMMAND_LOG"\n'
             'if [[ -n "$FAIL_COMMAND" && "$command" == "$FAIL_COMMAND"* ]]; then exit 7; fi\n'
-            'if [[ "${0##*/}" == python ]]; then echo 1.88.0; exit 0; fi\n'
+            'if [[ "${0##*/}" == python ]]; then echo 1.89.0; exit 0; fi\n'
             'if [[ "$*" == *"llvm-cov nextest"* && "$COVERAGE_MODE" == failed-tests ]]; then exit 7; fi\n'
             'if [[ "$*" == *"llvm-cov --version" ]]; then\n'
             '  if [[ "$COVERAGE_MODE" != install ]]; then echo "cargo-llvm-cov 0.6.21"; fi\n'
@@ -96,8 +96,8 @@ def test_rust_coverage_rejects_missing_empty_or_invalid_current_report(tmp_path:
     [
         "python",
         "rustup component add",
-        "cargo +1.88.0 install",
-        "cargo +1.88.0 llvm-cov clean",
+        "cargo +1.89.0 install",
+        "cargo +1.89.0 llvm-cov clean",
     ],
 )
 def test_rust_coverage_propagates_setup_and_cleanup_failures(tmp_path: Path, fail_command: str) -> None:

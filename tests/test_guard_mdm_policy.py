@@ -464,6 +464,13 @@ def test_managed_policy_survives_local_and_cloud_weakening(tmp_path: Path) -> No
     assert overlaid.install_owner == "mdm"
 
 
+def test_fail_closed_floor_keeps_automatic_browser_pages_disabled() -> None:
+    floor = policy_module.fail_closed_managed_policy()
+
+    assert floor.settings["approval_surface_policy"] == "native-only"
+    assert "approval_surface_policy" in floor.locked_settings
+
+
 def test_invalid_machine_policy_fails_closed_in_runtime_config(tmp_path: Path) -> None:
     path = tmp_path / "policy.json"
     path.write_text("not-json")

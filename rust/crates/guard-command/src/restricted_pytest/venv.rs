@@ -267,19 +267,34 @@ fn standard_libraries(prefix: &Path) -> Vec<PathBuf> {
 /// the runtime and have its whole prefix granted; with it, the directory has
 /// to be one an install actually starts Python from.
 fn interpreter_home(home: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
     if home.file_name() != Some(OsStr::new("bin")) {
         return false;
+    }
+    // A system `bin` holds thousands of entries and the filesystem answers
+    // them in its own order, so a bounded scan alone can miss the
+    // interpreter and decide the same venv differently from one host to the
+    // next. The names a venv's `home` is written with are read outright
+    // first; the scan is what finds a version-suffixed one.
+    if ["python3", "python"]
+        .iter()
+        .any(|name| runnable(&home.join(name)))
+    {
+        return true;
     }
     let Ok(entries) = fs::read_dir(home) else {
         return false;
     };
-    entries.flatten().take(256).any(|entry| {
-        python_named(&entry.path())
-            && entry.path().metadata().is_ok_and(|metadata| {
-                metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
-            })
-    })
+    entries
+        .flatten()
+        .take(256)
+        .any(|entry| python_named(&entry.path()) && runnable(&entry.path()))
+}
+
+/// A file this account can start, following a launcher's link to it.
+fn runnable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    path.metadata()
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
 }
 
 fn managed_prefix(prefix: &Path) -> bool {
@@ -309,6 +324,50 @@ pub(super) fn workspace_base_roots(bin: &Path, workspace: &Path) -> Vec<PathBuf>
     if !path_is_within(root, workspace) || !venv_shape(root) {
         return Vec::new();
     }
+    base_install_roots(root, workspace)
+}
+
+/// The venv itself and the install its launchers run, for a venv the session
+/// PATH names from outside the workspace.
+///
+/// A session that activated a venv elsewhere - `uv`, `virtualenvwrapper`, a
+/// venv kept beside a group of projects - puts that venv's `bin` on PATH, so
+/// a bare `python3` in the workspace is that venv's launcher. `tool_root`
+/// already keeps the `bin` directory on the sandbox PATH, but the launcher is
+/// a symlink to an interpreter installed somewhere else, and the packages it
+/// imports sit in the venv's own `lib`. Without both the sandbox cannot start
+/// the program the command names, so ordinary Python work in the workspace
+/// was contained, found unreachable and reviewed instead.
+///
+/// The venv is held to exactly what [`external_root`] asks of one the
+/// restricted profile grants: a venv's shape, a single `pyvenv.cfg` naming a
+/// trusted or managed runtime, no credential or agent-state component, and no
+/// ancestor relation to the workspace. Read and execute only, as every
+/// granted root is.
+pub(super) fn external_venv_roots(bin: &Path, workspace: &Path) -> Vec<PathBuf> {
+    if bin.file_name() != Some(OsStr::new("bin")) {
+        return Vec::new();
+    }
+    let Some(root) = bin.parent() else {
+        return Vec::new();
+    };
+    if path_is_within(root, workspace) || path_is_within(workspace, root) || !venv_shape(root) {
+        return Vec::new();
+    }
+    let installs = base_install_roots(root, workspace);
+    if installs.is_empty() {
+        return Vec::new();
+    }
+    let mut roots = vec![root.to_path_buf()];
+    roots.extend(installs);
+    roots
+}
+
+/// The install a venv's launchers run, as the directory that holds both the
+/// interpreter and its standard library. A managed install is granted whole;
+/// anywhere else only the interpreter's own directory and the standard
+/// library beside it are.
+fn base_install_roots(root: &Path, workspace: &Path) -> Vec<PathBuf> {
     let Some(home) = configured_home(root) else {
         return Vec::new();
     };

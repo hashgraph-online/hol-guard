@@ -83,6 +83,24 @@ fn the_event_log_keeps_the_payload_text_it_was_sent() {
 }
 
 #[test]
+fn an_event_sent_once_is_not_logged_again() {
+    let connection = store();
+    let args = json!({"event_name": "policy_source_fence_window", "payload_json": "{}", "occurred_at": "t1", "once": true});
+    call(&connection, add_event, args.clone()).unwrap();
+    call(&connection, add_event, args).unwrap();
+    let later = json!({"event_name": "policy_source_fence_window", "payload_json": "{}", "occurred_at": "t2", "once": true});
+    call(&connection, add_event, later).unwrap();
+    let logged = query_one(
+        &connection,
+        "select count(*) as logged from guard_events",
+        &[],
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(crate::guard_store_db::int(&logged, "logged"), 2);
+}
+
+#[test]
 fn queued_events_count_and_read_oldest_first() {
     let connection = store();
     queue(&connection, "e-2", "t2", 10);

@@ -331,6 +331,47 @@ fn a_quiet_redirect_before_a_readable_filter_is_rejoined_in_the_sibling_root() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// Text the peel refuses still names the sibling root the sink runs it from.
+///
+/// `>/dev/null` is inert, so the classifier reads the list as the reads it
+/// holds and contains it in the sibling root. The peel will not rebuild a
+/// core around that operator, and a refusal means the sink runs the whole
+/// text, `cd` included. Leaving the root out of the refusal rooted that run
+/// at the session workspace instead, where every step after the `cd` is
+/// outside the sandbox and fails.
+#[cfg(unix)]
+#[test]
+fn a_refused_null_sink_still_names_the_sibling_root_it_runs_in() {
+    let root = sibling_root("refused-null-sink");
+    let session = workspace("plan-refused-null-sink", true);
+    let workspace_path = session.to_str().expect("workspace path");
+    for sink in [
+        ">/dev/null",
+        "> /dev/null",
+        "1>/dev/null",
+        "&>/dev/null",
+        ">>/dev/null",
+    ] {
+        let command = format!("cd {} && pytest -q {sink} && ruff check .", root.display());
+        let plan = wrapper_plan(
+            &command,
+            workspace_path,
+            Some(workspace_path),
+            Some(HOME),
+            false,
+        );
+        assert_eq!(
+            (plan.refusal, plan.anchored_sibling_root.as_deref()),
+            (
+                Some(CONTAINED_WRAPPER_PLAN_UNSUPPORTED),
+                Some(root.as_path())
+            ),
+            "{command}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A `2` the shell passes to the program is never rewritten into a redirect.
 ///
 /// `cmd 2 >/dev/null` and `cmd '2'>/dev/null` send *standard output* to
@@ -367,5 +408,75 @@ fn a_detached_or_quoted_two_is_an_argument_rather_than_a_stderr_redirect() {
             "{command}"
         );
     }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A project directory beside the session's workspace that carries a manifest
+/// and no repository, under `/tmp` for the reason [`sibling_root`] gives.
+#[cfg(unix)]
+fn scratch_project(name: &str) -> std::path::PathBuf {
+    let root = std::path::Path::new("/tmp")
+        .join(format!("guard-plan-scratch-{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("scratch project");
+    std::fs::write(
+        root.join("package.json"),
+        "{\"name\": \"slug-repro\", \"scripts\": {\"test\": \"node --test\"}}",
+    )
+    .expect("manifest");
+    root.canonicalize().expect("scratch project")
+}
+
+/// `cd <project without a repository> && npm test` is peeled into that
+/// project, so the read-only package-test route and the sink that redeems its
+/// receipt agree on where the run happens.
+///
+/// A colleague's reproduction unpacked under a temporary root is a project
+/// with a manifest and no `.git`. Reading only a repository marker left it
+/// with no root at all, the peel refused the shape, and the same `npm test`
+/// that ran contained in the session's own directory fell through to the
+/// generic package prompt.
+#[cfg(unix)]
+#[test]
+fn a_project_without_a_repository_is_peeled_as_its_own_root() {
+    let root = scratch_project("no-repository");
+    let session = workspace("plan-scratch-project", true);
+    let workspace_path = session.to_str().expect("workspace path");
+    let command = format!("cd {} && npm test", root.display());
+
+    let plan = wrapper_plan(
+        &command,
+        workspace_path,
+        Some(workspace_path),
+        Some(HOME),
+        false,
+    )
+    .plan
+    .expect("peeled into the scratch project");
+    assert_eq!(plan.core, "npm test");
+    assert_eq!(
+        std::fs::canonicalize(&plan.directory).expect("directory"),
+        root
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A package below a checkout still resolves to the checkout, so a monorepo
+/// keeps the root that holds its hoisted install.
+#[cfg(unix)]
+#[test]
+fn a_package_below_a_checkout_keeps_the_checkout_as_its_root() {
+    let root = sibling_root("nested-package");
+    let package = root.join("packages/web");
+    std::fs::create_dir_all(&package).expect("package directory");
+    std::fs::write(package.join("package.json"), "{}").expect("manifest");
+    assert_eq!(
+        crate::pretool::contained_wrapper::project_root(
+            &package,
+            HOME,
+            crate::pretool::contained_wrapper::ProjectRoots::RepositoryOrPackage
+        ),
+        Some(root.clone())
+    );
     let _ = std::fs::remove_dir_all(&root);
 }

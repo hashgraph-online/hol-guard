@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import approvals, mcp_tool_calls, native_mcp_tool_call_identity
-from codex_plugin_scanner.guard.daemon.mcp_relay_evidence_drain import _decision, record_mcp_relay_evidence
+from codex_plugin_scanner.guard.evidence_drains.mcp_relay_evidence_drain import _decision, record_mcp_relay_evidence
 from codex_plugin_scanner.guard.proxy import runtime_mcp, runtime_mcp_projection
 from codex_plugin_scanner.guard.tool_decision_evidence import tool_decision_scanner_evidence
 
@@ -171,6 +171,15 @@ def test_the_drain_records_what_the_proxy_records(tmp_path: Path, recorded: list
     assert item["risk_summary"] == "Deletes a sensitive file."
 
 
+def test_the_drain_ignores_the_center_a_current_resident_carries(
+    tmp_path: Path, recorded: list[tuple[str, dict[str, Any]]]
+) -> None:
+    record = _record(review={"redaction_level": "partial", "approval_center_url": "http://127.0.0.1:4790"})
+
+    assert record_mcp_relay_evidence(object(), tmp_path, record)
+    assert [kind for kind, _ in recorded] == ["block", "review"]
+
+
 def test_a_review_row_failure_keeps_the_block(
     tmp_path: Path, recorded: list[tuple[str, dict[str, Any]]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -189,6 +198,7 @@ def test_a_review_row_failure_keeps_the_block(
     [
         {"review": {"redaction_level": "secret"}},
         {"review": {"redaction_level": "full", "extra": 1}},
+        {"review": {"redaction_level": "full", "approval_center_url": 4790}},
         {"review": "full"},
         {"review": None},
         {"decision_source": "policy-block"},

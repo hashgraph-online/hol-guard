@@ -98,6 +98,7 @@ AttemptSink = Callable[[ContinuationOffer, ContinuationAction, ContinuationResul
 FallbackNotifier = Callable[[ContinuationOffer, ContinuationResult], None]
 ExecutionPlan = TypeVar("ExecutionPlan")
 IsolatedRunner = Callable[[ExecutionPlan, ContinuationOffer, ContinuationAction, float], ContinuationResult]
+InlineSettler = Callable[[ContinuationOffer, ContinuationAction, Callable[[], bool]], ContinuationResult | None]
 
 
 def _subprocess_plan_worker(
@@ -127,12 +128,14 @@ class ContinuationCoordinator(Generic[ExecutionPlan]):
         notify_manual_retry: FallbackNotifier,
         isolated_plan: ExecutionPlan | None = None,
         isolated_runner: IsolatedRunner[ExecutionPlan] | None = None,
+        settle_inline: InlineSettler | None = None,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self._record_attempt: AttemptSink = record_attempt
         self._notify_manual_retry: FallbackNotifier = notify_manual_retry
         self._isolated_plan: ExecutionPlan | None = isolated_plan
         self._isolated_runner: IsolatedRunner[ExecutionPlan] | None = isolated_runner
+        self._settle_inline: InlineSettler | None = settle_inline
         self._now: Callable[[], datetime] = now
         self._completed: dict[tuple[str, ContinuationAction, str], ContinuationResult] = {}
 
@@ -180,9 +183,15 @@ class ContinuationCoordinator(Generic[ExecutionPlan]):
         """Return promptly when an external harness adapter stops responding.
 
         A non-cooperative adapter runs in an isolated process and is terminated
-        at the deadline, so a timeout cannot leak a daemon worker.
+        at the deadline, so a timeout cannot leak a daemon worker. Offers the
+        inline settler can answer without calling a harness skip the process
+        start, which costs about a second per approval.
         """
 
+        if self._settle_inline is not None:
+            settled = self._settle_inline(offer, action, cancelled)
+            if settled is not None:
+                return settled
         if self._isolated_plan is None or self._isolated_runner is None:
             return self._result(offer, "failed", "continuation_adapter_isolation_unavailable")
         context = multiprocessing.get_context("spawn")

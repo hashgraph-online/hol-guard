@@ -1,0 +1,307 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.usecvislib",
+  "version": "1.0.0",
+  "name": "USecVisLib MCP",
+  "description": "MCP server for USecVisLib: attack trees and graphs, STRIDE and MAESTRO threat models, MITRE ATT&CK/ATLAS kill chains, incident timelines, cloud diagrams, privilege gradients, and binary analysis charts. Generates local image and report files from JSON configs. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "com.vulnex",
+    "displayName": "VULNEX",
+    "url": "https://vulnex.com"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0B1220"
+  },
+  "homepage": "https://github.com/vulnex/usecvislib-mcp",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "direct-command",
+    "command": "usecvislib-mcp"
+  },
+  "riskClasses": [
+    "local-file-read",
+    "local-file-write"
+  ],
+  "tools": [
+    {
+      "name": "find_chokepoints",
+      "state": "inherit"
+    },
+    {
+      "name": "analyze_centrality",
+      "state": "inherit"
+    },
+    {
+      "name": "compare_visualizations",
+      "state": "inherit"
+    },
+    {
+      "name": "render_drift",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_component_diagram",
+      "state": "inherit"
+    },
+    {
+      "name": "validate_component_diagram",
+      "state": "inherit"
+    },
+    {
+      "name": "get_component_diagram_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_dependency_graph",
+      "state": "inherit"
+    },
+    {
+      "name": "validate_dependency_graph",
+      "state": "inherit"
+    },
+    {
+      "name": "get_dependency_graph_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_attack_graph",
+      "state": "inherit"
+    },
+    {
+      "name": "validate_attack_graph",
+      "state": "inherit"
+    },
+    {
+      "name": "get_attack_graph_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "find_attack_paths",
+      "state": "inherit"
+    },
+    {
+      "name": "analyze_critical_nodes",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_attack_tree",
+      "state": "inherit"
+    },
+    {
+      "name": "validate_attack_tree",
+      "state": "inherit"
+    },
+    {
+      "name": "get_attack_tree_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "build_attack_tree_from_spec",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_process",
+      "state": "review"
+    },
+    {
+      "name": "analyze_binary_entropy",
+      "state": "review"
+    },
+    {
+      "name": "analyze_binary_distribution",
+      "state": "review"
+    },
+    {
+      "name": "analyze_binary_heatmap",
+      "state": "review"
+    },
+    {
+      "name": "analyze_binary_digraph",
+      "state": "review"
+    },
+    {
+      "name": "analyze_binary_all",
+      "state": "review"
+    },
+    {
+      "name": "get_binary_stats",
+      "state": "review"
+    },
+    {
+      "name": "generate_cloud_diagram",
+      "state": "inherit"
+    },
+    {
+      "name": "validate_cloud_diagram",
+      "state": "inherit"
+    },
+    {
+      "name": "get_cloud_diagram_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "search_cloud_icons",
+      "state": "inherit"
+    },
+    {
+      "name": "list_cloud_providers",
+      "state": "inherit"
+    },
+    {
+      "name": "list_cloud_icons",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_custom_diagram",
+      "state": "inherit"
+    },
+    {
+      "name": "validate_custom_diagram",
+      "state": "inherit"
+    },
+    {
+      "name": "get_custom_diagram_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "export_data",
+      "state": "review"
+    },
+    {
+      "name": "generate_report",
+      "state": "review"
+    },
+    {
+      "name": "generate_kill_chain",
+      "state": "inherit"
+    },
+    {
+      "name": "validate_kill_chain",
+      "state": "inherit"
+    },
+    {
+      "name": "get_kill_chain_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "analyze_kill_chain_coverage",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_maestro_threat_model",
+      "state": "inherit"
+    },
+    {
+      "name": "validate_maestro_threat_model",
+      "state": "inherit"
+    },
+    {
+      "name": "get_maestro_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "export_maestro",
+      "state": "review"
+    },
+    {
+      "name": "render_mermaid",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_privilege_gradient",
+      "state": "inherit"
+    },
+    {
+      "name": "validate_privilege_gradient",
+      "state": "inherit"
+    },
+    {
+      "name": "get_privilege_gradient_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "detect_privilege_inversions",
+      "state": "inherit"
+    },
+    {
+      "name": "analyze_zone_influence",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_threat_model",
+      "state": "inherit"
+    },
+    {
+      "name": "validate_threat_model",
+      "state": "inherit"
+    },
+    {
+      "name": "get_threat_model_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "analyze_stride_threats",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_incident_timeline",
+      "state": "inherit"
+    },
+    {
+      "name": "validate_incident_timeline",
+      "state": "inherit"
+    },
+    {
+      "name": "get_incident_timeline_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "convert_to_mermaid",
+      "state": "inherit"
+    },
+    {
+      "name": "calculate_cvss_score",
+      "state": "inherit"
+    },
+    {
+      "name": "detect_config_type",
+      "state": "inherit"
+    },
+    {
+      "name": "list_shapes",
+      "state": "inherit"
+    },
+    {
+      "name": "generate_vuln_tree",
+      "state": "inherit"
+    },
+    {
+      "name": "validate_vuln_tree",
+      "state": "inherit"
+    },
+    {
+      "name": "get_vuln_tree_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/vulnex/usecvislib-mcp",
+    "https://github.com/vulnex/usecvislib",
+    "https://vulnex.github.io/usecvislib-gallery/",
+    "https://github.com/vulnex/usecvislib-mcp/blob/main/README.md"
+  ],
+  "saferAlternatives": [
+    "Prefer generate/validate/stats on trusted JSON. Outputs use USECVISLIB_MCP_OUTPUT_DIR (default: user-scoped temp). Use a dedicated directory; cleanup deletes files older than one hour. Set USECVISLIB_MCP_OUTPUT_TTL_SECONDS=0 to disable cleanup.",
+    "Put analyze_binary_* and get_binary_stats on Review: they read a host file path (scoped by USECVISLIB_MCP_ALLOWED_INPUT_DIRS when set).",
+    "Review batch_process, export_data, generate_report and export_maestro: they touch more files or produce larger artifacts than a single render.",
+    "Install from https://github.com/vulnex/usecvislib-mcp (Apache-2.0) and launch the usecvislib-mcp console script; pin a release tag before enabling."
+  ]
+}

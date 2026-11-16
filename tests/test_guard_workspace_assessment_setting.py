@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -12,7 +11,6 @@ from codex_plugin_scanner.guard import config as guard_config
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.workspace_fix_support import KEYS, T0, admit_worktree
 
@@ -98,22 +96,3 @@ def test_an_unreadable_configuration_leaves_the_worker_on(tmp_path: Path, monkey
     monkeypatch.setattr(guard_config, "load_guard_config", broken)
 
     assert worker.workspace_assessment_enabled(tmp_path) is True
-
-
-def test_the_daemon_starts_the_worker_while_the_setting_is_off_so_turning_it_on_needs_no_restart(
-    tmp_path: Path, monkeypatch
-) -> None:
-    _settings(monkeypatch, tmp_path, enabled=False)
-    _polls(monkeypatch)
-    daemon = SimpleNamespace(
-        _workspace_assessment_thread=None,
-        _server=SimpleNamespace(store=SimpleNamespace(guard_home=tmp_path)),
-        _shutdown_started=threading.Event(),
-        _diagnostics=SimpleNamespace(record_exception=lambda *_: None),
-    )
-    try:
-        GuardDaemonServer._start_workspace_assessment_worker(daemon)  # type: ignore[arg-type]
-        assert daemon._workspace_assessment_thread.is_alive()
-    finally:
-        daemon._shutdown_started.set()
-        daemon._workspace_assessment_thread.join(timeout=5)

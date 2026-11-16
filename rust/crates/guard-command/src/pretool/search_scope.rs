@@ -12,9 +12,14 @@
 use super::search_pattern_clearance::PatternClearance;
 use super::search_scope_filter::SearchFilter;
 use super::search_scope_walk::{
-    include_scope_proven, walk_scope, walk_scope_cleared, walk_scope_with, Ignores,
+    include_scope_proven, walk_listing_scope, walk_scope, walk_scope_cleared, walk_scope_with,
+    Ignores,
 };
 use serde_json::{Map, Value};
+
+#[path = "search_scope_claude.rs"]
+mod claude;
+pub(super) use claude::claude_grep_directory_scope_proven;
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
 
@@ -38,31 +43,6 @@ const CLAUDE_GREP_KEYS: &[&str] = &[
     "offset",
     "multiline",
 ];
-
-/// True when a Claude `Grep` directory search cannot reach a sensitive file.
-/// A single-file target returns false so the existing file-read proof decides.
-pub(super) fn claude_grep_directory_scope_proven(
-    payload: &Value,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-) -> bool {
-    let Some(input) = claude_grep_input(payload) else {
-        return false;
-    };
-    let target = match input.get("path") {
-        None => ".",
-        Some(Value::String(path)) if !path.is_empty() => path.as_str(),
-        Some(_) => return false,
-    };
-    let Some(filter) = SearchFilter::from_input(input) else {
-        return false;
-    };
-    let Some(root) = verified_directory_root(target, home_dir, cwd) else {
-        return false;
-    };
-    !super::read_paths::inside_agent_state_tree(&root, home_dir)
-        && walk_scope(&root, &filter, Ignores::Ripgrep, false, home_dir, &mut None).is_ok()
-}
 
 /// True when a Grok `Grep` directory search cannot reach a sensitive file.
 /// Grok's search includes hidden files and searches a gitignored file its
@@ -375,11 +355,12 @@ pub(super) fn content_search_blocker(
 }
 
 fn unfiltered_walk_proven(root: &Path, home: Option<&str>) -> bool {
-    unfiltered_walk_cleared(root, None, home)
+    SearchFilter::from_input(&Map::new())
+        .is_some_and(|filter| walk_listing_scope(root, &filter, home).is_ok())
 }
 
-/// [`unfiltered_walk_proven`], where a sensitive file the `clearance` pattern
-/// provably cannot match does not fail the proof.
+/// The unfiltered content walk, where a sensitive file the `clearance`
+/// pattern provably cannot match does not fail the proof.
 fn unfiltered_walk_cleared(
     root: &Path,
     clearance: Option<&PatternClearance>,

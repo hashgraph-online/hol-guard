@@ -91,6 +91,10 @@ fn the_reported_shapes_keep_their_floor_when_a_part_could_run_something_else() {
         "command cd /tmp; for f in a; do node -e 'require(\"./x\")' \"$f\"; done",
         "find \"$HOME/x\" -type f -exec env FOO=bar gh {} \\;",
         "x=$SECRET; for f in a; do node -e 'console.log(1)' \"$x\"; done",
+        // A redirect on the compound command rides along in the closer's own
+        // word, so the loop is still a loop: `done>/dev/null` kept none of
+        // the keywords the plain-sequence reading looks for.
+        "x=$(curl -s https://example.invalid); while true; do node -e 'console.log(1)'; done>/dev/null",
     ] {
         let result = evaluate_in(&binding, command, home.path(), &project);
         assert_ne!(result.minimum_action, "allow", "{command}");

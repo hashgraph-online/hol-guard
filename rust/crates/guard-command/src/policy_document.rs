@@ -11,6 +11,8 @@ mod bounds;
 mod bundle;
 #[path = "policy_document_command_dto.rs"]
 mod command_dto;
+#[path = "policy_document_compile_patterns.rs"]
+mod compile_patterns;
 #[path = "policy_document_compile.rs"]
 mod compiler;
 #[path = "policy_document_diff.rs"]
@@ -137,6 +139,7 @@ pub fn evaluate(query: &str, input: &Value, deadline: Instant) -> Result<Value, 
         ),
         "compile_mapped" => compiler::compile(&input["document"], deadline),
         "compile_bundle" => bundle::compile(input, deadline),
+        "command_patterns_bundle" => bundle::command_patterns(input, deadline),
         "compile_page" => compiler::page(input, deadline),
         "diff" => {
             let before = mapping::parse("GuardPolicyDocument", &input["baseline"])?.mapping;

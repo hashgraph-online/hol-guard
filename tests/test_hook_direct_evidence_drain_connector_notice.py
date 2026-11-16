@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import approvals
-from codex_plugin_scanner.guard.daemon.hook_direct_evidence_drain import record_direct_hook_evidence
+from codex_plugin_scanner.guard.evidence_drains.hook_direct_evidence_drain import record_direct_hook_evidence
 from tests.test_hook_direct_evidence_drain import _Host, _record
 
 QUEUED = {
@@ -70,6 +70,22 @@ def test_a_missing_or_malformed_notice_raises_nothing(
     store = _Store({"r-1": dict(QUEUED)})
     host = _Host(tmp_path, store=store)
     record = _record() if notice is None else _record(connector_setup_notice=notice)
+
+    assert record_direct_hook_evidence(host, record)
+
+    assert store.looked_up == []
+    assert notified == []
+
+
+def test_a_notice_the_resident_raised_is_not_raised_again(
+    tmp_path: Path, notified: list[tuple[object, Mapping[str, object], str]]
+) -> None:
+    store = _Store({"r-1": dict(QUEUED)})
+    host = _Host(tmp_path, store=store)
+    record = _record(
+        connector_setup_notice={"request_id": "r-1", "connector_name": "acme"},
+        connector_notice_raised=True,
+    )
 
     assert record_direct_hook_evidence(host, record)
 

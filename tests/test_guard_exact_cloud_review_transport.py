@@ -367,8 +367,8 @@ def test_poll_exact_leases_acks_applies_and_posts_versioned_result(
     assert "schemaVersions" not in capabilities
     ack_payload = {"leaseId": job["leaseId"], "protocolVersion": 2}
     assert calls[1] == ("POST", f"/{job['id']}/ack", ack_payload)
-    assert calls[2] == ("POST", f"/{job['id']}/ack", ack_payload)
-    result_call = calls[3]
+    assert len(calls) == 3
+    result_call = calls[2]
     assert result_call[0:2] == ("POST", f"/{job['id']}/result")
     assert result_call[2]["protocolVersion"] == 2
     result = result_call[2]["result"]
@@ -484,7 +484,6 @@ def test_missing_exact_route_preserves_generic_queue_progress_and_exact_health(
     assert "404" in str(status["exact_review_route_error"])
     assert generic_paths == [
         "/lease",
-        "/generic-status-job/heartbeat",
         "/generic-status-job/heartbeat",
         "/generic-status-job/result",
     ]

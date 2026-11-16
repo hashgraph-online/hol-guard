@@ -58,7 +58,6 @@ def test_status_json_reports_availability_and_resident_presence(
     assert section["availability"]["reason_code"] == "native_status_probe_skipped"
     assert section["availability"]["evaluation_verified"] is False
     assert section["resident"]["live"] is False
-    assert isinstance(section["daemon_http"], dict)
     assert "generated_at" in payload
 
 
@@ -131,27 +130,23 @@ def test_render_names_an_unknown_resident_without_inventing_one() -> None:
     section = {
         "availability": {"mode": "unknown", "available": None, "compatible": None, "reason_code": "probe_skipped"},
         "resident": {"live": None, "owner_lock_held": None, "generations": 0},
-        "daemon_http": {},
     }
 
     rendered = render_runtime_status(section)
 
     assert "available: unknown" in rendered
     assert "Resident on this account: unknown" in rendered
-    assert "no counters recorded" in rendered
 
 
 def test_render_reports_a_held_owner_lock() -> None:
     section = {
         "availability": {"mode": "auto", "available": True, "compatible": True, "reason_code": "native_ready"},
         "resident": {"live": True, "owner_lock_held": True, "generations": 2},
-        "daemon_http": {"accepted": 3, "rejected": 0},
     }
 
     rendered = render_runtime_status(section)
 
     assert "Resident on this account: running (owner lock held, 2 recorded generations)" in rendered
-    assert "accepted 3, rejected 0" in rendered
 
 
 def _pin_availability(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:

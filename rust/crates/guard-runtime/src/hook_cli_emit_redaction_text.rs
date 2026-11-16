@@ -288,7 +288,7 @@ fn redact_sensitive_assignments(text: &str) -> String {
 }
 
 /// `redaction.redact_local_path(value)` with `Path.home()` as `home_dir`.
-fn redact_local_path(text: &str, home_dir: Option<&str>) -> String {
+pub(crate) fn redact_local_path(text: &str, home_dir: Option<&str>) -> String {
     static POSIX_USER_PATH: OnceLock<Regex> = OnceLock::new();
     static WINDOWS_USER_PATH: OnceLock<Regex> = OnceLock::new();
     let shortened = match home_dir {

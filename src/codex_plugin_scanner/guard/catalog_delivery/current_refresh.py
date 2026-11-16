@@ -52,6 +52,25 @@ class PublicationEngineMismatchError(ValueError):
         return f"publication={self.publication_id} source={self.source_sha} engine={self.engine}"
 
 
+@contextmanager
+def _engine_mismatch_named(authority):
+    """Name the publication a mismatch came from, whichever path met it.
+
+    The native selector answers `discovery_current_engine_incompatible` for a
+    publication built by another compiler, and the cached bytes a restore
+    reverifies go through that same selector. Both paths therefore have to
+    raise the named error, or the caller cannot tell an expected version skew
+    from a transport that stopped answering.
+    """
+
+    try:
+        yield
+    except ValueError as error:
+        if ENGINE_INCOMPATIBLE in str(error):
+            raise PublicationEngineMismatchError(authority.data) from error
+        raise
+
+
 def _cache(store, name):
     # The prefix above the Guard home is resolved once so that a host which
     # reaches it through a symlink still yields a path every checked_path below
@@ -150,12 +169,8 @@ def refresh(store):
     captured = _capture(store)
     fields: dict[str, Any] = dict(publication=authority.data.decode(), now=time.time())
     while True:
-        try:
+        with _engine_mismatch_named(authority):
             result = _invoke(store, captured, **fields)
-        except ValueError as error:
-            if ENGINE_INCOMPATIBLE in str(error):
-                raise PublicationEngineMismatchError(authority.data) from error
-            raise
         if "lineage_kind" not in result:
             break
         floor = lifecycle.invoke("read", key=_key(store).hex(), floor=result["lineage_floor"])
@@ -213,9 +228,16 @@ def restore(store):
     retained = _invoke(store, (captured[0], complete, captured[2]))["retained"]
     directory = _cache(store, "current-publication")
     authority = _load(directory, retained, now=int(time.time()))
-    _invoke(store, captured, publication=authority.data.decode(), now=time.time(), restore=True, complete=complete)
+    with _engine_mismatch_named(authority):
+        _invoke(store, captured, publication=authority.data.decode(), now=time.time(), restore=True, complete=complete)
     handle = prepare_discovery(store.guard_home, authority, fetch=transport.cached_fetcher(_cache(store, "transfers")))
-    _invoke(
-        store, _capture(store), publication=authority.data.decode(), now=time.time(), restore=True, complete=complete
-    )
+    with _engine_mismatch_named(authority):
+        _invoke(
+            store,
+            _capture(store),
+            publication=authority.data.decode(),
+            now=time.time(),
+            restore=True,
+            complete=complete,
+        )
     return handle

@@ -7,12 +7,22 @@
 //! runtime event. For a plain record every input of that receipt is already in
 //! the record, so the resident writes it itself through the same
 //! `record_tool_call_evidence` store operation, once the daemon acknowledges
-//! the page that skipped it. A plain record is a forward, a policy block or a
-//! refused inline prompt whose identity carries its firewall evidence.
+//! the page that skipped it. A plain record is a forward, a policy block, a
+//! refused inline prompt, a safe-alternative block or an ask block whose
+//! identity carries its firewall evidence. The resident raises an ask block's
+//! desktop notice itself as soon as it writes the request, so its receipt is
+//! all that is left to write: the daemon's `_maybe_open_approval_center` opens
+//! nothing for a relayed call, whose surface policy is `attention-aware` or
+//! `native-only`. A safe-alternative block's silent inbox row follows its receipt
+//! through the same `queue_blocked_approvals` store operation the daemon's
+//! `record_unprompted_review` calls. A relayed package call's forward,
+//! observed forward, policy block or ask block is plain too: its receipt is
+//! written against the package request's artifact, which the resident
+//! rebuilds from the record (`mcp_relay_receipt_package.rs`).
 //!
 //! Everything else is still drained to the daemon: a remembered allow writes
-//! the daemon's policy, a safe-alternative block adds an inbox row and an ask
-//! block raises the desktop notice and the approval center.
+//! the daemon's policy, and an ask block whose notice the resident could not
+//! read still carries it.
 //!
 //! As in the Python drain, a record the resident cannot compose is dropped,
 //! never guessed. One the store cannot take goes back to the queue as an
@@ -24,7 +34,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use guard_command::mcp_runtime_evidence::ArgumentEntry;
 use guard_contracts::{
-    canonical_utc_timestamp, write_json_string, GuardStoreRequestV1, McpCallProjectionQueryV1,
+    canonical_utc_timestamp, GuardStoreRequestV1, McpCallProjectionQueryV1,
     McpRuntimeEvidenceRequestV1, GUARD_STORE_REQUEST_SCHEMA,
     MCP_RUNTIME_EVIDENCE_COMMAND_ARGUMENT_KEYS, MCP_RUNTIME_EVIDENCE_PATH_ARGUMENT_KEYS,
     MCP_RUNTIME_EVIDENCE_REQUEST_SCHEMA,
@@ -37,10 +47,17 @@ use crate::hook_evidence_store_gate::hold_storage_gate;
 use crate::hook_evidence_store_timeout::sqlite_timeout_ms;
 use crate::local_store_read::STORE_FILE_NAME;
 
+#[path = "mcp_relay_receipt_event.rs"]
+mod event;
+#[path = "mcp_relay_receipt_package.rs"]
+mod package;
 #[path = "mcp_relay_receipt_record.rs"]
 mod record;
+#[path = "mcp_relay_receipt_row.rs"]
+mod row;
 
-use record::{block_taxonomy, plain, Plain};
+use event::{store_args, Receipt};
+use record::plain;
 
 const INLINE_SOURCES: [&str; 4] = [
     "inline-approved",
@@ -65,15 +82,22 @@ const POLICY_SOURCES: [&str; 15] = [
     "auto-allow",
     "auto-block",
 ];
+const RECEIPT_METHOD: &str = "record_tool_call_evidence";
+const QUEUE_METHOD: &str = "queue_blocked_approvals";
 /// `GuardStore`'s default `guard_event_queue_limit`.
 const EVENT_QUEUE_LIMIT: u64 = 1_000;
+
+/// A receipt's store arguments and its silent inbox row's.
+type Args = (Map<String, Value>, Option<Map<String, Value>>);
+/// A record, its receipt's store arguments and its silent inbox row's.
+type Composed = (Value, Map<String, Value>, Option<Map<String, Value>>);
 
 /// One writer at a time, so two drains never contend for the store.
 static WRITER: Mutex<()> = Mutex::new(());
 
 /// Whether the resident writes this queued record's receipt itself.
 pub(crate) fn is_plain(record: &Value) -> bool {
-    plain(record).is_some()
+    plain(record).is_some() || package::plain(record).is_some()
 }
 
 /// Write the receipts of acknowledged plain records off the drain's thread,
@@ -115,11 +139,11 @@ fn take(slot: &Mutex<Option<Vec<Value>>>) -> Vec<Value> {
 /// stayed closed, or a write that failed. Records that are not plain are
 /// dropped.
 pub(crate) fn write(guard_home: &str, records: Vec<Value>) -> Vec<Value> {
-    let composed: Vec<(Value, Map<String, Value>)> = records
+    let composed: Vec<Composed> = records
         .into_iter()
         .filter_map(|record| {
-            let args = compose(guard_home, &record, &Stamp::fresh()?)?;
-            Some((record, args))
+            let (receipt, row) = compose(guard_home, &record, &Stamp::fresh()?)?;
+            Some((record, receipt, row))
         })
         .collect();
     if composed.is_empty() {
@@ -138,8 +162,17 @@ pub(crate) fn write(guard_home: &str, records: Vec<Value>) -> Vec<Value> {
         let busy_timeout_ms = u64::from(timeout_ms).clamp(1, MAX_BUSY_TIMEOUT_MS);
         composed
             .into_iter()
-            .filter_map(|(record, args)| {
-                (!store(guard_home, busy_timeout_ms, args)).then_some(record)
+            .filter_map(|(record, receipt, row)| {
+                if !store(guard_home, busy_timeout_ms, RECEIPT_METHOD, receipt) {
+                    return Some(record);
+                }
+                // After the receipt, as the proxy writes them. A row the store
+                // cannot take leaves the block without one, as
+                // `record_unprompted_review` does.
+                if let Some(row) = row {
+                    store(guard_home, busy_timeout_ms, QUEUE_METHOD, row);
+                }
+                None
             })
             .collect()
     };
@@ -147,14 +180,14 @@ pub(crate) fn write(guard_home: &str, records: Vec<Value>) -> Vec<Value> {
     unwritten
 }
 
-fn records_of(composed: Vec<(Value, Map<String, Value>)>) -> Vec<Value> {
-    composed.into_iter().map(|(record, _)| record).collect()
+fn records_of(composed: Vec<Composed>) -> Vec<Value> {
+    composed.into_iter().map(|(record, ..)| record).collect()
 }
 
-/// Whether the receipt is in the store: a failure after the commit (the
-/// outbox generation read) leaves it written, so the daemon must not write it
-/// again under a fresh receipt id.
-fn store(guard_home: &str, busy_timeout_ms: u64, args: Map<String, Value>) -> bool {
+/// Whether the write is in the store: a failure after the commit (the
+/// outbox generation read) leaves it written, so the daemon must not write a
+/// receipt again under a fresh receipt id.
+fn store(guard_home: &str, busy_timeout_ms: u64, method: &str, args: Map<String, Value>) -> bool {
     let (outcome, committed) = crate::guard_store_op::evaluate_committing(&GuardStoreRequestV1 {
         schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
         request_id: "mcp-relay-receipt".to_owned(),
@@ -163,7 +196,7 @@ fn store(guard_home: &str, busy_timeout_ms: u64, args: Map<String, Value>) -> bo
             .to_string_lossy()
             .into_owned(),
         guard_home: guard_home.to_owned(),
-        method: "record_tool_call_evidence".to_owned(),
+        method: method.to_owned(),
         source: "mcp-relay".to_owned(),
         busy_timeout_ms,
         args,
@@ -262,17 +295,28 @@ fn decision_evidence(decision: &Map<String, Value>) -> Vec<Value> {
     evidence
 }
 
-/// `receipt_evidence_for_mcp_tool_call` for an artifact that carries its
-/// firewall evidence: the displayed command and the firewall evidence entry.
+/// The call a receipt's display evidence is derived from.
+struct Call<'a> {
+    tool_name: &'a str,
+    params: &'a Value,
+    artifact_name: &'a str,
+    description: Option<&'a str>,
+    /// The artifact's firewall evidence; the proxy enriches only a tool or
+    /// server artifact, so a package request's receipt carries none.
+    firewall: Option<&'a Value>,
+}
+
+/// `receipt_evidence_for_mcp_tool_call` for an artifact that needs no
+/// enrichment: the displayed command and the firewall evidence entry.
 fn receipt_evidence(
     guard_home: &str,
-    plain: &Plain<'_>,
+    call: &Call<'_>,
     stamp: &Stamp,
     risk_categories: &[String],
 ) -> Option<(Option<String>, Value)> {
     let projection = crate::mcp_proxy_projection::call_projection(&McpCallProjectionQueryV1 {
-        tool_name: plain.tool_name.to_owned(),
-        params: plain.params.clone(),
+        tool_name: call.tool_name.to_owned(),
+        params: call.params.clone(),
         risk: None,
     })
     .ok()?;
@@ -287,20 +331,21 @@ fn receipt_evidence(
                 .map(|(key, value)| (key.clone(), value.as_str().map(str::to_owned)))
                 .collect()
         });
-    let description = plain.artifact["metadata"]["tool_description"].as_str();
     let request = McpRuntimeEvidenceRequestV1 {
         schema: MCP_RUNTIME_EVIDENCE_REQUEST_SCHEMA.to_owned(),
         request_id: stamp.device_id.clone(),
         subop: "receipt_evidence".to_owned(),
         guard_home: guard_home.to_owned(),
-        artifact_name: plain.artifact["name"].as_str()?.to_owned(),
-        tool_description: description.map(str::to_owned),
+        artifact_name: call.artifact_name.to_owned(),
+        tool_description: call.description.map(str::to_owned),
         arguments,
         risk_categories: risk_categories.to_vec(),
         envelope: None,
     };
     let mut evidence = Map::new();
-    evidence.insert("mcpSkillFirewall".to_owned(), plain.firewall.clone());
+    if let Some(firewall) = call.firewall {
+        evidence.insert("mcpSkillFirewall".to_owned(), firewall.clone());
+    }
     let command_text = match crate::mcp_runtime_evidence_op::receipt_evidence(&request) {
         Ok((command_text, runtime_action)) => {
             if let Some(runtime_action) = runtime_action {
@@ -317,160 +362,62 @@ fn receipt_evidence(
 }
 
 /// The `record_tool_call_evidence` arguments `allow_tool_call` or
-/// `block_tool_call` writes for this record.
-fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Map<String, Value>> {
+/// `block_tool_call` writes for this record, and the silent inbox row a
+/// safe-alternative block adds after it.
+fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Args> {
+    if record.get("kind").and_then(Value::as_str) == Some(package::KIND) {
+        return package::compose(guard_home, record, stamp);
+    }
     let plain = plain(record)?;
     let artifact = plain.artifact;
     let name = artifact["name"].as_str()?;
-    let config_path = artifact["config_path"].as_str()?;
-    let artifact_id = artifact["artifact_id"].as_str()?;
-    let signals = strings(&plain.decision["signals"]);
-    let risk_categories: Vec<String> = strings(&plain.decision["risk_categories"])
-        .into_iter()
-        .map(str::to_owned)
-        .collect();
-    let (raw_command_text, firewall_evidence) =
-        receipt_evidence(guard_home, &plain, stamp, &risk_categories)?;
-    let mut scanner_evidence = vec![firewall_evidence];
-    scanner_evidence.extend(decision_evidence(plain.decision));
-    scanner_evidence.extend(plain.append.iter().cloned());
-    let (event_name, provenance_summary, user_override) = if plain.forward {
-        (
-            "runtime_tool_call_allowed",
-            format!("runtime tool call allowed from {config_path}"),
-            (plain.source == "inline-approved").then_some("inline-approve"),
-        )
-    } else {
-        let (event_name, provenance) = block_taxonomy(plain.policy_action)?;
-        (
-            event_name,
-            format!("{provenance} from {config_path}"),
-            (plain.source == "inline-denied").then_some("inline-deny"),
-        )
+    let projected = plain.projected()?;
+    let risk_categories = plain.risk_categories(projected.as_ref())?;
+    let call = Call {
+        tool_name: plain.tool_name,
+        params: plain.params,
+        artifact_name: name,
+        description: artifact["metadata"]["tool_description"].as_str(),
+        firewall: Some(plain.firewall),
     };
-    let mut changed = vec!["runtime_tool_call", plain.source];
-    changed.extend(signals.iter().copied());
-    let receipt = json!({
-        "receipt_id": stamp.receipt_id,
-        "timestamp": stamp.now,
-        "harness": plain.harness,
-        "artifact_id": artifact_id,
-        "artifact_hash": plain.artifact_hash,
-        "policy_decision": plain.policy_action,
-        "capabilities_summary": format!("mcp tool call \u{2022} {name}"),
-        "changed_capabilities": changed,
-        "provenance_summary": provenance_summary,
-        "user_override": user_override,
-        "artifact_name": name,
-        "source_scope": artifact["source_scope"],
-        "diff_summary": diff_summary(&changed),
-        "approval_source": approval_source(plain.source),
-        "approval_request_id": null,
-        "scanner_evidence": scanner_evidence,
-        "raw_command_text": raw_command_text,
-    });
+    let (raw_command_text, firewall_evidence) =
+        receipt_evidence(guard_home, &call, stamp, &risk_categories)?;
+    // `(*tool_decision_scanner_evidence(decision), *evidence_append)`, which
+    // the inbox row records as well.
+    let mut call_evidence = decision_evidence(plain.decision);
+    call_evidence.extend(plain.append.iter().cloned());
+    let row = projected
+        .as_ref()
+        .and_then(|projected| row::silent_review(&plain, projected, &call_evidence, stamp));
+    let mut scanner_evidence = vec![firewall_evidence];
+    scanner_evidence.extend(call_evidence);
     let launch_command = artifact["command"]
         .as_str()
         .filter(|command| !command.is_empty())
-        .map(str::trim);
-    let inventory = json!({
-        "artifact_id": artifact_id,
-        "harness": plain.harness,
-        "artifact_name": name,
-        "artifact_type": "tool_call",
-        "source_scope": artifact["source_scope"],
-        "config_path": config_path,
-        "publisher": artifact["publisher"],
-        "origin_url": null,
-        "launch_command": launch_command,
-        "transport": artifact["transport"],
-        "artifact_hash": plain.artifact_hash,
-        "policy_action": plain.policy_action,
-        "changed": false,
-        "approved": plain.forward,
-        "now": stamp.now,
-    });
-    let risk_refs: Vec<&str> = risk_categories.iter().map(String::as_str).collect();
-    let mut args = Map::new();
-    args.insert("inventory".to_owned(), inventory);
-    args.insert("receipt".to_owned(), receipt);
-    args.insert("action_envelope".to_owned(), Value::Null);
-    args.insert("now".to_owned(), json!(stamp.store_now));
-    args.insert("new_device_id".to_owned(), json!(stamp.device_id));
-    args.insert("event_queue_limit".to_owned(), json!(EVENT_QUEUE_LIMIT));
-    args.insert("event_name".to_owned(), json!(event_name));
-    args.insert(
-        "event_payload_json".to_owned(),
-        json!(event_payload_json(
-            &plain,
-            artifact_id,
-            &risk_refs,
-            &signals
-        )?),
-    );
-    args.insert("event_occurred_at".to_owned(), json!(stamp.now));
-    Some(args)
-}
-
-/// `_auto_diff_summary`.
-fn diff_summary(changed: &[&str]) -> String {
-    let sample = changed
-        .iter()
-        .take(3)
-        .copied()
-        .collect::<Vec<_>>()
-        .join(", ");
-    let suffix = if changed.len() > 3 { " ..." } else { "" };
-    format!("{} change(s): {sample}{suffix}", changed.len())
-}
-
-/// The runtime event's payload as `json.dumps` writes it: insertion order,
-/// `", "` and `": "` separators, ASCII only.
-fn event_payload_json(
-    plain: &Plain<'_>,
-    artifact_id: &str,
-    risk_categories: &[&str],
-    signals: &[&str],
-) -> Option<String> {
-    let mut out = vec![b'{'];
-    for (name, value) in [
-        ("artifact_id", artifact_id),
-        ("artifact_hash", plain.artifact_hash),
-        ("decision_source", plain.source),
-        ("policy_action", plain.policy_action),
-    ] {
-        key(&mut out, name);
-        write_json_string(value, &mut out);
-    }
-    if !plain.forward {
-        key(&mut out, "execution_outcome");
-        write_json_string("not-executed", &mut out);
-    }
-    key(&mut out, "risk_categories");
-    list(&mut out, risk_categories);
-    key(&mut out, "signals");
-    list(&mut out, signals);
-    out.push(b'}');
-    String::from_utf8(out).ok()
-}
-
-fn key(out: &mut Vec<u8>, name: &str) {
-    if out.len() > 1 {
-        out.extend_from_slice(b", ");
-    }
-    write_json_string(name, out);
-    out.extend_from_slice(b": ");
-}
-
-fn list(out: &mut Vec<u8>, items: &[&str]) {
-    out.push(b'[');
-    for (index, item) in items.iter().enumerate() {
-        if index > 0 {
-            out.extend_from_slice(b", ");
-        }
-        write_json_string(item, out);
-    }
-    out.push(b']');
+        .map(|command| command.trim().to_owned());
+    let receipt = Receipt {
+        harness: plain.harness,
+        forward: plain.forward,
+        source: plain.source,
+        policy_action: plain.policy_action,
+        artifact: event::Artifact {
+            artifact_id: artifact["artifact_id"].as_str()?,
+            name,
+            artifact_type: "tool_call",
+            source_scope: artifact["source_scope"].as_str()?,
+            config_path: artifact["config_path"].as_str()?,
+            publisher: artifact["publisher"].clone(),
+            origin_url: Value::Null,
+            launch_command,
+            transport: artifact["transport"].clone(),
+        },
+        artifact_hash: plain.artifact_hash,
+        signals: strings(&plain.decision["signals"]),
+        risk_categories: &risk_categories,
+        scanner_evidence,
+        raw_command_text,
+    };
+    Some((store_args(&receipt, stamp)?, row))
 }
 
 #[cfg(test)]

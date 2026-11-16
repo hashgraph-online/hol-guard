@@ -1,6 +1,6 @@
-//! `stable_mcp_server_identifier` for an OpenCode server, which a verified
-//! `hol-guard::` companion's `--server-id` must equal: the digest of the
-//! server's launch with every path spelled out of it.
+//! `stable_mcp_server_identifier`, which a verified `hol-guard::` companion's
+//! and a Guard proxy's `--server-id` must equal: the digest of the server's
+//! launch with every path spelled out of it.
 
 use guard_command::command_option_parsing::python_is_alphabetic;
 use guard_contracts::python_strip;
@@ -39,9 +39,10 @@ const PATH_KEYS: [&str; 11] = [
     "workdir",
 ];
 
-/// `stable_mcp_server_identifier` for an OpenCode server: the digest of its
-/// launch with every path spelled out of it.
+/// `stable_mcp_server_identifier`: the digest of a server's launch with every
+/// path spelled out of it. `mapped` reads lone surrogates `pyjson` mapped.
 pub(crate) fn server_identifier(
+    harness: &str,
     name: &str,
     scope: &str,
     command: &str,
@@ -49,6 +50,7 @@ pub(crate) fn server_identifier(
     transport: &str,
     mapped: bool,
 ) -> String {
+    let harness = python_lower(python_strip(harness));
     let scope = python_lower(python_strip(scope));
     let name = match python_lower(python_strip(name)) {
         stripped if stripped.is_empty() => "unnamed".to_owned(),
@@ -57,9 +59,10 @@ pub(crate) fn server_identifier(
     let quoted = |text: &str| json_string(text, true, mapped);
     let args: Vec<String> = args.iter().map(|arg| quoted(&stable_arg(arg))).collect();
     let payload = format!(
-        "{{\"args\": [{}], \"command\": {}, \"harness\": \"opencode\", \"name\": {}, \"source_scope\": {}, \"transport\": {}}}",
+        "{{\"args\": [{}], \"command\": {}, \"harness\": {}, \"name\": {}, \"source_scope\": {}, \"transport\": {}}}",
         args.join(", "),
         quoted(&stable_command(command)),
+        quoted(&harness),
         quoted(&name),
         quoted(&scope),
         quoted(transport),
@@ -68,7 +71,7 @@ pub(crate) fn server_identifier(
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect();
-    format!("mcp_server:opencode:{scope}:{name}:{}", &digest[..20])
+    format!("mcp_server:{harness}:{scope}:{name}:{}", &digest[..20])
 }
 
 /// `_stable_arg_token`.

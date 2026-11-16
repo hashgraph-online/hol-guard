@@ -16,6 +16,7 @@ use serde_json::{json, Map, Value};
 use crate::guard_config_coerce as coerce;
 use crate::guard_config_harness as harness;
 use crate::guard_config_managed::{apply_managed_policy, ManagedInput};
+use crate::managed_policy::ManagedPolicy;
 use crate::managed_policy_floor::effective_managed_policy;
 use crate::managed_policy_load::{load_managed_policy, ManagedPolicySource};
 use crate::package_authority_config as base;
@@ -108,6 +109,10 @@ fn load_from_home(request: &LoadRequest, home: &Map<String, Value>) -> Result<Va
         merged = apply_managed_policy(&merged, policy);
     }
     let mut value = coerce_config(&merged, request.managed.as_ref());
+    // A person's own CIGAR "off" holds: project or managed settings can add one, never clear it.
+    let mut cigar_off = harness::loaded_cigar(value.get("harness_cigar"));
+    cigar_off.extend(harness::loaded_cigar(home.get("harness_cigar")));
+    value["harness_cigar"] = json!(cigar_off);
     // Preserve validated local intent for presentation/settings round trips.
     // Enforcement continues to use the restricted context_assistance value.
     value["context_assistance_requested"] = match home.get("context_assistance") {
@@ -179,6 +184,16 @@ fn context_assistance_at(
 ) -> Result<AssistanceSettings, String> {
     let home_config = context_snapshot::read_home(home)?;
     context_assistance_from_home(home, workspace, source, &home_config)
+}
+
+/// Whether CIGAR is off for `app` in the composed settings (home,
+/// `workspace` and managed policy), where the home "off" always holds. A
+/// config Guard cannot read leaves the choice to CIGAR's own policy.
+pub(crate) fn cigar_off_for(home: &Path, workspace: Option<&Path>, app: &str) -> bool {
+    let mut source = ManagedPolicySource::native();
+    source.write_cache = false;
+    effective_config(home, workspace, &source)
+        .is_ok_and(|config| harness::loaded_cigar(config.get("harness_cigar")).contains_key(app))
 }
 
 /// Hypothetical local intent is composed through the same native machine
@@ -282,11 +297,70 @@ pub(crate) fn approval_wait_timeout_seconds_under(
     workspace: Option<&Path>,
     source: &ManagedPolicySource,
 ) -> Result<i64, String> {
-    let managed =
-        effective_managed_policy(&load_managed_policy(source)).map(|policy| ManagedInput {
-            settings: policy.settings.clone(),
-            locked_settings: policy.locked_settings.iter().cloned().collect(),
-        });
+    Ok(effective_config(guard_home, workspace, source)?
+        .get("approval_wait_timeout_seconds")
+        .and_then(Value::as_i64)
+        .unwrap_or(120))
+}
+
+/// Effective `desktop_notifications` for an in-process caller, composed as
+/// `approval_wait_timeout_seconds` is.
+pub(crate) fn desktop_notifications(
+    guard_home: &Path,
+    workspace: Option<&Path>,
+) -> Result<bool, String> {
+    Ok(
+        effective_config(guard_home, workspace, &ManagedPolicySource::native())?
+            .get("desktop_notifications")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+    )
+}
+
+/// Effective evidence retention for storage maintenance: detail retention
+/// days and the receipt-detail and guard-event row limits, each limit
+/// defaulting to 250,000 when unset.
+pub(crate) fn evidence_retention(guard_home: &Path) -> Result<(i64, i64, i64), String> {
+    const DEFAULT_LIMIT: i64 = 250_000;
+    let config = effective_config(guard_home, None, &ManagedPolicySource::native())?;
+    let int = |key: &str| config.get(key).and_then(Value::as_i64);
+    Ok((
+        int("evidence_retain_days").unwrap_or(90),
+        int("receipt_detail_limit").unwrap_or(DEFAULT_LIMIT),
+        int("guard_event_limit").unwrap_or(DEFAULT_LIMIT),
+    ))
+}
+
+pub(crate) fn approval_browser_allowed_under(
+    guard_home: &Path,
+    source: &ManagedPolicySource,
+) -> Result<bool, String> {
+    Ok(effective_config(guard_home, None, source)?
+        .get("approval_surface_policy")
+        .and_then(Value::as_str)
+        != Some("native-only"))
+}
+
+fn effective_config(
+    guard_home: &Path,
+    workspace: Option<&Path>,
+    source: &ManagedPolicySource,
+) -> Result<Value, String> {
+    let policy = effective_managed_policy(&load_managed_policy(source));
+    load_under(guard_home, workspace, policy.as_ref())
+}
+
+/// `load_guard_config(guard_home, workspace)` composed against a managed
+/// policy the caller already resolved, as the native loader op reads it.
+pub(crate) fn load_under(
+    guard_home: &Path,
+    workspace: Option<&Path>,
+    policy: Option<&ManagedPolicy>,
+) -> Result<Value, String> {
+    let managed = policy.map(|policy| ManagedInput {
+        settings: policy.settings.clone(),
+        locked_settings: policy.locked_settings.iter().cloned().collect(),
+    });
     let request = LoadRequest {
         schema: SCHEMA.to_owned(),
         guard_home: guard_home.to_path_buf(),
@@ -294,11 +368,7 @@ pub(crate) fn approval_wait_timeout_seconds_under(
         require_canonical_workspace: false,
         managed,
     };
-    let config = load(&request)?;
-    Ok(config
-        .get("approval_wait_timeout_seconds")
-        .and_then(Value::as_i64)
-        .unwrap_or(120))
+    load(&request)
 }
 
 fn watch_hours(value: Option<&Value>) -> i64 {
@@ -371,6 +441,7 @@ pub(crate) fn coerce_config(merged: &Map<String, Value>, managed: Option<&Manage
         "watch_entered_at": watch_entered_at(get("watch_entered_at")),
         "harness_postures": postures,
         "harness_watch_entered_at": stamps,
+        "harness_cigar": harness::loaded_cigar(get("harness_cigar")),
         "default_action": action_text(get("default_action"), GuardAction::Warn),
         "unknown_publisher_action": action_text(get("unknown_publisher_action"), GuardAction::Review),
         "changed_hash_action": action_text(get("changed_hash_action"), GuardAction::RequireReapproval),
@@ -386,6 +457,7 @@ pub(crate) fn coerce_config(merged: &Map<String, Value>, managed: Option<&Manage
             other => coerce::loaded_bool(other),
         },
         "update_channel": coerce::update_channel(get("update_channel")),
+        "update_mode": coerce::update_mode(get("update_mode")),
         "telemetry": coerce::python_truthy(get("telemetry")),
         "sync": coerce::python_truthy(get("sync")),
         "billing": coerce::python_truthy(get("billing")),

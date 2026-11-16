@@ -12,11 +12,11 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from codex_plugin_scanner.guard.daemon.hook_native_exact_action import (
+from codex_plugin_scanner.guard.hook_review.hook_native_exact_action import (
     _ONCE_ONLY_REASONS,
     UNPROVEN_LAUNCH,
 )
-from codex_plugin_scanner.guard.daemon.hook_native_review_binding import native_review_policy_binding
+from codex_plugin_scanner.guard.hook_review.hook_native_review_binding import native_review_policy_binding
 from codex_plugin_scanner.guard.native_daemon_route import _decide
 from codex_plugin_scanner.guard.native_resident_decision import ResidentOperation
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import current_extension_control_binding_digest
@@ -131,7 +131,7 @@ def resident_review_evidence(
 def native_review_evidence(**kwargs: Any) -> tuple[bool, str | None, str | None, str | None]:
     """The decoded evidence the daemon's pause reads from the edge."""
 
-    from codex_plugin_scanner.guard.daemon.hook_native_exact_action import review_evidence_parts
+    from codex_plugin_scanner.guard.hook_review.hook_native_exact_action import review_evidence_parts
 
     parts = review_evidence_parts(resident_review_evidence(**kwargs))
     assert parts is not None

@@ -103,6 +103,7 @@ fn action(session: &Session, command: &str) -> String {
         guard_command::pretool::PathContext {
             home_dir: Some(&home),
             cwd: Some(&cwd),
+            literal_words: &[],
             cdpath_unset: false,
             rustup_override_absent: false,
             cargo_config_inert: false,
@@ -112,6 +113,7 @@ fn action(session: &Session, command: &str) -> String {
             ripgrep_config_absent: false,
             gem_config_absent: false,
             http_config_absent: false,
+            openssl_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },

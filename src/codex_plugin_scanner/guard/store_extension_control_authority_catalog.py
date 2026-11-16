@@ -15,20 +15,16 @@ from .native_extension_control_authority import (
 )
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
-    AuthorityAnchor,
-    AuthorityPhase,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
 )
 from .runtime.extension_control_contract import ExtensionControlLayer
 from .store_extension_control_authority_catalog_events import (
     already_recorded,
-    build_catalog_migration_payload,
-    insert_catalog_migration_event,
     migration_provenance,
     recorded_writer_version,
 )
-from .store_extension_control_authority_support import _now, _plan_int, _plan_map, _plan_pack_digest, _plan_record
+from .store_extension_control_authority_support import _now
 
 
 class ExtensionControlAuthorityCatalogMixin:
@@ -82,44 +78,17 @@ class ExtensionControlAuthorityCatalogMixin:
         manifest: dict[str, str],
         replace: bool = False,
     ) -> None:
-        sealed = self._extension_control_authority_op(
-            "seal_manifest",
+        self._invalidate_native_extension_control_policy()
+        reply = self._extension_control_authority_op(
+            "write_manifest",
             key=key,
             catalog_digest=registry.catalog_digest,
             current_manifest=manifest,
             now=_now(),
+            manifest_replace=replace,
         )
-        record_json, record_digest, record_mac = _plan_record(sealed, "record")
-        manifest_json, recorded_at = str(sealed["manifest_json"]), str(sealed["recorded_at"])
-        self._invalidate_native_extension_control_policy()
-        with self._connect() as connection:
-            if replace:
-                connection.execute(
-                    """
-                    update extension_control_catalog_manifest
-                    set manifest_json = ?, record_json = ?, record_digest = ?, record_mac = ?, recorded_at = ?
-                    where catalog_digest = ?
-                    """,
-                    (
-                        manifest_json,
-                        record_json,
-                        record_digest,
-                        record_mac,
-                        recorded_at,
-                        registry.catalog_digest,
-                    ),
-                )
-                if connection.execute("select changes()").fetchone()[0] != 1:
-                    raise ExtensionControlAuthorityError("extension control catalog manifest conflict")
-                return
-            connection.execute(
-                """
-                insert into extension_control_catalog_manifest (
-                    catalog_digest, manifest_json, record_json, record_digest, record_mac, recorded_at
-                ) values (?, ?, ?, ?, ?, ?)
-                """,
-                (registry.catalog_digest, manifest_json, record_json, record_digest, record_mac, recorded_at),
-            )
+        if reply.get("written") is not True:
+            raise ExtensionControlAuthorityError("extension control catalog manifest conflict")
 
     def _load_catalog_manifest(self, catalog_digest: str, *, key: bytes) -> dict[str, str] | None:
         reply = self._extension_control_authority_op("load_manifest", key=key, catalog_digest=catalog_digest)
@@ -138,7 +107,7 @@ class ExtensionControlAuthorityCatalogMixin:
         with self._connect() as connection:
             if already_recorded(connection, revision):
                 return
-        provenance = migration_provenance(
+        described, downgraded_from = migration_provenance(
             None,
             catalog_digest,
             registry=None,
@@ -146,27 +115,89 @@ class ExtensionControlAuthorityCatalogMixin:
             writer=False,
             guard_home=self.guard_home,
         )
+        # The resident takes the migration from the committed head again and
+        # writes its event once, in one transaction.
+        self._extension_control_authority_op(
+            "record_migration",
+            key=None,
+            catalog_digest=catalog_digest,
+            revision=revision,
+            now=_now(),
+            migration_record={
+                "provenance": described,
+                "retired_target_ids": [],
+                **({} if downgraded_from is None else {"downgraded_from": downgraded_from}),
+            },
+        )
+
+    def _migrate_catalog_in_resident(
+        self,
+        request: dict[str, object],
+        *,
+        key: bytes,
+        previous_catalog_digest: str,
+        retired_targets: tuple[str, ...],
+        registry: CommandSafetyExtensionRegistry,
+        pack_activation=None,
+    ) -> ExtensionControlAuthorityView:
+        """Have the resident commit a migration.
+
+        A migration that activates a command pack comes back ``pack_bound``
+        once its row is anchored; the resident then finishes it with the
+        protected pack state and records the migration as it commits the row.
+        """
+
+        catalog_digest = str(request["catalog_digest"])
         with self._connect() as connection:
-            if already_recorded(connection, revision):
-                return
-            payload, regression = build_catalog_migration_payload(
-                previous_revision=previous_revision,
-                revision=revision,
-                previous_catalog_digest=previous_catalog_digest,
+            previous_writer_version = recorded_writer_version(connection, previous_catalog_digest)
+        described, downgraded_from = migration_provenance(
+            previous_writer_version,
+            catalog_digest,
+            registry,
+            trigger="catalog-migration",
+            writer=True,
+            guard_home=self.guard_home,
+        )
+        # An absent downgrade is omitted, as the resident re-encodes it when it
+        # binds the reply to this request.
+        migration_record = {
+            "provenance": described,
+            **({"downgraded_from": downgraded_from} if downgraded_from is not None else {}),
+            "retired_target_ids": list(retired_targets),
+        }
+        pack_reserve: dict[str, object] = {}
+        if pack_activation is not None:
+            from .catalog_delivery.activation_journal import reserve_request
+
+            with self._connect() as connection:
+                pack_reserve["pack_reserve"] = reserve_request(
+                    self, connection, pack_activation, recorded_at=str(request["now"])
+                )
+        reply = self._extension_control_authority_op(
+            "migrate", key=key, **request, **pack_reserve, migration_record=migration_record
+        )
+        if reply.get("pack_bound") is True:
+            revision = reply.get("revision")
+            anchored = reply.get("anchor_json")
+            if type(revision) is not int or not isinstance(anchored, str):
+                raise ExtensionControlAuthorityError("invalid extension control catalog migration")
+            self._mirror_resident_anchor(anchored)
+            reply = self._resume_extension_control_op(
+                revision,
+                key=key,
+                now=str(request["now"]),
                 catalog_digest=catalog_digest,
-                layers=layers,
-                retired_targets=retired_targets,
-                provenance=provenance,
+                catalog_migration=request["catalog_migration"],
+                migration_record=migration_record,
             )
-            insert_catalog_migration_event(
-                connection,
-                payload=payload,
-                regression=regression,
-                occurred_at=_now(),
-                revision=revision,
-                previous_catalog_digest=previous_catalog_digest,
-                catalog_digest=catalog_digest,
-            )
+        migrated = reply.get("resumed")
+        sealed = reply.get("anchor_json")
+        if not isinstance(migrated, dict) or migrated.get("catalog_digest") != catalog_digest:
+            raise ExtensionControlAuthorityError("invalid extension control catalog migration")
+        if not isinstance(sealed, str):
+            raise ExtensionControlAuthorityError("invalid extension control anchor seal")
+        self._mirror_resident_anchor(sealed)
+        return self._read_extension_control_authority_locked(catalog_digest)
 
     def _migrate_extension_control_catalog(
         self,
@@ -188,7 +219,7 @@ class ExtensionControlAuthorityCatalogMixin:
         previous_catalog_digest = action.get("previous_catalog_digest")
         if type(previous_revision) is not int or not isinstance(previous_catalog_digest, str):
             raise ExtensionControlAuthorityError("invalid extension control catalog migration")
-        layers = layers_from_wire(action.get("layers"))
+        layers_from_wire(action.get("layers"))
         retired_targets = tuple(str(target) for target in cast(list[object], action.get("retired_targets") or []))
         migration = {
             "previous_revision": previous_revision,
@@ -197,135 +228,21 @@ class ExtensionControlAuthorityCatalogMixin:
         }
         if installed_upgrade is not None:
             migration["installed_upgrade"] = installed_upgrade
-        reply = self._extension_control_authority_op(
-            "migrate_plan",
-            key=key,
-            catalog_digest=catalog_digest,
-            now=_now(),
-            catalog_migration=migration,
+        request: dict[str, object] = {
+            "catalog_digest": catalog_digest,
+            "now": _now(),
+            "catalog_migration": migration,
             # An installed upgrade asks the resident to recompute the managed
             # policy of the authority head, which needs its anchor and the
             # manifest of the catalog that head is bound to.
-            anchor_json=self._read_anchor_json(),
-            current_manifest=dict(current_manifest) if current_manifest is not None else None,
+            "anchor_json": self._read_anchor_json(),
+            "current_manifest": dict(current_manifest) if current_manifest is not None else None,
+        }
+        return self._migrate_catalog_in_resident(
+            request,
+            key=key,
+            previous_catalog_digest=previous_catalog_digest,
+            retired_targets=retired_targets,
+            registry=registry,
+            pack_activation=pack_activation,
         )
-        plan = _plan_map(reply, "plan")
-        if plan.get("outcome") != "migrate":
-            raise ExtensionControlAuthorityError("invalid extension control catalog migration")
-        pack_digest = _plan_pack_digest(plan)
-        if pack_digest != (pack_activation.digest if pack_activation is not None else None):
-            raise ExtensionControlAuthorityError("installed command pack migration binding mismatch")
-        revision = _plan_int(plan, "revision")
-        previous_digest, created_at = str(plan["previous_digest"]), str(plan["created_at"])
-        layers_json = str(plan["layers_json"])
-        hashes = _plan_map(plan, "hashes")
-        actor_hash, idempotency_hash, nonce_hash = (str(hashes[name]) for name in ("actor", "idempotency", "nonce"))
-        snapshot_json, snapshot_digest, snapshot_mac = _plan_record(plan, "snapshot")
-        transition_json, transition_digest, transition_mac = _plan_record(plan, "transition")
-        with self._connect() as connection:
-            previous_writer_version = recorded_writer_version(connection, previous_catalog_digest)
-            connection.execute(
-                """
-                insert into extension_control_authority_transition (
-                    revision, previous_revision, phase, actor_id_hash, idempotency_key_hash,
-                    nonce_hash, catalog_digest, layers_json, snapshot_json, snapshot_digest,
-                    snapshot_mac, transition_json, transition_digest, transition_mac, created_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    revision,
-                    previous_revision,
-                    AuthorityPhase.PREPARED.value,
-                    actor_hash,
-                    idempotency_hash,
-                    nonce_hash,
-                    catalog_digest,
-                    layers_json,
-                    snapshot_json,
-                    snapshot_digest,
-                    snapshot_mac,
-                    transition_json,
-                    transition_digest,
-                    transition_mac,
-                    created_at,
-                ),
-            )
-            if pack_activation is not None:
-                from .catalog_delivery.activation_journal import reserve
-
-                reserve(
-                    self,
-                    connection,
-                    pack_activation,
-                    control_revision=revision,
-                    snapshot_digest=snapshot_digest,
-                    catalog_digest=catalog_digest,
-                    recorded_at=created_at,
-                )
-        self._write_and_verify_anchor(AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.ANCHORED), key=key)
-        provenance = migration_provenance(
-            previous_writer_version,
-            catalog_digest,
-            registry,
-            trigger="catalog-migration",
-            writer=True,
-            guard_home=self.guard_home,
-        )
-        with self._connect() as connection:
-            if pack_activation is not None:
-                from .catalog_delivery.activation_journal import finish
-
-                pending = connection.execute(
-                    "select * from extension_control_authority_transition where revision=?", (revision,)
-                ).fetchone()
-                finish(self, connection, pending, expected_pack=pack_digest)
-            connection.execute(
-                "update extension_control_authority_transition set phase = ? where revision = ?",
-                (AuthorityPhase.ANCHORED.value, revision),
-            )
-            connection.execute(
-                """
-                update extension_control_authority_snapshot
-                set revision = ?, catalog_digest = ?, layers_json = ?, previous_digest = ?,
-                    snapshot_json = ?, snapshot_digest = ?, snapshot_mac = ?, committed_at = ?
-                where singleton = 1 and revision = ? and snapshot_digest = ?
-                """,
-                (
-                    revision,
-                    catalog_digest,
-                    layers_json,
-                    previous_digest,
-                    snapshot_json,
-                    snapshot_digest,
-                    snapshot_mac,
-                    created_at,
-                    previous_revision,
-                    previous_digest,
-                ),
-            )
-            if connection.execute("select changes()").fetchone()[0] != 1:
-                raise ExtensionControlAuthorityError("extension control catalog migration conflict")
-            connection.execute(
-                "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
-                (AuthorityPhase.COMMITTED.value, created_at, revision),
-            )
-            payload, regression = build_catalog_migration_payload(
-                previous_revision=previous_revision,
-                revision=revision,
-                previous_catalog_digest=previous_catalog_digest,
-                catalog_digest=catalog_digest,
-                layers=layers,
-                retired_targets=retired_targets,
-                provenance=provenance,
-            )
-            insert_catalog_migration_event(
-                connection,
-                payload=payload,
-                regression=regression,
-                occurred_at=created_at,
-                revision=revision,
-                previous_catalog_digest=previous_catalog_digest,
-                catalog_digest=catalog_digest,
-            )
-        self._write_and_verify_anchor(AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.COMMITTED), key=key)
-        return self._read_extension_control_authority_locked(catalog_digest)

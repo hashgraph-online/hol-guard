@@ -427,3 +427,7 @@ fn a_generic_mutation_grant_does_not_cover_fields_hidden_in_fragments() {
         "allow"
     );
 }
+
+#[cfg(unix)]
+#[path = "native_command_directory_allow_tests.rs"]
+mod directory_allow;

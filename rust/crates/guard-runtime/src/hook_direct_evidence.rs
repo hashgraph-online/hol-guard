@@ -25,6 +25,10 @@
 //! the call's receipt itself (see [`crate::mcp_relay_receipt`]). A receipt the
 //! store cannot take goes back on the queue as an ordinary record, so the
 //! daemon records it as it did before.
+//!
+//! A paged record whose receipt the resident has not written yet is recorded
+//! before the page leaves, as the `record` module describes, and a record
+//! that leaves the daemon nothing to record is then left off the page.
 
 use crate::hook_direct_counters::DirectHookCounters;
 use serde::Deserialize;
@@ -68,11 +72,20 @@ struct QueuedRecord {
     record: Value,
     /// The resident writes this record's receipt itself, after the ack.
     native: bool,
+    /// The bound daemon let the resident record this answer's activity.
+    activity: bool,
+}
+
+/// A queued record copied onto a page.
+struct Paged {
+    seq: u64,
+    record: Value,
+    activity: bool,
 }
 
 /// What one drain request takes from the queue.
 struct Peeked {
-    records: Vec<Value>,
+    records: Vec<Paged>,
     remaining: usize,
     through: Option<u64>,
     /// Acknowledged records whose receipts the resident writes.
@@ -88,11 +101,17 @@ struct QueueState {
 
 impl QueueState {
     /// Queue one encoded record, or hand it back when the queue is full.
-    fn push(&mut self, record: Value, bytes: usize, native: bool) -> Result<(), Value> {
+    fn push(
+        &mut self,
+        record: Value,
+        bytes: usize,
+        native: bool,
+        activity: bool,
+    ) -> Result<(), Value> {
         if !self.holds(bytes) {
             return Err(record);
         }
-        self.append(record, bytes, native);
+        self.append(record, bytes, native, activity);
         Ok(())
     }
 
@@ -101,7 +120,7 @@ impl QueueState {
     }
 
     /// Queue one encoded record past the queue's limits.
-    fn append(&mut self, record: Value, bytes: usize, native: bool) {
+    fn append(&mut self, record: Value, bytes: usize, native: bool, activity: bool) {
         let seq = self.next_seq;
         self.next_seq = self.next_seq.saturating_add(1);
         self.bytes += bytes;
@@ -110,7 +129,25 @@ impl QueueState {
             bytes,
             record,
             native,
+            activity,
         });
+    }
+
+    /// Add `markers` to the queued record `seq`, if it is still queued.
+    fn mark(&mut self, seq: u64, markers: &[&str]) {
+        let Some(queued) = self.records.iter_mut().find(|queued| queued.seq == seq) else {
+            return;
+        };
+        let Some(fields) = queued.record.as_object_mut() else {
+            return;
+        };
+        for marker in markers {
+            fields.insert((*marker).to_owned(), Value::Bool(true));
+        }
+        let bytes =
+            serde_json::to_vec(&queued.record).map_or(queued.bytes, |encoded| encoded.len());
+        self.bytes = (self.bytes - queued.bytes).saturating_add(bytes);
+        queued.bytes = bytes;
     }
 }
 
@@ -138,6 +175,9 @@ pub(crate) struct DirectEvidenceQueue {
     epoch: String,
     state: Arc<Mutex<QueueState>>,
     counters: DirectHookCounters,
+    /// Held while a drain records a page, so two drains never record the
+    /// same record's activity, which the writer does not dedupe.
+    recording: Mutex<()>,
 }
 
 /// Returns acknowledged records whose receipts the resident could not write
@@ -162,7 +202,7 @@ impl Unwritten {
             let Ok(encoded) = serde_json::to_vec(&record) else {
                 continue;
             };
-            state.append(record, encoded.len(), false);
+            state.append(record, encoded.len(), false, false);
         }
     }
 }
@@ -182,6 +222,7 @@ impl Default for DirectEvidenceQueue {
             ),
             state: Arc::new(Mutex::new(QueueState::default())),
             counters: DirectHookCounters::default(),
+            recording: Mutex::new(()),
         }
     }
 }
@@ -210,8 +251,19 @@ impl DirectEvidenceQueue {
         self.try_offer(record).is_ok()
     }
 
+    /// Queue a direct answer's record, which the drain records with
+    /// `activity` as the bound daemon allowed it, or refuse it when the queue
+    /// cannot hold it.
+    pub(crate) fn offer_answer(&self, record: Value, activity: bool) -> bool {
+        self.try_offer_with(record, activity).is_ok()
+    }
+
     /// Queue one record, or hand it back when the queue cannot hold it.
     pub(crate) fn try_offer(&self, record: Value) -> Result<(), Value> {
+        self.try_offer_with(record, false)
+    }
+
+    fn try_offer_with(&self, record: Value, activity: bool) -> Result<(), Value> {
         let Ok(encoded) = serde_json::to_vec(&record) else {
             return Err(record);
         };
@@ -223,7 +275,7 @@ impl DirectEvidenceQueue {
             return Err(record);
         };
         let native = crate::mcp_relay_receipt::is_plain(&record);
-        state.push(record, bytes, native)
+        state.push(record, bytes, native, activity)
     }
 
     /// Where the resident returns receipts it could not write.
@@ -240,11 +292,12 @@ impl DirectEvidenceQueue {
     /// evidence is recorded only for a record the queue takes. A marker goes
     /// when its write is refused or the marked record would not fit; the
     /// drain then submits that evidence itself, which the writer dedupes for a
-    /// receipt.
+    /// receipt. The drain records this answer's activity only with `activity`.
     pub(crate) fn try_offer_recorded(
         &self,
         mut record: Value,
         markers: &[&str],
+        activity: bool,
         record_evidence: impl FnOnce(&Value) -> usize,
     ) -> Result<(), Value> {
         let Ok(encoded) = serde_json::to_vec(&record) else {
@@ -279,11 +332,11 @@ impl DirectEvidenceQueue {
             let record = unmarked(record, &markers[recorded..]);
             let kept_bytes =
                 serde_json::to_vec(&record).map_or(marked_bytes, |encoded| encoded.len());
-            state.append(record, kept_bytes, false);
+            state.append(record, kept_bytes, false, activity);
         } else {
             let record = unmarked(record, markers);
             let native = crate::mcp_relay_receipt::is_plain(&record);
-            state.append(record, bytes, native);
+            state.append(record, bytes, native, activity);
         }
         Ok(())
     }
@@ -345,7 +398,11 @@ impl DirectEvidenceQueue {
                     break;
                 }
                 page_bytes += next.bytes;
-                taken.push(next.record.clone());
+                taken.push(Paged {
+                    seq: next.seq,
+                    record: next.record.clone(),
+                    activity: next.activity,
+                });
             }
             scanned += 1;
             through = Some(next.seq);
@@ -362,11 +419,16 @@ impl DirectEvidenceQueue {
 pub(crate) fn drain(
     request: &HookDirectEvidenceDrainRequestV1,
     queue: &DirectEvidenceQueue,
+    writer_source: Option<&str>,
 ) -> Result<Vec<u8>, String> {
     let max_records = request
         .max_records
         .unwrap_or(DEFAULT_DRAIN_RECORDS)
         .clamp(1, DEFAULT_DRAIN_RECORDS);
+    let recording = queue
+        .recording
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let peeked = queue.acknowledge_and_peek(
         request.ack_through,
         request.ack_epoch.as_deref(),
@@ -377,16 +439,37 @@ pub(crate) fn drain(
         peeked.settled,
         queue.unwritten(),
     );
-    let records: Vec<Value> = peeked.records.into_iter().map(checked_receipt).collect();
-    serde_json::to_vec(&json!({
+    let mut paged: Vec<Paged> = peeked
+        .records
+        .into_iter()
+        .map(|paged| Paged {
+            record: checked_receipt(paged.record),
+            ..paged
+        })
+        .collect();
+    let store_fatal = match writer_source.filter(|_| !request.guard_home.is_empty()) {
+        Some(source) => {
+            let fatal = record::leftovers(queue, &request.guard_home, source, &mut paged);
+            record::drop_settled(&mut paged, &request.guard_home);
+            fatal
+        }
+        None => None,
+    };
+    drop(recording);
+    let records: Vec<Value> = paged.into_iter().map(|paged| paged.record).collect();
+    let mut page = json!({
         "schema": DRAIN_RESULT_SCHEMA,
         "epoch": queue.epoch,
         "records": records,
         "remaining": peeked.remaining,
         "through": peeked.through,
         "counters": queue.counters.snapshot(),
-    }))
-    .map_err(|_| "direct_hook_evidence_encoding_failed".to_owned())
+    });
+    if let Some(fatal) = store_fatal.filter(|fatal| !fatal.is_null()) {
+        // The daemon recovers its store from this, as from a writer reply.
+        page["store_fatal"] = fatal;
+    }
+    serde_json::to_vec(&page).map_err(|_| "direct_hook_evidence_encoding_failed".to_owned())
 }
 
 /// `record`, marked with whether the receipt it carries is one the native
@@ -402,6 +485,10 @@ fn checked_receipt(mut record: Value) -> Value {
     record
 }
 
+#[path = "hook_direct_evidence_notice.rs"]
+pub(crate) mod notice;
+#[path = "hook_direct_evidence_record.rs"]
+mod record;
 #[cfg(test)]
 #[path = "hook_direct_evidence_tests.rs"]
 mod tests;

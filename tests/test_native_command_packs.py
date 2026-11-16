@@ -255,7 +255,7 @@ def test_bootstrap_target_is_resolved_from_repository_not_calling_directory(gene
     assert generator.bootstrap_compiler() == expected / "release" / executable
     command, options = calls[0]
     assert command[-2:] == ["-p", "guard-pack-compiler"]
-    assert "--locked" in command and "+1.88.0" in command
+    assert "--locked" in command and "+1.89.0" in command
     assert options == {"cwd": tmp_path, "check": True}
 
 

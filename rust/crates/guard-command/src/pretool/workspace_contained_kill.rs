@@ -9,6 +9,12 @@
 //! process is still there and leaves it running. A script that waits on a
 //! server it started asks that question on every iteration, and reviewing it
 //! would stop work that reaches no process at all.
+//!
+//! `liveness_only` therefore answers for two readings. The containment
+//! reading uses it to keep a signal-0 probe inside a contained run, and the
+//! read-only proof in `segment_proof` uses it to read the same form as a
+//! question rather than work, so a wait flattened into its commands is not
+//! held up by the one it asks.
 
 /// Whether `arguments` (after `kill`) name only the shell's own jobs.
 ///
@@ -58,7 +64,7 @@ pub(super) fn jobs_only(arguments: &[String]) -> bool {
 /// A negative operand keeps its review: `kill -0 -1` asks about every process
 /// the user can reach, which is a survey of the host rather than a wait on a
 /// process this session started.
-pub(super) fn liveness_only(arguments: &[String]) -> bool {
+pub(in crate::pretool) fn liveness_only(arguments: &[String]) -> bool {
     let mut words = arguments.iter();
     let Some(first) = words.next() else {
         return false;

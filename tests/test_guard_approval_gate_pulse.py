@@ -376,7 +376,7 @@ def test_without_pulse_a_daemon_bound_cli_command_is_sent_once(tmp_path: Path) -
 
 
 def test_extension_routes_hand_back_the_pulse_request_to_approve() -> None:
-    from codex_plugin_scanner.guard.daemon.extension_control_errors import approval_gate_api_error
+    from codex_plugin_scanner.guard.extension_controls.extension_control_errors import approval_gate_api_error
 
     pending = ApprovalGateError(
         "approval_gate_pulse_pending",
@@ -500,53 +500,45 @@ def test_a_settings_grant_applies_only_the_change_it_was_issued_for(tmp_path: Pa
 
 
 def test_each_settings_route_asks_for_its_own_binding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import json
-    import urllib.error
-    import urllib.request
+    """The Python settings routes name their change; the resident derives the binding.
 
-    from codex_plugin_scanner.guard.daemon import GuardDaemonServer, server_control_pulse, server_control_repair
+    The native daemon answers ``/v1/settings`` and ``/v1/settings/reset`` itself
+    (``daemon_edge_settings_write.rs``, tested there); these are the routes it
+    runs as library calls.
+    """
+    import json
+
+    from codex_plugin_scanner.guard import approval_gate
+    from codex_plugin_scanner.guard.routes import pulse_calls, settings_calls
     from codex_plugin_scanner.guard.store import GuardStore
 
     asked: dict[str, object] = {}
+    route = ""
 
-    def recorder(route: str):
-        def gate(*_args: object, **kwargs: object) -> None:
-            assert kwargs.get("action") is None and kwargs.get("subject") is None, "the resident derives the binding"
-            asked[route] = kwargs.get("settings_change")
-            raise ApprovalGateError("approval_gate_required", "stop here")
+    def gate(*_args: object, **kwargs: object) -> None:
+        assert kwargs.get("action") is None and kwargs.get("subject") is None, "the resident derives the binding"
+        asked[route] = kwargs.get("settings_change")
+        raise ApprovalGateError("approval_gate_required", "stop here")
 
-        return gate
-
-    daemon = GuardDaemonServer(GuardStore(tmp_path / "home"), host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        for route, path, body in (
-            ("save", "/v1/settings", {"settings": {"receipt_redaction_level": "none"}}),
-            ("stable", "/v1/update/channel", {"update_channel": "stable"}),
-            ("alpha", "/v1/update/channel", {"update_channel": "alpha"}),
-            ("reset", "/v1/settings/reset", {"confirm": "reset-local-settings"}),
-            ("disable", "/v1/approval-gate/pulse/disable", {}),
-        ):
-            module = server_control_pulse if route == "disable" else server_control_repair
-            monkeypatch.setattr(module, "require_high_risk", recorder(route))
-            request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}{path}",
-                data=json.dumps({**body, "approval_pulse_request_id": "azr_1"}).encode(),
-                headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
-                method="POST",
-            )
-            try:
-                urllib.request.urlopen(request, timeout=5).close()
-            except urllib.error.HTTPError as error:
-                error.close()
-    finally:
-        daemon.stop()
-    assert set(asked) == {"save", "stable", "alpha", "reset", "disable"}, asked
+    monkeypatch.setattr(approval_gate, "require_high_risk", gate)
+    store = GuardStore(tmp_path / "home")
+    pulse_id = {"approval_pulse_request_id": "azr_1"}
+    for route, call in (
+        ("save", lambda: settings_calls._apply_settings(
+            store, {"settings": {"receipt_redaction_level": "none"}, **pulse_id}, missing_error="invalid_settings"
+        )),
+        ("stable", lambda: settings_calls.update_channel(store, {"payload": {"update_channel": "stable", **pulse_id}})),
+        ("alpha", lambda: settings_calls.update_channel(store, {"payload": {"update_channel": "alpha", **pulse_id}})),
+        ("disable", lambda: pulse_calls.approval_gate_pulse(store, {"action": "disable", "payload": dict(pulse_id)})),
+    ):
+        reply = call()
+        assert reply["status"] == 403, reply
+    assert set(asked) == {"save", "stable", "alpha", "disable"}, asked
     assert all(isinstance(change, dict) for change in asked.values()), asked
     assert len({json.dumps(change, sort_keys=True) for change in asked.values()}) == len(asked), (
         f"two routes name the same change: {asked}"
     )
-    assert {change["kind"] for change in asked.values()} == {"save", "update_channel", "reset", "pulse_disable"}
+    assert {change["kind"] for change in asked.values()} == {"save", "update_channel", "pulse_disable"}
     assert asked["save"] == {"kind": "save", "settings": {"receipt_redaction_level": "none"}}
     assert asked["alpha"] == _channel("alpha")
 

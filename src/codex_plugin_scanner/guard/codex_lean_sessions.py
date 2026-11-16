@@ -1,11 +1,15 @@
-"""Keep long Codex sessions lean by having Codex sum up older turns sooner.
+"""Let the user pick when Codex sums up older turns in a long session.
 
-Codex re-sends the whole conversation on every model call, so a session that
-runs for dozens of tool calls keeps paying for everything it has already seen.
 Codex's own ``model_auto_compact_token_limit`` setting makes it summarize the
-conversation once it passes that size. Guard can turn that on for the user and
-turn it off again, and it never touches a value the user set themselves: Guard
-records the value it wrote and only removes that exact value.
+conversation once it passes that size. A small chat is not a cheaper chat:
+Codex's provider bills the part of the chat it already saw at a tenth of the
+input price, and after each summary Codex reads again the files it had read,
+at full price. In Guard's long-task benchmark a 30,000-token limit halved the
+tokens sent but barely moved the bill. So Guard writes no
+limit of its own; it writes the size the user asks for, and never touches a
+value the user set themselves: Guard records the value it wrote and only
+removes that exact value. A limit an earlier Guard wrote stays until the user
+turns it off.
 """
 
 from __future__ import annotations
@@ -23,7 +27,13 @@ from .codex_config import dump_toml
 tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
 
 KEY = "model_auto_compact_token_limit"
-LIMIT = 30_000
+# Below this Codex would summarize before a session has done any real work.
+MIN_LIMIT = 10_000
+MAX_LIMIT = 10_000_000
+BILL_NOTE = (
+    "Summing up sooner keeps the chat small but can raise the bill: "
+    "Codex reads again, at full price, the files it had already read."
+)
 SCHEMA = "guard-codex-lean-sessions.v1"
 _RECORD_NAME = "codex-lean-sessions.json"
 
@@ -48,23 +58,38 @@ def status(home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None =
     return _view(path, payload.get(KEY), _recorded(guard_home, path))
 
 
-def enable(home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None = None) -> dict[str, object]:
+def check_limit(limit: object) -> int:
+    if limit is None:
+        raise LeanSessionsError("codex_lean_limit_required")
+    if not isinstance(limit, int) or isinstance(limit, bool) or not MIN_LIMIT <= limit <= MAX_LIMIT:
+        raise LeanSessionsError("codex_lean_limit_invalid")
+    return limit
+
+
+def enable(
+    home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None = None, *, limit: object = None
+) -> dict[str, object]:
+    """Write `limit` to the Codex config. There is no default size."""
+
+    limit = check_limit(limit)
     path = config_path(home_dir, environ)
     with _locked(guard_home, path):
         text, payload = _read_config(path)
         current, recorded = payload.get(KEY), _recorded(guard_home, path)
-        if current is not None:
+        guard_owned = recorded is not None and current == recorded
+        if (current is not None and not guard_owned) or current == limit:
             return _view(path, current, recorded)
         # The record goes first: if Guard stops between the two writes, the
-        # config is untouched and status reads "off", never a value nobody owns.
-        _write_record(guard_home, path, LIMIT)
-        payload[KEY] = LIMIT
+        # config still holds the earlier value and Guard never claims a value
+        # it did not write.
+        _write_record(guard_home, path, limit)
+        payload[KEY] = limit
         try:
             _write_config(path, payload, text)
         except BaseException:
-            _write_record(guard_home, path, None)
+            _write_record(guard_home, path, recorded if guard_owned else None)
             raise
-        return _view(path, LIMIT, LIMIT)
+        return _view(path, limit, limit)
 
 
 def disable(home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None = None) -> dict[str, object]:
@@ -90,16 +115,15 @@ def disable(home_dir: Path, guard_home: Path, environ: Mapping[str, str] | None 
 def render(state: dict[str, object], output: TextIO) -> None:
     limit = state["limit"]
     if state["state"] == "on":
-        print(
-            f"Lean Codex sessions: on. Codex sums up older turns once a session passes {limit:,} tokens.",
-            file=output,
-        )
-        print("Turn it off with: hol-guard context lean off", file=output)
+        print(f"Guard set Codex to sum up older turns once a session passes {limit:,} tokens.", file=output)
+        print(BILL_NOTE, file=output)
+        print("Remove it with: hol-guard context lean off", file=output)
     elif state["state"] == "yours":
         print(f"Your Codex config already sets {KEY} = {limit}. Guard left it as it is.", file=output)
     else:
-        print("Lean Codex sessions: off. Codex uses its own default for long sessions.", file=output)
-        print("Turn it on with: hol-guard context lean on", file=output)
+        print("Off. Codex sums up long sessions on its own schedule.", file=output)
+        print(BILL_NOTE, file=output)
+        print("To pick a size anyway: hol-guard context lean on --limit 100000", file=output)
 
 
 def _view(path: Path, current: object, recorded: int | None) -> dict[str, object]:

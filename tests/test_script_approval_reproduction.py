@@ -65,7 +65,7 @@ def test_unbound_maintenance_launch_can_still_be_approved(
     from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
     from codex_plugin_scanner.guard.approvals import apply_approval_resolution
     from codex_plugin_scanner.guard.config import update_guard_settings
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+    from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
     from codex_plugin_scanner.guard.store import GuardStore
 
     home, workspace = maintenance_lab

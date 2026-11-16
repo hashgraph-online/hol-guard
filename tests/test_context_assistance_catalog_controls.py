@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from codex_plugin_scanner.guard import native_context_assistance as native
 from codex_plugin_scanner.guard.cli import commands_router
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
-from codex_plugin_scanner.guard.daemon import context_assistance_versions_http as http
+from codex_plugin_scanner.guard.routes import context_assistance_versions_http as http
 
 
 def test_catalog_cli_reads_bounded_stdin_and_forwards_only_signed_bytes(monkeypatch, tmp_path):
@@ -79,34 +79,6 @@ def test_catalog_http_uses_settings_gate_strips_proof_and_keeps_read_routes_fixe
     calls.clear()
     http.respond(handler, "versions_catalog", {"input": body})
     assert calls == [("native", {"guard_home": tmp_path, "payload": {"action": "catalog"}})]
-
-
-def test_http_body_budget_is_scoped_and_supports_the_complete_signed_envelope():
-    from email.message import Message
-
-    from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
-
-    body = json.dumps({"input": {"action": "import_catalog", "signed_catalog": "x" * (1024 * 1024)}}).encode()
-    headers = Message()
-    headers["Content-Type"] = "application/json"
-    headers["Content-Length"] = str(len(body))
-    calls = []
-    handler = SimpleNamespace(
-        headers=headers,
-        path="/v1/context-assistance/versions?read=1",
-        _MAX_BODY_BYTES=1_000_000,
-        _read_request_body=lambda size: calls.append(size) or (body, None),
-    )
-    payload, error = _GuardDaemonHandler._load_request_body(handler)
-    assert error is None and len(payload["input"]["signed_catalog"]) == 1024 * 1024
-    assert calls == [len(body)]
-    for path in ("/v1/settings", "/v1/hooks/codex/pre", "/v1/context-assistance/workspace"):
-        handler.path = path
-        assert _GuardDaemonHandler._load_request_body(handler) == ({}, "request_body_too_large")
-    handler.path = "/v1/context-assistance/versions"
-    headers.replace_header("Content-Length", str(4 * 1024 * 1024 + 1))
-    assert _GuardDaemonHandler._load_request_body(handler) == ({}, "request_body_too_large")
-    assert calls == [len(body)]
 
 
 def test_catalog_lifecycle_conflict_is_an_http_conflict(monkeypatch, tmp_path):

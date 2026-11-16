@@ -214,6 +214,8 @@ def _isolated_environment() -> dict[str, str]:
     allowed = {
         "COMSPEC",
         "HOME",
+        # The desktop-notice opt-out the resident drain honours.
+        "HOL_GUARD_DESKTOP_NOTIFICATIONS",
         "HOL_GUARD_NATIVE_DIAGNOSTIC",
         # Dedicated opt-in for the resident's supply-chain test seams; kept
         # separate from diagnostics so diagnostics alone never enable them.
@@ -247,6 +249,8 @@ def _run_native_process_result(
     timeout_seconds: float,
     output_limit: int = _MAX_RESPONSE_BYTES,
     stop_event: threading.Event | None = None,
+    allow_windows_breakaway: bool = False,
+    windows_kill_on_job_close: bool = True,
 ) -> BoundedHookProcessResult:
     """Run one bounded native invocation and keep its whole result.
 
@@ -265,6 +269,8 @@ def _run_native_process_result(
         timeout_seconds=timeout_seconds,
         output_limit=output_limit,
         stop_event=stop_event,
+        allow_windows_breakaway=allow_windows_breakaway,
+        windows_kill_on_job_close=windows_kill_on_job_close,
     )
 
 
@@ -276,6 +282,8 @@ def _run_native_process(
     timeout_seconds: float,
     output_limit: int = _MAX_RESPONSE_BYTES,
     stop_event: threading.Event | None = None,
+    allow_windows_breakaway: bool = False,
+    windows_kill_on_job_close: bool = True,
 ) -> str | None:
     result = _run_native_process_result(
         path,
@@ -283,6 +291,8 @@ def _run_native_process(
         input_text=input_text,
         timeout_seconds=timeout_seconds,
         output_limit=output_limit,
+        allow_windows_breakaway=allow_windows_breakaway,
+        windows_kill_on_job_close=windows_kill_on_job_close,
         stop_event=stop_event,
     )
     if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:

@@ -25,7 +25,10 @@ mod runtime;
 mod source;
 
 pub use actor::{Quiescence, RuntimeActivity, RuntimeActor};
-pub use artifacts::{inspect_bundle, inspect_release_bundle, BundleApproval, RuntimeSelection};
+pub use artifacts::{
+    inspect_bundle, inspect_release_bundle, inspect_release_bundle_cancellable, BundleApproval,
+    RuntimeSelection,
+};
 pub use broker::EphemeralReviewedNotes;
 pub use broker::{
     BrokerAnswerClaim, BrokerAnswerPolicy, BrokerBoundExecution, BrokerClaimReview,

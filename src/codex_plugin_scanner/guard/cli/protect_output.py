@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -10,8 +11,22 @@ from ..approval_hook_copy import (
     authenticated_approval_review_url,
     is_loopback_approval_url,
 )
+from ..desktop_review_link import desktop_review_url
 
 _EPHEMERAL_SIGNED_APPROVAL_PLACEHOLDER = "__HOL_GUARD_EPHEMERAL_SIGNED_APPROVAL_URL__"
+_REVIEW_REQUEST_ID = re.compile(r"/requests/([0-9a-f]{32})$")
+
+
+def _desktop_approval_url(review_url: str, *, guard_home: Path) -> str | None:
+    """The HOL Guard Desktop link for a loopback review link, when Desktop opens requests."""
+
+    match = _REVIEW_REQUEST_ID.search(review_url)
+    if match is None:
+        return None
+    try:
+        return desktop_review_url(guard_home, match.group(1))
+    except OSError:
+        return None
 
 
 def _protect_payload_for_human_output(payload: dict[str, object], *, guard_home: Path) -> dict[str, object]:
@@ -48,6 +63,9 @@ def _protect_payload_for_human_output(payload: dict[str, object], *, guard_home:
         output_payload["_ephemeral_signed_approval"] = True
         output_payload["_ephemeral_signed_approval_url"] = browser_url
         output_payload["_ephemeral_signed_approval_placeholder"] = _EPHEMERAL_SIGNED_APPROVAL_PLACEHOLDER
+        desktop_url = _desktop_approval_url(review_url, guard_home=guard_home)
+        if desktop_url is not None:
+            output_payload["_ephemeral_desktop_approval_url"] = desktop_url
     return output_payload
 
 
@@ -78,6 +96,9 @@ def _restore_ephemeral_signed_approval_output(
         redacted_user_copy["harness_message"] = redacted_message.replace(placeholder, signed_url)
     redacted_user_copy["dashboard_url"] = signed_url
     redacted_payload["_ephemeral_signed_approval_url"] = signed_url
+    desktop_url = source_payload.get("_ephemeral_desktop_approval_url")
+    if isinstance(desktop_url, str) and desktop_url:
+        redacted_payload["_ephemeral_desktop_approval_url"] = desktop_url
 
 
 def _protect_harness_message_for_render(
@@ -92,9 +113,19 @@ def _protect_harness_message_for_render(
     return harness_message.replace(signed_approval_url, "[approval link below]"), signed_approval_url
 
 
+def protect_desktop_approval_url(payload: Mapping[str, object]) -> str | None:
+    """The HOL Guard Desktop link human output prints above the browser link, if any."""
+
+    desktop_url = payload.get("_ephemeral_desktop_approval_url")
+    if not isinstance(desktop_url, str) or not desktop_url:
+        return None
+    return desktop_url
+
+
 __all__ = [
     "_EPHEMERAL_SIGNED_APPROVAL_PLACEHOLDER",
     "_protect_harness_message_for_render",
     "_protect_payload_for_human_output",
     "_restore_ephemeral_signed_approval_output",
+    "protect_desktop_approval_url",
 ]

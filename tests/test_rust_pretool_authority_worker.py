@@ -13,8 +13,8 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.hook_native_exact_action import review_evidence_parts
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_native_exact_action import review_evidence_parts
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_route_receipt import (
     native_hook_route,
     record_native_hook_route,
@@ -82,7 +82,7 @@ def test_hook_worker_returns_native_allow(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: {
             "event_name": "PreToolUse",
             "harness": "codex",
@@ -120,7 +120,7 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
         return with_review_evidence(edge, **kwargs)
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         review_with_resident_receipt,
     )
 
@@ -132,7 +132,7 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
         return valid, f"native-review-v4:{'ab' * 32}:ask:review:review:r", token, reason
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.review_evidence_parts",
+        "codex_plugin_scanner.guard.hook_review.hook_native_review_approval.review_evidence_parts",
         evidence,
     )
     reset_native_hook_route()
@@ -188,7 +188,7 @@ def test_full_cli_review_keeps_native_terminal_provenance(
         return with_review_evidence(edge, **kwargs)
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         review_with_resident_receipt,
     )
     reset_native_hook_route()
@@ -227,11 +227,11 @@ def test_hook_worker_fails_closed_when_forced_native_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.native_runtime_status",
         lambda: NativeRuntimeStatus(
             mode="force",
             available=False,
@@ -257,11 +257,11 @@ def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.native_runtime_status",
         lambda: NativeRuntimeStatus(
             mode="auto",
             available=False,
@@ -287,7 +287,7 @@ def test_hook_worker_denies_unreviewed_non_command_pretool_without_native_result
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -308,7 +308,7 @@ def test_hook_worker_pauses_secret_read_without_native_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -329,7 +329,7 @@ def test_hook_worker_routes_out_of_scope_events_to_native_fail_safe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -365,7 +365,7 @@ def test_hook_worker_leaves_permission_requests_to_the_harness_prompt(
         raise AssertionError("passthrough permission requests must not reach the edge")
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         unexpected_review,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))

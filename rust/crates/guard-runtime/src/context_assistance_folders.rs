@@ -5,7 +5,7 @@
 //! source grant applies, so the picker never offers a pick the grant refuses.
 //! A listing grants nothing: the grant re-validates every path on its own.
 use guard_secure_fs::{
-    classify_source_path, contains_symlink_component, credential_directory_path,
+    classify_project_document, contains_symlink_component, credential_directory_path,
     credential_named_path,
 };
 use serde_json::{json, Map, Value};
@@ -349,7 +349,7 @@ fn file_row(entry: &DirEntry, parts: &[String]) -> Option<Value> {
 fn grantable(workspace: &Path, relative: &str) -> bool {
     !credential_named_path(Path::new(relative))
         && !credential_directory_path(Path::new(relative))
-        && classify_source_path(relative, workspace, None, false).allowed
+        && classify_project_document(relative, workspace).allowed
 }
 
 /// Plain readable files a grant would accept, never reached through a link.

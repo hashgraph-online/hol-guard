@@ -260,7 +260,7 @@ def _run_guard_command_inspection_command(
 
         guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
         return run_extension_controls_command(args, guard_home=guard_home, output_stream=output_stream)
-    from ..daemon.client import GuardDaemonRequestError
+    from ..native_daemon_client import GuardDaemonRequestError
     from ..runtime.command_inspection import unavailable_command_inspection
     from .extension_controls_commands import _client
 
@@ -286,13 +286,17 @@ def _run_guard_command_inspection_command(
         if command_command not in {"test", "explain"}:
             print("Choose command test, command explain, command extensions, or command setup.", file=sys.stderr)
             return 2
+        if command_command == "explain" and getattr(args, "cloud", False):
+            from .cloud_pack_explain_command import run_cloud_explain
+
+            return run_cloud_explain(args, output=output_stream)
         command_text = str(getattr(args, "command_text", "")).strip()
         if not command_text:
             raise ValueError("Command text cannot be empty")
         guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
         workspace, home = Path.cwd(), Path.home()
         try:
-            from ..daemon.manager import ensure_guard_daemon
+            from ..native_daemon_manage import ensure_guard_daemon
 
             try:
                 payload = _client(guard_home).inspect_command({
@@ -534,6 +538,10 @@ def _run_guard_protect_command(
                         config=current_protect_config(),
                         current_config_provider=current_protect_config,
                         unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
+                        # A Cloud resolution of these requests is honored
+                        # here, by the install that waited on them, and only
+                        # here.
+                        waited_request_ids=tuple(request_ids),
                     )
                 except NativeProtectRequestError as error:
                     return _emit_protect_resident_failure(error)

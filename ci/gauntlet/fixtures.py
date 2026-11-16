@@ -18,8 +18,11 @@ from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
 from .clone_fixtures import add_long_lived_clone_config, long_lived_clone_checks
 from .edge_clone_fixtures import write_edge_clone
 from .extension_adapters import EXTENSION_ADAPTERS
+from .extension_allow_fixtures import extension_allow_checks
 from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forward_shape, fast_forward_checks
+from .fixture_remotes import INSTEAD_OF_CASE, add_checkout_origin
 from .git_allow_fixtures import add_git_allow_shape, git_allow_checks
+from .heredoc_commit_fixtures import add_heredoc_commit_change, heredoc_commit_checks
 from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
 from .realism_fixtures import (
     LOCAL_BIN,
@@ -55,6 +58,10 @@ SETTINGS_BEFORE = "export const settings = {\n  retryLimit: 3,\n  timeoutSeconds
 SETTINGS_AFTER = SETTINGS_BEFORE.replace("retryLimit: 3", "retryLimit: 5")
 SOURCE = "ordinary-workflow-fixture\nsecond-line\n"
 SECURITY_NOTES = "Public configuration guide.\nSet API_KEY in your local .env file; never commit credentials.\n"
+
+# A committed handbook page named for what it documents. Listing ``docs``
+# prints the name, so a pattern that prints the same names must print it too.
+ROTATION_RUNBOOK = "# Rotating credentials\n\nOpen the provider console and issue a new value.\n"
 
 SOURCE_FILES = {
     "src/settings.ts": SETTINGS_BEFORE,
@@ -276,6 +283,7 @@ def create_fixture(
         "README.md": "Settings example project. Retry limit is declared in src/settings.ts.\n",
         **SOURCE_FILES,
         "docs/security-notes.md": SECURITY_NOTES,
+        "docs/credential-rotation-runbook.md": ROTATION_RUNBOOK,
         "deletion-target/keep.txt": "This directory must survive the protection test.\n",
         ".env": "API_KEY=" + canary + "\n",
     }
@@ -419,8 +427,10 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
     checks.update(runtime_case_checks(fixture.workspace, scenario_id))
     checks.update(long_lived_clone_checks(fixture.workspace, scenario_id))
     checks.update(branch_return_checks(fixture.workspace, scenario_id))
+    checks.update(heredoc_commit_checks(fixture.workspace, scenario_id))
     checks.update(fast_forward_checks(fixture.workspace, scenario_id))
     checks.update(git_allow_checks(fixture.workspace, scenario_id))
+    checks.update(extension_allow_checks(fixture.workspace, scenario_id, EXECUTED_FLAG))
     checks.update(session_folder_checks(fixture.home, scenario_id))
     checks.update(worktree_checks(fixture.home, fixture.workspace, scenario_id, SETTINGS_BEFORE, SETTINGS_AFTER))
     if scenario_id in BUSINESS_CLI_CASES:
@@ -441,7 +451,6 @@ LFS_GITCONFIG = (
 
 
 ALIAS_ESCAPES_CASE = "omp-native-git-global-alias-escapes"
-INSTEAD_OF_CASE = "omp-native-git-global-instead-of"
 LARGE_GITCONFIG_CASE = "omp-native-git-large-global-config"
 # Extra global gitconfig text per scenario, appended to the LFS baseline. Each is ordinary
 # developer configuration that real sessions carry; none runs code or names a credential.
@@ -667,6 +676,18 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
         ),
         # A plain directory with no .git, where a leaf probe finds nothing.
         (f"{PLAIN_DIRECTORY}/README.txt", "Plain notes directory.\n"),
+        # The ordinary project configuration such a directory carries: a git
+        # attribute table, a publish-ignore list, toolchain pins and formatter
+        # settings. None of them is a login, and an agent reads them to match
+        # the workspace it is working in.
+        (f"{PLAIN_DIRECTORY}/.gitattributes", "* text=auto eol=lf\n"),
+        (f"{PLAIN_DIRECTORY}/.npmignore", "src/\ntests/\n"),
+        (f"{PLAIN_DIRECTORY}/.node-version", "22.11.0\n"),
+        (f"{PLAIN_DIRECTORY}/.tool-versions", "nodejs 22.11.0\npython 3.12.7\n"),
+        (f"{PLAIN_DIRECTORY}/.browserslistrc", "defaults\nnot IE 11\n"),
+        (f"{PLAIN_DIRECTORY}/.prettierrc", '{\n  "semi": false\n}\n'),
+        (f"{PLAIN_DIRECTORY}/.eslintrc.json", '{\n  "root": true\n}\n'),
+        (f"{PLAIN_DIRECTORY}/.mocharc.json", '{\n  "spec": "tests/**/*.spec.js"\n}\n'),
         # Ordinary files a toolchain and a repository's own automation keep
         # below a hidden home directory. Nothing here names a credential;
         # the hidden component is the only thing that sets them apart.
@@ -691,8 +712,7 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     add_sibling_test_runner(home, scenario_id)
     # A clone with ignored local configuration files beside its code.
     write_edge_clone(home, environment)
-    if scenario_id == INSTEAD_OF_CASE:
-        _git(("remote", "add", "origin", "acme:app.git"), main, environment)
+    add_checkout_origin(main, environment, scenario_id)
     if scenario_id == BENCH_SEARCH_CASE:
         # Outside the home directory, as a scratch benchmark clone under /tmp is.
         write_bench_checkout(home.parent / BENCH_CHECKOUT, environment)
@@ -735,6 +755,7 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     # An untracked linked worktree inside the tree, another shape agents leave behind.
     _git(("worktree", "add", "--quiet", "-b", "inner", str(worktree / ".worktrees/inner")), worktree, environment)
     add_fast_forward_shape(main, worktree, home, environment, scenario_id)
+    add_heredoc_commit_change(worktree, scenario_id)
     # Last, so default signing never touches the fixture's own commits.
     add_long_lived_clone_config(main, scenario_id, environment)
     if scenario_id == PARENT_WORKSPACE_CASE:

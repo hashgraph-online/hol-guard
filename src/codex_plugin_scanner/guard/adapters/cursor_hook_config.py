@@ -35,7 +35,6 @@ from ._modules.cursor.cursor_hook_native import (
     python_client_pinned,
 )
 from .base import HarnessContext
-from .state_files import load_backup_payload
 
 HOOK_SCRIPT_NAME = "hol-guard-cursor-hook.py"
 FROZEN_CURSOR_HOOK_COMMAND = "__guard-cursor-hook"
@@ -359,9 +358,6 @@ def _hooks_backup_path(target_path: Path, context: HarnessContext) -> Path:
 def _hooks_state_path(target_path: Path, context: HarnessContext) -> Path:
     digest = sha256(str(target_path.resolve()).encode("utf-8")).hexdigest()[:12]
     return context.guard_home / "managed" / "cursor" / f"hooks-{digest}.state.json"
-
-
-_backup_payload = load_backup_payload
 
 
 def _accepted_live_cursor_hook_script(path: Path) -> Path | None:

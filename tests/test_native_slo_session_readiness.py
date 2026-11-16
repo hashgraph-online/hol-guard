@@ -82,7 +82,7 @@ def test_startup_failure_records_bounded_capacity_before_cleanup(monkeypatch, ca
     session.daemon = cast(
         session_module.GuardDaemonServer,
         SimpleNamespace(
-            _server=SimpleNamespace(runtime_hook_scheduler=SimpleNamespace(stats=stats)),
+            hook_capacity=stats,
         ),
     )
     monkeypatch.setattr(session, "start", fail_start)
@@ -115,7 +115,7 @@ def test_startup_diagnostic_failure_preserves_original_failure_and_cleanup(monke
     session.daemon = cast(
         session_module.GuardDaemonServer,
         SimpleNamespace(
-            _server=SimpleNamespace(runtime_hook_scheduler=SimpleNamespace(stats=fail_stats)),
+            hook_capacity=fail_stats,
         ),
     )
     monkeypatch.setattr(session, "start", fail_start)

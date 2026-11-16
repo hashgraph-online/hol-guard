@@ -233,6 +233,100 @@ pub(super) fn safe_kubectl_segment(
     verb_safe(&positionals, output) && (!logs_only || positionals.first() == Some(&"logs"))
 }
 
+/// Output formats whose value carries a template evaluated against the object
+/// `kubectl` already fetched. The `*-file` spellings read a local file and are
+/// absent from [`OUTPUT_FORMATS`], so none of these opens anything.
+const TEMPLATE_FORMATS: [&str; 4] = [
+    "custom-columns",
+    "go-template",
+    "jsonpath",
+    "jsonpath-as-json",
+];
+
+/// The positions in `segment.arguments` holding a `kubectl` output template.
+///
+/// A template is a selector over the object `kubectl` fetched, so its words
+/// are field names in an API object, not names on this machine. The
+/// credential-location screen reads the command as text, and a container's
+/// `env` list is spelled `.env` in a JSONPath, so `kubectl get deploy web -o
+/// jsonpath='{.spec.template.spec.containers[0].env[*].name}'` read as a
+/// dotenv file and went to review. It is the narrower form of `kubectl get
+/// deploy web -o yaml`, which prints that list and its values too, and which
+/// this proof already admits.
+///
+/// Only a template that cannot spell a path is set aside: it holds no `/`, so
+/// every location the screen looks for that names a directory is still read
+/// where it appears, and no expansion, so the words set aside are the ones the
+/// caller wrote. A template naming a credential keeps the whole segment's
+/// signal, because a selector asking for a password is a question about what
+/// this command is for rather than about the shape of a field name.
+pub(super) fn output_template_positions(segment: &crate::CommandSegmentV1) -> Vec<usize> {
+    if segment.executable.as_deref() != Some("kubectl") {
+        return Vec::new();
+    }
+    let mut positions = Vec::new();
+    let mut index = 0;
+    while index < segment.arguments.len() {
+        let argument = segment.arguments[index].as_str();
+        let (name, inline) = match argument.split_once('=') {
+            Some((name, value)) => (name, Some(value)),
+            None => (argument, None),
+        };
+        if !matches!(name, "-o" | "--output") {
+            index += 1;
+            continue;
+        }
+        match inline {
+            Some(value) => {
+                if removable_template(value) {
+                    positions.push(index);
+                }
+                index += 1;
+            }
+            None => {
+                if segment
+                    .arguments
+                    .get(index + 1)
+                    .is_some_and(|value| removable_template(value))
+                {
+                    positions.push(index + 1);
+                }
+                index += 2;
+            }
+        }
+    }
+    positions
+}
+
+/// `segment` as text with the templates at `positions` left out.
+pub(super) fn without_output_templates(
+    segment: &crate::CommandSegmentV1,
+    positions: &[usize],
+) -> String {
+    std::iter::once("kubectl")
+        .chain(
+            segment
+                .arguments
+                .iter()
+                .enumerate()
+                .filter_map(|(index, argument)| {
+                    (!positions.contains(&index)).then_some(argument.as_str())
+                }),
+        )
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// A template whose words are field names and nothing else.
+fn removable_template(value: &str) -> bool {
+    value.split_once('=').is_some_and(|(format, expression)| {
+        TEMPLATE_FORMATS.contains(&format)
+            && !expression.is_empty()
+            && !expression.contains(['/', '$', '`'])
+            && !super::credential_keyword_text(expression)
+    })
+}
+
 /// A whole `kubectl` segment, generic checks included, that the native proof
 /// accepts as a read of non-secret cluster state. The compatibility layer uses
 /// it so it does not treat the same query as a possible Secret read.

@@ -124,7 +124,11 @@ def test_workspace_package_approval_is_reused_across_linked_worktrees_with_the_s
 
     unrelated_dir = tmp_path / "unrelated-workspace"
     unrelated_dir.mkdir()
-    _write_linked_git_worktrees(unrelated_dir, tmp_path / "unrelated-unused-linked")
+    _write_linked_git_worktrees(
+        unrelated_dir,
+        tmp_path / "unrelated-unused-linked",
+        origin="https://example.test/other-team/app.git",
+    )
     _write_pnpm_workspace(unrelated_dir, extra_dependency="evilpkg")
     unrelated_payload, unrelated_rc = build_package_protect_payload(
         command=command,
@@ -161,6 +165,112 @@ def test_workspace_package_approval_is_reused_across_linked_worktrees_with_the_s
     assert isinstance(evidence, list)
     assert isinstance(evidence[0], dict)
     assert evidence[0]["changed_components"] == ["repository_identity"]
+
+
+def _protect(store: GuardStore, workspace_dir: Path, now: str) -> tuple[dict[str, object], int]:
+    return build_package_protect_payload(
+        command=["pnpm", "install"],
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now=now,
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+
+
+def _saved_approval_answered(payload: dict[str, object]) -> bool:
+    evaluation = payload["supply_chain_evaluation"]
+    assert isinstance(evaluation, dict)
+    return any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
+        for reason in evaluation.get("reasons", [])
+    )
+
+
+def test_workspace_package_approval_is_reused_by_a_fresh_clone_until_the_lockfile_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A workspace allow follows the repository and its lockfile, not the checkout.
+
+    A fresh clone at another path, with its own `.git`, the SSH spelling of the
+    same `origin`, an extra remote and a release version bump in `package.json`,
+    runs the install the user already approved. Changing the lockfile still asks.
+    """
+    store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home", "package_unknown", "package_lockfile_drift")
+    workspace_dir = tmp_path / "workspace"
+    clone_dir = tmp_path / "elsewhere" / "clone"
+    workspace_dir.mkdir()
+    clone_dir.mkdir(parents=True)
+    _write_linked_git_worktrees(workspace_dir, tmp_path / "unused-linked")
+    (clone_dir / ".git").mkdir()
+    (clone_dir / ".git" / "config").write_text(
+        '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = git@example.test:team/app.git\n'
+        '[remote "fork"]\n\turl = https://example.test/someone/app.git\n',
+        encoding="utf-8",
+    )
+    _install_fake_pnpm(monkeypatch, tmp_path)
+    _write_pnpm_workspace(workspace_dir, extra_dependency="evilpkg")
+    _write_pnpm_workspace(clone_dir, extra_dependency="evilpkg")
+    manifest = clone_dir / "package.json"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace('"name": "demo"', '"name": "demo", "version": "1.1.0"'),
+        encoding="utf-8",
+    )
+
+    baseline_payload, baseline_rc = _protect(store, workspace_dir, "2026-06-14T00:00:00Z")
+    assert baseline_rc == 2
+    receipt = baseline_payload["receipt"]
+    request = baseline_payload["request"]
+    assert isinstance(receipt, dict)
+    assert isinstance(request, dict)
+    package_context = request["package_execution_context"]
+    assert isinstance(package_context, dict)
+    store.add_approval_request(
+        GuardApprovalRequest(
+            request_id="req-pnpm-clone",
+            harness="guard-cli",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_name="pnpm install pnpm",
+            artifact_type="package_request",
+            artifact_hash=str(receipt["artifact_hash"]),
+            policy_action="require-reapproval",
+            recommended_scope="workspace",
+            changed_fields=("package_request",),
+            source_scope="project",
+            config_path=str(workspace_dir / "hol-guard.toml"),
+            workspace=str(workspace_dir),
+            launch_target="pnpm install",
+            review_command="hol-guard approvals approve req-pnpm-clone",
+            approval_url="http://127.0.0.1:4455/approvals/req-pnpm-clone",
+            scanner_evidence=(dict(package_context),),
+        ),
+        "2026-06-14T00:00:30Z",
+    )
+    apply_approval_resolution(
+        store=store,
+        request_id="req-pnpm-clone",
+        action="allow",
+        scope="workspace",
+        workspace=str(workspace_dir),
+        reason="same lockfile",
+        now="2026-06-14T00:01:00Z",
+    )
+
+    clone_payload, clone_rc = _protect(store, clone_dir, "2026-06-14T00:02:00Z")
+    assert clone_rc == 0
+    assert clone_payload["verdict"]["action"] == "allow"
+    assert _saved_approval_answered(clone_payload)
+
+    lockfile = clone_dir / "pnpm-lock.yaml"
+    lockfile.write_text(lockfile.read_text(encoding="utf-8").replace("4.17.21", "4.17.20"), encoding="utf-8")
+    drifted_payload, drifted_rc = _protect(store, clone_dir, "2026-06-14T00:03:00Z")
+    assert drifted_rc == 2
+    assert drifted_payload["verdict"]["action"] == "require-reapproval"
+    assert not _saved_approval_answered(drifted_payload)
 
 
 def test_package_policy_workspace_candidates_use_only_context_complete_v2_scope(

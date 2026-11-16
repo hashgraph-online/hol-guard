@@ -63,13 +63,18 @@ impl std::fmt::Display for InstallError {
 }
 impl std::error::Error for InstallError {}
 
+/// The longest single preparation. Setting up the private Python takes the
+/// longest: on a slow Windows machine unpacking and checking it has run past two
+/// minutes. Each caller still bounds its own step by its job's deadline.
+pub const MAX_PREPARATION_TIMEOUT: Duration = Duration::from_secs(300);
+
 pub struct PreparationControl {
     cancel: Arc<AtomicBool>,
     deadline: Instant,
 }
 impl PreparationControl {
     pub fn new(cancel: Arc<AtomicBool>, timeout: Duration) -> Result<Self, InstallError> {
-        if timeout.is_zero() || timeout > Duration::from_secs(120) {
+        if timeout.is_zero() || timeout > MAX_PREPARATION_TIMEOUT {
             return Err(InstallError::InputsInvalid);
         }
         Ok(Self {

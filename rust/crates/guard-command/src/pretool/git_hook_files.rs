@@ -49,6 +49,35 @@ pub(super) fn hook_file_inert(
     git_lfs_hook(&script, hook) || husky_shim(&script, path, hook, husky_directory_reached)
 }
 
+/// Whether Git looks for `hook` directly below the null device, where
+/// `core.hooksPath = /dev/null` puts every hook. The device holds no files,
+/// so no hook can be there.
+pub(super) fn below_null_device(path: &str, hook: &str) -> bool {
+    path.strip_prefix("/dev/null/") == Some(hook) && null_device()
+}
+
+/// `core.hooksPath = /dev/null`, the usual way to turn every hook off. Git
+/// looks for each hook below the null device, which holds no files, so it
+/// finds none, and nothing a sandboxed command writes can put one there.
+/// `value` is decoded already, so any other spelling, such as `" /dev/null "`
+/// with its quoted spaces, names a different directory.
+pub(super) fn names_no_hooks(value: &str) -> bool {
+    value == "/dev/null" && null_device()
+}
+
+#[cfg(unix)]
+fn null_device() -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    fs::symlink_metadata("/dev/null").is_ok_and(|metadata| metadata.file_type().is_char_device())
+}
+
+/// Git for Windows resolves `/dev/null` against the directory a hook runs
+/// in (see `git_probe_repository`), so no path there is the device.
+#[cfg(not(unix))]
+fn null_device() -> bool {
+    false
+}
+
 /// A relative `core.hooksPath` that stays below the directory Git runs hooks
 /// from, spelled one way only: normal components joined by single `/`, with no
 /// `~`, `.`, `..`, empty component (so no trailing or doubled separator),

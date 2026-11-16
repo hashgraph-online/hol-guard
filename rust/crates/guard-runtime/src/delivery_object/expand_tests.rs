@@ -365,11 +365,11 @@ fn a_concat_object_must_be_canonical_and_well_formed() {
     let part = data_ref(b"a");
     let pretty = serde_json::to_vec_pretty(&json!({"schema": PACK, "parts": [part]})).unwrap();
     put(dir.path(), &pretty);
-    let wrong_schema = concat(dir.path(), LOCATED, &[part.clone()]);
+    let wrong_schema = concat(dir.path(), LOCATED, std::slice::from_ref(&part));
     let mut none = concat(dir.path(), PACK, &[]);
     none["expanded_length"] = json!(1);
     let many = concat(dir.path(), PACK, &vec![part.clone(); MAX_PARTS + 1]);
-    let mut extra = concat(dir.path(), PACK, &[part.clone()]);
+    let mut extra = concat(dir.path(), PACK, std::slice::from_ref(&part));
     let value = json!({"schema": PACK, "parts": [part], "note": 1});
     let bytes = guard_policy_snapshot::canonical_json_bytes(&value).unwrap();
     put(dir.path(), &bytes);

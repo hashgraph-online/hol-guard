@@ -42,11 +42,9 @@ pub(in crate::pretool) fn sensitive_reach_reason(
     if proven || !scan.recursive {
         return None;
     }
-    // An exclusion next to `--include` is not part of the proof, so advice to
+    // Any `--exclude` next to `--include` keeps the review, so advice to
     // exclude a file would not release the search.
-    if scan.includes_present
-        && !(scan.excluded_files.is_empty() && scan.excluded_directories.is_empty())
-    {
+    if scan.include_beside_exclusion {
         return None;
     }
     let clearance = scan.clearance();

@@ -426,7 +426,7 @@ def test_worker_stabilization_requires_an_idle_scheduler_and_caps_warmup() -> No
         scheduler = SimpleNamespace(stats=lambda: stats)
         return cast(
             AdapterSession,
-            SimpleNamespace(daemon=SimpleNamespace(_server=SimpleNamespace(runtime_hook_scheduler=scheduler))),
+            SimpleNamespace(daemon=SimpleNamespace(hook_capacity=scheduler.stats)),
         )
 
     assert _stabilize_ready_hook_workers(session_with({"active_limit": 4, "active": 0})) == 4

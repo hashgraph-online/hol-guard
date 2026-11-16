@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TextIO
 
-from ..daemon.client import GuardDaemonRequestError, load_guard_surface_daemon_client
+from ..native_daemon_client import GuardDaemonRequestError, load_guard_surface_daemon_client
 from ..runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY,
     ExactCloudReviewError,

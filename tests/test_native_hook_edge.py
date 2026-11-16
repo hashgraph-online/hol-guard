@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
 from codex_plugin_scanner.guard.hook_execution_environment import (
     LIBRARY_SEARCH_PATH_NAMES,
     collect_hook_execution_environment,
 )
+from codex_plugin_scanner.guard.hook_review.hook_request_parsing import runtime_hook_event_name
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge, review_raw_hook_native
 from codex_plugin_scanner.guard.native_route_receipt import native_hook_route
 from codex_plugin_scanner.guard.native_runtime import (

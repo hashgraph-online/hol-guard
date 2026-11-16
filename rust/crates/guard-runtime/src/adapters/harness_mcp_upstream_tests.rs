@@ -130,7 +130,7 @@ fn the_argv_count_and_byte_bounds_hold_at_their_limits() {
     // `é` is two UTF-8 bytes; the bound counts bytes, not characters.
     let fill = 262_144 - used;
     let at_limit = format!("--arg={}", "é".repeat(fill / 2) + &"x".repeat(fill % 2));
-    assert!(!upstream(&proxy_args(&[at_limit.clone()])).is_null());
+    assert!(!upstream(&proxy_args(std::slice::from_ref(&at_limit))).is_null());
     let over = format!("{at_limit}x");
     assert!(upstream(&proxy_args(&[over])).is_null());
 }

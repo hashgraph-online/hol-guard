@@ -216,6 +216,43 @@ pub(super) fn evaluate_hashline_edit(
     })
 }
 
+/// The review reason for an edit with a line that opens with a bracket the
+/// way a header does but is not a plain `[PATH#TAG]` header, such as
+/// `[FILE: src/a.ts#0AC4]`. Guard cannot tell which file Oh My Pi would
+/// open, so the edit keeps its review and a person can still approve a path
+/// that really holds `#` or `:`; the reason shows the agent the header Guard
+/// can prove. A `REM` or `MV`, a stray row or anything else the proof does
+/// not read leaves this `None`, so those edits keep the usual reason.
+pub(super) fn unreadable_header_reason(input: &str) -> Option<String> {
+    let line = unreadable_header(input)?;
+    Some(format!(
+        "HOL Guard requires review for this edit because its file header `{line}` is not a plain `[PATH#TAG]` header, so Guard cannot tell which file it changes. To change the file without a review, write each header as just the path and the tag the read tool showed, for example `[src/app.py#1A2B]`, with nothing else inside the brackets."
+    ))
+}
+
+/// The first line that opens with a bracket but is not a plain header,
+/// shortened for a message.
+fn unreadable_header(input: &str) -> Option<String> {
+    const SHOWN_CHARS: usize = 120;
+    if input.len() > crate::MAX_COMMAND_BYTES || input.contains('\0') {
+        return None;
+    }
+    let line = input
+        .lines()
+        .map(|line| line.strip_suffix('\r').unwrap_or(line).trim_end())
+        .find(|line| line.starts_with('[') && header_path(line).is_none())?;
+    let shown: String = line
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(SHOWN_CHARS)
+        .collect();
+    Some(if line.chars().count() > SHOWN_CHARS {
+        format!("{shown}...")
+    } else {
+        shown
+    })
+}
+
 /// Whether an Oh My Pi `edit` input is one plain line with no file header.
 ///
 /// Every edit mode names its file in a `path` or `edits` field or in a header

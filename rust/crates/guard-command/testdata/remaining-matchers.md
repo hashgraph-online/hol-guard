@@ -65,5 +65,5 @@ source-independent proof, not reconstruction of the retired Python matchers.
 Run the retained native tests from the repository root:
 
 ```sh
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --lib
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --lib
 ```

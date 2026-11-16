@@ -21,6 +21,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
+#[path = "contained_workspace_sink_daemon.rs"]
+mod daemon;
 #[path = "contained_workspace_sink_directory.rs"]
 mod directory;
 #[path = "contained_esbuild_image.rs"]
@@ -83,7 +85,8 @@ pub(crate) const LAUNCH_COMMAND: &str = "contained-workspace-launch";
 pub(crate) const WORKSPACE_REASON: &str = "native_workspace_containment_required";
 pub(crate) const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
 const AUTHORIZATION_FAILED: &str = "contained_run_authorization_failed";
-const AUTHORIZATION_MESSAGE: &str = "Guard could not authorize this contained run.";
+const AUTHORIZATION_MESSAGE: &str =
+    "Guard could not authorize the remaining contained command. Any previously authorized host-side setup may already have completed; no unapproved command ran outside the sandbox.";
 const INVALID_COMMAND: &str = "pytest_restricted_invalid_command";
 const SANDBOX_UNAVAILABLE: &str = "pytest_restricted_sandbox_unavailable";
 const RECEIPT_ONLY_FIELD: &str = "guard_containment_receipt_only";
@@ -279,7 +282,8 @@ struct Authority<'a> {
 
 impl Authority<'_> {
     /// The resident's harness response for `payload`, receipt only, stamped
-    /// with the environment this process launches the command from.
+    /// with the environment this process launches the command from, or the
+    /// daemon's when the resident does not answer.
     fn authorize(&self, payload: &Map<String, Value>) -> Option<Map<String, Value>> {
         let mut asked = payload.clone();
         asked.insert(RECEIPT_ONLY_FIELD.to_owned(), Value::Bool(true));
@@ -290,14 +294,19 @@ impl Authority<'_> {
         else {
             return None;
         };
+        let deadline = Instant::now() + AUTHORIZE_BUDGET;
+        let arguments = self.arguments;
+        // The resident gets half the budget, so a deferral leaves the daemon
+        // the rest, as the hook bridges split it.
         let answer = crate::codex_hook_bridge_direct::resident_hook_answer(
-            &self.arguments.harness,
-            &self.arguments.guard_home,
-            &self.arguments.home,
+            &arguments.harness,
+            &arguments.guard_home,
+            &arguments.home,
             &self.workspace,
             &stamped,
-            Instant::now() + AUTHORIZE_BUDGET,
-        )?;
+            Instant::now() + AUTHORIZE_BUDGET / 2,
+        )
+        .or_else(|| daemon::daemon_answer(arguments, &self.workspace, &stamped, deadline))?;
         match serde_json::from_str(&answer).ok()? {
             Value::Object(response) => Some(response),
             _ => None,
@@ -478,6 +487,9 @@ fn environment() -> Vec<(String, String)> {
         .collect()
 }
 
+#[cfg(test)]
+#[path = "contained_workspace_sink_authorization_tests.rs"]
+mod authorization_tests;
 #[cfg(test)]
 #[path = "contained_workspace_sink_tests.rs"]
 mod tests;

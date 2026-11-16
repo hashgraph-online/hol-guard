@@ -6,6 +6,10 @@ use std::sync::LazyLock;
 struct GlobalOptionConfig {
     subcommands: &'static [&'static str],
     value_options: &'static [&'static str],
+    /// Options this manager documents as reporting-only. The set is per manager
+    /// because the same spelling means different things: `-v` is `--verbose` for
+    /// pip and `--version` for npm, and a `--version` run installs nothing.
+    presentation_options: &'static [&'static str],
 }
 
 static MANAGER_ALIASES: &[(&str, &str)] = &[("pip3", "pip")];
@@ -25,6 +29,15 @@ static MANAGER_GLOBAL_OPTIONS: LazyLock<Vec<(&'static str, GlobalOptionConfig)>>
                         "--userconfig",
                         "-C",
                     ],
+                    presentation_options: &[
+                        "--no-color",
+                        "--no-progress",
+                        "--quiet",
+                        "--silent",
+                        "--verbose",
+                        "-q",
+                        "-s",
+                    ],
                 },
             ),
             (
@@ -40,6 +53,7 @@ static MANAGER_GLOBAL_OPTIONS: LazyLock<Vec<(&'static str, GlobalOptionConfig)>>
                         "-C",
                         "-F",
                     ],
+                    presentation_options: &["--no-color", "--silent", "-s"],
                 },
             ),
             (
@@ -47,6 +61,7 @@ static MANAGER_GLOBAL_OPTIONS: LazyLock<Vec<(&'static str, GlobalOptionConfig)>>
                 GlobalOptionConfig {
                     subcommands: &["add", "dlx", "install", "up", "workspace"],
                     value_options: &["--cache-folder", "--cwd", "--modules-folder", "--registry"],
+                    presentation_options: &["--no-color", "--no-progress", "--silent", "--verbose"],
                 },
             ),
             (
@@ -68,6 +83,17 @@ static MANAGER_GLOBAL_OPTIONS: LazyLock<Vec<(&'static str, GlobalOptionConfig)>>
                         "-f",
                         "-i",
                     ],
+                    presentation_options: &[
+                        "--no-color",
+                        "--quiet",
+                        "--verbose",
+                        "-q",
+                        "-qq",
+                        "-qqq",
+                        "-v",
+                        "-vv",
+                        "-vvv",
+                    ],
                 },
             ),
             (
@@ -75,6 +101,7 @@ static MANAGER_GLOBAL_OPTIONS: LazyLock<Vec<(&'static str, GlobalOptionConfig)>>
                 GlobalOptionConfig {
                     subcommands: &["install", "run"],
                     value_options: &["--index-url", "--pip-args", "--python"],
+                    presentation_options: &["--quiet", "--verbose"],
                 },
             ),
             (
@@ -83,11 +110,13 @@ static MANAGER_GLOBAL_OPTIONS: LazyLock<Vec<(&'static str, GlobalOptionConfig)>>
                     subcommands: &["add", "pip", "sync"],
                     value_options: &[
                         "--cache-dir",
+                        "--config-file",
                         "--directory",
                         "--index",
                         "--python",
                         "--project",
                     ],
+                    presentation_options: &["--no-progress", "--quiet", "--verbose", "-q", "-v"],
                 },
             ),
             (
@@ -95,6 +124,7 @@ static MANAGER_GLOBAL_OPTIONS: LazyLock<Vec<(&'static str, GlobalOptionConfig)>>
                 GlobalOptionConfig {
                     subcommands: &["bundle", "install", "reinstall", "tap", "upgrade"],
                     value_options: &["--cache", "--cellar", "--prefix", "--repository"],
+                    presentation_options: &["--quiet", "--verbose", "-q"],
                 },
             ),
             (
@@ -102,6 +132,16 @@ static MANAGER_GLOBAL_OPTIONS: LazyLock<Vec<(&'static str, GlobalOptionConfig)>>
                 GlobalOptionConfig {
                     subcommands: &["add", "install"],
                     value_options: &["--directory", "-C"],
+                    presentation_options: &[
+                        "--ansi",
+                        "--no-ansi",
+                        "--quiet",
+                        "--verbose",
+                        "-q",
+                        "-v",
+                        "-vv",
+                        "-vvv",
+                    ],
                 },
             ),
             (
@@ -109,10 +149,143 @@ static MANAGER_GLOBAL_OPTIONS: LazyLock<Vec<(&'static str, GlobalOptionConfig)>>
                 GlobalOptionConfig {
                     subcommands: &["install", "sync"],
                     value_options: &["--python"],
+                    presentation_options: &["--quiet", "--verbose"],
                 },
             ),
         ]
     });
+
+/// Inline-valued forms of the reporting options. A `--log-level=` or
+/// `--progress=` never decides which bytes a manager installs, and a manager
+/// that does not define one treats it as an unknown setting rather than as a
+/// request to print its version, so this list is shared.
+static PRESENTATION_VALUE_PREFIXES: &[&str] = &[
+    "--color=",
+    "--log-level=",
+    "--loglevel=",
+    "--progress=",
+    "--verbosity=",
+];
+
+/// Verbs that hand the rest of the command line to another program. A `-q`
+/// after one of these belongs to that program, where it can mean anything
+/// (`grep -v` inverts the match), so those commands keep their exact spelling.
+static DOWNSTREAM_PROGRAM_VERBS: &[(&str, &[&str])] = &[
+    ("npm", &["create", "exec", "init", "run", "run-script", "x"]),
+    ("pnpm", &["create", "dlx", "exec", "init", "run"]),
+    ("yarn", &["create", "dlx", "exec", "init", "run"]),
+    ("pipx", &["run"]),
+    ("poetry", &["run"]),
+    ("pipenv", &["run"]),
+    ("uv", &["run", "tool"]),
+];
+
+/// Managers that are themselves a runner for another program.
+static DOWNSTREAM_PROGRAM_MANAGERS: &[&str] = &["bunx", "npx", "pnpx", "uvx"];
+
+fn is_presentation_option(config: &GlobalOptionConfig, token: &str) -> bool {
+    config.presentation_options.contains(&token)
+        || PRESENTATION_VALUE_PREFIXES
+            .iter()
+            .any(|prefix| token.starts_with(prefix))
+}
+
+/// What reading the manager's own verb found.
+enum ManagerVerb<'a> {
+    /// The first token that is neither an option nor the value of one.
+    Named(&'a str),
+    /// A leading option Guard does not know. Its value, if it takes one,
+    /// cannot be told apart from the verb, so `uv --config-file uv.toml run
+    /// grep -v pattern file` would read `uv.toml` as the verb and miss that
+    /// the rest of the line belongs to `grep`. Nothing after such an option
+    /// is trustworthy, so the caller leaves the command exactly as typed.
+    Unreadable,
+    /// Options only, with no verb at all.
+    Absent,
+}
+
+/// The manager's own verb. A package named `run` sits after the verb, so
+/// looking only at this position keeps `npm install run` strippable while
+/// `npm run build` is left alone.
+fn manager_verb<'a>(config: &GlobalOptionConfig, arguments: &'a [String]) -> ManagerVerb<'a> {
+    let mut index = 0;
+    while index < arguments.len() {
+        let token = arguments[index].as_str();
+        if token == "--" {
+            return arguments
+                .get(index + 1)
+                .map_or(ManagerVerb::Absent, |verb| ManagerVerb::Named(verb));
+        }
+        if token.starts_with('-') {
+            if config.value_options.contains(&token) {
+                index += 2;
+                continue;
+            }
+            if token.contains('=') || is_presentation_option(config, token) {
+                index += 1;
+                continue;
+            }
+            return ManagerVerb::Unreadable;
+        }
+        return ManagerVerb::Named(token);
+    }
+    ManagerVerb::Absent
+}
+
+/// Drop reporting-only options from a package manager's arguments.
+///
+/// `arguments` is the command line after the executable, the way
+/// `PackageExecutionContext` passes it to the launch identity. The result feeds
+/// the approval binding only: the review card still shows the command exactly
+/// as it was typed. Returns the arguments unchanged for an unknown manager, for
+/// a runner that executes another program, and for everything after a bare
+/// `--`.
+pub fn strip_manager_presentation_arguments(manager: &str, arguments: &[String]) -> Vec<String> {
+    let key = manager_key(manager);
+    if DOWNSTREAM_PROGRAM_MANAGERS.contains(&key.as_str()) {
+        return arguments.to_vec();
+    }
+    let Some(config) = manager_config(&key) else {
+        return arguments.to_vec();
+    };
+    let downstream = DOWNSTREAM_PROGRAM_VERBS
+        .iter()
+        .find(|(name, _)| *name == key)
+        .map_or(&[] as &[&str], |(_, verbs)| *verbs);
+    match manager_verb(config, arguments) {
+        ManagerVerb::Named(verb) if downstream.contains(&verb) => return arguments.to_vec(),
+        ManagerVerb::Unreadable => return arguments.to_vec(),
+        _ => {}
+    }
+    let mut stripped: Vec<String> = Vec::with_capacity(arguments.len());
+    let mut in_manager_options = true;
+    let mut index = 0;
+    while index < arguments.len() {
+        let argument = &arguments[index];
+        if in_manager_options {
+            if argument == "--" {
+                in_manager_options = false;
+            } else if config.value_options.contains(&argument.as_str()) {
+                // The word after a value option is that option's value, read
+                // the same way [`manager_verb`] reads it. A value spelled like
+                // a reporting option (`--registry --silent`) has to survive, or
+                // two different command lines share one approval binding.
+                stripped.push(argument.clone());
+                if let Some(value) = arguments.get(index + 1) {
+                    stripped.push(value.clone());
+                }
+                index += 2;
+                continue;
+            } else if is_presentation_option(config, argument) {
+                index += 1;
+                continue;
+            }
+        }
+        stripped.push(argument.clone());
+        index += 1;
+    }
+    stripped
+}
 
 fn manager_config(name: &str) -> Option<&'static GlobalOptionConfig> {
     let key = manager_key(name);
@@ -261,6 +434,231 @@ mod tests {
     fn bare_tokens_under_two_passthrough() {
         let got = strip_package_manager_global_options(&t(&["npm"]));
         assert_eq!(got, t(&["npm"]));
+    }
+
+    #[test]
+    fn a_quiet_spelling_binds_like_the_loud_one() {
+        assert_eq!(
+            strip_manager_presentation_arguments(
+                "uv",
+                &t(&["sync", "-q", "--frozen", "--extra", "dev"])
+            ),
+            t(&["sync", "--frozen", "--extra", "dev"]),
+        );
+    }
+
+    #[test]
+    fn a_scaffolding_verb_keeps_the_downstream_argv() {
+        // `npm create` and `npm init` run a `create-*` package with the rest of
+        // the line, so a `--verbose` there belongs to that program.
+        for verb in ["create", "init"] {
+            let args = t(&[verb, "vite", "--verbose"]);
+            assert_eq!(strip_manager_presentation_arguments("npm", &args), args);
+            assert_eq!(strip_manager_presentation_arguments("pnpm", &args), args);
+            assert_eq!(strip_manager_presentation_arguments("yarn", &args), args);
+        }
+    }
+
+    #[test]
+    fn a_package_named_like_a_verb_is_still_an_operand() {
+        // The verb is the first non-option token. `create` here is the package
+        // being installed, so the quiet spelling still binds like the loud one.
+        assert_eq!(
+            strip_manager_presentation_arguments("npm", &t(&["install", "create", "--quiet"])),
+            t(&["install", "create"]),
+        );
+    }
+
+    #[test]
+    fn installation_affecting_options_are_kept() {
+        let args = t(&[
+            "sync",
+            "--frozen",
+            "--group",
+            "ci-test",
+            "--no-install-project",
+            "--python",
+            "3.12",
+        ]);
+        assert_eq!(strip_manager_presentation_arguments("uv", &args), args);
+    }
+
+    #[test]
+    fn an_unknown_leading_option_keeps_the_command_as_typed() {
+        // Guard cannot tell whether `--settings` takes a value, so it cannot
+        // tell the verb from that value either. Reading `uv.toml` as the verb
+        // would hide the `run` behind it and strip `grep`'s own `-v`, letting
+        // one saved approval cover a different command.
+        let hidden_runner = t(&[
+            "--settings",
+            "uv.toml",
+            "run",
+            "grep",
+            "-v",
+            "pattern",
+            "file",
+        ]);
+        assert_eq!(
+            strip_manager_presentation_arguments("uv", &hidden_runner),
+            hidden_runner
+        );
+        // A value option Guard does know still resolves the verb, so an
+        // ordinary install keeps normalizing across quiet and verbose.
+        assert_eq!(
+            strip_manager_presentation_arguments(
+                "uv",
+                &t(&["--config-file", "uv.toml", "pip", "install", "-q", "ruff"])
+            ),
+            t(&["--config-file", "uv.toml", "pip", "install", "ruff"]),
+        );
+    }
+
+    #[test]
+    fn inline_reporting_values_are_dropped() {
+        assert_eq!(
+            strip_manager_presentation_arguments(
+                "npm",
+                &t(&["install", "--loglevel=silly", "--no-progress", "lodash"])
+            ),
+            t(&["install", "lodash"]),
+        );
+    }
+
+    #[test]
+    fn a_runner_keeps_its_programs_own_flags() {
+        let uvx = t(&["ruff", "check", "-q", "src"]);
+        assert_eq!(strip_manager_presentation_arguments("uvx", &uvx), uvx);
+        let uv_run = t(&["run", "ruff", "check", "-q", "src"]);
+        assert_eq!(strip_manager_presentation_arguments("uv", &uv_run), uv_run);
+        let npm_exec = t(&["exec", "--", "eslint", "-q"]);
+        assert_eq!(
+            strip_manager_presentation_arguments("npm", &npm_exec),
+            npm_exec
+        );
+    }
+
+    #[test]
+    fn nothing_after_a_bare_separator_is_touched() {
+        assert_eq!(
+            strip_manager_presentation_arguments("npm", &t(&["install", "-q", "--", "-v"])),
+            t(&["install", "--", "-v"]),
+        );
+    }
+
+    #[test]
+    fn an_unknown_manager_is_left_alone() {
+        let args = t(&["install", "-q", "ripgrep"]);
+        assert_eq!(strip_manager_presentation_arguments("cargo", &args), args);
+    }
+
+    #[test]
+    fn a_manager_alias_is_resolved_before_stripping() {
+        assert_eq!(
+            strip_manager_presentation_arguments("pip3", &t(&["install", "-q", "requests"])),
+            t(&["install", "requests"]),
+        );
+    }
+
+    #[test]
+    fn a_short_version_flag_keeps_its_own_binding() {
+        // `npm -v` is `--version`: the command prints a version and installs
+        // nothing. Collapsing it onto the plain install would let an allow saved
+        // for the harmless spelling cover the real one.
+        let versioned = t(&["install", "-v", "lodash"]);
+        assert_eq!(
+            strip_manager_presentation_arguments("npm", &versioned),
+            versioned
+        );
+        assert_ne!(
+            strip_manager_presentation_arguments("npm", &versioned),
+            strip_manager_presentation_arguments("npm", &t(&["install", "lodash"])),
+        );
+        for manager in ["pnpm", "yarn"] {
+            let args = t(&["add", "-v", "lodash"]);
+            assert_eq!(strip_manager_presentation_arguments(manager, &args), args);
+        }
+    }
+
+    #[test]
+    fn a_short_verbose_flag_is_dropped_where_the_manager_defines_it() {
+        assert_eq!(
+            strip_manager_presentation_arguments("pip", &t(&["install", "-v", "requests"])),
+            t(&["install", "requests"]),
+        );
+        assert_eq!(
+            strip_manager_presentation_arguments("poetry", &t(&["install", "-vv"])),
+            t(&["install"]),
+        );
+    }
+
+    #[test]
+    fn an_undefined_quiet_flag_keeps_its_own_binding() {
+        // yarn has no `-q`, so the two spellings are not the same command.
+        let args = t(&["install", "-q"]);
+        assert_eq!(strip_manager_presentation_arguments("yarn", &args), args);
+    }
+
+    #[test]
+    fn a_script_runner_keeps_the_scripts_own_flags() {
+        for (manager, args) in [
+            ("poetry", t(&["run", "grep", "-v", "pattern", "file"])),
+            ("pipenv", t(&["run", "pytest", "--verbose"])),
+            ("npm", t(&["run", "build", "--silent"])),
+            ("pnpm", t(&["run", "lint", "--no-color"])),
+        ] {
+            assert_eq!(strip_manager_presentation_arguments(manager, &args), args);
+        }
+    }
+
+    #[test]
+    fn a_downstream_verb_spelled_as_a_package_still_strips() {
+        // `run` here is the package being installed, not npm's script runner.
+        assert_eq!(
+            strip_manager_presentation_arguments("npm", &t(&["install", "-q", "run"])),
+            t(&["install", "run"]),
+        );
+    }
+
+    #[test]
+    fn a_global_option_value_is_not_mistaken_for_the_verb() {
+        assert_eq!(
+            strip_manager_presentation_arguments(
+                "npm",
+                &t(&["--prefix", "exec", "install", "-q", "lodash"])
+            ),
+            t(&["--prefix", "exec", "install", "lodash"]),
+        );
+    }
+
+    #[test]
+    fn a_global_option_value_spelled_as_a_reporting_flag_survives() {
+        // `--silent` here is the registry npm was told to use, however odd,
+        // not a request to print less. Dropping it would bind this command to
+        // the approval for `npm --registry install lodash`.
+        for (manager, args) in [
+            ("npm", t(&["--registry", "--silent", "install", "lodash"])),
+            ("pip", t(&["--index-url", "--quiet", "install", "requests"])),
+            (
+                "uv",
+                t(&["--config-file", "--verbose", "pip", "install", "x"]),
+            ),
+        ] {
+            assert_eq!(strip_manager_presentation_arguments(manager, &args), args);
+        }
+        // The reporting option itself still goes, wherever it sits.
+        assert_eq!(
+            strip_manager_presentation_arguments(
+                "npm",
+                &t(&["--registry", "--silent", "install", "-q", "lodash"])
+            ),
+            t(&["--registry", "--silent", "install", "lodash"]),
+        );
+    }
+
+    #[test]
+    fn a_value_option_at_the_end_keeps_its_place() {
+        let args = t(&["install", "lodash", "--registry"]);
+        assert_eq!(strip_manager_presentation_arguments("npm", &args), args);
     }
 
     #[test]

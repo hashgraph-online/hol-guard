@@ -36,6 +36,45 @@ def extension_control_schema_marker_is_compatible(
     }
 
 
+def require_compatible_extension_control_schema(
+    connection: sqlite3.Connection,
+    *,
+    require_compatible: bool = True,
+) -> bool:
+    """Whether the stored marker is one this release reads, without writing.
+
+    Store initialization creates the authority schema and the resident's
+    writer ops create what is missing and move the marker forward, so a
+    runtime caller only refuses a marker it does not know. A database
+    recreated after initialization has lost the tables recovery reads, so
+    that store is initialized again here before the read.
+    """
+
+    present = cast(
+        object,
+        connection.execute(
+            """select count(*) from sqlite_master where type = 'table'
+            and name in ('extension_control_schema_migration', 'extension_control_authority_snapshot')"""
+        ).fetchone(),
+    )
+    if tuple(cast("tuple[object, ...]", present)) != (2,):
+        return ensure_extension_control_authority_schema(connection, require_compatible=require_compatible)
+    row = cast(
+        object,
+        connection.execute(
+            "select version, checksum from extension_control_schema_migration where singleton = 1"
+        ).fetchone(),
+    )
+    if row is None:
+        return ensure_extension_control_authority_schema(connection, require_compatible=require_compatible)
+    values = tuple(cast("tuple[object, ...]", row))
+    if len(values) == 2 and extension_control_schema_marker_is_compatible(values[0], values[1]):
+        return True
+    if require_compatible:
+        raise ExtensionControlAuthorityError("unsupported or invalid extension control schema")
+    return False
+
+
 def ensure_extension_control_authority_schema(
     connection: sqlite3.Connection,
     *,

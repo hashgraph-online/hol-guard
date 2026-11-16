@@ -8,6 +8,7 @@ fn request(root: &Path, query: &str) -> Request {
         words: vec!["cart".into()],
         found: vec!["src/cart.ts".into()],
         earlier: Vec::new(),
+        names: Vec::new(),
     }
 }
 

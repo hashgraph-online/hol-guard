@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.manager import GUARD_DAEMON_COMPATIBILITY_VERSION
+from codex_plugin_scanner.guard.native_daemon_manage import GUARD_DAEMON_COMPATIBILITY_VERSION
 from tests.test_pi_hook_latency import _bun_executable, _decode_json_object
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -17,7 +17,7 @@ pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 @pytest.mark.skipif(_bun_executable() is None, reason="Bun is required to execute the managed Pi extension")
 def test_pi_extension_treats_authenticated_daemon_overload_as_terminal(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+    from tests.pi_extension_support import managed_extension_source
 
     bun = _bun_executable()
     assert bun is not None
@@ -101,7 +101,7 @@ console.log(JSON.stringify({{
     reason="Bun and POSIX process groups are required for fallback termination testing",
 )
 def test_pi_extension_denies_every_hook_without_cli_review_during_daemon_outage(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+    from tests.pi_extension_support import managed_extension_source
 
     bun = _bun_executable()
     assert bun is not None

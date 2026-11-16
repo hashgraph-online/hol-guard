@@ -276,7 +276,7 @@ impl Jobs {
             created_at_ms: now,
             updated_at_ms: now,
             deadline_at_ms: now
-                .checked_add(120_000)
+                .checked_add(store::INSTALL_WINDOW_MS)
                 .ok_or_else(|| error("clock_invalid"))?,
         };
         store::save(&home, &mut job, store::Phase::Queued, "queued")?;

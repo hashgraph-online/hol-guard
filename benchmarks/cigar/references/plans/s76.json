@@ -1,0 +1,125 @@
+{
+ "repo": "jinja",
+ "seed": 76,
+ "steps": [
+  {
+   "kind": "stub",
+   "prompt": "`Context.derived` in src/jinja2/runtime.py was stubbed out during a refactor and now raises NotImplementedError. Implement it again so it does what its docstring says and the existing tests pass.",
+   "stub": {
+    "body": "        context = new_context(\n            self.environment, self.name, {}, self.get_all(), True, None, locals\n        )\n        context.eval_ctx = self.eval_ctx\n        context.blocks.update((k, list(v)) for k, v in self.blocks.items())\n        return context\n",
+    "body_start": 315,
+    "end": 320,
+    "failing": [
+     "tests/test_ext.py::TestAutoEscape::test_overlay_scopes",
+     "tests/test_ext.py::TestExtensions::test_contextreference_node_can_pass_locals",
+     "tests/test_inheritance.py::TestInheritance::test_required_with_scope",
+     "tests/test_inheritance.py::TestInheritance::test_scoped_block",
+     "tests/test_inheritance.py::TestInheritance::test_scoped_block_after_inheritance",
+     "tests/test_inheritance.py::TestInheritance::test_super_in_scoped_block",
+     "tests/test_regression.py::TestBug::test_pass_context_block_and_loop",
+     "tests/test_regression.py::TestBug::test_pass_context_in_blocks",
+     "tests/test_regression.py::TestBug::test_pass_context_loop_vars",
+     "tests/test_regression.py::TestBug::test_pass_context_scoped_loop_vars",
+     "tests/test_regression.py::TestBug::test_scoped_block",
+     "tests/test_regression.py::TestBug::test_scoped_block_loop_vars"
+    ],
+    "indent": 8,
+    "path": "src/jinja2/runtime.py",
+    "qual": "Context.derived"
+   }
+  },
+  {
+   "kind": "stub",
+   "prompt": "Tests fail because Environment.list_templates is not implemented (src/jinja2/environment.py). Write the implementation; the docstring and tests describe the expected behavior.",
+   "stub": {
+    "body": "        assert self.loader is not None, \"No loader configured.\"\n        names = self.loader.list_templates()\n\n        if extensions is not None:\n            if filter_func is not None:\n                raise TypeError(\n                    \"either extensions or filter_func can be passed, but not both\"\n                )\n\n            def filter_func(x: str) -> bool:\n                return \".\" in x and x.rsplit(\".\", 1)[1] in extensions\n\n        if filter_func is not None:\n            names = [name for name in names if filter_func(name)]\n\n        return names\n",
+    "body_start": 916,
+    "end": 931,
+    "failing": [
+     "tests/test_compile.py::test_filters_deterministic",
+     "tests/test_compile.py::test_import_as_with_context_deterministic",
+     "tests/test_loader.py::TestModuleLoader::test_choice_loader",
+     "tests/test_loader.py::TestModuleLoader::test_deflated_zip_compile",
+     "tests/test_loader.py::TestModuleLoader::test_filesystem_compile",
+     "tests/test_loader.py::TestModuleLoader::test_log",
+     "tests/test_loader.py::TestModuleLoader::test_path_as_pathlib",
+     "tests/test_loader.py::TestModuleLoader::test_prefix_loader",
+     "tests/test_loader.py::TestModuleLoader::test_stored_zip_compile",
+     "tests/test_loader.py::TestModuleLoader::test_supports_pathlib_in_list_of_paths",
+     "tests/test_loader.py::TestModuleLoader::test_weak_references"
+    ],
+    "indent": 8,
+    "path": "src/jinja2/environment.py",
+    "qual": "Environment.list_templates"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "`tests/test_tests.py::TestTestsCase::test_types[(10` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_tests.py::TestTestsCase::test_types[(10",
+      "tests/test_tests.py::TestTestsCase::test_types[42",
+      "tests/test_tests.py::TestTestsCase::test_types[false"
+     ],
+     "line": 127,
+     "new": "    return isinstance(value, int) and value is not True and value is False\n",
+     "orig": "    return isinstance(value, int) and value is not True and value is not False\n",
+     "path": "src/jinja2/tests.py",
+     "qual": "test_integer"
+    }
+   ]
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_api.py::TestUndefined::test_strict_undefined",
+      "tests/test_lexnparse.py::TestSyntax::test_short_conditional_expression"
+     ],
+     "line": 712,
+     "new": "        if self.expr2 is not None:\n",
+     "orig": "        if self.expr2 is None:\n",
+     "path": "src/jinja2/nodes.py",
+     "qual": "CondExpr.as_const"
+    },
+    {
+     "failing": [
+      "tests/test_loader.py::TestLoaders::test_dict_loader_cache_invalidates",
+      "tests/test_loader.py::TestLoaders::test_limited_size_cache",
+      "tests/test_regression.py::TestBug::test_cached_extends[extends]",
+      "tests/test_regression.py::TestBug::test_cached_extends[include]"
+     ],
+     "line": 424,
+     "new": "            return source, None, lambda: source != self.mapping.get(template)\n",
+     "orig": "            return source, None, lambda: source == self.mapping.get(template)\n",
+     "path": "src/jinja2/loaders.py",
+     "qual": "DictLoader.get_source"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "`tests/test_filters.py::TestFilter::test_filter_undefined_in_nested_if` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_filters.py::TestFilter::test_filter_undefined_in_nested_if"
+     ],
+     "line": 267,
+     "new": "        else_symbols = inner_visit(node.else_ and ())\n",
+     "orig": "        else_symbols = inner_visit(node.else_ or ())\n",
+     "path": "src/jinja2/idtracking.py",
+     "qual": "FrameSymbolVisitor.visit_If"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

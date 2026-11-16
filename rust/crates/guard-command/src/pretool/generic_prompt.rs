@@ -4,7 +4,10 @@ use std::sync::OnceLock;
 
 #[path = "generic_prompt_masks.rs"]
 mod masks;
-use masks::{mask_credential_categories, mask_format_options};
+use masks::{
+    mask_credential_categories, mask_format_options, mask_liveness_probes, mask_rereads,
+    mask_url_paths,
+};
 
 const BYPASS_PATTERNS: [&str; 10] = [
     "disable hol-guard",
@@ -290,7 +293,7 @@ pub(super) fn exfil_prompt_intent(values: &[String]) -> bool {
         .collect()
     });
     values.iter().any(|value| {
-        let value = mask_transfer_encoding(value);
+        let value = mask_transfer_encoding(&mask_url_paths(value));
         patterns.iter().any(|pattern| pattern.is_match(&value))
     })
 }
@@ -440,9 +443,12 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
     // dumps and value requests still keep the prompt off the benign path.
     // Words inside an unconditional prohibition ("never X or Y") are not
     // requested actions; the strong intent detectors run on the raw prompt.
+    // The liveness and reread masks only answer the action scan: a reread
+    // still points back at a credential named earlier, so the secret check
+    // reads the text with the reread intact.
     !prompt_requests_secret(&remainder)
         && !risky_action.is_match(&mask_transfer_encoding(&mask_format_options(
-            &mask_negated_clauses(&remainder),
+            &mask_negated_clauses(&mask_rereads(&mask_liveness_probes(&remainder))),
         )))
 }
 

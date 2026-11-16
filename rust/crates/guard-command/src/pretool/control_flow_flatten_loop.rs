@@ -94,7 +94,7 @@ pub(super) fn flatten_wait(rest: &str) -> Option<String> {
     let [(probe, _)] = test.as_slice() else {
         return None;
     };
-    if probe.contains(['<', '>']) {
+    if !opens_no_file(probe) {
         return None;
     }
     if !body.iter().all(|(text, _)| only_waits(text)) {
@@ -103,14 +103,79 @@ pub(super) fn flatten_wait(rest: &str) -> Option<String> {
     // A redirection after `done` is opened once and used by every pass: a
     // file named there grows for as long as the wait runs, and an input
     // device feeds a probe that need never reach an end. One flat pass says
-    // neither, so a wait written with a tail keeps its review.
-    if !tail.trim().is_empty() {
-        return None;
-    }
+    // neither, so a wait written with a redirection keeps its review. A
+    // command list written after the loop is not that shape: it runs once,
+    // after the wait, and the flat list carries it.
+    let after = trailing_list(tail)?;
     let mut parts: Vec<(String, &'static str)> = Vec::new();
     collect(&mut parts, test, "")?;
     collect(&mut parts, body, "")?;
+    if !after.is_empty() {
+        collect(&mut parts, after, "")?;
+    }
     assemble(&parts, "")
+}
+
+/// Whether the loop's test opens nothing of its own.
+///
+/// A redirection in the test names something every pass reaches again: a
+/// file that grows for as long as the wait runs, or an input the probe reads
+/// a further piece of each time. One flat pass says neither, so a test that
+/// carries one keeps its review.
+///
+/// An inert redirect to the null device is the exception. `kill -0 1234
+/// 2>/dev/null` is how a wait asks whether a process is still running
+/// without printing the answer while it is not, and the sink holds nothing:
+/// every pass writes the same nothing, so the flat list stands for the loop
+/// exactly as the unredirected spelling does. Only a sink that ends the test
+/// is read, and only in front of text that spells no other redirection,
+/// quote or escape, so what is taken off is the whole of what the probe
+/// opens.
+fn opens_no_file(probe: &str) -> bool {
+    if !probe.contains(['<', '>']) {
+        return true;
+    }
+    let asked = probe.trim_end();
+    let chars: Vec<char> = asked.chars().collect();
+    let Some(start) = (0..chars.len()).find(|start| {
+        crate::parser_segments::null_sink_redirect_end(&chars, *start, false) == Some(chars.len())
+    }) else {
+        return false;
+    };
+    let command: String = chars[..start].iter().collect();
+    !command.trim().is_empty() && !command.contains(['<', '>', '\\', '\'', '"'])
+}
+
+/// The command list written after `done`, empty when nothing follows it.
+///
+/// A developer holds the next step until a service answers and then takes
+/// that step: `until ...; done; echo ready` is one command, and the list
+/// after the loop runs once when the wait is over. Writing it into the flat
+/// list keeps every command the shell runs in front of the ordinary proofs,
+/// in the order it runs them.
+///
+/// Only a plain `;` or newline join is read. A `&&` or `||` reads the loop's
+/// own outcome, a redirection belongs to the loop itself, and `&` puts the
+/// wait in the background, so each keeps its review. The parse ends on a
+/// terminator of this reading's own, which a list that spells `done` itself
+/// would reach early, leaving text behind and keeping its review too.
+fn trailing_list(tail: &str) -> Option<Vec<(String, &'static str)>> {
+    let trimmed = tail.trim_start_matches([' ', '\t']);
+    if trimmed.trim().is_empty() {
+        return Some(Vec::new());
+    }
+    let list = trimmed
+        .strip_prefix(';')
+        .or_else(|| trimmed.strip_prefix('\n'))?;
+    if list
+        .trim_start_matches([' ', '\t', '\n'])
+        .starts_with([';', '&', '|'])
+    {
+        return None;
+    }
+    let text = format!("{list}\ndone");
+    let (items, _, after) = body_items(&text, "", &["done"])?;
+    (after.is_empty() && !items.is_empty()).then_some(items)
 }
 
 /// Whether this body item is a plain `sleep` that waits and does nothing else.

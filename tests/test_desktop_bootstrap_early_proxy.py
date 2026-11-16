@@ -10,7 +10,6 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -42,8 +41,8 @@ def _write_daemon_identity(
     tamper_signature: bool = False,
     executable: str | None = None,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon.discovery import authenticate_daemon_state
     from codex_plugin_scanner.version import __version__
+    from tests.guard_daemon_state_signing import authenticate_daemon_state
 
     guard_home = home / ".hol-guard"
     guard_home.mkdir()
@@ -294,8 +293,8 @@ def test_cached_desktop_bootstrap_document_single_flights_a_miss() -> None:
 
 
 def test_desktop_bootstrap_route_is_critical() -> None:
-    from codex_plugin_scanner.guard.daemon.server import _DAEMON_CRITICAL_PATHS
     from codex_plugin_scanner.guard.dashboard_launcher import build_desktop_dashboard_session_url_for_daemon
+    from codex_plugin_scanner.guard.routes.request_handler import _DAEMON_CRITICAL_PATHS
 
     assert "/v1/desktop/bootstrap" in _DAEMON_CRITICAL_PATHS
     with pytest.raises(ValueError):
@@ -308,7 +307,7 @@ def test_desktop_bootstrap_route_is_critical() -> None:
 
 
 def test_daemon_state_executable_falls_back_when_resolution_fails(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard import native_daemon_manage as manager
 
     def fail_resolve(self: Path, strict: bool = False) -> Path:
         del self, strict
@@ -465,79 +464,3 @@ def test_cached_bootstrap_document_covers_refresh_and_failure_paths(monkeypatch:
         assert "error" in follower_error
     finally:
         desktop.reset_desktop_bootstrap_cache()
-
-
-def test_desktop_bootstrap_route_records_auth_and_build_failures(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.cli import commands_dispatch_desktop as desktop
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer, _GuardDaemonHandler
-
-    events: list[str] = []
-
-    class Handler:
-        def __init__(self, path: str, *, authorized: bool, diagnostics: object | None) -> None:
-            self.path = path
-            self.server = SimpleNamespace(
-                home_dir=Path("."),
-                auth_token="token",
-                diagnostics=diagnostics,
-                daemon_port=lambda: 9,
-            )
-            self.authorized = authorized
-            self.unauthorized = 0
-            self.payloads: list[tuple[dict[str, object], int]] = []
-
-        def _query_has_guard_token(self, query: str) -> bool:
-            return "guard_token=" in query
-
-        def _record_query_token_rejection(self) -> None:
-            events.append("query-token")
-
-        def _write_unauthorized(self, *, extra_headers: dict[str, str] | None = None) -> None:
-            del extra_headers
-            self.unauthorized += 1
-
-        def _header_token_is_valid(self) -> bool:
-            return self.authorized
-
-        def _cors_headers_for_request(self) -> dict[str, str]:
-            return {}
-
-        def _write_json(self, payload: dict[str, object], *, status: int = 200) -> None:
-            self.payloads.append((payload, status))
-
-    query = Handler("/v1/desktop/bootstrap?guard_token=1", authorized=True, diagnostics=None)
-    _GuardDaemonHandler._serve_desktop_bootstrap(query, object())  # type: ignore[arg-type]
-    assert query.unauthorized == 1
-
-    denied = Handler("/v1/desktop/bootstrap", authorized=False, diagnostics=None)
-    _GuardDaemonHandler._serve_desktop_bootstrap(denied, object())  # type: ignore[arg-type]
-    assert denied.unauthorized == 1
-
-    monkeypatch.setattr(
-        desktop,
-        "desktop_bootstrap_document_for_running_daemon",
-        lambda **_kwargs: {"schema": "guard-desktop-bootstrap.v1"},
-    )
-    diagnostics = SimpleNamespace(record_exception=lambda event: events.append(event))
-    served = Handler("/v1/desktop/bootstrap", authorized=True, diagnostics=diagnostics)
-    _GuardDaemonHandler._serve_desktop_bootstrap(served, object())  # type: ignore[arg-type]
-    assert served.payloads == [({"schema": "guard-desktop-bootstrap.v1"}, 200)]
-
-    def fail(**_kwargs: object) -> dict[str, object]:
-        raise RuntimeError("bootstrap failed")
-
-    monkeypatch.setattr(desktop, "desktop_bootstrap_document_for_running_daemon", fail)
-    failed = Handler("/v1/desktop/bootstrap", authorized=True, diagnostics=diagnostics)
-    _GuardDaemonHandler._serve_desktop_bootstrap(failed, object())  # type: ignore[arg-type]
-    assert failed.payloads == [({"error": "desktop_bootstrap_unavailable"}, 503)]
-    assert "desktop_bootstrap_unavailable" in events
-
-    owner = SimpleNamespace(
-        _server=SimpleNamespace(store=object(), home_dir=Path("."), auth_token="token", daemon_port=lambda: 9),
-        _diagnostics=diagnostics,
-    )
-    GuardDaemonServer._warm_desktop_bootstrap_cache(owner)  # type: ignore[arg-type]
-    deadline = time.monotonic() + 2
-    while "desktop_bootstrap_warmup_failed" not in events:
-        assert time.monotonic() < deadline
-        time.sleep(0.02)

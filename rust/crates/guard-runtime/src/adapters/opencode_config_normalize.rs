@@ -262,6 +262,7 @@ fn verified_binding<'a>(name: &'a str, entry: &'a Entry, place: &Place<'_>) -> O
     let command = single("--command")?;
     let args = options.get("--arg").cloned().unwrap_or_default();
     let identifier = server_identifier(
+        "opencode",
         native_name,
         place.scope,
         command,

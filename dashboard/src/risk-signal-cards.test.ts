@@ -182,6 +182,20 @@ assert(
   })[0].includes("lifecycle hook"),
   "P05: lifecycle-hook context copy explains why reuse is limited"
 );
+{
+  const [message] = packageExecutionContextMessages({
+    ...packageContext,
+    portable: false,
+    non_portable_reason: "package_manager_launch_identity_unavailable",
+    changed_components: [],
+  });
+  assert(
+    !message.includes("limited to one retry") &&
+      message.includes("not even for one retry") &&
+      message.includes("NODE_OPTIONS"),
+    "P05: an unpinned package manager launch says no approval can be reused and names the usual cause"
+  );
+}
 
 const multiSkillRequest: GuardApprovalRequest = {
   ...BASE_REQUEST,

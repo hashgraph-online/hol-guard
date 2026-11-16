@@ -363,6 +363,12 @@ enum Fetched {
 /// so the managed policy validates every destination and the exact hop limit
 /// the resident asked for is enforced here.
 fn fetch(need: &EgressNeedV1, policy: &dyn EgressPolicy) -> Fetched {
+    fetch_within(need, policy, MAX_EXCHANGE_SECONDS)
+}
+
+/// [`fetch`] with the wall-clock cap `cap_seconds` in place of
+/// [`MAX_EXCHANGE_SECONDS`].
+fn fetch_within(need: &EgressNeedV1, policy: &dyn EgressPolicy, cap_seconds: f64) -> Fetched {
     let mut url = need.url.clone();
     let body = need.body.as_ref().map(|text| text.as_bytes().to_vec());
     let budget = redirect_budget(
@@ -371,7 +377,7 @@ fn fetch(need: &EgressNeedV1, policy: &dyn EgressPolicy) -> Fetched {
         &need.headers,
         need.max_redirects,
     );
-    let deadline = Instant::now() + Duration::from_secs_f64(MAX_EXCHANGE_SECONDS);
+    let deadline = Instant::now() + Duration::from_secs_f64(cap_seconds);
     let origin = origin_of(&url);
     let mut hops = 0u32;
     loop {
@@ -388,7 +394,7 @@ fn fetch(need: &EgressNeedV1, policy: &dyn EgressPolicy) -> Fetched {
             need,
             &url,
             body.clone(),
-            deadline,
+            (deadline, cap_seconds),
             cross_origin,
             &policy.proxy(&url),
             &policy.trust(),
@@ -463,7 +469,7 @@ fn exchange(
     need: &EgressNeedV1,
     url: &str,
     body: Option<Vec<u8>>,
-    deadline: Instant,
+    (deadline, cap_seconds): (Instant, f64),
     cross_origin: bool,
     proxy: &EgressProxy,
     trust: &EgressTrust,
@@ -472,7 +478,7 @@ fn exchange(
     if remaining.is_zero() {
         return Err(Box::new(EgressOutcomeV1::Timeout));
     }
-    let per_read = Duration::from_secs_f64(per_read_seconds(need.timeout_seconds));
+    let per_read = Duration::from_secs_f64(per_read_seconds(need.timeout_seconds, cap_seconds));
     let builder = ureq::config::Config::builder()
         .timeout_global(Some(remaining))
         .timeout_connect(Some(per_read.min(remaining)))
@@ -519,11 +525,14 @@ fn exchange(
         }
         builder = builder.header(name.as_str(), value.as_str());
     }
-    let request = builder
-        .body(body.unwrap_or_default())
-        .map_err(|_| Box::new(error_outcome("request")))?;
-    let mut response = agent
-        .run(request)
+    // A request without a body carries no `Content-Length`, as Python's
+    // urllib sends it; some origins refuse a GET that names a zero length.
+    let sent = match body {
+        Some(body) => builder.body(body).map(|request| agent.run(request)),
+        None => builder.body(()).map(|request| agent.run(request)),
+    };
+    let mut response = sent
+        .map_err(|_| Box::new(error_outcome("request")))?
         .map_err(|error| Box::new(map_error(error)))?;
     let status = response.status().as_u16();
     let mut headers = BTreeMap::new();
@@ -660,11 +669,117 @@ fn carries_across_origins(name: &str) -> bool {
 /// asked for, never widened, capped by the wall-clock bound. A value that is
 /// not a usable duration falls back to that cap, which the deadline in
 /// [`fetch`] still bounds.
-fn per_read_seconds(requested: f64) -> f64 {
+fn per_read_seconds(requested: f64, cap_seconds: f64) -> f64 {
     if requested.is_finite() && requested > 0.0 {
-        requested.min(MAX_EXCHANGE_SECONDS)
+        requested.min(cap_seconds)
     } else {
-        MAX_EXCHANGE_SECONDS
+        cap_seconds
+    }
+}
+
+/// One credential-free GET the caller makes for itself rather than for the
+/// resident, under `policy`: every hop is screened, at most `max_redirects`
+/// are followed, the whole exchange takes at most `seconds`, and a body over
+/// `max_bytes` is an error. `Ok` carries any status with its body.
+pub fn policy_get(
+    url: &str,
+    headers: BTreeMap<String, String>,
+    seconds: f64,
+    max_redirects: u32,
+    max_bytes: u64,
+    policy: &dyn EgressPolicy,
+) -> Result<(u16, Vec<u8>), Box<EgressOutcomeV1>> {
+    let need = EgressNeedV1 {
+        class: "registry".to_owned(),
+        method: "GET".to_owned(),
+        url: url.to_owned(),
+        headers,
+        body: None,
+        body_sha256: String::new(),
+        occurrence: 1,
+        timeout_seconds: seconds,
+        max_redirects,
+        max_response_bytes: max_bytes,
+        delay_seconds: 0.0,
+        inspect: None,
+    };
+    match fetch_within(&need, policy, seconds) {
+        Fetched::Outcome(outcome) => Err(Box::new(outcome)),
+        Fetched::Response { body, .. } if body.len() as u64 > max_bytes => {
+            Err(Box::new(error_outcome("response too large")))
+        }
+        Fetched::Response { status, body, .. } => Ok((status, body)),
+    }
+}
+
+/// The status, lowercased response headers and body of one exchange.
+pub type PolicyExchange = (u16, BTreeMap<String, String>, Vec<u8>);
+
+/// [`policy_get`] that also hands back the final response's headers, their
+/// names lowercased, for a caller that revalidates what it cached.
+pub fn policy_get_with_headers(
+    url: &str,
+    headers: BTreeMap<String, String>,
+    seconds: f64,
+    max_redirects: u32,
+    max_bytes: u64,
+    policy: &dyn EgressPolicy,
+) -> Result<PolicyExchange, Box<EgressOutcomeV1>> {
+    policy_send(
+        "GET",
+        url,
+        headers,
+        None,
+        seconds,
+        max_redirects,
+        max_bytes,
+        policy,
+    )
+}
+
+/// One policy-screened exchange with any method and an optional UTF-8 body:
+/// the status, the lowercased response headers and the body, whatever the
+/// status.
+#[allow(clippy::too_many_arguments)]
+pub fn policy_send(
+    method: &str,
+    url: &str,
+    headers: BTreeMap<String, String>,
+    body: Option<String>,
+    seconds: f64,
+    max_redirects: u32,
+    max_bytes: u64,
+    policy: &dyn EgressPolicy,
+) -> Result<PolicyExchange, Box<EgressOutcomeV1>> {
+    use sha2::{Digest, Sha256};
+    let body_sha256 = body
+        .as_ref()
+        .map(|text| hex::encode(Sha256::digest(text.as_bytes())))
+        .unwrap_or_default();
+    let need = EgressNeedV1 {
+        class: "registry".to_owned(),
+        method: method.to_owned(),
+        url: url.to_owned(),
+        headers,
+        body,
+        body_sha256,
+        occurrence: 1,
+        timeout_seconds: seconds,
+        max_redirects,
+        max_response_bytes: max_bytes,
+        delay_seconds: 0.0,
+        inspect: None,
+    };
+    match fetch_within(&need, policy, seconds) {
+        Fetched::Outcome(outcome) => Err(Box::new(outcome)),
+        Fetched::Response { body, .. } if body.len() as u64 > max_bytes => {
+            Err(Box::new(error_outcome("response too large")))
+        }
+        Fetched::Response {
+            status,
+            headers,
+            body,
+        } => Ok((status, headers, body)),
     }
 }
 

@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import store_mcp_provider_catalog
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.runtime.composio_discovery import ComposioActionSchema
 from codex_plugin_scanner.guard.runtime.mcp_classification import McpClassificationUnavailableError
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool

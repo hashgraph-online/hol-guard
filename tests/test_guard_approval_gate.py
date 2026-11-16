@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from rich.console import Console
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import (
@@ -40,7 +41,6 @@ from codex_plugin_scanner.guard.cli.commands import run_guard_command
 from codex_plugin_scanner.guard.cli.commands_support_permission_store import _write_claude_native_permission_plan
 from codex_plugin_scanner.guard.config import editable_guard_settings, load_guard_config, reset_guard_settings
 from codex_plugin_scanner.guard.consumer.service import record_policy
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.mcp_tool_calls import allow_tool_call
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult

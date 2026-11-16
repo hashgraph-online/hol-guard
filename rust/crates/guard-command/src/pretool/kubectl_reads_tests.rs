@@ -1,4 +1,6 @@
-use super::{safe_export_segment, safe_kubectl_segment};
+use super::{
+    output_template_positions, safe_export_segment, safe_kubectl_segment, without_output_templates,
+};
 use crate::pretool::PathContext;
 
 fn model(command: &str) -> crate::CanonicalCommandV1 {
@@ -289,5 +291,53 @@ mod files {
         ] {
             assert!(!proven(&command), "{command}");
         }
+    }
+}
+
+/// The text a sensitive-location screen reads for `command`, with every
+/// `kubectl` output template set aside.
+fn without_templates(command: &str) -> Option<String> {
+    let model = model(command);
+    let segment = model.segments.first()?;
+    let positions = output_template_positions(segment);
+    (!positions.is_empty()).then(|| without_output_templates(segment, &positions))
+}
+
+#[test]
+fn an_output_template_is_set_aside_in_either_spelling() {
+    for command in [
+        "kubectl get deploy api -o jsonpath='{.spec.template.spec.containers[0].env[*].name}'",
+        "kubectl get deploy api -o=jsonpath='{.spec.template.spec.containers[0].env[*].name}'",
+        "kubectl get deploy api --output=jsonpath='{.spec.template.spec.containers[0].env[*].name}'",
+        "kubectl get deploy api -o jsonpath-as-json='{.spec.template.spec.containers[0].env}'",
+        "kubectl get deploy api -o custom-columns=ENV:.spec.template.spec.containers[0].env[0].name",
+        "kubectl get deploy api -o go-template='{{range .spec.template.spec.containers}}{{.env}}{{end}}'",
+    ] {
+        let rest = without_templates(command).unwrap_or_else(|| panic!("{command}"));
+        assert!(!rest.contains(".env"), "{command}: {rest}");
+        assert!(rest.starts_with("kubectl get deploy api"), "{command}: {rest}");
+    }
+}
+
+#[test]
+fn only_a_template_that_cannot_spell_a_path_or_a_credential_is_set_aside() {
+    for command in [
+        // Not a template format, so not a selector over the fetched object.
+        "kubectl get deploy api -o yaml",
+        "kubectl get deploy api -o json",
+        "kubectl get deploy api -o wide",
+        // A `*-file` spelling reads a local file, so its value is a path.
+        "kubectl get deploy api -o custom-columns-file=./columns.txt",
+        "kubectl get deploy api -o go-template-file=./template.tpl",
+        // A template holding a path separator or an expansion keeps its words.
+        "kubectl get deploy api -o jsonpath='{.metadata.annotations.kubernetes\\.io/x}'",
+        // A selector asking for a credential says what the command is for.
+        "kubectl get deploy api -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name==\"PASSWORD\")].value}'",
+        // An empty template selects nothing and sheds nothing.
+        "kubectl get deploy api -o jsonpath=",
+        // Another program's option of the same name is not kubectl's.
+        "helm template api -o jsonpath='{.env}'",
+    ] {
+        assert!(without_templates(command).is_none(), "{command}");
     }
 }

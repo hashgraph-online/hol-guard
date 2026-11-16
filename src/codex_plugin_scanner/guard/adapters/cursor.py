@@ -46,7 +46,7 @@ from .mcp_servers import (
     proxy_launcher_entry,
     skipped_stdio_server_names,
 )
-from .state_files import load_backup_payload
+from .state_files import restore_from_backup
 
 
 class CursorHarnessAdapter(HarnessAdapter):
@@ -453,18 +453,9 @@ class CursorHarnessAdapter(HarnessAdapter):
         _ensure_path_within_root(context.home_dir, target_path, label="Cursor editor")
         _ensure_path_within_root(context.guard_home, backup_path, label="Cursor backup")
         _ensure_path_within_root(context.guard_home, state_path, label="Cursor state")
-        backup_payload = self._backup_payload(backup_path)
-        restored = False
-        if backup_payload["readable"] is True:
-            if backup_payload["existed"] and isinstance(backup_payload["content"], str):
-                target_path.parent.mkdir(parents=True, exist_ok=True)
-                target_path.write_text(str(backup_payload["content"]), encoding="utf-8")
-                restored = True
-            elif backup_payload["existed"] is not True and target_path.is_file():
-                target_path.unlink()
-                restored = True
-            elif backup_payload["existed"] is not True:
-                restored = True
+        restored = restore_from_backup(
+            backup_path, target_path, write=lambda path, text: path.write_text(text, encoding="utf-8")
+        )
         if restored and backup_path.is_file():
             backup_path.unlink()
         if restored and state_path.is_file():
@@ -651,5 +642,3 @@ class CursorHarnessAdapter(HarnessAdapter):
             "managed_mcp_origin": tuple(origin),
             "managed_guard_home": str(context.guard_home),
         }
-
-    _backup_payload = staticmethod(load_backup_payload)

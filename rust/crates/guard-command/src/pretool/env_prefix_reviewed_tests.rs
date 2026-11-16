@@ -61,3 +61,17 @@ fn an_option_leader_or_an_overlong_value_is_not_data() {
     assert!(!plain_data("DEBUG", "-app:*"));
     assert!(!plain_data("DEBUG", &"a".repeat(super::MAX_DATA_CHARS + 1)));
 }
+
+/// A port number a run may carry is data the contained launcher drops; any
+/// other value under an endpoint-steering name decides whose server answers,
+/// so it keeps its review however plain its characters look.
+#[cfg(unix)]
+#[test]
+fn only_a_real_port_number_is_data_under_an_endpoint_name() {
+    assert!(plain_data("PORT", "3000"));
+    assert!(plain_data("POSTGRES_PORT", "55477"));
+    assert!(!plain_data("PORT", "99999"));
+    assert!(!plain_data("PORT", "db.example.test:5432"));
+    assert!(!plain_data("PGHOST", "db.example.test"));
+    assert!(!plain_data("NPM_CONFIG_REGISTRY", "https:"));
+}

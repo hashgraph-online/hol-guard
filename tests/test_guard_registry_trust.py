@@ -106,6 +106,23 @@ def test_lookup_is_skipped_for_unscored_kinds_and_when_disabled(
     assert opener.requests == []
 
 
+def test_no_native_runtime_means_no_score_and_no_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", lambda *_args, **_kwargs: None)
+    opener = _Opener(_plugins(("acme/helper", "Helper", 10)))
+
+    assert registry_trust_score(tmp_path, artifact_type="plugin", name="helper", opener=opener) is None
+    assert opener.requests == []
+
+
+def test_an_oversized_reply_is_not_an_answer(tmp_path: Path) -> None:
+    padded = json.dumps(_plugins(("acme/helper", "Helper", 10))).ljust(registry_trust.MAX_TRUST_RESPONSE_BYTES + 1)
+    opener = _Opener()
+    opener.open = lambda request, timeout: _Response(padded.encode("utf-8"))  # type: ignore[method-assign]
+
+    assert registry_trust_score(tmp_path, artifact_type="plugin", name="helper", opener=opener, now=10) is None
+    assert (tmp_path / registry_trust.CACHE_FILE_NAME).exists()
+
+
 def _artifact(artifact_type: str = "plugin") -> GuardArtifact:
     return GuardArtifact(
         artifact_id=f"codex:global:{artifact_type}:helper",

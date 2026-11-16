@@ -92,8 +92,8 @@ def test_parse_package_intent_treats_pip3_as_pip_install(tmp_path: Path) -> None
 
 
 def test_package_shim_test_requires_approval_gate_when_enabled(tmp_path: Path) -> None:
+    from ci.guard_daemon_harness import GuardDaemonServer
     from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
     from codex_plugin_scanner.guard.store import GuardStore
     from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_json_response, _request
 

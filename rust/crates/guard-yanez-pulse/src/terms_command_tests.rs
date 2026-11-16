@@ -65,8 +65,10 @@ fn a_long_command_is_cut_at_its_own_limit() {
     let shown = row(&terms, "Command").unwrap()["value"].as_str().unwrap();
     assert_eq!(shown.chars().count(), MAX_COMMAND_CHARS);
     assert!(shown.ends_with('…'));
-    assert!(MAX_COMMAND_CHARS > MAX_SUMMARY_VALUE_CHARS);
 }
+
+// The command gets more room than the other rows.
+const _: () = assert!(MAX_COMMAND_CHARS > MAX_SUMMARY_VALUE_CHARS);
 
 #[test]
 fn a_command_is_one_line_without_hidden_characters() {

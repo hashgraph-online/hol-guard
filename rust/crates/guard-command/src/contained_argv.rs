@@ -959,6 +959,11 @@ fn invalid_vitest<T>() -> Result<T, RestrictedPytestError> {
 /// own answer: a trailing group's command list, an activation's target, or
 /// both. A sink that plans the call again has to plan the text the pre-tool
 /// pass answered for, or it refuses the work that answer already admitted.
+///
+/// A bounded inline shell whose script is one command, such as
+/// `bash -ec 'pytest -q'`, is read as that command, because it is what the
+/// review read. The caller re-authorizes the projected text on its own, so a
+/// command the review would not contain still gets refused there.
 fn contained_target(input: &Value) -> Value {
     let text = input
         .get("text")
@@ -969,7 +974,9 @@ fn contained_target(input: &Value) -> Value {
         cwd: input.get("cwd").and_then(Value::as_str),
         ..Default::default()
     };
-    crate::pretool::generic::contained_target(text, context).map_or(Value::Null, Value::String)
+    crate::pretool::generic::contained_target(text, context)
+        .or_else(|| crate::contained_inline_target::inline_shell_target(text))
+        .map_or(Value::Null, Value::String)
 }
 
 /// The words a manifest script spells, read with the lexer that reads it in
@@ -1091,6 +1098,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             | "node_tool_route"
             | "pytest_command"
             | "package_test_resolve"
+            | "planned_route_argv"
     ) {
         return None;
     }
@@ -1113,6 +1121,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         "contained_kind" => contained_kind(&command),
         "node_tool_route" => crate::contained_node_tool::route_request(input, &command),
         "pytest_command" => Ok(json!(crate::pytest_argv::command_targets_pytest(&command))),
+        "planned_route_argv" => Ok(json!(planned_route_argv(&command))),
         "package_test_resolve" => crate::contained_package_test::resolve(
             &command,
             input.get("scripts").and_then(Value::as_object),
@@ -1145,6 +1154,18 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         Ok(value) => json!({"value":value}),
         Err(error) => crate::restricted_command::error_reply(error),
     })
+}
+
+/// The argv a contained sink re-authorizes for a planned command. Only Unix
+/// plans contained runs; elsewhere a plan never rewrites the caller's argv.
+#[cfg(unix)]
+fn planned_route_argv(command: &[String]) -> Vec<String> {
+    crate::restricted_pytest::planned_route_argv(command)
+}
+
+#[cfg(not(unix))]
+fn planned_route_argv(command: &[String]) -> Vec<String> {
+    command.to_vec()
 }
 
 fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {

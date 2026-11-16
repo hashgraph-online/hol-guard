@@ -77,7 +77,7 @@ ARBITRARY_STDOUT_FULL_ALLOW_BYTES = 256 * 1024  # Max arbitrary stdout for full 
 
 ## Integration Points
 
-- **Daemon**: `daemon/server.py` `_handle_runtime_hook()` dispatches supported
+- **Daemon**: `routes/request_handler.py` `_handle_runtime_hook()` dispatches supported
   events through the native worker or returns a fail-safe result.
 - **CLI**: `cli/commands_hook_native_authority.py` sends complete
   PreToolUse/PostToolUse envelopes to the native worker. Source-ref evaluation

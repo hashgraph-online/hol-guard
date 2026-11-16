@@ -261,3 +261,7 @@ b6926bac2ef58d0794d1df6e2bb9ee401d8ac18b:tests/test_guard_runtime.py:generic-api
 486624632b8665166ff84788ff8e976bfa71791f:tests/test_guard_connect_cloud_actions.py:generic-api-key:71
 # Synthetic sk- key in the inventory description redaction vectors, not a credential.
 029f6e816d3bfda39fc459be662433da45d922b0:rust/crates/guard-runtime/testdata/inventory_item_description/description_vectors.json:generic-api-key:787
+# Resume handle variable in the daemon edge session writes, renamed in a follow-up commit; not a credential.
+a3d54c9b6298f3905bfb176744259c771d72364c:rust/crates/guard-runtime/src/daemon_edge_sessions.rs:generic-api-key:270
+# Hook key variable in the Codex hook repair request, renamed in a follow-up commit; not a credential.
+812a4ae4cfb328a2044b47ad03630cbb51e30e20:src/codex_plugin_scanner/guard/codex_hook_repair_request.py:generic-api-key:213

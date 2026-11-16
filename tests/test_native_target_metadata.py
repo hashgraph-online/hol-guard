@@ -9,8 +9,8 @@ import pytest
 
 from codex_plugin_scanner.guard.catalog_delivery import activation_store, preparation_authority, transport
 from codex_plugin_scanner.guard.catalog_delivery.located_store import LocatedStore
-from codex_plugin_scanner.guard.daemon import extension_control_targets as targets
 from codex_plugin_scanner.guard.extension_builder import native_source_compiler
+from codex_plugin_scanner.guard.extension_controls import extension_control_targets as targets
 from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
 from tests.delivery_scripts import script
 from tests.test_native_pack_preparation import (
@@ -185,8 +185,8 @@ def test_authenticated_catalog_shape_and_agreement_errors(delivery, tmp_path, mo
 
 
 def test_existing_daemon_retains_inactive_permission_deny(delivery, tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.daemon import extension_control_prepared as candidates
-    from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
+    from codex_plugin_scanner.guard.extension_controls import extension_control_prepared as candidates
+    from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
     from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
     from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
     from tests.guard_extension_control_authority_fixtures import _PASSWORD
@@ -220,7 +220,7 @@ def test_existing_daemon_retains_inactive_permission_deny(delivery, tmp_path, mo
         ],
     )
     # Corrupt target metadata must retain the existing API's 503 boundary.
-    from codex_plugin_scanner.guard.daemon.extension_control_errors import ExtensionControlApiError
+    from codex_plugin_scanner.guard.extension_controls.extension_control_errors import ExtensionControlApiError
 
     directory = activation_store.prepare_directory_for_store(store)
     reader = LocatedStore(directory / "objects", fetch=installed.fetch)

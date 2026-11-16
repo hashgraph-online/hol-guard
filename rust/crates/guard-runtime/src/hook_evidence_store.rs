@@ -398,6 +398,32 @@ impl EvidenceStoreApi for NativeEvidenceStore {
         Ok(())
     }
 
+    fn record_guard_event(
+        &self,
+        event_name: &str,
+        payload: &Map<String, Value>,
+        occurred_at: &str,
+    ) -> Result<(), io::Error> {
+        // `GuardStore.add_event` stores the payload as `json.dumps` writes it.
+        let payload_json = crate::guard_store_json::dumps_default(&Value::Object(payload.clone()))
+            .ok_or_else(|| io::Error::other("guard event payload is not encodable"))?;
+        let mut args = Map::new();
+        args.insert(
+            "event_name".to_owned(),
+            Value::String(event_name.to_owned()),
+        );
+        args.insert("payload_json".to_owned(), Value::String(payload_json));
+        args.insert(
+            "occurred_at".to_owned(),
+            Value::String(occurred_at.to_owned()),
+        );
+        // The writer replays its journal after a crash, which can hold an
+        // event the store already saved.
+        args.insert("once".to_owned(), Value::Bool(true));
+        self.call("hook-evidence-guard-event", "add_event", args)?;
+        Ok(())
+    }
+
     fn record_native_decision_receipt(
         &self,
         receipt: &Map<String, Value>,

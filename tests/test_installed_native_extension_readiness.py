@@ -10,8 +10,8 @@ from typing import cast
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from ci.native_runtime import probe_installed_native_extensions as probe
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 
 
 @pytest.mark.parametrize(("publish_timeout", "expected_deadline"), [(2.0, 109.0), (8.0, 109.0)])

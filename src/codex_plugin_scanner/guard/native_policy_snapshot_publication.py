@@ -33,6 +33,7 @@ from .native_policy_snapshot_harness_postures import (
     write_harness_postures_sidecar,
 )
 from .native_policy_snapshot_reconcile import reconcile_policy_inputs
+from .native_process_stop_scope import native_process_stop_scope
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -47,6 +48,10 @@ def _publisher_api():
 
 
 class NativePolicySnapshotPublicationMixin:
+    @property
+    def _closed(self) -> bool:
+        return cast("NativePolicySnapshotPublisher", self)._close_event.is_set()
+
     def _run(self) -> None:
         publisher = cast("NativePolicySnapshotPublisher", self)
         # ContextVar bindings from the starting thread do not propagate here;
@@ -54,6 +59,10 @@ class NativePolicySnapshotPublicationMixin:
         from .native_context import bind_context_digest_home
 
         bind_context_digest_home(publisher.guard_home)
+        with native_process_stop_scope(publisher._close_event):
+            self._run_until_closed(publisher)
+
+    def _run_until_closed(self, publisher: NativePolicySnapshotPublisher) -> None:
         while True:
             with publisher._condition:
                 if publisher._closed:

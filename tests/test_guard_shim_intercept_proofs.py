@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import shims as shims_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES
 from codex_plugin_scanner.guard.native_shim_admin import probe_package_shim_intercepts as _probe_entry
 from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts

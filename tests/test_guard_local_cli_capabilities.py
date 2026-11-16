@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.approval_gate import update_settings
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.sqlite_recovery import salvage_quarantined_state
 from codex_plugin_scanner.guard.store import GuardStore
@@ -38,7 +38,7 @@ def _identity(identity_hash: str = "a" * 64) -> UnlistedCliIdentity:
 def _service(tmp_path: Path, monkeypatch, *, surface: str = "cli") -> tuple[GuardStore, LocalCliApiService]:
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home", staticmethod(lambda: home))
     store = GuardStore(home)
     store.record_local_cli_observation(_identity(), seen_at=_SEEN, surface=surface)
     update_settings(
@@ -229,8 +229,7 @@ def test_only_the_authority_apply_writes_capabilities() -> None:
         for verb in ("insert into", "insert or", "update", "replace into"):
             if f"{verb} local_cli_grant_capability" in text:
                 writers.add(path.name)
-    assert writers == {"store_local_cli_capabilities.py"}
-    assert _calls("write_local_cli_capabilities") == {"store_custom_extension_continuity.py"}
+    assert writers == {"guard_store_continuity_choices.rs"}
     # The store forwards its own parameter; only the local mutation recorder sets it.
     assert _calls("capability_updates") == {
         "runtime/custom_extension_continuity.py",
@@ -238,4 +237,4 @@ def test_only_the_authority_apply_writes_capabilities() -> None:
     }
     callers = _calls("record_local_custom_extension_mutation") - {"runtime/custom_extension_continuity.py"}
     with_capabilities = {path for path in callers if "capabilities=" in (_SRC / path).read_text(encoding="utf-8")}
-    assert with_capabilities == {"daemon/local_cli_api.py"}
+    assert with_capabilities == {"local_clis/local_cli_api.py"}

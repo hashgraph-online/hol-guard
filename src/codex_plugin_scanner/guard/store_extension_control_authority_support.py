@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import sqlite3
 import sys
 from collections.abc import Generator
@@ -16,8 +17,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Final, cast
 
-from .edge_events import build_policy_event
-from .extension_control_events import extension_control_change_payload
 from .native_extension_control import NativeExtensionControlError, compose_control_layers
 from .native_extension_control_authority import anchor_from_wire
 from .runtime.extension_control_authority import (
@@ -25,7 +24,6 @@ from .runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
-    layers_from_json,
 )
 from .runtime.extension_control_contract import (
     ControlLayerKind,
@@ -37,8 +35,9 @@ from .store_base import (
     SecretStore,
     SystemKeyringSecretStore,
 )
-from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
+from .store_extension_control_authority_schema import require_compatible_extension_control_schema
 
+_LOGGER = logging.getLogger(__name__)
 _KEY_REF_SUFFIX = ":authentication-key"
 _ANCHOR_REF_SUFFIX = ":anchor"
 _MAX_TRANSITION_ID_LENGTH = 256
@@ -95,7 +94,7 @@ class _ExtensionControlAuthoritySupportMixin:
 
     def _require_compatible_extension_control_schema(self) -> None:
         with self._connect() as connection:
-            ensure_extension_control_authority_schema(connection)
+            require_compatible_extension_control_schema(connection)
 
     def read_persisted_extension_control_authority(self) -> ExtensionControlAuthorityView:
         """Read the authenticated authority using its persisted catalog identity."""
@@ -151,21 +150,22 @@ class _ExtensionControlAuthoritySupportMixin:
         return anchor_from_wire(reply.get("anchor"))
 
     def _write_and_verify_anchor(self, anchor: AuthorityAnchor, *, key: bytes) -> None:
-        sealed = self._extension_control_authority_op(
-            "seal_anchor",
+        """Have the resident write an anchor the store has earned, then mirror it."""
+
+        reply = self._extension_control_authority_op(
+            "write_anchor",
             key=key,
+            anchor_json=self._read_anchor_json(),
             revision=anchor.revision,
             snapshot_digest=anchor.snapshot_digest,
             phase=anchor.phase.value,
-        ).get("anchor_json")
+        )
+        sealed = reply.get("anchor_json")
         if not isinstance(sealed, str):
             raise ExtensionControlAuthorityError("invalid extension control anchor seal")
-        encoded = sealed
-        self._secret_store().set_secret(self._anchor_ref(), encoded)
-        observed = self._secret_store().get_secret(self._anchor_ref())
-        if observed != encoded:
-            raise ExtensionControlAuthorityError("extension control anchor read-back mismatch")
-        self._export_last_good_authority(anchor)
+        self._mirror_resident_anchor(sealed)
+        if reply.get("last_good_exported") is False:
+            _LOGGER.warning("Guard could not refresh the extension-control last-good export.")
 
     def _secret_store(self) -> SecretStore:
         current = self._extension_control_authority_secret_store
@@ -191,7 +191,7 @@ class _ExtensionControlAuthoritySupportMixin:
         if sys.platform != "darwin":
             return False
         with self._connect() as connection:
-            ensure_extension_control_authority_schema(connection)
+            require_compatible_extension_control_schema(connection)
             snapshot_exists = (
                 connection.execute("select 1 from extension_control_authority_snapshot where singleton = 1").fetchone()
                 is not None
@@ -283,31 +283,6 @@ class _ExtensionControlAuthoritySupportMixin:
         if len(layers_json.encode("utf-8")) > _MAX_SERIALIZED_LAYERS_BYTES:
             raise ExtensionControlAuthorityError("extension control layers exceed storage limit")
 
-    def _queue_extension_control_change_event(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        revision: int,
-        previous_revision: int,
-        layers_json: str,
-        occurred_at: str,
-    ) -> None:
-        layers = layers_from_json(layers_json)
-        self._add_guard_event_v1(
-            connection,
-            build_policy_event(
-                policy_key=f"extension-controls:{revision}",
-                occurred_at=occurred_at,
-                device_id=None,
-                workspace_id=self._cloud_workspace_id_from_connection(connection),
-                payload=extension_control_change_payload(
-                    revision=revision,
-                    previous_revision=previous_revision,
-                    layers=layers,
-                ),
-            ),
-        )
-
     def _degraded_view(self, catalog_digest: str) -> ExtensionControlAuthorityView:
         health = (
             AuthorityHealth.DEGRADED_ACKNOWLEDGED
@@ -360,27 +335,8 @@ def _plan_int(plan: dict[str, object], name: str) -> int:
     return value
 
 
-def _plan_pack_digest(plan: dict[str, object]) -> str | None:
-    """The command-pack record digest the resident found the transition binds."""
-
-    value = plan.get("command_pack_record_digest")
-    if value is not None and not isinstance(value, str):
-        raise ExtensionControlAuthorityError("invalid extension control authority plan")
-    return value
-
-
 def _plan_map(plan: dict[str, object], name: str) -> dict[str, object]:
     value = plan.get(name)
     if not isinstance(value, dict):
         raise ExtensionControlAuthorityError("invalid extension control authority plan")
     return cast(dict[str, object], value)
-
-
-def _plan_record(plan: dict[str, object], name: str) -> tuple[str, str, str]:
-    """The ``json``, ``digest`` and ``mac`` of a record the resident sealed."""
-
-    record = _plan_map(plan, name)
-    sealed = (record.get("json"), record.get("digest"), record.get("mac"))
-    if not all(isinstance(part, str) for part in sealed):
-        raise ExtensionControlAuthorityError("invalid extension control authority plan")
-    return cast(tuple[str, str, str], sealed)

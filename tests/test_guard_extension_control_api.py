@@ -12,9 +12,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import extension_control_api as extension_control_api_module
-from codex_plugin_scanner.guard.daemon import managed_controls_api as managed_controls_api_module
-from codex_plugin_scanner.guard.daemon.extension_control_api import (
+from codex_plugin_scanner.guard.extension_controls import extension_control_api as extension_control_api_module
+from codex_plugin_scanner.guard.extension_controls import managed_controls_api as managed_controls_api_module
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import (
     ExtensionControlApiError,
     ExtensionControlApiService,
 )

@@ -13,7 +13,6 @@
 //! manifests itself, composes the action, builds the approval identity and
 //! returns the token; callers never recompute any of it.
 
-use guard_command::action_lattice::most_restrictive_guard_action;
 use guard_command::effect_decision::GuardAction;
 use guard_command::launch_identity::package_request_launch_identity_material;
 use guard_command::local_supply_chain::stable_digest_hex;
@@ -22,6 +21,7 @@ use guard_command::package_execution_context::{
     PackageExecutionContext, PackageExecutionContextComponent, PACKAGE_EXECUTION_CONTEXT_VERSION,
 };
 use guard_command::package_intent_common::resolve_path_within_workspace;
+use guard_command::package_manifest_sections::install_section_bytes;
 use guard_command::supply_chain_package_eval::LOCKFILE_PARSER_VERSION;
 use guard_contracts::{
     ContextDigestComponentsV1, PackageApprovalHashRequestV1, SupplyChainEvalResultV1,
@@ -30,13 +30,14 @@ use guard_contracts::{
 use serde_json::{json, Map, Value};
 use std::path::Path;
 
+use crate::package_approval_action::{compose_current_action, hashed_action};
 use crate::package_authority_op::request_digest;
 
 fn invalid() -> String {
     "native_package_approval_hash_invalid".to_owned()
 }
 
-fn field<'a>(map: &'a Value, key: &str) -> &'a Value {
+pub(crate) fn field<'a>(map: &'a Value, key: &str) -> &'a Value {
     map.get(key).unwrap_or(&Value::Null)
 }
 
@@ -103,24 +104,6 @@ fn resolve_config_policy(
     .ok_or_else(invalid)
 }
 
-/// `most_restrictive_guard_action(policy_action, additional?, config actions…)`.
-fn compose_current_action(
-    request: &PackageApprovalHashRequestV1,
-    config_policy: &Value,
-) -> GuardAction {
-    let mut actions = vec![field(&request.evaluation, "policy_action").clone()];
-    if let Some(additional) = request.additional_current_action.as_ref() {
-        actions.push(additional.clone());
-    }
-    for key in ["effective_package_script_action", "resolved_override"] {
-        let action = field(config_policy, key);
-        if !action.is_null() {
-            actions.push(action.clone());
-        }
-    }
-    most_restrictive_guard_action(&actions, GuardAction::Block)
-}
-
 fn string_items(value: &Value) -> Vec<String> {
     value
         .as_array()
@@ -144,6 +127,27 @@ fn hash_existing_paths(workspace: &Path, relative_paths: &[String]) -> Vec<Value
             }
             let payload = std::fs::read(resolved).ok()?;
             Some(Value::String(stable_digest_hex(&payload)))
+        })
+        .collect()
+}
+
+/// Manifests bind only what decides an install: a release version bump or a
+/// new `dev` script in `package.json` must not lapse a saved approval while
+/// the lockfile holds. A manifest that does not parse binds its bytes.
+fn hash_existing_manifests(workspace: &Path, relative_paths: &[String]) -> Vec<Value> {
+    relative_paths
+        .iter()
+        .filter_map(|relative| {
+            let resolved = resolve_path_within_workspace(workspace, relative)?;
+            if !resolved.is_file() {
+                return None;
+            }
+            let payload = std::fs::read(resolved).ok()?;
+            let digest = match install_section_bytes(relative, &payload) {
+                Some(sections) => stable_digest_hex(sections.as_bytes()),
+                None => stable_digest_hex(&payload),
+            };
+            Some(Value::String(digest))
         })
         .collect()
 }
@@ -345,7 +349,7 @@ fn artifact_hash(
         content.insert("lockfile_paths".to_owned(), json!(lockfile_paths));
         content.insert(
             "manifest_hashes".to_owned(),
-            Value::Array(hash_existing_paths(workspace, &manifest_paths)),
+            Value::Array(hash_existing_manifests(workspace, &manifest_paths)),
         );
         content.insert(
             "lockfile_hashes".to_owned(),
@@ -409,7 +413,11 @@ pub(crate) fn package_current_action_and_hash(
     }
     let config_policy = resolve_config_policy(request, PolicySource::InProcess)?;
     let current_action = compose_current_action(request, &config_policy);
-    let artifact_hash = artifact_hash(request, &config_policy, current_action)?;
+    let artifact_hash = artifact_hash(
+        request,
+        &config_policy,
+        hashed_action(request, &config_policy),
+    )?;
     Ok((current_action, artifact_hash))
 }
 
@@ -436,7 +444,11 @@ pub(crate) fn evaluate_package_approval_hash(
         "artifact_hash" => {
             payload.insert(
                 "artifact_hash".to_owned(),
-                Value::String(artifact_hash(request, &config_policy, current_action)?),
+                Value::String(artifact_hash(
+                    request,
+                    &config_policy,
+                    hashed_action(request, &config_policy),
+                )?),
             );
         }
         _ => return Err(invalid()),

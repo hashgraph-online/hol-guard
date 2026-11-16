@@ -506,3 +506,74 @@ fn guard_run_authorized_prefixes_answers_null_when_the_set_does_not_bind() {
         "Python requires the key to be present before reading the verdict"
     );
 }
+
+/// `argv_sha256` binds the argv exactly as typed, so a reporting-only option
+/// gives the same install a different approval key. A package-manager launch
+/// therefore also carries `binding_argv_sha256`, taken over the argv with the
+/// manager's presentation options removed, and that is what the approval
+/// material binds.
+#[test]
+fn a_quiet_package_manager_spelling_binds_the_loud_argv() {
+    let identity_for = |args: &[&str], binding: bool| -> Value {
+        let request = json!({
+            "schema": CONTEXT_DIGEST_REQUEST_SCHEMA,
+            "request_id": "package-binding",
+            "kind": "runtime_launch_identity",
+            "command": "uv",
+            "args": args,
+            "structured_command": true,
+            "direct_executable": true,
+            "search_path": null,
+            "cwd": std::env::temp_dir().to_string_lossy(),
+            "home_dir": null,
+            "launch_env": {"PATH": ""},
+            "package_manager_binding": binding,
+        });
+        let bytes = serde_json::to_vec(&request).unwrap();
+        let result: Value =
+            serde_json::from_slice(&evaluate_context_digest_bytes(&bytes).unwrap()).unwrap();
+        assert_eq!(result["status"], json!("ok"));
+        result["runtime_identity"].clone()
+    };
+
+    let loud = identity_for(&["sync", "--frozen", "--extra", "dev"], true);
+    let quiet = identity_for(&["sync", "-q", "--frozen", "--extra", "dev"], true);
+    assert_ne!(
+        quiet["argv_sha256"], loud["argv_sha256"],
+        "the typed argv still binds what the runtime launches"
+    );
+    assert_eq!(
+        quiet["binding_argv_sha256"], loud["argv_sha256"],
+        "the quiet spelling must bind the approval the loud one saved"
+    );
+    assert!(
+        loud.get("binding_argv_sha256").is_none(),
+        "a launch with nothing to strip keeps exactly the binding it has today"
+    );
+
+    // `-v` is `--version` for npm, so stripping it would collapse a no-op onto
+    // a real install; and a caller that does not declare a package-manager
+    // launch never gains the second digest.
+    let npm = json!({
+        "schema": CONTEXT_DIGEST_REQUEST_SCHEMA,
+        "request_id": "package-binding",
+        "kind": "runtime_launch_identity",
+        "command": "npm",
+        "args": ["install", "-v", "lodash"],
+        "structured_command": true,
+        "direct_executable": true,
+        "search_path": null,
+        "cwd": std::env::temp_dir().to_string_lossy(),
+        "home_dir": null,
+        "launch_env": {"PATH": ""},
+        "package_manager_binding": true,
+    });
+    let npm: Value = serde_json::from_slice(
+        &evaluate_context_digest_bytes(&serde_json::to_vec(&npm).unwrap()).unwrap(),
+    )
+    .unwrap();
+    assert!(npm["runtime_identity"].get("binding_argv_sha256").is_none());
+
+    let undeclared = identity_for(&["sync", "-q", "--frozen", "--extra", "dev"], false);
+    assert!(undeclared.get("binding_argv_sha256").is_none());
+}

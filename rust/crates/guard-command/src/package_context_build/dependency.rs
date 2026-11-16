@@ -8,6 +8,7 @@ use crate::hook_adapter_value::OValue;
 
 use super::fs::{ContextFiles, Fs, ResolveError, MAX_DEPENDENCY_FILE_BYTES};
 use super::{object, string_items, string_value, text, BuildError, Built};
+use crate::package_manifest_sections::manifest_digest;
 
 fn default_dependency_paths(manager: &str, kind: &str) -> &'static [&'static str] {
     let normalized = py_strip(manager).to_lowercase();
@@ -107,7 +108,11 @@ pub(super) fn dependency_material(
             };
             match files.read(fs, &resolved, MAX_DEPENDENCY_FILE_BYTES, false) {
                 Ok(payload) => {
-                    let digest = sha256_hex(&payload);
+                    let digest = if kind == "manifest" {
+                        manifest_digest(&relative, &payload)
+                    } else {
+                        sha256_hex(&payload)
+                    };
                     entries.push(entry(kind, &relative, "digest", &digest));
                 }
                 Err(BuildError::Unavailable(reason)) => {

@@ -298,7 +298,7 @@ def test_failed_proof_reservation_preserves_grant_for_retry(tmp_path: Path) -> N
             """
         )
 
-    with pytest.raises(sqlite3.IntegrityError, match="injected proof reservation failure"):
+    with pytest.raises(RuntimeError, match="extension control authority store unavailable"):
         store.commit_extension_control_layers(
             layers,
             catalog_digest=digest,

@@ -108,7 +108,7 @@ impl PackageExecutionContext {
             "portable_summary".to_string(),
             Value::String(
                 if self.portable {
-                    "Reusable only across linked Git worktrees when every package execution input matches."
+                    "Reusable in any checkout of the same repository origin when the lockfile and every other package execution input match."
                 } else {
                     "Bound to this retry because Guard could not prove a complete portable package context."
                 }

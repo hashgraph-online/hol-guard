@@ -57,7 +57,7 @@ pub(super) fn encode_state(state: &SecureApprovalState) -> Result<String, String
 }
 
 fn decode_state(value: &str) -> Result<SecureApprovalState, String> {
-    if value.is_empty() || value.len() > MAX_SECRET_TEXT_BYTES || value.len() % 2 != 0 {
+    if value.is_empty() || value.len() > MAX_SECRET_TEXT_BYTES || !value.len().is_multiple_of(2) {
         return Err("native_approval_secure_state_invalid".to_owned());
     }
     let bytes =

@@ -38,13 +38,18 @@ def _native_package_context_authority(native_context_digest: Path) -> None:
     assert result is not None and result["status"] == "ok", native_resident_client_failure_code()
 
 
-def _write_repository(root: Path, *, common_git_dir: Path | None = None) -> Path:
+def _write_repository(
+    root: Path,
+    *,
+    common_git_dir: Path | None = None,
+    origin: str = "https://example.test/team/app.git",
+) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     if common_git_dir is None:
         common_git_dir = root / ".git"
         common_git_dir.mkdir(parents=True)
         (common_git_dir / "config").write_text(
-            '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = https://example.test/team/app.git\n',
+            f'[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = {origin}\n',
             encoding="utf-8",
         )
     else:
@@ -149,11 +154,29 @@ def test_portable_context_matches_across_linked_git_worktrees(
     assert primary_scope is not None and primary_scope.startswith("package-request-workspace:v2:")
 
 
+def test_separate_clone_of_the_same_origin_shares_context(tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "elsewhere" / "second"
+    _write_repository(first, origin="git@example.test:team/app.git")
+    _write_repository(second, origin="https://example.test/team/app")
+    _write_package_files(first)
+    _write_package_files(second)
+    environment = _environment(tmp_path)
+    artifact = _artifact()
+
+    first_context = _context(first, artifact, environment)
+    second_context = _context(second, artifact, environment)
+
+    assert first_context.portable is True
+    assert changed_package_execution_context_components(first_context, second_context) == ()
+    assert first_context.digest == second_context.digest
+
+
 def test_identical_files_in_unrelated_repositories_do_not_share_context(tmp_path: Path) -> None:
     first = tmp_path / "first"
     second = tmp_path / "second"
     _write_repository(first)
-    _write_repository(second)
+    _write_repository(second, origin="https://example.test/other/app.git")
     _write_package_files(first)
     _write_package_files(second)
     environment = _environment(tmp_path)

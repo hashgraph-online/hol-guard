@@ -16,10 +16,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..daemon.background_diagnostics import failure_detail, record_background_event, record_background_notice
 from ..file_identity import full_stat_identity
 from ..native_resident_client import native_resident_client_request
 from ..native_runtime import _isolated_environment, native_runtime_status
+from ..runtime_health.background_diagnostics import failure_detail, record_background_event, record_background_notice
 from ..strict_json_pairs import unique_json_object
 from . import lifecycle
 from .authority import VerifiedDistribution
@@ -263,11 +263,19 @@ def _prepare_ready(home):
 
 
 def _engine_mismatch_with_nothing_kept(refresh_error, restore_error):
-    """The refresh met a publication for another engine and no older view was kept."""
+    """The refresh met a publication for another engine and no older view was kept.
+
+    Nothing is kept either when no publication was cached or when the cached one
+    was built by that same other engine: a core released before the compiler
+    changed reaches the second case on every host that cached a newer
+    publication once, and it stays there until the core is updated.
+    """
 
     from .current_refresh import PublicationEngineMismatchError
 
-    if isinstance(refresh_error, PublicationEngineMismatchError) and (
+    if not isinstance(refresh_error, PublicationEngineMismatchError):
+        return None
+    if isinstance(restore_error, PublicationEngineMismatchError) or (
         str(restore_error) == "discovery_current_cached_publication_unavailable"
     ):
         return refresh_error

@@ -63,6 +63,7 @@ export function buildSettingsUpdatePayload(
   delete payload.presentation_diagnostic;
   delete payload.context_assistance_diagnostic;
   delete payload.context_assistance_requested;
+  delete payload.context_assistance_effective_ready;
   // Older cores expose only the restricted value. Never round-trip that value
   // into local consent while saving another preference.
   if (draft.context_assistance_requested === undefined

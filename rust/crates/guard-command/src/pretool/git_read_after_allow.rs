@@ -24,6 +24,8 @@
 //! runs when it asks whether the Allow settles its order check, through
 //! [`allow_settles_read_order`].
 
+use super::git_output_target::points_output_at_a_protected_file;
+
 use super::PathContext;
 use crate::CanonicalCommandV1;
 use std::collections::BTreeSet;
@@ -52,9 +54,9 @@ const REF_READS: &[&str] = &[
 
 /// Git operations that write no configuration a later read obeys. Some record
 /// an upstream (`push -u`, `checkout --track`, `branch -u`), and those
-/// `branch.*` keys name no program. Only a step whose first argument is one of
-/// these carries a read, so a leading `-C` that points the step at another
-/// repository ends the run.
+/// `branch.*` keys name no program. Only a step on this list carries a read,
+/// and only into the checkout it works in: a step whose leading `-C` points
+/// at another repository ends the run.
 const CONFIG_STABLE_STEPS: &[&str] = &[
     "add", "branch", "checkout", "commit", "fetch", "merge", "pull", "push", "reset", "restore",
     "stash", "switch", "tag",
@@ -63,6 +65,37 @@ const CONFIG_STABLE_STEPS: &[&str] = &[
 /// Git operations that rewrite no tracked file. Any other step the Git floor
 /// leaves unsettled may replace a file a configuration include names.
 const TREE_PRESERVING_STEPS: &[&str] = &["add", "branch", "commit", "fetch", "push", "tag"];
+
+/// Git verbs that write nothing a later step could read: no tracked file, no
+/// configuration, no new path at all. A step on this list leaves the program,
+/// the configuration and the bind-mounted file a later step starts exactly as
+/// Guard read them, so coverage that reads a whole extension as allowed walks
+/// past it. `diff` is left out on purpose: `git diff --output=<file>` writes
+/// wherever it is pointed, and so can replace a later step's program.
+const WRITES_NOTHING_STEPS: &[&str] = &[
+    "blame",
+    "cat-file",
+    "check-attr",
+    "check-ref-format",
+    "describe",
+    "for-each-ref",
+    "grep",
+    "log",
+    "ls-files",
+    "ls-remote",
+    "ls-tree",
+    "merge-base",
+    "name-rev",
+    "rev-list",
+    "rev-parse",
+    "shortlog",
+    "show",
+    "show-branch",
+    "show-ref",
+    "status",
+    "var",
+    "whatchanged",
+];
 
 /// `git worktree` actions that write no file at a new path. Removing a linked
 /// worktree deletes files, which can drop configuration but never adds a
@@ -74,10 +107,12 @@ const TREE_PRESERVING_WORKTREE_ACTIONS: &[&str] = &["list", "lock", "prune", "re
 ///
 /// `benign` holds the segments the native benign proof covers and `covered`
 /// every segment covered so far, by that proof, an enabled permission or a
-/// GitHub grant. A read qualifies when it is proven safe on its own, takes no
-/// leading Git option (so `-C` and `--git-dir` cannot route it elsewhere), and
-/// every earlier step is covered and either benign or a Git step on
-/// [`CONFIG_STABLE_STEPS`]. Any other step, such as an allowed `ln` or `git
+/// GitHub grant. A read qualifies when it is proven safe on its
+/// own, takes no leading Git option beyond one that routes or shapes its
+/// output (so `--git-dir` and `-c` cannot repoint it, and a `-C` must name
+/// the checkout the steps before it worked in), and every earlier step is
+/// covered and either benign or a Git step on [`CONFIG_STABLE_STEPS`]
+/// working in that same checkout. Any other step, such as an allowed `ln` or `git
 /// config`, could repoint the directory the read runs in or the program it
 /// starts, so it ends the run.
 pub(crate) fn git_reads_after_allowed_steps(
@@ -98,19 +133,35 @@ pub(crate) fn git_reads_after_allowed_steps(
         ..context
     };
     let mut added = Vec::new();
+    // The checkouts the carried steps worked in. A step with no leading
+    // option works where the command runs; one with a leading `-C` works
+    // where it points. A read is carried only when every step before it
+    // worked in the checkout the read itself runs in, which is the question
+    // the Git floor's own order check asks in `allow_settles_read_order`. A
+    // step routed somewhere else still ends the run.
+    let mut routes: Vec<std::path::PathBuf> = Vec::new();
     for (index, segment) in model.segments.iter().enumerate() {
         let git = git_segment(segment);
         if covered.contains(&index) {
-            if benign.contains(&index)
-                || (git && leading_operation_in(segment, CONFIG_STABLE_STEPS))
+            if benign.contains(&index) {
+                continue;
+            }
+            if let Some(route) = git
+                .then(|| config_stable_route(segment, proof_context))
+                .flatten()
             {
+                routes.push(route);
                 continue;
             }
             break;
         }
         let read = if git {
             ref_read(model, segment, proof_context)
+                && routed_checkout(segment, proof_context)
+                    .is_some_and(|route| routes.iter().all(|carried| *carried == route))
         } else {
+            // A Docker listing reads no checkout, so where a Git step before
+            // it worked changes nothing it looks at.
             docker_listing(model, segment, proof_context)
         };
         if !read {
@@ -121,14 +172,46 @@ pub(crate) fn git_reads_after_allowed_steps(
     added
 }
 
+/// The checkout a Git segment works in, when its leading options only route
+/// or shape what it prints. `None` when it carries any other leading option
+/// or the route cannot be named, so `--git-dir`, `--work-tree` and `-c` keep
+/// the refusal they had.
+fn routed_checkout(
+    segment: &crate::CommandSegmentV1,
+    context: PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    globals_only_route_or_print(&segment.arguments)
+        .then(|| super::git_remote_ops::routed_directory(segment, context))
+        .flatten()
+}
+
+/// The checkout a Git step on [`CONFIG_STABLE_STEPS`] works in, resolving the
+/// subcommand the way Git does rather than reading the first word: `git -C
+/// <dir> pull` is the same step as `git pull`, pointed at a checkout this
+/// names, and the caller compares that checkout with the read's own.
+fn config_stable_route(
+    segment: &crate::CommandSegmentV1,
+    context: PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    let index = crate::command_compatibility::git_command_index(&segment.arguments)?;
+    let operation = segment.arguments.get(index)?;
+    CONFIG_STABLE_STEPS
+        .contains(&operation.as_str())
+        .then(|| routed_checkout(segment, context))
+        .flatten()
+}
+
 /// Whether the user's Allow may settle the Git floor's order check for
 /// `steps`, the earlier steps it could not prove leave a later read's
-/// configuration as Guard read it. A step that may rewrite tracked files
-/// settles it only when no configuration include reaches the work tree, so no
-/// file it checks out becomes configuration the read obeys. Such a step with a
-/// leading option may act on another repository, whose files an absolute
-/// include could name, so it never settles. Steps outside Git keep the Allow's
-/// judgment.
+/// configuration as Guard read it. A step that writes configuration the read
+/// then obeys never settles: the Allow says to run the read as this checkout
+/// configures it, and such a step rewrites that answer first. A step that may
+/// rewrite tracked files settles it only when no configuration include reaches
+/// the work tree, so no file it checks out becomes configuration the read
+/// obeys, and only when it works in the very checkout the read runs in: a
+/// step routed elsewhere rewrites files an absolute include in the read's
+/// configuration could name, which that walk never examines. Steps outside
+/// Git keep the Allow's judgment.
 pub(crate) fn allow_settles_read_order(
     model: &CanonicalCommandV1,
     steps: &[usize],
@@ -137,20 +220,29 @@ pub(crate) fn allow_settles_read_order(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
     let mut first = None;
+    let mut writers: Vec<usize> = Vec::new();
     for &index in steps {
         let Some(segment) = model.segments.get(index) else {
             return false;
         };
-        if !git_segment(segment) || preserves_tree(&segment.arguments) {
+        if !git_segment(segment) {
             continue;
         }
-        if segment
-            .arguments
-            .first()
-            .is_none_or(|argument| argument.starts_with('-'))
-        {
+        // `git config core.pager 'sh -c true' && git log -1` is the shape this
+        // refuses. The read was left to the Allow because Guard could not
+        // prove the step before it leaves the configuration alone; a step that
+        // writes configuration outright, or whose subcommand Guard does not
+        // model at all, settles nothing.
+        if !preserves_configuration(&segment.arguments) {
             return false;
         }
+        if preserves_tree(&segment.arguments) {
+            continue;
+        }
+        if !globals_only_route_or_print(&segment.arguments) {
+            return false;
+        }
+        writers.push(index);
         first = Some(first.map_or(index, |current: usize| current.min(index)));
     }
     let Some(first) = first else {
@@ -162,17 +254,39 @@ pub(crate) fn allow_settles_read_order(
         cwd: destination.as_deref().or(context.cwd),
         ..context
     };
+    // Where each tree-rewriting step actually works. The later-read walk below
+    // answers for the read's own checkout: it asks whether any configuration
+    // include reaches that work tree. A step routed somewhere else rewrites a
+    // checkout that walk never looks at, and an absolute include in the read's
+    // configuration can name a file there, so the read would obey what the
+    // step just checked out. Only a step working in the read's own checkout is
+    // answered for.
+    let routes: Vec<Option<std::path::PathBuf>> = writers
+        .iter()
+        .map(|&index| super::git_remote_ops::routed_directory(&model.segments[index], read_context))
+        .collect();
     (first + 1..model.segments.len()).all(|index| {
         // `... | xargs git log` runs its read as the child.
         let child = super::fanout_reads::git_xargs_child(model, index);
         let later = child.as_ref().unwrap_or(&model.segments[index]);
-        !git_segment(later)
-            || super::git_remote_ops::work_tree_outside_configuration(
-                later,
-                read_context,
-                deadline,
-                execution_environment,
-            )
+        if !git_segment(later) {
+            return true;
+        }
+        let Some(read_route) = super::git_remote_ops::routed_directory(later, read_context) else {
+            return false;
+        };
+        if routes
+            .iter()
+            .any(|route| route.as_deref() != Some(read_route.as_path()))
+        {
+            return false;
+        }
+        super::git_remote_ops::work_tree_outside_configuration(
+            later,
+            read_context,
+            deadline,
+            execution_environment,
+        )
     })
 }
 
@@ -192,6 +306,75 @@ fn read_directory(model: &CanonicalCommandV1, context: PathContext<'_>) -> Optio
     Some(cwd)
 }
 
+/// Whether every Git global option before the subcommand only chooses the
+/// directory the step runs in or shapes what it prints.
+///
+/// `git -c core.pager='sh -c true' pull && git log` is the shape this
+/// refuses: `-c` and `--config-env` set configuration the later read obeys,
+/// which is the one thing [`preserves_configuration`] cannot see, because the
+/// shared Git parser skips those options to reach the subcommand.
+/// `--exec-path`, `--git-dir`, `--work-tree`, `--namespace`, `--super-prefix`
+/// and `--bare` move the repository out from under the read, and
+/// `--paginate` starts the program `core.pager` names, so a step carrying
+/// one settles nothing either. A `-C <dir>` only picks the checkout
+/// the step works in; whatever it rewrites there is answered by the
+/// later-read walk below, the same way a step with no global option is.
+/// Git takes these options as whole words, so `-Cdir` and `-ckey=value`
+/// are not spellings of them and keep the refusal.
+fn globals_only_route_or_print(arguments: &[String]) -> bool {
+    let Some(end) = crate::command_compatibility::git_command_index(arguments) else {
+        return false;
+    };
+    let mut index = 0;
+    while index < end {
+        let argument = &arguments[index];
+        let option = argument.split('=').next().unwrap_or(argument);
+        if option == "-C" {
+            index += if argument.contains('=') { 1 } else { 2 };
+        } else if matches!(
+            option,
+            "-P" | "--no-pager"
+                | "--no-replace-objects"
+                | "--literal-pathspecs"
+                | "--glob-pathspecs"
+                | "--noglob-pathspecs"
+                | "--icase-pathspecs"
+                | "--no-optional-locks"
+        ) {
+            index += 1;
+        } else {
+            return false;
+        }
+    }
+    true
+}
+
+/// Whether a Git step, wherever its global options route it, writes no
+/// configuration a later read obeys: a step that records only `branch.*` keys
+/// ([`CONFIG_STABLE_STEPS`]) or writes nothing at all
+/// ([`WRITES_NOTHING_STEPS`]). Every other subcommand is refused, `config`
+/// among them, and so is one the shared Git parser cannot resolve — an alias
+/// runs whatever the configuration names it, which is the program this check
+/// exists to keep out.
+fn preserves_configuration(arguments: &[String]) -> bool {
+    let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
+        return false;
+    };
+    match arguments.get(index).map(String::as_str) {
+        // `git worktree add` writes a configuration of its own; the actions
+        // that only list or retire a checkout leave this one's alone.
+        Some("worktree") => arguments
+            .get(index + 1)
+            .is_some_and(|action| TREE_PRESERVING_WORKTREE_ACTIONS.contains(&action.as_str())),
+        Some(operation) => {
+            CONFIG_STABLE_STEPS.contains(&operation)
+                || WRITES_NOTHING_STEPS.contains(&operation)
+                || REF_READS.contains(&operation)
+        }
+        None => false,
+    }
+}
+
 /// Whether a Git step, wherever its global options route it, rewrites no
 /// tracked file. A global option the shared Git parser does not know leaves
 /// the subcommand unknown, so the step does not qualify.
@@ -206,15 +389,6 @@ fn preserves_tree(arguments: &[String]) -> bool {
         Some(operation) => TREE_PRESERVING_STEPS.contains(&operation),
         None => false,
     }
-}
-
-/// Whether the segment's first argument, with no global option before it, is
-/// one of `operations`.
-fn leading_operation_in(segment: &crate::CommandSegmentV1, operations: &[&str]) -> bool {
-    segment
-        .arguments
-        .first()
-        .is_some_and(|operation| operations.contains(&operation.as_str()))
 }
 
 fn git_segment(segment: &crate::CommandSegmentV1) -> bool {
@@ -244,9 +418,17 @@ fn ref_read(
 ) -> bool {
     let stripped = super::without_stderr_merge(segment);
     let segment = stripped.as_ref().unwrap_or(segment);
-    let Some((operation, rest)) = segment.arguments.split_first() else {
+    // Git resolves the subcommand past its leading options, so `git -C <dir>
+    // rev-parse HEAD` is the same read as `git rev-parse HEAD`. The caller
+    // screens which leading options are acceptable and compares the checkout
+    // a `-C` points at with the one the steps before it worked in.
+    let Some(index) = crate::command_compatibility::git_command_index(&segment.arguments) else {
         return false;
     };
+    let Some(operation) = segment.arguments.get(index) else {
+        return false;
+    };
+    let rest = &segment.arguments[index + 1..];
     !segment.path_overridden
         && segment.wrapper_chain.is_empty()
         && segment
@@ -261,39 +443,46 @@ fn ref_read(
         && super::segment_proof::exact_safe_segment_with_context(model, segment, true, context)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{preserves_tree, REF_READS};
-
-    #[test]
-    fn working_tree_reads_are_not_ref_reads() {
-        for operation in ["status", "diff", "grep", "ls-files", "blame", "check-attr"] {
-            assert!(!REF_READS.contains(&operation), "{operation}");
-        }
-    }
-
-    fn words(command: &str) -> Vec<String> {
-        command.split_whitespace().map(str::to_owned).collect()
-    }
-
-    #[test]
-    fn a_step_routed_by_global_options_keeps_its_own_subcommand() {
-        for command in [
-            "push",
-            "-C repo worktree remove wt",
-            "-c a.b=c branch -D pr",
-        ] {
-            assert!(preserves_tree(&words(command)), "{command}");
-        }
-        // `--attr-source` takes a value, so `push` here is that value and the
-        // step is a checkout.
-        for command in [
-            "checkout main",
-            "--attr-source push checkout main",
-            "--attr-source=push checkout main",
-            "-C repo worktree add wt",
-        ] {
-            assert!(!preserves_tree(&words(command)), "{command}");
-        }
-    }
+/// Whether `segment` leaves what a later step runs as Guard read it.
+///
+/// A Git step that rewrites tracked files can replace the program, the
+/// configuration or the bind-mounted file a later step starts, so coverage
+/// that reads a whole extension as allowed stops at it. Only a Git step whose
+/// verb rewrites nothing is answered here; every other program -- `ln`, `cp`,
+/// `mv`, `tee`, `gh pr checkout` -- can replace the same files without Guard
+/// modelling how, so it ends the walk unless the caller already proved that
+/// segment benign.
+pub(crate) fn step_preserves_later_programs(segment: &crate::CommandSegmentV1) -> bool {
+    let arguments = &segment.arguments;
+    git_segment(segment)
+        && !points_output_at_a_protected_file(arguments)
+        && (preserves_tree(arguments) || writes_nothing(arguments))
 }
+
+/// Whether `segment` is a Git step that writes its output over a file a later
+/// step runs under.
+///
+/// An extension-wide Allow answers for Git's own work, and packaging a tree
+/// into a file the workspace names -- `git archive -o snapshot.tar HEAD` --
+/// is part of that work. Pointing the same output at `.git/config`, a hook,
+/// or a path that leaves the workspace is not: it rewrites what the next Git
+/// step runs, so that step keeps the review it had.
+pub(crate) fn git_step_overwrites_what_runs_next(segment: &crate::CommandSegmentV1) -> bool {
+    git_segment(segment) && points_output_at_a_protected_file(&segment.arguments)
+}
+
+/// Whether a Git step, wherever its global options route it, writes nothing a
+/// later step reads. A global option the shared Git parser does not know
+/// leaves the subcommand unknown, so the step does not qualify.
+fn writes_nothing(arguments: &[String]) -> bool {
+    let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
+        return false;
+    };
+    arguments
+        .get(index)
+        .is_some_and(|operation| WRITES_NOTHING_STEPS.contains(&operation.as_str()))
+}
+
+#[cfg(test)]
+#[path = "git_read_after_allow_tests.rs"]
+mod tests;

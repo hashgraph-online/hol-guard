@@ -11,6 +11,7 @@ from typing import Any
 
 from ..action_lattice import is_guard_action
 from ..adapters.base import HarnessContext
+from ..approval_hook_copy import authenticated_approval_review_url
 from ..approvals import approval_center_hint, attach_primary_approval_link, queue_blocked_approvals
 from ..config import load_guard_config
 from ..models import GuardAction, GuardArtifact, HarnessDetection
@@ -81,8 +82,10 @@ def _queue_local_protect_approvals(
         verdict = response_payload.get("verdict")
         reason = verdict.get("reason") if isinstance(verdict, dict) else None
         guidance = safe_alternative_reason(str(reason or "HOL Guard blocked this package request."))
+        review_url: str | None = None
         if queued:
             request_id = str(queued[0]["request_id"])
+            review_url = _live_request_review_url(request_id, guard_home=guard_home)
             guidance = safe_alternative_reason(
                 str(reason or "HOL Guard blocked this package request."),
                 reason_code=str(plan["review_reason_code"]),
@@ -102,7 +105,7 @@ def _queue_local_protect_approvals(
                 **(user_copy if isinstance(user_copy, dict) else {}),
                 "harness_message": guidance,
                 "next_step": guidance,
-                "dashboard_url": None,
+                "dashboard_url": review_url,
             }
         return
     artifact = _protect_request_artifact(response_payload, workspace=workspace, plan=plan)
@@ -360,6 +363,32 @@ def _suppress_package_shim_allow_output(args: argparse.Namespace, response_paylo
     verdict = response_payload.get("verdict")
     action = _optional_string(verdict.get("action")) if isinstance(verdict, dict) else None
     return action in {"allow", "warn"}
+
+
+def _live_request_review_url(request_id: str, *, guard_home: Path) -> str | None:
+    """Link to the queued request on the running daemon, or None.
+
+    The stored request URL uses the configured port, which is wrong when the
+    daemon fell back to another one, so the link comes from the verified live
+    daemon. This never starts a daemon. Human output signs the loopback link;
+    without a running daemon or its token there is nothing to open, and the
+    guidance keeps the wait command alone.
+    """
+
+    from ..native_daemon_manage import load_guard_daemon_url
+
+    try:
+        daemon_url = load_guard_daemon_url(guard_home)
+    except (OSError, RuntimeError, ValueError):
+        # The request is already queued; a failed optional lookup (including
+        # NativeDaemonLifecycleError) must not replace the denial and wait guidance.
+        return None
+    if daemon_url is None:
+        return None
+    review_url = f"{daemon_url.rstrip('/')}/requests/{request_id}"
+    if authenticated_approval_review_url(review_url, guard_home=guard_home) is None:
+        return None
+    return review_url
 
 
 def _optional_string(value: object | None) -> str | None:

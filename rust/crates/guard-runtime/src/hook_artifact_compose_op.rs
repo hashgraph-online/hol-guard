@@ -179,10 +179,17 @@ fn native_edge_floor(
     let event = edge.event_name.as_deref();
     if event == Some("PreToolUse")
         && edge.package_request
-        && edge.reason_code.as_str() == Some("native_command_extension_evaluation_failed")
+        && matches!(
+            edge.reason_code.as_str(),
+            Some(
+                "native_command_extension_evaluation_failed"
+                    | "native_command_extension_evaluation_timed_out"
+            )
+        )
     {
         // Package requests have their own fail-closed evaluator. A generic
-        // command-control failure is not a second package verdict.
+        // command-control failure, or a check that ran out of time, is not a
+        // second package verdict.
         return None;
     }
     match event {

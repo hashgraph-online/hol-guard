@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import native_extension_control as bridge
-from codex_plugin_scanner.guard.daemon import extension_control_api
+from codex_plugin_scanner.guard.extension_controls import extension_control_api
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ControlLayerKind,
     ControlState,

@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 
 use super::{failure, text, Error};
 
-fn error(code: &str, id: &str) -> Error {
+pub(super) fn error(code: &str, id: &str) -> Error {
     failure(
         "PolicyCompilationError",
         &format!("{code}: {id}"),
@@ -48,7 +48,7 @@ fn timestamp(value: &Value, id: &str, code: &str) -> Result<String, Error> {
     }
 }
 
-fn expiry(value: &Value, id: &str, code: &str) -> Result<Value, Error> {
+pub(super) fn expiry(value: &Value, id: &str, code: &str) -> Result<Value, Error> {
     if value.is_null() {
         Ok(Value::Null)
     } else {
@@ -201,7 +201,7 @@ pub(super) fn rows(body: &Value, deadline: Instant) -> Result<Value, Error> {
     )
 }
 
-fn selectors(matcher: &Value, key: &str, id: &str) -> Result<Vec<Value>, Error> {
+pub(super) fn selectors(matcher: &Value, key: &str, id: &str) -> Result<Vec<Value>, Error> {
     let value = &matcher[key];
     if value.is_null() {
         return Ok(vec![Value::Null]);
@@ -424,7 +424,8 @@ fn compile_range(
             .as_object()
             .ok_or_else(|| error("unsupported_policy_match", id))?;
         if matcher.get("commands").is_some_and(Value::is_object) {
-            return Err(error("command_expression_requires_guard_3_1_runtime", id));
+            super::compile_patterns::validate_pattern_rule(rule, effects, id)?;
+            continue;
         }
         if matcher.iter().any(|(key, value)| {
             !key.starts_with("x-")

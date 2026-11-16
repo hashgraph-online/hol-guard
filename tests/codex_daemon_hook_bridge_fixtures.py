@@ -10,8 +10,8 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import ClassVar
 
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager
-from codex_plugin_scanner.guard.daemon.discovery import (
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
+from tests.guard_daemon_state_signing import (
     DAEMON_DISCOVERY_CHALLENGE_TTL_SECONDS,
     authenticated_challenge_payload,
     load_daemon_discovery_key,

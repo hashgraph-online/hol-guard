@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-import codex_plugin_scanner.guard.daemon.local_cli_api as local_cli_api_module
+import codex_plugin_scanner.guard.local_clis.local_cli_api as local_cli_api_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.store import GuardStore
 
 

@@ -4,7 +4,7 @@ import json
 import logging
 import urllib.error
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from ..config import VALID_RECEIPT_REDACTION_LEVELS, load_guard_config
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
@@ -16,9 +16,10 @@ from .cloud_review_batching import (
     CloudReviewEventTooLargeError,
     next_review_batch_limits,
     persisted_review_batch_limits,
+    review_batch_answer,
     select_review_event_batch,
 )
-from .cloud_review_event_delivery import post_review_events
+from .cloud_review_event_delivery import CloudReviewEventProtocolError, post_review_events
 from .cloud_review_event_projection import build_cloud_review_event, project_cloud_review_event
 from .cloud_review_retry_recovery import (
     forget_rejection_counts,
@@ -105,7 +106,11 @@ def _prepare_sync_batch_state(
 ) -> tuple[dict[str, object], str, CloudReviewBatchLimits]:
     state = _load_sync_state(store)
     binding_key = _batch_binding_key(delivery_binding)
-    limits = persisted_review_batch_limits(state, binding_key)
+    try:
+        limits = persisted_review_batch_limits(state, binding_key)
+    except CloudReviewEventProtocolError:
+        # The first batch hits the same refusal inside the run, which records it.
+        limits = CloudReviewBatchLimits()
     state.update({"state": "syncing", "last_sync_attempt_at": _now(), "last_error": None, "last_error_code": None})
     _save_sync_state(store, state)
     return state, binding_key, limits
@@ -204,17 +209,23 @@ def _complete_sync_state(
     return completed_at, outbox_status
 
 
-def _is_terminally_superseded_result(item: dict[str, object]) -> bool:
-    """Ignore refreshes superseded by an authoritative Cloud decision.
-
-    Decision application acknowledgements travel as separate outbox events.
-    """
-    if item.get("code") == "stale_sequence":
-        return True
-    error = item.get("error")
-    if error in {"decision_queued", "stale_regression_rejected", "stale_sequence"}:
-        return True
-    return isinstance(error, str) and error.startswith("stale event sequence ")
+def _settle_review_batch(
+    response: dict[str, object],
+    events: list[dict[str, object]],
+    sequences: list[int],
+) -> dict[str, object]:
+    """Read Cloud's answer to one batch in the native ``cloud_review_batch`` kind."""
+    answer = review_batch_answer(
+        {
+            "op": "settle",
+            "response": response,
+            "sequences": sequences,
+            "snapshot_keys": [[event.get("localRequestId"), event.get("localEventSequence")] for event in events],
+        }
+    )
+    if answer.get("plan") not in {"per_event", "count_mismatch", "rejected", "acknowledge"}:
+        raise CloudReviewEventProtocolError("HOL Guard native runtime returned a malformed Review batch settlement.")
+    return answer
 
 
 def _post_events_with_oauth_refresh(
@@ -332,99 +343,64 @@ def sync_cloud_review_events_once(
                 _retry_review_events(store, sequences, error=_redacted_error(error), binding=delivery_binding)
                 raise
 
-            accepted_value, rejected_value = response.get("accepted"), response.get("rejected")
-            accepted = int(accepted_value) if isinstance(accepted_value, (int, float)) else 0
-            rejected = int(rejected_value) if isinstance(rejected_value, (int, float)) else 0
+            settled = _settle_review_batch(response, events, sequences)
+            accepted, rejected = cast("int", settled["accepted"]), cast("int", settled["rejected"])
             total_accepted += accepted
             total_rejected += rejected
-            delivered = response.get("delivered")
-            if isinstance(delivered, int) and not isinstance(delivered, bool) and 0 <= delivered <= accepted:
-                total_delivered += delivered
+            total_delivered += cast("int", settled["delivered"])
             batches += 1
-            retry_after_hint = response.get("retryAfterMs")
-            if type(retry_after_hint) is int and retry_after_hint > 0:
-                retry_after_ms = max(retry_after_ms, retry_after_hint)
+            retry_after_ms = max(retry_after_ms, cast("int", settled["retry_after_ms"]))
             batch_limits = next_review_batch_limits(batch_limits, response)
             _persist_sync_batch_limits(store, state, batch_binding_key, batch_limits)
 
             errors = response.get("errors")
             if isinstance(errors, list):
                 all_errors.extend(str(error) for error in errors[:5])
-            per_event_results = response.get("perEventResults")
-            if isinstance(per_event_results, list) and len(per_event_results) == len(events):
-                acknowledged_sequences: list[int] = []
-                retry_sequences: list[int] = []
-                retry_results: list[dict[str, object]] = []
-                snapshot_repairs: dict[str, int] = {}
-                valid_results = True
-                for index, item in enumerate(per_event_results):
-                    if (
-                        not isinstance(item, dict)
-                        or item.get("index") != index
-                        or not isinstance(item.get("accepted"), bool)
-                    ):
-                        valid_results = False
-                        break
-                    if item["accepted"] or _is_terminally_superseded_result(item):
-                        acknowledged_sequences.append(sequences[index])
-                    else:
-                        retry_sequences.append(sequences[index])
-                        retry_results.append(item)
-                        if item.get("code") == "review_event_snapshot_required":
-                            request_id = events[index].get("localRequestId")
-                            request_sequence = events[index].get("localEventSequence")
-                            if isinstance(request_id, str) and type(request_sequence) is int:
-                                snapshot_repairs[request_id] = max(
-                                    snapshot_repairs.get(request_id, 0), request_sequence
-                                )
-                if (
-                    valid_results
-                    and sum(bool(item["accepted"]) for item in per_event_results) == accepted
-                    and len(per_event_results) - accepted == rejected
-                ):
-                    marker_ready = _mark_accepted_replay_contexts(store, events, per_event_results, supplied_binding)
-                    if not marker_ready:
-                        message = "Native workspace review replay marker persistence requires retry."
-                        all_errors.append(message)
-                        _retry_review_events(store, sequences, error=message, binding=delivery_binding)
-                        continue
-                    store.acknowledge_review_events(acknowledged_sequences, **delivery_binding)
-                    retry_sequences, retry_results, progressed = settle_rejected_review_events(
-                        store,
-                        sequences=retry_sequences,
-                        results=retry_results,
-                        events=dict(zip(sequences, events, strict=True)),
-                        acknowledged=acknowledged_sequences,
-                        acknowledged_through=response.get("acknowledgedThrough"),
-                        binding=delivery_binding,
-                    )
-                    stalled_batch = not progressed
-                    if retry_sequences:
-                        message = retry_result_message(retry_results)
-                        all_errors.append(message)
-                        store.retry_review_events(
-                            retry_sequences,
-                            now=_now(),
-                            error=message,
-                            **delivery_binding,
-                        )
-                    if snapshot_repairs and store.requeue_pending_review_events(
-                        changed_at=_now(), require_binding=True, snapshot_repair_sequences=snapshot_repairs
-                    ):
-                        stalled_batch = False
-                    if stalled_batch:
-                        break
+            plan = settled["plan"]
+            if plan == "per_event":
+                acknowledged_sequences = cast("list[int]", settled["acknowledged"])
+                marker_ready = _mark_accepted_replay_contexts(
+                    store, events, cast("list[dict[str, object]]", response["perEventResults"]), supplied_binding
+                )
+                if not marker_ready:
+                    message = "Native workspace review replay marker persistence requires retry."
+                    all_errors.append(message)
+                    _retry_review_events(store, sequences, error=message, binding=delivery_binding)
                     continue
-
-            accounted = accepted + rejected
-            if accounted != len(events):
-                message = "Cloud Review sync acknowledgement count did not match the batch."
-                all_errors.append(message)
-                _retry_review_events(store, sequences, error=message, binding=delivery_binding)
-                stalled_batch = True
-                break
-            if rejected:
-                message = f"{rejected} Cloud Review events were rejected."
+                store.acknowledge_review_events(acknowledged_sequences, **delivery_binding)
+                retry_sequences, retry_results, progressed = settle_rejected_review_events(
+                    store,
+                    sequences=cast("list[int]", settled["retry"]),
+                    results=cast("list[dict[str, object]]", settled["retry_results"]),
+                    events=dict(zip(sequences, events, strict=True)),
+                    acknowledged=acknowledged_sequences,
+                    acknowledged_through=response.get("acknowledgedThrough"),
+                    binding=delivery_binding,
+                )
+                stalled_batch = not progressed
+                if retry_sequences:
+                    message = retry_result_message(retry_results)
+                    all_errors.append(message)
+                    store.retry_review_events(
+                        retry_sequences,
+                        now=_now(),
+                        error=message,
+                        **delivery_binding,
+                    )
+                snapshot_repairs = cast("dict[str, int]", settled["snapshot_repairs"])
+                if snapshot_repairs and store.requeue_pending_review_events(
+                    changed_at=_now(), require_binding=True, snapshot_repair_sequences=snapshot_repairs
+                ):
+                    stalled_batch = False
+                if stalled_batch:
+                    break
+                continue
+            if plan != "acknowledge":
+                message = (
+                    "Cloud Review sync acknowledgement count did not match the batch."
+                    if plan == "count_mismatch"
+                    else f"{rejected} Cloud Review events were rejected."
+                )
                 all_errors.append(message)
                 _retry_review_events(store, sequences, error=message, binding=delivery_binding)
                 stalled_batch = True

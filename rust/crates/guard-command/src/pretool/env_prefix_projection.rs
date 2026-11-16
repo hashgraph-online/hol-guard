@@ -36,8 +36,11 @@ const MAX_PROJECTED_CHARS: usize = 32_768;
 /// Command separators after which a new simple command starts.
 const COMMAND_SEPARATORS: [&str; 6] = ["|", "||", "&&", ";", "&", "|&"];
 
-/// Exact settings that only quiet a tool, accepted despite a denied prefix.
-const QUIETING_SETTINGS: [(&str, &str); 11] = [
+/// Exact settings that only quiet a tool or switch one of its loaders off,
+/// accepted despite a denied prefix. `PYTEST_DISABLE_PLUGIN_AUTOLOAD` carries
+/// a code-loading word, but setting it stops pytest from importing the plugins its
+/// installed packages advertise, so it loads less code, never more.
+const QUIETING_SETTINGS: [(&str, &str); 13] = [
     ("GH_NO_UPDATE_NOTIFIER", "1"),
     ("GH_PAGER", "cat"),
     ("GH_PAGER", ""),
@@ -49,6 +52,8 @@ const QUIETING_SETTINGS: [(&str, &str); 11] = [
     ("GIT_TERMINAL_PROMPT", "0"),
     ("PAGER", "cat"),
     ("PAGER", ""),
+    ("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1"),
+    ("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "true"),
 ];
 
 /// Settings that only shape output, locale or time.

@@ -45,9 +45,9 @@ pub(crate) const EDGE_ACTIVITY_RECORD_FEATURE: &str = "edge-activity-record-v1";
 pub(crate) const EDGE_PRE_TOOL_ACTIVITY_RECORD_FEATURE: &str = "edge-pre-tool-activity-record-v1";
 /// The field of a direct answer's evidence record that says the resident
 /// already queued its receipt with the writer.
-const DIRECT_RECEIPT_RECORDED: &str = "receipt_recorded";
+pub(crate) const DIRECT_RECEIPT_RECORDED: &str = "receipt_recorded";
 /// The field that says the resident queued its command activity as well.
-const DIRECT_ACTIVITY_RECORDED: &str = "activity_recorded";
+pub(crate) const DIRECT_ACTIVITY_RECORDED: &str = "activity_recorded";
 /// `hook_post_succeeded`'s compact spelling of a failed tool call's event.
 const POST_TOOL_USE_FAILURE: &str = "posttoolusefailure";
 /// The `minimum_action`s the daemon pauses for an approval
@@ -232,8 +232,8 @@ impl PreToolActivity {
 /// Queue a direct answer's `evidence` for the drain, recording its receipt
 /// and then, with `record_activity`, its command activity first when a writer
 /// already runs for `guard_home`. The record carries `receipt_recorded` and
-/// `activity_recorded` only for what that writer accepted; the drain submits
-/// the rest itself, which starts the writer when none runs. False when the
+/// `activity_recorded` only for what that writer accepted; the drain records
+/// the rest, which starts the writer when none runs. False when the
 /// queue cannot hold the record: nothing was queued or recorded, so the
 /// daemon answering the hook records it once.
 pub(crate) fn offer_direct(
@@ -250,7 +250,7 @@ pub(crate) fn offer_direct(
         pending.take().is_some_and(|record| {
             let markers = [DIRECT_RECEIPT_RECORDED, DIRECT_ACTIVITY_RECORDED];
             queue
-                .try_offer_recorded(record, &markers, |record| {
+                .try_offer_recorded(record, &markers, record_activity, |record| {
                     let Some(receipt) = record.get("receipt").and_then(Value::as_object) else {
                         return 0;
                     };
@@ -262,13 +262,15 @@ pub(crate) fn offer_direct(
                 .is_ok()
         })
     });
-    queued.unwrap_or_else(|| pending.is_some_and(|record| queue.offer(record)))
+    queued.unwrap_or_else(|| {
+        pending.is_some_and(|record| queue.offer_answer(record, record_activity))
+    })
 }
 
 /// Queue a direct tool answer's command activity as the drain would. False
 /// leaves it to the drain, which also gets any answer whose fields the
 /// activity cannot take.
-fn submit_activity(writer: &RuntimeHookEvidenceWriter, record: &Value) -> bool {
+pub(crate) fn submit_activity(writer: &RuntimeHookEvidenceWriter, record: &Value) -> bool {
     match record.get("event").and_then(Value::as_str) {
         Some("PreToolUse") => submit_pre_tool_activity(writer, record),
         Some("PostToolUse") => submit_post_tool_activity(writer, record),
@@ -364,6 +366,9 @@ fn submit_pre_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value) 
 #[cfg(test)]
 #[path = "edge_receipt_deadline_tests.rs"]
 mod deadline_tests;
+#[cfg(test)]
+#[path = "edge_receipt_drain_tests.rs"]
+mod drain_tests;
 #[cfg(test)]
 #[path = "edge_receipt_tests.rs"]
 mod tests;

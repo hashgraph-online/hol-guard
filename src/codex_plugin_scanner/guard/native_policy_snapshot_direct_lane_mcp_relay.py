@@ -11,12 +11,15 @@ publisher's command-control runtime holds readable ones; anything else is
 left out and the relay's call defers. A bound harness also carries the
 receipt redaction level a queued call's silent inbox row is written with,
 when every config agrees on it; without it only such a call defers.
+
+The native composer derives the harness views (``policy-effective`` op
+``publish``); this module adds the extension layers and binds the view.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
 from .native_policy_snapshot_codec import _validate_json_limits_v3
@@ -27,12 +30,6 @@ if TYPE_CHECKING:
 
 MCP_RELAY_BINDING_KEY = "mcp_relay"
 MCP_RELAY_VIEW_SCHEMA = "guard-mcp-relay-view.v2"
-# The harnesses whose MCP proxy the relay replaces.
-MCP_RELAY_HARNESSES = ("cline", "codex", "copilot", "cursor", "hermes", "opencode")
-
-# The field a bound harness carries its receipt redaction level in.
-REDACTION_LEVEL_KEY = "receipt_redaction_level"
-_REDACTION_LEVELS = frozenset({"full", "partial", "none"})
 _MAX_VIEW_BYTES = 262_144
 _MAX_SAFE_INTEGER = 2**53 - 1
 
@@ -63,66 +60,6 @@ def _stable(value: object) -> object | None:
     if len(encoded.encode("utf-8")) > _MAX_VIEW_BYTES or not _plain(decoded):
         return None
     return decoded
-
-
-def harness_view(config: object, harness: str) -> dict[str, object] | None:
-    """The proxy's tool-call configuration and hash fields for one harness."""
-
-    from .harness_posture import config_for_harness, harness_posture_override
-    from .mcp_tool_calls import _tool_call_configuration  # pyright: ignore[reportPrivateUsage]
-
-    try:
-        effective = config_for_harness(config, harness)  # pyright: ignore[reportArgumentType]
-        hash_config = {
-            **_tool_call_configuration(effective),
-            "managed_policy_hash": effective.managed_policy_hash,
-            "managed_policy_status": effective.managed_policy_status,
-            "sandbox_analysis": effective.sandbox_analysis,
-        }
-        # The resolver reads this harness's own posture override for the Extra
-        # careful risk-action floor, which `config_for_harness` does not fold
-        # into an explicit risk action. Only this harness's entry crosses: the
-        # whole map would make every harness's view differ whenever any other
-        # harness carries an override. It stays out of `hash_config` so the
-        # approval token the relay binds is the one the proxy already binds.
-        override = harness_posture_override(config, harness)  # pyright: ignore[reportArgumentType]
-        configuration = {
-            **_tool_call_configuration(effective),
-            "harness_postures": {harness: override} if override is not None else {},
-        }
-    except (AttributeError, TypeError, ValueError):
-        return None
-    view = _stable({"config": configuration, "hash_config": hash_config})
-    if not isinstance(view, dict):
-        return None
-    stable = cast(dict[str, dict[str, object]], view)
-    return dict(stable) if isinstance(stable["config"].get("mode"), str) else None
-
-
-def uniform_redaction_level(configs: Iterable[object]) -> str | None:
-    """The receipt redaction level every compiled config resolves to."""
-
-    levels = {getattr(config, "receipt_redaction_level", None) for config in configs}
-    if len(levels) != 1:
-        return None
-    (level,) = levels
-    return level if isinstance(level, str) and level in _REDACTION_LEVELS else None
-
-
-def uniform_harness_views(configs: Iterable[object]) -> dict[str, object]:
-    """The harness views every compiled config agrees on."""
-
-    compiled = tuple(configs)
-    harnesses: dict[str, object] = {}
-    if not compiled:
-        return harnesses
-    level = uniform_redaction_level(compiled)
-    for harness in MCP_RELAY_HARNESSES:
-        views = [harness_view(config, harness) for config in compiled]
-        bound = views[0]
-        if bound is not None and all(view == bound for view in views[1:]):
-            harnesses[harness] = bound if level is None else {**bound, REDACTION_LEVEL_KEY: level}
-    return harnesses
 
 
 def extension_layers(runtime: object) -> list[object] | None:

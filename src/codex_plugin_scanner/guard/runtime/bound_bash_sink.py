@@ -96,8 +96,8 @@ def run_bound_bash(
     host_owner_pid: int | None = None,
     tool_call_id: str | None = None,
 ) -> int:
-    from ..daemon.hook_worker import HookWorker
     from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
+    from ..hook_review.hook_worker import HookWorker
     from ..native_hook_edge import _encode_hook_envelope
 
     if (

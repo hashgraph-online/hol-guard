@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_native_exact_action as exact
+from codex_plugin_scanner.guard.hook_review import hook_native_exact_action as exact
 
 
 def _evidence(**overrides: object) -> dict[str, object]:
@@ -69,7 +69,7 @@ _REVIEW = {"decision": "deny", "minimum_action": "review", "policy_action": "rev
 
 
 def test_a_custom_block_settles_before_the_policy_binding_is_checked(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.daemon import hook_native_review_approval as review
+    from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
 
     # The verdict claims extension policy and no evidence proves it; the block
     # denies either way, so the binding is never read first.
@@ -80,7 +80,7 @@ def test_a_custom_block_settles_before_the_policy_binding_is_checked(tmp_path: P
 
 
 def test_a_matching_custom_grant_settles_without_evidence(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.daemon import hook_native_review_approval as review
+    from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
 
     granted = {"decision": "allow"}
 
@@ -91,7 +91,7 @@ def test_a_matching_custom_grant_settles_without_evidence(tmp_path: Path) -> Non
 def test_missing_or_rejected_evidence_is_denied_before_any_saved_decision(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, evidence: Mapping[str, object] | None
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import hook_native_review_approval as review
+    from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
 
     monkeypatch.setattr(
         review, "native_saved_decision_response", lambda *_a, **_k: pytest.fail("no saved decision without a binding")

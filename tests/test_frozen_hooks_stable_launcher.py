@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import stable_guard_cli
-from codex_plugin_scanner.guard.adapters import claude_hook_argv, cline_mcp, copilot, hermes
+from codex_plugin_scanner.guard.adapters import claude_hook_argv, cline_runtime, copilot, hermes
 from codex_plugin_scanner.guard.adapters._modules.claude.claude_frozen_hook import FROZEN_CLAUDE_HOOK_COMMAND
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
@@ -99,7 +99,7 @@ def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_co
         CursorHarnessAdapter()._proxy_server_entry(context, server)["command"],  # pyright: ignore[reportPrivateUsage]
         CursorHarnessAdapter._refresh_guard_proxy_entry(stale)["command"],  # pyright: ignore[reportPrivateUsage]
         copilot._refresh_guard_proxy_entry(stale, list(python_args), launcher_env={})["command"],  # pyright: ignore[reportPrivateUsage]
-        cline_mcp._proxy_entry(context, server)["command"],  # pyright: ignore[reportPrivateUsage]
+        cline_runtime.proxy_entry(context, server)["command"],
         hermes._overlay_servers(context=context, source_configs={"fixture": {"command": "node"}})["fixture"]["command"],  # pyright: ignore[reportPrivateUsage]
     ]
 

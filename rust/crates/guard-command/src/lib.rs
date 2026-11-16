@@ -46,10 +46,52 @@ pub mod cloud_action;
 pub mod cloud_action_activation;
 pub mod cloud_action_binding;
 pub mod cloud_action_canonical;
+pub mod cloud_action_classifier;
+pub mod cloud_action_inspect;
+mod cloud_action_inspect_pii;
+#[cfg(test)]
+mod cloud_action_inspect_tests;
 pub mod cloud_action_policy;
+pub mod cloud_action_serve;
 #[cfg(test)]
 mod cloud_action_tests;
+pub mod cloud_action_v2;
+pub mod cloud_action_v2_consent;
 pub mod cloud_catalog;
+pub mod cloud_pack;
+pub mod cloud_pack_artifact;
+pub mod cloud_pack_cli;
+#[cfg(test)]
+mod cloud_pack_corpus_tests;
+pub mod cloud_pack_diff;
+pub mod cloud_pack_explain;
+#[cfg(test)]
+mod cloud_pack_explain_tests;
+pub mod cloud_pack_facts;
+pub mod cloud_pack_fixtures;
+pub mod cloud_pack_generate;
+#[cfg(test)]
+mod cloud_pack_generate_edge_tests;
+mod cloud_pack_generate_openapi;
+mod cloud_pack_generate_response;
+#[cfg(test)]
+mod cloud_pack_generate_tests;
+#[cfg(test)]
+mod cloud_pack_keyed_tests;
+pub mod cloud_pack_mail;
+#[cfg(test)]
+mod cloud_pack_mail_tests;
+pub mod cloud_pack_pattern;
+pub mod cloud_pack_request;
+pub mod cloud_pack_response;
+#[cfg(test)]
+mod cloud_pack_review_tests;
+#[cfg(test)]
+mod cloud_pack_tests;
+pub mod cloud_pack_validate;
+mod cloud_pack_validate_facts;
+mod cloud_pack_validate_request;
+pub mod cloud_policy_pack;
 pub mod cloud_scrub;
 mod cloud_scrub_shell;
 mod cloud_scrub_source_search;
@@ -62,6 +104,7 @@ mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;
 pub mod command_expression_match;
+pub mod command_pattern_allow;
 mod credential_store_names;
 pub mod cursor_shell_command;
 pub mod editor_task_risk;
@@ -167,6 +210,7 @@ pub mod launch_identity_environment;
 #[cfg(windows)]
 mod launch_identity_windows;
 pub mod launch_screen;
+pub mod lifecycle_scripts_flag;
 pub mod local_tool_eligibility;
 pub mod mcp_arguments;
 pub mod mcp_config_risk;
@@ -197,6 +241,7 @@ pub mod package_intent_common;
 pub mod package_intent_parser;
 pub mod package_manager_command;
 pub mod package_manifest_diff;
+pub mod package_manifest_sections;
 #[cfg(not(guard_source_bootstrap))]
 mod packaged_blob;
 mod parser_brace_command;
@@ -228,6 +273,7 @@ pub mod rich_command_model_api;
 use parser_executables::*;
 use parser_segments::*;
 pub mod developer_inspection_authority;
+mod environment_name_filters;
 pub mod environment_secret_dump;
 pub mod pretool;
 pub mod runtime_artifact_identity;
@@ -235,6 +281,7 @@ pub mod runtime_artifact_identity;
 mod runtime_artifact_identity_tests;
 mod runtime_read_paths;
 pub mod secret_path_probe;
+mod sed_substitution;
 pub mod sensitive_request;
 mod sfrs_agent_guidance;
 mod sfrs_benign_reads;
@@ -435,8 +482,8 @@ pub(crate) use command_parse_surface::{
     parse_posix_command, uncertain, Quote, RawSegment,
 };
 pub use command_parse_surface::{
-    parse_command, CanonicalCommandV1, CommandModelRequestV1, CommandSegmentV1, CommandSpanV1,
-    MAX_COMMAND_BYTES, MAX_COMMAND_SEGMENTS, MAX_COMMAND_TOKENS,
+    inline_shell_script_text, parse_command, CanonicalCommandV1, CommandModelRequestV1,
+    CommandSegmentV1, CommandSpanV1, MAX_COMMAND_BYTES, MAX_COMMAND_SEGMENTS, MAX_COMMAND_TOKENS,
 };
 pub use critical_floor_context::critical_floor_action;
 
@@ -488,6 +535,7 @@ pub mod contained_argv;
 #[cfg(unix)]
 pub mod contained_execution;
 mod contained_git;
+mod contained_inline_target;
 
 /// Whether `argv` is a protected Git read the contained planner admits, for
 /// the `contained_path` fuzz target, which no operation reaches it through.

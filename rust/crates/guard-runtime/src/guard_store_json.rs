@@ -262,7 +262,8 @@ fn days_in_month(year: i64, month: i64) -> i64 {
     }
 }
 
-fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+/// Days since 1970-01-01 for a proleptic Gregorian date.
+pub(crate) fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     let year = if month <= 2 { year - 1 } else { year };
     let era = year.div_euclid(400);
     let year_of_era = year - era * 400;

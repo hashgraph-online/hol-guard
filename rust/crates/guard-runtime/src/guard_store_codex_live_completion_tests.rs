@@ -74,3 +74,82 @@ fn a_failure_names_its_code() {
         json!({"completed": false, "error": "request_not_found"})
     );
 }
+
+fn allow(revision: i64) -> Value {
+    json!({"approval_id": "approval-1", "_approval_authority_revision": revision})
+}
+
+/// Runs `settle_on_fresh_authority` over scripted reads and spends, returning
+/// its answer and how many times the authority was read.
+fn settle(reads: Vec<Result<Value, Value>>, spends: Vec<bool>, current: i64) -> (Value, usize) {
+    let reads = std::cell::RefCell::new(reads.into_iter());
+    let spends = std::cell::RefCell::new(spends.into_iter());
+    let count = std::cell::Cell::new(0);
+    let answer = settle_on_fresh_authority(
+        || {
+            count.set(count.get() + 1);
+            Ok(reads.borrow_mut().next().expect("no read left"))
+        },
+        |decision| {
+            let spent = spends.borrow_mut().next().expect("no spend left");
+            Ok(spent.then(|| json!({"completed": true, "spent": decision.clone()})))
+        },
+        |decision| Ok(decision["_approval_authority_revision"].as_i64() != Some(current)),
+    )
+    .unwrap();
+    (answer, count.get())
+}
+
+#[test]
+fn an_allow_refused_after_another_allow_moved_the_revision_is_read_again_and_spent() {
+    let (answer, reads) = settle(vec![Ok(allow(7)), Ok(allow(8))], vec![false, true], 8);
+    assert_eq!(answer, json!({"completed": true, "spent": allow(8)}));
+    assert_eq!(reads, 2);
+}
+
+#[test]
+fn a_refused_spend_at_the_same_revision_is_not_read_again() {
+    let (answer, reads) = settle(vec![Ok(allow(7))], vec![false], 7);
+    assert_eq!(answer, failure("continuation_not_recorded"));
+    assert_eq!(reads, 1);
+}
+
+#[test]
+fn a_block_saved_before_the_second_read_answers_instead_of_the_old_allow() {
+    let (answer, reads) = settle(
+        vec![
+            Ok(allow(7)),
+            Err(failure("exact_approval_authority_missing")),
+        ],
+        vec![false],
+        8,
+    );
+    assert_eq!(answer, failure("exact_approval_authority_missing"));
+    assert_eq!(reads, 2);
+}
+
+#[test]
+fn the_authority_is_read_a_bounded_number_of_times() {
+    let (answer, reads) = settle(
+        vec![Ok(allow(1)); AUTHORITY_READS],
+        vec![false; AUTHORITY_READS],
+        9,
+    );
+    assert_eq!(answer, failure("continuation_not_recorded"));
+    assert_eq!(reads, AUTHORITY_READS);
+}
+
+#[test]
+fn the_revision_has_moved_only_when_the_store_holds_another() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "create table guard_approval_authority_revision (singleton integer primary key,
+               revision integer);
+             insert into guard_approval_authority_revision values (1, 7);",
+        )
+        .unwrap();
+    assert!(!authority_moved(&connection, &allow(7)).unwrap());
+    assert!(authority_moved(&connection, &allow(6)).unwrap());
+    assert!(!authority_moved(&connection, &Value::Null).unwrap());
+}

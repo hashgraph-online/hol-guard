@@ -386,3 +386,107 @@ fn an_explicit_git_allow_does_not_settle_a_glob_that_names_a_secret() {
         assert_eq!(action(&home, &repository, command), "allow", "{command}");
     }
 }
+
+// A toolchain inventory prints what is installed before it looks at the
+// repository, and spells the files it reads through `$HOME`. That spelling
+// leaves the step without the path proof the wider read checks want, which
+// also answers what a read may disclose. This floor asks only whether the
+// step could have rewritten the configuration the later Git read runs under,
+// and a program that opens its operands to read them could not, wherever
+// those operands are.
+#[test]
+fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
+    let root = std::env::temp_dir().join(format!("guard home read order {}", std::process::id()));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    for directory in [&home, &repository] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let home = home.canonicalize().unwrap();
+    let repository = repository.canonicalize().unwrap();
+    std::fs::create_dir_all(home.join(".github").join("workflows")).unwrap();
+    std::fs::write(
+        home.join(".github").join("workflows").join("nightly.yml"),
+        "name: nightly\njobs:\n  build:\n    runs-on: ubuntu-latest\n",
+    )
+    .unwrap();
+    std::fs::write(
+        home.join(".zshrc"),
+        "export PATH=\"$HOME/.local/bin:$PATH\"\n",
+    )
+    .unwrap();
+    git(&repository, &home, &["init", "--quiet"]);
+    git(
+        &repository,
+        &home,
+        &["config", "user.email", "fixture@example.test"],
+    );
+    git(&repository, &home, &["config", "user.name", "fixture"]);
+    std::fs::write(repository.join("package.json"), "{}\n").unwrap();
+    git(&repository, &home, &["add", "-A"]);
+    git(&repository, &home, &["commit", "--quiet", "-m", "fixture"]);
+
+    for command in [
+        "cat \"$HOME/.github/workflows/nightly.yml\"; git status --short",
+        "printf '%s\\n' '--- workflow ---'; \
+         cat \"$HOME/.github/workflows/nightly.yml\"; \
+         printf '%s\\n' '--- repo state ---'; git status --short",
+        "head -20 \"$HOME/.zshrc\"; git log --oneline -5",
+        "wc -l \"$HOME/.zshrc\" && git status --short --branch",
+        // A `-v` after the format is printed data, not printf's option.
+        "printf '%s\\n' -version; git status --short",
+        "printf -- '%s\\n' hello; git status --short",
+    ] {
+        assert_ne!(reason(&home, &repository, command), FLOOR, "{command}");
+    }
+    // The same read with an output redirect puts a file where the later read
+    // may look, so it keeps the floor's review.
+    let redirected = "cat \"$HOME/.github/workflows/nightly.yml\" > notes.txt; git status --short";
+    assert_ne!(
+        action(&home, &repository, redirected),
+        "allow",
+        "{redirected}"
+    );
+    // A path-qualified spelling is a local program wearing a builtin's name,
+    // not the builtin, so it stays a step that could have written Git's
+    // configuration.
+    std::fs::write(
+        repository.join("echo"),
+        "#!/bin/sh\ngit config core.pager true\n",
+    )
+    .unwrap();
+    // ripgrep can run a program of the caller's choosing on what it searches,
+    // and that program can rewrite Git's configuration before the read.
+    for disguised in [
+        "./echo hello; git status --short",
+        "./echo hello && git status --short --branch",
+        "rg --pre ./echo needle package.json; git log -1",
+        "rg --pre=./echo needle package.json && git status --short",
+        // `printf -v` assigns a shell variable, and a `VAR=value` head sets
+        // one for the read, so neither is a step that only prints.
+        "printf -v GIT_CONFIG_GLOBAL '/tmp/evil'; git status --short",
+        "GIT_CONFIG_GLOBAL=/tmp/evil cat package.json; git status --short",
+        // The shell joins split quoting back into the option, and `%n`
+        // stores a count in the variable it names.
+        "printf \"-\"v HOME /tmp/evil; git status --short",
+        "printf -''v HOME /tmp/evil; git status --short",
+        "printf 'x%n' PATH; git status --short",
+        "printf 2>/dev/null -v PATH /tmp/tools; git log -1",
+        "printf {-v,PATH,%s,/tmp/x}; git status --short",
+        "printf '%5n' PATH; git status --short",
+        // The shell joins a split-quoted option, so these still assign.
+        "printf \"-\"v GIT_CONFIG_GLOBAL /tmp/evil; git status --short",
+        "printf -''v GIT_CONFIG_GLOBAL /tmp/evil; git status --short",
+        // An arithmetic expansion assigns as it prints.
+        "cat package.json $((PATH=10)); git status --short",
+        "echo \"$((PATH=10))\"; git status --short",
+        "echo \"it's\" $((PATH=10)); git status --short",
+    ] {
+        assert_ne!(
+            action(&home, &repository, disguised),
+            "allow",
+            "{disguised}"
+        );
+    }
+}

@@ -115,6 +115,16 @@ fn an_exclusion_beside_an_include_is_not_offered_as_the_way_around() {
         ),
         None
     );
+    // A glob exclusion is never recorded as exact, but beside an include it
+    // keeps the review all the same, so no exclusion could release it.
+    assert_eq!(
+        reason(
+            "grep -rn --include=*.ts --exclude=*.min.js cookie_name .",
+            &home,
+            &repo
+        ),
+        None
+    );
     std::fs::remove_dir_all(home.parent().unwrap()).unwrap();
 }
 

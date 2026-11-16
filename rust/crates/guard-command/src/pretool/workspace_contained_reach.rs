@@ -96,14 +96,16 @@ pub(super) fn reaches_outside(
     {
         return false;
     }
-    segment.arguments.iter().any(|argument| {
-        if granted_script == Some(argument.as_str()) || (guide && argument == SAFETY_GUIDE) {
+    // A name pattern is matched against what the walk finds and never opened,
+    // so `-not -path './.git/*'` or `--exclude-dir=.git` reaches nothing.
+    name_patterns::opened(name, &segment.arguments).any(|argument| {
+        if granted_script == Some(argument) || (guide && argument == SAFETY_GUIDE) {
             return false;
         }
         let value = match argument.split_once('=') {
             Some((option, value)) if option.starts_with('-') => value,
             _ if argument.starts_with('-') => return false,
-            _ => argument.as_str(),
+            _ => argument,
         };
         outside_from(value, name, workspace, below)
     })
@@ -489,6 +491,9 @@ pub(super) fn through_root_link(path: &Path, workspace: &Path) -> bool {
             .join(path.strip_prefix("/").unwrap_or(path))
             .starts_with(workspace)
 }
+
+#[path = "workspace_contained_name_patterns.rs"]
+mod name_patterns;
 
 #[cfg(test)]
 #[path = "workspace_contained_reach_prefix_tests.rs"]

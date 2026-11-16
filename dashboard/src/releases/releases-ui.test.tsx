@@ -66,6 +66,7 @@ const detail: ReleaseDetail = {
       evidenceUrl: "https://github.com/hashgraph-online/hol-guard/pull/5534",
     },
   ],
+  changesTotal: 2,
   roster: [
     {
       creditId: "credit-1",
@@ -86,6 +87,7 @@ const detail: ReleaseDetail = {
       evidenceUrl: null,
     },
   ],
+  rosterTotal: 2,
   assets: [{ name: "hol_guard-3.53.0-py3-none-any.whl", url: "https://example.org/guard.whl" }],
   sourceNotes: { scope: "exact_release", text: "Published notes for 3.53.0." },
 };

@@ -153,6 +153,89 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     Ok(answer.to_string().into_bytes())
 }
 
+/// `send_desktop_approval_notification` from this process: whether the
+/// notice was shown.
+pub(crate) fn send_approval(
+    request_id: &str,
+    title: &str,
+    message: &str,
+    approval_url: &str,
+) -> bool {
+    let notification = Notification {
+        request_id: request_id.to_owned(),
+        title: title.to_owned(),
+        message: message.to_owned(),
+        approval_url: approval_url.to_owned(),
+    };
+    send(&notification, Platform::current(), &mut SystemHost)
+}
+
+/// The daemon's `POST /v1/notifications/setup` body: setup forced, with the
+/// platform name Python's `platform.system()` reports and, on macOS, how to
+/// find the notifier in Settings.
+pub(crate) fn setup_reply(guard_home: &Path, approval_url: &str) -> Value {
+    let platform = match Platform::current() {
+        Platform::MacOs if !disabled_by_env() => Platform::MacOs,
+        _ => Platform::Other,
+    };
+    setup_reply_on(
+        guard_home,
+        approval_url,
+        platform,
+        system_name(),
+        &mut SystemHost,
+    )
+}
+
+fn setup_reply_on(
+    guard_home: &Path,
+    approval_url: &str,
+    platform: Platform,
+    name: &str,
+    host: &mut impl Host,
+) -> Value {
+    let mut body = setup(guard_home, approval_url, true, platform, host);
+    let notifier = body.get("notifier_path").and_then(Value::as_str).is_some();
+    if let Value::Object(map) = &mut body {
+        map.insert("platform".to_owned(), Value::String(name.to_owned()));
+        if name == "Darwin" {
+            let app = if notifier {
+                "terminal-notifier"
+            } else {
+                "Terminal or terminal-notifier"
+            };
+            map.insert(
+                "guidance".to_owned(),
+                Value::String(format!(
+                    "macOS may open the general Notifications list. Choose {app}, enable Allow Notifications, then enable Banners or Alerts plus Sounds."
+                )),
+            );
+        }
+    }
+    body
+}
+
+fn disabled_by_env() -> bool {
+    std::env::var("HOL_GUARD_DESKTOP_NOTIFICATIONS").is_ok_and(|value| {
+        matches!(
+            value.trim().to_lowercase().as_str(),
+            "0" | "false" | "off" | "no"
+        )
+    })
+}
+
+fn system_name() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "Darwin",
+        "linux" => "Linux",
+        "windows" => "Windows",
+        "freebsd" => "FreeBSD",
+        "openbsd" => "OpenBSD",
+        "netbsd" => "NetBSD",
+        _ => "unknown",
+    }
+}
+
 fn invalid() -> String {
     "desktop_notification_request_invalid".to_owned()
 }

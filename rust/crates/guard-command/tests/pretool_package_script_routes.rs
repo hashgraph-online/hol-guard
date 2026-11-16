@@ -63,11 +63,21 @@ thread_local! {
 }
 
 fn classify(cwd: &Path, harness: &str, command: &str) -> PreToolResultV1 {
+    evaluate(cwd, harness, json!({"command": command}))
+}
+
+/// As [`classify`], for a host whose run directory is a tool argument rather
+/// than the session directory.
+fn classify_in(cwd: &Path, harness: &str, command: &str, directory: &str) -> PreToolResultV1 {
+    evaluate(cwd, harness, json!({"command": command, "cwd": directory}))
+}
+
+fn evaluate(cwd: &Path, harness: &str, input: serde_json::Value) -> PreToolResultV1 {
     let home = HOME.with(|declared| declared.borrow().clone());
     evaluate_pre_tool_envelope_with_context(
         harness,
         "PreToolUse",
-        &json!({"tool_name": "bash", "tool_input": {"command": command}}),
+        &json!({"tool_name": "bash", "tool_input": input}),
         None,
         None,
         home.as_deref(),
@@ -362,6 +372,48 @@ fn a_test_named_tool_body_keeps_the_receipt_only_while_the_tool_is_installed() {
         if cfg!(target_os = "macos") {
             assert_eq!(present.reason_code, PACKAGE_TEST, "{harness}");
         }
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// Oh My Pi's `bash` tool runs its command in the optional `cwd` argument, so
+/// a run in a scratch checkout outside the session is judged there. A
+/// reproduction left under a temporary root is a project with a manifest and
+/// no repository: reading only a repository marker gave it no root, the
+/// package-test route declined it, and `npm test` fell through to the generic
+/// package prompt while the same command in the session's own directory ran
+/// contained.
+#[test]
+fn a_test_run_in_a_scratch_project_outside_the_session_takes_the_package_route() {
+    let root = root();
+    let session = project(&root, "session", json!({"test": "node --test"}), &[]);
+    let scratch = root.join("scratch/slug-repro");
+    std::fs::create_dir_all(&scratch).unwrap();
+    std::fs::write(
+        scratch.join("package.json"),
+        json!({"name": "slug-repro", "scripts": {"test": "node --test"}}).to_string(),
+    )
+    .unwrap();
+    let own = classify(&session, "omp", "npm test");
+    let outside = classify_in(&session, "omp", "npm test", scratch.to_str().unwrap());
+    assert_ne!(outside.decision, "allow");
+    assert_ne!(outside.minimum_action, "allow");
+    // Only the package-test sandbox is rooted there: a build or a tool run in
+    // a directory no repository roots keeps the prompt it had.
+    let build = classify_in(&session, "omp", "npm run build", scratch.to_str().unwrap());
+    assert_ne!(build.reason_code, PACKAGE_TEST);
+    assert_ne!(build.reason_code, NODE_BUILD);
+    if guard_command::pretool::workspace_sandbox_available() {
+        // The session's own run is the answer the scratch run has to match:
+        // one command, one route.
+        assert_eq!(own.reason_code, PACKAGE_TEST);
+        assert_eq!(
+            (
+                outside.minimum_action.as_str(),
+                outside.reason_code.as_str()
+            ),
+            ("sandbox-required", PACKAGE_TEST)
+        );
     }
     let _ = std::fs::remove_dir_all(root);
 }

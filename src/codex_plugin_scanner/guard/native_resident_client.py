@@ -15,6 +15,7 @@ import threading
 import time
 from collections.abc import Mapping
 from contextvars import ContextVar
+from functools import partial
 from pathlib import Path
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
@@ -196,8 +197,18 @@ class _PersistentNativeClientPool:
                 return False
             return any(client._process is not None and client._process.poll() is None for client in self._idle)
 
-    def _lease(self, *, deadline_monotonic: float) -> _PersistentNativeClient | None:
+    def _lease(self, *, deadline_monotonic: float, idle_only: bool = False) -> _PersistentNativeClient | None:
         with self._condition:
+            if idle_only:
+                # Readiness is advisory: another caller can borrow the last
+                # stream before dispatch. Select and remove it atomically.
+                if not self._closed:
+                    for client in reversed(self._idle):
+                        if client._process is not None and client._process.poll() is None:
+                            self._idle.remove(client)
+                            self._parked_at.pop(client, None)
+                            return client
+                return None
             while not self._closed:
                 # Timed-out requests may have no teardown budget left. Retain
                 # ownership until close confirms containment, but reclaim
@@ -232,25 +243,30 @@ class _PersistentNativeClientPool:
         *,
         deadline_monotonic: float,
         diagnostic: bool = False,
+        idle_only: bool = False,
     ) -> bytes | None:
         """Send one request. ``diagnostic`` asks a question about the resident
         rather than giving it work: the answer must not arm or clear the hold
         that gates hook execution, and the stream it borrows is retired rather
         than parked, so the question leaves no lease of its own behind.
         """
-        if restart_hold_active(self._hold_key) and not self.has_idle_client():
+        if not idle_only and restart_hold_active(self._hold_key) and not self.has_idle_client():
             # The Rust client just refused to respawn a crash-looping resident.
             # Answer the same bounded refusal instead of spawning a client per call.
             _LAST_FAILURE_CODE.set(RESTART_BLOCKED_CODE)
             _LAST_HOLD_KEY.set(self._hold_key)
             return restart_blocked_frame()
-        client = self._lease(deadline_monotonic=deadline_monotonic)
+        client = self._lease(deadline_monotonic=deadline_monotonic, idle_only=idle_only)
         if client is None:
             return None
         response: bytes | None = None
         try:
             _record_resident_request(payload)
-            response = client.request(payload, deadline_monotonic=deadline_monotonic)
+            response = (
+                client.request(payload, deadline_monotonic=deadline_monotonic, allow_start=False)
+                if idle_only
+                else client.request(payload, deadline_monotonic=deadline_monotonic)
+            )
             if response is not None and not diagnostic:
                 if is_restart_blocked_frame(response):
                     arm_restart_hold(self._hold_key)
@@ -642,6 +658,7 @@ def native_resident_client_request(
     raw_hook_envelope: bool = False,
     deadline_monotonic: float | None = None,
     diagnostic: bool = False,
+    idle_only: bool = False,
 ) -> bytes | None:
     """Send bounded bytes through a persistent Rust client stream.
 
@@ -649,6 +666,10 @@ def native_resident_client_request(
     A diagnostic leaves the hook path exactly as it found it: the restart hold
     is neither armed nor cleared, and the failure code and hold key a hook
     request left behind are restored before returning.
+
+    ``idle_only`` borrows only an existing live idle client, without waiting
+    for pool capacity or spawning a Python-owned client process. Rust still
+    owns resident recovery behind a live client stream.
     """
     previous_failure = _LAST_FAILURE_CODE.get() if diagnostic else None
     previous_hold_key = _LAST_HOLD_KEY.get() if diagnostic else None
@@ -662,6 +683,7 @@ def native_resident_client_request(
             raw_hook_envelope=raw_hook_envelope,
             deadline_monotonic=deadline_monotonic,
             diagnostic=diagnostic,
+            idle_only=idle_only,
         )
     finally:
         if diagnostic:
@@ -681,6 +703,7 @@ def _resident_client_request(
     raw_hook_envelope: bool,
     deadline_monotonic: float | None,
     diagnostic: bool,
+    idle_only: bool = False,
 ) -> bytes | None:
     _LAST_FAILURE_CODE.set(None)
     _LAST_HOLD_KEY.set(None)
@@ -700,11 +723,23 @@ def _resident_client_request(
     if deadline is None:
         assert timeout_seconds is not None
         deadline = time.monotonic() + timeout_seconds
-    return _client_pool_for(executable, guard_home / "native-runtime", environment).request(
+    if idle_only:
+        key = (str(executable), str(_pinned_state_dir(guard_home / "native-runtime")))
+        with _CLIENTS_LOCK:
+            pool = _CLIENT_POOLS.get(key)
+        if pool is None:
+            return None
+    else:
+        pool = _client_pool_for(executable, guard_home / "native-runtime", environment)
+    return pool.request(
         payload,
         deadline_monotonic=deadline,
         diagnostic=diagnostic,
+        idle_only=idle_only,
     )
+
+
+native_resident_client_request_if_idle = partial(native_resident_client_request, idle_only=True)
 
 
 __all__ = [
@@ -716,6 +751,7 @@ __all__ = [
     "native_resident_client_failure_hold_key",
     "native_resident_client_ready",
     "native_resident_client_request",
+    "native_resident_client_request_if_idle",
     "record_native_resident_client_failure_code",
     "record_native_resident_client_failure_hold_key",
     "record_native_resident_error_frame",

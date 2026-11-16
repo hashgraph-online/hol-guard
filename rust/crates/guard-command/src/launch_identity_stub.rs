@@ -13,6 +13,7 @@ use guard_contracts::write_canonical_json;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
+pub use crate::launch_identity_common::package_binding_argv_digest;
 pub use crate::launch_identity_common::package_request_launch_identity_material;
 use crate::launch_identity_common::{
     launch_argv_digest, normalized_launch_cwd, runtime_launch_argv, sha256_hex, RuntimeLaunchArgv,

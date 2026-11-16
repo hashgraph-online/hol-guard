@@ -11,9 +11,9 @@ import pytest
 
 from codex_plugin_scanner.ecosystems.kimi import _path_values
 from codex_plugin_scanner.guard import action_lattice
+from codex_plugin_scanner.guard import native_daemon_client as client
 from codex_plugin_scanner.guard.adapters.claude_hook_config import handler_identity
 from codex_plugin_scanner.guard.approval_scope_support import package_request_portable_workspace_scope
-from codex_plugin_scanner.guard.daemon import client
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction, GuardArtifact
 from codex_plugin_scanner.guard.package_execution_context import (
     PackageExecutionContext,

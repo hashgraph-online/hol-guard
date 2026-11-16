@@ -100,6 +100,26 @@
     "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la", "tool_use_id": "b"}}
   },
   {
+    "name": "session-bound codex retry in a later turn", "harness": "codex", "same_identity": true,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "turn_id": "turn-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "turn_id": "turn-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "codex later turn without a session", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "Bash", "turn_id": "turn-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "turn_id": "turn-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "codex nested turn id is input", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "turn_id": "turn-first", "tool_input": {"command": "ls -la", "turn_id": "a"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "turn_id": "turn-first", "tool_input": {"command": "ls -la", "turn_id": "b"}}
+  },
+  {
+    "name": "other harness keeps turn id", "harness": "claude-code", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "turn_id": "turn-first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "turn_id": "turn-retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
     "name": "other harness retains tool use id", "harness": "gemini", "same_identity": false,
     "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
     "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}

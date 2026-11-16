@@ -17,7 +17,7 @@ from .runtime.local_cli_commands import (
 )
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .runtime.local_mcp_stdio import McpCatalogResult
-from .store_custom_extension_continuity import _write_local_cli_grant
+from .store_custom_extension_continuity import _native_grant_write
 from .store_local_cli_capabilities import LocalCliCapabilityState, capability_map, load_local_cli_capabilities
 from .store_local_cli_context import note_capability_cause
 from .store_local_cli_retention import utc_now_iso
@@ -221,22 +221,19 @@ class StoreLocalCliMixin:
             ensure_local_cli_schema(connection)
             reviewing = (identity.cli_id,) if reviewed_catalog_revision is not None else ()
             change_ids = catalog_change_ids(connection, reviewing)
-        with self._connect() as connection:
-            current = connection.execute("select revision from local_cli_authority where singleton = 1").fetchone()
-            current_revision = 0 if current is None else _row_int(current[0])
-            if current_revision != expected_revision:
-                raise ValueError("local_cli_revision_conflict")
-            next_revision = _write_local_cli_grant(
-                connection,
-                identity=identity,
-                state=state,
-                current_revision=current_revision,
-                updated_at=updated_at,
-                command_states=command_states,
-                reviewed_catalog_revision=reviewed_catalog_revision,
-                catalog_change_ids=change_ids,
-            )
-        return next_revision
+        args: dict[str, object] = {
+            "cli_id": identity.cli_id,
+            "identity_hash": identity.identity_hash,
+            "state": state,
+            "expected_revision": expected_revision,
+            "updated_at": updated_at,
+            "catalog_change_ids": change_ids,
+        }
+        if command_states is not None:
+            args["command_states"] = dict(command_states)
+        if reviewed_catalog_revision is not None:
+            args["reviewed_catalog_revision"] = reviewed_catalog_revision
+        return _native_grant_write(self, "upsert_local_cli_grant", args)
 
     def replace_local_cli_commands(
         self,

@@ -128,6 +128,14 @@ pub(crate) fn evaluate_hook_authority_state_request(
 }
 
 pub(crate) fn evaluate(request: &HookAuthorityStateRequestV1) -> Result<Value, &'static str> {
+    evaluate_within(request, Duration::from_millis(5000))
+}
+
+/// `evaluate` waiting at most `busy` for a store another writer holds.
+pub(crate) fn evaluate_within(
+    request: &HookAuthorityStateRequestV1,
+    busy: Duration,
+) -> Result<Value, &'static str> {
     if request.schema != HOOK_AUTHORITY_STATE_REQUEST_SCHEMA {
         return Err("native_hook_authority_state_schema_mismatch");
     }
@@ -140,9 +148,7 @@ pub(crate) fn evaluate(request: &HookAuthorityStateRequestV1) -> Result<Value, &
     let connection =
         Connection::open_with_flags(&request.store_path, OpenFlags::SQLITE_OPEN_READ_WRITE)
             .map_err(|_| ERROR_STORE)?;
-    connection
-        .busy_timeout(Duration::from_millis(5000))
-        .map_err(|_| ERROR_STORE)?;
+    connection.busy_timeout(busy).map_err(|_| ERROR_STORE)?;
     // One writer at a time: every flow reads, then rewrites or consumes state,
     // so concurrent hooks must not interleave between those steps.
     connection

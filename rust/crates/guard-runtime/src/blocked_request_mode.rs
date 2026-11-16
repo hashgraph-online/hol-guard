@@ -238,7 +238,8 @@ fn reason_code_hint(reason_code: &str) -> &'static str {
             "Package installs download code from a registry, so Guard reviews them. An install \
              that only restores the committed lockfile and runs no scripts (`bun install \
              --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile \
-             --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked \
+             --ignore-scripts --ignore-pnpmfile` or `npm ci --ignore-scripts`) can proceed once \
+             Guard has checked \
              the lockfile and settings. If this was already that form, reuse dependencies that \
              are already installed where you can."
         }
@@ -410,6 +411,29 @@ mod tests {
             Some(true),
         );
         assert!(install.contains("--ignore-scripts"), "{install}");
+    }
+
+    /// Guard tells the agent which install form can proceed. Every form it
+    /// names has to be one the native authority actually proves script-free,
+    /// or the advice sends the agent straight back into the same review. The
+    /// pnpm form needs `--ignore-pnpmfile` as well, because a `.pnpmfile.cjs`
+    /// hook runs its own code during the install.
+    #[test]
+    fn every_install_form_the_hint_names_is_one_guard_proves_script_free() {
+        let hint = reason_code_hint("native_package_review");
+        let forms: Vec<&str> = hint
+            .split('`')
+            .skip(1)
+            .step_by(2)
+            .filter(|form| form.contains("install") || form.contains(" ci"))
+            .collect();
+        assert_eq!(forms.len(), 3, "{hint}");
+        for form in forms {
+            assert!(
+                guard_command::pretool::no_script_install_command(form),
+                "the hint offers `{form}`, which Guard does not prove script-free"
+            );
+        }
     }
 
     #[test]

@@ -7,10 +7,12 @@ The managed ``pretool-hook.json`` file is unused until that entry exists.
 from __future__ import annotations
 
 import json
+import os
 import shlex
 from collections.abc import Mapping, Sequence
+from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 from codex_plugin_scanner.safe_output import write_text_atomic_no_follow
 
@@ -35,42 +37,113 @@ def hermes_hook_command_string(command: Sequence[str]) -> str:
     return shlex.join([str(part) for part in command])
 
 
-def is_guard_pretool_entry(entry: object, *, expected_command: str | None = None) -> bool:
-    if not isinstance(entry, Mapping):
-        return False
-    if entry.get("id") == _GUARD_HOOK_ID:
-        return True
-    command = entry.get("command")
-    return isinstance(expected_command, str) and bool(expected_command) and command == expected_command
+def _hook_config(request: dict[str, object]) -> dict[str, object]:
+    """Ask the native ``hermes_hook_config`` kind which entries Guard owns."""
+
+    # Imported here so the hook bridges stay off the native runtime at import time.
+    from ..native_runner_authority import native_runner_authority
+
+    answer = native_runner_authority("hermes_hook_config", request)
+    if not isinstance(answer, dict):
+        _invalid()
+    return answer
 
 
-def _legacy_guard_pretool_command(command: object, *, expected_command: str | None = None) -> bool:
-    if not isinstance(command, str) or not command.strip():
-        return False
+def _invalid() -> NoReturn:
+    from ..native_runner_authority import NativeRunnerAuthorityError
+
+    raise NativeRunnerAuthorityError("native_hermes_hook_config_invalid")
+
+
+_ENTRY_FIELDS = ("id", "command", "matcher", "fail_closed", "failClosed")
+_APPROVAL_FIELDS = ("event", "command")
+
+
+def _wire(items: list[object], fields: tuple[str, ...]) -> list[object]:
+    """Items as sent to the resident: only the fields ownership is decided on.
+
+    The rest of an item never reaches the resident, so it neither inflates the
+    request nor hides the item. A field holding text the resident cannot encode
+    is left out; such text can never be Guard's own id or command.
+    """
+
+    wire: list[object] = []
+    for item in items:
+        if not isinstance(item, dict):
+            wire.append(None)
+            continue
+        projected: dict[str, object] = {}
+        for field in fields:
+            value = item.get(field)
+            if isinstance(value, str):
+                try:
+                    value.encode()
+                except UnicodeEncodeError:
+                    continue
+            elif not isinstance(value, bool):
+                continue
+            projected[field] = value
+        wire.append(projected)
+    return wire
+
+
+def _kept(items: list[object], indices: object) -> list[object]:
+    if not isinstance(indices, list) or not all(type(index) is int and 0 <= index < len(items) for index in indices):
+        _invalid()
+    if any(left >= right for left, right in pairwise(indices)):
+        _invalid()
+    return [items[index] for index in indices]
+
+
+def _install_cwd() -> str | None:
+    """The directory a relative hook script resolves from; ``None`` when it is gone."""
+
     try:
-        tokens = shlex.split(command)
-    except ValueError:
-        return False
-    if "__guard-bounded-hook" in tokens:
-        return True
-    try:
-        inline_index = tokens.index("-c")
-    except ValueError:
-        inline_index = -1
-    if inline_index >= 0 and inline_index + 1 < len(tokens) and "bounded_cli_hook_bridge" in tokens[inline_index + 1]:
-        return True
-    if len(tokens) != 3 or tokens[1] != "-I" or expected_command is None:
-        return False
-    try:
-        expected_tokens = shlex.split(expected_command)
-    except ValueError:
-        return False
-    if len(expected_tokens) != 3 or expected_tokens[1] != "-I":
-        return False
-    try:
-        return Path(tokens[2]).resolve() == Path(expected_tokens[2]).resolve()
+        return os.getcwd()
     except OSError:
-        return False
+        return None
+
+
+def _pretool_plan(entries: list[object], *, expected_command: str | None) -> tuple[list[object], list[str]]:
+    """Entries to keep and the commands of the Guard entries dropped."""
+
+    # Only an install compares script paths, so only an install needs a cwd.
+    cwd = _install_cwd() if expected_command is not None else None
+    answer = _hook_config(
+        {
+            "op": "pretool_plan",
+            "entries": _wire(entries, _ENTRY_FIELDS),
+            "expected_command": expected_command,
+            "cwd": cwd,
+        }
+    )
+    removed = answer.get("removed")
+    if not isinstance(removed, list) or not all(isinstance(item, str) for item in removed):
+        _invalid()
+    return _kept(entries, answer.get("keep")), removed
+
+
+def _allowlist_plan(payload: Mapping[str, object], *, command: str, retire: list[str], mode: str) -> list[object]:
+    """Approvals kept after dropping Guard's retired or removed ones, plus Guard's own when merging."""
+
+    approvals = payload.get("approvals", [])
+    items = list(approvals) if isinstance(approvals, list) else []
+    answer = _hook_config(
+        {
+            "op": "allowlist_plan",
+            "approvals": _wire(items, _APPROVAL_FIELDS),
+            "command": command,
+            "retire": retire,
+            "mode": mode,
+        }
+    )
+    append = answer.get("append")
+    if not isinstance(append, bool):
+        _invalid()
+    kept = _kept(items, answer.get("keep"))
+    if append:
+        kept.append({"event": _PRETOOL_EVENT, "command": command})
+    return kept
 
 
 def guard_pretool_hook_entry(*, command: Sequence[str], timeout_seconds: int) -> dict[str, object]:
@@ -101,22 +174,27 @@ def guard_pretool_hook_registered(
     hooks = config.get("hooks")
     if not isinstance(hooks, Mapping):
         return False
-    for entry in _pretool_entries(hooks):
-        if not isinstance(entry, Mapping):
-            continue
-        if entry.get("fail_closed") is not True and entry.get("failClosed") is not True:
-            continue
-        if entry.get("matcher") != ".*":
-            continue
-        if not is_guard_pretool_entry(entry, expected_command=expected_command):
-            continue
-        command = entry.get("command")
-        if not isinstance(command, str) or not command.strip():
-            continue
-        if allowlist_path is not None and not _allowlist_has_command(allowlist_path, command):
-            continue
-        return True
-    return False
+    entries = _pretool_entries(hooks)
+    if not entries:
+        return False
+    from ..native_runner_authority import NativeRunnerAuthorityError
+
+    approvals: object = None
+    if allowlist_path is not None:
+        payload = _read_allowlist(allowlist_path)
+        approvals = False if payload is None else _wire(list(payload.get("approvals", [])), _APPROVAL_FIELDS)
+    request: dict[str, object] = {
+        "op": "registered",
+        "entries": _wire(entries, _ENTRY_FIELDS),
+        "expected_command": expected_command,
+        "approvals": approvals,
+    }
+    # A read-only probe: a resident that cannot answer leaves the hook unproven.
+    try:
+        registered = _hook_config(request).get("registered")
+    except NativeRunnerAuthorityError:
+        return False
+    return registered if isinstance(registered, bool) else False
 
 
 def merge_guard_pretool_hook(
@@ -138,18 +216,7 @@ def merge_guard_pretool_hook(
     if not isinstance(hooks, dict):
         return False, []
     expected = hermes_hook_command_string(command)
-    preserved: list[object] = []
-    removed: list[str] = []
-    for entry in _pretool_entries(hooks):
-        if is_guard_pretool_entry(entry, expected_command=expected) or (
-            isinstance(entry, Mapping)
-            and _legacy_guard_pretool_command(entry.get("command"), expected_command=expected)
-        ):
-            old_command = entry.get("command") if isinstance(entry, Mapping) else None
-            if isinstance(old_command, str) and old_command.strip():
-                removed.append(old_command)
-            continue
-        preserved.append(entry)
+    preserved, removed = _pretool_plan(_pretool_entries(hooks), expected_command=expected)
     preserved.append(guard_pretool_hook_entry(command=command, timeout_seconds=timeout_seconds))
     hooks[_PRETOOL_EVENT] = preserved
     return True, removed
@@ -159,17 +226,7 @@ def remove_guard_pretool_hooks(config: dict[str, Any]) -> list[str]:
     hooks = config.get("hooks")
     if not isinstance(hooks, dict):
         return []
-    removed: list[str] = []
-    preserved: list[object] = []
-    for entry in _pretool_entries(hooks):
-        if is_guard_pretool_entry(entry) or (
-            isinstance(entry, Mapping) and _legacy_guard_pretool_command(entry.get("command"))
-        ):
-            command = entry.get("command") if isinstance(entry, Mapping) else None
-            if isinstance(command, str) and command.strip():
-                removed.append(command)
-            continue
-        preserved.append(entry)
+    preserved, removed = _pretool_plan(_pretool_entries(hooks), expected_command=None)
     if preserved:
         hooks[_PRETOOL_EVENT] = preserved
     else:
@@ -192,14 +249,7 @@ def merge_guard_hook_allowlist(
     payload = _read_allowlist(allowlist_path)
     if payload is None:
         raise ValueError(_MALFORMED_ALLOWLIST)
-    retired = {item for item in retire_commands if item and item != command_string}
-    approvals = [
-        item
-        for item in payload.get("approvals", [])
-        if isinstance(item, dict) and not (item.get("event") == _PRETOOL_EVENT and item.get("command") in retired)
-    ]
-    if not any(item.get("event") == _PRETOOL_EVENT and item.get("command") == command_string for item in approvals):
-        approvals.append({"event": _PRETOOL_EVENT, "command": command_string})
+    approvals = _allowlist_plan(payload, command=command_string, retire=list(retire_commands), mode="merge")
     _atomic_write_allowlist(
         allowlist_path,
         json.dumps({**payload, "approvals": approvals}, indent=2) + "\n",
@@ -213,12 +263,7 @@ def remove_guard_hook_allowlist(hermes_home: Path, *, command_string: str) -> No
     payload = _read_allowlist(allowlist_path)
     if payload is None:
         return
-    approvals = [
-        item
-        for item in payload.get("approvals", [])
-        if isinstance(item, dict)
-        and not (item.get("event") == _PRETOOL_EVENT and item.get("command") == command_string)
-    ]
+    approvals = _allowlist_plan(payload, command=command_string, retire=[], mode="remove")
     _atomic_write_allowlist(
         allowlist_path,
         json.dumps({**payload, "approvals": approvals}, indent=2) + "\n",
@@ -344,16 +389,6 @@ def _read_allowlist(path: Path) -> dict[str, Any] | None:
     if not isinstance(approvals, list):
         return None
     return raw
-
-
-def _allowlist_has_command(path: Path, command: str) -> bool:
-    payload = _read_allowlist(path)
-    if payload is None:
-        return False
-    return any(
-        isinstance(item, dict) and item.get("event") == _PRETOOL_EVENT and item.get("command") == command
-        for item in payload.get("approvals", [])
-    )
 
 
 def _allowlist_destination(hermes_home: Path) -> Path:

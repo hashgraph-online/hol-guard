@@ -70,12 +70,12 @@ _SAFE_KEY_EXCEPTIONS: Final = frozenset(
 )
 _SERIALIZERS: Final = (
     (
-        "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
+        "src/codex_plugin_scanner/guard/hook_review/hook_metrics.py",
         "_snapshot_locked",
         "HookMetricsRecorder",
     ),
     (
-        "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
+        "src/codex_plugin_scanner/guard/hook_review/hook_metrics.py",
         "snapshot",
         "HookMetricsRecorder",
     ),
@@ -231,7 +231,7 @@ def _dynamic_failures() -> list[str]:
         if not validate_artifact(artifact):
             failures.append("dynamic privacy probe accepted a raw-content adversarial artifact")
     try:
-        from codex_plugin_scanner.guard.daemon.hook_metrics import HookMetricsRecorder
+        from codex_plugin_scanner.guard.hook_review.hook_metrics import HookMetricsRecorder
 
         metrics = HookMetricsRecorder()
         metrics.record_route("native_resident")

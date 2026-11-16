@@ -465,11 +465,12 @@ def native_adapter_state_integrity_runtime(
 ) -> Path:
     """Answer adapter-state authentication requests from the shared resident.
 
-    The ``adapter_state_integrity`` op reads the manifest and the key off the
-    wire, so the Guard home it is asked about only has to name a resident that
-    is already keyed and warm.  Tests keep their own ``tmp_path`` guard home
-    for the adapter state key file, which stays Python-side, and borrow the
-    session home for the runtime call.
+    The ``adapter_state_integrity`` op reads the manifest off the wire and the
+    key from the ``key_home`` it names, so the Guard home it is asked about
+    only has to name a resident that is already keyed and warm.  Tests keep
+    their own ``tmp_path`` guard home for the adapter state key file, which
+    the runtime reads and creates there, and borrow the session home for the
+    runtime call.
     """
 
     from codex_plugin_scanner.guard import native_adapter_state_integrity

@@ -41,6 +41,9 @@ _RELEASE_DOWNLOAD_PREFIX = "https://github.com/hashgraph-online/hol-guard/releas
 _DESKTOP_APP_ID = "org.hol.guard.desktop"
 _ONEDIR_FEATURE = "native-desktop-core-onedir-v1"
 _MAX_MANIFEST_BYTES = 128 * 1024
+# `codesign --verify` on a sealed onedir launcher hashes every bundled resource, which takes
+# several seconds on a busy Mac. The ceiling only bounds a hung codesign.
+_SIGNATURE_TIMEOUT_SECONDS = 30.0
 _MAX_BINARY_BYTES = 300 * 1024 * 1024
 _USER_AGENT = "HOL-Guard-Core-Updater"
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -470,8 +473,6 @@ def _verify_candidate(path: Path, *, expected_team: str | None, expected_sha256:
         raise DesktopCoreUpdateError("desktop_core_integrity_mismatch")
     if sys.platform != "darwin":
         return
-    if not _macos_codesign_ok(path):
-        raise DesktopCoreUpdateError("desktop_core_signature_invalid")
     actual_team = _macos_signing_team(path)
     if expected_team is None or actual_team != expected_team:
         raise DesktopCoreUpdateError("desktop_core_signature_mismatch")
@@ -643,12 +644,8 @@ def _install_managed_core_onedir(tree: Path, manifest: _ParsedOnedirManifest, ta
     return installed
 
 
-def _macos_codesign_ok(path: Path) -> bool:
-    return verified_macos_signing_team(path) is not None
-
-
 def _macos_signing_team(path: Path) -> str:
-    team = verified_macos_signing_team(path)
+    team = verified_macos_signing_team(path, timeout=_SIGNATURE_TIMEOUT_SECONDS)
     if team is None:
         raise DesktopCoreUpdateError("desktop_core_signature_invalid")
     return team

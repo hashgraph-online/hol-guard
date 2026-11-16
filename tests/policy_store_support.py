@@ -18,6 +18,8 @@ from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_hook_artifact_compose import native_hook_compose
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import (
+    _REMOTE_POLICY_SOURCE_PARAMS,
+    _REMOTE_POLICY_SOURCE_PLACEHOLDERS,
     _SCOPED_RUNTIME_EXACT_FAMILIES,
     PolicyDecisionLookupResult,
     _artifact_family_key,
@@ -152,7 +154,21 @@ def replace_remote_policies(
         remote_write_authorized=remote_write_authorized,
     )
     with store._connect() as connection:
-        store._replace_remote_policy_rows_locked(connection, rows)
+        connection.execute(
+            f"delete from policy_decisions where source in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}",
+            _REMOTE_POLICY_SOURCE_PARAMS,
+        )
+        connection.executemany(
+            """
+            insert into policy_decisions (
+              harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
+              expires_at, updated_at, integrity_version, integrity_generation, payload_hash, payload_mac,
+              integrity_key_id, signed_at
+            )
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
 
 
 def runtime_tool_action_policy_artifact_id(artifact_id: str | None) -> str | None:

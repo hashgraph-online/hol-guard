@@ -5,7 +5,6 @@ import os
 import shutil
 import subprocess
 import sys
-import threading
 import urllib.parse
 import urllib.request
 from http.client import HTTPResponse
@@ -14,9 +13,7 @@ from typing import Protocol, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-from codex_plugin_scanner.guard.store import GuardStore
-from tests.runtime_hook_scheduler_support import set_active_limit
+from ci.guard_daemon_harness import GuardDaemonServer
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -67,49 +64,6 @@ def _pi_hook_request(*, daemon: GuardDaemonServer, guard_home: str, call_id: str
         headers={"Content-Type": "application/json", "X-Guard-Token": _daemon_internals(daemon).auth_token},
         method="POST",
     )
-
-
-@pytest.mark.usefixtures("native_hook_force")
-def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    first_started = threading.Event()
-    release_first = threading.Event()
-
-    def fake_review(**kwargs: object) -> dict[str, object]:
-        payload = kwargs["payload"]
-        assert isinstance(payload, dict)
-        if payload["tool_call_id"] == "first":
-            first_started.set()
-            assert release_first.wait(timeout=2)
-        return {"decision": "allow"}
-
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    monkeypatch.setattr(_daemon_internals(daemon).hook_worker, "review_http_payload", fake_review)
-    daemon.start()
-    set_active_limit(_daemon_internals(daemon).runtime_hook_scheduler, 2)
-    first_result: list[dict[str, object]] = []
-
-    def run_first() -> None:
-        request = _pi_hook_request(daemon=daemon, guard_home=str(store.guard_home), call_id="first")
-        with cast(HTTPResponse, urllib.request.urlopen(request, timeout=3)) as response:
-            first_result.append(_read_json_object(response))
-
-    first_thread = threading.Thread(target=run_first)
-    first_thread.start()
-    try:
-        assert first_started.wait(timeout=1)
-        request = _pi_hook_request(daemon=daemon, guard_home=str(store.guard_home), call_id="second")
-        with cast(HTTPResponse, urllib.request.urlopen(request, timeout=1)) as response:
-            second_result = _read_json_object(response)
-    finally:
-        release_first.set()
-        first_thread.join(timeout=3)
-        daemon.stop()
-    assert second_result == {"decision": "allow"}
-    assert first_result == [{"decision": "allow"}]
 
 
 def test_pi_hook_deadline_stays_inside_host_timeout() -> None:

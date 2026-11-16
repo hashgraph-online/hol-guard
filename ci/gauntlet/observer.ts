@@ -127,7 +127,13 @@ function recordExchange(exchange: {
 }): void {
   const { request, probe, body } = exchange;
   const nativeObservation = publicNativeObservation(body);
-  const input = JSON.stringify(request.tool_input ?? null);
+  // The extension reviews each prompt before its turn starts. That answer names
+  // no tool, so its input is an empty object and the prompt text stays out of
+  // the evidence. Project context it adds reaches the model hidden, so only the
+  // fields the agent would show count as rendered.
+  const prompt = exchange.event === "UserPromptSubmit";
+  const input = JSON.stringify(prompt ? {} : request.tool_input ?? null);
+  const rendered = renderedFields(body).filter(field => !(prompt && field === "additionalContext"));
   record({
     ...(exchange.transport ? { transport: exchange.transport } : {}),
     event: exchange.event,
@@ -139,7 +145,7 @@ function recordExchange(exchange: {
     decision: body.decision,
     policy_action: body.policy_action,
     reason_code: body.reason_code,
-    rendered_fields: renderedFields(body),
+    rendered_fields: rendered,
     model_output_action: body.model_output_action,
     reviewed_output_sha256: body.reviewed_output_sha256,
     response_sha256: createHash("sha256").update(JSON.stringify(body)).digest("hex"),

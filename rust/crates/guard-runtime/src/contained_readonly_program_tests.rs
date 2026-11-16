@@ -77,6 +77,48 @@ fn inert_settings_are_carried_into_the_plain_run_behind_them() {
 }
 
 #[test]
+fn an_inert_node_options_setting_is_carried_into_the_runner_behind_it() {
+    let (carried, program) =
+        carried_program("NODE_OPTIONS=--max-old-space-size=4096 npx jest --ci").unwrap();
+    assert_eq!(
+        carried.settings,
+        pairs(&[("NODE_OPTIONS", "--max-old-space-size=4096")])
+    );
+    assert_eq!(carried.behind, words(&["npx", "jest", "--ci"]));
+    assert_eq!(program, plain_program("npx jest --ci").unwrap());
+    // A preload is not inert, so the command keeps it and no run is read.
+    assert_eq!(
+        carried_program("NODE_OPTIONS=--require=./x.js npx jest"),
+        None
+    );
+}
+
+#[test]
+fn an_inline_shell_runs_the_script_it_holds() {
+    for command in [
+        "bash -ec 'pytest -q'",
+        "sh -c 'pytest -q'",
+        "bash -e -c 'pytest -q'",
+    ] {
+        let (carried, program) = inline_program(command).unwrap();
+        assert!(carried.settings.is_empty(), "{command}");
+        assert_eq!(carried.behind, words(&["pytest", "-q"]), "{command}");
+        assert_eq!(program, (words(&["pytest", "-q"]), None, Kind::Pytest));
+    }
+    // A shell that reads more than its script, a chained script, or a command
+    // with no shell in front is not an inline run.
+    for command in [
+        "bash -lc 'pytest -q'",
+        "zsh -c 'pytest -q'",
+        "bash -ec 'pytest -q && rm -rf x'",
+        "bash -c 'CI=1 pytest -q'",
+        "pytest -q",
+    ] {
+        assert_eq!(inline_program(command), None, "{command}");
+    }
+}
+
+#[test]
 fn a_plain_data_setting_is_dropped_and_carries_nothing() {
     let (carried, program) = carried_program("REPORT_DIR=/tmp/r npm test").unwrap();
     assert!(carried.settings.is_empty());

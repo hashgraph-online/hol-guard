@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import atomic_replace
+from codex_plugin_scanner.guard.updates import atomic_replace
 
 
 def _held_open(winerror: int, failures: int):

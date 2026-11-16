@@ -15,7 +15,7 @@ def test_delegated_review_must_reach_snapshot_native_edge(tmp_path: Path) -> Non
     assert spec and spec.loader
     gate = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gate)
-    relative = Path("src/codex_plugin_scanner/guard/daemon")
+    relative = Path("src/codex_plugin_scanner/guard/hook_review")
     target = tmp_path / relative
     target.mkdir(parents=True)
     for name in ("hook_worker.py", "hook_worker_native.py", "hook_worker_native_review.py"):

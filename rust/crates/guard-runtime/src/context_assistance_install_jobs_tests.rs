@@ -395,3 +395,12 @@ fn later_python_patch_requirement_refuses_before_any_job_download_or_sdk() {
     assert!(!settings.requested.enabled);
     assert!(settings.requested.runtime_id.is_empty());
 }
+#[test]
+fn install_records_allow_the_wider_window_and_nothing_beyond_it() {
+    let fixture = Fixture::new();
+    let mut job = fixture.job("install-window");
+    job.deadline_at_ms = job.created_at_ms + 300_000;
+    assert!(job.validate().is_ok());
+    job.deadline_at_ms += 1;
+    assert_eq!(job.validate(), Err(error("install_job_invalid")));
+}

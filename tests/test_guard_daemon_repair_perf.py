@@ -8,8 +8,8 @@ import uuid
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import repair_approval_center_locator
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.native_daemon_manage import repair_approval_center_locator
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_approval_writes import (
     add_approval_request,

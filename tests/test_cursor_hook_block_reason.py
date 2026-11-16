@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from codex_plugin_scanner.guard.daemon.hook_policy_admission import _native_policy_not_ready_reason
+from codex_plugin_scanner.guard.hook_review.hook_policy_admission import _native_policy_not_ready_reason
 
 
 def test_native_policy_not_ready_reason_includes_publisher_error() -> None:

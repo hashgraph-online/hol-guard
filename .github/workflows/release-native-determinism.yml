@@ -93,8 +93,8 @@ jobs:
       - name: Install pinned Rust target
         shell: bash
         run: |
-          rustup toolchain install 1.88.0 --profile minimal
-          rustup default 1.88.0
+          rustup toolchain install 1.89.0 --profile minimal
+          rustup default 1.89.0
           rustup target add "$RUST_TARGET"
       - name: Install Linux static toolchain
         if: runner.os == 'Linux'

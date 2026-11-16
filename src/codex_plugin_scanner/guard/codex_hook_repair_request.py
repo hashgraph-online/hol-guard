@@ -8,7 +8,6 @@ Factors and grants are deliberately absent from this protocol.
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import os
 import time
@@ -17,8 +16,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
+from .codex_hook_authority_record import AuthorityRecordRefusedError, open_authority_record, seal_authority_record
 from .codex_hook_file_integrity import hook_validation_deadline
-from .codex_hook_integrity import canonical_manifest_bytes, hook_manifest_path, load_hook_secret
+from .codex_hook_integrity import hook_manifest_path, load_hook_secret
 from .codex_hook_manifest import CODEX_AUTHORITY_REPAIR_ACTION, CodexHookManifestSpec, PreparedCodexHookRepair
 from .codex_hook_recovery import _decode, load_hook_authority_receipt
 from .codex_publication_inverse_plan import (
@@ -27,7 +27,6 @@ from .codex_publication_inverse_plan import (
     prepare_authenticated_hook_publication_inverse,
 )
 from .durable_io import fsync_directory
-from .local_authority_integrity import sign_local_authority_payload, verify_local_authority_payload
 from .native_runtime import NativeRuntimeIdentity
 from .private_file_io import (
     _private_directory_metadata_is_valid,
@@ -47,7 +46,7 @@ _PURPOSE = "codex-authority-repair-request"
 _MAX_REQUEST = 8 * 1024 * 1024
 _REVIEW_SECONDS = 300.0
 # Canonical JSON preserves each timestamp. Subtracting the loaded values can
-# exceed the signed window by a few ulps. One microsecond covers that error.
+# exceed the signed window by a few ulps; the runtime allows one microsecond.
 _REVIEW_TIMESTAMP_SLACK_SECONDS = 1e-6
 _INVERSE_SCHEMA = "hol-guard.codex-publication-inverse-request.v1"
 _INVERSE_PURPOSE = "codex-publication-inverse-request"
@@ -197,27 +196,26 @@ def write_codex_hook_repair_request(
     if not inverse:
         plan = _plan_from_payload(plan.payload(), home=plan.guard_home, config=plan.config_path)
     _compare(plan, deadline_monotonic)
-    secret = load_hook_secret(plan.guard_home)
+    material = load_hook_secret(plan.guard_home)
     created = time.monotonic()
     payload: dict[str, object] = {
         "schema": _INVERSE_SCHEMA if inverse else _SCHEMA,
         "guard_home": str(plan.guard_home),
         "config_path": str(plan.config_path),
-        "installation_id": secret.installation_id,
+        "installation_id": material.installation_id,
         "created_monotonic": created,
         "expires_monotonic": created + _REVIEW_SECONDS,
         "plan": plan.payload(),
         "subject": plan.subject(),
     }
-    payload["authentication"] = sign_local_authority_payload(
-        payload,
-        key=secret.key,
-        key_id=secret.key_id,
-        purpose=_INVERSE_PURPOSE if inverse else _PURPOSE,
-        signed_at=plan.operation_id,
-    )
-    encoded = canonical_manifest_bytes(payload) + b"\n"
+    try:
+        encoded = seal_authority_record(
+            "inverse_request" if inverse else "repair_request", payload, material, signed_at=plan.operation_id
+        )
+    except AuthorityRecordRefusedError as exc:
+        raise TransitionError(f"authority_repair_request_{exc.reason}") from exc
     if len(encoded) > _MAX_REQUEST:
+        # The read-back below is capped at the same size.
         raise TransitionError("authority_repair_request_too_large")
     _compare(plan, deadline_monotonic)
     parent_fd = None
@@ -282,81 +280,26 @@ def load_codex_hook_repair_request(
     if raw is None or hashlib.sha256(raw).hexdigest() != expected_sha256:
         raise TransitionError("authority_repair_request_changed")
     _check_deadline(deadline_monotonic)
-    try:
-        payload = json.loads(raw)
-    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
-        raise TransitionError("authority_repair_request_invalid") from exc
-    if not isinstance(payload, dict) or set(payload) != {
-        "schema",
-        "guard_home",
-        "config_path",
-        "installation_id",
-        "created_monotonic",
-        "expires_monotonic",
-        "plan",
-        "subject",
-        "authentication",
-    }:
-        raise TransitionError("authority_repair_request_invalid")
     home = guard_home.resolve(strict=False)
     config = config_path.parent.resolve(strict=False) / config_path.name
     inverse = inverse_spec is not None
-    if (
-        payload["schema"] != (_INVERSE_SCHEMA if inverse else _SCHEMA)
-        or payload["guard_home"] != str(home)
-        or payload["config_path"] != str(config)
-    ):
-        raise TransitionError("authority_repair_request_context_invalid")
-    authentication = payload.pop("authentication")
-    secret = load_hook_secret(home)
-    if (
-        not isinstance(authentication, dict)
-        or set(authentication)
-        != {
-            "integrity_version",
-            "payload_hash",
-            "payload_mac",
-            "integrity_key_id",
-            "signed_at",
-        }
-        or type(authentication["integrity_version"]) is not int
-        or payload["installation_id"] != secret.installation_id
-    ):
-        raise TransitionError("authority_repair_request_authentication_invalid")
     try:
-        verification = verify_local_authority_payload(
-            payload,
-            authentication,
-            key=secret.key,
-            key_id=secret.key_id,
-            purpose=_INVERSE_PURPOSE if inverse else _PURPOSE,
+        payload, signed_at = open_authority_record(
+            "inverse_request" if inverse else "repair_request",
+            raw,
+            load_hook_secret(home),
+            guard_home=str(home),
+            config_path=str(config),
         )
-    except (ValueError, TypeError, RecursionError) as exc:
-        raise TransitionError("authority_repair_request_authentication_invalid") from exc
-    if verification.status != "valid":
-        raise TransitionError("authority_repair_request_authentication_invalid")
-    created, expires = payload["created_monotonic"], payload["expires_monotonic"]
-    timestamps_are_real = (
-        isinstance(created, (int, float))
-        and not isinstance(created, bool)
-        and math.isfinite(created)
-        and isinstance(expires, (int, float))
-        and not isinstance(expires, bool)
-        and math.isfinite(expires)
-    )
-    window = expires - created if timestamps_are_real else 0.0
-    if (
-        not timestamps_are_real
-        or not 0 < window <= _REVIEW_SECONDS + _REVIEW_TIMESTAMP_SLACK_SECONDS
-        or not created <= time.monotonic() < expires
-    ):
-        raise TransitionError("authority_repair_request_expired")
+    except AuthorityRecordRefusedError as exc:
+        raise TransitionError(f"authority_repair_request_{exc.reason}") from exc
+    created, expires = cast(float, payload["created_monotonic"]), cast(float, payload["expires_monotonic"])
     plan = (
         _inverse_from_payload(payload["plan"], inverse_spec, deadline_monotonic)
         if inverse_spec is not None
         else _plan_from_payload(payload["plan"], home=home, config=config)
     )
-    if authentication.get("signed_at") != plan.operation_id or payload["subject"] != plan.subject():
+    if signed_at != plan.operation_id or payload["subject"] != plan.subject():
         raise TransitionError("authority_repair_request_plan_invalid")
     _compare(plan, deadline_monotonic)
     if read_private_regular_bytes(path, max_bytes=_MAX_REQUEST, require_private_parent=True) != raw:

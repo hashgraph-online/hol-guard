@@ -10,7 +10,6 @@ from threading import Event
 import pytest
 
 from tests import owned_daemon_test_support as support
-from tests.test_runtime_transition_configured_inverse import DAEMON_PROCESS
 
 
 def test_readiness_is_invisible_until_the_complete_pid_is_published(tmp_path: Path, monkeypatch) -> None:
@@ -58,9 +57,3 @@ def test_invalid_pid_cannot_create_a_ready_marker(tmp_path: Path, pid) -> None:
     with pytest.raises(ValueError, match="positive integer"):
         support.publish_ready_pid(tmp_path / "ready", pid)
     assert list(tmp_path.iterdir()) == []
-
-
-def test_real_daemon_fixture_uses_atomic_publication_after_startup() -> None:
-    assert "from tests.owned_daemon_test_support import publish_ready_pid" in DAEMON_PROCESS
-    assert DAEMON_PROCESS.index("daemon.start()") < DAEMON_PROCESS.index("publish_ready_pid(ready, os.getpid())")
-    assert "with ready.open" not in DAEMON_PROCESS

@@ -258,7 +258,7 @@ pub(super) fn evaluate_signals(
             action,
             "allow",
             super::omp::host_reference_reason(&signals.path_values[0]).unwrap_or_default(),
-            "This Oh My Pi artifact or skill reference names host-held content, not a filesystem path.",
+            "This Oh My Pi artifact, skill, job or session-local reference names host-held content, not a filesystem path.",
         );
     }
     if action_type == PreToolActionTypeV1::FileRead
@@ -486,7 +486,7 @@ pub(super) fn evaluate_signals(
     generic_result(action, "review", reason_code, reason)
 }
 
-const EVAL_REVIEW_REASON: &str = "HOL Guard requires review because code run by eval can start processes, change files or reach the network, and Guard cannot check what it will do before it runs. Run shell commands with the bash tool instead, where Guard checks each command.";
+const EVAL_REVIEW_REASON: &str = "HOL Guard requires review because code run by eval can start processes, change files or reach the network, and Guard cannot check what it will do before it runs. Change files with the edit tool and run shell commands with the bash tool instead; Guard checks each edit and each command.";
 
 /// Whether the tool opens the files it is handed and nothing else. `grep`,
 /// `glob` and the listing tools are file reads too, but they fall back to a

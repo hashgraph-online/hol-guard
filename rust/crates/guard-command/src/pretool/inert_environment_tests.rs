@@ -211,3 +211,31 @@ fn endpoint_names_are_matched_by_fragment_and_libpq_prefix() {
         assert!(!screen::endpoint_steering_environment_name(name), "{name}");
     }
 }
+
+/// A marker buried in an ordinary word names no endpoint: `REPORT_DIR` is a
+/// directory a test run writes into. A name that carries a real marker beside
+/// such a word is still an endpoint.
+#[test]
+fn a_marker_inside_an_ordinary_word_names_no_endpoint() {
+    for name in [
+        "REPORT_DIR",
+        "POSTHOG_REPORT_DIR",
+        "EXPORT_DIR",
+        "IMPORT_PATH_PREFIX",
+        "SUPPORT_EMAIL_NAME",
+        "TRANSPORT_MODE",
+        "SECURITY_LEVEL",
+        "REPORTER",
+    ] {
+        assert!(!screen::endpoint_steering_environment_name(name), "{name}");
+    }
+    for name in [
+        "REPORT_SERVER_URL",
+        "EXPORT_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "TRANSPORT_HOST",
+        "DBHOST",
+    ] {
+        assert!(screen::endpoint_steering_environment_name(name), "{name}");
+    }
+}

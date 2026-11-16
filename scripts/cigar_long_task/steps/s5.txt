@@ -1,0 +1,1 @@
+Document the new features from this session in the user docs: enum choices, deprecated options and arguments, and the "did you mean" suggestion for choices. Put each in the most fitting existing page under docs/ with a short runnable example, and check that each example actually works by running it.

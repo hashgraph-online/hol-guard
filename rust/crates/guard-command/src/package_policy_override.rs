@@ -87,6 +87,9 @@ pub fn approval_reuse_reason_message(reuse: &ApprovalReuseDecision) -> String {
         "approval_reuse_content_changed" => {
             "Saved approval was rejected because the current package content or execution context changed."
         }
+        "approval_reuse_expired" => {
+            "Saved approval was rejected because it expired."
+        }
         "approval_reuse_claim_failed" => {
             "Saved approval was rejected because it changed, expired, or was already consumed."
         }

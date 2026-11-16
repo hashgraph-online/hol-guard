@@ -32,11 +32,19 @@ const READ_BYTES_BUDGET: usize = EVENT_BYTES_LIMIT;
 
 /// `add_event`: append one entry to the local event log. The caller sends the
 /// payload already encoded, so the stored text is exactly what `json.dumps`
-/// wrote.
+/// wrote. With `once`, an entry the log already holds is not added again, so
+/// the hook evidence writer can replay its journal after a crash.
 pub(crate) fn add_event(connection: &rusqlite::Connection, args: &Args<'_>) -> StoreResult<Value> {
+    let sql = if args.flag("once")? {
+        "insert into guard_events (event_name, payload_json, occurred_at) \
+         select ?1, ?2, ?3 where not exists (select 1 from guard_events \
+         where event_name = ?1 and payload_json = ?2 and occurred_at = ?3)"
+    } else {
+        "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)"
+    };
     exec(
         connection,
-        "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
+        sql,
         &[
             Value::from(args.str("event_name")?),
             Value::from(args.str("payload_json")?),
@@ -44,6 +52,36 @@ pub(crate) fn add_event(connection: &rusqlite::Connection, args: &Args<'_>) -> S
         ],
     )?;
     Ok(Value::Null)
+}
+
+/// `list_events_after`: the local event log past `event_id`, oldest first.
+/// A stored payload that is not a mapping reads as an empty one, and one that
+/// is not JSON at all fails the read as `json.loads` does.
+pub(crate) fn list_after(connection: &rusqlite::Connection, args: &Args<'_>) -> StoreResult<Value> {
+    let rows = query_all(
+        connection,
+        "select event_id, event_name, payload_json, occurred_at from guard_events \
+         where event_id > ? order by event_id asc limit ?",
+        &[
+            Value::from(args.int("event_id")?),
+            Value::from(args.int("limit")?),
+        ],
+    )?;
+    let mut items = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let payload = match serde_json::from_str::<Value>(text(row, "payload_json")) {
+            Ok(Value::Object(payload)) => payload,
+            Ok(_) => Map::new(),
+            Err(_) => return Err(PAYLOAD_INVALID),
+        };
+        items.push(json!({
+            "event_id": row.get("event_id").cloned().unwrap_or(Value::Null),
+            "event_name": text(row, "event_name"),
+            "occurred_at": text(row, "occurred_at"),
+            "payload": payload,
+        }));
+    }
+    Ok(Value::Array(items))
 }
 
 /// `add_guard_event_v1`: queue one event, or record that the queue is full.

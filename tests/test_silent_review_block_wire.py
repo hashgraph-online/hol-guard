@@ -19,7 +19,7 @@ import pytest
 from codex_plugin_scanner.guard import native_hook_decision as decision_module
 from codex_plugin_scanner.guard import native_resident_decision as shared
 from codex_plugin_scanner.guard.blocked_request_mode import safe_alternative_reason
-from codex_plugin_scanner.guard.daemon import hook_fail_closed
+from codex_plugin_scanner.guard.hook_review import hook_fail_closed
 from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError, native_review_response
 
 _URL = "http://127.0.0.1:4781/requests/abc"

@@ -61,6 +61,7 @@ fn evaluate_in(
         Some(&fixture::github_controls("enabled")),
         None,
         guard_command::pretool::PathContext {
+            literal_words: &[],
             home_dir: home.to_str(),
             cwd: cwd.to_str(),
             cdpath_unset: false,
@@ -72,6 +73,7 @@ fn evaluate_in(
             ripgrep_config_absent: false,
             gem_config_absent: false,
             http_config_absent: false,
+            openssl_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },

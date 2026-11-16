@@ -24,7 +24,7 @@ const POST_BLOCK_REASON: &str =
     "HOL Guard blocked this tool output because it could not be proven safe.";
 const POST_WARN_REASON: &str =
     "HOL Guard raised a non-blocking warning under the installed native policy.";
-const PROMPT_UNAVAILABLE_REASON: &str = "HOL Guard could not complete native prompt review safely.";
+const PROMPT_UNAVAILABLE_REASON: &str = "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running or not responding, open HOL Guard and choose Troubleshoot Guard, then Restart Guard, or run hol-guard daemon recovery restart, then send the prompt again. For a custom Guard home, run hol-guard daemon recovery restart --guard-home <path>.";
 const SILENT_WARNING_CODES: [&str; 2] = ["native_policy_observed", "native_policy_warning"];
 
 /// The execution profile a containment `reason_code` requires, if any.

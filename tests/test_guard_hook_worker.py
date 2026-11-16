@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -273,11 +273,11 @@ class TestHookWorkerNonPostTool:
     ) -> None:
         """PreToolUse without a native result returns the fail-safe response."""
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+            "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
             lambda *_args, **_kwargs: None,
         )
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+            "codex_plugin_scanner.guard.hook_review.hook_worker.native_runtime_status",
             lambda: NativeRuntimeStatus(mode="force", available=False, compatible=False, reason="missing"),
         )
         payload = {

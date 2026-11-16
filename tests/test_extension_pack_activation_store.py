@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.store_extension_control_authority_schema import 
 )
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.native_activation_support import seed
+from tests.pack_activation_writer_support import write_in_transaction
 from tests.test_extension_pack_preparation import delivery as delivery
 
 
@@ -36,18 +37,14 @@ def test_activation_transaction_rechecks_predecessor_and_keeps_schema_floor_atom
     ensure_extension_control_authority_schema(connection)
     connection.commit()
     with pytest.raises(NativePolicySnapshotError, match="lease_missing"):
-        activation_store.write_in_transaction(store, connection, draft, verifier_key=key, recorded_at="unit", now=1500)
+        write_in_transaction(store, connection, draft, verifier_key=key, recorded_at="unit", now=1500)
     with hold_command_control_authority_lock(store.guard_home):
         with pytest.raises(RuntimeError, match="crash"), connection:
-            activation_store.write_in_transaction(
-                store, connection, draft, verifier_key=key, recorded_at="unit", now=1500
-            )
+            write_in_transaction(store, connection, draft, verifier_key=key, recorded_at="unit", now=1500)
             raise RuntimeError("crash before control commit")
         assert connection.execute("select version from extension_control_schema_migration").fetchone()[0] == 4
         with connection:
-            activation_store.write_in_transaction(
-                store, connection, draft, verifier_key=key, recorded_at="unit", now=1500
-            )
+            write_in_transaction(store, connection, draft, verifier_key=key, recorded_at="unit", now=1500)
     assert connection.execute("select version from extension_control_schema_migration").fetchone()[0] == 6
     row = connection.execute("select * from extension_command_pack_activation").fetchone()
     opened = activation_record.open_record(
@@ -59,9 +56,9 @@ def test_activation_transaction_rechecks_predecessor_and_keeps_schema_floor_atom
         pytest.raises(NativePolicySnapshotError, match="conflict"),
         connection,
     ):
-        activation_store.write_in_transaction(store, connection, draft, verifier_key=key, recorded_at="unit", now=1500)
+        write_in_transaction(store, connection, draft, verifier_key=key, recorded_at="unit", now=1500)
     with (
         hold_command_control_authority_lock(store.guard_home, shared=True),
         pytest.raises(NativePolicySnapshotError, match="lease_missing"),
     ):
-        activation_store.write_in_transaction(store, connection, draft, verifier_key=key, recorded_at="unit", now=1500)
+        write_in_transaction(store, connection, draft, verifier_key=key, recorded_at="unit", now=1500)

@@ -11,8 +11,8 @@ from http.server import HTTPServer
 from pathlib import Path
 from urllib.parse import urlencode
 
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
@@ -39,7 +39,7 @@ def test_real_daemon_rejects_consumed_challenge_replay(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon = NativeGuardDaemon(GuardStore(guard_home), home_dir=tmp_path)
     daemon.start()
     state = json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8"))
     nonce = "a" * 64
@@ -79,7 +79,7 @@ def test_real_daemon_rejects_consumed_challenge_replay(tmp_path: Path) -> None:
         proof_headers = {
             "Content-Type": "application/json",
             "Connection": "close",
-            "X-Guard-Token": daemon._server.auth_token,
+            "X-Guard-Token": daemon.auth_token,
             "X-Guard-Daemon-Nonce": nonce,
             "X-Guard-Daemon-Proof": challenge["proof"],
         }

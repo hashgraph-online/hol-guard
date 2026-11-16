@@ -8,7 +8,7 @@ fn page(queue: &DirectEvidenceQueue, ack: Option<&Value>) -> Value {
         request["ack_epoch"] = previous["epoch"].clone();
     }
     let request: HookDirectEvidenceDrainRequestV1 = serde_json::from_value(request).unwrap();
-    serde_json::from_slice(&drain(&request, queue).unwrap()).unwrap()
+    serde_json::from_slice(&drain(&request, queue, None).unwrap()).unwrap()
 }
 
 fn drained(queue: &DirectEvidenceQueue) -> Vec<Value> {

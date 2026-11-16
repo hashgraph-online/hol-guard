@@ -8,61 +8,10 @@
 
 use super::{safe_reads, search};
 
-struct Word {
-    value: String,
-    unquoted_glob: bool,
-    quoted_glob: bool,
-}
-
-/// Split segment text into shell words, tracking where glob characters sit.
-/// `None` for anything beyond plain words and simple quotes, which makes the
-/// caller treat every glob character as unquoted.
-fn quoted_words(text: &str) -> Option<Vec<Word>> {
-    let mut words = Vec::new();
-    let mut current: Option<Word> = None;
-    let mut quote: Option<char> = None;
-    for character in text.chars() {
-        match quote {
-            Some(open) if character == open => quote = None,
-            Some(open) => {
-                if character == '\\' || (open == '"' && matches!(character, '$' | '`')) {
-                    return None;
-                }
-                let word = current.get_or_insert_with(|| Word {
-                    value: String::new(),
-                    unquoted_glob: false,
-                    quoted_glob: false,
-                });
-                word.quoted_glob |= matches!(character, '*' | '?' | '[');
-                word.value.push(character);
-            }
-            None if matches!(character, '\'' | '"') => {
-                quote = Some(character);
-                current.get_or_insert_with(|| Word {
-                    value: String::new(),
-                    unquoted_glob: false,
-                    quoted_glob: false,
-                });
-            }
-            None if character == '\\' => return None,
-            None if character.is_whitespace() => words.extend(current.take()),
-            None => {
-                let word = current.get_or_insert_with(|| Word {
-                    value: String::new(),
-                    unquoted_glob: false,
-                    quoted_glob: false,
-                });
-                word.unquoted_glob |= matches!(character, '*' | '?' | '[');
-                word.value.push(character);
-            }
-        }
-    }
-    if quote.is_some() {
-        return None;
-    }
-    words.extend(current);
-    Some(words)
-}
+#[path = "listing_words.rs"]
+mod words;
+pub(super) use words::literal_words;
+use words::quoted_words;
 
 enum Operand {
     Plain,
@@ -187,9 +136,9 @@ pub(super) fn listable_glob(value: &str, context: super::PathContext<'_>) -> boo
 
 /// `ls` of a path that does not exist prints only an error. Agents probe for
 /// optional directories this way (`ls ~/work/scripts 2>/dev/null`). The
-/// nearest existing ancestor must be a directory a listing may name, and every
-/// missing component must be a visible name that clears the sensitive screens,
-/// so the probe cannot spell a hidden or credential location.
+/// nearest existing ancestor must be a directory a listing may name, and the
+/// path must clear the sensitive screens, so the probe cannot spell a
+/// credential location.
 pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_>) -> bool {
     if value.is_empty()
         || value.len() > 4096
@@ -212,9 +161,7 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
     let Some(expanded) = expanded_path(value, context) else {
         return false;
     };
-    if !std::fs::symlink_metadata(&expanded)
-        .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
-    {
+    if !std::fs::symlink_metadata(&expanded).is_err_and(|error| absent(&error)) {
         return false;
     }
     let mut missing: Vec<&std::ffi::OsStr> = Vec::new();
@@ -223,14 +170,28 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
             Ok(_) => {
                 let private_temporary =
                     super::listing_temporary::private_temporary_ancestor(ancestor, context);
+                // A name that is not there prints `No such file or
+                // directory` and nothing else, so what the probe may spell
+                // is whatever a listing of the same path would be allowed to
+                // print if it did exist. A plain name is one, with the `.git`
+                // marker an agent probes for and a repository's `.github`
+                // beside it; so is a tool's own directory in the home
+                // directory, which a present-path listing already allows and
+                // an absent one used to refuse, reporting by the
+                // disagreement whether the tool was set up. `~/.aws`,
+                // `~/.config/gh` and the other stores stay refused, because
+                // the answer to a probe for one of them is itself the
+                // account it keeps.
                 let spelled = missing.iter().enumerate().all(|(index, part)| {
                     let name = part.to_string_lossy();
-                    // `.git` is the one marker agents probe for. A missing
-                    // leaf prints only an error and reveals no content.
-                    // `.github` holds a project's workflows, never a
-                    // credential, so a probe for them may name it anywhere.
                     !name.starts_with('.') || (index == 0 && name == ".git") || name == ".github"
-                }) || private_temporary;
+                })
+                    || crate::pretool::read_paths::hidden_listing::absent_home_hidden_tool_path(
+                        &expanded,
+                        ancestor,
+                        context.home_dir,
+                    )
+                    || private_temporary;
                 // The owner's private temporary root itself (`$TMPDIR`) sits
                 // in a location the listing screens deny, but nobody else can
                 // put an entry there, so a missing name below it is enough.
@@ -238,7 +199,7 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
                     && spelled
                     && (private_temporary || listable_ancestor(ancestor, context));
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Err(error) if absent(&error) => {
                 let Some(name) = ancestor.file_name() else {
                     return false;
                 };
@@ -248,6 +209,18 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
         }
     }
     false
+}
+
+/// Whether a lookup failed because the path is not there. A path that runs
+/// through a regular file, as `<worktree>/.git/index.lock` does where `.git`
+/// is a linked worktree's gitfile, fails with `Not a directory` and prints
+/// that error and nothing else, the same as a missing name. The walk still
+/// judges that file as the nearest existing ancestor.
+fn absent(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+    )
 }
 
 /// The path an operand names, with `~` and a relative cwd resolved.
@@ -389,7 +362,11 @@ fn parent_steps_lead(value: &str) -> bool {
 
 /// The nearest existing ancestor must be a directory a listing may name. The
 /// kernel resolves `..` physically, so a spelling with parent steps is judged
-/// by its canonical directory, never by its lexical text.
+/// by its canonical directory, never by its lexical text. A repository's own
+/// Git directory, such as `.git/worktrees/<name>` or a linked worktree's
+/// `.git` file, counts too: a listing of it is already allowed, so a probe for
+/// `index.lock` or `MERGE_HEAD` below it says no more than that listing. Other
+/// hidden directories, such as a package store under `node_modules`, do not.
 fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>) -> bool {
     let parent_steps = ancestor
         .components()
@@ -405,6 +382,14 @@ fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>
     resolved.to_str().is_some_and(|parent| {
         safe_reads::bounded_read_target(parent, context.home_dir, context.cwd, true)
             || (!parent_steps && search::skill_listing_root(parent, context, false))
+            || (!parent_steps
+                && std::fs::canonicalize(&resolved)
+                    .is_ok_and(|target| target.components().any(|part| part.as_os_str() == ".git"))
+                && super::read_paths::repository_hidden_directory(
+                    parent,
+                    context.home_dir,
+                    context.cwd,
+                ))
     })
 }
 

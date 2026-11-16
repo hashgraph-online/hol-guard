@@ -8,7 +8,7 @@ fn refusal(result: &Value) -> &str {
     result["reason"].as_str().unwrap()
 }
 
-fn input() -> ExtensionControlManagedActivationV1 {
+pub(super) fn input() -> ExtensionControlManagedActivationV1 {
     ExtensionControlManagedActivationV1 {
         bundle: json!({
             "bundleHash": "bundle-hash",

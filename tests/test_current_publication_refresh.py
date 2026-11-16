@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 import json
 import threading
-from types import SimpleNamespace
 
 import pytest
 
@@ -23,6 +22,7 @@ from codex_plugin_scanner.guard.catalog_delivery import (
 from codex_plugin_scanner.guard.native_command_control_authority_store import _key
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from tests.current_publication_support import ADDED, setup
+from tests.pack_activation_writer_support import write_in_transaction
 
 
 @pytest.fixture
@@ -64,24 +64,13 @@ def workers():
 
 
 def periodic(state):
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+    from codex_plugin_scanner.guard.workers import ticks
 
-    class Stop:
-        calls = 0
-
-        def wait(self, seconds):
-            self.calls += 1
-            return self.calls > 1
-
-    server = SimpleNamespace(
-        store=state.store,
-        refresh_extension_control_runtime=lambda: None,
-        extension_control_api=SimpleNamespace(expire_prepared_cache_leases=lambda: None),
-    )
-    daemon = SimpleNamespace(_shutdown_started=Stop(), _server=server, _extension_control_refresh_interval_seconds=0.1)
     discovery._refresh_after = 0
-    GuardDaemonServer._refresh_extension_control_loop(daemon)
-    workers()
+    try:
+        ticks.extension_catalog(state.store, {})
+    finally:
+        workers()
 
 
 def read(state, query=""):
@@ -104,7 +93,7 @@ def commit_initial(state):
     )
     draft = activation_transition.stage(None, prepared, verifier_key=_key(store), store=store)
     with store._extension_control_authority_lock(), store._connect() as connection:
-        activation_store.write_in_transaction(store, connection, draft, verifier_key=_key(store), recorded_at="fixture")
+        write_in_transaction(store, connection, draft, verifier_key=_key(store), recorded_at="fixture")
     return activation_store.read(store)
 
 
@@ -150,7 +139,7 @@ def test_periodic_publisher_advances_complete_readiness_and_enable_without_packa
     ) == before
     # Existing automatic enable preparation retries unavailable installed data
     # with the authenticated current publisher, then stages native policy IR.
-    from codex_plugin_scanner.guard.daemon import extension_control_prepared as candidates
+    from codex_plugin_scanner.guard.extension_controls import extension_control_prepared as candidates
     from codex_plugin_scanner.guard.runtime.extension_control_contract import (
         ControlLayerKind,
         ControlState,

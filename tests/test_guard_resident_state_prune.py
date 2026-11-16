@@ -64,12 +64,24 @@ def test_prune_reports_none_for_a_malformed_runtime_answer(tmp_path: Path, monke
     requests: list[object] = []
     offered: list[bool] = [False, True]
 
-    def fake_answer(_feature: str, _command: str, request: object, **_options: object) -> dict[str, object] | None:
+    real_answer = runtime_request.runtime_answer
+    real_offers = runtime_request.runtime_offers
+
+    # Repair asks the runtime about other features too; only the prune's
+    # questions are scripted here.
+    def fake_answer(feature: str, command: str, request: object, **options: object) -> dict[str, object] | None:
+        if feature != "native-resident-state-prune-v1":
+            return real_answer(feature, command, request, **options)
         requests.append(request)
         return answers.pop(0)
 
+    def fake_offers(feature: str, **options: object) -> bool:
+        if feature != "native-resident-state-prune-v1":
+            return real_offers(feature, **options)
+        return offered.pop(0)
+
     monkeypatch.setattr(runtime_request, "runtime_answer", fake_answer)
-    monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature, **_options: offered.pop(0))
+    monkeypatch.setattr(runtime_request, "runtime_offers", fake_offers)
     assert prune_native_runtime(tmp_path, include_system_sockets=False) is None
     assert requests[0] == {
         "schema": "resident-state-prune.v1",
@@ -177,10 +189,11 @@ def test_repair_onefile_step_uses_injected_root_and_fails_closed(
 
 
 def test_report_status_rollup() -> None:
-    def step(status: str) -> dict[str, object]:
-        return {"step": "daemon", "title": "Guard daemon", "status": status, "summary": "s"}
+    healthy = {"step": "daemon", "runtime_status": "healthy"}
+    restarted = {"step": "daemon", "runtime_status": "restarted"}
+    failed = {"step": "command_queue", "error_type": "OSError", "error_message": "denied"}
 
-    assert build_report([step("ok")], dry_run=False)["status"] == "healthy"
-    assert build_report([step("ok"), step("changed")], dry_run=False)["status"] == "repaired"
-    assert build_report([step("planned")], dry_run=True)["status"] == "needs_repair"
-    assert build_report([step("changed"), step("error")], dry_run=False)["status"] == "partial"
+    assert build_report([healthy], dry_run=False)["status"] == "healthy"
+    assert build_report([healthy, restarted], dry_run=False)["status"] == "repaired"
+    assert build_report([{"step": "daemon", "probe": "unhealthy"}], dry_run=True)["status"] == "needs_repair"
+    assert build_report([restarted, failed], dry_run=False)["status"] == "partial"

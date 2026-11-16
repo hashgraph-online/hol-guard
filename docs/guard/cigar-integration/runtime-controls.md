@@ -32,13 +32,17 @@ Each accepts `--guard-home` for an explicit installation. The commands also work
 
 A successful start response can mean a background verification job was accepted. Read status for its result. A transport timeout is an unknown result: inspect status before another start request. The service does not automatically retry a mutation after an uncertain outcome.
 
-### Lean Codex sessions
+### Codex summary size
 
-Codex sends the whole conversation with every model call, so a long session keeps paying for turns it has already seen. `hol-guard context lean on` sets Codex's own `model_auto_compact_token_limit` to 30,000 in `~/.codex/config.toml` (or `$CODEX_HOME/config.toml` when that is set), so Codex summarizes older turns once a session passes that size. `hol-guard context lean off` removes the value again, and `hol-guard context lean` (or `lean status`) reports the current state. `--json` gives the same state as JSON.
+Codex sums up older turns of a long session once it passes a size, set by its own `model_auto_compact_token_limit`. `hol-guard context lean on --limit N` writes the size you pick (10,000 to 10,000,000) to `~/.codex/config.toml` (or `$CODEX_HOME/config.toml` when that is set). `hol-guard context lean off` removes it again, and `hol-guard context lean` (or `lean status`) reports the current state. `--json` gives the same state as JSON. Guard sets no size of its own: `lean on` without `--limit` changes nothing.
+
+A smaller chat is not a cheaper chat. The provider bills the part of the chat it has already seen at a fraction of the input price, and after each summary Codex reads again, at full price, the files it had already read. In Guard's long-task benchmark a 30,000-token limit halved the tokens Codex sent but barely changed the bill. Use this when you want a short chat, not to save money.
+
+Earlier Guard versions wrote 30,000 on `lean on`. That value stays until you remove it with `hol-guard context lean off`.
 
 Guard records the value it wrote and only ever removes that value. If your config already sets a limit, or you change Guard's value later, the command reports `yours` and leaves the file as it is. The edit keeps your comments and layout, takes the same lock as Guard's Codex hook install, and refuses to write over a config file it cannot parse. This command edits the Codex config directly and does not need the CIGAR service to be running.
 
-The dashboard's CIGAR **Settings** tab has the same control as a switch, **Keep long Codex sessions lean**. It shows the current state, asks for the approval Guard requires for settings changes when an approval gate is on, and shows `yours` as a locked switch with the limit your config already sets.
+The dashboard's CIGAR **Settings** tab shows this control only while a limit Guard wrote is in the Codex config, as a button that removes it. It asks for the approval Guard requires for settings changes when an approval gate is on.
 
 Keep Guard's desktop app or daemon running for `check`, `start` and context tools. These commands control the existing service; they do not launch a persistent Guard host. If a standalone CLI invocation accepts a job but subsequent status reports `runtime_not_verified`, open Guard and explicitly start assistance again. Off-state status and runtime listing remain available.
 
@@ -91,3 +95,7 @@ The current feed covers receipts created by the resident native evaluator and co
 The SDK receives only the canonical harness/event, recorded decision and policy actions, observe-mode flag, native policy generation and receipt digest, with an explicit statement that the fact is neither execution confirmation nor an approval grant. Recorded and observed policy actions stay separate so an observation cannot be presented as an enforced decision. It receives no raw command/prompt, source path, origin authenticator, execution-intent digest or review capability. Context and native evidence remain distinct from execution authority.
 
 Pending origins and committed notifications are bounded at 128 and 64 respectively. Producers use nonblocking native memory operations; they do not call the SDK, read source files or wait for graph work. The context actor coalesces admitted notifications on its next read. A missed update clears retained receipt context and exposes a loss indicator. The durable evidence writer, its ordering/failure signal and acknowledgement behavior stay independent. Withdrawal/revocation does not drain optional updates first. Turning off closes the mailbox and discards ephemeral grants and context.
+
+## Tool output and usage
+
+Guard never trims tool output to save tokens. It passes output on unchanged, blocks it when it holds a secret, and keeps only a scanned first part when output is too big to scan in full. Pi, Oh My Pi and the Cline plugin show Guard's message or that first part in place of the output; in other apps Guard adds its message after the tool has returned. `hol-guard context usage` and the CIGAR **Usage** tab show what Codex and Claude Code used, read from their own records. See [Tool output and usage](tool-output-and-usage.md).

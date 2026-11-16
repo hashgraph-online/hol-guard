@@ -17,8 +17,8 @@ import pytest
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli.commands_dispatch_local import _run_guard_execute_bound_bash_command
-from codex_plugin_scanner.guard.daemon.hook_native_review_approval import queue_native_pre_tool_review
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_native_review_approval import queue_native_pre_tool_review
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_bash_protocol import ARTIFACT_ID, ARTIFACT_TYPE, runtime_status
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents

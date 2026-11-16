@@ -30,19 +30,16 @@ from ... import version as package_version
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
 from ..adapters.cursor_hooks import cursor_native_hook_state
-from ..adapters.pi import OmpHarnessAdapter, PiHarnessAdapter, legacy_omp_managed_extension_is_verified
-from ..adapters.pi_extension_source import managed_extension_source
-from ..adapters.pi_support import json_payload
+from ..adapters.native_extension import extension_is_current, legacy_omp_extension_is_verified
 from ..config import load_guard_config, resolve_guard_home
-from ..daemon.runtime_peer import (
-    daemon_refresh_outcome_succeeded as _daemon_refresh_outcome_succeeded,
-)
-from ..daemon.runtime_peer import retained_desktop_owner_note, retained_desktop_owner_payload
-from ..daemon.runtime_peer import retained_newer_runtime_payload as _verified_newer_guard_daemon
-from ..daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
+from ..native_daemon_peer import (
+    daemon_refresh_outcome_succeeded as _daemon_refresh_outcome_succeeded,
+)
+from ..native_daemon_peer import retained_desktop_owner_note, retained_desktop_owner_payload
+from ..native_daemon_peer import retained_newer_runtime_payload as _verified_newer_guard_daemon
 from ..native_resident_update_lock import (
     NativeResidentUpdateLock,
     NativeResidentUpdateLockError,
@@ -53,6 +50,7 @@ from ..redaction import redact_sensitive_text
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_authority import AuthorityHealth
 from ..store import GuardStore
+from ..updates.update_refresh_program import DAEMON_REFRESH_SCRIPT
 from .install_commands import apply_managed_install
 from .managed_install_context import managed_install_context as _repair_context_from_managed_install
 from .native_wheel_sources import NativeWheelError, is_alpha_version
@@ -244,7 +242,7 @@ _DAEMON_REFRESH_TIMEOUT_SECONDS = 150.0
 _DAEMON_REFRESH_CLEANUP_TIMEOUT_SECONDS = 15.0
 _DAEMON_REFRESH_SCRIPT = DAEMON_REFRESH_SCRIPT
 _DAEMON_REFRESH_BOOTSTRAP_SCRIPT = """
-from codex_plugin_scanner.guard.daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
+from codex_plugin_scanner.guard.updates.update_refresh_program import DAEMON_REFRESH_SCRIPT
 
 exec(DAEMON_REFRESH_SCRIPT, {})
 """.strip()
@@ -255,14 +253,14 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.manager import (
+from codex_plugin_scanner.guard.native_daemon_manage import (
     _guard_daemon_pid_is_running,
     clear_guard_daemon_state,
     guard_daemon_retirement_is_complete,
     load_authenticated_guard_daemon_pending_launch,
     retire_all_guard_daemons_for_home,
 )
-from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
+from codex_plugin_scanner.guard.native_daemon_manage import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.windows_paths import windows_process_creation_time
 
 payload = json.loads(sys.stdin.read())
@@ -3024,7 +3022,11 @@ def _migrate_legacy_omp_install(
         return None, None
     if omp_install is not None or pi_install is None:
         return None, None
-    if not legacy_omp_managed_extension_is_verified(context, pi_install):
+    try:
+        verified = legacy_omp_extension_is_verified(context, pi_install)
+    except (OSError, RuntimeError, ValueError) as error:
+        return None, f"Could not verify legacy Oh My Pi protection during update: {error}"
+    if not verified:
         return None, None
     try:
         repair_context, repair_workspace = _repair_context_from_managed_install(context, pi_install)
@@ -3086,36 +3088,9 @@ def _repair_pi_family_install(
 def _pi_family_extension_is_current(*, harness: str, context: HarnessContext) -> bool:
     """Return whether the managed Pi/OMP extension already matches this package."""
 
-    adapter: PiHarnessAdapter | OmpHarnessAdapter
-    if harness == "pi":
-        adapter = PiHarnessAdapter()
-    elif harness == "omp":
-        adapter = OmpHarnessAdapter()
-    else:
+    if harness not in {"pi", "omp"}:
         return False
-    extension_path = adapter._managed_extension_path(context)
-    settings_path = adapter._managed_settings_path(context)
-    if not extension_path.is_file():
-        return False
-    expected_source = managed_extension_source(
-        guard_home=context.guard_home,
-        home_dir=context.home_dir,
-        settings_path=settings_path,
-        harness=adapter.harness,
-        display_name=adapter.display_name,
-    )
-    try:
-        current_source = extension_path.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    if current_source != expected_source:
-        return False
-    settings = json_payload(settings_path) if settings_path.is_file() else {}
-    raw_extensions = settings.get("extensions")
-    if not isinstance(raw_extensions, list):
-        return False
-    extension_value = str(extension_path)
-    return any(isinstance(item, str) and item == extension_value for item in raw_extensions)
+    return extension_is_current(harness, context)
 
 
 def _repair_cursor_install(
@@ -3239,7 +3214,9 @@ def _codex_backup_repair_contexts(context: HarnessContext) -> tuple[HarnessConte
 
 def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict[str, object]:
     resolved_guard_home = guard_home or resolve_guard_home()
-    update_channel = load_guard_config(resolved_guard_home).update_channel
+    guard_config = load_guard_config(resolved_guard_home)
+    update_channel = guard_config.update_channel
+    update_mode = getattr(guard_config, "update_mode", "automatic")
     include_alpha = update_channel == "alpha"
     install_surface = build_guard_install_surface_payload()
     installer = str(install_surface.get("installer") or "")
@@ -3380,6 +3357,7 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
         "recovery_reinstall_available": recovery_reinstall_available,
         "recovery_reinstall_command": recovery_reinstall_command,
         "release_channel": "alpha" if include_alpha else update_channel,
+        "update_mode": update_mode,
     }
     if trusted_failure_reason is not None:
         payload["reason_code"] = trusted_failure_reason

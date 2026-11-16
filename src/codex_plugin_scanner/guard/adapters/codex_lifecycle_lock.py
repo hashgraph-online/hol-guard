@@ -15,8 +15,8 @@ from hashlib import sha256
 from pathlib import Path
 from typing import BinaryIO
 
-from ..daemon.file_locking import try_lock_daemon_file
 from ..mdm.file_lock import release_file_lock
+from ..native_daemon_manage import try_lock_daemon_file
 from ..windows_paths import trusted_windows_user_profile
 from .base import HarnessContext
 

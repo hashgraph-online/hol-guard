@@ -12,7 +12,7 @@ from .native_business_source_store import ANCHOR_FILE_NAME, SOURCE_FILE_NAME
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_command_control_binding import read_native_command_control_binding
 from .native_guard_config import WORKSPACE_CONFIG_FILENAMES
-from .native_policy_effective import compose_effective_native_policies
+from .native_policy_effective import compose_native_publication
 from .native_policy_snapshot_codec import _digest_v3
 from .native_policy_snapshot_constants import (
     NATIVE_POLICY_VERIFIER_KEY_NAME,
@@ -277,8 +277,6 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
         """
 
         from .config import load_guard_config
-        from .native_policy_snapshot_direct_lane_mcp_relay import uniform_harness_views
-        from .native_policy_snapshot_direct_lane_review import uniform_blocked_request_mode
         from .native_policy_snapshot_direct_lane_structured import uniform_structured_output_view
 
         with self._condition:
@@ -305,10 +303,12 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
             provider_hash = provider_authority_reader()
             if provider_hash is not None:
                 observed["mcp_provider_catalog_hash"] = provider_hash
-        policy = compose_effective_native_policies(tuple(configs), observed=observed)
-        self._compiled_blocked_request_mode = uniform_blocked_request_mode(configs)
+        # Rust derives the blocked-request mode and the MCP relay harness views
+        # from the same request that composes the policy.
+        policy, blocked_request_mode, harnesses = compose_native_publication(tuple(configs), observed=observed)
+        self._compiled_blocked_request_mode = blocked_request_mode
         self._compiled_structured_output_view = uniform_structured_output_view(configs)
-        self._compiled_mcp_relay_harnesses = uniform_harness_views(configs)
+        self._compiled_mcp_relay_harnesses = harnesses
         return policy
 
     def _compiled_command_extensions(self) -> dict[str, object]:

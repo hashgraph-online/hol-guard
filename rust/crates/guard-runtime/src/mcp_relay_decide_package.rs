@@ -61,19 +61,34 @@ pub(super) fn package_gate(
     if python_strip(tool) != tool.trim() || !strips_agree(&arguments) {
         return Err(PACKAGE_AMBIGUOUS);
     }
-    let environment = request
-        .path
-        .as_ref()
-        .filter(|path| !path.is_empty())
-        .map(|path| BTreeMap::from([("PATH".to_owned(), path.clone())]));
-    Ok(extract_package_intent_request(
+    Ok(parse_intent(
         tool,
         &arguments,
+        workspace,
+        request.path.as_deref(),
+    ))
+}
+
+/// The parse the gate runs: the call's `_command_argument`, no home directory
+/// and the relay's `PATH`, unbound when absent or empty. The resident's
+/// receipt writer rebuilds a decided package request through it as well.
+pub(crate) fn parse_intent(
+    tool: &str,
+    arguments: &Value,
+    workspace: Option<&Path>,
+    path: Option<&str>,
+) -> Option<PackageIntent> {
+    let environment = path
+        .filter(|path| !path.is_empty())
+        .map(|path| BTreeMap::from([("PATH".to_owned(), path.to_owned())]));
+    extract_package_intent_request(
+        tool,
+        arguments,
         command_argument(arguments.as_object()),
         workspace,
         None,
         environment.as_ref(),
-    ))
+    )
 }
 
 /// `_command_argument`: the first command key holding a non-blank string,

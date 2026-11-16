@@ -263,7 +263,7 @@ def _refresh_package_shims(context: HarnessContext) -> str | None:
 
 
 def _retire_daemons(guard_home: Path) -> None:
-    from ..daemon.manager import retire_all_guard_daemons_for_home
+    from ..native_daemon_manage import retire_all_guard_daemons_for_home
 
     _ = retire_all_guard_daemons_for_home(guard_home)
 

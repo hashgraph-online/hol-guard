@@ -304,6 +304,47 @@ fn contained_target_answers_the_sink() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+#[test]
+fn contained_target_reads_a_bounded_inline_shell_as_its_script() {
+    // The review reads `bash -ec 'pytest -q'` as `pytest -q`, so the sink has
+    // to plan that script or it refuses the run the review sent it.
+    for (text, script) in [
+        ("bash -ec 'pytest -q'", "pytest -q"),
+        ("sh -c 'pytest -q'", "pytest -q"),
+        ("bash -e -c 'pytest -q'", "pytest -q"),
+    ] {
+        let input = json!({ "text": text });
+        assert_eq!(
+            evaluate("contained_target", &input).unwrap()["value"],
+            json!(script),
+            "{text}"
+        );
+    }
+    // A shell that reads more than its script, a script of several commands
+    // (run bare, it would lose `-e`), a script that expands, a brace Bash would
+    // expand, or a command with no shell in front stays whole.
+    for text in [
+        "bash -lc 'pytest -q'",
+        "zsh -c 'pytest -q'",
+        "bash -ec 'pytest -q; echo done'",
+        "bash -ec 'pytest -q && rm -rf x'",
+        "bash -ec 'pytest -q | tee log'",
+        "bash -c 'pytest \"$X\"'",
+        "bash -ec 'python3 build.py {fast,full}'",
+        "bash -ec 'python3 build.py ~+'",
+        "bash -ec 'python3 build.py ~-/out'",
+        "bash -ec 'python3 build.py ~1'",
+        "pytest -q",
+    ] {
+        let input = json!({ "text": text });
+        assert_eq!(
+            evaluate("contained_target", &input).unwrap()["value"],
+            Value::Null,
+            "{text}"
+        );
+    }
+}
+
 #[path = "contained_argv_program_tests.rs"]
 mod program;
 #[path = "contained_argv_script_tests.rs"]

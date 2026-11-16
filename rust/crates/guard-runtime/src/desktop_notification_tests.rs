@@ -254,3 +254,58 @@ fn setup_that_could_not_open_settings_records_nothing() {
     assert_eq!(answer["notifier_path"], Value::Null);
     assert!(!directory.path().join(SETUP_STATE_FILE).exists());
 }
+
+#[test]
+fn the_daemon_setup_reply_names_the_platform_and_guides_macos() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let home = directory.path().join("guard");
+    let mut host = FakeHost {
+        succeed: true,
+        ..FakeHost::default()
+    };
+    let reply = setup_reply_on(
+        &home,
+        "http://127.0.0.1:1/x",
+        Platform::MacOs,
+        "Darwin",
+        &mut host,
+    );
+    assert_eq!(reply["platform"], "Darwin");
+    assert_eq!(reply["supported"], true);
+    assert_eq!(reply["settings_opened"], true);
+    assert!(reply["guidance"]
+        .as_str()
+        .is_some_and(|text| text.contains("Choose Terminal or terminal-notifier,")));
+    // Setup is forced: a recorded prompt is shown again.
+    let again = setup_reply_on(
+        &home,
+        "http://127.0.0.1:1/x",
+        Platform::MacOs,
+        "Darwin",
+        &mut host,
+    );
+    assert_eq!(again["already_prompted"], true);
+    assert_eq!(again["settings_opened"], true);
+
+    let mut quiet = FakeHost::default();
+    let linux = setup_reply_on(
+        &home,
+        "http://127.0.0.1:1/x",
+        Platform::Other,
+        "Linux",
+        &mut quiet,
+    );
+    assert_eq!(
+        linux,
+        json!({
+            "platform": "Linux",
+            "supported": false,
+            "preview_sent": false,
+            "settings_opened": false,
+            "settings_url": null,
+            "already_prompted": false,
+            "notifier_path": null,
+        })
+    );
+    assert!(quiet.runs.is_empty());
+}

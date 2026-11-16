@@ -11,6 +11,7 @@
 //! A bundle that fails any of them authorizes nothing, so its rows are dropped.
 
 use std::collections::HashSet;
+use std::time::{Duration, Instant};
 
 use guard_contracts::{
     canonical_utc_timestamp, utc_timestamp_micros, PolicyBundleAuthorityRequestV1,
@@ -94,6 +95,55 @@ pub(crate) fn cached_bundle_authority(
     Some((identities, Some(validated)))
 }
 
+/// `contractVersion` of a canonical (v2) policy bundle.
+const CANONICAL_CONTRACT: &str = "guard-policy-bundle.v2";
+/// `source` the store saves a canonical bundle's compiled rules under
+/// (`_build_canonical_policy_bundle_decisions`, `runner.py`).
+const CANONICAL_SOURCE: &str = "policy-bundle-canonical";
+/// The compile budget the payload-hash queries use.
+const COMPILE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The identities of the `policy-bundle-canonical` rows the validated
+/// `bundle` yields for this device, compiled the way the store compiled them
+/// when it saved them: the rule id as owner, the canonical source. A v1
+/// bundle yields none; `None` when the compile or the device cannot be read.
+pub(crate) fn canonical_identities(
+    connection: &Connection,
+    bundle: &Map<String, Value>,
+) -> Option<Vec<Identity>> {
+    if bundle.get("contractVersion").and_then(Value::as_str) != Some(CANONICAL_CONTRACT) {
+        return Some(Vec::new());
+    }
+    let (device_id, device_label) = local_device(connection).ok()??;
+    let device_name = device_display_name(connection, &device_label)?;
+    let input = json!({
+        "bundle": bundle,
+        "device_id": device_id,
+        "device_name": device_name,
+    });
+    let deadline = Instant::now() + COMPILE_TIMEOUT;
+    let Value::Object(mut answer) =
+        guard_command::policy_document::evaluate("compile_bundle", &input, deadline).ok()?
+    else {
+        return None;
+    };
+    let Value::Array(rows) = answer.remove("ok")? else {
+        return None;
+    };
+    let mut seen = HashSet::new();
+    let mut identities = Vec::new();
+    for row in rows {
+        let mut decision = row.get("decision")?.as_object()?.clone();
+        decision.insert("owner".to_owned(), row.get("rule_id")?.clone());
+        decision.insert("source".to_owned(), json!(CANONICAL_SOURCE));
+        let identity = identity(&decision)?;
+        if seen.insert(serde_json::to_string(&identity).ok()?) {
+            identities.push(identity);
+        }
+    }
+    Some(identities)
+}
+
 /// The bundle authority a lookup Python sent no identities for reads
 /// `policy-bundle` rows under, derived from the store that lookup reads.
 /// `Ok(None)` when no such row exists, so a store without bundle rules never
@@ -119,6 +169,19 @@ pub(crate) fn lookup_bundle_authority(
         return Ok(None);
     }
     cached_bundle_authority(connection, now).map(Some).ok_or(())
+}
+
+/// `validated_synced_policy_bundle`: the cached bundle while it is live
+/// authority, `Some(None)` when it is missing or not, and `None` when the
+/// resident cannot decide the way the Python store would.
+pub(crate) fn validated_synced_bundle(
+    connection: &Connection,
+) -> Option<Option<Map<String, Value>>> {
+    let bundle = match sync_payload(connection, "policy_bundle")? {
+        Some(Value::Object(bundle)) if !bundle.is_empty() => bundle,
+        _ => return Some(None),
+    };
+    validated(connection, &bundle, epoch_now()?.as_secs_f64())
 }
 
 /// `cached_policy_bundle_validation`: the payload rules are read from, or
@@ -305,7 +368,7 @@ fn identity(decision: &Map<String, Value>) -> Option<Identity> {
 
 /// `device_display_name`: the stored label, unless it is still a generic one
 /// nobody chose, which yields to the host name.
-fn device_display_name(connection: &Connection, label: &str) -> Option<String> {
+pub(crate) fn device_display_name(connection: &Connection, label: &str) -> Option<String> {
     let chosen = matches!(
         sync_payload(connection, DEVICE_LABEL_CHOICE_KEY),
         Some(Some(Value::Object(choice))) if choice.get("label").and_then(Value::as_str) == Some(label)
@@ -352,7 +415,7 @@ fn host_name() -> Option<String> {
 
 /// One `sync_state` payload as `get_sync_payload` reads it: `Some(None)` when
 /// missing or not a JSON object or list, `None` when it cannot be read.
-fn sync_payload(connection: &Connection, key: &str) -> Option<Option<Value>> {
+pub(crate) fn sync_payload(connection: &Connection, key: &str) -> Option<Option<Value>> {
     let Some(text) = sync_state_payload(connection, key).ok()? else {
         return Some(None);
     };

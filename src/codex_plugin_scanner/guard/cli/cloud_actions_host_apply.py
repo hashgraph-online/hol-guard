@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from ..daemon.atomic_replace import replace_file
+from ..updates.atomic_replace import replace_file
 from .cloud_actions_host_config import (
     HostConfigNativeUnavailableError,
     HostConfigPlan,

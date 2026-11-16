@@ -15,18 +15,16 @@ import pytest
 
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard import codex_hook_runtime_trust, frozen_codex_runtime
-from codex_plugin_scanner.guard import daemon as daemon_api
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_api
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager
-from codex_plugin_scanner.guard.daemon.live_identity import DaemonArtifactBinding
 from codex_plugin_scanner.guard.frozen_runtime_commands import (
     frozen_daemon_recovery_command,
-    frozen_daemon_recovery_worker_command,
     frozen_daemon_serve_command,
     frozen_windows_extension_control_commands,
 )
+from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 
 
 @pytest.fixture
@@ -157,41 +155,6 @@ def test_frozen_recovery_command_schedules_one_detached_worker(
             Path(sys.executable).expanduser().resolve(strict=True),
         )
     ]
-
-
-def test_frozen_recovery_worker_releases_its_reservation(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    home_dir = tmp_path / "home"
-    guard_home.mkdir()
-    home_dir.mkdir()
-    recovered: list[tuple[Path, Path, str]] = []
-    cleared: list[tuple[Path, str]] = []
-    monkeypatch.setattr(
-        daemon_manager,
-        "recover_guard_daemon_after_hook_failure",
-        lambda requested_guard_home, *, home_dir, failure_kind, **_kwargs: recovered.append(
-            (requested_guard_home, home_dir, failure_kind)
-        ),
-    )
-    monkeypatch.setattr(
-        daemon_manager,
-        "clear_guard_daemon_recovery_reservation",
-        lambda requested_guard_home, *, token: cleared.append((requested_guard_home, token)) or True,
-    )
-    command = frozen_daemon_recovery_worker_command(
-        guard_home,
-        home_dir,
-        "overload",
-        "recovery-token",
-        executable=sys.executable,
-    )
-
-    assert frozen_codex_runtime.run_frozen_internal_command(command) == 0
-    assert recovered == [(guard_home, home_dir, "overload")]
-    assert cleared == [(guard_home, "recovery-token")]
 
 
 @pytest.mark.parametrize("gate_input", [b"", b"0"])

@@ -189,6 +189,28 @@ def _required_extension_ids() -> frozenset[str]:
     )
 
 
+def _extension_controls(extension_id: str, permissions: tuple[tuple[str, bool], ...]) -> list[Any]:
+    """The controls that enable one extension and set each of its permissions.
+
+    A required extension is already enabled and the runtime refuses a local
+    control over its state, so ask only for the permissions. Asking to enable
+    it anyway is refused with `immutable_extension`, which no fixture can
+    recover from.
+    """
+    from ci.native_runtime.probe_installed_native_extensions import control
+    from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlState, ControlTargetKind
+
+    required = extension_id in _required_extension_ids()
+    controls: list[Any] = [] if required else [control(ControlTargetKind.EXTENSION, extension_id, ControlState.ENABLED)]
+    controls += [
+        control(ControlTargetKind.PERMISSION, permission, ControlState.ENABLED if enabled else ControlState.DISABLED)
+        for permission, enabled in permissions
+    ]
+    if not controls:
+        raise RuntimeError(f"{extension_id} is required and no permission control was requested")
+    return controls
+
+
 def _commit_extension_controls(
     daemon: Any, password: str, extension_id: str, permissions: tuple[tuple[str, bool], ...]
 ) -> int:
@@ -196,34 +218,46 @@ def _commit_extension_controls(
 
     The commit goes through the daemon's control service, the path an installed
     enable takes, so it prepares the extension's optional pack first.
-
-    A required extension is already enabled and the runtime refuses a local
-    control over its state, so ask only for the permissions. Asking to enable
-    it anyway is refused with `immutable_extension`, which no fixture can
-    recover from.
     """
-    from ci.native_runtime.probe_installed_native_extensions import commit_controls, control
-    from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlState, ControlTargetKind
+    from ci.native_runtime.probe_installed_native_extensions import commit_controls
 
-    required = extension_id in _required_extension_ids()
-    controls = [] if required else [control(ControlTargetKind.EXTENSION, extension_id, ControlState.ENABLED)]
-    controls += [
-        control(ControlTargetKind.PERMISSION, permission, ControlState.ENABLED if enabled else ControlState.DISABLED)
-        for permission, enabled in permissions
-    ]
-    if not controls:
-        raise RuntimeError(f"{extension_id} is required and no permission control was requested")
-    return commit_controls(daemon._server.extension_control_api, password, tuple(controls))
+    return commit_controls(
+        daemon._server.extension_control_api, password, tuple(_extension_controls(extension_id, permissions))
+    )
 
 
 def configure_extension_controls(
     daemon: Any, guard_home: Path, extension_id: str, *, enabled_permissions: list[str]
 ) -> int:
     """Enable an extension with every listed permission explicitly allowed."""
+    return configure_each_extension_controls(daemon, guard_home, {extension_id: enabled_permissions})[extension_id]
+
+
+def configure_each_extension_controls(
+    daemon: Any, guard_home: Path, enabled_permissions: dict[str, list[str]]
+) -> dict[str, int]:
+    """Enable several extensions, each with its permissions, in one committed layer.
+
+    Authorizing enrolls the control authority, which only a home still at
+    revision 0 accepts; once a layer is committed a second authorization is
+    refused with `fixture_not_new`. A case that needs more than one extension
+    therefore commits all of them from the single password.
+
+    A commit replaces the stored local-admin layers rather than adding to
+    them: `_effective_layers_for_local_mutation` builds the proposed state
+    from the mutation's own local layers plus the managed ones. Committing
+    one extension at a time would drop the extension committed before it, so
+    every extension's controls go into the single layer this commits, and
+    each extension reports the revision that layer landed at.
+    """
+    from ci.native_runtime.probe_installed_native_extensions import commit_controls
+
     password = _authorize_extension_controls(daemon, guard_home)
-    return _commit_extension_controls(
-        daemon, password, extension_id, tuple((permission, True) for permission in enabled_permissions)
-    )
+    controls: list[Any] = []
+    for extension_id, permissions in enabled_permissions.items():
+        controls += _extension_controls(extension_id, tuple((permission, True) for permission in permissions))
+    revision = commit_controls(daemon._server.extension_control_api, password, tuple(controls))
+    return {extension_id: revision for extension_id in enabled_permissions}
 
 
 def configure_extension_permission_denial(daemon: Any, guard_home: Path, adapter: ExtensionAdapter) -> dict[str, Any]:

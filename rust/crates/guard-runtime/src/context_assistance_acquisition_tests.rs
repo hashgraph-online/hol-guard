@@ -150,6 +150,7 @@ fn exact_download_is_cached_and_wrong_hash_length_or_changed_file_is_refused() {
     #[cfg(windows)]
     {
         let mut permissions = fs::metadata(&file.path).unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
         permissions.set_readonly(false);
         fs::set_permissions(&file.path, permissions).unwrap();
     }

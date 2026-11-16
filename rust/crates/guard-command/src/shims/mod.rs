@@ -47,6 +47,7 @@ pub use status::{
     package_shim_cloud_coverage, package_shim_dashboard_status, package_shim_protection,
     package_shim_protection_from_status, package_shim_status,
 };
+pub use values::parse_py_str_list;
 pub(crate) use values::py_json_dumps;
 
 /// Sentinel assignment the generated shims carry (`<name> = True`).

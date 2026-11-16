@@ -9,7 +9,9 @@
 use std::path::{Path, PathBuf};
 
 use crate::codex_output_env::{Ctx, GitCheck, GitProbe, InspectionHost};
-use crate::sfrs_git_routines::{git_local_branch_switch_is_safe, previous_branch_name};
+use crate::sfrs_git_routines::{
+    git_local_branch_switch_is_safe, previous_branch_name, read_only_git_invocation,
+};
 
 /// A checkout the proof can question: it holds `main`, keeps no post-checkout
 /// hook, and answers `@{-1}` with whatever the case asks it to.
@@ -170,4 +172,42 @@ fn the_previous_branch_is_read_from_the_full_ref_name() {
     assert_eq!(previous_branch_name(&probe(0, "refs/tags/v1\n")), None);
     assert_eq!(previous_branch_name(&probe(0, "refs/heads/\n")), None);
     assert_eq!(previous_branch_name(&probe(0, "")), None);
+}
+
+#[test]
+fn a_routed_read_names_its_directory_the_way_git_reads_it() {
+    let checkout = Checkout::new("routed");
+    let host = Host {
+        root: checkout.0.clone(),
+        previous: (LEFT_MAIN.0, LEFT_MAIN.1.to_owned()),
+    };
+    let ctx = Ctx::new(&host, "/", "/");
+    let inner = checkout.0.join("bin").to_string_lossy().into_owned();
+    let read = |words: &[&str]| {
+        let args: Vec<String> = words.iter().map(|word| (*word).to_owned()).collect();
+        read_only_git_invocation(&args, &checkout.0, &ctx)
+    };
+
+    let routed = read(&["-C", &inner, "LOG", "-1"]);
+    assert_eq!(
+        routed.clone().map(|(operation, _)| operation).as_deref(),
+        Some("log")
+    );
+    assert_eq!(
+        routed.map(|(_, directory)| directory),
+        Some(PathBuf::from(&inner))
+    );
+
+    // Git takes `-C` and `-c` as whole words and rejects a value written onto
+    // them, so neither attached spelling names a directory the proof can read.
+    assert_eq!(read(&[&format!("-C{inner}"), "log"]), None);
+    assert_eq!(read(&["-ccore.pager=sh", "log"]), None);
+
+    // A route still needs an operation of its own after the directory.
+    assert_eq!(read(&["-C", &inner]), None);
+
+    // Nothing else that leads with a dash becomes readable along the way.
+    assert_eq!(read(&["-c", "core.pager=sh", "log"]), None);
+    assert_eq!(read(&["--git-dir", &inner, "log"]), None);
+    assert_eq!(read(&["-C", "/", "log"]), None);
 }

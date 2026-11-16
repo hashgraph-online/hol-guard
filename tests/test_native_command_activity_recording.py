@@ -53,7 +53,7 @@ def _valid_native_receipt() -> dict[str, object]:
 
 
 def test_native_receipt_link_records_the_edge_receipt() -> None:
-    from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativeMixin
+    from codex_plugin_scanner.guard.hook_review.hook_worker_native import HookWorkerNativeMixin
 
     host = SimpleNamespace(_last_native_decision_receipt=None)
     # The edge checked the receipt before it answered; only a non-mapping is refused here.
@@ -84,7 +84,7 @@ class _ReceiptWriter:
 def test_the_daemon_submits_the_receipt_only_when_the_edge_did_not_queue_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: bool | None
 ) -> None:
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+    from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -113,7 +113,7 @@ def test_the_daemon_submits_the_receipt_only_when_the_edge_did_not_queue_it(
             answer["receipt_recorded"] = recorded
         return answer
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", edge)
+    monkeypatch.setattr("codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native", edge)
     writer = _ReceiptWriter()
     worker = HookWorker(store=GuardStore(guard_home), activity_writer=writer)  # pyright: ignore[reportArgumentType]
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace, **_kwargs: {"mode": "observe"})
@@ -137,7 +137,7 @@ def test_the_daemon_submits_the_receipt_only_when_the_edge_did_not_queue_it(
 def test_the_daemon_records_a_post_tool_activity_only_when_the_edge_did_not_queue_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: bool | None
 ) -> None:
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+    from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -164,7 +164,7 @@ def test_the_daemon_records_a_post_tool_activity_only_when_the_edge_did_not_queu
             answer["activity_recorded"] = recorded
         return answer
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", edge)
+    monkeypatch.setattr("codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native", edge)
     worker = HookWorker(store=GuardStore(guard_home), activity_writer=_ReceiptWriter())  # pyright: ignore[reportArgumentType]
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace, **_kwargs: {"mode": "observe"})
     activities: list[object] = []
@@ -189,7 +189,7 @@ def test_the_daemon_records_a_post_tool_activity_only_when_the_edge_did_not_queu
 def test_the_daemon_records_a_pre_tool_activity_only_when_the_edge_did_not_queue_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: bool | None
 ) -> None:
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+    from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -217,10 +217,10 @@ def test_the_daemon_records_a_pre_tool_activity_only_when_the_edge_did_not_queue
             answer["activity_recorded"] = recorded
         return answer
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", edge)
+    monkeypatch.setattr("codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native", edge)
     # Evidence is submitted behind the answer; run it in line to observe it.
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker_native.run_hook_evidence", lambda _host, act: act()
+        "codex_plugin_scanner.guard.hook_review.hook_worker_native.run_hook_evidence", lambda _host, act: act()
     )
     activities: list[object] = []
     writer = _ReceiptWriter()

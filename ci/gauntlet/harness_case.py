@@ -20,6 +20,21 @@ from .approval_retry_bash import stage as stage_bash_lifecycle
 from .approval_retry_marker import CASE as APPROVAL_MARKER_CASE
 from .approval_retry_marker import collect as collect_approval_marker
 from .approval_retry_marker import stage as stage_approval_marker
+from .approval_retry_persistent import CASE as APPROVAL_PERSISTENT_CASE
+from .approval_retry_persistent import PACKAGE_CASES as APPROVAL_PERSISTENT_PACKAGE_CASES
+from .approval_retry_persistent import case_environment as approval_persistent_environment
+from .approval_retry_persistent import collect as collect_approval_persistent
+from .approval_retry_persistent import stage as stage_approval_persistent
+from .approval_retry_persistent import write_package_review_config
+from .approval_retry_relay import (
+    RELAY_MARKER,
+    RELAY_ORACLE,
+    SIGNED_LINK_REDACTIONS,
+    queued_request_ids,
+    record_daemon_origin,
+    relay_evidence,
+    write_relay_config,
+)
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import add_credential_redactions, fixture_system_context
@@ -36,6 +51,7 @@ from .connector_fixtures import (
 )
 from .evidence import execution_error_chain, sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
+from .extension_allow_fixtures import EXTENSION_ALLOW_CASES, configure_extension_allow_controls
 from .fixtures import (
     create_fixture,
     digest_file,
@@ -185,6 +201,7 @@ def run_harness_case(
         "transcript": {"calls": [], "terminal": False},
     }
     stage_approval_marker(fixture.workspace, scenario.id, case)
+    stage_approval_persistent(fixture.workspace, scenario.id, case, fixture.protected)
     daemon = None
     connector = None
     seed: CredentialSeed | None = None
@@ -223,11 +240,17 @@ def run_harness_case(
                 # path has no other way in, because a hard block never queues an approval.
                 # A case whose repeated action is a file-tool call needs the default floor;
                 # the subprocess floor the shell cases raise never reaches a file tool.
-                case["review_policy"] = write_review_config(
-                    guard_home,
-                    file_tool="bash" not in scenario.required_tools,
-                    intrinsic_review=scenario.id == APPROVAL_MARKER_CASE,
+                case["review_policy"] = (
+                    write_package_review_config(guard_home)
+                    if scenario.id in APPROVAL_PERSISTENT_PACKAGE_CASES
+                    else write_review_config(
+                        guard_home,
+                        file_tool="bash" not in scenario.required_tools,
+                        intrinsic_review=scenario.id in {APPROVAL_MARKER_CASE, APPROVAL_PERSISTENT_CASE},
+                    )
                 )
+            if scenario.oracle == RELAY_ORACLE:
+                case["review_policy"] = write_relay_config(guard_home)
             if CONNECTOR_PROFILE in scenario.profiles:
                 connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
                 connector_state = state_digest(connector.state_dir)
@@ -238,6 +261,8 @@ def run_harness_case(
                 identity=identity,
                 register_workspace_policy=not realistic,
             )
+            if scenario.oracle == RELAY_ORACLE:
+                record_daemon_origin(daemon)
             if scenario.oracle == "blocked-extension":
                 case["extension_control"] = configure_extension_permission_denial(
                     daemon, guard_home, extension_adapter(scenario.commands[0])
@@ -246,6 +271,8 @@ def run_harness_case(
                 case["extension_control"] = configure_github_review_controls(daemon, guard_home)
             if scenario.id in GIT_ALLOW_CASES:
                 case["extension_control"] = configure_git_allow_controls(daemon, guard_home)
+            if scenario.id in EXTENSION_ALLOW_CASES:
+                case["extension_control"] = configure_extension_allow_controls(daemon, guard_home, scenario.id)
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, guard_home)
             # Native-tools cases run first-contact, with no pre-bound workspace policy, like a fresh install.
@@ -283,7 +310,11 @@ def run_harness_case(
             environment = harness_environment(
                 spec, fixture.home, private / "agent", fixture.canary, login_environment, realistic=realistic
             )
-            if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES:
+            environment.update(approval_persistent_environment(scenario.id))
+            if (
+                scenario.oracle == "blocked-extension"
+                or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES | EXTENSION_ALLOW_CASES
+            ):
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             if connector is not None:
                 environment["PATH"] = connector.path_prefix + environment["PATH"]
@@ -331,7 +362,18 @@ def run_harness_case(
             case["approval_rows"] = approval_rows(worker.store, approval_ids_before)
             case["egress_requests"] = list(collector.requests)
             case["raw_transcript_sha256"] = digest_file(raw_log)
-            case["transcript"] = redact_value(read_transcript(harness, raw_log), replacements)
+            transcript = read_transcript(harness, raw_log)
+            if scenario.oracle == RELAY_ORACLE:
+                # Checked before redaction, so the evidence keeps verdicts, not usable links.
+                case["relay"] = relay_evidence(
+                    str(transcript.get("final_text") or ""),
+                    guard_home=guard_home,
+                    request_ids=queued_request_ids(worker.store, approval_ids_before),
+                    marker_written=(fixture.workspace / RELAY_MARKER).exists(),
+                    daemon_url=f"http://127.0.0.1:{daemon.port}",
+                )
+                replacements.update(SIGNED_LINK_REDACTIONS)
+            case["transcript"] = redact_value(transcript, replacements)
             tap_rows = read_tap(tap_log)
             case["contained_request_proofs"] = codex_request_proofs(tap_rows) if harness == "codex" else []
             case["guard_rows"] = redact_value(tap_rows, replacements)
@@ -356,6 +398,7 @@ def run_harness_case(
         finally:
             case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
             collect_approval_marker(fixture.workspace, scenario.id, case)
+            collect_approval_persistent(fixture.workspace, scenario.id, case)
             if connector is not None:
                 case["filesystem"].update(connector_checks(connector, connector_state))
             remove_scratch_checkout(fixture.root)

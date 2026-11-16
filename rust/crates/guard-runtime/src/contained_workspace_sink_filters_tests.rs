@@ -68,7 +68,10 @@ fn a_stage_the_chain_does_not_name_is_refused() {
         stage(&["tail", "x"]),
         Vec::new(),
     ] {
-        assert!(apply(b"a\n", &[refused.clone()]).is_err(), "{refused:?}");
+        assert!(
+            apply(b"a\n", std::slice::from_ref(&refused)).is_err(),
+            "{refused:?}"
+        );
     }
 }
 

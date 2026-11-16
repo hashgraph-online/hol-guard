@@ -11,7 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_guard_store, store_review_event_outbox
 from codex_plugin_scanner.guard.cli.connect_flow import build_connect_status_payload
-from codex_plugin_scanner.guard.daemon.cloud_review_settings import cloud_review_settings_status
+from codex_plugin_scanner.guard.cloud_control.cloud_review_settings import cloud_review_settings_status
 from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_store_shims import refresh_review_event_outbox_binding
@@ -223,24 +223,6 @@ def test_unquarantinable_oversized_event_fails_closed(tmp_path: Path, monkeypatc
         _ = store.list_ready_review_events(now="2026-09-01T12:00:00+00:00", limit=10, **identity)
 
 
-def test_idle_watcher_does_not_stay_alive_on_an_unavailable_outbox(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import time
-
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=1)
-    _unavailable_native(monkeypatch)
-    monkeypatch.setattr(store, "get_cloud_sync_profile", lambda: {"workspace_id": "workspace-1"})
-    shutdowns: list[bool] = []
-    monkeypatch.setattr(daemon._server, "shutdown", lambda: shutdowns.append(True))
-    daemon._server.last_activity_monotonic = time.monotonic() - 30
-    daemon._watch_for_idle_shutdown()
-    assert shutdowns == [True]
-
-
 def test_the_request_digest_never_covers_the_policy_integrity_key() -> None:
     """The resident drops the same argument names before it digests the request.
 
@@ -269,3 +251,21 @@ def test_the_request_digest_never_covers_the_policy_integrity_key() -> None:
     assert native_guard_store._canonical_request_sha256(native_guard_store._digest_material(renamed)) != bare
     assert "integrity_key_b64" not in native_guard_store._digest_material(keyed)["args"]
     assert keyed["args"]["integrity_key_b64"] == "c2VjcmV0"
+
+
+def test_a_store_call_resolves_the_runtime_status_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+    resolved: list[object] = []
+
+    class _Status:
+        identity = None
+
+    status = _Status()
+    _patch_transport(monkeypatch, [100.0], seen, lambda: None)
+    monkeypatch.setattr(native_guard_store, "native_runtime_status", lambda: resolved.append(status) or status)
+
+    with pytest.raises(NativeGuardStoreUnavailable):
+        _call(tmp_path, 130.0)
+
+    assert resolved == [status]
+    assert seen["status"] is status

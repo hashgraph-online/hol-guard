@@ -6,8 +6,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from .daemon.discovery import load_authenticated_daemon_state
-from .daemon.manager import load_guard_daemon_url
 from .local_trust_contract import (
     POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
     POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE,
@@ -20,6 +18,7 @@ from .local_trust_contract import (
     run_trust_backend_check,
     select_trust_backend,
 )
+from .native_daemon_manage import load_authenticated_daemon_state, load_guard_daemon_url
 from .store import (
     EncryptedFileSecretStore,
     FallbackSecretStore,

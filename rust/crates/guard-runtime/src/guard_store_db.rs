@@ -129,11 +129,7 @@ pub(crate) fn query_each(
     mut visit: impl FnMut(Row) -> StoreResult<bool>,
 ) -> StoreResult<()> {
     let mut statement = connection.prepare_cached(sql)?;
-    let names: Vec<String> = statement
-        .column_names()
-        .iter()
-        .map(|n| (*n).to_owned())
-        .collect();
+    let names: Vec<String> = statement.column_names().map(str::to_owned).collect();
     let bound: Vec<rusqlite::types::Value> = params.iter().map(bind).collect();
     let mut rows = statement.query(rusqlite::params_from_iter(bound))?;
     while let Some(row) = rows.next()? {

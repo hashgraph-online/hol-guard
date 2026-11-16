@@ -28,7 +28,6 @@ from codex_plugin_scanner.guard import local_trust_controller as local_trust_con
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard import store_policy_integrity_runtime as policy_integrity_runtime_module
 from codex_plugin_scanner.guard.cli import commands_dispatch_trust as trust_dispatch_module
-from codex_plugin_scanner.guard.daemon.manager import ApprovalCenterLocator, write_guard_daemon_state
 from codex_plugin_scanner.guard.local_trust_contract import (
     LOCAL_TRUST_DEGRADED_REASON_LABELS,
     LOCAL_TRUST_MODES,
@@ -53,6 +52,7 @@ from codex_plugin_scanner.guard.local_trust_contract import (
 )
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
+from codex_plugin_scanner.guard.native_daemon_manage import ApprovalCenterLocator, write_guard_daemon_state
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
     NATIVE_POLICY_VERIFIER_KEY_NAME,
     NATIVE_RUNTIME_STATE_DIRECTORY,

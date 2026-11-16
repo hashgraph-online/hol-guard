@@ -556,3 +556,18 @@ fn resident_transport_binds_replies_and_rejects_unknown_fields() {
             .is_err()
     );
 }
+
+#[test]
+fn a_control_view_without_an_admitted_snapshot_answers_no_view() {
+    let request = request(ApprovalExtensionRecommendationQueryV1::ControlView {});
+    for read in [None, Some(Err("native_policy_snapshot_missing".to_owned()))] {
+        let bytes = evaluate_with_snapshot(&request, || read).unwrap();
+        let result: ApprovalExtensionRecommendationResultV1 =
+            serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(result.status, "ok", "{}", result.code);
+        assert_eq!(
+            result.payload,
+            Some(ApprovalExtensionRecommendationPayloadV1::ControlView { view: None })
+        );
+    }
+}

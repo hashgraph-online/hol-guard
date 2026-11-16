@@ -54,7 +54,9 @@ const OFF_OR_ON: &[&str] = &["0", "1", "false", "true"];
 /// `CYPRESS_INSTALL_BINARY` is the one exception to the shared value list.
 /// It is listed with `0` alone, because its other accepted values are a URL
 /// or a path to a zip file, which is exactly the redirection the name test
-/// refuses it for.
+/// refuses it for. `PYTEST_DISABLE_PLUGIN_AUTOLOAD` is listed with the two
+/// words that switch pytest's plugin autoload off, so a contained run still
+/// loads fewer plugins rather than the caller's whole installed set.
 const TOOL_SWITCHES: &[(&str, &[&str])] = &[
     ("BROWSERSLIST_DISABLE_CACHE", OFF_OR_ON),
     ("BROWSERSLIST_IGNORE_OLD_DATA", OFF_OR_ON),
@@ -64,6 +66,7 @@ const TOOL_SWITCHES: &[(&str, &[&str])] = &[
     ("HUSKY_SKIP_HOOKS", OFF_OR_ON),
     ("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", OFF_OR_ON),
     ("PUPPETEER_SKIP_DOWNLOAD", OFF_OR_ON),
+    ("PYTEST_DISABLE_PLUGIN_AUTOLOAD", &["1", "true"]),
     ("SHARP_IGNORE_GLOBAL_LIBVIPS", OFF_OR_ON),
 ];
 
@@ -93,7 +96,7 @@ const NPM_DISPLAY_SETTINGS: &[(&str, &[&str])] = &[
 /// word is a literal assignment in front of a command.
 pub(crate) fn inert_tool_setting(name: &str, value: &str) -> bool {
     let upper = name.to_ascii_uppercase();
-    if tool_switch_inert(&upper, value) {
+    if tool_switch_inert(&upper, value) || port_number_setting(&upper, value) {
         return true;
     }
     match upper.as_str() {
@@ -102,6 +105,26 @@ pub(crate) fn inert_tool_setting(name: &str, value: &str) -> bool {
         "RUSTFLAGS" | "RUSTDOCFLAGS" => rust_lint_levels_only(value),
         other => npm_display_setting(other, value),
     }
+}
+
+/// A setting that names a port, carrying only a port number.
+///
+/// The endpoint screen refuses the whole `*_PORT` family by name, because the
+/// value is what decides whose server answers: `PORT=db.example.test:5432`
+/// moves the connection to another machine. A value that is only a port
+/// number cannot. It names no host, so whatever answers it answers on the
+/// host the run was already talking to, and nothing the command sends can
+/// leave that host on the strength of this setting alone.
+///
+/// Agents set these constantly to keep concurrent stacks off each other's
+/// ports (`PORT=3000`, `GUARD_TEST_POSTGRES_PORT=55477`), and reading the
+/// name alone cost every such run the proof the same run had without the
+/// prefix.
+fn port_number_setting(upper: &str, value: &str) -> bool {
+    (upper == "PORT" || upper.ends_with("_PORT"))
+        && !value.is_empty()
+        && value.chars().all(|character| character.is_ascii_digit())
+        && matches!(value.parse::<u32>(), Ok(1..=65_535))
 }
 
 /// One of the switches above, written with one of the words that switch

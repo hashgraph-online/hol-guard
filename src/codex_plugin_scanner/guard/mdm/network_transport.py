@@ -19,6 +19,7 @@ from urllib3.poolmanager import ProxyManager
 
 from ...no_redirect import RejectRedirects
 from .contracts import ManagedNetworkPolicy
+from .network_keepalive import KeepAliveHTTPSHandler
 from .network_trust import ManagedTrustError, build_default_ssl_context, build_managed_ssl_context
 from .network_urlopen import ManagedOpener, ManagedResponse, ManagedUrlOpener
 from .policy import load_managed_policy
@@ -339,7 +340,9 @@ def managed_urlopen(
     ):
         context = build_default_ssl_context()
         if reject_redirects:
-            return urllib.request.build_opener(RejectRedirects(), urllib.request.HTTPSHandler(context=context)).open(
+            # Authenticated Guard calls come in quick runs (lease, ack, result);
+            # reuse their TLS connections instead of a handshake per call.
+            return urllib.request.build_opener(RejectRedirects(), KeepAliveHTTPSHandler(context)).open(
                 request, timeout=timeout
             )
         return urllib.request.urlopen(request, timeout=timeout, context=context)

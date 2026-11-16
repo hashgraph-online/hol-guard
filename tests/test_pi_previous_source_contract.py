@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import previous_managed_extension_source
+from tests.pi_extension_support import previous_managed_extension_source
 
 
 def _arguments(root: Path) -> dict[str, object]:

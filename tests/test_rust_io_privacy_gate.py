@@ -60,7 +60,7 @@ def test_static_gate_rejects_new_command_field_in_serializer(tmp_path: Path) -> 
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
 
-    metrics = tmp_path / "src/codex_plugin_scanner/guard/daemon/hook_metrics.py"
+    metrics = tmp_path / "src/codex_plugin_scanner/guard/hook_review/hook_metrics.py"
     source = metrics.read_text(encoding="utf-8")
     marker = '            "counters": dict(self._counters),\n'
     assert marker in source

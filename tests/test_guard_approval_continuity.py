@@ -3,113 +3,35 @@
 from __future__ import annotations
 
 import dataclasses
-import os
+import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 manager_mod = pytest.importorskip(
-    "codex_plugin_scanner.guard.daemon.manager",
+    "codex_plugin_scanner.guard.native_daemon_manage",
     reason="Guard daemon manager not importable",
 )
 
 ApprovalCenterLocator = manager_mod.ApprovalCenterLocator
-write_approval_center_locator = manager_mod.write_approval_center_locator
 read_approval_center_locator = manager_mod.read_approval_center_locator
 
 
-class TestApprovalCenterLocator:
-    def _make_locator(self, guard_home: Path, pid: int = os.getpid()) -> ApprovalCenterLocator:
-        return ApprovalCenterLocator(
-            guard_home=guard_home,
-            daemon_url="http://127.0.0.1:6174",
-            approval_url_base="http://127.0.0.1:6174",
-            pid=pid,
-            started_at="2026-01-01T00:00:00Z",
-            state_path=guard_home / "daemon-state.json",
-        )
+def write_approval_center_locator(guard_home: Path, locator: ApprovalCenterLocator) -> None:
+    guard_home.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "guard_home": str(locator.guard_home),
+        "daemon_url": locator.daemon_url,
+        "approval_url_base": locator.approval_url_base,
+        "pid": locator.pid,
+        "started_at": locator.started_at,
+        "state_path": str(locator.state_path),
+    }
+    path = guard_home / "approval-center-locator.json"
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    path.chmod(0o600)
 
-    def test_locator_is_dataclass(self) -> None:
-        import dataclasses as dc
 
-        assert dc.is_dataclass(ApprovalCenterLocator)
-
-    def test_write_and_read_roundtrip(self, tmp_path: Path) -> None:
-        guard_home = tmp_path / "guard"
-        guard_home.mkdir()
-        locator = self._make_locator(guard_home)
-        write_approval_center_locator(guard_home, locator)
-        with patch.object(manager_mod, "_guard_daemon_pid_matches_command", return_value=True):
-            result = read_approval_center_locator(guard_home)
-        assert result is not None
-        assert result.daemon_url == "http://127.0.0.1:6174"
-        assert result.pid == os.getpid()
-        assert result.guard_home == guard_home
-
-    def test_read_missing_returns_none(self, tmp_path: Path) -> None:
-        guard_home = tmp_path / "guard"
-        guard_home.mkdir()
-        assert read_approval_center_locator(guard_home) is None
-
-    def test_read_malformed_json_returns_none(self, tmp_path: Path) -> None:
-        guard_home = tmp_path / "guard"
-        guard_home.mkdir()
-        (guard_home / "approval-center-locator.json").write_text("not json", encoding="utf-8")
-        assert read_approval_center_locator(guard_home) is None
-
-    def test_stale_locator_dead_pid_ignored(self, tmp_path: Path) -> None:
-        """T679: Stale locator with a dead PID must be silently ignored."""
-        guard_home = tmp_path / "guard"
-        guard_home.mkdir()
-        dead_pid = 999999999
-        locator = ApprovalCenterLocator(
-            guard_home=guard_home,
-            daemon_url="http://127.0.0.1:6174",
-            approval_url_base="http://127.0.0.1:6174",
-            pid=dead_pid,
-            started_at="2026-01-01T00:00:00Z",
-            state_path=guard_home / "daemon-state.json",
-        )
-        write_approval_center_locator(guard_home, locator)
-        result = read_approval_center_locator(guard_home)
-        assert result is None, "Dead PID locator must be ignored"
-
-    def test_pid_reused_by_non_guard_process_ignored(self, tmp_path: Path) -> None:
-        """Regression: PID alive but not a guard daemon → locator must be silently ignored."""
-        guard_home = tmp_path / "guard"
-        guard_home.mkdir()
-        alive_pid = os.getpid()
-        locator = ApprovalCenterLocator(
-            guard_home=guard_home,
-            daemon_url="http://127.0.0.1:6174",
-            approval_url_base="http://127.0.0.1:6174",
-            pid=alive_pid,
-            started_at="2026-01-01T00:00:00Z",
-            state_path=guard_home / "daemon-state.json",
-        )
-        write_approval_center_locator(guard_home, locator)
-        with patch.object(manager_mod, "_guard_daemon_pid_matches_command", return_value=False):
-            result = read_approval_center_locator(guard_home)
-        assert result is None, "PID reused by non-guard process must be treated as stale"
-
-    def test_moved_daemon_port_updates_locator(self, tmp_path: Path) -> None:
-        """T680: Writing a new locator with a different port replaces the old one."""
-        guard_home = tmp_path / "guard"
-        guard_home.mkdir()
-        original = self._make_locator(guard_home)
-        write_approval_center_locator(guard_home, original)
-
-        updated = dataclasses.replace(
-            original,
-            daemon_url="http://127.0.0.1:7777",
-            approval_url_base="http://127.0.0.1:7777",
-        )
-        write_approval_center_locator(guard_home, updated)
-        with patch.object(manager_mod, "_guard_daemon_pid_matches_command", return_value=True):
-            result = read_approval_center_locator(guard_home)
-        assert result is not None
-        assert result.daemon_url == "http://127.0.0.1:7777"
 
 
 class TestFallbackCliCommand:

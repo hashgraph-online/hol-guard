@@ -124,6 +124,7 @@ request with the case that exposed it.
 | False-positive fix | A safe variant that incorrectly triggers a rule | A scoped native predicate and regressions for the affected rule and independent protections |
 | New native operation | Semantics the existing matcher graph cannot express | Reviewed Rust contract, validation, lowering, evaluation, identity, and parity tests |
 | MCP server | A package or hosted MCP service with tool defaults | Follow the separate [MCP server guide](../mcp-server-contributions.md) |
+| Cloud action pack | A provider's hosted actions, run by a host from a reviewed pack | Follow the separate [cloud action pack guide](cloud-action-pack-contributing.md) |
 | Documentation or publisher listing | Examples, references, public presentation, or attribution | Docs or an optional listing sidecar, plus public directory checks |
 
 For a new Extension or a material authority change, open a draft pull request with the
@@ -214,9 +215,9 @@ an addition with `base: "packaged"` cannot overwrite an ID already embedded in t
 Build current binaries and run the native source CLI contract:
 
 ```bash
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command --bin guard-command-source
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p hol-guard-runtime
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
+cargo +1.89.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command --bin guard-command-source
+cargo +1.89.0 build --locked --manifest-path rust/Cargo.toml --release -p hol-guard-runtime
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
 uv run --no-sync python scripts/build_native_command_program.py --check --compiler rust/target/release/guard-command-source
 ```
 

@@ -84,11 +84,65 @@ pub(crate) fn reads_index(subcommand: &str, rest: &[String]) -> bool {
         "ls-files" => true,
         // A revision only reaches the index through an index-stage spelling
         // such as `:path` or `:0:path`; `HEAD` and the repository questions
-        // are answered out of the object store and the configuration.
-        "rev-parse" => options(rest).any(|argument| argument.starts_with(':')),
+        // are answered out of the object store and the configuration. `show`
+        // and `cat-file` print the blob such a name resolves to.
+        "rev-parse" | "show" | "cat-file" => {
+            options(rest).any(|argument| argument.starts_with(':'))
+        }
         // A count walks the object store and never the index.
         _ => false,
     }
+}
+
+/// Positions in `arguments` of the index-stage object names a `show`,
+/// `cat-file` or `rev-parse` was given: `:path` and `:<stage>:path` name the
+/// blob the index holds for `path`, the staged copy `git diff --cached`
+/// already prints. They share a leading colon with magic pathspecs, which
+/// the read screen refuses, but only before `--` and only in these three
+/// subcommands is the word an object name. The path itself still passes the
+/// sensitive-path screen, and the configuration probe treats the read as
+/// one that loads the index.
+pub(crate) fn index_stage_object_positions(
+    arguments: &[String],
+    context: super::PathContext<'_>,
+) -> Vec<usize> {
+    let Some(inspected) =
+        crate::command_compatibility::git_inspection_arguments(arguments, context)
+    else {
+        return Vec::new();
+    };
+    let offset = arguments.len() - inspected.len();
+    let Some((subcommand, rest)) = inspected.split_first() else {
+        return Vec::new();
+    };
+    if !matches!(subcommand.as_str(), "show" | "cat-file" | "rev-parse") {
+        return Vec::new();
+    }
+    rest.iter()
+        .take_while(|argument| *argument != "--")
+        .enumerate()
+        .filter(|(_, argument)| index_stage_object(argument))
+        .map(|(index, _)| offset + 1 + index)
+        .collect()
+}
+
+/// `:path` or `:0:path` through `:3:path`, where `path` is a plain
+/// repository path with no colon of its own, so `:4:path` is not read as a
+/// stage. `:/text` searches commit messages, and `:(top)`,
+/// `:!path` and `:^path` are pathspec magic, so none of those qualify.
+fn index_stage_object(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix(':') else {
+        return false;
+    };
+    let path = match rest.as_bytes() {
+        [b'0'..=b'3', b':', ..] => &rest[2..],
+        _ => rest,
+    };
+    let path = path.strip_prefix("./").unwrap_or(path);
+    !path.is_empty()
+        && !path.starts_with(['/', '(', '!', '^', ':', '-'])
+        && !path.contains(['*', '?', '[', '\\', ':'])
+        && !path.split('/').any(|part| part.is_empty() || part == "..")
 }
 
 /// Whether the listing prints the rule that matched and the file it came

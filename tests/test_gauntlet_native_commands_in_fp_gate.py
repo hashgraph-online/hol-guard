@@ -8,6 +8,7 @@ so a regression shows up on the pull request that causes it.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -63,3 +64,15 @@ def test_registry_manifest_queries_and_their_negative_controls_are_gate_cases() 
         "neg-docker-imagetools-inspect-builder",
         "neg-docker-imagetools-inspect-remote-host",
     } <= ids
+
+
+def test_every_gate_case_has_an_id_of_its_own() -> None:
+    """A shared id hides one of the two cases.
+
+    The pending maps, the shard plan and every report key off the id, and the
+    harness expansion builds `<id>@<harness>` from it, so two cases that share
+    an id and a harness answer to one key. Whichever is read last wins.
+    """
+    counted = Counter(case["id"] for case in json.loads(_GATE.read_text(encoding="utf-8"))["cases"])
+    repeated = sorted(case_id for case_id, count in counted.items() if count > 1)
+    assert not repeated, repeated

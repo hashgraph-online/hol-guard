@@ -101,7 +101,7 @@ def _cursor_hook_env(tmp_path: Path) -> Iterator[tuple[HarnessContext, Path]]:
     assert context.guard_home is not None
     # Cursor runs the client behind the native bridge, which answers from
     # the daemon; the client itself never reviews a hook.
-    with live_cursor_daemon(context.guard_home):
+    with live_cursor_daemon(context.guard_home, context.home_dir):
         yield context, hook_script
 
 

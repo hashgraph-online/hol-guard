@@ -37,6 +37,13 @@ impl Span {
     }
 }
 
+/// Stands for the hint that ends a note, recorded beside the excerpts once
+/// a note of the session carried it. No project file has an empty path, so
+/// it never matches an excerpt.
+pub(super) fn hint() -> Span {
+    Span::new("", 0, 0, "hint")
+}
+
 /// One session of one app in one project.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Session {
@@ -65,9 +72,13 @@ pub(super) fn earlier(session: &Session) -> Vec<Span> {
 }
 
 /// Records what this prompt's context showed. The session moves to the back
-/// of the list, and the oldest session or span goes once a bound is met.
+/// of the list, and the oldest session or excerpt goes once a bound is met.
+/// The once-per-session hint survives excerpt eviction within that session.
+/// Pi and Oh My Pi drop the context when the agent is busy or the prompt
+/// changed before it starts, so Guard cannot tell whether they showed it and
+/// records nothing for them.
 pub(super) fn remember(session: &Session, shown: &[Span]) {
-    if shown.is_empty() {
+    if shown.is_empty() || matches!(session.app.as_str(), "pi" | "omp") {
         return;
     }
     let Ok(mut sessions) = sessions().lock() else {
@@ -80,8 +91,15 @@ pub(super) fn remember(session: &Session, shown: &[Span]) {
         .map(|(_, spans)| spans)
         .unwrap_or_default();
     spans.extend(shown.iter().cloned());
-    let extra = spans.len().saturating_sub(MAX_SPANS);
+    let hint = hint();
+    let has_hint = spans.contains(&hint);
+    spans.retain(|span| span != &hint);
+    let excerpt_limit = MAX_SPANS - usize::from(has_hint);
+    let extra = spans.len().saturating_sub(excerpt_limit);
     spans.drain(..extra);
+    if has_hint {
+        spans.insert(0, hint);
+    }
     while sessions.len() >= MAX_SESSIONS {
         sessions.pop_front();
     }

@@ -89,7 +89,7 @@ class _Publisher(NativePolicySnapshotPublicationMixin):
     def __init__(self) -> None:
         self._condition = threading.Condition()
         self._publish_event = threading.Event()
-        self._closed = False
+        self._close_event = threading.Event()
         self._acked = True
         self._snapshot = {"generation": 7}
         self._direct_lane_ack_target: tuple[int, str] | None = (7, "digest")

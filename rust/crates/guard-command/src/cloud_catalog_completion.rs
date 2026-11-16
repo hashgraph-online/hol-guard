@@ -6,6 +6,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAX_PENDING_COMPLETIONS: usize = 8;
 const PENDING_COMPLETION_TTL: u64 = 120_000_000;
+// The receipt time comes from the server clock. The nonce already binds it to
+// this challenge, so tolerate ordinary skew between device and server clocks.
+pub const SERVER_CLOCK_SKEW: u64 = 300_000_000;
 
 fn pending(root: &Path, key: &hmac::Key, current_time: u64) -> Result<Vec<Value>> {
     if !root.join("completion-pending.json").try_exists()? {
@@ -199,7 +202,12 @@ pub fn validate(home: &Path, local: &Value) -> Result<Value> {
         return Err(Error::Invalid);
     }
     let observed = micros(&receipt["observedAt"])?;
-    let age = now()?.checked_sub(observed).ok_or(Error::Invalid)?;
+    let current_time = now()?;
+    if observed > current_time.saturating_add(SERVER_CLOCK_SKEW) {
+        return Err(Error::Invalid);
+    }
+    // A receipt accepted from a server clock running ahead reads as fresh.
+    let age = current_time.saturating_sub(observed);
     if age > 900_000_000 {
         return Err(Error::Unavailable);
     }
@@ -267,8 +275,8 @@ pub fn evaluate(request: &Value) -> Result<Value> {
         .checked_sub(started)
         .is_none_or(|age| age > PENDING_COMPLETION_TTL)
         // Date.toISOString rounds server timestamps down to milliseconds.
-        || observed.saturating_add(999) < started
-        || observed > current_time
+        || observed.saturating_add(999 + SERVER_CLOCK_SKEW) < started
+        || observed > current_time.saturating_add(SERVER_CLOCK_SKEW)
         || pending["token"] != request["token"]
         || pending["observation"] != record["observation"]
         || pending["origin"] != request["origin"]

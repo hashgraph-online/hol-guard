@@ -60,6 +60,17 @@ pub(super) fn rank(action: &str) -> u8 {
     }
 }
 
+/// The reason code for a batch that carries an evaluation error. A check
+/// that ran out of time says so plainly, so an operator reading a log or a
+/// CI failure can tell a busy machine from a command Guard cannot model.
+pub(super) fn evaluation_error_reason(deadline_expired: bool) -> &'static str {
+    if deadline_expired {
+        "native_command_extension_evaluation_timed_out"
+    } else {
+        "native_command_extension_evaluation_failed"
+    }
+}
+
 pub(super) fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &str) {
     if rank(action) > rank(&result.minimum_action) {
         result.minimum_action = action.to_owned();
@@ -76,12 +87,26 @@ pub(super) fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &st
             "native_command_extension_evaluation_failed" => {
                 "HOL Guard could not match this command to the installed extension controls, so it stays blocked. A command that runs a script or another program (such as `bash script.sh`, `env`, `xargs`, `node -e` or a `$(...)` that runs one) cannot be matched. Run the program directly, or use a built-in tool. If an ordinary command keeps getting this, ask the user to run `hol-guard doctor`."
             }
+            "native_command_extension_evaluation_timed_out" => TIMED_OUT_REVIEW_REASON,
             "native_command_extension_uncertain" => {
                 "HOL Guard could not rule out a protected action in this command, such as a write to a harness, shell or credential file, or a program, loop or heredoc Guard cannot read ahead of time. Running each step directly, or using a built-in tool for an ordinary file read, usually avoids it."
             }
             _ => "HOL Guard requires the native command extension policy before this action can execute.",
         }
         .to_owned();
+    }
+}
+
+/// A command already heading for a review keeps that action when the check
+/// runs out of time, so `strengthen` never rewrites its prose. The agent
+/// still has to learn the check did not run, because the way out differs:
+/// wait and run the same command again rather than rewrite it. The timeout
+/// explanation therefore wins a tie at review, and a stronger floor, such as
+/// an administrator disable, is never reached here.
+pub(super) fn explain_timed_out_review(result: &mut PreToolResultV1, timed_out: bool) {
+    if timed_out && result.minimum_action == "review" {
+        result.reason_code = "native_command_extension_evaluation_timed_out".to_owned();
+        result.reason = TIMED_OUT_REVIEW_REASON.to_owned();
     }
 }
 
@@ -92,6 +117,36 @@ pub(super) fn explain_expired_deadline(result: &mut PreToolResultV1, deadline: O
         && deadline.is_some_and(|limit| Instant::now() >= limit)
     {
         result.reason = EXPIRED_DEADLINE_REASON.to_owned();
+    }
+}
+
+/// A shell carrying its script under a login, interactive or alias-changing
+/// option, or any `zsh`, runs code this text does not hold, so Guard keeps
+/// the block. The agent is told which options did that and offered the plain
+/// `bash -c` spelling, but only when `matches` shows Guard evaluates that
+/// spelling of the same script, so the recovery it names is one that works.
+pub(super) fn explain_startup_shell(
+    result: &mut PreToolResultV1,
+    command: Option<&CanonicalCommandV1>,
+    matches: impl FnOnce(&CanonicalCommandV1) -> bool,
+) {
+    if result.reason_code != "native_command_extension_evaluation_failed" {
+        return;
+    }
+    let Some(command) = command else {
+        return;
+    };
+    let Some(text) = crate::parser_wrappers::refused_inline_shell(&command.normalized_text) else {
+        return;
+    };
+    let probe = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: text,
+        dialect: command.dialect.clone(),
+        transport: command.transport.clone(),
+        extraction_provenance: command.extraction_provenance.clone(),
+    });
+    if probe.is_ok_and(|probe| matches(&probe)) {
+        result.reason = STARTUP_SHELL_REASON.to_owned();
     }
 }
 
@@ -202,6 +257,12 @@ fn project_home_target(target: &str) -> Option<String> {
 
 pub(super) const HOME_REDIRECT_REASON: &str = "HOL Guard could not match this command to the installed extension controls, so it stays blocked. It writes to a path under the home folder (`~` or `$HOME`), which the shell only works out when the command runs. Write the output inside the project or a temporary folder instead, or use the built-in edit tool for a file in the home folder.";
 
+pub(super) const STARTUP_SHELL_REASON: &str = "HOL Guard blocked this because the shell options run code that is not in the command text: startup files (`-l`, `-i`, `--login`, `--rcfile`, or any `zsh`) or modes that change how the script's words are read (`--posix`, `-O expand_aliases`, `-O nullglob`, `-a`, `-k`). Guard cannot review that code, so this cannot be approved. Run the script's commands directly, or as `bash -c '...'` with no other options; Guard reviews those the usual way.";
+
+/// A check that ran out of time inspected nothing, so Guard asks rather
+/// than deciding for the user. The card keeps Allow once and Always allow.
+pub(super) const TIMED_OUT_REVIEW_REASON: &str = "HOL Guard ran out of time checking this command against the installed extension controls, so it has not inspected the command and is asking you instead of deciding for you. This is usually temporary while the machine is busy, and running the same command again in a moment normally clears it. If it keeps happening, run each chained step as its own command, or run `hol-guard doctor`.";
+
 pub(super) const EXPIRED_DEADLINE_REASON: &str = "HOL Guard ran out of time checking this command against the installed extension controls, so it stays blocked. This is usually temporary while the machine is busy: run the same command again in a moment. If it keeps happening, run each chained step as its own command, or ask the user to run `hol-guard doctor`.";
 
 /// Tell the user how to restore protection when an unhealthy local authority,
@@ -257,3 +318,7 @@ impl super::CompiledNativeCommandControls {
         granted.difference(&withheld).copied().collect()
     }
 }
+
+#[cfg(test)]
+#[path = "native_command_startup_shell_tests.rs"]
+mod startup_shell_tests;

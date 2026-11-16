@@ -1,0 +1,1733 @@
+{
+  "schema": "guard.cloud-action-corpus.v1",
+  "kind": "benign",
+  "preset": "balanced",
+  "maxReviewRate": 0.05,
+  "cases": [
+    {
+      "id": "b001",
+      "task": "search mail: is:unread",
+      "actionId": "gmail.messages.list",
+      "arguments": {
+        "query": "is:unread",
+        "max_results": 25
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b002",
+      "task": "search mail: from:billing@example.com",
+      "actionId": "gmail.messages.list",
+      "arguments": {
+        "query": "from:billing@example.com",
+        "max_results": 26
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b003",
+      "task": "search mail: subject:invoice newer_than:7d",
+      "actionId": "gmail.messages.list",
+      "arguments": {
+        "query": "subject:invoice newer_than:7d",
+        "max_results": 27
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b004",
+      "task": "search mail: label:receipts",
+      "actionId": "gmail.messages.list",
+      "arguments": {
+        "query": "label:receipts",
+        "max_results": 28
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b005",
+      "task": "search mail: category:promotions is:unread",
+      "actionId": "gmail.messages.list",
+      "arguments": {
+        "query": "category:promotions is:unread",
+        "max_results": 29
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b006",
+      "task": "search mail: has:attachment filename:pdf",
+      "actionId": "gmail.messages.list",
+      "arguments": {
+        "query": "has:attachment filename:pdf",
+        "max_results": 30
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b007",
+      "task": "search mail: is:starred",
+      "actionId": "gmail.messages.list",
+      "arguments": {
+        "query": "is:starred",
+        "max_results": 31
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b008",
+      "task": "search mail: in:inbox older_than:30d",
+      "actionId": "gmail.messages.list",
+      "arguments": {
+        "query": "in:inbox older_than:30d",
+        "max_results": 32
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b009",
+      "task": "search mail: from:pat@example.org",
+      "actionId": "gmail.messages.list",
+      "arguments": {
+        "query": "from:pat@example.org",
+        "max_results": 33
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b010",
+      "task": "search mail: subject:(standup notes)",
+      "actionId": "gmail.messages.list",
+      "arguments": {
+        "query": "subject:(standup notes)",
+        "max_results": 34
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b011",
+      "task": "read one message",
+      "actionId": "gmail.messages.get",
+      "arguments": {
+        "id": "18c2f0a1b2c30000"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b012",
+      "task": "read one message",
+      "actionId": "gmail.messages.get",
+      "arguments": {
+        "id": "18c2f0a1b2c30001"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b013",
+      "task": "read one message",
+      "actionId": "gmail.messages.get",
+      "arguments": {
+        "id": "18c2f0a1b2c30002"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b014",
+      "task": "read one message",
+      "actionId": "gmail.messages.get",
+      "arguments": {
+        "id": "18c2f0a1b2c30003"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b015",
+      "task": "read one message",
+      "actionId": "gmail.messages.get",
+      "arguments": {
+        "id": "18c2f0a1b2c30004"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b016",
+      "task": "read one message",
+      "actionId": "gmail.messages.get",
+      "arguments": {
+        "id": "18c2f0a1b2c30005"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b017",
+      "task": "read one message",
+      "actionId": "gmail.messages.get",
+      "arguments": {
+        "id": "18c2f0a1b2c30006"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b018",
+      "task": "read one message",
+      "actionId": "gmail.messages.get",
+      "arguments": {
+        "id": "18c2f0a1b2c30007"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b019",
+      "task": "read one message",
+      "actionId": "gmail.messages.get",
+      "arguments": {
+        "id": "18c2f0a1b2c30008"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b020",
+      "task": "read one message",
+      "actionId": "gmail.messages.get",
+      "arguments": {
+        "id": "18c2f0a1b2c30009"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b021",
+      "task": "read one message",
+      "actionId": "gmail.messages.get",
+      "arguments": {
+        "id": "18c2f0a1b2c3000a"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b022",
+      "task": "read one message",
+      "actionId": "gmail.messages.get",
+      "arguments": {
+        "id": "18c2f0a1b2c3000b"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b023",
+      "task": "draft a reply",
+      "actionId": "gmail.drafts.create",
+      "arguments": {
+        "to": [
+          "pat@example.org"
+        ],
+        "subject": "Re: invoice",
+        "text": "Thanks, I will follow up tomorrow."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b024",
+      "task": "draft a reply",
+      "actionId": "gmail.drafts.create",
+      "arguments": {
+        "to": [
+          "lee@example.com"
+        ],
+        "subject": "Notes from today",
+        "text": "Thanks, I will follow up tomorrow."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b025",
+      "task": "draft a reply",
+      "actionId": "gmail.drafts.create",
+      "arguments": {
+        "to": [
+          "ops@example.com"
+        ],
+        "subject": "Draft: rota",
+        "text": "Thanks, I will follow up tomorrow."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b026",
+      "task": "draft a reply",
+      "actionId": "gmail.drafts.create",
+      "arguments": {
+        "to": [
+          "sam@example.net"
+        ],
+        "subject": "Re: quote",
+        "text": "Thanks, I will follow up tomorrow."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b027",
+      "task": "label a message",
+      "actionId": "gmail.messages.modify",
+      "arguments": {
+        "id": "18c2f0a1b2c30014",
+        "add_label_ids": [
+          "Label_1"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b028",
+      "task": "label a message",
+      "actionId": "gmail.messages.modify",
+      "arguments": {
+        "id": "18c2f0a1b2c30015",
+        "add_label_ids": [
+          "Label_2"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b029",
+      "task": "label a message",
+      "actionId": "gmail.messages.modify",
+      "arguments": {
+        "id": "18c2f0a1b2c30016",
+        "add_label_ids": [
+          "Label_3"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b030",
+      "task": "label a message",
+      "actionId": "gmail.messages.modify",
+      "arguments": {
+        "id": "18c2f0a1b2c30017",
+        "add_label_ids": [
+          "Label_4"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b031",
+      "task": "label a message",
+      "actionId": "gmail.messages.modify",
+      "arguments": {
+        "id": "18c2f0a1b2c30018",
+        "add_label_ids": [
+          "Label_5"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b032",
+      "task": "star a message",
+      "actionId": "gmail.messages.modify",
+      "arguments": {
+        "id": "18c2f0a1b2c3001e",
+        "add_label_ids": [
+          "STARRED"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b033",
+      "task": "mark a message read",
+      "actionId": "gmail.messages.modify",
+      "arguments": {
+        "id": "18c2f0a1b2c3001f",
+        "remove_label_ids": [
+          "UNREAD"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b034",
+      "task": "archive 3 read newsletters",
+      "actionId": "gmail.messages.archive",
+      "arguments": {
+        "ids": [
+          "18c2f0a1b2c30028",
+          "18c2f0a1b2c30029",
+          "18c2f0a1b2c3002a"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b035",
+      "task": "archive 8 read newsletters",
+      "actionId": "gmail.messages.archive",
+      "arguments": {
+        "ids": [
+          "18c2f0a1b2c3003c",
+          "18c2f0a1b2c3003d",
+          "18c2f0a1b2c3003e",
+          "18c2f0a1b2c3003f",
+          "18c2f0a1b2c30040",
+          "18c2f0a1b2c30041",
+          "18c2f0a1b2c30042",
+          "18c2f0a1b2c30043"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b036",
+      "task": "archive 15 read newsletters",
+      "actionId": "gmail.messages.archive",
+      "arguments": {
+        "ids": [
+          "18c2f0a1b2c30050",
+          "18c2f0a1b2c30051",
+          "18c2f0a1b2c30052",
+          "18c2f0a1b2c30053",
+          "18c2f0a1b2c30054",
+          "18c2f0a1b2c30055",
+          "18c2f0a1b2c30056",
+          "18c2f0a1b2c30057",
+          "18c2f0a1b2c30058",
+          "18c2f0a1b2c30059",
+          "18c2f0a1b2c3005a",
+          "18c2f0a1b2c3005b",
+          "18c2f0a1b2c3005c",
+          "18c2f0a1b2c3005d",
+          "18c2f0a1b2c3005e"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b037",
+      "task": "trash one message",
+      "actionId": "gmail.messages.trash",
+      "arguments": {
+        "id": "18c2f0a1b2c30064"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b038",
+      "task": "trash one message",
+      "actionId": "gmail.messages.trash",
+      "arguments": {
+        "id": "18c2f0a1b2c30065"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b039",
+      "task": "trash one message",
+      "actionId": "gmail.messages.trash",
+      "arguments": {
+        "id": "18c2f0a1b2c30066"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b040",
+      "task": "restore a trashed message",
+      "actionId": "gmail.messages.untrash",
+      "arguments": {
+        "id": "18c2f0a1b2c3006e"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b041",
+      "task": "send a quote to a customer",
+      "actionId": "gmail.messages.send",
+      "arguments": {
+        "to": [
+          "pat@example.org"
+        ],
+        "subject": "Quote",
+        "text": "Attached is the quote."
+      },
+      "expect": "review"
+    },
+    {
+      "id": "b042",
+      "task": "find files: name contains 'budget'",
+      "actionId": "drive.files.list",
+      "arguments": {
+        "query": "name contains 'budget'",
+        "page_size": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b043",
+      "task": "find files: mimeType='application/vnd.google-apps.spreadsheet'",
+      "actionId": "drive.files.list",
+      "arguments": {
+        "query": "mimeType='application/vnd.google-apps.spreadsheet'",
+        "page_size": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b044",
+      "task": "find files: modifiedTime > '2026-11-01T00:00:00'",
+      "actionId": "drive.files.list",
+      "arguments": {
+        "query": "modifiedTime > '2026-11-01T00:00:00'",
+        "page_size": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b045",
+      "task": "find files: 'me' in owners",
+      "actionId": "drive.files.list",
+      "arguments": {
+        "query": "'me' in owners",
+        "page_size": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b046",
+      "task": "find files: name contains 'Q3'",
+      "actionId": "drive.files.list",
+      "arguments": {
+        "query": "name contains 'Q3'",
+        "page_size": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b047",
+      "task": "find files: starred = true",
+      "actionId": "drive.files.list",
+      "arguments": {
+        "query": "starred = true",
+        "page_size": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b048",
+      "task": "read one file's details",
+      "actionId": "drive.files.get",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i900"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b049",
+      "task": "read one file's details",
+      "actionId": "drive.files.get",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i901"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b050",
+      "task": "read one file's details",
+      "actionId": "drive.files.get",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i902"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b051",
+      "task": "read one file's details",
+      "actionId": "drive.files.get",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i903"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b052",
+      "task": "read one file's details",
+      "actionId": "drive.files.get",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i904"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b053",
+      "task": "read one file's details",
+      "actionId": "drive.files.get",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i905"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b054",
+      "task": "read one file's details",
+      "actionId": "drive.files.get",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i906"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b055",
+      "task": "read one file's details",
+      "actionId": "drive.files.get",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i907"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b056",
+      "task": "check an export",
+      "actionId": "drive.operations.get",
+      "arguments": {
+        "name": "op_7f3a9c"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b057",
+      "task": "create a folder",
+      "actionId": "drive.files.create",
+      "arguments": {
+        "name": "Q4 reports",
+        "mime_type": "application/vnd.google-apps.folder"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b058",
+      "task": "create a document",
+      "actionId": "drive.files.create",
+      "arguments": {
+        "name": "Meeting notes",
+        "mime_type": "application/vnd.google-apps.document"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b059",
+      "task": "rename a file",
+      "actionId": "drive.files.update",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i910",
+        "name": "Budget (final)"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b060",
+      "task": "rename a file",
+      "actionId": "drive.files.update",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i911",
+        "name": "Roadmap 2027"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b061",
+      "task": "rename a file",
+      "actionId": "drive.files.update",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i912",
+        "name": "Interview notes"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b062",
+      "task": "move a file",
+      "actionId": "drive.files.move",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i920",
+        "add_parent": "Z9y8X7w6V5u4T3s2R1q0",
+        "remove_parent": "P0o9I8u7Y6t5R4e3W2q1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b063",
+      "task": "remove a link share",
+      "actionId": "drive.permissions.delete",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i921",
+        "permission_id": "anyoneWithLink"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b064",
+      "task": "trash an old draft",
+      "actionId": "drive.files.trash",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i923"
+      },
+      "expect": "require-reapproval"
+    },
+    {
+      "id": "b065",
+      "task": "export a document as PDF",
+      "actionId": "drive.files.download",
+      "arguments": {
+        "file_id": "a1B2c3D4e5F6g7H8i922",
+        "mime_type": "application/pdf"
+      },
+      "expect": "review"
+    },
+    {
+      "id": "b066",
+      "task": "list this week's events",
+      "actionId": "calendar.events.list",
+      "arguments": {
+        "calendar_id": "primary",
+        "time_min": "2026-11-16T00:00:00Z",
+        "time_max": "2026-11-17T00:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b067",
+      "task": "list this week's events",
+      "actionId": "calendar.events.list",
+      "arguments": {
+        "calendar_id": "primary",
+        "time_min": "2026-11-17T00:00:00Z",
+        "time_max": "2026-11-18T00:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b068",
+      "task": "list this week's events",
+      "actionId": "calendar.events.list",
+      "arguments": {
+        "calendar_id": "primary",
+        "time_min": "2026-11-18T00:00:00Z",
+        "time_max": "2026-11-19T00:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b069",
+      "task": "list this week's events",
+      "actionId": "calendar.events.list",
+      "arguments": {
+        "calendar_id": "primary",
+        "time_min": "2026-11-19T00:00:00Z",
+        "time_max": "2026-11-20T00:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b070",
+      "task": "list this week's events",
+      "actionId": "calendar.events.list",
+      "arguments": {
+        "calendar_id": "primary",
+        "time_min": "2026-11-20T00:00:00Z",
+        "time_max": "2026-11-21T00:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b071",
+      "task": "list this week's events",
+      "actionId": "calendar.events.list",
+      "arguments": {
+        "calendar_id": "primary",
+        "time_min": "2026-11-21T00:00:00Z",
+        "time_max": "2026-11-22T00:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b072",
+      "task": "read one event",
+      "actionId": "calendar.events.get",
+      "arguments": {
+        "calendar_id": "primary",
+        "event_id": "a1b2c3d4e5f6g7h8"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b073",
+      "task": "read one event",
+      "actionId": "calendar.events.get",
+      "arguments": {
+        "calendar_id": "primary",
+        "event_id": "b2c3d4e5f6g7h8i9"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b074",
+      "task": "read one event",
+      "actionId": "calendar.events.get",
+      "arguments": {
+        "calendar_id": "primary",
+        "event_id": "c3d4e5f6g7h8i9j0"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b075",
+      "task": "read one event",
+      "actionId": "calendar.events.get",
+      "arguments": {
+        "calendar_id": "primary",
+        "event_id": "a1b2c3d4e5f6g7h8"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b076",
+      "task": "read one event",
+      "actionId": "calendar.events.get",
+      "arguments": {
+        "calendar_id": "primary",
+        "event_id": "b2c3d4e5f6g7h8i9"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b077",
+      "task": "add a focus block",
+      "actionId": "calendar.events.insert",
+      "arguments": {
+        "calendar_id": "primary",
+        "summary": "Focus 1",
+        "start": "2026-11-20T15:00:00Z",
+        "end": "2026-11-20T16:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b078",
+      "task": "add a focus block",
+      "actionId": "calendar.events.insert",
+      "arguments": {
+        "calendar_id": "primary",
+        "summary": "Focus 2",
+        "start": "2026-11-21T15:00:00Z",
+        "end": "2026-11-21T16:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b079",
+      "task": "add a focus block",
+      "actionId": "calendar.events.insert",
+      "arguments": {
+        "calendar_id": "primary",
+        "summary": "Focus 3",
+        "start": "2026-11-22T15:00:00Z",
+        "end": "2026-11-22T16:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b080",
+      "task": "invite a customer to a call",
+      "actionId": "calendar.events.invite",
+      "arguments": {
+        "calendar_id": "primary",
+        "summary": "Kickoff",
+        "start": "2026-11-24T15:00:00Z",
+        "end": "2026-11-24T15:30:00Z",
+        "attendees": [
+          "pat@example.org"
+        ]
+      },
+      "expect": "review"
+    },
+    {
+      "id": "b081",
+      "task": "rename an event",
+      "actionId": "calendar.events.patch",
+      "arguments": {
+        "calendar_id": "primary",
+        "event_id": "a1b2c3d4e5f6g7h8",
+        "summary": "Design review (moved)"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b082",
+      "task": "move an event",
+      "actionId": "calendar.events.reschedule",
+      "arguments": {
+        "calendar_id": "primary",
+        "event_id": "b2c3d4e5f6g7h8i9",
+        "start": "2026-11-20T16:00:00Z",
+        "end": "2026-11-20T16:30:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b083",
+      "task": "list channels",
+      "actionId": "slack.conversations.list",
+      "arguments": {
+        "limit": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b084",
+      "task": "list channels",
+      "actionId": "slack.conversations.list",
+      "arguments": {
+        "limit": 21
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b085",
+      "task": "list channels",
+      "actionId": "slack.conversations.list",
+      "arguments": {
+        "limit": 22
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b086",
+      "task": "list channels",
+      "actionId": "slack.conversations.list",
+      "arguments": {
+        "limit": 23
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b087",
+      "task": "read recent messages",
+      "actionId": "slack.conversations.history",
+      "arguments": {
+        "channel": "C0123456789"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b088",
+      "task": "read recent messages",
+      "actionId": "slack.conversations.history",
+      "arguments": {
+        "channel": "C0A1B2C3D4E"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b089",
+      "task": "read recent messages",
+      "actionId": "slack.conversations.history",
+      "arguments": {
+        "channel": "C09ZZ8YY7XX"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b090",
+      "task": "read recent messages",
+      "actionId": "slack.conversations.history",
+      "arguments": {
+        "channel": "C0123456789"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b091",
+      "task": "read recent messages",
+      "actionId": "slack.conversations.history",
+      "arguments": {
+        "channel": "C0A1B2C3D4E"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b092",
+      "task": "read recent messages",
+      "actionId": "slack.conversations.history",
+      "arguments": {
+        "channel": "C09ZZ8YY7XX"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b093",
+      "task": "read recent messages",
+      "actionId": "slack.conversations.history",
+      "arguments": {
+        "channel": "C0123456789"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b094",
+      "task": "read recent messages",
+      "actionId": "slack.conversations.history",
+      "arguments": {
+        "channel": "C0A1B2C3D4E"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b095",
+      "task": "read recent messages",
+      "actionId": "slack.conversations.history",
+      "arguments": {
+        "channel": "C09ZZ8YY7XX"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b096",
+      "task": "read recent messages",
+      "actionId": "slack.conversations.history",
+      "arguments": {
+        "channel": "C0123456789"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b097",
+      "task": "edit one of my messages",
+      "actionId": "slack.chat.update",
+      "arguments": {
+        "channel": "C0123456789",
+        "ts": "1731430000.000100",
+        "text": "Build is green (rerun)."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b098",
+      "task": "edit one of my messages",
+      "actionId": "slack.chat.update",
+      "arguments": {
+        "channel": "C0A1B2C3D4E",
+        "ts": "1731430100.000200",
+        "text": "Build is green (rerun)."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b099",
+      "task": "react to a message",
+      "actionId": "slack.reactions.add",
+      "arguments": {
+        "channel": "C0123456789",
+        "timestamp": "1731430000.000100",
+        "name": "white_check_mark"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b100",
+      "task": "react to a message",
+      "actionId": "slack.reactions.add",
+      "arguments": {
+        "channel": "C0A1B2C3D4E",
+        "timestamp": "1731430100.000200",
+        "name": "eyes"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b101",
+      "task": "react to a message",
+      "actionId": "slack.reactions.add",
+      "arguments": {
+        "channel": "C09ZZ8YY7XX",
+        "timestamp": "1731430200.000300",
+        "name": "tada"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b102",
+      "task": "react to a message",
+      "actionId": "slack.reactions.add",
+      "arguments": {
+        "channel": "C0123456789",
+        "timestamp": "1731430000.000100",
+        "name": "+1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b103",
+      "task": "pin a message",
+      "actionId": "slack.pins.add",
+      "arguments": {
+        "channel": "C0123456789",
+        "timestamp": "1731430000.000100"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b104",
+      "task": "set a channel topic",
+      "actionId": "slack.conversations.set_topic",
+      "arguments": {
+        "channel": "C0A1B2C3D4E",
+        "topic": "Release week: freeze on Thursday"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b105",
+      "task": "post a build status",
+      "actionId": "slack.chat.post_message",
+      "arguments": {
+        "channel": "C0123456789",
+        "text": "Build is green."
+      },
+      "expect": "review"
+    },
+    {
+      "id": "b106",
+      "task": "list open issues",
+      "actionId": "github.issues.list",
+      "arguments": {
+        "repository": "octo-org/widgets"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b107",
+      "task": "list open issues",
+      "actionId": "github.issues.list",
+      "arguments": {
+        "repository": "octo-org/api"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b108",
+      "task": "list open issues",
+      "actionId": "github.issues.list",
+      "arguments": {
+        "repository": "octo-org/docs"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b109",
+      "task": "list open issues",
+      "actionId": "github.issues.list",
+      "arguments": {
+        "repository": "octo-org/widgets"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b110",
+      "task": "list open issues",
+      "actionId": "github.issues.list",
+      "arguments": {
+        "repository": "octo-org/api"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b111",
+      "task": "list open issues",
+      "actionId": "github.issues.list",
+      "arguments": {
+        "repository": "octo-org/docs"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b112",
+      "task": "list open issues",
+      "actionId": "github.issues.list",
+      "arguments": {
+        "repository": "octo-org/widgets"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b113",
+      "task": "list open issues",
+      "actionId": "github.issues.list",
+      "arguments": {
+        "repository": "octo-org/api"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b114",
+      "task": "list open issues",
+      "actionId": "github.issues.list",
+      "arguments": {
+        "repository": "octo-org/docs"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b115",
+      "task": "list open issues",
+      "actionId": "github.issues.list",
+      "arguments": {
+        "repository": "octo-org/widgets"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b116",
+      "task": "list open issues",
+      "actionId": "github.issues.list",
+      "arguments": {
+        "repository": "octo-org/api"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b117",
+      "task": "list open issues",
+      "actionId": "github.issues.list",
+      "arguments": {
+        "repository": "octo-org/docs"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b118",
+      "task": "open an issue",
+      "actionId": "github.issues.create",
+      "arguments": {
+        "repository": "octo-org/widgets",
+        "title": "Flaky login test",
+        "body": "Seen in CI."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b119",
+      "task": "open an issue",
+      "actionId": "github.issues.create",
+      "arguments": {
+        "repository": "octo-org/api",
+        "title": "Docs typo in README",
+        "body": "Seen in CI."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b120",
+      "task": "open an issue",
+      "actionId": "github.issues.create",
+      "arguments": {
+        "repository": "octo-org/docs",
+        "title": "Upgrade the date library",
+        "body": "Seen in CI."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b121",
+      "task": "close an issue",
+      "actionId": "github.issues.update",
+      "arguments": {
+        "repository": "octo-org/widgets",
+        "issue_number": 40,
+        "state": "closed"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b122",
+      "task": "close an issue",
+      "actionId": "github.issues.update",
+      "arguments": {
+        "repository": "octo-org/api",
+        "issue_number": 41,
+        "state": "closed"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b123",
+      "task": "close an issue",
+      "actionId": "github.issues.update",
+      "arguments": {
+        "repository": "octo-org/docs",
+        "issue_number": 42,
+        "state": "closed"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b124",
+      "task": "label an issue",
+      "actionId": "github.issues.add_labels",
+      "arguments": {
+        "repository": "octo-org/widgets",
+        "issue_number": 50,
+        "labels": [
+          "bug"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b125",
+      "task": "label an issue",
+      "actionId": "github.issues.add_labels",
+      "arguments": {
+        "repository": "octo-org/api",
+        "issue_number": 51,
+        "labels": [
+          "bug"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b126",
+      "task": "label an issue",
+      "actionId": "github.issues.add_labels",
+      "arguments": {
+        "repository": "octo-org/docs",
+        "issue_number": 52,
+        "labels": [
+          "bug"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b127",
+      "task": "label an issue",
+      "actionId": "github.issues.add_labels",
+      "arguments": {
+        "repository": "octo-org/widgets",
+        "issue_number": 53,
+        "labels": [
+          "bug"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b128",
+      "task": "open a draft pull request",
+      "actionId": "github.pulls.create",
+      "arguments": {
+        "repository": "octo-org/widgets",
+        "title": "Fix flaky login test",
+        "head": "fix/login-0",
+        "base": "main",
+        "draft": true
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b129",
+      "task": "open a draft pull request",
+      "actionId": "github.pulls.create",
+      "arguments": {
+        "repository": "octo-org/api",
+        "title": "Fix flaky login test",
+        "head": "fix/login-1",
+        "base": "main",
+        "draft": true
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b130",
+      "task": "request changes on a pull request",
+      "actionId": "github.pulls.create_review",
+      "arguments": {
+        "repository": "octo-org/widgets",
+        "pull_number": 7,
+        "event": "REQUEST_CHANGES",
+        "body": "Please add a test."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b131",
+      "task": "request changes on a pull request",
+      "actionId": "github.pulls.create_review",
+      "arguments": {
+        "repository": "octo-org/api",
+        "pull_number": 8,
+        "event": "REQUEST_CHANGES",
+        "body": "Please add a test."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b132",
+      "task": "comment on an issue",
+      "actionId": "github.issues.create_comment",
+      "arguments": {
+        "repository": "octo-org/widgets",
+        "issue_number": 7,
+        "body": "Fixed in #8."
+      },
+      "expect": "review"
+    },
+    {
+      "id": "b133",
+      "task": "read a page",
+      "actionId": "notion.blocks.children.list",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000000"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b134",
+      "task": "read a page",
+      "actionId": "notion.blocks.children.list",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000001"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b135",
+      "task": "read a page",
+      "actionId": "notion.blocks.children.list",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000002"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b136",
+      "task": "read a page",
+      "actionId": "notion.blocks.children.list",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000003"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b137",
+      "task": "read a page",
+      "actionId": "notion.blocks.children.list",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000004"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b138",
+      "task": "read a page",
+      "actionId": "notion.blocks.children.list",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000005"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b139",
+      "task": "read a page",
+      "actionId": "notion.blocks.children.list",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000006"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b140",
+      "task": "read a page",
+      "actionId": "notion.blocks.children.list",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000007"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b141",
+      "task": "read a page",
+      "actionId": "notion.blocks.children.list",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000008"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b142",
+      "task": "read a page",
+      "actionId": "notion.blocks.children.list",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000009"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b143",
+      "task": "query a database",
+      "actionId": "notion.databases.query",
+      "arguments": {
+        "database_id": "7c9e6679-7425-40de-944b-e07fc1f90000",
+        "page_size": 25
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b144",
+      "task": "query a database",
+      "actionId": "notion.databases.query",
+      "arguments": {
+        "database_id": "7c9e6679-7425-40de-944b-e07fc1f90001",
+        "page_size": 25
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b145",
+      "task": "query a database",
+      "actionId": "notion.databases.query",
+      "arguments": {
+        "database_id": "7c9e6679-7425-40de-944b-e07fc1f90002",
+        "page_size": 25
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b146",
+      "task": "query a database",
+      "actionId": "notion.databases.query",
+      "arguments": {
+        "database_id": "7c9e6679-7425-40de-944b-e07fc1f90003",
+        "page_size": 25
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b147",
+      "task": "query a database",
+      "actionId": "notion.databases.query",
+      "arguments": {
+        "database_id": "7c9e6679-7425-40de-944b-e07fc1f90004",
+        "page_size": 25
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b148",
+      "task": "query a database",
+      "actionId": "notion.databases.query",
+      "arguments": {
+        "database_id": "7c9e6679-7425-40de-944b-e07fc1f90005",
+        "page_size": 25
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b149",
+      "task": "query a database",
+      "actionId": "notion.databases.query",
+      "arguments": {
+        "database_id": "7c9e6679-7425-40de-944b-e07fc1f90006",
+        "page_size": 25
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b150",
+      "task": "query a database",
+      "actionId": "notion.databases.query",
+      "arguments": {
+        "database_id": "7c9e6679-7425-40de-944b-e07fc1f90007",
+        "page_size": 25
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b151",
+      "task": "append notes to a page",
+      "actionId": "notion.blocks.children.append",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000014",
+        "paragraphs": [
+          "Decision: ship Friday.",
+          "Owner: Pat."
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b152",
+      "task": "append notes to a page",
+      "actionId": "notion.blocks.children.append",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000015",
+        "paragraphs": [
+          "Decision: ship Friday.",
+          "Owner: Pat."
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b153",
+      "task": "append notes to a page",
+      "actionId": "notion.blocks.children.append",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000016",
+        "paragraphs": [
+          "Decision: ship Friday.",
+          "Owner: Pat."
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b154",
+      "task": "append notes to a page",
+      "actionId": "notion.blocks.children.append",
+      "arguments": {
+        "page_id": "0f8fad5bd9cb469fa165000000000017",
+        "paragraphs": [
+          "Decision: ship Friday.",
+          "Owner: Pat."
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b155",
+      "task": "create a page",
+      "actionId": "notion.pages.create",
+      "arguments": {
+        "parent_id": "0f8fad5b-d9cb-469f-a165-00000000001e",
+        "title": "Meeting notes"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b156",
+      "task": "create a page",
+      "actionId": "notion.pages.create",
+      "arguments": {
+        "parent_id": "0f8fad5b-d9cb-469f-a165-00000000001e",
+        "title": "Retro 11/12"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b157",
+      "task": "create a page",
+      "actionId": "notion.pages.create",
+      "arguments": {
+        "parent_id": "0f8fad5b-d9cb-469f-a165-00000000001e",
+        "title": "Hiring plan"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b158",
+      "task": "set a status",
+      "actionId": "notion.pages.set_select",
+      "arguments": {
+        "page_id": "0f8fad5b-d9cb-469f-a165-000000000028",
+        "property": "Status",
+        "option": "Done"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b159",
+      "task": "set a status",
+      "actionId": "notion.pages.set_select",
+      "arguments": {
+        "page_id": "0f8fad5b-d9cb-469f-a165-000000000029",
+        "property": "Status",
+        "option": "In progress"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b160",
+      "task": "set a status",
+      "actionId": "notion.pages.set_select",
+      "arguments": {
+        "page_id": "0f8fad5b-d9cb-469f-a165-00000000002a",
+        "property": "Priority",
+        "option": "High"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b161",
+      "task": "tick a checkbox",
+      "actionId": "notion.pages.set_checkbox",
+      "arguments": {
+        "page_id": "0f8fad5b-d9cb-469f-a165-000000000032",
+        "property": "Reviewed",
+        "checked": true
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b162",
+      "task": "set an estimate",
+      "actionId": "notion.pages.set_number",
+      "arguments": {
+        "page_id": "0f8fad5b-d9cb-469f-a165-000000000033",
+        "property": "Estimate",
+        "number": 3
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b163",
+      "task": "set a note",
+      "actionId": "notion.pages.set_text",
+      "arguments": {
+        "page_id": "0f8fad5b-d9cb-469f-a165-000000000034",
+        "property": "Notes",
+        "text": "Waiting on design"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b164",
+      "task": "archive an old page",
+      "actionId": "notion.pages.archive",
+      "arguments": {
+        "page_id": "0f8fad5b-d9cb-469f-a165-00000000003c"
+      },
+      "expect": "require-reapproval"
+    },
+    {
+      "id": "b165",
+      "task": "restore a page",
+      "actionId": "notion.pages.restore",
+      "arguments": {
+        "page_id": "0f8fad5b-d9cb-469f-a165-00000000003d"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b166",
+      "task": "create a task database",
+      "actionId": "notion.databases.create",
+      "arguments": {
+        "parent_id": "0f8fad5b-d9cb-469f-a165-000000000046",
+        "title": "Tasks"
+      },
+      "expect": "allow"
+    }
+  ]
+}

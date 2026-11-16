@@ -243,3 +243,81 @@ fn plugin_update_prompts_are_token_gated_session_paths() {
     // Reset stays a CLI action; the dashboard cannot clear every dismissal.
     assert!(!session_path("POST", "/v1/plugins/updates/reset"));
 }
+
+fn approval_session(request_id: Option<&str>, method: &str, path: &str) -> Value {
+    let claims = json!({"surface": "approval-center", "request_id": request_id});
+    payload(
+        &json!({"kind": "session_authorize", "method": method, "path": path,
+                    "claims": claims, "payload": null}),
+    )
+}
+
+#[test]
+fn a_link_bound_session_decides_only_its_own_request() {
+    let own = "0123456789abcdef0123456789abcdef";
+    let other = "fedcba9876543210fedcba9876543210";
+    let bound =
+        |method: &str, path: &str| approval_session(Some(own), method, path)["allowed"].clone();
+    for action in ["approve", "block", "resume"] {
+        assert_eq!(
+            bound("POST", &format!("/v1/requests/{own}/{action}")),
+            true,
+            "{action}"
+        );
+        assert_eq!(
+            bound("POST", &format!("/v1/requests/{other}/{action}")),
+            false,
+            "{action}"
+        );
+    }
+    assert_eq!(
+        bound("POST", &format!("/v1/mcp-policy/requests/{own}/decision")),
+        true
+    );
+    assert_eq!(
+        bound("POST", &format!("/v1/mcp-policy/requests/{other}/decision")),
+        false
+    );
+    // The page still loads and marks what the user has seen.
+    assert_eq!(bound("GET", "/v1/requests"), true);
+    assert_eq!(bound("GET", &format!("/v1/requests/{own}")), true);
+    assert_eq!(bound("POST", "/v1/read-state"), true);
+    // Bulk exports are not part of the page.
+    for path in ["/v1/evidence/export", "/v1/settings/export"] {
+        assert_eq!(bound("GET", path), false, "{path}");
+    }
+    // Nothing else the approval center can change is open to it.
+    for path in [
+        "/v1/requests/bulk-allow-once",
+        "/v1/settings/reset",
+        "/v1/policy/clear",
+        "/v1/update",
+    ] {
+        assert_eq!(bound("POST", path), false, "{path}");
+    }
+}
+
+#[test]
+fn an_unbound_approval_session_keeps_every_approval_center_route() {
+    let other = "fedcba9876543210fedcba9876543210";
+    for path in [
+        format!("/v1/requests/{other}/approve"),
+        "/v1/requests/bulk-allow-once".to_string(),
+        "/v1/settings/reset".to_string(),
+        "/v1/policy/clear".to_string(),
+        "/v1/update".to_string(),
+    ] {
+        assert_eq!(
+            approval_session(None, "POST", &path)["allowed"],
+            true,
+            "{path}"
+        );
+    }
+    for path in ["/v1/evidence/export", "/v1/settings/export"] {
+        assert_eq!(
+            approval_session(None, "GET", path)["allowed"],
+            true,
+            "{path}"
+        );
+    }
+}

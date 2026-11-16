@@ -1,7 +1,7 @@
 //! Grammar for the OMP eval bridge: the literal-only JavaScript program and
 //! the Python `read` lines, each parsed into ordered tool calls.
 
-use super::tokens::{tokenize, Token};
+use super::tokens::{tokenize, tokenize_lines, Token};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 
@@ -24,6 +24,8 @@ pub(super) struct Call {
 
 struct Parser {
     tokens: Vec<Token>,
+    /// Whether a line terminator came before each token.
+    breaks: Vec<bool>,
     pos: usize,
     declared: HashSet<String>,
     calls: Vec<Call>,
@@ -33,6 +35,7 @@ const RESERVED: &[&str] = &[
     "read",
     "tool",
     "display",
+    "print",
     "log",
     "console",
     "Promise",
@@ -79,6 +82,25 @@ const RESERVED: &[&str] = &[
     "constructor",
     "prototype",
     "__proto__",
+];
+
+/// String and array methods that only compute a new value from their
+/// receiver and plain arguments.
+const PURE_METHODS: &[&str] = &[
+    "split",
+    "slice",
+    "substring",
+    "trim",
+    "trimStart",
+    "trimEnd",
+    "toLowerCase",
+    "toUpperCase",
+    "join",
+    "includes",
+    "startsWith",
+    "endsWith",
+    "indexOf",
+    "at",
 ];
 
 impl Parser {
@@ -160,9 +182,27 @@ impl Parser {
                 self.declared.extend(names);
                 Some(())
             }
-            Token::Ident(word) if word == "display" || word == "log" => {
+            // The JavaScript prelude binds `print` to the same console bridge
+            // as `log`, so all three only show what they are given.
+            Token::Ident(word) if matches!(word.as_str(), "display" | "print" | "log") => {
                 self.pos += 1;
                 self.paren_value()
+            }
+            // The host rewrites a final top-level `return value;` into the
+            // cell's shown result, like a trailing expression. A `return`
+            // anywhere else would end the cell before later statements run,
+            // so it must be the last statement. A line break after `return`
+            // ends it there, leaving the value unread and unshown.
+            Token::Ident(word) if word == "return" => {
+                self.pos += 1;
+                if self.breaks.get(self.pos).copied().unwrap_or(true) {
+                    return None;
+                }
+                self.value(0)?;
+                self.tokens[self.pos..]
+                    .iter()
+                    .all(|token| matches!(token, Token::Punct(';')))
+                    .then_some(())
             }
             Token::Ident(word) if word == "console" => {
                 self.pos += 1;
@@ -226,15 +266,46 @@ impl Parser {
             Token::Punct('{') => self.display_object(depth)?,
             _ => return None,
         }
-        // Only the `.text` and `.length` accessors may follow a value.
-        while self.at('.') {
-            self.pos += 1;
-            match self.ident()?.as_str() {
-                "text" | "length" => {}
-                _ => return None,
+        self.postfix(depth)
+    }
+
+    /// What may follow a value: the `.text` and `.length` accessors, a
+    /// numeric index, and the pure string and array methods in
+    /// `PURE_METHODS` called with plain values. No method takes a callback,
+    /// and an index is a number literal, so no member lookup can reach a
+    /// constructor or anything else that runs code.
+    fn postfix(&mut self, depth: usize) -> Option<()> {
+        loop {
+            if self.at('[') {
+                self.pos += 1;
+                match self.next()? {
+                    Token::Num(_) => {}
+                    _ => return None,
+                }
+                self.eat(']')?;
+            } else if self.at('.') {
+                self.pos += 1;
+                let name = self.ident()?;
+                if matches!(name.as_str(), "text" | "length") {
+                    continue;
+                }
+                if !PURE_METHODS.contains(&name.as_str()) {
+                    return None;
+                }
+                self.eat('(')?;
+                while !self.at(')') {
+                    self.value(depth + 1)?;
+                    if self.at(',') {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
+                self.eat(')')?;
+            } else {
+                return Some(());
             }
         }
-        Some(())
     }
 
     fn display_object(&mut self, depth: usize) -> Option<()> {
@@ -347,8 +418,10 @@ pub(super) fn parse_program(code: &str) -> Option<Vec<Call>> {
     if code.len() > MAX_CODE_BYTES {
         return None;
     }
+    let (tokens, breaks) = tokenize_lines(code)?;
     let mut parser = Parser {
-        tokens: tokenize(code)?,
+        tokens,
+        breaks,
         pos: 0,
         declared: HashSet::new(),
         calls: Vec::new(),
@@ -421,34 +494,6 @@ pub(super) fn parse_python(code: &str) -> Option<Vec<Call>> {
     (!calls.is_empty()).then_some(calls)
 }
 
-#[test]
-fn python_read_lines_are_parsed_as_reads() {
-    let calls =
-        parse_python("print(read('calc.py'))\ndisplay(read(\"a.ts\"))\nread('b')\n").unwrap();
-    assert_eq!(calls.len(), 3);
-    for code in [
-        "import os",
-        "print(read('a'));import os",
-        "  print(read('a'))",
-        "print(read(r'a'))",
-        "print(read('a', 1, 5))",
-        "print(read('~/.ssh/id_rsa'))",
-        "print(read('a'))  # note",
-        "print(read('a'))\rimport os",
-        "print(read(\n'a'))",
-        "x = read('a')",
-        "",
-        "print(read('a\\b'))",
-        "print(read('a`b'))",
-        "read(`a`)",
-    ] {
-        assert!(parse_python(code).is_none(), "{code:?}");
-    }
-}
-
-#[test]
-fn literal_read_helper_is_parsed_as_one_read() {
-    let calls = parse_program("display(await read('README.md'))").unwrap();
-    assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].tool, "read");
-}
+#[cfg(test)]
+#[path = "generic_omp_eval_parser_tests.rs"]
+mod tests;

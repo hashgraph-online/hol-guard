@@ -110,8 +110,9 @@ _REASON_CODE_HINTS = {
     "native_package_review": (
         "Package installs download code from a registry, so Guard reviews them. An install that "
         "only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile "
-        "--ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci "
-        "--ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this "
+        "--ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile` "
+        "or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and "
+        "settings. If this "
         "was already that form, reuse dependencies that are already installed where you can."
     ),
     # Cloud gave no verdict, so the lockfile-only advice above would be paused the same way.

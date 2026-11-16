@@ -390,6 +390,38 @@ pub(crate) fn record_direct<T>(
     with_live(guard_home, |resident| queue(resident.writer.as_ref()))
 }
 
+/// Run `record` with this Guard home's writer, started on first use as a
+/// submission starts it, and hand back the store failure the writer holds.
+///
+/// The direct evidence drain records what a direct answer left behind this
+/// way, with the source of the store the bound daemon publishes. `None`
+/// means the writer could not run, and the evidence stays with the drain.
+pub(crate) fn record_drained<T>(
+    guard_home: &Path,
+    source: &str,
+    record: impl FnOnce(&RuntimeHookEvidenceWriter) -> T,
+) -> Option<(T, Value)> {
+    with_writer(&canonical_home(guard_home), source, |resident| {
+        (record(resident.writer.as_ref()), resident.fatal.peek())
+    })
+    .ok()
+}
+
+/// The store failure the writer already running for `guard_home` holds, for
+/// a drain page that gave it nothing to record. It reports the failure until
+/// the client acknowledges it, so a recovery that failed is asked for again.
+/// A slot busy starting or draining a writer is not waited on, and no writer
+/// is started.
+pub(crate) fn drained_fatal(guard_home: &Path) -> Option<Value> {
+    let slot = slot(&canonical_home(guard_home));
+    let held = match slot.writer.try_lock() {
+        Ok(held) => held,
+        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        Err(TryLockError::WouldBlock) => return None,
+    };
+    held.as_ref().map(|resident| resident.fatal.peek())
+}
+
 /// Run `act` while this Guard home's writer slot is held, as starting a
 /// writer or draining one holds it.
 #[cfg(test)]
@@ -473,6 +505,50 @@ fn stats_payload(resident: &ResidentWriter) -> Value {
         "store_fatal": fatal,
         "started": true,
     })
+}
+
+/// The writer's counters for the daemon's health details, without taking
+/// the signals its client reads: a health read must not swallow a policy
+/// mutation or a fatal store error.
+pub(crate) fn health_stats(guard_home: &Path) -> Value {
+    // Never waits on a slot that is starting or draining a writer.
+    let slot = slot(&canonical_home(guard_home));
+    let held = match slot.writer.try_lock() {
+        Ok(held) => Some(held),
+        Err(TryLockError::Poisoned(poisoned)) => Some(poisoned.into_inner()),
+        Err(TryLockError::WouldBlock) => None,
+    };
+    let mut payload = held
+        .as_ref()
+        .and_then(|held| held.as_ref())
+        .map(|resident| {
+            let stats = resident.writer.stats();
+            json!({
+                "queued": stats.queued,
+                "queued_bytes": stats.queued_bytes,
+                "accepted": stats.accepted,
+                "processed": stats.processed,
+                "dropped": stats.dropped,
+                "failures": stats.failures,
+                "recovered": stats.recovered,
+                "durable_pending": stats.durable_pending,
+                "degraded": stats.degraded,
+                "running": stats.running,
+                "receipt_accepted": stats.receipt_accepted,
+                "receipt_processed": stats.receipt_processed,
+                "receipt_deduped": stats.receipt_deduped,
+                "receipt_dropped": stats.receipt_dropped,
+                "receipt_failures": stats.receipt_failures,
+                "receipt_durable_pending": stats.receipt_durable_pending,
+                "started": true,
+            })
+        })
+        .unwrap_or_else(idle_stats);
+    if let Some(fields) = payload.as_object_mut() {
+        fields.remove("policy_mutations");
+        fields.remove("store_fatal");
+    }
+    payload
 }
 
 /// A writer that was never started has nothing queued and is not running.

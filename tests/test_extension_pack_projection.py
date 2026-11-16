@@ -24,6 +24,7 @@ from codex_plugin_scanner.guard.store_extension_control_authority_schema import 
 )
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.native_activation_support import seed
+from tests.pack_activation_writer_support import write_in_transaction
 from tests.test_extension_pack_preparation import delivery as delivery
 
 
@@ -35,6 +36,7 @@ def active(delivery):
     connection.row_factory = sqlite3.Row
     store = SimpleNamespace(
         guard_home=home,
+        path=home / "guard.db",
         _connect=lambda: connection,
         _authority_key=lambda *, required: b"a" * 32,
         _policy_integrity_secret_material=lambda *, create: (b"k" * 32, "test"),
@@ -52,9 +54,7 @@ def active(delivery):
     )
     draft = activation_transition.stage(None, prepared, verifier_key=_key(store), store=store, now=1500)
     with hold_command_control_authority_lock(home), connection:
-        activation_store.write_in_transaction(
-            store, connection, draft, verifier_key=_key(store), recorded_at="unit", now=1500
-        )
+        write_in_transaction(store, connection, draft, verifier_key=_key(store), recorded_at="unit", now=1500)
     binding = {name: getattr(prepared.metadata, name) for name in ("program_digest", "catalog_digest", "trust_digest")}
     binding["effective_digest"] = "e" * 64
     return store, connection, draft, binding

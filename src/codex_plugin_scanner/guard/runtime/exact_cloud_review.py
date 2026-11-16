@@ -7,14 +7,12 @@ signed Cloud review receipt.
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import secrets
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ..review_contracts import (
     GuardReviewContractError,
@@ -22,9 +20,8 @@ from ..review_contracts import (
     guard_review_oauth_metadata,
     remote_approval_uses_workspace_admin_mfa,
 )
-from ..stable_digest import sha256_content_digest
-from ..stable_json import stable_json_serialize
 from .exact_cloud_review_diagnostics import enrich_exact_cloud_review_status
+from .exact_cloud_review_resident import resident_exact_cloud_review_answer
 from .time_support import parse_utc_timestamp
 
 if TYPE_CHECKING:
@@ -37,6 +34,12 @@ EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY = "guard_exact_cloud_review_capability"
 EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY = "guard_exact_cloud_review_revocation"
 EXACT_CLOUD_REVIEW_MAX_TTL_SECONDS = 365 * 24 * 60 * 60
 EXACT_CLOUD_REVIEW_DEFAULT_TTL_SECONDS = 30 * 24 * 60 * 60
+_FEATURE = "native-exact-cloud-review-v1"
+_COMMAND = "exact-cloud-review"
+_UNAVAILABLE = "native_exact_cloud_review_unavailable"
+# The runtime's answer when the capability reached the binding check and the
+# caller had no binding to send; the caller raises its own reason instead.
+_BINDING_UNREADABLE = "binding_unreadable"
 
 
 class ExactCloudReviewError(ValueError):
@@ -68,42 +71,64 @@ def _text(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
-def _canonical(payload: dict[str, object]) -> bytes:
-    return stable_json_serialize(payload).encode("utf-8")
+def _clock(now: str | None) -> str:
+    return datetime.now(timezone.utc).isoformat() if now is None else now
 
 
-def _signing_material(store: GuardStore, *, create: bool) -> tuple[bytes, str]:
-    key, key_id = store._policy_integrity_secret_material(create=create)
-    if key is None or key_id is None:
-        raise ExactCloudReviewError("cloud_review_signing_key_unavailable")
-    return key, key_id
+def _answer(request: dict[str, object], store: GuardStore | None = None) -> dict[str, object]:
+    """What the runtime says about the signed consent; it signs and checks it."""
+
+    answer = resident_exact_cloud_review_answer(request, store)
+    if answer is not None:
+        return answer
+    from ..mdm.runtime_request import runtime_answer
+
+    answer = runtime_answer(_FEATURE, _COMMAND, request, output_limit=1 << 20, timeout_seconds=10.0)
+    if answer is None:
+        raise ExactCloudReviewError(_UNAVAILABLE)
+    return answer
+
+
+def _ask(request: dict[str, object], member: str, store: GuardStore | None = None) -> dict[str, object]:
+    answer = _answer(request, store)
+    error = answer.get("error")
+    if isinstance(error, str):
+        raise ExactCloudReviewError(error)
+    value = answer.get(member)
+    if not isinstance(value, dict):
+        raise ExactCloudReviewError(_UNAVAILABLE)
+    return cast("dict[str, object]", value)
+
+
+_FOR_SIGNING = object()
+
+
+def _signing_key(store: GuardStore, envelope: object, *, create: bool = False) -> dict[str, object]:
+    """The local key: always for signing, and for checking only an envelope it could check."""
+
+    if envelope is not _FOR_SIGNING and not create and not isinstance(envelope, dict):
+        return {"key": None, "key_id": None}
+    from .command_capability import _signing_material_for_resident
+
+    key, key_id = _signing_material_for_resident(store, create=create)
+    return {"key": key, "key_id": key_id}
 
 
 def _sign(store: GuardStore, payload: dict[str, object], *, create_key: bool) -> dict[str, object]:
-    key, key_id = _signing_material(store, create=create_key)
-    unsigned = {**payload, "keyId": key_id}
-    signature = hmac.new(key, _canonical(unsigned), hashlib.sha256).hexdigest()
-    return {**unsigned, "signature": signature}
+    request = {"op": "sign", **_signing_key(store, _FOR_SIGNING, create=create_key), "payload": payload}
+    return _ask(request, "envelope", store)
 
 
 def _verify(store: GuardStore, payload: object) -> dict[str, object]:
-    if not isinstance(payload, dict):
-        raise ExactCloudReviewError("cloud_review_capability_missing")
-    signature = _text(payload.get("signature"))
-    if signature is None:
-        raise ExactCloudReviewError("cloud_review_capability_signature_missing")
-    unsigned = {str(key): value for key, value in payload.items() if key != "signature"}
-    key, key_id = _signing_material(store, create=False)
-    if unsigned.get("keyId") != key_id:
-        raise ExactCloudReviewError("cloud_review_capability_key_mismatch")
-    expected = hmac.new(key, _canonical(unsigned), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(signature, expected):
-        raise ExactCloudReviewError("cloud_review_capability_signature_invalid")
-    return unsigned
+    return _ask({"op": "verify", **_signing_key(store, payload), "envelope": payload}, "unsigned", store)
 
 
-def _capability_digest(capability: dict[str, object]) -> str:
-    return hashlib.sha256(_canonical(capability)).hexdigest()
+def _capability_digest(capability: dict[str, object], store: GuardStore | None = None) -> str:
+    answer = _answer({"op": "digest", "payload": capability}, store)
+    digest = answer.get("digest")
+    if not isinstance(digest, str):
+        raise ExactCloudReviewError(_UNAVAILABLE)
+    return digest
 
 
 def _oauth_metadata(store: GuardStore) -> GuardReviewOAuthMetadata:
@@ -219,7 +244,7 @@ def disable_exact_cloud_review(
     except ExactCloudReviewError:
         capability_digest = None
     else:
-        capability_digest = _capability_digest(capability)
+        capability_digest = _capability_digest(capability, store)
     revocation = _sign(
         store,
         {
@@ -249,49 +274,48 @@ def _verified_capability(
     now: str | None = None,
     revoke_binding_drift: bool = True,
 ) -> dict[str, object]:
-    capability = _verify(store, store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY))
-    if capability.get("operation") != EXACT_CLOUD_REVIEW_OPERATION:
-        raise ExactCloudReviewError("cloud_review_capability_operation_invalid")
-    if _text(capability.get("issuer")) is None or _text(capability.get("nonce")) is None:
-        raise ExactCloudReviewError("cloud_review_capability_invalid")
-    issued_at = parse_utc_timestamp(capability.get("issuedAt"))
-    expires_at = parse_utc_timestamp(capability.get("expiresAt"))
-    current = _now(now)
-    if issued_at is None or expires_at is None or expires_at <= issued_at:
-        raise ExactCloudReviewError("cloud_review_capability_time_invalid")
-    if issued_at > current + timedelta(minutes=5):
-        raise ExactCloudReviewError("cloud_review_capability_issued_in_future")
-    if expires_at - issued_at > timedelta(seconds=EXACT_CLOUD_REVIEW_MAX_TTL_SECONDS):
-        raise ExactCloudReviewError("cloud_review_capability_ttl_invalid")
-    if expires_at <= current:
-        raise ExactCloudReviewError("cloud_review_capability_expired")
-    if any(capability.get(key) != value for key, value in _oauth_binding(store).items()):
-        if revoke_binding_drift:
-            _revoke_binding_drift(store, capability, now=current)
-        raise ExactCloudReviewError("cloud_review_capability_binding_mismatch")
-    revocation = store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY)
-    if revocation is not None:
-        if not isinstance(revocation, dict):
-            raise ExactCloudReviewError("cloud_review_capability_revocation_invalid")
-        verified_revocation = _verify(store, revocation)
-        if parse_utc_timestamp(verified_revocation.get("revokedAt")) is None:
-            raise ExactCloudReviewError("cloud_review_capability_revocation_invalid")
-        digest = verified_revocation.get("capabilityDigest")
-        if digest is not None and not isinstance(digest, str):
-            raise ExactCloudReviewError("cloud_review_capability_revocation_invalid")
-        if digest is None or digest == _capability_digest(capability):
-            raise ExactCloudReviewError("cloud_review_capability_revoked")
-    return capability
+    raw = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
+    binding: dict[str, object] | None = None
+    binding_error: Exception | None = None
+    if isinstance(raw, dict):
+        # Read here, raised only if the runtime reaches the binding check.
+        try:
+            binding = _oauth_binding(store)
+        except Exception as error:
+            binding_error = error
+    answer = _answer(
+        {
+            "op": "capability",
+            **_signing_key(store, raw),
+            "capability": raw,
+            "revocation": store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY),
+            "binding": binding,
+            "now": _clock(now),
+        },
+        store,
+    )
+    error = answer.get("error")
+    if error == _BINDING_UNREADABLE and binding_error is not None:
+        raise binding_error
+    drift_digest = answer.get("drift_digest")
+    if isinstance(drift_digest, str) and revoke_binding_drift:
+        _revoke_binding_drift(store, drift_digest, now=_now(_clock(now)))
+    if isinstance(error, str):
+        raise ExactCloudReviewError(error)
+    capability = answer.get("capability")
+    if not isinstance(capability, dict):
+        raise ExactCloudReviewError(_UNAVAILABLE)
+    return cast("dict[str, object]", capability)
 
 
-def _revoke_binding_drift(store: GuardStore, capability: dict[str, object], *, now: datetime) -> None:
+def _revoke_binding_drift(store: GuardStore, capability_digest: str, *, now: datetime) -> None:
     raw_capability = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
     if not isinstance(raw_capability, dict):
         return
     revocation = _sign(
         store,
         {
-            "capabilityDigest": _capability_digest(capability),
+            "capabilityDigest": capability_digest,
             "issuer": "binding-drift",
             "revokedAt": now.isoformat(),
         },
@@ -378,12 +402,7 @@ def authorize_exact_cloud_review_job(
     )
 
     try:
-        identity = _exact_job_identity(job)
-        expires_at = parse_utc_timestamp(identity.get("expiresAt"))
-        if expires_at is None or expires_at <= _now(now):
-            raise ExactCloudReviewError("remote_exact_job_expired")
-        if expires_at > _now(now) + timedelta(hours=24):
-            raise ExactCloudReviewError("remote_exact_job_expiry_too_distant")
+        identity = _exact_job_identity(job, now=now, store=store)
         payload = job.get("payload")
         native_command = native_workspace_review_payload(payload)
         if native_command is not None:
@@ -421,7 +440,7 @@ def authorize_exact_cloud_review_job(
                     raise ExactCloudReviewError("remote_exact_job_wrong_workspace")
                 if approval.get("grantId") != capability["grantId"]:
                     raise ExactCloudReviewError("remote_exact_job_wrong_grant")
-                if approval.get("capabilityId") != _capability_digest(capability):
+                if approval.get("capabilityId") != _capability_digest(capability, store):
                     raise ExactCloudReviewError("remote_exact_job_capability_mismatch")
         if native_command is None and _command_job_seen(store, identity, now=now):
             raise ExactCloudReviewError("remote_exact_job_replayed")
@@ -445,32 +464,12 @@ def authorize_exact_cloud_review_job(
     )
 
 
-def _exact_job_identity(job: Mapping[str, object]) -> dict[str, object]:
-    if job.get("operation") != EXACT_CLOUD_REVIEW_OPERATION:
-        raise ExactCloudReviewError("remote_exact_job_operation_invalid")
-    if job.get("protocolVersion") != EXACT_CLOUD_REVIEW_PROTOCOL_VERSION:
-        raise ExactCloudReviewError("cloud_review_protocol_upgrade_required")
-    if "schemaVersion" in job:
-        raise ExactCloudReviewError("remote_exact_job_invalid")
-    required_strings = {
-        "id": "remote_exact_job_id_missing",
-        "deviceId": "remote_exact_job_device_missing",
-        "workspaceId": "remote_exact_job_workspace_missing",
-        "nonce": "remote_exact_job_nonce_missing",
-        "expiresAt": "remote_exact_job_expiry_missing",
-        "idempotencyKey": "remote_exact_job_idempotency_key_missing",
-    }
-    identity: dict[str, object] = {"operation": EXACT_CLOUD_REVIEW_OPERATION}
-    for field, error_code in required_strings.items():
-        value = _text(job.get(field))
-        if value is None:
-            raise ExactCloudReviewError(error_code)
-        identity[field] = value
-    payload = job.get("payload")
-    if not isinstance(payload, Mapping):
-        raise ExactCloudReviewError("remote_exact_job_invalid")
-    identity["payloadDigest"] = sha256_content_digest(_canonical(dict(payload)))
-    return identity
+def _exact_job_identity(
+    job: Mapping[str, object], *, now: str | None = None, store: GuardStore | None = None
+) -> dict[str, object]:
+    """The leased job's identity, once the runtime has checked its lease."""
+
+    return _ask({"op": "job", "job": dict(job), "now": _clock(now)}, "identity", store)
 
 
 from .exact_cloud_review_apply import apply_exact_cloud_review  # noqa: E402, F401

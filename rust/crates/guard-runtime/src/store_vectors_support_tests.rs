@@ -87,11 +87,7 @@ pub(crate) fn seeded_store(schema_sql: &Value, seed: &Value) -> Connection {
 
 fn dump_rows(connection: &Connection, sql: &str) -> Value {
     let mut statement = connection.prepare(sql).expect("dump statement");
-    let names: Vec<String> = statement
-        .column_names()
-        .iter()
-        .map(|name| (*name).to_owned())
-        .collect();
+    let names: Vec<String> = statement.column_names().map(str::to_owned).collect();
     let rows = statement
         .query_map([], |row| {
             let mut object = Map::new();

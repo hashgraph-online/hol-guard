@@ -38,125 +38,6 @@
       "note": "The reply to an event that pauses when review cannot finish."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
-      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_canonical_policy_action",
-      "root": "hook",
-      "reading": "fails-closed",
-      "actions": [
-        "block"
-      ],
-      "note": "Places the resident's policy_action in the lattice the generated client carries. A recognised action passes through unchanged; the only verdict this function itself composes is the block it answers for an action it cannot place, matching the native bridge's own is_guard_action filter."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
-      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_agreeing_native_response",
-      "root": "hook",
-      "reading": "fails-closed",
-      "actions": [
-        "block",
-        "review"
-      ],
-      "note": "Reconciles the decision fields the resident already put in its own response with the canonical action beside them, so a harness that reads the envelope and one that reads the exit code answer alike. It only ever tightens: a deny or block field lowers an allowing action to block, an ask field lowers it to review, and an unplaceable decision word reads as deny. It composes no permission, and the native bridge that answers for this client reconciles the same two fields the same way."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
-      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_failure_payload",
-      "root": "hook",
-      "reading": "acknowledges-observation",
-      "actions": [
-        "allow",
-        "block"
-      ],
-      "note": "The generated client's own fail-safe: a pausing event denies, an observation acknowledges. The allow is only ever the observation branch. Same split as _pause_payload and _observe_payload above."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
-      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_hermes_policy",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow",
-        "block"
-      ],
-      "note": "Reads the resident's decision out of the daemon response; an answer it cannot read becomes a block."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
-      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_permission_decision",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow"
-      ],
-      "note": "Maps the resident's policy_action into the harness permission vocabulary. _canonical_policy_action reads an unplaceable action as block first, so the None branch is now unreachable from a daemon response."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
-      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_to_native",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow",
-        "block"
-      ],
-      "note": "Allows only when _hermes_policy read allow or warn off the resident's answer; anything else blocks."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
-      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_muse_behavior",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow",
-        "block",
-        "review"
-      ],
-      "note": "Places a verdict word the resident wrote (decision, permissionDecision or a nested behavior) in Guard's vocabulary. A word it does not know reads as no verdict, which _muse_native then treats as restrictive on a gating event."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
-      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_muse_action",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow",
-        "block"
-      ],
-      "note": "Reads the resident's action off the daemon answer, preferring policy_action through _canonical_policy_action, which reads an unplaceable action as block. The allow and block returned here come from the answer's own continue flag, which the resident sets for a harness it does not manage."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
-      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_muse_native",
-      "root": "hook",
-      "reading": "fails-closed",
-      "actions": [
-        "block"
-      ],
-      "note": "Writes Muse's wire answer for the action _muse_action read. A permitted call is empty stdout and exit 0, because Muse rejects an envelope that says allow without the reviewed input, so the only verdict this function itself writes is the deny it sends for a restrictive action and for an answer that names no verdict on a gating event."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_template.py",
-      "func": "BOUNDED_HOOK_SCRIPT_TEMPLATE:_rewrite_grok_decision",
-      "root": "hook",
-      "reading": "records-approval",
-      "actions": [
-        "allow",
-        "block"
-      ],
-      "note": "Rewrites the decision from the approval wait, which allows only once every request id the resident opened resolved to allow."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_template.py",
-      "func": "BOUNDED_HOOK_SCRIPT_TEMPLATE:_rewrite_muse_decision",
-      "root": "hook",
-      "reading": "records-approval",
-      "actions": [
-        "allow",
-        "block"
-      ],
-      "note": "Rewrites the decision from the approval wait, which allows only once every request id the resident opened resolved to allow. The allow echoes the reviewed tool input back as updatedInput, which is what Muse needs to resume the identical call."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
       "func": "_deny_event",
       "root": "hook",
@@ -260,7 +141,7 @@
       "note": "Blocks a continuation it cannot settle."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
       "func": "cursor_shell_route_response",
       "root": "hook",
       "reading": "routes-guard-own-sink",
@@ -270,7 +151,7 @@
       "note": "Same route: an argv shape that matches Guard's own sink is passed through to it, and the sink does the authorizing."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
       "func": "_probe_response",
       "root": "hook",
       "reading": "renders-native",
@@ -280,7 +161,7 @@
       "note": "The edge's own route: a probe the native edge does not route to the sink gets the plain allow the resident would have answered, and the shell call itself is still judged at execution."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_fail_closed.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_fail_closed.py",
       "func": "render_silent_review_block",
       "root": "hook",
       "reading": "fails-closed",
@@ -290,7 +171,7 @@
       "note": "The fixed deny render_pre_tool falls back to when the resident cannot compose the silent block."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
       "func": "_blocked",
       "root": "hook",
       "reading": "fails-closed",
@@ -300,7 +181,7 @@
       "note": "Renders the block response."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
       "func": "native_package_review_response",
       "root": "hook",
       "reading": "renders-native",
@@ -310,7 +191,7 @@
       "note": "Renders the resident's review_settlement: an allow only where the resident settled the review as allow and the package review plan's may_allow still holds. Closed MAJ-AC-01 finding: the script-free watch widening now lives in the resident."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
       "func": "_policy_binding_failed",
       "root": "hook",
       "reading": "fails-closed",
@@ -320,7 +201,7 @@
       "note": "Renders a block when a review cannot be bound to its native policy."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
       "func": "_policy_binding_failed",
       "root": "hook",
       "reading": "fails-closed",
@@ -330,7 +211,7 @@
       "note": "Renders a block when a review cannot be bound to its native policy."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
       "func": "_policy_binding_failed",
       "root": "hook",
       "reading": "fails-closed",
@@ -340,7 +221,7 @@
       "note": "Blocks when a native review cannot be bound to its native policy."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
       "func": "pause_native_pre_tool_for_approval",
       "root": "hook",
       "reading": "records-approval",
@@ -351,7 +232,7 @@
       "note": "Blocks while the review is pending, and allows only on the two saved-approval matches native_review_settle finds in the store."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_saved_approval.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
       "func": "_saved_block_response",
       "root": "hook",
       "reading": "fails-closed",
@@ -361,7 +242,7 @@
       "note": "Renders the saved block."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_saved_approval.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
       "func": "native_saved_decision_response",
       "root": "hook",
       "reading": "records-approval",
@@ -371,7 +252,7 @@
       "note": "Replays the user's saved exact-action decision, bound to the artifact hash and gated on the resident having marked the review approvable."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/local_cli_connector_group.py",
+      "file": "src/codex_plugin_scanner/guard/local_clis/local_cli_connector_group.py",
       "func": "_continuation",
       "root": "hook",
       "reading": "records-approval",
@@ -381,7 +262,7 @@
       "note": "Builds the retry copy for an approval the user already allowed."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/server_control_connect_flow.py",
+      "file": "src/codex_plugin_scanner/guard/cloud_control/server_control_connect_flow.py",
       "func": "_repair_command_activity_persistence_health",
       "root": "guard-run",
       "reading": "health-probe",
@@ -630,6 +511,27 @@
         "warn"
       ],
       "note": "Same scan-finding record field."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/headless_receipts.py",
+      "func": "record_headless_receipt",
+      "root": "none",
+      "reading": "presentation",
+      "actions": [
+        "allow"
+      ],
+      "note": "Files the receipt for an app action the user already ran from the dashboard; the stored decision labels history and no hook reads it."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_template.py",
+      "func": "BOUNDED_HOOK_SCRIPT_TEMPLATE:_decide",
+      "root": "hook",
+      "reading": "acknowledges-observation",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "The standalone Grok client's own fail-safe when no native runtime answers: a prompt blocks, a tool or permission event denies, and a lifecycle or completed-tool event is acknowledged, matching the shared failure_payload contract. The allow is only ever the acknowledgement branch."
     }
   ]
 }

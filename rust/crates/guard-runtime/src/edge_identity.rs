@@ -75,10 +75,10 @@ pub(super) fn request_payload_identity(
     // A retry of an unchanged action mints a new transport call ID: Pi's
     // `tool_call_id`, and the `tool_use_id` Claude Code, Codex and Cursor stamp
     // on each tool-use block the model emits. Claude Code also stamps the user
-    // turn as `prompt_id`, and Cursor stamps every attempt with a fresh
-    // `generation_id`, the request id its own adapter documents, while ZCode
-    // moves `tool_use_id`, `toolCallId` and `turnId` together; the retry an
-    // approval unblocks comes in the turn after the user answers. Dropping them
+    // turn as `prompt_id` and Codex as `turn_id`, Cursor stamps every attempt
+    // with a fresh `generation_id`, the request id its own adapter documents,
+    // and ZCode moves `tool_use_id`, `toolCallId` and `turnId` together; the
+    // retry an approval unblocks comes in the turn after the user answers. Dropping them
     // lets an Allow once approval reach the agent's own retry. Nested tool
     // arguments and session identity stay in the commitment, and a request
     // without a session keeps the IDs.
@@ -116,7 +116,10 @@ fn transport_call_id_keys(harness: &str) -> &'static [&'static str] {
     match harness {
         "pi" | "omp" => &["tool_call_id"],
         "claude-code" => &["tool_use_id", "prompt_id"],
-        "codex" => &["tool_use_id"],
+        // Codex names the turn `turn_id`. A request whose hook stopped
+        // waiting is retried in a later turn, after the user answers, so
+        // keeping it stranded every Allow once given after the agent moved on.
+        "codex" => &["tool_use_id", "turn_id"],
         // Cursor's own request id, the field `PROVEN_REQUEST_ID_FIELDS` pairs
         // its pre- and post-execution evidence by. It moves on every attempt,
         // so an identical retry never reached the approval the user gave.

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_native_review_approval as review
+from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 
 _LOOKUP: dict[str, object] = {

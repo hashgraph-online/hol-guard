@@ -130,6 +130,19 @@ fn portable_identity(
                 if key == "search_path_sha256" {
                     continue;
                 }
+                // Inode numbers, device ids and the two timestamps say where a
+                // file sits on this host and when it was last written, not what
+                // it will run. `sha256`, `size`, `mode` and the resolved path
+                // already pin that. Keeping them would retire a saved package
+                // approval every time a reinstall, a corepack refresh or any
+                // other atomic rewrite put the same bytes back under a new
+                // inode, which is what made package approvals look unsaveable.
+                if matches!(
+                    key.as_str(),
+                    "change_time_ns" | "device" | "inode" | "modified_time_ns"
+                ) {
+                    continue;
+                }
                 let tracked = matches!(key.as_str(), "path" | "launch_cwd" | "command");
                 if let (true, Value::String(raw)) = (tracked, item) {
                     let replacement = if PyPath::new(raw).is_absolute() {
@@ -204,9 +217,18 @@ pub(super) fn executable_material(
     };
     let location = canonical_location(&candidate, input.workspace, input.repository_root);
     let search_path = input.environment.get("PATH").map(String::as_str);
+    // Reporting-only options are dropped before the argv is digested. `-q`
+    // changes nothing about which bytes the manager installs, so an approval
+    // saved for the quiet spelling has to cover the loud one and the other way
+    // round. Only the binding sees the stripped form; the review card still
+    // carries the command exactly as it was typed.
+    let bound_arguments = crate::package_manager_command::strip_manager_presentation_arguments(
+        manager,
+        input.arguments,
+    );
     let identity = ports.launch_identity(
         requested,
-        input.arguments,
+        &bound_arguments,
         search_path,
         input.workspace,
         input.environment,

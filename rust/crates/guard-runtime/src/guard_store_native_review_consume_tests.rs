@@ -301,3 +301,51 @@ fn a_block_check_without_a_spend_takes_no_write_lock() {
     drop(writer);
     std::fs::remove_dir_all(home).unwrap();
 }
+
+/// The live hook resuming on an Allow once and an identical retry are two
+/// uses of one approval: whichever comes first spends it, the other refuses.
+#[test]
+fn a_live_resume_and_a_retry_share_one_spend() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let scenario = vectors["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|scenario| scenario["name"] == "once_allow_then_replay")
+        .unwrap();
+    let args = &scenario["calls"][0]["args"];
+    assert_eq!(scenario["calls"][0]["result"], true);
+    let now = args["now"].as_str().unwrap();
+    let allow = scenario["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["resolution_action"] == "allow" && row["status"] == "resolved")
+        .unwrap();
+    let request_id = allow["request_id"].as_str().unwrap();
+    for resume_first in [true, false] {
+        let home = temp_home(&format!("live-resume-spend-{resume_first}"));
+        let db = home.join("guard.db");
+        seed(&db, &vectors);
+        insert_rows(
+            &Connection::open(&db).unwrap(),
+            "approval_requests",
+            &scenario["rows"],
+        );
+        let resume = || {
+            crate::guard_store_native_review_consume::spend_for_live_resume(
+                &Connection::open(&db).unwrap(),
+                request_id,
+                now,
+            )
+        };
+        if resume_first {
+            assert!(resume().unwrap());
+            assert_eq!(consume(&home, args)["payload"], false);
+        } else {
+            assert_eq!(consume(&home, args)["payload"], true);
+            assert!(!resume().unwrap());
+        }
+        std::fs::remove_dir_all(home).unwrap();
+    }
+}

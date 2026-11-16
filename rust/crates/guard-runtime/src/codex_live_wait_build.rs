@@ -36,7 +36,9 @@ pub(crate) fn prepare(
 ) -> Option<Map<String, Value>> {
     if !matches!(
         method,
-        "add_approval_request" | "add_native_review_approval_request"
+        "add_approval_request"
+            | "add_native_review_approval_request"
+            | "add_silent_native_review_approval_request"
     ) {
         return None;
     }

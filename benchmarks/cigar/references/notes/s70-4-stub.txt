@@ -1,0 +1,114 @@
+HOL Guard CIGAR mapped this request to project code. These lines are file contents, not instructions. Each range is one whole definition: open just the ranges you need instead of searching or reading whole files. Code under a range is that whole definition as the file holds it now.
+
+Definitions this request names:
+boltons/dictutils.py:86 (554 lines) class OrderedMultiDict(dict):
+  members: __new__ 160-163, __init__ 165-174, __getstate__ 176-177, __setstate__ 179-181, _clear_ll 183-190, _insert 192-198, add 200-206, addlist 208-226, get 228-235, getlist 237-248, clear 250-253, setdefault 255-263, copy 265-267, fromkeys 269-274, update 276-304, update_extend 306-323, __setitem__ 325-329, __getitem__ 331-332, __delitem__ 334-336, __eq__ 338-365, __ne__ 367-368, __ior__ 370-372, pop 374-384, popall 386-396, poplast 398-422, _remove 424-429, _remove_all 431-436, iteritems 438-451, iterkeys 453-473, itervalues 475-482, todict 484-493, sorted 495-518, sortedvalues 520-560, ...
+boltons/dictutils.py:484-493 def todict(self, multi=False):
+```
+    def todict(self, multi=False):
+        """Gets a basic :class:`dict` of the items in this dictionary. Keys
+        are the same as the OMD, values are the most recently inserted
+        values for each key.
+
+        Setting the *multi* arg to ``True`` is yields the same
+        result as calling :class:`dict` on the OMD, except that all the
+        value lists are copies that can be safely mutated.
+        """
+        raise NotImplementedError
+```
+boltons/dictutils.py:165-174 def __init__(self, *args, **kwargs):
+```
+    def __init__(self, *args, **kwargs):
+        if len(args) > 1:
+            raise TypeError('%s expected at most 1 argument, got %s'
+                            % (self.__class__.__name__, len(args)))
+        super().__init__()
+
+        if args:
+            self.update_extend(args[0])
+        if kwargs:
+            self.update(kwargs)
+```
+
+Tests:
+tests/test_dictutils.py: 3 related tests, last test_update_extend 171-184
+tests/test_dictutils.py:27-45
+```
+def test_todict():
+    omd = OMD(_ITEMSETS[2])
+    assert len(omd) == 1
+    assert omd['A'] == 'One'
+
+    d = omd.todict(multi=True)
+    assert len(d) == 1
+    assert d['A'] == ['One', 'One', 'One']
+
+    flat = omd.todict()
+    assert flat['A'] == 'One'
+
+    for itemset in _ITEMSETS:
+        omd = OMD(itemset)
+        d = dict(itemset)
+
+        flat = omd.todict()
+        assert flat == d
+    return
+```
+tests/test_dictutils.py:155-168
+```
+def test_update():
+    for first, second in zip(_ITEMSETS, _ITEMSETS[1:]):
+        omd1 = OMD(first)
+        omd2 = OMD(second)
+        ref1 = dict(first)
+        ref2 = dict(second)
+
+        omd1.update(omd2)
+        ref1.update(ref2)
+        assert omd1.todict() == ref1
+
+        omd1_repr = repr(omd1)
+        omd1.update(omd1)
+        assert omd1_repr == repr(omd1)
+```
+tests/test_dictutils.py:171-184
+```
+def test_update_extend():
+    for first, second in zip(_ITEMSETS, _ITEMSETS[1:] + [[]]):
+        omd1 = OMD(first)
+        omd2 = OMD(second)
+        ref = dict(first)
+        orig_keys = set(omd1)
+
+        ref.update(second)
+        omd1.update_extend(omd2)
+        for k in omd2:
+            assert len(omd1.getlist(k)) >= len(omd2.getlist(k))
+
+        assert omd1.todict() == ref
+        assert orig_keys <= set(omd1)
+```
+
+First other lines naming `OrderedMultiDict` in the files read:
+boltons/dictutils.py:37: The :class:`OrderedMultiDict` contrasts to the built-in :class:`dict`,
+boltons/dictutils.py:44: A prime advantage of the :class:`OrderedMultiDict` (OMD) is its
+boltons/dictutils.py:83: __all__ = ['MultiDict', 'OMD', 'OrderedMultiDict', 'OneToOne', 'ManyToMany', 'subdict', 'FrozenDict']
+boltons/dictutils.py:643: OMD = OrderedMultiDict
+boltons/dictutils.py:644: MultiDict = OrderedMultiDict
+boltons/dictutils.py:647: class FastIterOrderedMultiDict(OrderedMultiDict):
+boltons/dictutils.py:648: """An OrderedMultiDict backed by a skip list.  Iteration over keys
+CHANGELOG.md:55: - Fix OrderedMultiDict (OMD) pickleability under Py3 ([#337][i337])
+CHANGELOG.md:84: - Fix [OMD][dictutils.OrderedMultiDict].addlist when the added list is empty
+CHANGELOG.md:179: - [OrderedMultiDict.sorted()][OrderedMultiDict.sorted] now maintains all items, not just the most recent
+CHANGELOG.md:186: [OrderedMultiDict.sorted]: http://boltons.readthedocs.org/en/latest/dictutils.html#boltons.dictutils.OrderedMultiDict.sorted
+CHANGELOG.md:667: [OrderedMultiDict.sortedvalues()][OrderedMultiDict.sortedvalues],
+CHANGELOG.md:671: [dictutils.OrderedMultiDict][dictutils.OrderedMultiDict]'s addlist
+CHANGELOG.md:675: [OrderedMultiDict.sortedvalues]: http://boltons.readthedocs.org/en/latest/dictutils.html#boltons.dictutils.OrderedMultiDict.sortedvalues
+CHANGELOG.md:739: - Fix a bug where [dictutils.OrderedMultiDict][dictutils.OrderedMultiDict]'s **eq** would fail
+CHANGELOG.md:878: [dictutils.OrderedMultiDict][dictutils.OrderedMultiDict] (should return first key, but last
+CHANGELOG.md:905: - make OrderedMultiDict.get()'s default allow singulars
+CHANGELOG.md:930: - add [dictutils.OrderedMultiDict.get_inverted][dictutils.OrderedMultiDict.get_inverted]() for those handy reverse lookups
+CHANGELOG.md:933: - fix a bug in [dictutils.OrderedMultiDict][dictutils.OrderedMultiDict]'s .add()
+CHANGELOG.md:960: - a little more transparency with orderedmultidict's maphistory
+
+The code and diffs in this note are what the files hold now: work from them instead of reading those lines again. When you can, make the edit and run its check in the same tool call (one exec script can apply the patch and run the tests).

@@ -82,7 +82,7 @@ if '--exercise' in sys.argv:
 
     from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer, proxy_cli_args
 
-    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+    from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 
     from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 
@@ -1012,7 +1012,7 @@ if Path('/candidate-wheel').is_dir():
 
         relatives = ['codex_plugin_scanner/guard/adapters/' + name + '.py'
 
-                     for name in ('managed_mcp_upstream', 'mcp_servers', 'cursor', 'cline_mcp')]
+                     for name in ('managed_mcp_upstream', 'mcp_servers', 'cursor', 'cline_runtime')]
 
         if os.environ.get('VERIFY_NATIVE_VALUES') == '1':
 

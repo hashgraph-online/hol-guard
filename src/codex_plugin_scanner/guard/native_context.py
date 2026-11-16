@@ -802,6 +802,7 @@ def context_runtime_launch_identity(
     cwd: Path | None = None,
     home_dir: Path | None = None,
     launch_env: Mapping[str, str] | None = None,
+    package_manager_binding: bool = False,
     guard_home: Path | None = None,
 ) -> dict[str, Any]:
     """Transport `build_runtime_launch_identity` inputs to native authority; no fallback."""
@@ -816,6 +817,7 @@ def context_runtime_launch_identity(
             "cwd": str(cwd) if cwd is not None else None,
             "home_dir": str(home_dir) if home_dir is not None else None,
             "launch_env": _ambient_launch_environment(launch_env),
+            "package_manager_binding": package_manager_binding,
         },
         guard_home=_resolve_digest_home(guard_home),
     )

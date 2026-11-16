@@ -8,8 +8,8 @@ import pytest
 import tomlkit
 
 from codex_plugin_scanner.guard.adapters.base import _shell_command
-from codex_plugin_scanner.guard.adapters.grok_user_config import prepare_user_config_text
 from codex_plugin_scanner.guard.cli.grok_hook_validation import is_missing_grok_hook_command
+from tests.grok_test_support import prepare_user_config_text
 
 
 def command(home: Path, *, workspace: Path | None = None) -> str:

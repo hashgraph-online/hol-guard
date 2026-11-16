@@ -266,6 +266,7 @@ pub(super) fn derive_context_with_snapshot(
         None,
         None,
         guard_command::pretool::PathContext {
+            literal_words: &[],
             home_dir: Some(envelope.source.home_dir.as_str()),
             cwd: envelope.source.cwd.as_deref(),
             cdpath_unset: false,
@@ -277,6 +278,7 @@ pub(super) fn derive_context_with_snapshot(
             ripgrep_config_absent: false,
             gem_config_absent: false,
             http_config_absent: false,
+            openssl_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },

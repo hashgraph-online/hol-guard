@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from codex_plugin_scanner.guard.adapters import codex as adapter
+from codex_plugin_scanner.guard.adapters import codex_install_plan as install_plan
 from codex_plugin_scanner.guard.codex_hook_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
@@ -13,7 +14,7 @@ from .test_runtime_transition import begin, transition  # noqa: F401 -- shared p
 
 
 def _block():
-    return (adapter._SHELL_GUARD_BEGIN + "\r\nlegacy\r\n" + adapter._SHELL_GUARD_END + "\r\n").encode()
+    return (install_plan.SHELL_GUARD_BEGIN + "\r\nlegacy\r\n" + install_plan.SHELL_GUARD_END + "\r\n").encode()
 
 
 def _sources(tmp_path, monkeypatch):
@@ -49,7 +50,7 @@ def test_capture_never_publishes_and_preserves_all_rollback_material(tmp_path, m
 def test_empty_and_unmatched_profiles_are_dependencies_not_deletions(tmp_path, monkeypatch):
     context = _context(tmp_path, monkeypatch)
     context.home_dir.mkdir()
-    for name, data in ((".zshenv", b""), (".bashrc", adapter._SHELL_GUARD_BEGIN.encode() + b"\nunterminated\n")):
+    for name, data in ((".zshenv", b""), (".bashrc", install_plan.SHELL_GUARD_BEGIN.encode() + b"\nunterminated\n")):
         (context.home_dir / name).write_bytes(data)
     before = _tree(tmp_path)
     files = adapter.prepare_codex_shell_cleanup(context)

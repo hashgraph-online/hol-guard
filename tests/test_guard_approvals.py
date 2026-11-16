@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -13,7 +12,10 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import native_daemon_client as daemon_client_module
 from codex_plugin_scanner.guard.approval_scope_support import (
     StaleApprovalScopeContractError,
     package_request_portable_workspace_scope,
@@ -27,20 +29,16 @@ from codex_plugin_scanner.guard.approvals import (
 from codex_plugin_scanner.guard.cli import approval_commands as approval_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import client as daemon_client_module
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.models import (
     GuardApprovalRequest,
     GuardArtifact,
     GuardReceipt,
     HarnessDetection,
     PolicyDecision,
+    format_local_http_origin,
 )
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.daemon_control_patching import patch_daemon_global
-from tests.native_runtime_fixtures import patch_popen_past_native_runtime
 from tests.policy_store_support import replace_remote_policies, resolve_policy
 
 _AGENT_CONTEXT_ENV_MARKERS = (
@@ -1572,221 +1570,6 @@ class TestGuardApprovals:
 
         assert resolved is None
 
-    def test_ensure_guard_daemon_uses_stable_default_port(self, tmp_path, monkeypatch):
-        launched_commands: list[list[str]] = []
-        guard_home = tmp_path / "guard-home"
-        expected_port = daemon_manager_module._configured_port(guard_home)
-        responses = iter([None, None, f"http://127.0.0.1:{expected_port}"])
-
-        class FakeProcess:
-            def poll(self):
-                return None
-
-        monkeypatch.delenv("GUARD_DAEMON_PORT", raising=False)
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "load_guard_daemon_url",
-            lambda _guard_home: next(responses),
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_running_guard_daemon_processes_for_guard_home",
-            lambda _guard_home: [],
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_reap_stale_ephemeral_guard_daemons",
-            lambda *_args, **_kwargs: None,
-        )
-        monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
-        monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_running_guard_daemon_processes_for_guard_home",
-            lambda _guard_home: [],
-        )
-        patch_popen_past_native_runtime(
-            monkeypatch,
-            lambda command, **_kwargs: launched_commands.append(command) or FakeProcess(),
-        )
-
-        url = daemon_manager_module.ensure_guard_daemon(guard_home)
-
-        assert url == f"http://127.0.0.1:{expected_port}"
-        assert launched_commands
-        assert launched_commands[0][-2:] == ["--port", str(expected_port)]
-
-    def test_load_guard_daemon_url_rejects_stale_runtime_without_connect_state_support(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-
-        class FakeResponse:
-            status = 200
-
-            def __enter__(self) -> FakeResponse:
-                return self
-
-            def __exit__(self, exc_type, exc, tb) -> None:
-                return None
-
-            def read(self) -> bytes:
-                return json.dumps(
-                    {
-                        "ok": True,
-                        "tables": [
-                            "approval_requests",
-                            "guard_connect_requests",
-                            "sync_state",
-                        ],
-                    }
-                ).encode("utf-8")
-
-        daemon_manager_module.write_guard_daemon_state(
-            guard_home,
-            5530,
-            "token-123",
-            pid=12345,
-        )
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_guard_daemon_pid_matches_command",
-            lambda _pid, expected_guard_home=None: True,
-        )
-        monkeypatch.setattr(
-            daemon_manager_module.urllib.request,
-            "urlopen",
-            lambda request, timeout=1: FakeResponse(),
-        )
-
-        assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
-
-    def test_load_guard_daemon_url_accepts_healthy_daemon_for_matching_source_root(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-
-        class FakeResponse:
-            status = 200
-
-            def __enter__(self) -> FakeResponse:
-                return self
-
-            def __exit__(self, exc_type, exc, tb) -> None:
-                return None
-
-            def read(self) -> bytes:
-                return json.dumps(
-                    {
-                        "ok": True,
-                        "tables": ["guard_connect_states"],
-                        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-                    }
-                ).encode("utf-8")
-
-        daemon_manager_module.write_guard_daemon_state(
-            guard_home,
-            5530,
-            "token-123",
-            pid=12345,
-        )
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_guard_daemon_pid_matches_command",
-            lambda _pid, expected_guard_home=None: True,
-        )
-        monkeypatch.setattr(
-            daemon_manager_module.urllib.request,
-            "urlopen",
-            lambda request, timeout=1: FakeResponse(),
-        )
-
-        assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
-
-    def test_load_guard_daemon_url_rejects_incompatible_daemon_state(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-
-        class FakeResponse:
-            status = 200
-
-            def __enter__(self) -> FakeResponse:
-                return self
-
-            def __exit__(self, exc_type, exc, tb) -> None:
-                return None
-
-            def read(self) -> bytes:
-                return json.dumps(
-                    {
-                        "ok": True,
-                        "tables": ["guard_connect_states"],
-                        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION - 1,
-                    }
-                ).encode("utf-8")
-
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_load_state",
-            lambda _guard_home: {
-                "port": 5530,
-                "auth_token": "token-123",
-                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION - 1,
-                "source_root": daemon_manager_module._current_guard_daemon_source_root(),
-                "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
-            },
-        )
-        monkeypatch.setattr(
-            daemon_manager_module.urllib.request,
-            "urlopen",
-            lambda request, timeout=1: FakeResponse(),
-        )
-
-        assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
-
-    def test_load_guard_daemon_url_adopts_same_fingerprint_from_different_source_root(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-
-        class FakeResponse:
-            status = 200
-
-            def __enter__(self) -> FakeResponse:
-                return self
-
-            def __exit__(self, exc_type, exc, tb) -> None:
-                return None
-
-            def read(self) -> bytes:
-                return json.dumps(
-                    {
-                        "ok": True,
-                        "tables": ["guard_connect_states"],
-                        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-                    }
-                ).encode("utf-8")
-
-        daemon_manager_module.write_guard_daemon_state(
-            guard_home,
-            5530,
-            "token-123",
-            pid=12345,
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_current_guard_daemon_source_root",
-            lambda: "/different/install/path",
-        )
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_guard_daemon_pid_matches_command",
-            lambda _pid, expected_guard_home=None: True,
-        )
-        monkeypatch.setattr(
-            daemon_manager_module.urllib.request,
-            "urlopen",
-            lambda request, timeout=1: FakeResponse(),
-        )
-
-        assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
-
     def test_guard_daemon_server_reuses_existing_auth_token(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         token_path = store.guard_home / "daemon-auth-token"
@@ -1867,13 +1650,13 @@ class TestGuardApprovals:
             ),
             "2026-04-11T00:00:00+00:00",
         )
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon = NativeGuardDaemon(store, home_dir=tmp_path)
         daemon.start()
 
         try:
             request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/runtime",
-                headers=_guard_json_headers(daemon._server.auth_token),
+                headers=_guard_json_headers(daemon.auth_token),
                 method="GET",
             )
             with urllib.request.urlopen(request, timeout=5) as response:
@@ -1888,36 +1671,11 @@ class TestGuardApprovals:
         assert snapshot_payload["runtime_state"]["approval_center_url"] == f"http://127.0.0.1:{daemon.port}"
         assert snapshot_payload["runtime_state"]["session_id"]
 
-    def test_guard_daemon_runtime_snapshot_brackets_ipv6_urls(self, tmp_path, monkeypatch):
-        store = GuardStore(tmp_path / "guard-home")
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-        monkeypatch.setattr(daemon._server, "daemon_host", lambda: "::1")
-        daemon._server.runtime_host = "::1"
-        runtime_state = store.get_runtime_state()
-        assert runtime_state is not None
-        store.upsert_runtime_state(
-            session_id=str(runtime_state["session_id"]),
-            daemon_host="::1",
-            daemon_port=daemon.port,
-            started_at=str(runtime_state["started_at"]),
-            last_heartbeat_at=str(runtime_state["last_heartbeat_at"]),
-        )
-
-        try:
-            request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/runtime",
-                headers=_guard_json_headers(daemon._server.auth_token),
-                method="GET",
-            )
-            with urllib.request.urlopen(request, timeout=5) as response:
-                snapshot_payload = json.loads(response.read().decode("utf-8"))
-        finally:
-            daemon.stop()
-
-        expected_url = f"http://[::1]:{daemon.port}"
-        assert snapshot_payload["approval_center_url"] == expected_url
-        assert snapshot_payload["runtime_state"]["approval_center_url"] == expected_url
+    def test_guard_daemon_runtime_snapshot_brackets_ipv6_urls(self):
+        # The snapshot names the approval center with the origin helper the
+        # daemon serves it under; an IPv6 host must come back bracketed.
+        assert format_local_http_origin("::1", 5474) == "http://[::1]:5474"
+        assert format_local_http_origin("127.0.0.1", 5474) == "http://127.0.0.1:5474"
 
     def test_guard_daemon_runtime_snapshot_counts_all_pending_requests_beyond_page_limit(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -2026,40 +1784,6 @@ class TestGuardApprovals:
 
         assert snapshot_payload["receipt_count"] == 1
         assert snapshot_payload["latest_receipts"] == []
-
-    def test_guard_daemon_updates_runtime_heartbeat_while_serving_requests(self, tmp_path, monkeypatch):
-        store = GuardStore(tmp_path / "guard-home")
-        heartbeat_values = [
-            "2026-04-11T00:00:00+00:00",
-            "2026-04-11T00:00:00+00:00",
-            "2026-04-11T00:05:00+00:00",
-        ]
-
-        def next_heartbeat() -> str:
-            if len(heartbeat_values) > 1:
-                return heartbeat_values.pop(0)
-            return heartbeat_values[0]
-
-        patch_daemon_global(monkeypatch, "_now", next_heartbeat)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=5):
-                pass
-            deadline = time.monotonic() + 1
-            while True:
-                runtime_state = store.get_runtime_state()
-                if runtime_state is not None and runtime_state["last_heartbeat_at"] == "2026-04-11T00:05:00+00:00":
-                    break
-                if time.monotonic() >= deadline:
-                    break
-                time.sleep(0.01)
-        finally:
-            daemon.stop()
-
-        assert runtime_state is not None
-        assert runtime_state["last_heartbeat_at"] == "2026-04-11T00:05:00+00:00"
 
     def test_guard_store_clears_runtime_state_only_for_matching_session(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

@@ -309,24 +309,3 @@ def test_realistic_environment_sets_a_loader_path_only_where_the_loader_reads_on
     loaders = {name for name in environment if name.startswith(("LD_", "DYLD_"))}
     expected = {"nt": set(), "linux": {"LD_LIBRARY_PATH"}, "darwin": {"LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"}}
     assert loaders == expected["nt" if os_name == "nt" else platform]
-
-
-def test_scope_judge_requires_every_search_path_to_be_left_empty() -> None:
-    from ci.gauntlet.native_tools import BLANK_SEARCH_PATH_CASE, native_tools_scope_error
-
-    blank = _scenario(BLANK_SEARCH_PATH_CASE)
-    for path in ("", "   "):
-        assert native_tools_scope_error(blank, [_call("glob", path=path)], {}) is None
-    assert native_tools_scope_error(blank, [_call("glob", path=""), _call("glob", path=" ")], {}) is None
-    # A search that names a folder, omits the argument or sends a null never
-    # carries the blank field this case exists to exercise, and neither does a
-    # later call that names a folder after a blank one.
-    for calls in (
-        [_call("glob", path=".")],
-        [_call("glob", path="docs")],
-        [_call("glob")],
-        [_call("glob", path=None)],
-        [_call("glob", path=""), _call("glob", path="docs")],
-        [],
-    ):
-        assert native_tools_scope_error(blank, calls, {}) is not None

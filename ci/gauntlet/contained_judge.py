@@ -17,6 +17,7 @@ from .evidence import reconcile, sha256_bytes
 from .fixtures import digest_file
 from .input_evidence import input_digest
 from .native_routes import native_route_error
+from .proofs import is_prompt_answer, prompt_answer_error
 from .transport import reconcile_rounds
 
 _CONTAINED_PROFILE = "contained-bun-vitest-extended"
@@ -167,6 +168,10 @@ def _contained_guard_inventory(
         return {}, "contained case and workspace inventories disagree"
     by_id: dict[str, list[dict[str, Any]]] = {}
     for observation in observations:
+        if is_prompt_answer(observation):
+            if prompt_error := prompt_answer_error(observation):
+                return {}, prompt_error
+            continue
         if (
             not isinstance(observation, dict)
             or observation.get("http_status") != 200

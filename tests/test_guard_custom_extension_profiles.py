@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
-from codex_plugin_scanner.guard.daemon.local_cli_profiles_api import (
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_profiles_api import (
     annotate_cli_profiles,
     is_default_catalog,
     merge_profile_commands,
@@ -298,7 +298,7 @@ def test_recognize_profiled_cli_runner_skips_mcp_probe(tmp_path: Path, monkeypat
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
 
@@ -306,7 +306,7 @@ def test_recognize_profiled_cli_runner_skips_mcp_probe(tmp_path: Path, monkeypat
         raise AssertionError("profiled CLIs must not be probed as MCP servers")
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server",
         _probe,
     )
     service = LocalCliApiService(store=GuardStore(home))
@@ -356,7 +356,7 @@ def test_an_unreadable_runner_answer_only_covers_a_runner_paste(monkeypatch, com
     """
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_profiles_api.native_context_digest",
+        "codex_plugin_scanner.guard.local_clis.local_cli_profiles_api.native_context_digest",
         lambda *args, **kwargs: {"status": "unavailable"},
     )
     assert profiled_cli_package_launch(command.split()) is expected
@@ -366,7 +366,7 @@ def test_an_unanswered_profile_lookup_spawns_nothing(monkeypatch) -> None:
     """A runner target the runtime read, with no profile answer, is treated as profiled."""
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_profiles_api.native_context_digest",
+        "codex_plugin_scanner.guard.local_clis.local_cli_profiles_api.native_context_digest",
         lambda *args, **kwargs: {"status": "ok", "package_runner_target": "cowsay"},
     )
 
@@ -374,6 +374,6 @@ def test_an_unanswered_profile_lookup_spawns_nothing(monkeypatch) -> None:
         raise custom_extension_profiles.CliProfileUnavailableError("cli_profiles")
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_profiles_api.profiles_for_executables", unavailable
+        "codex_plugin_scanner.guard.local_clis.local_cli_profiles_api.profiles_for_executables", unavailable
     )
     assert profiled_cli_package_launch(["npx", "cowsay"]) is True

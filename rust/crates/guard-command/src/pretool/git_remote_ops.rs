@@ -423,6 +423,17 @@ pub(super) fn work_tree_outside_configuration(
     .unwrap_or(false)
 }
 
+/// The directory a Git step runs in: its working directory folded through the
+/// step's leading `-C` routes, as Git folds them. `None` when a leading option
+/// could send it somewhere this cannot name, which `--git-dir` and
+/// `--work-tree` do.
+pub(super) fn routed_directory(
+    segment: &CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    read_route(segment, context)
+}
+
 /// The directory the later read runs Git in: the segment's working directory
 /// folded through its leading `-C` routes, as Git folds them. `None` when a
 /// leading option could send the read somewhere this cannot name, which

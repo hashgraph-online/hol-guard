@@ -256,6 +256,47 @@ fn later_comparison_literals_with_a_value_shape_are_credentials() {
 }
 
 #[test]
+fn a_comparison_against_a_short_plain_literal_is_a_label() {
+    // Reading ordinary source stopped on every line of this shape. The
+    // credential rule reads the comparison's own `==` as its separator, so the
+    // literal it compares against arrives with no operator left beside it, and
+    // the cursor used to refuse a literal there outright.
+    for text in [
+        "if token == \"--\" {",
+        "if (secret === 'none') {",
+        "if password == \"\":",
+        "secret == \"default\"",
+        "if (secret === 'none' || mode !== 'prod') {",
+        // An apostrophe in a trailing comment is prose, not an unclosed
+        // literal, so the code before it still reads as labels.
+        "if (session.token === 'none') { // don't connect",
+        // A `+` that joins anything but literals is ordinary arithmetic,
+        // including when a comment sits between it and the code it joins.
+        "if (secret == 'default' && retries + 1 > max) {",
+        "if (secret == 'default' && retries /* note */ + 1 /* note */ > max) {",
+    ] {
+        assert!(!flagged(text), "{text:?}");
+    }
+    // A literal with a digit or a long one is a value wherever it sits on the
+    // line, and an unclosed one hides however much the cursor never read.
+    for text in [
+        "if (token == \"sk-live-9f2a1c\") {",
+        "if (password === 'correcthorsebattery') {",
+        "if (token == 'dev' || token == 'v2') {",
+        "if (token == 'unterminated",
+        // Joined pieces spell out one value, so none of them is a label.
+        "if (token === 'alpha' + 'bravo' + 'charlie' + 'delta') {",
+        // Code after a closed block comment is still code.
+        "if (token == 'dev' /* note */ || token == 'v2') {",
+        "if (token === 'alpha' /* note */ + 'bravo' + 'charlie') {",
+        // A comment on each side of the only `+` hides neither piece.
+        "if (token === 'abcdefghijkl' /* note */ + /* note */ 'mnopqrstuvwx') {",
+    ] {
+        assert!(flagged(text), "{text:?}");
+    }
+}
+
+#[test]
 fn long_bare_fallbacks_are_credentials_and_variables_stay_inert() {
     for text in [
         "const password = getPassword(user, 12) || correcthorsebatterystaple;",
@@ -345,4 +386,115 @@ fn a_template_default_holds_no_more_than_a_quoted_one() {
         assert!(flagged(&text), "{text:?}");
     }
     assert!(!flagged("const token = settings.get('TOKEN', `none`);"));
+}
+
+#[test]
+fn a_value_wrapped_onto_the_next_line_is_read_without_its_open_bracket() {
+    let wrapped = "\
+class URL:
+    def __init__(self, ud):
+        self.password = (unquote(ud['password'])
+                         if ud['password'] is not None else None)
+";
+    assert!(!flagged(wrapped));
+    let sample = ["a1b2c3d4", "e5f6g7h8i9j0"].concat();
+    for text in [
+        "password = (hunter2production".to_string(),
+        "auth_token = (decode(c2VjcmV0dG9rZW4xMjM0NQ)".to_string(),
+        format!("auth_token = (get_auth_token(\"{sample}\")"),
+        format!("auth_token = (decode(\n    \"{sample}\"))\n"),
+    ] {
+        assert!(flagged(&text), "{text:?}");
+    }
+}
+
+#[test]
+fn extension_header_names_read_by_a_handler_are_not_credentials() {
+    for text in [
+        "    const token = req.header('x-service-maintenance-token');",
+        "    const token = req.header(\"x-app-plugin-data-capability\");",
+        "  const apiKey = request.headers.get('x-internal-api-key');",
+    ] {
+        assert!(!flagged(text), "{text:?}");
+    }
+    let digits = ["x-session-", "a1b2c3d4e5f6"].concat();
+    for text in [
+        "    const token = req.header('x-correct-horse-battery-staple-again-and-more');"
+            .to_string(),
+        format!("    const token = req.header('{digits}');"),
+        "    const token = req.header('X-Service-Maintenance-Token-Value');".to_string(),
+        "    const token = 'x-service-maintenance-token';".to_string(),
+        "    const password = String('x-correct-horse-battery-staple');".to_string(),
+        "    const token = Buffer.from('x-alpha-bravo-charlie-delta-echo');".to_string(),
+        "    const token = req.headers['x-service-maintenance-token-value'];".to_string(),
+        "    const token = config.get('x-service-maintenance-token');".to_string(),
+        "    const token = req.header(sha256('x-alpha-bravo-charlie-delta'));".to_string(),
+    ] {
+        assert!(flagged(&text), "{text:?}");
+    }
+}
+
+#[test]
+fn a_typeof_guarded_choice_between_variables_is_not_a_credential() {
+    for text in [
+        "    const apiKey = typeof rawApiKeyHeader === 'string' ? rawApiKeyHeader : undefined;",
+        "  const token = typeof header !== 'undefined' ? header.trim() : null;",
+    ] {
+        assert!(!flagged(text), "{text:?}");
+    }
+    let secret = ["hunter2", "-production", "-value"].concat();
+    for text in [
+        format!("    const apiKey = typeof raw === 'string' ? '{secret}' : undefined;"),
+        format!("    const apiKey = typeof raw === 'string' ? raw : '{secret}';"),
+        format!("    const apiKey = typeof raw === '{secret}' ? raw : undefined;"),
+        "    const apiKey = typeof raw === 'string' ? correcthorsebatterystaple : raw;".to_string(),
+        "    const password = typeof raw === 'string' ? raw : 123456;".to_string(),
+        "    const password = typeof raw === 'string' ? 98765432 : raw;".to_string(),
+    ] {
+        assert!(flagged(&text), "{text:?}");
+    }
+}
+
+#[test]
+fn a_fetch_credentials_mode_is_not_a_credential() {
+    for text in [
+        "const res = await fetch(url, {\n      credentials: 'omit',\n    });",
+        "fetch(url, { credentials: \"same-origin\" });",
+        "  credentials: 'include'",
+    ] {
+        assert!(!flagged(text), "{text:?}");
+    }
+    let secret = ["hunter2", "-production", "-value"].concat();
+    for text in [
+        format!("  credentials: '{secret}',"),
+        "  credentials: 'omit' + suffix,".to_string(),
+        "  password: 'omit',".to_string(),
+    ] {
+        assert!(flagged(&text), "{text:?}");
+    }
+}
+
+#[test]
+fn an_arrow_function_with_one_parameter_per_line_is_not_a_credential() {
+    let handler = "\
+  const requireMaintenanceToken = (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    next();
+  };
+";
+    assert!(!flagged(handler));
+    let secret = ["hunter2", "-production", "-value"].concat();
+    for text in [
+        format!("  const maintenanceToken = (\n    '{secret}'\n  );\n"),
+        format!("  const maintenanceToken = (\n    {secret}\n  );\n"),
+        format!("  const maintenanceToken = ( '{secret}'\n  );\n"),
+        format!("let credentials = (\n    user: \"admin\",\n    value: \"{secret}\"\n)\n"),
+        "let token = (\n    user: admin,\n    value: hunter2production\n)\n".to_string(),
+        format!("  const maintenanceToken = (\n    req: Request,\n  ) => '{secret}';\n"),
+    ] {
+        assert!(flagged(&text), "{text:?}");
+    }
 }

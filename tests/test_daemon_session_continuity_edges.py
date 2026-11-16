@@ -10,12 +10,12 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
-from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
+from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     availability_harness_response,
     cursor_unparseable_input_permission,
     hook_event_is_permission_request,
 )
-from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
+from codex_plugin_scanner.guard.hook_review.hook_request_parsing import runtime_hook_event_name
 
 
 def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request() -> None:
@@ -75,7 +75,7 @@ def test_native_policy_not_ready_pretool_denies_without_interrupting_session(tmp
 
 
 def test_cursor_write_denies_when_native_unavailable() -> None:
-    from codex_plugin_scanner.guard.daemon.hook_availability_policy import cursor_fallback_permission
+    from codex_plugin_scanner.guard.hook_review.hook_availability_policy import cursor_fallback_permission
 
     deny, code = cursor_fallback_permission(
         hook_event_name="beforeWriteFile",

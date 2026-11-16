@@ -56,6 +56,9 @@ def test_package_hint_names_the_frozen_install_without_promising_it() -> None:
     text = safe_alternative_reason("Blocked.", reason_code="native_package_review", approval_queued=True)
     assert "`bun install --frozen-lockfile --ignore-scripts`" in text
     assert "`npm ci --ignore-scripts`" in text
+    # pnpmfile runs inside the pnpm process, so `--ignore-scripts` alone does not
+    # make a pnpm install script-free and the runtime will not prove that form.
+    assert "`pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile`" in text
     assert "If this was already that form" in text
     assert "Use `--ignore-scripts`" not in text
 

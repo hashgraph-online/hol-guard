@@ -1,6 +1,7 @@
 import { useId, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { CigarGuide } from "./workspace-guide";
 import { CigarStory } from "./workspace-story";
+import { CigarUsagePanel } from "./usage-panel";
 import { CIGAR_TABS, cigarWaking, type CigarTab } from "./workspace-model";
 import type { ContextAssistanceStatus } from "./types";
 import type { CigarTutorialId } from "./tutorial-content";
@@ -65,6 +66,10 @@ export function CigarSections(props: CigarSectionsProps) {
           {props.controls}
         </div>
         {tab === "versions" ? props.versions : null}
+        {tab === "usage" ? <div>
+          <Intro title="Usage">What each AI app on this computer used, read from the app's own records. Guard does not estimate these numbers, and they count with CIGAR on or off.</Intro>
+          <CigarUsagePanel />
+        </div> : null}
         {tab === "access" ? <div>
           <Intro title="Projects">CIGAR already finds the project each AI app is open in. Add a project here only to choose exactly which files it reads. Your choice counts for every app.</Intro>
           {!status?.effective_enabled ? <div className="cigar-note">

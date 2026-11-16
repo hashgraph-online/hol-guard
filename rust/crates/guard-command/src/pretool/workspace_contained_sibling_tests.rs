@@ -76,6 +76,7 @@ fn home_result(
         Some(&controls),
         None,
         crate::pretool::PathContext {
+            literal_words: &[],
             home_dir: home.to_str(),
             cwd: cwd.to_str(),
             shell_home_matches: true,
@@ -87,6 +88,7 @@ fn home_result(
             ripgrep_config_absent: false,
             gem_config_absent: false,
             http_config_absent: false,
+            openssl_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },
@@ -192,6 +194,7 @@ fn the_home_projection_answers_for_a_sibling_root() {
     let (home, main, tree) = fixture();
     worktree_packages(&main, &tree);
     let context = crate::pretool::PathContext {
+        literal_words: &[],
         home_dir: home.to_str(),
         cwd: main.to_str(),
         shell_home_matches: true,
@@ -203,6 +206,7 @@ fn the_home_projection_answers_for_a_sibling_root() {
         ripgrep_config_absent: false,
         gem_config_absent: false,
         http_config_absent: false,
+        openssl_config_absent: false,
         psql_environment: Default::default(),
         creates_nothing: false,
     };
@@ -314,11 +318,7 @@ fn a_sibling_cd_the_sink_would_not_rebase_keeps_its_review() {
         "cd ../other && npm run build && ls dist".to_owned(),
         "cd ../plain && npm run build && ls dist".to_owned(),
         "cd .. && npm run build && ls dist".to_owned(),
-        // Not a repository root, or no repository at all.
-        format!(
-            "cd {}/app-report/scripts && node report.mjs && cat out.md",
-            projects.display()
-        ),
+        // No repository at all.
         format!(
             "cd {}/plain && npm run build && ls dist",
             projects.display()
@@ -521,9 +521,8 @@ fn a_command_below_a_sibling_root_reaching_outside_it_keeps_its_review() {
             tree.display(),
             config.display()
         ),
-        // Unproved, or more than one command.
+        // Unproved, or not the list the sink rejoins.
         "cd ../app-report/scripts && ./report.sh".to_owned(),
-        format!("cd {}/scripts && ./report.sh && ls", tree.display()),
         format!("cd {}/scripts; ./report.sh; ls", tree.display()),
         format!("cd {}/scripts && ./report.sh | wc -l", tree.display()),
         format!(
@@ -799,3 +798,10 @@ fn a_quoted_delimiter_in_a_peeled_stage_stays_contained() {
     );
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
+
+#[path = "workspace_contained_sibling_cat_tests.rs"]
+mod cat;
+
+#[cfg(unix)]
+#[path = "workspace_contained_sibling_chain_tests.rs"]
+mod chain;

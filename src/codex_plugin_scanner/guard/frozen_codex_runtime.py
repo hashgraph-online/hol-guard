@@ -19,20 +19,18 @@ import json
 import os
 import sys
 from collections.abc import Mapping, Sequence
-from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .daemon.live_identity import DaemonArtifactBinding
-    from .daemon.manager import GuardDaemonHookFailureKind
+    from .native_daemon_manage import GuardDaemonHookFailureKind
+    from .native_daemon_peer import DaemonArtifactBinding
 
 from .codex_hook_bridge_runtime import decode_bridge_config_argument
 from .codex_hook_compatibility import python_bridge_argv
 from .frozen_runtime_commands import (
     FROZEN_CODEX_BRIDGE_ARG,
     FROZEN_DAEMON_RECOVER_ARG,
-    FROZEN_DAEMON_RECOVERY_WORKER_ARG,
     FROZEN_DAEMON_SERVE_ARG,
     consume_frozen_daemon_serve_gate,
     decode_frozen_daemon_serve_payload,
@@ -42,7 +40,6 @@ from .frozen_runtime_commands import (
 
 _FROZEN_BRIDGE_ARG = FROZEN_CODEX_BRIDGE_ARG
 _FROZEN_DAEMON_RECOVER_ARG = FROZEN_DAEMON_RECOVER_ARG
-_FROZEN_DAEMON_RECOVERY_WORKER_ARG = FROZEN_DAEMON_RECOVERY_WORKER_ARG
 _FROZEN_DAEMON_SERVE_ARG = FROZEN_DAEMON_SERVE_ARG
 
 
@@ -181,8 +178,6 @@ def run_frozen_internal_command(
 
     if operation == _FROZEN_DAEMON_RECOVER_ARG:
         return _schedule_frozen_daemon_recovery(raw_payload)
-    if operation == _FROZEN_DAEMON_RECOVERY_WORKER_ARG:
-        return _run_frozen_daemon_recovery_worker(raw_payload)
     if operation == _FROZEN_DAEMON_SERVE_ARG:
         if not gate_already_released:
             consume_frozen_daemon_serve_gate(process_argv)
@@ -215,7 +210,7 @@ def _schedule_frozen_daemon_recovery(raw_payload: str) -> int:
         raise ValueError("Codex daemon recovery payload has unexpected fields")
     guard_home, home_dir = _frozen_recovery_paths(payload)
 
-    from .daemon import schedule_guard_daemon_recovery
+    from .native_daemon_manage import schedule_guard_daemon_recovery
 
     schedule_guard_daemon_recovery(
         guard_home,
@@ -223,44 +218,6 @@ def _schedule_frozen_daemon_recovery(raw_payload: str) -> int:
         failure_kind=_hook_failure_kind(),
         executable=Path(sys.executable).expanduser().resolve(strict=True),
     )
-    return 0
-
-
-def _run_frozen_daemon_recovery_worker(raw_payload: str) -> int:
-    payload = _decode_private_payload(raw_payload, label="Codex daemon recovery worker")
-    if set(payload) != {"failure_kind", "guard_home", "home_dir", "recovery_token"}:
-        raise ValueError("Codex daemon recovery worker payload has unexpected fields")
-    guard_home, home_dir = _frozen_recovery_paths(payload)
-    failure_kind = payload.get("failure_kind")
-    recovery_token = payload.get("recovery_token")
-    typed_failure_kind: GuardDaemonHookFailureKind
-    if failure_kind == "authenticated-control-plane-failure":
-        typed_failure_kind = "authenticated-control-plane-failure"
-    elif failure_kind == "overload":
-        typed_failure_kind = "overload"
-    elif failure_kind == "transport-failure":
-        typed_failure_kind = "transport-failure"
-    else:
-        raise ValueError("Codex daemon recovery worker failure kind is invalid")
-    if not isinstance(recovery_token, str) or not recovery_token:
-        raise ValueError("Codex daemon recovery worker token is invalid")
-
-    from .daemon.manager import (
-        _GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS,
-        clear_guard_daemon_recovery_reservation,
-        recover_guard_daemon_after_hook_failure,
-    )
-
-    try:
-        recover_guard_daemon_after_hook_failure(
-            guard_home,
-            home_dir=home_dir,
-            failure_kind=typed_failure_kind,
-            recovery_lock_timeout_seconds=_GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS,
-        )
-    finally:
-        with suppress(OSError, RuntimeError, ValueError):
-            clear_guard_daemon_recovery_reservation(guard_home, token=recovery_token)
     return 0
 
 

@@ -128,7 +128,8 @@ fn drain(lane: &Lane, acked: Option<&Value>) -> Value {
         ack_epoch: acked.and_then(|page| page["epoch"].as_str().map(str::to_owned)),
     };
     let page =
-        crate::hook_direct_evidence::drain(&request, lane.fixture.store.direct_evidence()).unwrap();
+        crate::hook_direct_evidence::drain(&request, lane.fixture.store.direct_evidence(), None)
+            .unwrap();
     serde_json::from_slice(&page).unwrap()
 }
 

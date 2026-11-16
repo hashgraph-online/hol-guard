@@ -8,10 +8,10 @@ ARG TARGETARCH
 ARG GH_VERSION=2.102.0
 ARG GH_SHA256_AMD64=7e54a307f90afdc59796c325ec0c49fb09e6c18537727207a8ac7513584ea5b0
 ARG GH_SHA256_ARM64=5006962696f01e1624b3fcf1f9d8e1a11547f24bf067dd2a0371b7b421945237
-ARG BUN_VERSION=1.3.14
+ARG BUN_VERSION=1.4.4
 # The amd64 build uses the baseline Bun, which runs under emulation without AVX2.
-ARG BUN_SHA256_AMD64=a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7
-ARG BUN_SHA256_ARM64=a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b
+ARG BUN_SHA256_AMD64=e0446eb55995772eb9894bebae9a6be368d985a8b9271ee124486f9946eedd76
+ARG BUN_SHA256_ARM64=baa6bb36f51d6e58561e02bbea825038a9df454f673d6d776e8bbf86f8c7850e
 
 # Bubblewrap runs Guard's Linux workspace containment. Its overlay mounts need
 # bubblewrap 0.10 or newer, which is why the base is trixie rather than bookworm.

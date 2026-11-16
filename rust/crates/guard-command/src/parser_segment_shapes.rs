@@ -43,6 +43,70 @@ pub(crate) fn is_stderr_to_null_redirect(
         })
 }
 
+/// Where an inert redirect to the null device starting at `start` ends, or
+/// `None` when the text there is not one.
+///
+/// The shapes read are `>`, `>>`, `1>`, `2>` and `&>` (and their appending
+/// spellings) followed by `/dev/null`, with the blanks the shell allows
+/// between the operator and its target. Every one of them sends the stream to
+/// the null device and nowhere else, so none writes a file and none is an
+/// operand the decision needs: `git status > /dev/null` runs the same read
+/// `git status` does. Arbitrary paths and descriptors still reach the
+/// unsupported-redirection guard.
+pub(crate) fn null_sink_redirect_end(
+    chars: &[char],
+    start: usize,
+    preserve_backslash: bool,
+) -> Option<usize> {
+    const SINK: [char; 9] = ['/', 'd', 'e', 'v', '/', 'n', 'u', 'l', 'l'];
+    if !stderr_null_sink_is_inert()
+        || !starts_at_shell_token_boundary(chars, start, preserve_backslash)
+    {
+        return None;
+    }
+    let mut index = start;
+    // The stream being redirected: stdout when the operator stands alone, the
+    // descriptor it names, or both streams for `&`.
+    if matches!(chars.get(index), Some('1' | '2' | '&')) {
+        index += 1;
+    }
+    if chars.get(index) != Some(&'>') {
+        return None;
+    }
+    index += 1;
+    // Appending to the null device still writes nothing.
+    if chars.get(index) == Some(&'>') {
+        index += 1;
+    }
+    while matches!(chars.get(index), Some(' ' | '\t')) {
+        index += 1;
+    }
+    if chars.get(index..index.saturating_add(SINK.len())) != Some(&SINK[..]) {
+        return None;
+    }
+    let end = index + SINK.len();
+    chars
+        .get(end)
+        .is_none_or(|value| is_shell_token_whitespace(*value) || matches!(*value, '|' | '&' | ';'))
+        .then_some(end)
+}
+
+/// Whether the `>` at `index` belongs to a redirect to the null device. The
+/// operator may carry a descriptor (`2>`), both streams (`&>`) or a second
+/// `>`, so the token can start up to two characters before it.
+pub(crate) fn null_sink_redirect_at(
+    chars: &[char],
+    index: usize,
+    preserve_backslash: bool,
+) -> bool {
+    (0..=2).any(|back| {
+        index
+            .checked_sub(back)
+            .and_then(|start| null_sink_redirect_end(chars, start, preserve_backslash))
+            .is_some_and(|end| end > index)
+    })
+}
+
 /// `/dev/null` is the null device on Unix. On Windows, Git Bash (the shell
 /// harnesses run POSIX commands in) maps it to the null device too, while
 /// PowerShell and cmd open `\dev\null` on the shell's current drive. That

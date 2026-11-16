@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 
 from ..adapters.base import HarnessContext
+from ..adapters.codex_install_plan import guard_proxy_server_names
 from ..adapters.cursor_cli import cursor_cli_detected, cursor_cli_shim_installed
-from ..adapters.mcp_servers import is_guard_proxy_command
 from ..store import GuardStore
 
 
@@ -169,13 +169,8 @@ def _cursor_editor_protected(context: HarnessContext) -> bool:
         mcp_servers = payload.get("mcpServers")
         if not isinstance(mcp_servers, dict):
             continue
-        for server_config in mcp_servers.values():
-            if not isinstance(server_config, dict):
-                continue
-            command = server_config.get("command")
-            args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
-            if is_guard_proxy_command(command if isinstance(command, str) else None, args):
-                return True
+        if guard_proxy_server_names(mcp_servers):
+            return True
     return False
 
 

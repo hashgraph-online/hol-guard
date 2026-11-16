@@ -17,7 +17,6 @@ from .base import HarnessContext, PreparedHarnessInstall, _ensure_path_within_ro
 from .cursor_hook_config import (
     _MANAGED_HOOK_EVENTS,
     HOOK_SCRIPT_NAME,
-    _backup_payload,
     _hooks_backup_path,
     _hooks_state_path,
     _is_managed_hook_script,
@@ -32,7 +31,7 @@ from .cursor_native_approval import cursor_hook_attestation_secret_path, ensure_
 from .cursor_path_cleanup import prune_empty_project_cursor_dir
 from .guard_cli_attestation import resolve_attested_guard_cli
 from .hook_python import HookPythonAttestation
-from .state_files import parse_backup_payload
+from .state_files import plan_backup_restore, restore_from_backup
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -181,16 +180,14 @@ def _prepare_legacy_project_cursor_cleanup(context: HarnessContext) -> tuple[Tra
     cleaned, removed = _render_without_managed_hook_entries(payload, script_path=script_path)
     after = dict(before)
     if managed_script or removed:
-        backup = parse_backup_payload(backup_before.decode("utf-8")) if backup_before is not None else {}
-        restored = False
-        if backup.get("readable") is True:
-            content = backup.get("content")
-            if backup.get("existed") is True and isinstance(content, str):
-                after[hooks_path] = content.encode("utf-8")
-                restored = True
-            elif backup.get("existed") is not True:
-                after[hooks_path] = None
-                restored = True
+        action, content, restored = plan_backup_restore(
+            backup_before.decode("utf-8") if backup_before is not None else None,
+            target_exists=hook_before is not None,
+        )
+        if action == "write" and content is not None:
+            after[hooks_path] = content.encode("utf-8")
+        elif action == "unlink":
+            after[hooks_path] = None
         if restored:
             after[backup_path] = after[state_path] = None
         elif removed:
@@ -321,18 +318,7 @@ def _uninstall_cursor_hooks_at_paths(
     state_path = _hooks_state_path(hooks_path, context)
     _ensure_path_within_root(context.guard_home, backup_path, label="Cursor hook backup")
     _ensure_path_within_root(context.guard_home, state_path, label="Cursor hook state")
-    backup_payload = _backup_payload(backup_path)
-    restored = False
-    if backup_payload["readable"] is True:
-        if backup_payload["existed"] and isinstance(backup_payload["content"], str):
-            hooks_path.parent.mkdir(parents=True, exist_ok=True)
-            write_text_at_authorized_path(hooks_path, str(backup_payload["content"]))
-            restored = True
-        elif backup_payload["existed"] is not True and hooks_path.is_file():
-            hooks_path.unlink()
-            restored = True
-        elif backup_payload["existed"] is not True:
-            restored = True
+    restored = restore_from_backup(backup_path, hooks_path, write=write_text_at_authorized_path)
     if restored and backup_path.is_file():
         backup_path.unlink()
     if restored and state_path.is_file():

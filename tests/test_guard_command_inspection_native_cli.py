@@ -7,7 +7,7 @@ import pytest
 
 from codex_plugin_scanner.guard.cli import commands_dispatch_local as dispatch
 from codex_plugin_scanner.guard.cli import extension_controls_commands as controls
-from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError
+from codex_plugin_scanner.guard.native_daemon_client import GuardDaemonRequestError
 
 
 @pytest.mark.parametrize("mode", ["test", "explain"])

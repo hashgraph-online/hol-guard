@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -306,7 +307,23 @@ def test_signed_settings_exactly_replace_prior_command_states_without_touching_u
     assert store.read_local_cli_command_states(unrelated.cli_id) == {"deploy": "block"}
 
 
-@pytest.mark.parametrize("failure_stage", ("after_authority", "after_sync_state", "after_event"))
+# The native writer commits authority, continuity state and the receipt in one
+# transaction. A trigger fails the write after the grant rows (on the state
+# row) or after the state row (on the receipt), so the whole apply rolls back.
+_FAILING_WRITES = {
+    "after_authority": (
+        "create trigger fail_continuity_write before insert on sync_state "
+        "when new.state_key like 'custom_extension_continuity%' "
+        "begin select raise(abort, 'simulated process failure'); end"
+    ),
+    "after_sync_state": (
+        "create trigger fail_continuity_write before insert on guard_events "
+        "begin select raise(abort, 'simulated process failure'); end"
+    ),
+}
+
+
+@pytest.mark.parametrize("failure_stage", sorted(_FAILING_WRITES))
 def test_local_removal_is_crash_atomic_and_same_revision_cannot_recreate_after_retry(
     tmp_path: Path,
     failure_stage: str,
@@ -317,21 +334,19 @@ def test_local_removal_is_crash_atomic_and_same_revision_cannot_recreate_after_r
     _observe(initial, identity)
     apply_verified_custom_extension_continuity(initial, _bundle(identity), now=_NOW)
 
-    class FaultyStore(GuardStore):
-        def _custom_extension_continuity_transaction_boundary(self, stage: str) -> None:
-            if stage == failure_stage:
-                raise RuntimeError("simulated process failure")
-
-    faulty = FaultyStore(guard_home)
-    with pytest.raises(RuntimeError, match="simulated process failure"):
+    with initial._connect() as connection:
+        connection.execute(_FAILING_WRITES[failure_stage])
+    with pytest.raises(sqlite3.IntegrityError, match="simulated process failure"):
         record_local_custom_extension_mutation(
-            faulty,
+            initial,
             identity=identity,
             state="unset",
-            expected_revision=faulty.read_local_cli_revision(),
+            expected_revision=initial.read_local_cli_revision(),
             command_states={},
             now=_NOW,
         )
+    with initial._connect() as connection:
+        connection.execute("drop trigger fail_continuity_write")
 
     restarted = GuardStore(guard_home)
     assert restarted.read_local_cli_grant(identity.cli_id)["state"] == "allowed"

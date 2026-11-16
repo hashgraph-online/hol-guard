@@ -17,6 +17,7 @@ pub(super) mod git_chain;
 mod leading_chain;
 #[path = "redirect_stdin.rs"]
 mod stdin;
+pub(super) use stdin::{heredoc_records_commit_message, heredoc_segment, skip_bodies};
 #[path = "redirect_targets.rs"]
 mod targets;
 
@@ -73,6 +74,9 @@ pub(super) fn project(
     let mut escaped = false;
     let mut heredocs: Vec<(String, bool)> = Vec::new();
     let mut saw_stdin_data = false;
+    // Whether a separator came after the literal standard input, so which
+    // command the shell hands those bytes to is no longer in the text.
+    let mut stdin_separated = false;
     // The single file a plain `< path` redirect feeds the first command.
     let mut input_source: Option<String> = None;
     let mut removed = false;
@@ -84,6 +88,8 @@ pub(super) fn project(
     // so another step could run before the shell opens the file.
     let mut separated = false;
     let mut late_write = false;
+    // Set once the text is not one pipeline whose last command alone writes.
+    let mut beyond_pipeline = false;
     let mut index = 0usize;
     while index < chars.len() {
         let current = chars[index];
@@ -108,17 +114,27 @@ pub(super) fn project(
                 } else if current == '\\' {
                     escaped = true;
                 }
-                separated |= substitution(&chars, index);
+                let opens = substitution(&chars, index);
+                separated |= opens;
+                beyond_pipeline |= opens;
                 out.push(current);
                 index += 1;
                 continue;
             }
             Quote::None => {}
         }
-        // `&>` is a redirect, not a separator.
-        separated |= matches!(current, ';' | '|' | '\n' | '(' | ')' | '{' | '}')
-            || (current == '&' && chars.get(index + 1) != Some(&'>'))
-            || substitution(&chars, index);
+        // The newline that opens a heredoc body ends a command the operator
+        // already belongs to, so it separates nothing the operator has not
+        // already reached. `&>` is a redirect rather than a separator.
+        let opens_a_heredoc_body = current == '\n' && !heredocs.is_empty();
+        let separates = !opens_a_heredoc_body
+            && (matches!(current, ';' | '|' | '\n' | '(' | ')' | '{' | '}')
+                || (current == '&' && chars.get(index + 1) != Some(&'>'))
+                || substitution(&chars, index));
+        separated |= separates;
+        stdin_separated |= saw_stdin_data && separates;
+        beyond_pipeline |= separates
+            && (!targets.is_empty() || !super::super::chain_temporary::plain_pipe(&chars, index));
         match current {
             '\'' => quote = Quote::Single,
             '"' => quote = Quote::Double,
@@ -126,6 +142,16 @@ pub(super) fn project(
             '\n' if !heredocs.is_empty() => {
                 out.push('\n');
                 index = skip_heredoc_bodies(&chars, index + 1, &mut heredocs)?;
+                // The newline closing the last body is consumed with it, and
+                // it ends the command the shell handed those bytes to. Text
+                // after it is another command, so which segment reads standard
+                // input is no longer in the projected text, and a redirect
+                // further on is no longer the leading write of the chain.
+                if chars[index..].iter().any(|value| !value.is_whitespace()) {
+                    separated = true;
+                    stdin_separated = true;
+                    beyond_pipeline = true;
+                }
                 continue;
             }
             '>' => {
@@ -150,6 +176,7 @@ pub(super) fn project(
                 continue;
             }
             '<' if chars.get(index + 1) == Some(&'<') => {
+                heredoc_segment(&out)?;
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
                 saw_stdin_data = true;
                 removed = true;
@@ -210,6 +237,13 @@ pub(super) fn project(
     // so a write that follows one still opens the file the target check
     // proved: `cp /tmp/a.ts /tmp/b.ts && cat /tmp/a.ts > src/c.ts`.
     let peer_write = chain && bounded_writes && super::super::chain_temporary::peers_only(&model);
+    // `gh api ... | base64 -d > /tmp/a.json` saves a pipeline's output the
+    // way the same redirect on one command does. See `final_pipeline_write`.
+    let pipe_write = chain
+        && bounded_writes
+        && temporary_writes
+        && !beyond_pipeline
+        && super::super::chain_temporary::final_pipeline_write(&model);
     scratch_writes &= targets.iter().all(|target| {
         crate::pretool::curl_reads::output_targets::scratch_output_target(target, context)
     });
@@ -220,13 +254,18 @@ pub(super) fn project(
     if model.confidence != "exact"
         || model.uncertainty_reason.is_some()
         || model.segments.is_empty()
-        || (chain && git_chain.is_none() && !leading_write && !init_chain && !peer_write)
+        || (chain
+            && git_chain.is_none()
+            && !leading_write
+            && !init_chain
+            && !peer_write
+            && !pipe_write)
     {
         return None;
     }
     // A heredoc body and a here-string word are both stdin, so the command
     // has to be one that reads them as data rather than running them.
-    if saw_stdin_data && !stdin::reads_data(&model) {
+    if saw_stdin_data && !stdin::reads_data(&model, stdin_separated) {
         return None;
     }
     // Literal standard input leaves a bare `cat` that still reads

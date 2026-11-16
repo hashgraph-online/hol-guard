@@ -333,7 +333,11 @@ fn controls_are_bound_to_program_and_both_independent_revisions() {
         decision("gh api graphql -f query='{ viewer { login } }'", &original),
         Some(Instant::now()),
     );
-    assert_eq!(result.minimum_action, "block");
+    // The deadline is already past, so the check observes nothing. That is a
+    // transient failure, not a command the controls cannot match, so it
+    // settles at a review the user can answer. The evidence field keeps one
+    // value for both, because consumers pin it.
+    assert_eq!(result.minimum_action, "review");
     let observations = result.command_extensions.unwrap();
     assert_eq!(
         observations.evaluation_error.as_deref(),

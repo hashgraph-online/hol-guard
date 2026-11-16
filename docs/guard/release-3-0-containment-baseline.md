@@ -56,7 +56,6 @@ Where a control is not enforced by the backend it is omitted rather than inferre
 - `tests/test_guard_contained_{node,package_script,typescript,workspace_write}_execution.py` — backend success/failure paths.
 - `tests/test_guard_contained_workspace_write_contract.py` — policy/request/declared-output validation.
 - `tests/test_guard_daemon_containment_health.py` — daemon `/v1/runtime/containment-health` auth.
-- `tests/test_guard_daemon_adversarial_transport.py` — owner retained until worker containment.
 
 ## Notes
 

@@ -22,8 +22,8 @@ from pathlib import Path
 from typing import BinaryIO
 
 from .codex_hook_file_integrity import CodexHookIntegrityError
-from .daemon.file_locking import try_lock_daemon_file
 from .mdm.file_lock import release_file_lock
+from .native_daemon_manage import try_lock_daemon_file
 
 _locks: dict[str, threading.RLock] = {}
 _locks_guard = threading.Lock()

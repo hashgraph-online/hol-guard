@@ -17,11 +17,10 @@ use guard_contracts::{GuardExecutionEnvironmentV1, PreToolResultV1};
 use serde_json::Value;
 
 use super::redirect_projection::{
-    boundary, remove_quoted_heredoc, skip_heredoc_bodies, trailing_word,
+    boundary, heredoc_records_commit_message, heredoc_segment, remove_quoted_heredoc, skip_bodies,
+    trailing_word,
 };
-use crate::native_command_controls::{
-    python_is_builtin_only, python_stdin, CompiledNativeCommandControls,
-};
+use crate::native_command_controls::{python_stdin, CompiledNativeCommandControls};
 use crate::pretool::workspace_contained::Shape;
 use crate::CommandModelRequestV1;
 
@@ -33,7 +32,8 @@ enum Quote {
 }
 
 /// The command with every literal-path redirect, descriptor copy and quoted
-/// `cat` heredoc removed. A quoted heredoc may also feed `python3 -` a program
+/// `cat` heredoc removed. A quoted heredoc may also carry the message of a
+/// `git commit -F -`, or feed `python3 -` a program
 /// that reads only builtins, which cannot start a program or load a module;
 /// the projection keeps `python3 -`, so every control still sees it. `None`
 /// when nothing was removed or any redirect has another form: process
@@ -109,11 +109,13 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
                 continue;
             }
             '<' if chars.get(index + 1) == Some(&'<') => {
-                // A heredoc is stdin. Only `cat` is known to treat it as data;
-                // Python runs it, so its body is checked once it is read.
-                let segment = current_segment(&out).trim();
+                // A heredoc is stdin. `cat` treats it as data and `git commit
+                // -F -` records it as the message, exactly as the decision's
+                // own projection reads both; Python runs it, so its body is
+                // checked once it is read.
+                let segment = heredoc_segment(&out)?.trim();
                 let program = python_stdin(segment);
-                if segment != "cat" && !program {
+                if segment != "cat" && !program && !heredoc_records_commit_message(segment) {
                     return None;
                 }
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
@@ -379,45 +381,6 @@ fn narrower_sink_runs(raw: &str, context: crate::pretool::PathContext<'_>) -> bo
         crate::pretool::contained_wrapper::contained_core(&model, context).is_some()
             && crate::pretool::contained_wrapper::sink_peels_leading_cd(&model, context)
     })
-}
-
-/// Skips the bodies of the pending heredocs in order, as
-/// `skip_heredoc_bodies` does. A body that feeds Python must use only its
-/// builtins, the same check the extension controls apply to such a program.
-fn skip_bodies(
-    chars: &[char],
-    mut index: usize,
-    heredocs: &mut Vec<(String, bool)>,
-    programs: &mut Vec<bool>,
-) -> Option<usize> {
-    if heredocs.len() != programs.len() {
-        return None;
-    }
-    for (heredoc, program) in heredocs.drain(..).zip(programs.drain(..)) {
-        let start = index;
-        index = skip_heredoc_bodies(chars, index, &mut vec![heredoc])?;
-        if program {
-            let text: String = chars[start..index].iter().collect();
-            let text = text.strip_suffix('\n').unwrap_or(&text);
-            // The last line is the delimiter.
-            let body: Vec<&str> = match text.rsplit_once('\n') {
-                Some((body, _)) => body.split('\n').collect(),
-                None => Vec::new(),
-            };
-            if !python_is_builtin_only(&body) {
-                return None;
-            }
-        }
-    }
-    Some(index)
-}
-
-/// The text of the simple command being written, after the last separator.
-fn current_segment(out: &str) -> &str {
-    let start = out
-        .rfind([';', '|', '&', '\n', '(', ')', '{', '}'])
-        .map_or(0, |position| position + 1);
-    &out[start..]
 }
 
 fn remove_redirect(

@@ -111,8 +111,17 @@ pub(super) fn rejudge(
     };
     // A value producer counts only when it would be allowed as a command of
     // its own, so lockdown, managed policy and extension controls on it hold.
+    // A bare `cat` is the exception: it is the program a `$(cat <<'EOF' ...)`
+    // substitution runs, it reads only the literal heredoc the projection
+    // already read, and no rule names it, so it runs in the workspace
+    // sandbox rather than under a control that refuses it. A control that
+    // did refuse it answers review or deny, which this still keeps.
     let allowed = |body: &str| {
-        evaluate(&super::payload_with_command(payload, &command, body)).minimum_action == "allow"
+        let verdict = evaluate(&super::payload_with_command(payload, &command, body));
+        verdict.minimum_action == "allow"
+            || (body == "cat"
+                && verdict.minimum_action == "sandbox-required"
+                && verdict.reason_code == CONTAINED)
     };
     let opened = inert::project(&command, allowed);
     // A fresh `mktemp -d` directory expanded later in its `&&` chain is

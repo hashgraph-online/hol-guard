@@ -52,9 +52,9 @@ function errorMessage(code: string, status: number): string {
     return "CIGAR settings changed. Refresh the current selection and jobs before trying again.";
   }
   if (code.endsWith("_busy") || code.endsWith("cleanup_pending")) return "Another CIGAR operation is finishing. Refresh jobs after it completes.";
-  if (code.endsWith("recovery_required")) return "This CIGAR operation needs recovery. Refresh its job before choosing the next action.";
+  if (code.endsWith("recovery_required")) return "An earlier CIGAR step stopped partway. Refresh, then choose Clean up on that step.";
   if (code.endsWith("data_choice_required")) return "Saved CIGAR data needs an explicit choice before this selection can proceed.";
-  return "CIGAR did not return a confirmed result. Refresh status and jobs before trying again.";
+  return "Guard did not say whether this worked. Refresh to see where it stands before trying again.";
 }
 
 /** Opening metadata never starts SDK work. Mutations are explicit and never retried here. */

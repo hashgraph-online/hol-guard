@@ -44,6 +44,7 @@ from .continuation_snapshot import canonical_continuation_correlation_id, valida
 from .continuation_worker import (
     StoreContinuationPlan,
     run_store_continuation_plan,
+    settle_without_harness,
 )
 from .desktop_notifications import DesktopApprovalNotification, notify_pending_approval_once
 from .native_continuation_authority import offer_wire, result_wire
@@ -61,6 +62,7 @@ _SESSION_KEYS = (
 )
 _CLAIM_LEASE_SECONDS: Final = 30.0
 _run_store_continuation_plan = run_store_continuation_plan
+_settle_without_harness = settle_without_harness
 
 
 def continue_request_after_application(
@@ -151,6 +153,9 @@ def continue_request_after_application(
             observed_at=now,
         ),
         isolated_runner=_run_store_continuation_plan,
+        settle_inline=lambda offer, _action, offer_cancelled: _settle_without_harness(
+            offer, cancelled=offer_cancelled, observed_at=now
+        ),
     )
     result = coordinator.continue_after_application(
         offer,

@@ -65,20 +65,25 @@ pub(crate) fn plain_program(command: &str) -> Option<Program> {
 /// program is planned as pytest, so a chain such as `cd x && python3 -c 0`
 /// must never reach the planner as one argv.
 fn one_command(command: &str) -> bool {
-    let request = guard_command::CommandModelRequestV1 {
+    guard_command::parse_command(&shell_request(command)).is_ok_and(|model| {
+        match model.segments.as_slice() {
+            [segment] => !segment.tokens.iter().any(|token| {
+                token
+                    .trim_start_matches(|character: char| character.is_ascii_digit())
+                    .starts_with(['<', '>', '&', '|', ';'])
+            }),
+            _ => false,
+        }
+    })
+}
+
+fn shell_request(command: &str) -> guard_command::CommandModelRequestV1 {
+    guard_command::CommandModelRequestV1 {
         command: command.to_owned(),
         dialect: "posix".into(),
         transport: "shell_string".into(),
         extraction_provenance: "guard-shell".into(),
-    };
-    guard_command::parse_command(&request).is_ok_and(|model| match model.segments.as_slice() {
-        [segment] => !segment.tokens.iter().any(|token| {
-            token
-                .trim_start_matches(|character: char| character.is_ascii_digit())
-                .starts_with(['<', '>', '&', '|', ';'])
-        }),
-        _ => false,
-    })
+    }
 }
 
 /// The settings an inert prefix carries into a read-only run, and the
@@ -117,6 +122,24 @@ pub(crate) fn carried_program(command: &str) -> Option<(Carried, Program)> {
         .to_vec();
     let program = plain_program(&crate::mcp_proxy_shlex::join(&behind))?;
     Some((Carried { settings, behind }, program))
+}
+
+/// The program a bounded inline shell such as `bash -ec 'pytest -q'` runs,
+/// read from the script the way the review read it. The shell is the
+/// command as issued and draws the receipt; the script behind it, which must
+/// itself be a plain read-only run, is what runs. `None` for any other
+/// command, including a script that carries settings or joins commands.
+pub(crate) fn inline_program(command: &str) -> Option<(Carried, Program)> {
+    let script = guard_command::inline_shell_script_text(&shell_request(command))?;
+    let program = plain_program(&script)?;
+    let behind = strings(native("command_words", json!({ "command_text": script })).ok()?)?;
+    Some((
+        Carried {
+            settings: Vec::new(),
+            behind,
+        },
+        program,
+    ))
 }
 
 /// The kind of run `core` is, as native authority reads it.

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import ast
 import json
 import os
 import re
-import shlex
 from pathlib import Path
 
 import pytest
@@ -215,43 +213,10 @@ class TestZCodeHookResponses:
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_TEMPLATE_PATH = (
-    _REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "adapters" / "bounded_cli_hook_script_template.py"
-)
 _BRIDGE_PATH = _REPO_ROOT / "rust" / "crates" / "guard-runtime" / "src" / "bounded_hook_bridge_remediation.rs"
 # Punctuation only: the alphanumerics are plain in every copy, so the probe is
 # the part of the alphabet a copy could disagree about.
 _PUNCTUATION = "_-.:\\/ ~$'\"@%^&(){}[]|;,<>?*!+=#`"
-
-
-def _standalone_hook_script_names() -> dict[str, object]:
-    """The quoting rule the generated standalone hook script carries.
-
-    The script is a string literal inside the template, and running it would
-    start a hook, so the two definitions this test compares are lifted out of
-    its syntax tree and nothing else is executed.
-    """
-
-    literal: str | None = None
-    for node in ast.walk(ast.parse(_TEMPLATE_PATH.read_text(encoding="utf-8"))):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str) and "def _quote_home" in node.value:
-            literal = node.value
-            break
-    assert literal is not None, "the hook script template no longer defines _quote_home"
-    wanted = {"_quote_home", "_AUTHORITY_REMEDIATION"}
-    body = [
-        node
-        for node in ast.parse(literal).body
-        if (isinstance(node, ast.FunctionDef) and node.name in wanted)
-        or (
-            isinstance(node, ast.Assign)
-            and any(isinstance(target, ast.Name) and target.id in wanted for target in node.targets)
-        )
-    ]
-    namespace: dict[str, object] = {"shlex": shlex}
-    exec(compile(ast.Module(body=body, type_ignores=[]), str(_TEMPLATE_PATH), "exec"), namespace)
-    assert wanted <= namespace.keys()
-    return namespace
 
 
 def _bridge_source() -> str:
@@ -259,32 +224,12 @@ def _bridge_source() -> str:
 
 
 class TestAuthorityRemediationParity:
-    """The remediation sentence is written in three places, so pin them together.
+    """The remediation sentence is written in two places, so pin them together.
 
-    The native bridge answers the native path, ``zcode_hooks`` answers the
-    Python daemon path, and the generated standalone script can import neither,
-    so the duplication is structural. What a test can do is fail the moment one
-    copy drifts from the others.
+    The native bridge answers the native path and ``zcode_hooks`` answers the
+    Python daemon path, so the duplication is structural. What a test can do is
+    fail the moment one copy drifts from the other.
     """
-
-    def test_the_standalone_script_quotes_a_home_exactly_like_the_package(self) -> None:
-        script_quote = _standalone_hook_script_names()["_quote_home"]
-        homes = (
-            "/opt/guards/ci",
-            "/opt/shared guards/.hol-guard",
-            "C:\\guards\\ci",
-            "C:\\Program Files\\guard\\.hol-guard",
-            "C:\\Users\\RUNNER~1\\Temp\\g",
-            "/opt/g$x/ci",
-            "C:\\guards\\$ci",
-            "C:\\guards\\%CI%",
-            "C:\\guards\\`ci",
-            "C:\\guards\\!ci",
-            "",
-        )
-        for home in homes:
-            for windows in (False, True):
-                assert script_quote(home, windows) == _quote_home(home, windows), (home, windows)
 
     def test_the_native_bridge_shares_the_plain_character_set(self) -> None:
         arm = re.search(r"matches!\(\s*character,([^)]*)\)", _bridge_source())
@@ -293,17 +238,15 @@ class TestAuthorityRemediationParity:
         package = {character for character in _PUNCTUATION if _quote_home("a" + character, True) == "a" + character}
         assert bridge == package
 
-    def test_all_three_copies_offer_the_same_sentence(self) -> None:
+    def test_both_copies_offer_the_same_sentence(self) -> None:
         constant = re.search(r'const AUTHORITY_BLOCK_REMEDIATION: &str = "([^"]*)";', _bridge_source())
         assert constant is not None, "the native bridge no longer spells the remediation sentence"
-        script = _standalone_hook_script_names()["_AUTHORITY_REMEDIATION"]
-        assert constant.group(1) == _AUTHORITY_BLOCK_REMEDIATION == script
+        assert constant.group(1) == _AUTHORITY_BLOCK_REMEDIATION
 
-    def test_all_three_copies_splice_the_home_into_the_same_phrase(self) -> None:
+    def test_both_copies_splice_the_home_into_the_same_phrase(self) -> None:
         # Each copy reaches its named form with `.replace`, so a phrase that
         # drifts leaves one copy offering the bare command for a home the bare
         # command cannot find.
         phrase = "command controls recover-authority"
         assert phrase in _AUTHORITY_BLOCK_REMEDIATION
         assert _bridge_source().count(f'"{phrase}"') == 1
-        assert phrase in str(_standalone_hook_script_names()["_AUTHORITY_REMEDIATION"])

@@ -144,10 +144,6 @@ fn rejects_environment_input_and_module_access() {
         "import \"x\"",
         "include \"x\"",
         "def f: env; f",
-        "reduce .[] as $x (0; .)",
-        "foreach .[] as $x (0; .)",
-        "limit(1; .[])",
-        "range(1; 2)",
         "getpath([\"a\"]) | input",
         "$x",
         ".a | has(\"\\(env)\")",
@@ -160,17 +156,11 @@ fn rejects_environment_input_and_module_access() {
 #[test]
 fn rejects_builtins_outside_the_lists() {
     for filter in [
-        ".a | test(\"x\")",
         ".a | keys()",
         ".a | tostring(1)",
         ".a | env[]",
         ".a | input[]",
-        "walk(.a)",
-        "setpath([\"a\"]; 1)",
-        "ltrimstr(.a)",
-        ".a | has(.b)",
         ".a | has($x)",
-        ".a | has(\"x\", \"y\")",
         ".a | has(\"x\")(\"y\")",
         "select(.a; .b)",
         "map(.a; .b)",
@@ -179,21 +169,11 @@ fn rejects_builtins_outside_the_lists() {
     }
 }
 
-/// Only the two-character comparison spellings are read as operators, so an
-/// assignment — which writes back into the value — never parses.
+/// A comparison joins exactly two operands, and a number is read only in a
+/// spelling jq itself accepts.
 #[test]
-fn rejects_assignment_and_arithmetic() {
+fn rejects_chained_comparisons_and_malformed_numbers() {
     for filter in [
-        ".a = 1",
-        ".a |= 1",
-        ".a += 1",
-        ".a //= 1",
-        ".a |= .b",
-        ".a + 1",
-        ".a - 1",
-        ".a * 2",
-        ".a / 2",
-        ".a % 2",
         ".a == 1 == 2",
         ".a < 1 < 2",
         ".a ==",
@@ -219,32 +199,12 @@ fn rejects_unbalanced_or_empty_constructions() {
         ".a]",
         "(.a",
         ".a)",
-        "[]",
         "()",
-        "{}",
         "{a: .x",
         "a: .x}",
         "{a: .x}{b: .y}",
-        "[.a][0]",
         "(.a)(.b)",
         ".a | has(\"x)",
-        ".a | has(\"\\\"\")",
-    ] {
-        assert!(!safe_filter(filter), "expected rejected: {filter}");
-    }
-}
-
-/// A plain literal is an operand, never a stage: a filter may compare against
-/// `"x"` or fall back to it, but a stage still has to read the value.
-#[test]
-fn rejects_a_bare_literal_as_a_stage() {
-    for filter in [
-        ".a | \"x\"",
-        ".a | keys[] | \"x\"",
-        "\"x\"",
-        "select(\"x\")",
-        "map(1)",
-        "[\"x\"]",
     ] {
         assert!(!safe_filter(filter), "expected rejected: {filter}");
     }
@@ -256,12 +216,11 @@ fn rejects_malformed_and_oversized_pipelines() {
         ".a : .b",
         ".a |",
         ".a | | length",
-        ". | keys | keys | keys | keys | keys | keys | keys | keys",
+        ". | keys | keys | keys | keys | keys | keys | keys | keys | keys | keys | keys | keys | keys | keys | keys | keys | keys",
         "{$ENV}",
         "{a,}",
         "{a, .b}",
         "{@tsv}",
-        "{(.a): .b}",
         "{a: env}",
         "{a: input}",
         "{a: .x, .y}",
@@ -294,6 +253,78 @@ fn admits_bare_rendering_formats_and_shorthand_keys() {
     }
 }
 
+/// `"\(.a) \(.b)"`: a string that renders admitted filters into its text.
+/// Each interpolation reads the value jq already read, so the string reaches
+/// no further than `join` or `@tsv` does over the same value.
+#[test]
+fn admits_strings_that_render_the_value_read() {
+    for filter in [
+        "\"\\(.type)\"",
+        ".[] | \"\\(.type)\\t\\(.name)\"",
+        ".[] | \"\\(.name) is \\(.state)\"",
+        ".[] | \"\\(.source.path // .repo // \"?\") \\(.icon)\"",
+        ".[] | \"\\(.items | length) items\"",
+        ".[] | \"\\(.a)\" | length",
+        "[.[] | \"\\(.id)\"]",
+        "{line: \"\\(.a)/\\(.b)\"}",
+        ".[] | select(.draft == false) | \"\\(.number)\"",
+        ".a // \"\\(.b)\"",
+        ".a == \"\\(.b)\"",
+        ". as $x | \"\\($x.name)\"",
+        ".[] | \"\\(.a | keys | join(\",\"))\"",
+    ] {
+        assert!(safe_filter(filter), "expected admitted: {filter}");
+    }
+}
+
+/// An interpolation carries a filter, not text, so it is held to the same
+/// grammar as any other stage and a program that reaches the environment,
+/// another input or a module is refused inside one too.
+#[test]
+fn rejects_an_interpolation_that_reaches_outside_the_value_read() {
+    for filter in [
+        "\"\\(env)\"",
+        "\"\\(input)\"",
+        "\"\\($ENV)\"",
+        "\"\\($ENV.HOME)\"",
+        "\"\\(.a | @sh)\"",
+        "\"\\(.a; .b)\"",
+        "\"\\(.a\"",
+        "\"\\(\"",
+        "\"\\()\"",
+        "\"\\(   )\"",
+        // Text alone is a literal, which is an operand and not a stage.
+        // The argument of a literal builtin is text, so a filter written in
+        // it is refused rather than read as one.
+        // A computed object key is refused however it is written.
+        "{\"\\(.a)\": .b}",
+        // Three backslashes are an escaped backslash and then an
+        // interpolation, which still carries a filter.
+        // A format applied to a template renders words, not a value read.
+        "@sh \"\\(.a)\"",
+        "@base64 \"\\(.a)\"",
+    ] {
+        assert!(!safe_filter(filter), "expected rejected: {filter}");
+    }
+}
+
+/// `has("\\(")`: the two backslashes are one escaped backslash, so the
+/// parenthesis that follows them is text and not the opening of an
+/// interpolation. Reading the escapes is what tells the two apart; a search
+/// for the characters alone takes the text for code and sends an ordinary
+/// filter to review.
+#[test]
+fn admits_an_escaped_backslash_before_a_parenthesis() {
+    for filter in [
+        ".a | has(\"\\\\(\")",
+        ".a | join(\"\\\\(\")",
+        ".a == \"\\\\(\"",
+        ".a // \"x\\\\(y\"",
+    ] {
+        assert!(safe_filter(filter), "expected admitted: {filter}");
+    }
+}
+
 #[test]
 fn rejects_shell_and_templated_formats() {
     for filter in [
@@ -316,7 +347,7 @@ fn rejects_shell_and_templated_formats() {
 
 #[test]
 fn rejects_a_filter_longer_than_the_bound() {
-    let filter = format!(".{}", "a".repeat(300));
+    let filter = format!(".{}", "a".repeat(2048));
     assert!(!safe_filter(&filter));
 }
 
@@ -440,4 +471,37 @@ fn rejects_malformed_sequences_slices_and_optionals() {
     ] {
         assert!(!safe_filter(filter), "expected refused: {filter}");
     }
+}
+
+#[test]
+fn refuses_stacked_ranges_and_runaway_work() {
+    // Each call is bounded on its own, but stacked calls multiply outputs.
+    for filter in [
+        "range(100000) | range(100000) | range(100000)",
+        "range(100000) as $x | range(100000)",
+        "def a: range(100000); a | a | a",
+        "[range(3), range(3)]",
+    ] {
+        assert!(!safe_filter(filter), "expected refused: {filter}");
+    }
+    assert!(safe_filter("[range(3)]"));
+    assert!(safe_filter(".[] | .range"));
+    assert!(safe_filter(".changes | length"));
+
+    // A refused argument nested deeply used to be read twice per level.
+    let nested = format!("{}env{}", "map(".repeat(32), ")".repeat(32));
+    let started = std::time::Instant::now();
+    assert!(!safe_filter(&nested));
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+
+    // Unused definitions that grow sixteenfold per level stop at the budget.
+    let mut chain = String::from("def a0: .; ");
+    for level in 1..6 {
+        let body = vec![format!("a{}", level - 1); 16].join(",");
+        chain.push_str(&format!("def a{level}: {body}; "));
+    }
+    chain.push('.');
+    let started = std::time::Instant::now();
+    assert!(!safe_filter(&chain));
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
 }

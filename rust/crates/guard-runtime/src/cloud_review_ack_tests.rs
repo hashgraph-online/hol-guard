@@ -90,6 +90,10 @@ fn a_sequence_collision_names_its_event() {
     let item = &answer(response, ONE)["response"]["perEventResults"][0];
     assert_eq!(item["eventId"], "event-41");
     assert_eq!(item["error"], "review_event_snapshot_sequence_collision");
+    let mut response = single("rejected");
+    response["results"][0]["code"] = json!("review_event_sequence_conflict");
+    let item = &answer(response, ONE)["response"]["perEventResults"][0];
+    assert_eq!(item["eventId"], "event-41");
     let item = &answer(single("rejected"), ONE)["response"]["perEventResults"][0];
     assert!(item.get("eventId").is_none());
 }

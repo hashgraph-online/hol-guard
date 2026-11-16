@@ -13,12 +13,13 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.approval_scope_support import (
     APPROVAL_SCOPE_CONTRACT_VERSION,
     request_scope_contract,
 )
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.library_calls import run_library_call
 from codex_plugin_scanner.guard.models import GuardAction, GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.approval_context import build_approval_context_token
 from codex_plugin_scanner.guard.store import (
@@ -1081,13 +1082,13 @@ def test_raced_completed_replay_maps_scope_contract_errors(
         reason=None,
         resolved_at="2026-07-19T00:00:01+00:00",
     )
-    original_get = store.get_approval_request
+    original_get = GuardStore.get_approval_request
     call_count = 0
 
-    def raced_get(request_id: str, *, derive_scope: bool = True) -> dict[str, object] | None:
+    def raced_get(self: GuardStore, request_id: str, *, derive_scope: bool = True) -> dict[str, object] | None:
         nonlocal call_count
         call_count += 1
-        current = original_get(request_id, derive_scope=derive_scope)
+        current = original_get(self, request_id, derive_scope=derive_scope)
         if current is None:
             return None
         if call_count == 1:
@@ -1100,16 +1101,19 @@ def test_raced_completed_replay_maps_scope_contract_errors(
             }
         return current
 
-    monkeypatch.setattr(store, "get_approval_request", raced_get)
-    payload = _v2_selection(row, payload_scope) if use_contract else {"scope": payload_scope}
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        status, response = _post(daemon, "/v1/requests/replay-race/approve", payload)
-    finally:
-        daemon.stop()
-    assert status == expected_status
-    assert response["error"] == expected_error
+    monkeypatch.setattr(GuardStore, "get_approval_request", raced_get)
+    selection = _v2_selection(row, payload_scope) if use_contract else {"scope": payload_scope}
+    # The daemon answers a request it reads as resolved itself, so the race
+    # (pending when the library read it, resolved by the time it applied)
+    # is reached through the library call the daemon makes for a pending one.
+    request = {
+        "call": "approval.resolve",
+        "args": {"request_id": "replay-race", "action": "allow", "payload": {}, **selection},
+    }
+    answer = run_library_call(store.guard_home, json.dumps(request).encode())
+    error = _mapping(answer["error"])
+    assert error["kind"] == {409: "stale_scope_contract", 422: "ineligible_scope"}[expected_status]
+    assert error["message"] == expected_error
 
 
 def test_concurrent_same_resolution_has_one_effect_and_two_successes(tmp_path: Path) -> None:

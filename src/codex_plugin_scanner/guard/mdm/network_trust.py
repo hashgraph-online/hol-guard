@@ -6,6 +6,8 @@ import os
 import re
 import ssl
 import sys
+import threading
+import time
 from contextlib import suppress
 from pathlib import Path
 
@@ -18,14 +20,48 @@ class ManagedTrustError(RuntimeError):
     """A managed TLS trust source is unavailable or invalid."""
 
 
+# Loading the platform and public roots costs tens of milliseconds, which every
+# Cloud request used to pay before it could connect. A built context is reused
+# while its trust sources are unchanged, and rebuilt at least this often so a
+# long-running daemon still picks up platform trust store updates.
+_DEFAULT_CONTEXT_MAX_AGE_SECONDS = 300.0
+_default_context_lock = threading.Lock()
+_default_context: tuple[tuple[object, ...], float, ssl.SSLContext] | None = None
+
+
 def build_default_ssl_context() -> ssl.SSLContext:
     """Keep platform trust and explicit CA overrides usable in bundled runtimes."""
-    context = ssl.create_default_context()
-    if not os.environ.get("SSL_CERT_FILE") and not os.environ.get("SSL_CERT_DIR"):
-        # Preserve platform trust; an empty context still fails TLS verification.
+    global _default_context
+    cert_file = os.environ.get("SSL_CERT_FILE")
+    cert_dir = os.environ.get("SSL_CERT_DIR")
+    bundle: Path | None = None
+    bundle_stat: tuple[int, int] | None = None
+    if not cert_file and not cert_dir:
         with suppress(ManagedTrustError, OSError):
-            context.load_verify_locations(cafile=str(_requests_ca_bundle()))
+            bundle = _requests_ca_bundle()
+            stat = bundle.stat()
+            bundle_stat = (stat.st_mtime_ns, stat.st_size)
+    key = (cert_file, cert_dir, str(bundle) if bundle is not None else None, bundle_stat)
+    now = time.monotonic()
+    with _default_context_lock:
+        cached = _default_context
+        if cached is not None and cached[0] == key and now - cached[1] < _DEFAULT_CONTEXT_MAX_AGE_SECONDS:
+            return cached[2]
+    context = ssl.create_default_context()
+    if bundle is not None:
+        # Preserve platform trust; an empty context still fails TLS verification.
+        with suppress(OSError, ssl.SSLError):
+            context.load_verify_locations(cafile=str(bundle))
+    with _default_context_lock:
+        _default_context = (key, now, context)
     return context
+
+
+def reset_default_ssl_context_cache() -> None:
+    """Forget the reused default context, so the next request rebuilds it."""
+    global _default_context
+    with _default_context_lock:
+        _default_context = None
 
 
 def _requests_ca_bundle() -> Path:

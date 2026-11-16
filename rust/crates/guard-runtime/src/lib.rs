@@ -6,6 +6,8 @@ mod active_pack_security;
 #[path = "adapters/adapter_inventory.rs"]
 mod adapter_inventory;
 mod adapter_state_integrity_op;
+#[path = "adapters/adapter_state_key.rs"]
+mod adapter_state_key;
 #[cfg(all(test, unix))]
 #[path = "adapters/adapter_vectors_tests.rs"]
 mod adapter_vectors_tests;
@@ -190,12 +192,14 @@ mod cloud_request_text;
 #[cfg(test)]
 mod cloud_request_vectors_tests;
 mod cloud_review_ack;
+mod cloud_review_batch;
 mod cloud_review_event;
 mod cloud_sync_privacy;
 mod codex_app_server_socket;
 #[path = "adapters/detection/codex_detect.rs"]
 mod codex_detect;
 mod codex_hook_artifacts;
+mod codex_hook_authority_record;
 mod codex_hook_bridge;
 mod codex_hook_bridge_direct;
 mod codex_hook_bridge_direct_resident;
@@ -211,6 +215,8 @@ mod codex_hooks;
 mod codex_hooks_parity_tests;
 mod codex_host_inventory;
 mod codex_identity;
+#[path = "adapters/codex_install_plan.rs"]
+mod codex_install_plan;
 mod codex_live_operation;
 mod codex_live_wait_build;
 mod codex_proxy;
@@ -287,6 +293,7 @@ mod context_assistance_op;
 mod context_assistance_prompt;
 mod context_assistance_prompt_files;
 mod context_assistance_prompt_ignore;
+mod context_assistance_prompt_words;
 mod context_assistance_service;
 mod context_digest;
 mod context_digest_json;
@@ -339,6 +346,11 @@ mod cursor_hook_config;
 #[cfg(test)]
 #[path = "adapters/cursor_hook_config_tests.rs"]
 mod cursor_hook_config_tests;
+#[path = "adapters/cursor_hook_rebind.rs"]
+mod cursor_hook_rebind;
+#[cfg(test)]
+#[path = "adapters/cursor_hook_rebind_tests.rs"]
+mod cursor_hook_rebind_tests;
 #[path = "adapters/cursor_hook_script.rs"]
 mod cursor_hook_script;
 #[path = "adapters/cursor_hook_state.rs"]
@@ -349,6 +361,8 @@ mod cursor_hook_state_tests;
 mod cursor_observer_proof_op;
 mod custom_extension_continuity;
 mod custom_extension_suggestion;
+mod daemon_client;
+mod daemon_edge;
 mod daemon_handler_digits;
 mod daemon_handler_fields;
 mod daemon_handler_headless;
@@ -368,7 +382,11 @@ mod daemon_lifecycle_text;
 mod daemon_lifecycle_unit_tests;
 #[cfg(test)]
 mod daemon_lifecycle_vectors_tests;
+mod daemon_manage;
 mod daemon_policy_authority;
+mod daemon_recovery;
+mod daemon_recovery_contract;
+mod daemon_recovery_store;
 mod daemon_route_op;
 mod daemon_route_paths;
 mod daemon_route_resolve;
@@ -402,12 +420,18 @@ mod directory_trust;
 mod discovery_placement_op;
 mod durable_runtime_collapse;
 mod edge;
+mod edge_command_pattern_allow;
+mod edge_exact_command_allow;
 mod edge_exact_command_review;
+mod edge_exact_command_spelling;
 mod edge_git_push;
 mod edge_receipt;
 mod edge_review_evidence;
 mod edge_structured;
 mod encrypted_secret_store;
+mod evaluation_contract;
+mod evaluation_contract_scope;
+mod exact_cloud_review;
 mod extension_allow_hint_op;
 mod extension_control_authority_op;
 mod extension_control_mutation_op;
@@ -473,6 +497,7 @@ mod guard_config_update_value;
 mod guard_home_resolve;
 mod guard_paths;
 mod guard_product_copy;
+mod guard_repair_report;
 mod guard_shim_profile;
 mod guard_store_advisory_cache;
 #[cfg(test)]
@@ -519,10 +544,12 @@ mod guard_store_connect_effective;
 #[cfg(test)]
 mod guard_store_connect_vectors_tests;
 mod guard_store_connector_context;
+mod guard_store_continuity_write;
 mod guard_store_db;
 mod guard_store_devices;
 mod guard_store_evidence;
 mod guard_store_exact_cloud_apply;
+mod guard_store_exact_cloud_package;
 mod guard_store_exact_cloud_peek;
 mod guard_store_guard_event;
 #[cfg(test)]
@@ -558,6 +585,7 @@ mod guard_store_local_cli_vectors_tests;
 mod guard_store_local_mcp_declarations;
 mod guard_store_local_mcp_observation;
 mod guard_store_local_once_mint;
+mod guard_store_mcp_policy_requests;
 mod guard_store_mcp_provider_reads;
 #[cfg(test)]
 mod guard_store_mcp_reads_tests;
@@ -581,6 +609,8 @@ mod guard_store_outbox_reads;
 mod guard_store_outbox_reads_tests;
 mod guard_store_outbox_recover;
 mod guard_store_outbox_requeue;
+mod guard_store_policy_clear;
+mod guard_store_policy_import;
 mod guard_store_policy_source_context;
 #[cfg(test)]
 mod guard_store_policy_source_context_vectors_tests;
@@ -611,6 +641,7 @@ mod guard_store_state_ops_vectors_tests;
 mod guard_store_storage_maintenance;
 #[cfg(test)]
 mod guard_store_storage_maintenance_vectors_tests;
+mod guard_store_sync_state;
 mod guard_store_temporary_mcp;
 mod guard_store_tool_call_evidence;
 #[cfg(test)]
@@ -634,6 +665,13 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod guard_store_write_cache;
 mod hardening;
+#[path = "adapters/harness_adapter/mod.rs"]
+mod harness_adapter;
+#[path = "adapters/harness_backup_restore.rs"]
+mod harness_backup_restore;
+#[cfg(test)]
+#[path = "adapters/harness_backup_restore_tests.rs"]
+mod harness_backup_restore_tests;
 mod harness_coverage;
 mod harness_coverage_command;
 mod harness_diagnostics;
@@ -649,6 +687,8 @@ mod harness_mcp_discovery;
 mod harness_mcp_discovery_tests;
 #[path = "adapters/harness_settings_file.rs"]
 mod harness_settings_file;
+#[path = "adapters/harness_shim_refresh.rs"]
+mod harness_shim_refresh;
 mod harness_version_compat;
 mod health_lease_contract;
 mod health_lease_state;
@@ -656,7 +696,14 @@ mod health_snapshot_binding;
 #[path = "adapters/detection/hermes_detect.rs"]
 mod hermes_detect;
 mod hermes_file_inspect;
+#[path = "adapters/hermes_hook_config.rs"]
+mod hermes_hook_config;
+#[cfg(test)]
+#[path = "adapters/hermes_hook_config_tests.rs"]
+mod hermes_hook_config_tests;
 mod hermes_inspect;
+#[path = "adapters/hermes_install_plan.rs"]
+mod hermes_install_plan;
 mod hermes_printable;
 mod hermes_skills;
 mod hermes_text;
@@ -934,6 +981,7 @@ mod opencode_proxy_entry;
 mod opencode_server_id;
 mod orphaned_worker_reap;
 mod ownership_acl_verdict;
+mod package_approval_action;
 mod package_approval_hash_op;
 mod package_audit_projection_op;
 mod package_authority_config;
@@ -972,6 +1020,7 @@ use guard_policy_bundle::{
     families as policy_bundle_families, json as policy_bundle_json, keys as policy_bundle_keys,
     python as policy_bundle_py, time as policy_bundle_time,
 };
+mod policy_bundle_cloud_exceptions;
 mod policy_bundle_op;
 mod policy_bundle_payload_hash;
 mod policy_bundle_store_identities;
@@ -993,6 +1042,7 @@ mod policy_lookup_reuse;
 mod policy_runtime_saved;
 mod policy_runtime_saved_reuse;
 mod policy_snapshot_build;
+mod policy_snapshot_publish;
 mod policy_store;
 mod policy_verifier_key_provision;
 mod posix_processes;
@@ -1007,8 +1057,10 @@ mod protect_guidance;
 mod protect_request_op;
 mod protection_health_report_op;
 mod proxy_credentials;
+mod supply_chain_bundle_cache_op;
 use guard_runtime_pyjson as pyjson;
 mod receipt_embedded_scripts;
+mod registry_trust;
 #[cfg(test)]
 mod registry_vectors_tests;
 mod release_feed_op;

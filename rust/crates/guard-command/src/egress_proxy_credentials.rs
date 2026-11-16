@@ -159,7 +159,7 @@ fn windows_credential_text(raw: Vec<u8>) -> Option<Vec<u8>> {
 
 #[cfg_attr(not(any(windows, test)), allow(dead_code))]
 fn utf16le_text(raw: &[u8]) -> Option<String> {
-    if raw.len() % 2 != 0 {
+    if !raw.len().is_multiple_of(2) {
         return None;
     }
     let units: Vec<u16> = raw

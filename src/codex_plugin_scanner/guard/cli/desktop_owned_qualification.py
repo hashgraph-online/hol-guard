@@ -11,7 +11,7 @@ from typing import TextIO
 
 from ..adapters.base import HarnessContext
 from ..codex_hook_file_integrity import CodexHookIntegrityError
-from ..daemon.live_identity import DaemonArtifactBinding
+from ..native_daemon_peer import DaemonArtifactBinding
 from ..runtime_transition import TransitionError
 from ..runtime_transition_admission import verified_admission_payload
 from ..runtime_transition_owned_qualification import qualify_owned_codex_native

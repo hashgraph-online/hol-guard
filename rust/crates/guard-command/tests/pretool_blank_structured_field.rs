@@ -13,7 +13,9 @@ fn generic(payload: Value) -> PreToolResultV1 {
 /// A harness-native search tool spells "start where the project does" as an
 /// empty path argument. The field is present and its type is right, so the
 /// payload parses; there is simply no target in it, and a call that names no
-/// target must not be read as a malformed payload and blocked.
+/// target must not be read as a malformed payload and blocked. It must also
+/// reach the answer a search of the project root reaches, because that is the
+/// search it describes: the blank is the same scope an absent `path` names.
 #[test]
 fn a_blank_structured_field_names_nothing_rather_than_breaking_the_payload() {
     for payload in [
@@ -29,6 +31,97 @@ fn a_blank_structured_field_names_nothing_rather_than_breaking_the_payload() {
             "{payload}"
         );
         assert_ne!(result.minimum_action, "block", "{payload}");
+    }
+    // Proving the scope of a project-root search needs a verified workspace,
+    // so the verdict itself is pinned against one.
+    #[cfg(unix)]
+    a_blank_search_path_earns_what_an_absent_one_earns();
+}
+
+/// A blank `path` and no `path` at all describe one search, so Oh My Pi's
+/// `glob` and `grep` must answer both the same way: the bounded project-root
+/// allow. Reading the blank as an unusable value instead dropped these calls
+/// to a file-read review while the payload still parsed.
+#[cfg(unix)]
+fn a_blank_search_path_earns_what_an_absent_one_earns() {
+    let workspace = BlankPathWorkspace::new();
+    const LISTING: &str = "native_omp_directory_listing";
+    const SEARCH: &str = "native_bounded_search_scope";
+    for (tool, input, reason) in [
+        // A blank path argument, in each spelling the extractor reads as
+        // naming nothing.
+        ("glob", json!({"path": ""}), LISTING),
+        ("glob", json!({"path": "   "}), LISTING),
+        ("glob", json!({"path": "", "pattern": "**/*.md"}), LISTING),
+        ("grep", json!({"path": "", "pattern": "retryLimit"}), SEARCH),
+        // The same calls with the key absent: the answer each blank must get.
+        ("glob", json!({}), LISTING),
+        ("glob", json!({"pattern": "**/*.md"}), LISTING),
+        ("grep", json!({"pattern": "retryLimit"}), SEARCH),
+    ] {
+        let result = workspace.evaluate(tool, &input);
+        assert_eq!(
+            result.minimum_action, "allow",
+            "{tool} {input}: {}",
+            result.reason_code
+        );
+        assert_eq!(result.reason_code, reason, "{tool} {input}");
+    }
+}
+
+/// An ordinary project inside its own home directory: the context a search
+/// scope is proven against. Nothing sensitive lives in it, so the only thing
+/// these cases can turn on is how the blank path itself is read.
+#[cfg(unix)]
+struct BlankPathWorkspace {
+    root: std::path::PathBuf,
+    home: std::path::PathBuf,
+    project: std::path::PathBuf,
+}
+
+#[cfg(unix)]
+impl Drop for BlankPathWorkspace {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+#[cfg(unix)]
+impl BlankPathWorkspace {
+    fn new() -> Self {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/pretool-blank-structured-field")
+            .join(format!(
+                "home-{}-{}",
+                std::process::id(),
+                crate::unique_nanos::unique_nanos()
+            ));
+        std::fs::create_dir_all(&root).unwrap();
+        let root = std::fs::canonicalize(root).unwrap();
+        let home = root.join("home");
+        let project = home.join("project");
+        for file in ["README.md", "docs/retry.md", "src/index.ts"] {
+            let path = project.join(file);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, "synthetic fixture\n").unwrap();
+        }
+        Self {
+            root,
+            home,
+            project,
+        }
+    }
+
+    fn evaluate(&self, tool: &str, input: &Value) -> PreToolResultV1 {
+        guard_command::pretool::evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": input}),
+            None,
+            None,
+            self.home.to_str(),
+            self.project.to_str(),
+        )
     }
 }
 

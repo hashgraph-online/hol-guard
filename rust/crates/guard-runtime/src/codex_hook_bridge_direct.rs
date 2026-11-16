@@ -545,6 +545,80 @@ pub(crate) fn resident_hook_answer(
     answered_response(&output)
 }
 
+/// The switch that turns the direct lane off for a harness the daemon may
+/// ask the resident about, or `None` when the daemon never asks for it.
+fn daemon_switch(harness: &str) -> Option<&'static str> {
+    [CODEX, CLAUDE_CODE, CURSOR, PI, OMP]
+        .into_iter()
+        .find(|direct| direct.name == harness)
+        .map(|direct| direct.switch)
+        .or_else(|| {
+            BOUNDED_DIRECT_HARNESSES
+                .contains(&harness)
+                .then_some(BOUNDED_DIRECT_SWITCH)
+        })
+}
+
+/// Whether the resident may answer this hook event for `harness`, as its
+/// bridge would ask. Oh My Pi has no bridge, so every event is asked.
+fn daemon_event(harness: &str, payload: &Value) -> bool {
+    let event = payload
+        .get("hook_event_name")
+        .or_else(|| payload.get("event"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if [PI.name, OMP.name].contains(&harness) {
+        return true;
+    }
+    if BOUNDED_DIRECT_HARNESSES.contains(&harness) {
+        return bounded_event(harness, event);
+    }
+    [CODEX, CLAUDE_CODE, CURSOR]
+        .into_iter()
+        .find(|direct| direct.name == harness)
+        .is_some_and(|direct| harness_event(&direct, event))
+}
+
+/// Whether the daemon may ask the resident to answer `harness`'s hooks.
+pub(crate) fn daemon_direct_harness(harness: &str) -> bool {
+    daemon_switch(harness).is_some()
+}
+
+/// The harness response a live resident answered for a hook the daemon
+/// received, or `None` for the daemon path (`pi_direct_answer`).
+///
+/// Oh My Pi has no bridge to ask the resident first, and a bridge that
+/// reached the daemon may have found the resident busy, so the daemon asks
+/// it with the raw `home` and `workspace` queries, which the resident
+/// settles against the lane it bound. A defer keeps the daemon path.
+pub(crate) fn daemon_direct_answer(
+    harness: &str,
+    guard_home: &Path,
+    home: Option<&str>,
+    workspace: Option<String>,
+    payload: &Value,
+    rpc_deadline: Instant,
+) -> Option<String> {
+    if !direct_enabled(daemon_switch(harness)?) || !daemon_event(harness, payload) {
+        return None;
+    }
+    let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);
+    let data = serde_json::to_string(payload).ok()?;
+    let request = request_body(
+        harness,
+        guard_home,
+        home.map(Path::new),
+        workspace,
+        &data,
+        remaining(deadline),
+        Lane::Ordinary,
+    )?;
+    let output =
+        send_to_live_resident_reporting(&guard_home.join(STATE_DIRECTORY), &request, deadline)
+            .ok()?;
+    answered_response_reporting(&output).ok()
+}
+
 #[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_direct_tests.rs"]
 mod tests;

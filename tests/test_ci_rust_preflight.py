@@ -80,7 +80,7 @@ def test_required_clippy_formats_the_full_workspace_even_with_cached_archives(
     assert "native-workspace" in document["jobs"]["required"]["needs"]
     assert "continue-on-error" not in job
     (tmp_path / "rust").mkdir()
-    (tmp_path / "rust/rust-toolchain.toml").write_text('[toolchain]\nchannel = "1.88.0"\n')
+    (tmp_path / "rust/rust-toolchain.toml").write_text('[toolchain]\nchannel = "1.89.0"\n')
     bindir = tmp_path / "bin"
     bindir.mkdir()
     cargo = bindir / "cargo"
@@ -96,7 +96,7 @@ def test_required_clippy_formats_the_full_workspace_even_with_cached_archives(
     )
     assert result.returncode == cargo_status
     assert capture.read_text().splitlines() == [
-        "+1.88.0",
+        "+1.89.0",
         "fmt",
         "--manifest-path",
         "rust/Cargo.toml",

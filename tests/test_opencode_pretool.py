@@ -13,17 +13,15 @@ import pytest
 from codex_plugin_scanner.guard.adapters import guard_cli_attestation
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.hook_python import attest_guard_hook_python
-from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.opencode_pretool import (
+from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
+from codex_plugin_scanner.guard.cli import install_commands as install_commands_module
+from tests.opencode_test_support import (
+    config_uses_guard_proxy,
     global_plugin_path,
     install_pretool_plugin,
     managed_plugin_path,
-    opencode_config_has_mcp_servers,
-    opencode_config_uses_guard_proxy,
     pretool_plugin_source,
-    remove_pretool_plugin,
 )
-from codex_plugin_scanner.guard.cli import install_commands as install_commands_module
 
 
 def _bun_executable() -> str | None:
@@ -540,15 +538,6 @@ def test_install_pretool_plugin_writes_managed_and_global_copies(tmp_path: Path)
     assert managed_plugin_path(ctx).read_text(encoding="utf-8") == global_plugin_path(ctx).read_text(encoding="utf-8")
 
 
-def test_remove_pretool_plugin_deletes_installed_files(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path)
-    install_pretool_plugin(ctx)
-    removed = remove_pretool_plugin(ctx)
-    assert removed["removed_plugin_paths"]
-    assert not global_plugin_path(ctx).exists()
-    assert not managed_plugin_path(ctx).exists()
-
-
 def test_opencode_install_includes_pretool_plugin_paths(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
@@ -574,7 +563,7 @@ def test_opencode_config_uses_guard_proxy_parses_jsonc_comments(tmp_path: Path) 
         """,
         encoding="utf-8",
     )
-    assert opencode_config_uses_guard_proxy(config) is True
+    assert config_uses_guard_proxy(_ctx(tmp_path), config) is True
 
 
 def test_opencode_config_uses_guard_proxy_rejects_invalid_companion_command(tmp_path: Path) -> None:
@@ -596,7 +585,7 @@ def test_opencode_config_uses_guard_proxy_rejects_invalid_companion_command(tmp_
         ),
         encoding="utf-8",
     )
-    assert opencode_config_uses_guard_proxy(config) is False
+    assert config_uses_guard_proxy(_ctx(tmp_path), config) is False
 
 
 def test_opencode_config_uses_guard_proxy_detects_companion_server_name(tmp_path: Path) -> None:
@@ -614,7 +603,7 @@ def test_opencode_config_uses_guard_proxy_detects_companion_server_name(tmp_path
         ),
         encoding="utf-8",
     )
-    assert opencode_config_uses_guard_proxy(config) is True
+    assert config_uses_guard_proxy(_ctx(tmp_path), config) is True
 
 
 def test_opencode_config_uses_guard_proxy_detects_managed_command(tmp_path: Path) -> None:
@@ -632,7 +621,7 @@ def test_opencode_config_uses_guard_proxy_detects_managed_command(tmp_path: Path
         ),
         encoding="utf-8",
     )
-    assert opencode_config_uses_guard_proxy(config) is True
+    assert config_uses_guard_proxy(_ctx(tmp_path), config) is True
 
 
 def test_opencode_config_uses_guard_proxy_requires_companion_for_each_native_server(tmp_path: Path) -> None:
@@ -654,7 +643,7 @@ def test_opencode_config_uses_guard_proxy_requires_companion_for_each_native_ser
         ),
         encoding="utf-8",
     )
-    assert opencode_config_uses_guard_proxy(config) is False
+    assert config_uses_guard_proxy(_ctx(tmp_path), config) is False
 
 
 def test_opencode_verification_ready_without_mcp_servers(tmp_path: Path) -> None:
@@ -673,7 +662,6 @@ def test_opencode_verification_ready_without_mcp_servers(tmp_path: Path) -> None
     verification = payload["verification"]
     assert verification["pretool_plugin_installed"] is True
     assert verification["mcp_proxy_configured"] is False
-    assert opencode_config_has_mcp_servers(config) is False
     assert verification["ready"] is True
     assert not verification["warnings"]
 
@@ -747,10 +735,10 @@ def test_refresh_opencode_pretool_plugin_handles_runtime_error(
     store = GuardStore(ctx.guard_home)
     store.set_managed_install("opencode", True, None, {}, "2026-06-04T00:00:00+00:00")
 
-    def _raise_runtime_error(_context: HarnessContext) -> str:
+    def _raise_runtime_error(_context: HarnessContext) -> dict[str, object]:
         raise RuntimeError("no guard python")
 
-    monkeypatch.setattr(update_commands, "pretool_plugin_source", _raise_runtime_error)
+    monkeypatch.setattr(update_commands, "plugin_render_args", _raise_runtime_error)
 
     note = update_commands._refresh_opencode_pretool_plugin(context=ctx, store=store)
 
@@ -771,10 +759,10 @@ def test_refresh_opencode_pretool_plugin_handles_install_runtime_error(
     install_pretool_plugin(ctx)
     global_plugin_path(ctx).write_text("// stale plugin\n", encoding="utf-8")
 
-    def _raise_runtime_error(_context: HarnessContext) -> dict[str, object]:
-        raise RuntimeError("write failed")
+    def _raise_os_error(*_args: object, **_kwargs: object) -> int:
+        raise OSError("write failed")
 
-    monkeypatch.setattr(update_commands, "install_pretool_plugin", _raise_runtime_error)
+    monkeypatch.setattr(Path, "write_text", _raise_os_error)
 
     note = update_commands._refresh_opencode_pretool_plugin(context=ctx, store=store)
 

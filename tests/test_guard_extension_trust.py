@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.extension_control_projection import (
+from codex_plugin_scanner.guard.extension_controls.extension_control_projection import (
     build_effective_extension_control_projection,
 )
 from codex_plugin_scanner.guard.runtime import extension_trust as extension_trust_module

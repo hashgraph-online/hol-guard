@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput
 from codex_plugin_scanner.guard.cli import codex_authority_repair as command
 from codex_plugin_scanner.guard.cli import run_guard_command
@@ -17,7 +18,6 @@ from codex_plugin_scanner.guard.cli.commands_lifecycle_gate import lifecycle_gat
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 from codex_plugin_scanner.guard.codex_hook_recovery import hook_publication_pending
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.sqlite_tuning import sqlite_operation_deadline_monotonic
 from codex_plugin_scanner.guard.store import GuardStore

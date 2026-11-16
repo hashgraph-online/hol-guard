@@ -27,6 +27,25 @@ Run it locally without an account. Use the CLI and local dashboard to manage pro
 [Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contribute an extension](#contribute-a-new-extension) · [Contribute an adapter](docs/guard/adapter-contributions.md) · [Development](#development)
 
 <!-- hol-sponsors:start -->
+### Sponsors
+#### Gold sponsors
+
+<p align="center">
+<a href="https://www.yanez.ai/"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/4783ec9c93e4aa9ee19b558bd1902157bcddae28/assets/yanez-sponsor-gold.svg" alt="Yanez" width="240" height="68" /></a>
+</p>
+
+#### Bronze sponsors
+
+<p align="center">
+<a href="https://synthetic.new/?referral=FTVR2kb0"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/451f3fee55db9fe86c42f545606a25af8ae8b66f/assets/synthetic-sponsor-bronze.png" alt="Synthetic" width="160" height="48" /></a>
+&nbsp;&nbsp;&nbsp;
+<a href="https://www.firecrawl.dev/referral?rid=SLPLSKAU"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/451f3fee55db9fe86c42f545606a25af8ae8b66f/assets/firecrawl-sponsor-bronze.png" alt="Firecrawl" width="160" height="48" /></a>
+</p>
+
+<p align="center"><sub>Thank you to our sponsors for supporting HOL Guard. Some sponsor links are referral links.<br>Sponsorship does not change Guard's security decisions or coverage.</sub></p>
+<p align="center">
+<a href="https://hol.org/advertise"><img src="https://img.shields.io/badge/Become_a_sponsor-hol.org%2Fadvertise-1e3970?style=flat" alt="Become a sponsor" height="22"></a>
+</p>
 <!-- hol-sponsors:end -->
 
 ## Install HOL Guard
@@ -507,16 +526,16 @@ Add fixture cases for destructive operations, safe previews, aliases, reordered 
 
 ## Development
 
-The development toolchain includes Python 3.10 or newer, [uv](https://docs.astral.sh/uv/), and Rust 1.88.0, pinned in [`rust/rust-toolchain.toml`](rust/rust-toolchain.toml). Rust builds the native runtime and extension compiler; Python supplies the CLI and development tooling. The commands below use a POSIX shell from the repository root. See [CONTRIBUTING.md](CONTRIBUTING.md) for Windows setup and the checks for each kind of change.
+The development toolchain includes Python 3.10 or newer, [uv](https://docs.astral.sh/uv/), and Rust 1.89.0, pinned in [`rust/rust-toolchain.toml`](rust/rust-toolchain.toml). Rust builds the native runtime and extension compiler; Python supplies the CLI and development tooling. The commands below use a POSIX shell from the repository root. See [CONTRIBUTING.md](CONTRIBUTING.md) for Windows setup and the checks for each kind of change.
 
 ```bash
 git clone https://github.com/hashgraph-online/hol-guard.git
 cd hol-guard
 uv sync --frozen --extra dev
-rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml \
+rustup toolchain install 1.89.0 --profile minimal --component rustfmt --component clippy
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml \
   -p guard-command --bin guard-command-source
-cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml \
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml \
   -p hol-guard-runtime
 
 export HOL_GUARD_NATIVE_SOURCE_COMPILER="$PWD/rust/target/release/guard-command-source"

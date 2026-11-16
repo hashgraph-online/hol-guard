@@ -40,7 +40,7 @@ def test_release_native_binary_and_base_wheel_use_the_same_regenerated_program()
         step for step in build_steps if step.get("name") == "Generate projections for release source distributions"
     )
     assert "if" not in source_generation
-    assert "cargo +1.88.0 build" in source_generation["run"]
+    assert "cargo +1.89.0 build" in source_generation["run"]
     assert build_steps.index(source_generation) < next(
         index for index, step in enumerate(build_steps) if step.get("name") == "Build Guard package (hol-guard)"
     )

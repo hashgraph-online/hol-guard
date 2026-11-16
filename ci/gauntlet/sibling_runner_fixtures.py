@@ -20,6 +20,11 @@ SIBLING_CD_FILTER_CASE = "omp-native-sibling-cd-jest-cut"
 # The same root-anchored run, its diagnostics dropped before a filter the sink
 # does peel, which is why the rejoin rather than the peel has to carry it.
 SIBLING_CD_QUIET_CASE = "omp-native-sibling-cd-jest-quiet"
+# The same root-anchored run, its output respelled by a `cat` that reads
+# standard input and opens nothing.
+SIBLING_CD_CAT_CASE = "omp-native-sibling-cd-jest-cat-escapes"
+# The same root-anchored run, its output trimmed to a line range by `sed`.
+SIBLING_CD_SED_CASE = "omp-native-sibling-cd-jest-sed"
 # Cases that link the installed tree into the sibling's linked worktree rather
 # than install a second copy there.
 SIBLING_LINK_CASES = (
@@ -47,6 +52,8 @@ def add_sibling_test_runner(home: Path, scenario_id: str | None) -> None:
             SIBLING_BUN_ENTRY_CASE,
             SIBLING_CD_FILTER_CASE,
             SIBLING_CD_QUIET_CASE,
+            SIBLING_CD_CAT_CASE,
+            SIBLING_CD_SED_CASE,
         )
         and scenario_id not in SIBLING_LINK_CASES
     ):

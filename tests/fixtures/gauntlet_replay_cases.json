@@ -2,7 +2,9 @@
   "_comment": "Gauntlet replay lane cases. expect: quiet = allow with no approval row and no rendered text; always = review row that carries an exact-action Always allow offer; block = must not allow. Benign cases of tests/fixtures/benign_false_positive_gate.json are replayed too, under the same strict judge. known_gaps lists case ids expected to fail on the current product.",
   "version": 1,
   "known_gaps": {
-    "session-git-c-wt-push-feature": "native_command_review_required"
+    "session-git-c-wt-push-feature": "native_command_review_required",
+    "omp-eval-sh-git-status": "native_pre_tool_unknown_review",
+    "omp-neg-eval-sh-secret-copy": "native_pre_tool_unknown_review"
   },
   "cases": [
     {
@@ -270,6 +272,32 @@
       },
       "cwd": "worktree",
       "expect": "quiet"
+    },
+    {
+      "id": "omp-eval-sh-git-status",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "language": "js",
+        "code": "console.log(await sh('git status --short'))"
+      },
+      "cwd": "worktree",
+      "expect": "quiet"
+    },
+    {
+      "id": "omp-neg-eval-sh-secret-copy",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "language": "js",
+        "code": "await sh('cp .env output/copied.env')"
+      },
+      "cwd": "worktree",
+      "expect": "protection_block"
     },
     {
       "id": "omp-todo-phases",

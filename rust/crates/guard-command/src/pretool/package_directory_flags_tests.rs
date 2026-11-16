@@ -200,3 +200,52 @@ fn other_workspace_root_spellings_keep_the_unprojected_text() {
         None
     );
 }
+
+/// A leading `NAME=value` assignment is part of the manager call, not of the
+/// directory flag, so it rides along into the projected list. Without this an
+/// everyday `PORT=3000 bun --cwd web run build` fell past the peel into the
+/// package review while both `bun --cwd web run build` and
+/// `PORT=3000 bun run build` were contained silently.
+#[test]
+fn a_leading_assignment_rides_along_into_the_projected_list() {
+    let root = fixture("assignments");
+    let cwd = root.to_str().unwrap();
+    let web = root.join("web");
+    let web = web.to_str().unwrap();
+    for (raw, expected) in [
+        (
+            "PORT=3000 bun --cwd web run build",
+            format!("cd {web} && PORT=3000 bun run build"),
+        ),
+        (
+            "PORT=3000 PROJECT=probe bun --cwd=web build",
+            format!("cd {web} && PORT=3000 PROJECT=probe bun build"),
+        ),
+        (
+            "CI=1 npm --prefix web run build 2>&1 | tail -20",
+            format!("cd {web} && CI=1 npm run build 2>&1 | tail -20"),
+        ),
+        (
+            "_UNDERSCORE=1 pnpm -C web test",
+            format!("cd {web} && _UNDERSCORE=1 pnpm test"),
+        ),
+    ] {
+        assert_eq!(projection(raw, cwd).as_deref(), Some(&*expected), "{raw}");
+    }
+}
+
+/// An assignment the peel cannot copy over unchanged keeps the unprojected
+/// text: a quoted or expanded value is not the word the source holds, and a
+/// command that sets `PATH` is refused before the peel is reached at all.
+#[test]
+fn an_unreadable_assignment_keeps_the_unprojected_text() {
+    let root = fixture("assignments-refused");
+    let cwd = root.to_str().unwrap();
+    for raw in [
+        "PATH=/tmp bun --cwd web run build",
+        "PORT=\"3000\" bun --cwd web run build",
+        "PORT=$OTHER bun --cwd web run build",
+    ] {
+        assert_eq!(projection(raw, cwd), None, "{raw}");
+    }
+}

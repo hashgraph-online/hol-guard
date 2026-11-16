@@ -72,7 +72,8 @@ pub(crate) enum CommandRow<'a> {
 }
 
 /// The summary for one Pulse request, without the command. See
-/// `summary_with_command`.
+/// `summary_with_command`, which the resident uses.
+#[cfg(test)]
 pub(crate) fn summary_for(
     guard_home: &Path,
     purpose: &str,

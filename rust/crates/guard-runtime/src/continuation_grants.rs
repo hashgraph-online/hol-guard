@@ -33,6 +33,50 @@ pub(crate) fn consume(
     key: &[u8],
     key_id: &str,
 ) -> StoreResult<bool> {
+    if crate::claim_reuse::approval_reuse_claim_disposition(decision) != Some("consumed") {
+        return Ok(false);
+    }
+    spend(
+        connection,
+        request_id,
+        decision,
+        now,
+        (key, key_id),
+        &["legacy", "exact-cloud"],
+    )
+}
+
+/// Spend the exact Cloud allow issued for a package install's own request.
+///
+/// A package once-approval saved locally is retained for reuse until it
+/// expires, so `consume` would refuse it. An exact Cloud allow answers one
+/// queue item only, so the install that waited on that item spends it.
+pub(crate) fn consume_exact_cloud_package(
+    connection: &Connection,
+    request_id: &str,
+    decision: &Value,
+    now: &str,
+    key: &[u8],
+    key_id: &str,
+) -> StoreResult<bool> {
+    spend(
+        connection,
+        request_id,
+        decision,
+        now,
+        (key, key_id),
+        &["exact-cloud"],
+    )
+}
+
+fn spend(
+    connection: &Connection,
+    request_id: &str,
+    decision: &Value,
+    now: &str,
+    (key, key_id): (&[u8], &str),
+    kinds: &[&str],
+) -> StoreResult<bool> {
     let Some(id) = decision["approval_id"].as_str().filter(|s| !s.is_empty()) else {
         return Ok(false);
     };
@@ -43,13 +87,12 @@ pub(crate) fn consume(
         return Ok(false);
     };
     if decision["action"] != "allow"
-        || crate::claim_reuse::approval_reuse_claim_disposition(decision) != Some("consumed")
         || crate::claim_reuse::approval_authority_revision(connection)? != revision
     {
         return Ok(false);
     }
     let kind = decision["authority_kind"].as_str().unwrap_or("");
-    if !matches!(kind, "legacy" | "exact-cloud") {
+    if !kinds.contains(&kind) {
         return Ok(false);
     }
     let now = guard_contracts::canonical_utc_timestamp(now).ok_or(

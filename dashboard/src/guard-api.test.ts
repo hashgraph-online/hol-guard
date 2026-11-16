@@ -2034,4 +2034,59 @@ try {
 assert(hostileCommandActivityError instanceof Error, "command activity path traversal is rejected");
 assert(hostileCommandActivityFetches === 0, "path traversal cannot receive the dashboard session token");
 
+// A busy computer can keep Guard's policy check from answering in time; the
+// daemon refuses before acting, so the dashboard sends the request again
+// instead of treating the refusal as a lost session.
+installGuardWindow("?guard-token=token-busy-retry&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const busyReplies: Array<[number, Record<string, string>]> = [
+  [503, { error: "native_route_policy_unavailable" }],
+  [503, { error: "native_route_policy_unavailable" }],
+  [200, { ok: "yes" }],
+];
+let busyFetches = 0;
+globalThis.fetch = async (): Promise<Response> => {
+  const [status, body] = busyReplies[Math.min(busyFetches, busyReplies.length - 1)];
+  busyFetches += 1;
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+};
+const busyResponse = await fetchCommandActivityApi("/v1/command-activity");
+assert(busyResponse.status === 200, "a busy refusal is retried until Guard answers");
+assert(busyFetches === 3, "each busy refusal is sent again once");
+
+for (const [status, body] of [
+  [503, { error: "native_route_policy_unavailable", reason_code: "native_resident_restart_blocked" }],
+  [403, { error: "forbidden_origin" }],
+] as const) {
+  busyFetches = 0;
+  globalThis.fetch = async (): Promise<Response> => {
+    busyFetches += 1;
+    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  };
+  const refused = await fetchCommandActivityApi("/v1/command-activity");
+  assert(refused.status === status, `a ${status} refusal is returned as is`);
+  assert(busyFetches === 1, `a ${status} refusal that is not a busy check is not retried`);
+}
+
+// A caller that gives up while the dashboard waits to retry gets the same
+// AbortError fetch would give it, so its own recovery still runs.
+busyFetches = 0;
+globalThis.fetch = async (): Promise<Response> => {
+  busyFetches += 1;
+  return new Response(JSON.stringify({ error: "native_route_policy_unavailable" }), {
+    status: 503,
+    headers: { "Content-Type": "application/json" },
+  });
+};
+const busyAbort = new AbortController();
+const abandoned = fetchCommandActivityApi("/v1/command-activity", { signal: busyAbort.signal });
+setTimeout(() => busyAbort.abort(new DOMException("gave up", "AbortError")), 50);
+let abandonedError: unknown = null;
+try {
+  await abandoned;
+} catch (error) {
+  abandonedError = error;
+}
+assert(abandonedError instanceof DOMException && abandonedError.name === "AbortError", "an abort during the retry wait rejects");
+assert(busyFetches === 1, "an aborted request is not sent again");
+
 console.log("guard-api.test.ts: all tests passed");

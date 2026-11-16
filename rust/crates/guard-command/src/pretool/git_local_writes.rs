@@ -41,7 +41,7 @@ use std::time::Instant;
 #[path = "git_local_writes_config.rs"]
 mod config;
 #[path = "git_local_writes_forms.rs"]
-mod forms;
+pub(super) mod forms;
 #[path = "git_local_writes_hooks.rs"]
 mod hooks;
 #[path = "git_local_writes_merge.rs"]

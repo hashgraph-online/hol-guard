@@ -21,6 +21,9 @@ from .approval_retry_action import relative_path as _relative
 from .approval_retry_bash import BASH_LIFECYCLE_ORACLE
 from .approval_retry_bash import assessment as bash_lifecycle_assessment
 from .approval_retry_marker import assessment as marker_assessment
+from .approval_retry_persistent import assessment as persistent_assessment
+from .approval_retry_relay import RELAY_ORACLE
+from .approval_retry_relay import assessment as relay_assessment
 from .catalog import Scenario
 from .codex_contained import routed_calls, shell_script
 from .connector_judge import connector_setup_outcome, connector_tool_outcome, reason_text, ungranted_stop
@@ -238,6 +241,12 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
         return "harness-error", f"{len(hooked) - len(decisions)} of {len(hooked)} tool calls ran without a Guard review"
     if scenario.oracle == BASH_LIFECYCLE_ORACLE:
         return bash_lifecycle_assessment(scenario.id, case, decisions)
+    if scenario.oracle == RELAY_ORACLE:
+        # Nobody answers this lane's review: the hold is expected, and what is judged is
+        # the approval link the agent hands the user while it is held.
+        if not calls:
+            return "not-exercised", "the model made no tool call"
+        return relay_assessment(case, decisions, scenario.commands)
     # A Codex call Guard routed into its contained runner ran there; its resident deny is the
     # route, not a stop, once codex_contained binds the run to the reviewed input.
     routed, routed_error = routed_calls(scenario.expectation, case)
@@ -262,7 +271,7 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
             )
         ):
             return pinned
-        return marker_assessment(scenario.id, case, outcome)
+        return persistent_assessment(scenario.id, case, marker_assessment(scenario.id, case, outcome))
     if scenario.oracle == "mixed-read-batch":
         return _mixed_reads(case, decisions)
     if scenario.oracle == "connector-tool" and (tool_result := connector_tool_outcome(scenario, decisions, calls)):

@@ -2,7 +2,9 @@
 //! approval-hash path before it was deleted. Their policy digests were later
 //! recomputed when bundle and feed revisions left the policy context,
 //! reasons were reduced to their codes, and the matched rule and advisories
-//! left it.
+//! left it. The `manifests_and_lockfiles` content digest was recomputed when
+//! `package.json` and `pyproject.toml` hashes came to bind only their install
+//! sections.
 
 use super::*;
 use guard_contracts::PackageApprovalHashRequestV1;
@@ -397,3 +399,49 @@ fn feed_changes_that_touch_the_verdict_still_require_reapproval() {
         );
     }
 }
+
+/// A package approval binds the launch identity, so a reporting-only option
+/// used to give the same install a different key. The identity now carries
+/// `binding_argv_sha256` for that case, and the whole approval key — not just
+/// its executable component — has to come out identical.
+#[test]
+fn a_quiet_spelling_keeps_the_whole_package_approval_key() {
+    let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
+    let vector = vectors
+        .iter()
+        .find(|vector| vector["name"] == json!("advisory_feed_launch_additional"))
+        .expect("a vector carrying a launch identity")
+        .clone();
+    let loud_argv = vector["request"]["launch_identity"]["argv_sha256"].clone();
+
+    let hash_for = |launch_identity: Value| -> Value {
+        let mut vector = vector.clone();
+        vector["request"]["launch_identity"] = launch_identity;
+        let workspace = Workspace::new("quiet-binding");
+        run(&request(&vector, &workspace, "artifact_hash")).unwrap()["artifact_hash"].clone()
+    };
+
+    // The typed argv of `uv sync -q ...` differs from `uv sync ...`; its
+    // binding digest is the loud spelling's argv digest.
+    let quiet = hash_for(json!({
+        "argv_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "binding_argv_sha256": loud_argv,
+        "wrapper_resolution": {"reuse_nonce": "n1", "status": "unproven"},
+    }));
+    let loud = hash_for(vector["request"]["launch_identity"].clone());
+    assert_eq!(
+        quiet, loud,
+        "a saved approval must cover both spellings of the same install"
+    );
+
+    // Without the binding the same typed argv keys differently, which is the
+    // behaviour every non-package launch keeps.
+    let unbound = hash_for(json!({
+        "argv_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "wrapper_resolution": {"reuse_nonce": "n1", "status": "unproven"},
+    }));
+    assert_ne!(unbound, loud);
+}
+
+#[path = "package_approval_hash_op_manifest_tests.rs"]
+mod manifest;

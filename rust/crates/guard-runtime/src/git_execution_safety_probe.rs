@@ -21,6 +21,13 @@ const PROBE_ENVIRONMENT: &[&str] = &[
     "GIT_CEILING_DIRECTORIES",
     "GIT_DISCOVERY_ACROSS_FILESYSTEM",
 ];
+/// Set for an offline probe. Git then allows no transport, even one the
+/// repository's configuration allows (`/` names none; an empty value can read
+/// as unset), and a partial clone does not fetch a missing object. So the
+/// probe never reaches the network or starts a remote helper; a missing
+/// object fails it instead.
+const OFFLINE_ENVIRONMENT: &[(&str, &str)] =
+    &[("GIT_ALLOW_PROTOCOL", "/"), ("GIT_NO_LAZY_FETCH", "1")];
 
 #[derive(Clone)]
 pub(crate) struct ProbeOutput {
@@ -81,7 +88,22 @@ impl Prober<'_> {
 
     /// Like [`Prober::run`], but keeps stderr as well (bounded the same way).
     pub(crate) fn run_capturing_stderr(&self, arguments: &[&str]) -> Option<ProbeOutput> {
-        self.execute(arguments, None, true)
+        self.execute(arguments, None, true, false, None)
+    }
+
+    /// Like [`Prober::run`], with Git's fetches off (see [`OFFLINE_ENVIRONMENT`]).
+    pub(crate) fn run_offline(&self, arguments: &[&str]) -> Option<ProbeOutput> {
+        self.execute(arguments, None, false, true, None)
+    }
+
+    /// Like [`Prober::run_offline`], but stopped at `until` when that comes
+    /// before the probe's own timeout.
+    pub(crate) fn run_offline_until(
+        &self,
+        arguments: &[&str],
+        until: Instant,
+    ) -> Option<ProbeOutput> {
+        self.execute(arguments, None, false, true, Some(until))
     }
 
     pub(crate) fn run_with_input(
@@ -89,7 +111,7 @@ impl Prober<'_> {
         arguments: &[&str],
         input: Option<Vec<u8>>,
     ) -> Option<ProbeOutput> {
-        self.execute(arguments, input, false)
+        self.execute(arguments, input, false, false, None)
     }
 
     fn execute(
@@ -97,6 +119,8 @@ impl Prober<'_> {
         arguments: &[&str],
         input: Option<Vec<u8>>,
         capture_stderr: bool,
+        offline: bool,
+        until: Option<Instant>,
     ) -> Option<ProbeOutput> {
         let mut command = Command::new(self.git);
         command
@@ -119,7 +143,11 @@ impl Prober<'_> {
                 command.env(name, value);
             }
         }
+        if offline {
+            command.envs(OFFLINE_ENVIRONMENT.iter().copied());
+        }
         let deadline = Instant::now() + PROBE_TIMEOUT;
+        let deadline = until.map_or(deadline, |until| until.min(deadline));
         let mut child = command.spawn().ok()?;
         let writer = input.and_then(|bytes| {
             let mut stdin = child.stdin.take()?;

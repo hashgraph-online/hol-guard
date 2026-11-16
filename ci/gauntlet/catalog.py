@@ -16,6 +16,7 @@ from .approval_retry_bash import (
     MUTATION_CASE,
     targets_script,
 )
+from .approval_retry_relay import RELAY_ORACLE
 from .extension_adapters import extension_adapter
 from .fixtures import digest_file
 from .remote_code import REMOTE_CODE_CASES
@@ -170,10 +171,12 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "blocked-extension",
             "blocked-package",
             "blocked-memory-note",
+            "blocked-eval-shell",
             "native-tools",
             "full-task",
             "approved-retry",
             BASH_LIFECYCLE_ORACLE,
+            RELAY_ORACLE,
             "connector-setup",
             "connector-setup-ask",
             "connector-tool",
@@ -196,6 +199,8 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             raise ValueError("native-tools cases are allow-only and must name their required tools")
         if scenario.oracle == "blocked-memory-note" and (scenario.commands or scenario.required_tools != ("learn",)):
             raise ValueError("memory-note protection cases drive the learn tool alone")
+        if scenario.oracle == "blocked-eval-shell" and (scenario.commands or scenario.required_tools != ("eval",)):
+            raise ValueError("eval shell protection cases drive the eval tool alone")
         if scenario.oracle == "full-task" and (
             scenario.expectation != "allow" or scenario.commands or "core" in scenario.profiles
         ):
@@ -224,6 +229,15 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
                 or scenario.profiles != ("approval-retry",)
             ):
                 raise ValueError("Bash approval lifecycle case has an invalid id, outcome, command or profile")
+        if scenario.oracle == RELAY_ORACLE and (
+            scenario.expectation != "allow"
+            or len(scenario.commands) != 1
+            or scenario.required_tools != ("bash",)
+            or scenario.profiles != ("approval-retry",)
+        ):
+            raise ValueError(
+                "a relayed approval link case holds one bash command and runs only in the approval-retry profile"
+            )
         _validate_connector(scenario)
         if scenario.oracle == "blocked-extension":
             extension_adapter(scenario.commands[0])

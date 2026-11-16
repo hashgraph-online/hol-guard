@@ -5,7 +5,6 @@ import os
 import pytest
 
 from codex_plugin_scanner.guard import posix_processes
-from codex_plugin_scanner.guard.daemon import manager
 
 
 class _Runtime:
@@ -29,7 +28,7 @@ def runtime(monkeypatch: pytest.MonkeyPatch) -> _Runtime:
 @pytest.mark.skipif(os.name == "nt", reason="POSIX process queries")
 def test_parent_pid_reads_only_a_positive_integer(runtime: _Runtime) -> None:
     runtime.replies["parent"] = {"parent_pid": 4242}
-    assert manager._guard_daemon_parent_pid(4243) == 4242
+    assert posix_processes.posix_parent_pid(4243) == 4242
     assert runtime.sent[-1] == {"schema": "posix-processes.v1", "op": "parent", "pid": 4243}
     for reply in ({"parent_pid": 0}, {"parent_pid": True}, {"parent_pid": "7"}, {"parent_pid": None}, None):
         runtime.replies["parent"] = reply

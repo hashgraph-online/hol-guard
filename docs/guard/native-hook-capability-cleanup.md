@@ -93,7 +93,7 @@ source deletion or oracle removal remains a separately reviewed change.
 ```text
 uv run --no-sync ruff check <changed Python files>
 uv run --no-sync pytest -q tests/test_python_capability_cleanup_gate.py
-uv run --no-sync pytest -q tests/test_python_hook_semantic_callgraph_gate.py tests/test_guard_hook_payload_reference.py
+uv run --no-sync pytest -q tests/test_python_hook_semantic_callgraph_gate.py
 uv run --no-sync python scripts/ci/python_capability_cleanup_gate.py --root . --json python-capability-cleanup.json
 ```
 

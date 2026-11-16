@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_supply_chain_eval
-from codex_plugin_scanner.guard.daemon import hook_native_package_review as package_review
+from codex_plugin_scanner.guard.hook_review import hook_native_package_review as package_review
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.native_package_review_plan import NativePackageReviewPlanError
 from codex_plugin_scanner.guard.native_supply_chain_registry_cache import RegistryDeadlineError

@@ -165,7 +165,7 @@ pub(super) fn conversation_id(payload: &Value) -> Option<&str> {
 /// with the leading separator dropped and every other non-alphanumeric
 /// character spelled `-`. Cursor names the directory after the path it was
 /// opened with, so both that spelling and the canonical one are accepted.
-pub(super) fn workspace_slugs(cwd: Option<&str>) -> Vec<String> {
+pub(in crate::pretool) fn workspace_slugs(cwd: Option<&str>) -> Vec<String> {
     let Some(cwd) = cwd.map(str::trim).filter(|cwd| !cwd.is_empty()) else {
         return Vec::new();
     };

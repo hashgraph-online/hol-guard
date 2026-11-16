@@ -12,13 +12,13 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.cli import commands as guard_commands
 from codex_plugin_scanner.guard.cli import connect_flow
 from codex_plugin_scanner.guard.cli.commands import run_guard_command
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore
 
 

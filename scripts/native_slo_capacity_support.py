@@ -129,9 +129,9 @@ def _reconcile_wave_routes(
 
 
 def _hook_capacity_view(session: AdapterSession) -> dict[str, int]:
-    """Report the in-process hook scheduler's aggregate capacity as target/workers/ready/busy."""
+    """Report the daemon's hook scheduler's aggregate capacity as target/workers/ready/busy."""
 
-    stats = session.daemon._server.runtime_hook_scheduler.stats()
+    stats = session.daemon.hook_capacity()
     limit = stats["active_limit"]
     active = stats["active"]
     return {"target": limit, "workers": limit, "ready": max(0, limit - active), "busy": active}

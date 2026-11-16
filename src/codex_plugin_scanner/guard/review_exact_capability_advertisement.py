@@ -49,7 +49,7 @@ def exact_review_capability_advertisement(
         return None
     advertisement: dict[str, object] = {
         "actionDigest": claim["actionEnvelopeHash"],
-        "capabilityId": _capability_digest(capability),
+        "capabilityId": _capability_digest(capability, store),
         "deviceId": oauth.device_id,
         "expiresAt": capability["expiresAt"],
         "grantId": oauth.grant_id,

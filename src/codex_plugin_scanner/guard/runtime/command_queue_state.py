@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import urllib.error
 from collections.abc import Callable
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -39,6 +41,53 @@ COMMAND_QUEUE_ENABLED_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ENABLED"
 _LOGGER = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class CommandQueueLane:
+    """Which queue state a worker owns and which jobs it may lease.
+
+    The daemon's main worker uses the defaults: the shared state key, every
+    ready operation and the configured long-poll wait. A Review drain worker
+    keeps its own state key, so a result it could not upload is retried by
+    that worker instead of being overwritten by another, and leases exact
+    Review jobs without waiting.
+    """
+
+    state_key: str = COMMAND_QUEUE_STATE_KEY
+    operations: tuple[str, ...] | None = None
+    wait_ms: int | None = None
+
+    @property
+    def is_drain(self) -> bool:
+        """Whether this lane is a Review drain worker rather than the main worker."""
+
+        return self.state_key != COMMAND_QUEUE_STATE_KEY
+
+    def lease_scope(self, operations: tuple[str, ...], wait_ms: int) -> tuple[tuple[str, ...], int] | None:
+        """Narrow a lease of ``operations`` to this lane, or None when it may lease none."""
+
+        if self.operations is not None:
+            operations = tuple(operation for operation in self.operations if operation in operations)
+            if not operations:
+                return None
+        return operations, wait_ms if self.wait_ms is None else self.wait_ms
+
+
+_MAIN_LANE = CommandQueueLane()
+_CURRENT_LANE: ContextVar[CommandQueueLane] = ContextVar("guard_command_queue_lane", default=_MAIN_LANE)
+
+
+def current_command_queue_lane() -> CommandQueueLane:
+    """The lane bound to the calling thread's context; the main lane by default."""
+
+    return _CURRENT_LANE.get()
+
+
+def enter_command_queue_lane(lane: CommandQueueLane) -> None:
+    """Bind ``lane`` to the calling thread's context for the rest of its run."""
+
+    _CURRENT_LANE.set(lane)
+
+
 def command_queue_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -69,12 +118,12 @@ def command_queue_enabled(
 
 
 def load_command_queue_state(store: GuardStore) -> dict[str, object]:
-    payload = store.get_sync_payload(COMMAND_QUEUE_STATE_KEY)
+    payload = store.get_sync_payload(current_command_queue_lane().state_key)
     return dict(payload) if isinstance(payload, dict) else {}
 
 
 def save_command_queue_state(store: GuardStore, payload: dict[str, object]) -> None:
-    store.set_sync_payload(COMMAND_QUEUE_STATE_KEY, payload, command_queue_now())
+    store.set_sync_payload(current_command_queue_lane().state_key, payload, command_queue_now())
 
 
 def record_exact_route_failure(state: dict[str, object], error: urllib.error.HTTPError) -> None:
@@ -90,6 +139,44 @@ def record_exact_route_failure(state: dict[str, object], error: urllib.error.HTT
 def clear_exact_route_failure(state: dict[str, object]) -> None:
     state.pop("exact_review_route_error", None)
     state.pop("exact_review_route_error_at", None)
+
+
+EXACT_LEASE_BATCH_LIMIT_KEY = "exact_lease_batch_limit"
+
+
+def exact_lease_batch_limit(state: dict[str, object]) -> int:
+    """How many exact Review jobs Guard Cloud last said one lease may return."""
+
+    value = state.get(EXACT_LEASE_BATCH_LIMIT_KEY)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return 1
+    return value
+
+
+def lane_exact_lease_batch_limit(store: GuardStore, state: dict[str, object]) -> int:
+    """The lease batch limit for this lane's state.
+
+    A drain lane that has not leased a batch of its own yet uses the limit the
+    main worker recorded, so its first batch is not cut to one job.
+    """
+
+    if EXACT_LEASE_BATCH_LIMIT_KEY in state or not current_command_queue_lane().is_drain:
+        return exact_lease_batch_limit(state)
+    main = store.get_sync_payload(COMMAND_QUEUE_STATE_KEY)
+    return exact_lease_batch_limit(main if isinstance(main, dict) else {})
+
+
+def record_exact_lease_batch_limit(store: GuardStore, state: dict[str, object], limit: int) -> None:
+    """Remember Guard Cloud's lease batch limit, saving at once when it changes.
+
+    A limit that drops back to one is saved even when the poll then fails, so a
+    Guard Cloud that stopped accepting batches is never asked for one again.
+    """
+
+    if exact_lease_batch_limit(state) == limit and EXACT_LEASE_BATCH_LIMIT_KEY in state:
+        return
+    state[EXACT_LEASE_BATCH_LIMIT_KEY] = limit
+    save_command_queue_state(store, state)
 
 
 def command_queue_status(
@@ -121,6 +208,22 @@ def command_queue_status(
     }
 
 
+def command_queue_brief_status(store: GuardStore) -> dict[str, object]:
+    """The lane's queue state alone, for the daemon's own loops between jobs.
+
+    The full status also reports capability, Cloud Review and grant details.
+    Building it costs a native round trip per job, and the loops read none of it.
+    """
+
+    state = load_command_queue_state(store)
+    return {
+        "state": state.get("state", "idle"),
+        "last_error": state.get("last_error"),
+        "last_poll_was_empty": bool(state.get("last_poll_was_empty")),
+        "pending_result": state.get("pending_result"),
+    }
+
+
 def repair_command_queue_state(store: GuardStore) -> dict[str, object]:
     state = load_command_queue_state(store)
     repaired: list[str] = []
@@ -148,6 +251,7 @@ def command_queue_lease_payload(
     *,
     operations: tuple[str, ...] | None = None,
     wait_ms: int | None = None,
+    max_jobs: int = 1,
     operation_resolver: Callable[[GuardStore], tuple[str, ...]] = command_queue_operations,
 ) -> dict[str, object]:
     machine_id, workspace_id = command_queue_oauth_target(store)
@@ -168,7 +272,8 @@ def command_queue_lease_payload(
         "deviceId": machine_id,
         "daemonVersion": __version__,
         "capabilities": capabilities,
-        "maxJobs": 1,
+        # Only the exact Review route leases more than one job at a time.
+        "maxJobs": max_jobs if exact_only else 1,
         "waitMs": command_queue_lease_wait_ms() if wait_ms is None else wait_ms,
     }
     if exact_only:
@@ -184,13 +289,17 @@ __all__ = [
     "COMMAND_QUEUE_ENABLED_ENV",
     "COMMAND_QUEUE_LEASE_WAIT_MS_ENV",
     "COMMAND_QUEUE_STATE_KEY",
+    "CommandQueueLane",
     "clear_exact_route_failure",
+    "command_queue_brief_status",
     "command_queue_enabled",
     "command_queue_lease_payload",
     "command_queue_now",
     "command_queue_operations",
     "command_queue_status",
+    "current_command_queue_lane",
     "default_command_context",
+    "enter_command_queue_lane",
     "load_command_queue_state",
     "record_exact_route_failure",
     "repair_command_queue_state",

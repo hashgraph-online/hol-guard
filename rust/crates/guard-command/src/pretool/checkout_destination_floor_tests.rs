@@ -223,3 +223,44 @@ fn without_a_cwd_a_checkout_cannot_be_located() {
         );
     }
 }
+
+/// A repository that points `core.hooksPath` at a directory inside itself —
+/// what husky, lefthook and pre-commit all configure — must still be able to
+/// start an ordinary checkout. A directory that contains the configured hooks
+/// directory is protected, so screening the working directory of every
+/// checkout subcommand made such a repository its own floor, and no extension
+/// permission could settle the worktree it created.
+#[test]
+fn a_repository_that_keeps_its_hooks_inside_itself_still_starts_ordinary_checkouts() {
+    let layout = layout("relative-hooks");
+    std::fs::create_dir_all(format!("{}/.husky", layout.workspace)).unwrap();
+    std::fs::write(
+        format!("{}/.git/config", layout.workspace),
+        "[core]\n\tbare = false\n\thooksPath = .husky\n",
+    )
+    .unwrap();
+    for command in [
+        "git worktree add ../sibling -b br origin/main",
+        "git fetch origin --quiet && git worktree add -b br ../sibling origin/main",
+        "git clone https://github.com/example-org/x.git ../x",
+        "git submodule add https://github.com/example-org/x.git vendor/x",
+    ] {
+        assert!(
+            !protected_in(&layout, &layout.workspace, command),
+            "{command}"
+        );
+    }
+    // The hooks directory itself, and the locations Guard always protects,
+    // stay a floor for the same repository.
+    for command in [
+        "git worktree add .husky/wt origin/main",
+        "git worktree add HOME/.claude/agents origin/main",
+        "git init .husky/x",
+        "cd HOME/.claude && git init",
+    ] {
+        assert!(
+            protected_in(&layout, &layout.workspace, command),
+            "{command}"
+        );
+    }
+}

@@ -96,6 +96,123 @@ pub(super) fn input_heredoc(text: &str) -> bool {
     heredoc.quoted || lines.iter().all(|body| !body.contains(['$', '`', '\\']))
 }
 
+/// The text with each `$(cat <<'EOF' … EOF)` read as the `$(cat)` it is.
+///
+/// `git commit -m "$(cat <<'EOF' … EOF)"` is how agents write a multi-line
+/// commit message: `cat` prints the body and the output becomes one argument.
+/// A quoted delimiter keeps the body from expanding, and an unquoted one
+/// leaves a body with no `$`, backtick or backslash as written, so every line
+/// under it is data on `cat`'s standard input and runs nothing. Dropping the body
+/// leaves the substitution this reader already bounds; without it the `<<`
+/// alone sent the commit to an evaluation failure with no approval to give.
+///
+/// Only that exact shape folds: `cat` alone in the substitution, a delimiter
+/// written plainly, nothing after it on the line, and the
+/// substitution closing right under the delimiter line. The `$(` must be read
+/// by the shell as a substitution, outside single quotes, an escape or a
+/// comment, because a body the shell reads as command lines must never be
+/// dropped. Text with no `<<` comes back unchanged, and any other heredoc
+/// stays in place for the check that refuses it.
+pub(super) fn fold_printed_heredocs(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("<<") {
+        let (before, operator) = rest.split_at(start);
+        let opened = before
+            .trim_end()
+            .strip_suffix("cat")
+            .map(str::trim_end)
+            .and_then(|head| head.strip_suffix("$("));
+        let Some(head) = opened else {
+            break;
+        };
+        if !reads_as_substitution(&format!("{out}{head}")) {
+            break;
+        }
+        let after = &operator[2..];
+        let (after, strip_tabs) = match after.strip_prefix('-') {
+            Some(after) => (after, true),
+            None => (after, false),
+        };
+        let after = after.trim_start_matches([' ', '\t']);
+        let Some((delimiter, quoted, trailing)) = delimiter_word(after) else {
+            break;
+        };
+        let Some((trailing, mut body)) = trailing.split_once('\n') else {
+            break;
+        };
+        if !trailing.trim().is_empty()
+            || !delimiter
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        {
+            break;
+        }
+        let closed = loop {
+            let (line, next) = match body.split_once('\n') {
+                Some((line, next)) => (line, Some(next)),
+                None => (body, None),
+            };
+            let line = if strip_tabs {
+                line.trim_start_matches('\t')
+            } else {
+                line
+            };
+            if line == delimiter {
+                break next;
+            }
+            // An unquoted delimiter lets the body expand, so it folds only
+            // when the body holds nothing that could.
+            if !quoted && line.contains(['$', '`', '\\']) {
+                break None;
+            }
+            match next {
+                Some(next) => body = next,
+                None => break None,
+            }
+        };
+        let Some(remaining) = closed.filter(|remaining| remaining.trim_start().starts_with(')'))
+        else {
+            break;
+        };
+        out.push_str(before);
+        rest = remaining.trim_start();
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Whether a `$(` written after this text opens a substitution: no single
+/// quote is open, no backslash escapes it, and no comment has started. An
+/// ANSI-C `$'…'` string ends at a different quote than a plain one (`\'`
+/// does not close it), so any `$'` outside double quotes refuses.
+fn reads_as_substitution(prefix: &str) -> bool {
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    let mut previous = ' ';
+    for character in prefix.chars() {
+        if single {
+            single = character != '\'';
+        } else if escaped {
+            escaped = false;
+        } else {
+            match character {
+                '\\' => escaped = true,
+                '\'' if !double && previous == '$' => return false,
+                '\'' if !double => single = true,
+                '"' => double = !double,
+                '#' if !double
+                    && (previous.is_whitespace() || matches!(previous, ';' | '&' | '|' | '(')) =>
+                {
+                    return false;
+                }
+                _ => {}
+            }
+        }
+        previous = character;
+    }
+    !single && !escaped
+}
+
 #[cfg(test)]
 #[path = "native_command_unmodeled_heredoc_tests.rs"]
 mod tests;

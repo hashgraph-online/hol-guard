@@ -211,6 +211,7 @@ def build_runtime_launch_identity(
     cwd: Path | None = None,
     home_dir: Path | None = None,
     launch_env: Mapping[str, str] | None = None,
+    package_manager_binding: bool = False,
 ) -> dict[str, object]:
     """Content-bind an executable and any local code-bearing entrypoint.
 
@@ -233,6 +234,7 @@ def build_runtime_launch_identity(
         cwd=cwd,
         home_dir=home_dir,
         launch_env=launch_env,
+        package_manager_binding=package_manager_binding,
     )
 
 

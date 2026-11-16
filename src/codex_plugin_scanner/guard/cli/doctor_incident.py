@@ -16,8 +16,7 @@ from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, _hook_manifest_spec
 from ..codex_config import tomllib
 from ..codex_hook_manifest import verify_live_hook_manifest
-from ..daemon.discovery import load_authenticated_daemon_state
-from ..daemon.lifecycle_journal import load_bounded_incident_lifecycle_events
+from ..native_daemon_manage import load_authenticated_daemon_state, load_bounded_incident_lifecycle_events
 
 _MAX_CONFIG_BYTES = 1024 * 1024
 _MAX_REPORT_BYTES = 8192

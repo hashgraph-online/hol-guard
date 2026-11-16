@@ -6,6 +6,7 @@ import {
   HiMiniInformationCircle,
   HiMiniShieldCheck,
 } from "react-icons/hi2";
+import { resolveAgentStatedIntent } from "./agent-stated-intent";
 import { ActionButton, GuardHero, ProofStrip, SectionLabel } from "./approval-center-primitives";
 import {
   buildCodexResumeUx,
@@ -200,6 +201,7 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
 export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
+  const agentIntent = resolveAgentStatedIntent(item);
   const watchOnlyObservation = isWatchOnlyObservation(item);
   const actionDescription = watchOnlyObservation ? "observed action" : "stopped action";
   const actionLabel = watchOnlyObservation ? "Would have stopped" : action.label;
@@ -236,6 +238,19 @@ export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
               {workingDirectory}
             </code>
           </div>
+        )}
+        {agentIntent !== null && (
+          <figure className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2">
+            <figcaption className="text-xs font-medium text-brand-dark/70">
+              What the agent said it is doing
+            </figcaption>
+            <blockquote className="mt-1 break-words text-sm text-brand-dark">
+              “{agentIntent.text}”
+            </blockquote>
+            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+              In the agent's own words. Guard has not checked this, so decide from the command above.
+            </p>
+          </figure>
         )}
       </div>
     </div>

@@ -144,8 +144,12 @@ fn contain(
         let profile = text(response, "required_execution_profile");
         match sandbox::launching_turn(&payload.value) {
             sandbox::Turn::Unknown => {}
-            turn if turn.confines(profile) => return sandbox::checked(original, &payload, profile),
-            _ => return Contained::Unchanged,
+            turn => {
+                return match turn.check_profile(profile) {
+                    Some(check) => sandbox::checked(original, &payload, Some(check)),
+                    None => Contained::Unchanged,
+                }
+            }
         }
     }
     let target = Target {

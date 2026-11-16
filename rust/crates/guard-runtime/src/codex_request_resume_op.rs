@@ -89,12 +89,12 @@ fn evaluate(request: &CodexRequestResumeRequestV1) -> Result<Outcome, &'static s
     let path =
         crate::local_store_read::require_store_path(&request.store_path, &request.guard_home)
             .map_err(|_| "native_codex_request_resume_path_invalid")?;
-    let connection = Connection::open_with_flags(
+    let mut connection = Connection::open_with_flags(
         &path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(|_| "native_codex_request_resume_store_unavailable")?;
-    crate::codex_request_resume_busy::arm(&connection, request.busy_timeout_ms)
+    crate::codex_request_resume_busy::arm(&mut connection, request.busy_timeout_ms)
         .map_err(|_| "native_codex_request_resume_store_unavailable")?;
     let call = Call {
         request_id: &request.approval_request_id,
