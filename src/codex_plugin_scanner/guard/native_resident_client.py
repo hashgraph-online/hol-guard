@@ -242,6 +242,11 @@ class _PersistentNativeClientPool:
         """
 
         while not self._closed:
+            # Recheck after every condition wait, before consuming a parked
+            # lease: a closing owner must never retire the resident's last stream.
+            if native_process_stop_requested():
+                _LAST_FAILURE_CODE.set("native_client_timed_out")
+                return None
             for client in reversed(self._idle):
                 if _client_alive(client):
                     self._idle.remove(client)
