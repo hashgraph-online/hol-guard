@@ -58,6 +58,11 @@ fn action(fixture: &Fixture, harness: &str, command: &str) -> String {
     .minimum_action
 }
 
+// Quote the complete path for POSIX shells, including embedded apostrophes.
+fn shell_quote_path(path: &Path) -> String {
+    format!("'{}'", path.to_str().unwrap().replace('\'', "'\\\"'\\\"'"))
+}
+
 #[test]
 fn a_project_file_may_be_the_reference() {
     let fixture = fixture("allowed");
@@ -67,8 +72,8 @@ fn a_project_file_may_be_the_reference() {
             "find . -maxdepth 3 -iname '*bing*' -newer README.md".to_owned(),
             "find src -name '*.py' -newer docs/PRD.md -type f".to_owned(),
             format!(
-                "find . -maxdepth 3 -iname '*bing*' -newer '{}'",
-                prd.display()
+                "find . -maxdepth 3 -iname '*bing*' -newer {}",
+                shell_quote_path(&prd)
             ),
             "find reports -newer ./README.md 2>/dev/null | head -10".to_owned(),
         ] {
@@ -78,6 +83,23 @@ fn a_project_file_may_be_the_reference() {
                 "{harness}: {command}"
             );
         }
+    }
+}
+
+#[test]
+fn a_reference_path_with_spaces_and_apostrophe_is_one_operand() {
+    let fixture = fixture("allowed with space and 'apostrophe");
+    let prd = fixture.workspace.join("docs/PRD.md");
+    let command = format!(
+        "find . -maxdepth 3 -iname '*bing*' -newer {}",
+        shell_quote_path(&prd)
+    );
+    for harness in ["claude-code", "codex", "omp"] {
+        assert_eq!(
+            action(&fixture, harness, &command),
+            "allow",
+            "{harness}: {command}"
+        );
     }
 }
 
