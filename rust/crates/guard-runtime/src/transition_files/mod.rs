@@ -29,6 +29,7 @@ mod publication_commit;
 mod publication_files;
 mod publication_generation;
 mod publication_inverse_plan;
+mod publication_inverse_publish;
 mod publication_io;
 mod publication_observer;
 mod publication_receipt;

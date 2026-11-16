@@ -273,6 +273,8 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_inverse_prior" => super::publication_inverse_plan::prior_op(call),
         "publication_inverse_plan" => super::publication_inverse_plan::plan_op(call),
         "publication_inverse_check" => super::publication_inverse_plan::check_op(call),
+        "publication_inverse_record" => super::publication_inverse_publish::record_op(call),
+        "publication_inverse_restore" => super::publication_inverse_publish::restore_op(call),
         "publication_request_create" => super::publication_request::create_op(call),
         "publication_request_read" => super::publication_request::read_op(call),
         "publication_repair_claim" => super::repair_claims::claim(call),
