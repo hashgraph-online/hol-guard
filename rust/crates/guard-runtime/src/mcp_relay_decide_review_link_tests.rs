@@ -5,6 +5,7 @@ use super::*;
 const REQUEST_ID: &str = "b6d4d55da3984b94b4b2930f5e99f8fa";
 const DAEMON_AUTH: &str = "mcp-review-link-daemon-auth-for-tests";
 const NOW: i64 = 1_800_000_000_000_000;
+const RELAY: &str = crate::native_review_link::RELAY_SIGNED_LINK;
 const STOPPED: &str = "HOL Guard stopped tool call SEARCH_TOOLS from composio";
 
 fn review_url() -> String {
@@ -36,7 +37,7 @@ fn the_block_names_the_signed_link_never_the_bare_page() {
     assert_eq!(
         review.message,
         format!(
-            "{STOPPED} (request {REQUEST_ID}). {OPEN_GUARD} {}, then retry the same action.",
+            "{STOPPED} (request {REQUEST_ID}). {OPEN_GUARD} {}, then retry the same action. {RELAY}",
             signed_url()
         )
     );
@@ -119,7 +120,7 @@ fn a_desktop_user_gets_the_desktop_link_first_and_the_signed_link_after() {
         review.message,
         format!(
             "{STOPPED} (request {REQUEST_ID}). {OPEN_GUARD} hol-guard-desktop://requests/{REQUEST_ID} \
-             (HOL Guard Desktop), or in a browser: {}, then retry the same action.",
+             (HOL Guard Desktop), or in a browser: {}, then retry the same action. {RELAY}",
             signed_url()
         )
     );
