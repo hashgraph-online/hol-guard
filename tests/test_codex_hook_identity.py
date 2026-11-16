@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.consumer.service import (
     diff_artifact,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from tests import codex_plan_segments as segments
 from tests import codex_publication_steps
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.transition_fault_support import interrupt_publication_at
@@ -292,7 +293,7 @@ def test_migration_deduplicates_only_canonical_equivalents_and_surfaces_conflict
     equivalent: dict[str, object] = {"hooks": {"PreToolUse": [_group("python3   hook.py", timeout=12.0)]}}
     hooks_path.write_text(json.dumps(equivalent), encoding="utf-8")
 
-    prepared = codex_adapter.prepare_codex_hook_migration(context, config_path=config_path, hooks_path=hooks_path)
+    prepared = segments.prepare_codex_hook_migration(context, config_path=config_path, hooks_path=hooks_path)
 
     config_change = prepared.files[0]
     assert config_change.after == config_change.before
@@ -305,7 +306,7 @@ def test_migration_deduplicates_only_canonical_equivalents_and_surfaces_conflict
     conflicting: dict[str, object] = {"hooks": {"PreToolUse": [_group("python3 hook.py", timeout=13)]}}
     hooks_path.write_text(json.dumps(conflicting), encoding="utf-8")
     with pytest.raises(RuntimeError, match="codex_hook_migration_conflict"):
-        codex_adapter.prepare_codex_hook_migration(context, config_path=config_path, hooks_path=hooks_path)
+        segments.prepare_codex_hook_migration(context, config_path=config_path, hooks_path=hooks_path)
 
 
 def test_readback_failure_preserves_original_toml_and_legacy_json(

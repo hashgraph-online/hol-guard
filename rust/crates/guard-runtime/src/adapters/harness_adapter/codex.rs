@@ -86,6 +86,7 @@ pub(super) fn dispatch(
         "uninstall_restore" => codex_uninstall::uninstall_restore(fields),
         "uninstall_config" => codex_uninstall_config::uninstall_config(ctx, fields),
         "uninstall_plan" => codex_uninstall_plan::uninstall_plan(ctx, fields),
+        "uninstall" => super::codex_uninstall_op::uninstall(ctx, fields),
         "live_hook_state" => codex_live_state::live_hook_state(ctx, fields),
         "runtime_hooks_verified" => codex_live_read::runtime_hooks_verified(ctx, fields),
         "publish_hooks" => codex_publish::publish_hooks(ctx, fields),

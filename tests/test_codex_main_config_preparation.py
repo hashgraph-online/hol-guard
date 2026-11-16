@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.adapters import codex as adapter
 from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer
 from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionError
+from tests import codex_plan_segments as segments
 
 from .test_codex_publication_preparation import _context, _tree
 from .test_runtime_transition import begin, transition  # noqa: F401 -- shared pytest fixture
@@ -20,7 +21,7 @@ def _backup(context, *, original, migrated_payload=None):
         if migrated_payload is not None
         else {"original": adapter._b64(original)}
     )
-    return adapter._one_planned_file(adapter._codex("main_backup", context, **content))
+    return segments._one_planned_file(adapter._codex("main_backup", context, **content))
 
 
 def _publish(change):
@@ -95,7 +96,7 @@ def test_mcp_renderer_refreshes_proxy_preserves_input_and_workspace_precedence(t
     workspace = {"mcp_servers": {"shadow": {"command": "workspace"}, "project": {"command": "node"}}}
     originals = deepcopy((payload, workspace))
     before = _tree(tmp_path)
-    rendered, migrated = adapter.render_codex_managed_mcp(
+    rendered, migrated = segments.render_codex_managed_mcp(
         context,
         payload,
         workspace_payload=workspace,

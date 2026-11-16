@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard import codex_hook_self_binding
 from codex_plugin_scanner.guard.adapters import codex as adapter
 from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests import codex_plan_segments as segments
 
 from .test_codex_publication_preparation import _context, _tree
 from .test_runtime_transition import begin, transition  # noqa: F401 -- imported pytest fixture
@@ -61,7 +62,7 @@ def test_migration_prunes_unlaunchable_legacy_guard_handler(tmp_path, monkeypatc
             }
         )
     )
-    prepared = adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+    prepared = segments.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
     changes = {change.path: change for change in prepared.files}
     migrated = parse_toml_object(changes[config].after, path=config, label="fixture")
     assert migrated["hooks"] == {
@@ -104,7 +105,7 @@ def test_migration_preserves_launchable_legacy_handlers(tmp_path, monkeypatch, h
             }
         )
     )
-    prepared = adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+    prepared = segments.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
     changes = {change.path: change for change in prepared.files}
     migrated = parse_toml_object(changes[config].after, path=config, label="fixture")
     assert migrated["hooks"]["PreToolUse"][-1] == legacy_group
@@ -174,14 +175,14 @@ def test_migration_rejects_malformed_legacy_handlers_in_inventory(tmp_path, monk
     hooks.write_text(json.dumps({"hooks": {"PreToolUse": [{"hooks": [handler]}]}}))
     before = _tree(tmp_path)
     with pytest.raises(RuntimeError, match="codex_hook_inventory_malformed_handler"):
-        adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+        segments.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
     assert _tree(tmp_path) == before
 
 
 def test_migration_capture_never_publishes_or_creates_backup(tmp_path, monkeypatch):
     context, config, hooks = _sources(tmp_path, monkeypatch)
     before = _tree(tmp_path)
-    prepared = adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+    prepared = segments.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
     assert _tree(tmp_path) == before
     changes = {change.path: change for change in prepared.files}
     migrated = parse_toml_object(changes[config].after, path=config, label="fixture")
@@ -198,13 +199,13 @@ def test_migration_capture_never_publishes_or_creates_backup(tmp_path, monkeypat
 
 def test_existing_migration_backup_remains_unchanged(tmp_path, monkeypatch):
     context, config, hooks = _sources(tmp_path, monkeypatch)
-    first = adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+    first = segments.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
     backup = next(change for change in first.files if change.path not in {config, hooks})
     backup.path.parent.mkdir(parents=True)
     backup.path.write_bytes(b"existing backup generation")
     backup.path.chmod(0o600)
     before = _tree(tmp_path)
-    second = adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+    second = segments.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
     assert _tree(tmp_path) == before
     retained = next(change for change in second.files if change.path == backup.path)
     assert retained.before == retained.after == b"existing backup generation"
@@ -216,7 +217,7 @@ def test_invalid_json_cannot_create_migration_files(tmp_path, monkeypatch, inval
     hooks.write_bytes(invalid)
     before = _tree(tmp_path)
     with pytest.raises(RuntimeError, match="codex_hook_inventory_source_"):
-        adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+        segments.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
     assert _tree(tmp_path) == before
 
 
@@ -225,7 +226,7 @@ def test_invalid_toml_cannot_retire_json_source(tmp_path, monkeypatch):
     config.write_bytes(b"\xff")
     before = _tree(tmp_path)
     with pytest.raises(RuntimeError, match="codex_hook_inventory_source_malformed"):
-        adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+        segments.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
     assert _tree(tmp_path) == before
 
 
@@ -239,9 +240,9 @@ def test_foreign_json_generation_during_render_is_preserved(tmp_path, monkeypatc
             hooks.write_text('{"foreign":"generation"}')
         return result
 
-    monkeypatch.setattr(adapter, "_codex", foreign_write)
+    monkeypatch.setattr(segments, "_codex", foreign_write)
     with pytest.raises(TransitionError, match="generation_changed"):
-        adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+        segments.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
     assert json.loads(hooks.read_text()) == {"foreign": "generation"}
     assert config.read_text() == 'model = "fixture"\n'
     assert not context.guard_home.exists()
@@ -256,13 +257,13 @@ def test_signed_migration_inverse_restores_sources_and_backup(
 ):
     runtime, plan, _bindings, _pointer = transition
     context, config, hooks = _sources(tmp_path, monkeypatch)
-    prepared = adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+    prepared = segments.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
     if existing_backup:
         backup = next(change for change in prepared.files if change.path not in {config, hooks})
         backup.path.parent.mkdir(parents=True)
         backup.path.write_bytes(b"prior backup generation")
         backup.path.chmod(0o600)
-        prepared = adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+        prepared = segments.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
     plan = replace(plan, files=(*plan.files, *prepared.files))
     begin(runtime, plan)
     runtime.publish(plan.operation_id, "AuthorizedForExactTransition")

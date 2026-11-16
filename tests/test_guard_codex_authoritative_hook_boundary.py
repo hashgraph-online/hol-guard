@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import codex_plan_segments as segments
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.conftest import guard_commands_module
 
@@ -112,7 +113,7 @@ def test_legacy_shell_cleanup_preserves_crlf_non_utf8_and_unmatched_markers(tmp_
     )
     (context.home_dir / ".bashrc").write_bytes(unterminated)
 
-    planned = {change.path.name: change.after for change in codex_adapter.prepare_codex_shell_cleanup(context)}
+    planned = {change.path.name: change.after for change in segments.prepare_codex_shell_cleanup(context)}
 
     assert planned[".zshenv"] == b"\xffKEEP\r\nAFTER\xfe\r\n"
     assert planned[".bashrc"] == unterminated

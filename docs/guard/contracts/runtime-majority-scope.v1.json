@@ -1086,10 +1086,6 @@
           "_install_manifest",
           "_plan_report",
           "_located",
-          "prepare_codex_hook_migration",
-          "render_codex_managed_mcp",
-          "prepare_codex_alternate_cleanup",
-          "prepare_codex_shell_cleanup",
           "CodexHarnessAdapter._all_hook_paths",
           "CodexHarnessAdapter.prepare_install",
           "CodexHarnessAdapter._prepare_plan",
@@ -1099,7 +1095,6 @@
           "CodexHarnessAdapter._install_owned",
           "CodexHarnessAdapter.uninstall",
           "CodexHarnessAdapter._uninstall_owned",
-          "CodexHarnessAdapter._prepare_uninstall",
           "CodexHarnessAdapter._target_config_path",
           "CodexHarnessAdapter._backup_path",
           "CodexHarnessAdapter._proxy_server_entry",
@@ -1109,7 +1104,7 @@
         ],
         "entry_points": [],
         "reason": "Codex config.toml and hooks.json install, uninstall, migration, alternate-config cleanup and shell-guard cleanup, plus the helpers only they use; the shell-guard block ranges and the Guard proxy recognition they act on run in the native codex_install_plan runner-authority kind.",
-        "evidence": "install, prepare_install, uninstall and prepare_codex_hook_migration have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. Launch, detect, diagnostics and the runtime hook-state readers stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. Launch, detect, diagnostics and the runtime hook-state readers stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "runtime-policy-admin-payloads",

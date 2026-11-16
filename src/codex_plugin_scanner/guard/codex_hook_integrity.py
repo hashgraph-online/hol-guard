@@ -101,17 +101,22 @@ def _hook_key_answer(op: _KeyOp, guard_home: Path) -> dict[str, object]:
     try:
         return hook_key_answer(op, _home_text(guard_home))
     except AuthorityRecordRefusedError as exc:
-        if exc.reason in _KEY_UNAVAILABLE_REASONS:
-            raise CodexHookIntegrityError(
-                "codex_hook_manifest_verification_unavailable",
-                "Guard's native runtime did not answer for the Codex hook key; run `hol-guard repair`.",
-            ) from exc
-        message = (
-            _KEY_MISSING_MESSAGE
-            if exc.reason == "codex_hook_manifest_secret_missing"
-            else "The private Codex hook authentication key is not usable; repair the Codex installation."
+        raise hook_key_refusal(exc.reason) from exc
+
+
+def hook_key_refusal(reason: str) -> CodexHookIntegrityError:
+    """The error a refused hook key operation raises."""
+    if reason in _KEY_UNAVAILABLE_REASONS:
+        return CodexHookIntegrityError(
+            "codex_hook_manifest_verification_unavailable",
+            "Guard's native runtime did not answer for the Codex hook key; run `hol-guard repair`.",
         )
-        raise CodexHookIntegrityError(exc.reason, message) from exc
+    message = (
+        _KEY_MISSING_MESSAGE
+        if reason == "codex_hook_manifest_secret_missing"
+        else "The private Codex hook authentication key is not usable; repair the Codex installation."
+    )
+    return CodexHookIntegrityError(reason, message)
 
 
 def _hook_key(op: _KeyOp, guard_home: Path) -> HookSecretMaterial:

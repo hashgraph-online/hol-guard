@@ -31,7 +31,7 @@ const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495
 /// The journal records of an answer; file-write markers index the files of
 /// the op that wrote them, which the caller does not see, so only the
 /// mutation records travel on.
-fn mutations(answer: &Value, events: &mut Vec<Value>) {
+pub(super) fn mutations(answer: &Value, events: &mut Vec<Value>) {
     if let Some(list) = answer.get("events").and_then(Value::as_array) {
         events.extend(
             list.iter()
@@ -42,7 +42,7 @@ fn mutations(answer: &Value, events: &mut Vec<Value>) {
 }
 
 /// One transition op on the caller's home: its value, or the fault it sent.
-fn transition(
+pub(super) fn transition(
     fields: &Map<String, Value>,
     mut request: Map<String, Value>,
     events: &mut Vec<Value>,
@@ -65,7 +65,7 @@ fn transition(
     Ok(answer.get("value").cloned().unwrap_or(Value::Null))
 }
 
-fn text<'a>(fields: &'a Map<String, Value>, key: &str) -> Step<&'a str> {
+pub(super) fn text<'a>(fields: &'a Map<String, Value>, key: &str) -> Step<&'a str> {
     fields
         .get(key)
         .and_then(Value::as_str)
@@ -106,11 +106,17 @@ fn withdraw(fields: &Map<String, Value>, publication: &[Value], events: &mut Vec
     let Ok(home) = text(fields, "home") else {
         return false;
     };
-    let Some(answer) = codex_hook_key::answer("key_remove_if_unused", home) else {
-        return false;
-    };
-    if answer.get("error").is_some() {
-        return false;
+    remove_unused_key(home, events).is_ok()
+}
+
+/// `remove_hook_secret_if_unused`: the hook key goes once no manifest uses
+/// it, journaled as `record_codex_mutation` does; the refusal reason when the
+/// key cannot be read.
+pub(super) fn remove_unused_key(home: &str, events: &mut Vec<Value>) -> Result<(), Value> {
+    let answer = codex_hook_key::answer("key_remove_if_unused", home)
+        .ok_or_else(|| json!("codex_hook_manifest_secret_invalid"))?;
+    if let Some(reason) = answer.get("error") {
+        return Err(reason.clone());
     }
     if answer.get("removed") == Some(&json!(true)) {
         let path = codex_hook_key::key_path(std::path::Path::new(home));
@@ -123,10 +129,10 @@ fn withdraw(fields: &Map<String, Value>, publication: &[Value], events: &mut Vec
             "after_digest": null,
         }}));
     }
-    true
+    Ok(())
 }
 
-fn stopped(mut answer: Value, events: Vec<Value>) -> Step<Value> {
+pub(super) fn stopped(mut answer: Value, events: Vec<Value>) -> Step<Value> {
     answer["events"] = Value::Array(events);
     Ok(answer)
 }

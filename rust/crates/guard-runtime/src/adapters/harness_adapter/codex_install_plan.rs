@@ -108,7 +108,7 @@ fn files_of(answer: &Value) -> Planned<Vec<Value>> {
 
 /// A prepared change as `planned_files` builds its `TransitionFile`: the
 /// five recorded fields, a binding kind, and `no_follow` as planned.
-fn wire_file(change: &Value) -> Step<Value> {
+pub(super) fn wire_file(change: &Value) -> Step<Value> {
     let change = change.as_object().ok_or(Failure::Invalid)?;
     let mut file = Map::new();
     for key in ["path", "before", "after", "before_mode", "after_mode"] {

@@ -26,7 +26,7 @@ from ..aibom_detection import (
     extend_detection_with_workspace_aibom,
     native_adapter_detection_payload,
 )
-from ..codex_config import _restore_native, _Wire, dump_toml, read_toml_payload
+from ..codex_config import _Wire, dump_toml, read_toml_payload
 from ..codex_hook_command_line import short_path_facts
 from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
 from ..codex_hook_integrity import (
@@ -34,7 +34,6 @@ from ..codex_hook_integrity import (
     canonical_manifest_bytes,
     hook_authority_receipt_path,
     hook_manifest_path,
-    remove_hook_secret_if_unused,
 )
 from ..codex_hook_manifest import (
     CodexHookManifestSpec,
@@ -83,7 +82,7 @@ from .mcp_servers import (
     proxy_launcher_entry,
     skipped_stdio_server_names,
 )
-from .native_harness import NativeHarnessAdapter, ask, planned_files
+from .native_harness import NativeHarnessAdapter, ask
 from .native_hook_bridge import native_hook_bridge_executable
 
 if TYPE_CHECKING:
@@ -339,10 +338,6 @@ def _legacy_fields(context: HarnessContext, registration: _HookRegistration | No
     )
 
 
-def _one_planned_file(answer: dict[str, Any]) -> TransitionFile:
-    return planned_files({"files": [answer["file"]]})[0]
-
-
 def _b64(data: bytes | None) -> str | None:
     return None if data is None else base64.b64encode(data).decode("ascii")
 
@@ -365,14 +360,6 @@ def _check_sources(
 
 
 @dataclass(frozen=True, slots=True)
-class PreparedCodexHookMigration:
-    """Captured JSON migration segment; publication requires the complete install."""
-
-    config_payload: dict[str, object]
-    files: tuple[TransitionFile, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class _CodexInstallPlan:
     """A prepared install, with what publishing it as an ordinary install needs."""
 
@@ -381,40 +368,6 @@ class _CodexInstallPlan:
     backups: frozenset[Path]
     shim_manifest: Mapping[str, object]
     fields: dict[str, object]
-
-
-def prepare_codex_hook_migration(
-    context: HarnessContext,
-    *,
-    config_path: Path,
-    hooks_path: Path,
-    owned_bindings: Sequence[Mapping[str, object]] = (),
-    require_owners: bool = False,
-) -> PreparedCodexHookMigration:
-    """Fold one ``hooks.json`` into its ``config.toml``, as the native
-    ``hook_migration`` op plans it: the config rewrite, the retired JSON
-    source and a backup of the config it replaces."""
-    from ..runtime_transition import RuntimeTransition
-
-    request: dict[str, Any] = {
-        "config": str(config_path),
-        "hooks": str(hooks_path),
-        "owned": json.dumps(list(owned_bindings), separators=(",", ":")),
-        "require_owners": require_owners,
-        **_legacy_fields(context),
-        **install_fields(_runtime_guard_home(context), None),
-        **short_path_fields(),
-    }
-    answer = settle_short_paths(lambda: _codex("hook_migration", context, **request), request, "hook_migration")
-    tokens = answer.get("tokens")
-    if not isinstance(tokens, dict):
-        raise ValueError("Harness adapter answer is malformed")
-    config = _restore_native(json.loads(_reply_text(answer, "config")), tokens)
-    if not isinstance(config, dict):
-        raise ValueError("Harness adapter answer is malformed")
-    files = planned_files({"files": answer.get("files")})
-    RuntimeTransition._compare({"files": [change.payload() for change in files]}, "before")
-    return PreparedCodexHookMigration(config, tuple(files))
 
 
 def _relaunch(asked: Mapping[str, object]) -> dict[str, object]:
@@ -522,72 +475,6 @@ def _raise_publication_error(answer: Mapping[str, object]) -> None:
             add_note(f"rollback error: {rollback_error!r}")
         raise raised from failure
     raise failure
-
-
-def render_codex_managed_mcp(
-    context: HarnessContext,
-    payload: dict[str, object],
-    *,
-    managed_servers: tuple[ManagedMcpServer, ...],
-    workspace_payload: dict[str, object],
-) -> tuple[dict[str, object], tuple[str, ...]]:
-    """Render proxy refresh and workspace precedence from captured payloads."""
-    adapter = CodexHarnessAdapter()
-    entries = [(server, adapter._proxy_server_entry(context, server)) for server in managed_servers]
-    wire = _Wire(payload, workspace_payload, *(entry for _server, entry in entries))
-    fields: dict[str, object] = {
-        "payload": wire.text(payload),
-        "workspace_payload": None if context.workspace_dir is None else wire.text(workspace_payload),
-        "servers": [
-            {"name": server.name, "source_scope": server.source_scope, "entry": wire.text(entry)}
-            for server, entry in entries
-        ],
-    }
-    answer = _codex("managed_mcp", context, **fields)
-    if set(answer) == {"reply"}:
-        answer = _codex("managed_mcp", context, **fields, relaunch=_relaunch(answer["reply"]["relaunch"]))
-    rendered = wire.decode(_reply_text(answer, "rendered"))
-    return rendered, tuple(str(name) for name in answer["migrated"])
-
-
-def prepare_codex_alternate_cleanup(
-    context: HarnessContext,
-    *,
-    config_path: Path,
-    remove_hooks: bool = True,
-    managed_server_names: Sequence[str] = (),
-) -> TransitionFile:
-    """Capture one cleanup segment; this is not a complete Codex install plan."""
-    from ..runtime_transition import RuntimeTransition
-
-    request: dict[str, Any] = {
-        "config": str(config_path),
-        "remove_hooks": remove_hooks,
-        "managed_server_names": list(managed_server_names),
-        **_legacy_fields(context),
-        **install_fields(_runtime_guard_home(context), None),
-        **short_path_fields(),
-    }
-    answer = settle_short_paths(lambda: _codex("alternate_change", context, **request), request, "alternate_change")
-    change = _one_planned_file(answer)
-    RuntimeTransition._compare({"files": [change.payload()]}, "before")
-    return change
-
-
-def _payload_has_hooks_feature_enabled(config_payload: Mapping[str, object]) -> bool:
-    features = config_payload.get("features")
-    if not isinstance(features, Mapping):
-        return True
-    return features.get("hooks") is not False
-
-
-def prepare_codex_shell_cleanup(context: HarnessContext) -> tuple[TransitionFile, ...]:
-    """Capture all legacy shell removals without reading through symlinks or publishing."""
-    from ..runtime_transition import RuntimeTransition
-
-    files = tuple(planned_files(_codex("shell_cleanup", context)))
-    RuntimeTransition._compare({"files": [change.payload() for change in files]}, "before")
-    return files
 
 
 def live_hook_ask(op: str, context: HarnessContext) -> dict[str, Any]:
@@ -948,33 +835,12 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             return self._uninstall_owned(context)
 
     def _uninstall_owned(self, context: HarnessContext) -> dict[str, object]:
-        from ..codex_install_transaction import record_codex_mutation
-
-        prepared = self._prepare_uninstall(context)
-        config_path = self._hook_config_path(context)
-        operations = {
-            _located(hook_authority_receipt_path(context.guard_home, config_path)): "remove_authority_receipt",
-            _located(hook_manifest_path(context.guard_home, config_path)): "remove_manifest",
-        }
-
-        def audit(change: TransitionFile) -> None:
-            operation = operations.get(change.path)
-            if operation is not None:
-                record_codex_mutation(operation, change.path, change.before, None)
-
-        prepared.publish(context.guard_home, removals=True, on_write=audit)
-        remove_hook_secret_if_unused(context.guard_home)
-        return _install_manifest(
-            context,
-            "uninstall",
-            prepared.manifest,
-            hooks_path=str(self._hooks_path(context)),
-            backup_path=str(self._backup_path(context)),
-        )
-
-    def _prepare_uninstall(self, context: HarnessContext) -> PreparedHarnessInstall:
-        """Every file uninstall restores or deletes, captured before any of them changes."""
-        from ..runtime_transition import RuntimeTransition
+        """Uninstall in the runtime's ``uninstall`` op: every file it restores or
+        deletes is captured and compared before any of them changes, the
+        receipt and manifest removals are journaled as they are written, and
+        the hook key goes once no manifest uses it."""
+        from ..codex_hook_integrity import hook_key_refusal
+        from ..native_transition_files import _budget, _exception, _package_roots, _replay
 
         hook_config_path = self._hook_config_path(context)
         owned = _manifest_bindings(load_hook_manifest_baseline(_hook_manifest_spec(context)))
@@ -984,15 +850,26 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                 str(_located(hook_authority_receipt_path(context.guard_home, hook_config_path))),
                 str(_located(hook_manifest_path(context.guard_home, hook_config_path))),
             ],
+            "home": os.path.abspath(context.guard_home),
+            "package_roots": _package_roots(),
+            "budget": _budget(),
             **_legacy_fields(context),
             **install_fields(_runtime_guard_home(context), None),
             **short_path_fields(),
         }
-        answer = settle_short_paths(lambda: _codex("uninstall_plan", context, **request), request, "uninstall_plan")
-        files = tuple(planned_files(answer))
-        compared = cast(list[int], answer["compared"])
-        RuntimeTransition._compare({"files": [files[index].payload() for index in compared]}, "before")
-        return PreparedHarnessInstall(files, json.loads(str(answer["manifest"])))
+        answer = settle_short_paths(lambda: _codex("uninstall", context, **request), request, "uninstall")
+        _replay(answer.get("events"), None, None)
+        if "fault" in answer:
+            raise _exception(answer["fault"])
+        if "key_error" in answer:
+            raise hook_key_refusal(str(answer["key_error"]))
+        return _install_manifest(
+            context,
+            "uninstall",
+            json.loads(str(answer["manifest"])),
+            hooks_path=str(self._hooks_path(context)),
+            backup_path=str(self._backup_path(context)),
+        )
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         payload = super().diagnostics(context)

@@ -113,7 +113,8 @@ def _stepwise_publication():
     native_transition_files.publish_files = publish
     # The hook generation goes through ``publish_files`` too.
     from codex_plugin_scanner.guard.adapters import codex
-    from tests.codex_publication_steps import stepwise_publish_hooks
+    from tests.codex_publication_steps import stepwise_install_owned, stepwise_publish_hooks
 
     codex._publish_hooks = stepwise_publish_hooks
+    codex.CodexHarnessAdapter._install_owned = stepwise_install_owned
 """
