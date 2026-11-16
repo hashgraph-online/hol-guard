@@ -89,6 +89,7 @@ pub(super) fn dispatch(
         "live_hook_state" => codex_live_state::live_hook_state(ctx, fields),
         "runtime_hooks_verified" => codex_live_read::runtime_hooks_verified(ctx, fields),
         "publish_hooks" => codex_publish::publish_hooks(ctx, fields),
+        "install_plan" => super::codex_install_plan::install_plan(ctx, fields),
         _ => common(spec, op, ctx),
     }
 }

@@ -98,6 +98,31 @@ class PreparedCodexHookPublication:
         return (self.authority_dependency, self.manifest_change, self.receipt_change, self.config_change)
 
 
+def generation_request(
+    spec: CodexHookManifestSpec,
+    *,
+    previous_manifest: Mapping[str, object] | None,
+    create_key: bool,
+) -> dict[str, object]:
+    """The ``publication_generation`` request for ``spec``, without its rendered config."""
+    import os
+
+    def spelled(path: Path) -> str:
+        return os.path.abspath(path.expanduser())
+
+    return {
+        "config": spelled(spec.config_path),
+        "guard_home": spelled(spec.guard_home),
+        "home_dir": spelled(spec.home_dir),
+        "runtime_guard_home": spelled(spec.runtime_guard_home),
+        "workspace_dir": spelled(spec.workspace_dir) if spec.workspace_dir is not None else None,
+        "workspace_rebinding_allowed": spec.workspace_rebinding_allowed,
+        "spec": _spec_payload(spec),
+        "previous_manifest": None if previous_manifest is None else dict(previous_manifest),
+        "create_key": create_key,
+    }
+
+
 def prepare_authenticated_hook_publication(
     spec: CodexHookManifestSpec,
     *,
@@ -113,27 +138,13 @@ def prepare_authenticated_hook_publication(
     Enrollment runs under the install owner, which also guards the key."""
     import base64
     import json
-    import os
 
     from .codex_hook_integrity import _ordinary_hook_writer
     from .native_transition_files import publication
     from .runtime_transition import RuntimeTransition, TransitionError, TransitionFile
 
-    def spelled(path: Path) -> str:
-        return os.path.abspath(path.expanduser())
-
-    request: dict[str, object] = {
-        "config": spelled(spec.config_path),
-        "guard_home": spelled(spec.guard_home),
-        "home_dir": spelled(spec.home_dir),
-        "runtime_guard_home": spelled(spec.runtime_guard_home),
-        "workspace_dir": spelled(spec.workspace_dir) if spec.workspace_dir is not None else None,
-        "workspace_rebinding_allowed": spec.workspace_rebinding_allowed,
-        "spec": _spec_payload(spec),
-        "rendered_config": rendered_config,
-        "previous_manifest": None if previous_manifest is None else dict(previous_manifest),
-        "create_key": create_key,
-    }
+    request = generation_request(spec, previous_manifest=previous_manifest, create_key=create_key)
+    request["rendered_config"] = rendered_config
     check_hook_validation_deadline()
     if create_key:
         with _ordinary_hook_writer(spec.guard_home, hook_secret_path(spec.guard_home), actor="codex.authority-key"):

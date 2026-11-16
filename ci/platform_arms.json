@@ -844,6 +844,14 @@
   },
   {
    "verdict": "posix-primitive",
+   "note": "Clears group and world write from a rewritten user file's POSIX mode, as `TransitionFile.__post_init__` did through `normalized_after_mode`. Windows has no such bits and Python returned the mode unchanged there, so the plan keeps it as recorded.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/codex_install_plan.rs",
+   "item": "fn wire_file -- cfg! expression",
+   "cfg": "unix",
+   "body": "ccf60f93f912"
+  },
+  {
+   "verdict": "posix-primitive",
    "note": "Tells the manifest verifier whether POSIX owner and mode bits exist. Windows has neither, so the verifier skips those two checks there and still checks the digests and the hook commands; Python passed `os.name != \"nt\"` for the same flag.",
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/codex_live_state.rs",
    "item": "fn live_hook_state -- cfg! expression",

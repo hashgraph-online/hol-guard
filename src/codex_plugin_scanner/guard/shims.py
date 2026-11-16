@@ -82,16 +82,21 @@ def prepare_guard_shim(
         harness=harness,
         launcher_name=launcher_name,
         display_name=display_name,
-        interpreter={
-            "executable": sys.executable,
-            "frozen": bool(getattr(sys, "frozen", False)),
-            "package_interpreter": package_shim_interpreter(),
-            "python_flags": _trusted_python_flags(),
-            "import_root": str(_trusted_import_root()),
-            "launcher_env": [list(item) for item in merge_guard_launcher_env().items()],
-        },
+        interpreter=shim_interpreter(),
     )
     return PreparedGuardShim(tuple(planned_files(answer)), json.loads(str(answer["manifest"])))
+
+
+def shim_interpreter() -> dict[str, object]:
+    """The interpreter a Guard launcher runs, as this process would launch it."""
+    return {
+        "executable": sys.executable,
+        "frozen": bool(getattr(sys, "frozen", False)),
+        "package_interpreter": package_shim_interpreter(),
+        "python_flags": _trusted_python_flags(),
+        "import_root": str(_trusted_import_root()),
+        "launcher_env": [list(item) for item in merge_guard_launcher_env().items()],
+    }
 
 
 def install_guard_shim(

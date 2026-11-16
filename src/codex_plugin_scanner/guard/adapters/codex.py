@@ -38,6 +38,8 @@ from ..codex_hook_integrity import (
 )
 from ..codex_hook_manifest import (
     CodexHookManifestSpec,
+    PreparedCodexHookPublication,
+    generation_request,
     load_hook_manifest_baseline,
     prepare_authenticated_hook_publication,
 )
@@ -52,11 +54,11 @@ from ..codex_hook_registration import (
     legacy_binding_fields,
 )
 from ..codex_hook_self_binding import (
+    expanded_short_paths,
     install_fields,
     settle_short_paths,
     short_path_fields,
 )
-from ..codex_hook_sources import parse_toml_object
 from ..codex_hook_trust import apply_codex_hook_trust_doctor
 from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
@@ -64,7 +66,7 @@ from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
 from ..native_path_anchor import anchor_to_process_directory
-from ..shims import prepare_guard_shim
+from ..shims import shim_interpreter
 from ..stable_guard_cli import resolve_frozen_guard_cli
 from .base import HarnessContext, PreparedHarnessInstall
 from .codex_detect_sources import path_restorations, read_source_bytes
@@ -438,6 +440,73 @@ def prepare_codex_hook_migration(
     return PreparedCodexHookMigration(config, tuple(files))
 
 
+def _relaunch(asked: Mapping[str, object]) -> dict[str, object]:
+    """Each Guard proxy's launch, the way this process would write it."""
+    python = _guard_python_executable()
+    relaunch: dict[str, object] = {}
+    for name, args in asked.items():
+        _, python_args = python_proxy_launch(None, tuple(str(arg) for arg in cast(Sequence[object], args)))
+        launcher, launch_args = mcp_proxy_launch(python, python_args)
+        relaunch[str(name)] = [launcher, list(launch_args)]
+    return relaunch
+
+
+def _plan_file(item: Mapping[str, Any]) -> TransitionFile:
+    """One file an ``install_plan`` answer plans."""
+    from ..runtime_transition import TransitionFile
+
+    return TransitionFile(
+        Path(str(item["path"])),
+        None if item["before"] is None else base64.b64decode(str(item["before"])),
+        None if item["after"] is None else base64.b64decode(str(item["after"])),
+        before_mode=int(item["before_mode"]),
+        after_mode=int(item["after_mode"]),
+        no_follow=bool(item["no_follow"]),
+        expected_digest=cast("str | None", item.get("expected_digest")),
+        artifact_identity=cast("dict[str, object] | None", item.get("artifact_identity")),
+        invocation_identity=cast("dict[str, object] | None", item.get("invocation_identity")),
+    )
+
+
+def _ask_install_plan(context: HarnessContext, request: dict[str, Any], enroll_home: Path | None) -> dict[str, Any]:
+    """One ``install_plan`` answer, asked again with each reply it needs.
+
+    An enrolling plan may create the hook key, so it runs under the key's
+    ordinary writer, as the generation always has."""
+    from ..codex_hook_file_integrity import check_hook_validation_deadline
+    from ..codex_hook_integrity import _ordinary_hook_writer, hook_secret_path
+    from ..native_transition_files import _budget, _exception, _package_roots, _replay
+    from ..runtime_transition import TransitionError
+
+    request["package_roots"] = _package_roots()
+    request["budget"] = _budget()
+    for _ in range(4):
+        check_hook_validation_deadline()
+        if enroll_home is None:
+            answer = ask("install_plan", context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
+        else:
+            with _ordinary_hook_writer(enroll_home, hook_secret_path(enroll_home), actor="codex.authority-key"):
+                answer = ask(
+                    "install_plan", context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request
+                )
+        reply = answer.get("reply")
+        if not isinstance(reply, Mapping):
+            break
+        if "relaunch" in reply:
+            request["relaunch"] = _relaunch(cast(Mapping[str, object], reply["relaunch"]))
+        if "expand" in reply:
+            request["long_paths"] = {**request.get("long_paths", {}), **expanded_short_paths(reply)}
+    else:
+        raise RuntimeError("install_plan did not settle its replies")
+    check_hook_validation_deadline()
+    _replay(answer.get("events"), None, None)
+    if answer.get("conflict") is True:
+        raise TransitionError("adapter_preparation_generation_conflict")
+    if "fault" in answer:
+        raise _exception(answer["fault"])
+    return answer
+
+
 def render_codex_managed_mcp(
     context: HarnessContext,
     payload: dict[str, object],
@@ -459,86 +528,9 @@ def render_codex_managed_mcp(
     }
     answer = _codex("managed_mcp", context, **fields)
     if set(answer) == {"reply"}:
-        # Each Guard proxy is relaunched the way this process would write it.
-        python = _guard_python_executable()
-        relaunch: dict[str, object] = {}
-        for name, args in answer["reply"]["relaunch"].items():
-            _, python_args = python_proxy_launch(None, tuple(str(arg) for arg in args))
-            launcher, launch_args = mcp_proxy_launch(python, python_args)
-            relaunch[str(name)] = [launcher, list(launch_args)]
-        answer = _codex("managed_mcp", context, **fields, relaunch=relaunch)
+        answer = _codex("managed_mcp", context, **fields, relaunch=_relaunch(answer["reply"]["relaunch"]))
     rendered = wire.decode(_reply_text(answer, "rendered"))
     return rendered, tuple(str(name) for name in answer["migrated"])
-
-
-def _main_plan(
-    context: HarnessContext,
-    config: Path,
-    hooks: Path,
-    contents: Mapping[Path, bytes | None],
-    owned_bindings: Sequence[Mapping[str, object]],
-    *,
-    require_owners: bool,
-) -> tuple[dict[str, object], TransitionFile, list[TransitionFile]]:
-    """The main config's installed payload, the install backup and the
-    migration files after the config change, as the native ``main_plan`` op
-    plans them."""
-    from ..runtime_transition import RuntimeTransition, TransitionError
-
-    request: dict[str, Any] = {
-        "config": str(config),
-        "hooks": str(hooks),
-        "before_config": _b64(contents[config]),
-        "before_hooks": _b64(contents[hooks]),
-        "owned": json.dumps(list(owned_bindings), separators=(",", ":")),
-        "managed": _hook_registration(context).groups,
-        "require_owners": require_owners,
-        **_legacy_fields(context),
-        **install_fields(_runtime_guard_home(context), None),
-        **short_path_fields(),
-    }
-    answer = settle_short_paths(lambda: _codex("main_plan", context, **request), request, "main_plan")
-    if answer.get("conflict") is True:
-        raise TransitionError("adapter_preparation_generation_conflict")
-    tokens = answer.get("tokens")
-    if not isinstance(tokens, dict):
-        raise ValueError("Harness adapter answer is malformed")
-    payload = _restore_native(json.loads(_reply_text(answer, "config")), tokens)
-    if not isinstance(payload, dict):
-        raise ValueError("Harness adapter answer is malformed")
-    backup = _one_planned_file({"file": answer.get("backup")})
-    files = planned_files({"files": answer.get("files")})
-    RuntimeTransition._compare({"files": [change.payload() for change in (backup, *files)]}, "before")
-    return payload, backup, files
-
-
-def _alternate_plan(
-    context: HarnessContext,
-    config: Path,
-    hooks: Path,
-    contents: Mapping[Path, bytes | None],
-    managed_server_names: Sequence[str],
-    *,
-    require_owners: bool,
-) -> list[TransitionFile]:
-    """One alternate config's install files, as the native ``alternate_plan`` op plans them."""
-    from ..runtime_transition import TransitionError
-
-    request: dict[str, Any] = {
-        "config": str(config),
-        "hooks": str(hooks),
-        "before_config": _b64(contents[config]),
-        "before_hooks": _b64(contents[hooks]),
-        "managed_server_names": list(managed_server_names),
-        "require_owners": require_owners,
-        **_legacy_fields(context),
-        **install_fields(_runtime_guard_home(context), None),
-        **short_path_fields(),
-    }
-    answer = settle_short_paths(lambda: _codex("alternate_plan", context, **request), request, "alternate_plan")
-    if answer.get("conflict") is True:
-        raise TransitionError("adapter_preparation_generation_conflict")
-    return planned_files({"files": answer.get("files")})
 
 
 def prepare_codex_alternate_cleanup(
@@ -804,92 +796,74 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
 
     def _prepare_plan(self, context: HarnessContext, *, enroll: bool) -> _CodexInstallPlan:
         """The whole install as one plan. ``enroll`` may create the hook key and
-        checks every active handler's owner, as an ordinary install does."""
+        checks every active handler's owner, as an ordinary install does; the
+        runtime's ``install_plan`` op composes it."""
         from ..codex_hook_recovery import _snapshot
-        from ..runtime_transition import RuntimeTransition, TransitionError, TransitionFile, merge_transition_dependency
 
         spec = _hook_manifest_spec(context)
         previous_manifest = load_hook_manifest_baseline(spec)
-        bindings = _manifest_bindings(previous_manifest)
         pairs = self._config_hook_pairs(context)
         contents = {path: _snapshot(path) for pair in pairs for path in pair}
         detection = self.detect(context, config_contents=contents)
         managed_servers = managed_stdio_servers(detection)
-        main_hooks = next(hooks for config, hooks in pairs if config == spec.config_path)
-        payload, backup, migration_files = _main_plan(
-            context, spec.config_path, main_hooks, contents, bindings, require_owners=enroll
+        registration = _hook_registration(context)
+        workspace = context.workspace_dir / ".codex/config.toml" if context.workspace_dir is not None else None
+        request: dict[str, Any] = {
+            "pairs": [[str(config), str(hooks)] for config, hooks in pairs],
+            "contents": {str(path): _b64(data) for path, data in contents.items()},
+            "workspace_config": None if workspace is None else str(workspace),
+            "owned": json.dumps(_manifest_bindings(previous_manifest), separators=(",", ":")),
+            "managed": registration.groups,
+            "require_owners": enroll,
+            "servers": [
+                {
+                    "name": server.name,
+                    "source_scope": server.source_scope,
+                    "config_path": str(Path(server.config_path)),
+                    "entry": json.dumps(self._proxy_server_entry(context, server)),
+                }
+                for server in managed_servers
+            ],
+            "generation": {
+                "home": os.path.abspath(spec.guard_home),
+                **generation_request(spec, previous_manifest=previous_manifest, create_key=enroll),
+            },
+            "interpreter": shim_interpreter(),
+            **_legacy_fields(context, registration),
+            **install_fields(_runtime_guard_home(context), None),
+            **short_path_fields(),
+        }
+        answer = _ask_install_plan(context, request, spec.guard_home if enroll else None)
+        files = tuple(_plan_file(item) for item in answer["files"])
+        # The plan leads with the publication: authority, manifest, receipt, config.
+        authority, manifest_change, receipt_change, config_change = files[:4]
+        publication = PreparedCodexHookPublication(
+            json.loads(bytes(manifest_change.after or b"")),
+            str(answer["rendered_config"]),
+            config_change,
+            manifest_change,
+            authority,
+            receipt_change,
         )
-        workspace_path = context.workspace_dir / ".codex/config.toml" if context.workspace_dir is not None else None
-        workspace_payload = (
-            parse_toml_object(contents[workspace_path], path=workspace_path, label="Codex config file")
-            if workspace_path is not None
-            else {}
-        )
-        payload, migrated_proxies = render_codex_managed_mcp(
-            context,
-            payload,
-            managed_servers=managed_servers,
-            workspace_payload=workspace_payload,
-        )
-        publication = prepare_authenticated_hook_publication(
-            spec,
-            rendered_config=dump_toml(payload, original=contents[spec.config_path]),
-            previous_manifest=previous_manifest,
-            create_key=enroll,
-        )
-        if publication.config_change.before != contents[spec.config_path]:
-            raise TransitionError("adapter_preparation_generation_conflict")
-        files = list(publication.files)
-        files.append(backup)
-        files.extend(migration_files)
-        migration_backups = [change.path for change in migration_files[1:]]
-        for config, hooks in pairs:
-            if config != spec.config_path:
-                names = tuple(server.name for server in managed_servers if Path(server.config_path) == config)
-                planned = _alternate_plan(context, config, hooks, contents, names, require_owners=enroll)
-                files.extend(planned)
-                migration_backups.extend(change.path for change in planned[2:])
-        files.extend(prepare_codex_shell_cleanup(context))
-        shim = prepare_guard_shim(self.harness, context)
-        files.extend(shim.files)
-        identities = publication.manifest.get("packaged_files")
-        interpreter = publication.manifest.get("interpreter")
-        if not isinstance(identities, list) or not isinstance(interpreter, dict):
-            raise TransitionError("adapter_preparation_generation_conflict")
-        dependencies = []
-        for identity in identities:
-            if not isinstance(identity, dict) or not isinstance(identity.get("path"), str):
-                raise TransitionError("adapter_preparation_generation_conflict")
-            dependencies.append(TransitionFile.artifact_dependency(identity, compared=False))
-        target_identity = interpreter.get("target")
-        if not isinstance(target_identity, dict):
-            raise TransitionError("adapter_preparation_generation_conflict")
-        dependencies.append(TransitionFile.artifact_dependency(target_identity, invocation=interpreter, compared=False))
-        RuntimeTransition._compare({"files": [dependency.payload() for dependency in dependencies]}, "before")
-        files.extend(dependencies)
-        unique_files = {}
-        for change in files:
-            previous = unique_files.get(change.path)
-            unique_files[change.path] = change if previous is None else merge_transition_dependency(previous, change)
-        files = list(unique_files.values())
-        fields = {"backup_path": str(backup.path), **_server_fields(detection, managed_servers, migrated_proxies)}
+        shim_manifest = json.loads(str(answer["shim_manifest"]))
+        fields = {
+            "backup_path": str(answer["backup_path"]),
+            **_server_fields(detection, managed_servers, [str(name) for name in answer["migrated"]]),
+        }
         prepared = PreparedHarnessInstall(
-            tuple(files),
+            files,
             _install_manifest(
                 context,
                 "prepare",
-                shim.manifest,
-                manifest_path=str(publication.manifest_change.path),
+                shim_manifest,
+                manifest_path=str(manifest_change.path),
                 integrity="authenticated",
                 **fields,
             ),
         )
-        if len({change.path for change in files}) != len(files):
-            raise TransitionError("adapter_preparation_generation_conflict")
-        RuntimeTransition._compare({"files": [change.payload() for change in files]}, "before")
         # The backups an install writes before its authenticated generation.
-        backups = frozenset({backup.path, *migration_backups})
-        return _CodexInstallPlan(prepared, publication, backups, shim.manifest, fields)
+        backups = frozenset(Path(str(path)) for path in answer["backups"])
+        return _CodexInstallPlan(prepared, publication, backups, shim_manifest, fields)
 
     def install(self, context: HarnessContext) -> dict[str, object]:
         from ..runtime_transition import assert_transition_mutation_allowed

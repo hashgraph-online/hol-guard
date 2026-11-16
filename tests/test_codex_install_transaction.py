@@ -246,7 +246,7 @@ if actor == "A":
                 raise TimeoutError("fixture synchronization expired")
             time.sleep(0.01)
         raise OSError("injected publication failure")
-    codex.prepare_authenticated_hook_publication = fail_publish
+    codex._ask_install_plan = fail_publish
 try:
     codex.CodexHarnessAdapter().install(context)
 except RuntimeError as error:
@@ -308,7 +308,8 @@ def test_failed_installer_cannot_remove_separate_process_winner(
             [sys.executable, "-c", INSTALLER, str(tmp_path), "B"],
             env=environment,
             capture_output=True,
-            timeout=10,
+            # A whole install: native detection, plan, publication and readback.
+            timeout=60,
         )
         assert winner.returncode == 0, winner.stderr
         assert (tmp_path / "B-committed").exists()

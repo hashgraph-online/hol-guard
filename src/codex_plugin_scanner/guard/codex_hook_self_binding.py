@@ -87,10 +87,16 @@ def settle_short_paths(ask: Callable[[], Mapping[str, Any]], request: dict[str, 
         reply = answer.get("reply")
         if not isinstance(reply, Mapping):
             return answer
-        expand = reply.get("expand")
-        names = [str(name) for name in expand] if isinstance(expand, list) else []
-        request["long_paths"] = {name: _command_line._long_path(name) or "" for name in names}
+        request["long_paths"] = expanded_short_paths(reply)
     raise RuntimeError(f"{kind} did not settle its short paths")
+
+
+def expanded_short_paths(reply: Mapping[str, Any]) -> dict[str, str]:
+    """Each 8.3 short name a ``reply`` asks for, with the long path it names here."""
+
+    expand = reply.get("expand")
+    names = [str(name) for name in expand] if isinstance(expand, list) else []
+    return {name: _command_line._long_path(name) or "" for name in names}
 
 
 def answer_text(answer: Mapping[str, object], key: str) -> str:

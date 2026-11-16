@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import shlex
@@ -11,6 +12,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import tomllib
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
@@ -225,13 +227,24 @@ def test_codex_install_fails_closed_if_native_hook_reconciliation_is_unavailable
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
-    real_main_plan = codex_adapter._main_plan
+    real_ask = codex_adapter.ask
 
-    def _without_hooks(*args, **kwargs):
-        payload, backup, files = real_main_plan(*args, **kwargs)
-        return {key: value for key, value in payload.items() if key != "hooks"}, backup, files
+    def _strip_hooks(encoded):
+        payload = tomllib.loads(base64.b64decode(encoded).decode("utf-8"))
+        payload.pop("hooks", None)
+        return base64.b64encode(dump_toml(payload).encode("utf-8")).decode("ascii")
 
-    monkeypatch.setattr(codex_adapter, "_main_plan", _without_hooks)
+    def _without_hooks(op, *args, **kwargs):
+        # The planned config loses its Guard hooks, as if the native plan
+        # could not reconcile them; publication must refuse it.
+        answer = real_ask(op, *args, **kwargs)
+        if op == "install_plan" and "files" in answer:
+            # The plan leads with authority, manifest, receipt and config.
+            config = answer["files"][3]
+            config["after"] = _strip_hooks(config["after"])
+        return answer
+
+    monkeypatch.setattr(codex_adapter, "ask", _without_hooks)
 
     result = main(
         [

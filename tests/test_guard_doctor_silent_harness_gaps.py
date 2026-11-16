@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-import tomli_w
+import tomlkit
 
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
@@ -79,7 +79,7 @@ def stale_guard_hook_coordinates(payload: dict[str, object], config_path: Path) 
 
     home = config_path.parent.parent
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(tomli_w.dumps({"hooks": payload["hooks"]}), encoding="utf-8")
+    config_path.write_text(tomlkit.dumps({"hooks": payload["hooks"]}), encoding="utf-8")
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=home / "guard-home")
     return bool(codex_native_hook_state(context)["hook_trust_stale"])
 
