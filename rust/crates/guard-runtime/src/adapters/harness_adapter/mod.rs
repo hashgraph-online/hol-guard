@@ -59,6 +59,7 @@ mod codex_servers;
 mod codex_sources;
 mod codex_uninstall;
 mod codex_uninstall_config;
+mod codex_uninstall_plan;
 mod copilot;
 mod copilot_install;
 mod copilot_mcp;

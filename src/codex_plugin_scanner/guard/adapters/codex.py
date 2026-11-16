@@ -17,7 +17,7 @@ import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ...version import __version__
 from ..aibom_detection import (
@@ -69,7 +69,7 @@ from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
 from ..native_path_anchor import anchor_to_process_directory
-from ..shims import prepare_guard_shim, prepare_guard_shim_removal
+from ..shims import prepare_guard_shim
 from ..stable_guard_cli import resolve_frozen_guard_cli
 from .base import HarnessContext, PreparedHarnessInstall
 from .codex_detect_sources import path_restorations, read_source_bytes
@@ -79,7 +79,6 @@ from .codex_remote_control import (
     guarded_codex_launch_command_candidates,
     guarded_codex_launch_command_from_prefix,
 )
-from .codex_uninstall_restore import render_without_guard
 from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (
     ManagedMcpServer,
@@ -1002,68 +1001,26 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         )
 
     def _prepare_uninstall(self, context: HarnessContext) -> PreparedHarnessInstall:
-        """Every file uninstall restores or deletes, captured before any of them changes.
+        """Every file uninstall restores or deletes, captured before any of them changes."""
+        from ..runtime_transition import RuntimeTransition
 
-        The main config returns to its backup, or loses only the hooks the
-        authenticated manifest binds. Alternate configs lose this install's
-        bridge, the receipt and manifest go, and so do shell guards and the
-        launcher. JSON hook files created after install stay byte-for-byte.
-        """
-        from ..codex_hook_recovery import _snapshot
-        from ..runtime_transition import TransitionFile
-
-        def mode_of(path: Path, data: bytes | None) -> int:
-            return path.stat().st_mode & 0o777 if data is not None else 0o600
-
-        owned = _manifest_bindings(load_hook_manifest_baseline(_hook_manifest_spec(context)))
-        target = _located(self._target_config_path(context))
-        current = _snapshot(target)
-        backup_path = _located(self._backup_path(context))
-        backup = _snapshot(backup_path)
-        files: list[TransitionFile] = []
-        if backup is not None:
-            after = backup or None
-            if current is not None:
-                delete, text = render_without_guard(
-                    context, target, current, backup, owned, hooks_json_path=self._hooks_path(context)
-                )
-                after = None if delete else (current if text is None else text)
-            files.append(TransitionFile(target, current, after, before_mode=mode_of(target, current), no_follow=True))
-            files.append(
-                TransitionFile(
-                    backup_path,
-                    backup,
-                    None,
-                    before_mode=mode_of(backup_path, backup),
-                    after_mode=0o600,
-                    no_follow=True,
-                )
-            )
-        elif current is not None:
-            _delete, rendered = render_without_guard(
-                context, target, current, None, owned, hooks_json_path=self._hooks_path(context)
-            )
-            if rendered is not None:
-                files.append(
-                    TransitionFile(target, current, rendered, before_mode=mode_of(target, current), no_follow=True)
-                )
-        files.extend(
-            prepare_codex_alternate_cleanup(context, config_path=config_path)
-            for config_path, _hooks_path in self._config_hook_pairs(context)
-            if _located(config_path) != target and config_path.is_file()
-        )
         hook_config_path = self._hook_config_path(context)
-        for path in (
-            _located(hook_authority_receipt_path(context.guard_home, hook_config_path)),
-            _located(hook_manifest_path(context.guard_home, hook_config_path)),
-        ):
-            data = _snapshot(path)
-            if data is not None:
-                mode = mode_of(path, data)
-                files.append(TransitionFile(path, data, None, before_mode=mode, after_mode=mode, no_follow=True))
-        files.extend(prepare_codex_shell_cleanup(context))
-        shim = prepare_guard_shim_removal(self.harness, context)
-        return PreparedHarnessInstall((*files, *shim.files), shim.manifest)
+        owned = _manifest_bindings(load_hook_manifest_baseline(_hook_manifest_spec(context)))
+        request: dict[str, Any] = {
+            "owned": json.dumps(list(owned), separators=(",", ":")),
+            "authority_files": [
+                str(_located(hook_authority_receipt_path(context.guard_home, hook_config_path))),
+                str(_located(hook_manifest_path(context.guard_home, hook_config_path))),
+            ],
+            **_legacy_fields(context),
+            **install_fields(_runtime_guard_home(context), None),
+            **short_path_fields(),
+        }
+        answer = settle_short_paths(lambda: _codex("uninstall_plan", context, **request), request, "uninstall_plan")
+        files = tuple(planned_files(answer))
+        compared = cast(list[int], answer["compared"])
+        RuntimeTransition._compare({"files": [files[index].payload() for index in compared]}, "before")
+        return PreparedHarnessInstall(files, json.loads(str(answer["manifest"])))
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         payload = super().diagnostics(context)
