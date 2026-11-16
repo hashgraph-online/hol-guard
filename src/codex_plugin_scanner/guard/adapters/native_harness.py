@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from ..models import HarnessDetection
+from ..native_caller import caller_identity
 from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _run_command_probe
 
 _KIND = "harness_adapter"
@@ -108,6 +109,7 @@ def wire_context(context: HarnessContext) -> dict[str, object]:
         "user_home": str(Path.home()),
         "env": _environment(),
         "executable_overrides": dict(getattr(context, "executable_overrides", {}) or {}),
+        "caller": caller_identity(),
     }
 
 

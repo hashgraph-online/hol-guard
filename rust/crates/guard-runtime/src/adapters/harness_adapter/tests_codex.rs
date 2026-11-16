@@ -47,9 +47,7 @@ fn argv_fields(home: &Home, frozen: bool) -> Value {
         "home_is_current": false,
         "runtime_guard_home": home.guard(),
         "workspace_explicit": false,
-        "python": "/py",
-        "frozen": frozen,
-        "package_root": "/opt/guard/site",
+        "caller": super::caller(frozen),
         "native_bridge": "/g/hol-guard-runtime",
         "manifest_path": "/g/manifest.json",
         "long_timeout": 85,
@@ -143,7 +141,7 @@ fn groups_register_every_event_with_one_bound_handler() {
     let answer = ask(
         &home,
         "groups",
-        json!({"argv": ["/py", "-I"], "env": "{}", "long_timeout": 85}),
+        json!({"argv": ["/py", "-I"], "long_timeout": 85}),
     );
     let groups: Value = serde_json::from_str(answer["groups"].as_str().unwrap()).unwrap();
     let mut events: Vec<&String> = groups.as_object().unwrap().keys().collect();
@@ -168,11 +166,37 @@ fn groups_register_every_event_with_one_bound_handler() {
     assert_eq!(bindings[0]["handler"]["command"], "/py -I");
 }
 
+#[test]
+fn each_handler_pins_the_callers_package_and_codex_home() {
+    let home = Home::new();
+    let codex_home = home.home().join(".codex");
+    let env_for = |frozen: bool| {
+        let fields = json!({"argv": ["/py"], "long_timeout": 85, "caller": super::caller(frozen)});
+        let answer = home.ask_env(
+            "codex",
+            "groups",
+            fields,
+            json!({"PATH": "", "HOL_GUARD_NATIVE": "1", "HOL_GUARD_TEST_MODE": ""}),
+        );
+        let groups: Value = serde_json::from_str(answer["groups"].as_str().unwrap()).unwrap();
+        groups["PreToolUse"]["hooks"][0]["env"].clone()
+    };
+    assert_eq!(
+        env_for(false),
+        json!({"PYTHONPATH": "/opt/guard/site", "HOL_GUARD_NATIVE": "1", "CODEX_HOME": codex_home})
+    );
+    // A frozen build imports from its own archive, so it pins no package.
+    assert_eq!(
+        env_for(true),
+        json!({"HOL_GUARD_NATIVE": "1", "CODEX_HOME": codex_home})
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn a_posix_groups_command_is_shlex_joined() {
     let home = Home::new();
-    let fields = json!({"argv": ["/a b/py", "-I"], "env": "{}", "long_timeout": 85});
+    let fields = json!({"argv": ["/a b/py", "-I"], "long_timeout": 85});
     let answer = ask(&home, "groups", fields);
     let groups: Value = serde_json::from_str(answer["groups"].as_str().unwrap()).unwrap();
     assert_eq!(groups["PreToolUse"]["hooks"][0]["command"], "'/a b/py' -I");
@@ -182,8 +206,7 @@ fn a_posix_groups_command_is_shlex_joined() {
 #[test]
 fn a_windows_groups_command_asks_the_host_to_shorten_spaced_paths() {
     let home = Home::new();
-    let fields =
-        json!({"argv": ["C:\\Program Files\\py.exe", "-I"], "env": "{}", "long_timeout": 85});
+    let fields = json!({"argv": ["C:\\Program Files\\py.exe", "-I"], "long_timeout": 85});
     assert_eq!(
         ask(&home, "groups", fields.clone())["reply"],
         json!({"shorten": ["C:\\Program Files\\py.exe"]})

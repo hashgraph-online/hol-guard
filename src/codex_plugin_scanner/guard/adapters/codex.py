@@ -59,7 +59,6 @@ from ..codex_hook_self_binding import (
 from ..codex_hook_trust import apply_codex_hook_trust_doctor
 from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
-from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
 from ..native_path_anchor import anchor_to_process_directory
@@ -189,11 +188,7 @@ def _native_bridge_executable(guard_home: Path) -> Path | None:
     return native_hook_bridge_executable(NATIVE_CODEX_HOOK_FEATURE, guard_home=guard_home)
 
 
-def _frozen_contract() -> bool:
-    return globals().get("_HOL_GUARD_FROZEN_CODEX_RUNTIME") is True
-
-
-def _launch(context: HarnessContext, *, home_is_current: bool, python_executable: str) -> dict[str, Any]:
+def _launch(context: HarnessContext, *, home_is_current: bool) -> dict[str, Any]:
     """The bridge argv with the fallback and daemon start commands it launches through."""
 
     fields = _argv_fields(context, home_is_current=home_is_current)
@@ -205,35 +200,23 @@ def _launch(context: HarnessContext, *, home_is_current: bool, python_executable
         "argv",
         context,
         **fields,
-        python=python_executable,
-        frozen=_frozen_contract(),
-        package_root=str(Path(__file__).resolve().parents[3]),
         native_bridge=None if native_bridge is None else str(native_bridge),
         manifest_path=str(hook_manifest_path(guard_home, CodexHarnessAdapter._hook_config_path(context))),
         long_timeout=_post_tool_hook_timeout_seconds(context),
     )
 
 
-def _hook_command_parts_for_home_mode(
-    context: HarnessContext,
-    *,
-    home_is_current: bool,
-    python_executable: str,
-) -> tuple[str, ...]:
-    answer = _launch(context, home_is_current=home_is_current, python_executable=python_executable)
+def _hook_command_parts_for_home_mode(context: HarnessContext, *, home_is_current: bool) -> tuple[str, ...]:
+    answer = _launch(context, home_is_current=home_is_current)
     return tuple(str(part) for part in answer["argv"])
 
 
 def _current_launch(context: HarnessContext) -> dict[str, Any]:
-    return _launch(context, home_is_current=_home_is_current(context), python_executable=_guard_python_executable())
+    return _launch(context, home_is_current=_home_is_current(context))
 
 
 def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
-    return _hook_command_parts_for_home_mode(
-        context,
-        home_is_current=_home_is_current(context),
-        python_executable=_guard_python_executable(),
-    )
+    return _hook_command_parts_for_home_mode(context, home_is_current=_home_is_current(context))
 
 
 def _post_tool_hook_timeout_seconds(context: HarnessContext) -> int:
@@ -262,13 +245,7 @@ class _HookRegistration:
 
 def _hook_registration(context: HarnessContext) -> _HookRegistration:
     argv = _hook_command_parts(context)
-    environment = merge_guard_launcher_env(pin_package=True)
-    environment.update(codex_remote_launch_environment(context.home_dir))
-    fields: dict[str, object] = {
-        "argv": list(argv),
-        "env": json.dumps(environment),
-        "long_timeout": _post_tool_hook_timeout_seconds(context),
-    }
+    fields: dict[str, object] = {"argv": list(argv), "long_timeout": _post_tool_hook_timeout_seconds(context)}
     answer = _codex("groups", context, **fields)
     if set(answer) == {"reply"}:
         # A Windows path is rendered by its 8.3 name, which only this host knows.

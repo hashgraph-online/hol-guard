@@ -63,6 +63,7 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
         return False
 
     from . import codex_hook_runtime_trust as runtime_trust
+    from . import native_caller
     from .adapters import codex
 
     if bool(getattr(codex, "_HOL_GUARD_FROZEN_CODEX_RUNTIME", False)):
@@ -90,6 +91,7 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
     codex._hook_packaged_file_paths = frozen_packaged_paths
     runtime_trust.validate_codex_hook_launch = _validate_frozen_codex_hook_launch
     codex.__dict__["_HOL_GUARD_FROZEN_CODEX_RUNTIME"] = True
+    native_caller.install_frozen_contract()
     return True
 
 

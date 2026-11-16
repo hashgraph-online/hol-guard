@@ -31,12 +31,12 @@ mod install_apply_family;
 mod mcp_servers_family;
 #[path = "tests_opencode.rs"]
 mod opencode_family;
-#[path = "tests_shims_apply.rs"]
-mod shims_apply_family;
 #[path = "tests_pi.rs"]
 mod pi_family;
 #[path = "tests_shims.rs"]
 mod shim_family;
+#[path = "tests_shims_apply.rs"]
+mod shims_apply_family;
 
 struct Home {
     _dir: TempDir,
@@ -74,6 +74,7 @@ impl Home {
             "cwd": self.root,
             "user_home": self.home(),
             "env": env,
+            "caller": caller(false),
         })
     }
 
@@ -84,10 +85,26 @@ impl Home {
     fn ask_env(&self, harness: &str, op: &str, extra: Value, env: Value) -> Value {
         let mut request = json!({"harness": harness, "op": op, "context": self.context(env)});
         for (key, value) in extra.as_object().unwrap() {
-            request[key] = value.clone();
+            // A test's own `caller` replaces the context's default one.
+            if key == "caller" {
+                request["context"]["caller"] = value.clone();
+            } else {
+                request[key] = value.clone();
+            }
         }
         dispatch(&request).unwrap()
     }
+}
+
+/// `native_caller.caller_identity()` for a source (or `frozen`) Guard.
+fn caller(frozen: bool) -> Value {
+    json!({
+        "executable": "/py",
+        "executable_resolved": "/py",
+        "frozen": frozen,
+        "package_root": "/opt/guard/site",
+        "version": "0.0.0",
+    })
 }
 
 fn shim() -> String {

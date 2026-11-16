@@ -14,7 +14,7 @@ from types import ModuleType
 import pytest
 
 from codex_plugin_scanner.cli import _build_parser
-from codex_plugin_scanner.guard import codex_hook_runtime_trust, frozen_codex_runtime
+from codex_plugin_scanner.guard import codex_hook_runtime_trust, frozen_codex_runtime, native_caller
 from codex_plugin_scanner.guard import native_daemon_manage as daemon_api
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -50,6 +50,7 @@ def frozen_codex_contract(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         # later monkeypatch teardown reinstates a temporary frozen function.
         monkeypatch.undo()
         codex_adapter._guard_python_executable = original_interpreter
+        native_caller._frozen_contract = False
         codex_adapter._hook_packaged_file_paths = original_paths
         codex_hook_runtime_trust.validate_codex_hook_launch = original_validator
         if had_marker:

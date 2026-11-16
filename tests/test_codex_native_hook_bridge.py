@@ -68,7 +68,6 @@ def _hook_argv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, features: tuple[
     return codex_adapter._hook_command_parts_for_home_mode(
         context,
         home_is_current=False,
-        python_executable=sys.executable,
     )
 
 

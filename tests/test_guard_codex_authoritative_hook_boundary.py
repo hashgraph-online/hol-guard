@@ -212,7 +212,6 @@ def test_codex_launch_rejects_hook_bound_to_opposite_home_mode(
     opposite_home_command = codex_adapter._hook_command_parts_for_home_mode(
         context,
         home_is_current=True,
-        python_executable=sys.executable,
     )
     entry["command"] = shlex.join(opposite_home_command)
     config_path.write_text(dump_toml(payload), encoding="utf-8")

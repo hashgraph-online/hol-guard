@@ -1,0 +1,37 @@
+"""The identity of the Guard process that asks the native runtime.
+
+The resident cannot see which interpreter or package sent a request, so every
+``harness_adapter`` request carries these facts once, in its context. The
+native runtime derives each launcher, hook argv and package path from them.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+#: Set once a frozen Guard installs its launch contract
+#: (``install_frozen_codex_runtime``): it is then its own interpreter.
+_frozen_contract = False
+
+
+def install_frozen_contract() -> None:
+    """Report this process as a frozen Guard from now on."""
+    global _frozen_contract
+    _frozen_contract = True
+
+
+def caller_identity() -> dict[str, object]:
+    """This process's interpreter, frozen state, package root and version."""
+    from ..version import __version__
+    from .frozen_runtime_commands import is_frozen_guard_runtime
+
+    executable = Path(sys.executable).expanduser()
+    frozen = _frozen_contract or is_frozen_guard_runtime()
+    return {
+        "executable": str(executable.absolute()),
+        "executable_resolved": str(executable.resolve(strict=frozen)),
+        "frozen": frozen,
+        "package_root": str(Path(__file__).resolve().parents[2]),
+        "version": __version__,
+    }

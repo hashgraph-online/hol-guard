@@ -28,6 +28,7 @@ use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
 mod authorized_write;
+mod caller;
 mod claude;
 mod claude_argv;
 mod claude_install_target;
@@ -144,6 +145,8 @@ pub(crate) struct Ctx {
     pub(crate) env: BTreeMap<String, String>,
     pub(crate) executable_overrides: BTreeMap<String, String>,
     pub(crate) windows: bool,
+    /// `native_caller.caller_identity()`: the Guard process that asked.
+    pub(crate) caller: Map<String, Value>,
 }
 
 impl Ctx {
@@ -182,6 +185,11 @@ impl Ctx {
             env: strings("env")?,
             executable_overrides: strings("executable_overrides")?,
             windows: cfg!(windows),
+            caller: match map.get("caller") {
+                None | Some(Value::Null) => Map::new(),
+                Some(Value::Object(caller)) => caller.clone(),
+                Some(_) => return Err(ERR_INVALID),
+            },
         })
     }
 

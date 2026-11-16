@@ -226,8 +226,8 @@ fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
             super::claude_argv::RUNTIME_MISSING.to_owned(),
         ));
     };
-    let python = text(fields, "python")?;
-    let frozen = flag(fields, "frozen")?;
+    let python = super::caller::hook_python(ctx)?;
+    let frozen = super::caller::frozen(ctx)?;
     let (fallback, start) = if frozen {
         let mut fallback = vec![python.to_owned()];
         fallback.extend(guard_args[1..].iter().cloned());
@@ -235,7 +235,7 @@ fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
             frozen_recovery_command(python, &runtime_home, &home).ok_or(Failure::Invalid)?;
         (fallback, start)
     } else {
-        let root = Path::new(text(fields, "package_root")?);
+        let root = Path::new(super::caller::package_root(ctx)?);
         (
             isolated_guard_cli_command(python, root, &guard_args),
             isolated_daemon_start_command(python, root, &runtime_home, Some(&home)),
@@ -280,6 +280,20 @@ fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     Ok(json!({ "argv": argv, "fallback": fallback, "start": start }))
 }
 
+/// The environment each handler runs with: the launcher's pinned package
+/// and native bindings, then the Codex home it reviews.
+fn hook_env(ctx: &Ctx) -> Step<Vec<(String, PyVal)>> {
+    let mut env: Vec<(String, PyVal)> = super::caller::launcher_env(ctx)?
+        .into_iter()
+        .map(|(name, value)| (name, files::text(value)))
+        .collect();
+    env.push((
+        "CODEX_HOME".to_owned(),
+        files::text(path_text(&ctx.home.join(".codex"))),
+    ));
+    Ok(env)
+}
+
 /// `_managed_hook_groups` and `_manifest_event_bindings`, as ordered JSON.
 fn groups(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let argv = strings(fields.get("argv"))?;
@@ -289,7 +303,7 @@ fn groups(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         return Err(hook_render::ask_for(unnamed));
     }
     let command = &hook_render::render(&argv, ctx.windows, &names)?;
-    let env = PyVal::Dict(dict(fields, "env")?);
+    let env = PyVal::Dict(hook_env(ctx)?);
     let long = fields
         .get("long_timeout")
         .and_then(Value::as_i64)
