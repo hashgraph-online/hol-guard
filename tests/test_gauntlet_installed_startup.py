@@ -86,3 +86,32 @@ def test_the_lane_records_the_prewarm_probe_before_any_harness_pass(tmp_path: Pa
 class _Runtime:
     def as_evidence(self) -> dict[str, str]:
         return {"kind": "stub"}
+
+
+def test_each_harness_pass_stops_its_daemon_before_the_next_cold_start(tmp_path: Path, monkeypatch) -> None:
+    from ci.gauntlet import installed_lane
+
+    calls: list[str] = []
+
+    def install(runtime, harness, *, home, guard_home, workspace):
+        calls.append(f"install:{harness}")
+        return {"harness": harness, "exit_code": 0, "payload": {}, "stderr_tail": ""}
+
+    def stop(runtime, *, home, guard_home, timeout=60.0):
+        calls.append(f"stop:{home.name}")
+        return 0
+
+    monkeypatch.setattr(installed_lane, "install_harness", install)
+    monkeypatch.setattr(installed_lane, "stop_daemon", stop)
+    monkeypatch.setattr(installed_lane, "assess_harness", lambda home, harness, expectation: {"failures": []})
+    homes = []
+    for harness in ("claude-code", "codex"):
+        result = installed_lane.harness_pass(_Runtime(), harness, {"replay": False}, {}, root=tmp_path, repeat=1)
+        assert result["startup"]["daemon_stop_exit_code"] == 0
+        homes.append(installed_lane.build_home(tmp_path, f"home-{harness}").name)
+    assert calls == [
+        "install:claude-code",
+        f"stop:{homes[0]}",
+        "install:codex",
+        f"stop:{homes[1]}",
+    ]
