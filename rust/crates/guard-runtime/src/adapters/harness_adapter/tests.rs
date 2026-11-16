@@ -29,6 +29,8 @@ mod hermes_family;
 mod opencode_family;
 #[path = "tests_pi.rs"]
 mod pi_family;
+#[path = "tests_shims.rs"]
+mod shim_family;
 
 struct Home {
     _dir: TempDir,
@@ -178,6 +180,46 @@ fn devin_install_backs_up_the_config_and_records_state() {
         .as_str()
         .unwrap()
         .ends_with("managed/devin/install.state.json"));
+}
+
+#[test]
+fn apply_uninstall_runs_the_plan_it_prepares_and_journals_managed_writes() {
+    let home = Home::new();
+    let config = home.home().join(".config/devin/config.json");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "{}\n").unwrap();
+    let install = home.ask(
+        "devin",
+        "prepare_install",
+        json!({"shim": shim(), "hook_argv": ["/py", "hook"]}),
+    );
+    for file in install["files"].as_array().unwrap() {
+        let path = Path::new(file["path"].as_str().unwrap());
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, after(file)).unwrap();
+    }
+    let plan = home.ask("devin", "prepare_uninstall", json!({}));
+    let state = plan["deletes"][0].as_str().unwrap().to_owned();
+    let launcher = home.guard().join("bin/guard-devin");
+    fs::create_dir_all(launcher.parent().unwrap()).unwrap();
+    fs::write(&launcher, "#!/bin/sh\n").unwrap();
+    let applied = home.ask("devin", "apply_uninstall", json!({}));
+    assert!(!launcher.exists());
+    let manifest: Value = serde_json::from_str(applied["manifest"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        manifest["removed_paths"][0],
+        json!(launcher.to_string_lossy())
+    );
+    assert!(applied["manifest"].is_string(), "{applied}");
+    assert_eq!(
+        applied["events"][0]["mutation"]["operation"],
+        json!("publish")
+    );
+    assert!(!Path::new(&state).exists());
+    assert_eq!(
+        fs::read_to_string(&config).unwrap(),
+        plan["writes"][0]["text"].as_str().unwrap()
+    );
 }
 
 #[test]
@@ -354,6 +396,42 @@ fn command_lookup_follows_the_callers_path() {
     let env = json!({"PATH": bin});
     let answer = home.ask_env("gemini", "resolved_executable", json!({}), env);
     assert_eq!(Path::new(answer["path"].as_str().unwrap()), gemini);
+    let found = home.ask_env(
+        "codex",
+        "command_available",
+        json!({}),
+        json!({"PATH": bin}),
+    );
+    assert_eq!(found, json!({"available": false}));
+    let found = home.ask_env(
+        "gemini",
+        "command_available",
+        json!({}),
+        json!({"PATH": bin}),
+    );
+    assert_eq!(found, json!({"available": true}));
+
+    let launch = |harness: &str, workspace: Value| {
+        let mut context = home.context(json!({"PATH": bin}));
+        context["workspace"] = workspace;
+        let extra = json!({"args": ["--flag"], "context": context});
+        home.ask_env(harness, "default_launch", extra, json!({}))["argv"].clone()
+    };
+    let workspace = home.root.join("project");
+    assert_eq!(
+        launch("gemini", json!(workspace)),
+        json!([gemini, "--flag"])
+    );
+    assert_eq!(
+        launch("opencode", Value::Null),
+        json!(["opencode", "--flag"])
+    );
+    assert_eq!(
+        launch("opencode", json!(workspace)),
+        json!(["opencode", workspace, "--flag"])
+    );
+    let request = json!({"harness": "gemini", "op": "default_launch", "context": home.context(json!({})), "args": [1]});
+    assert!(dispatch(&request).is_err());
 }
 
 #[test]

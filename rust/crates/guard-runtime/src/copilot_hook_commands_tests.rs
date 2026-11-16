@@ -192,3 +192,17 @@ fn command_refuses_malformed_requests() {
         );
     }
 }
+
+#[test]
+fn recognizes_the_native_runtime_command() {
+    let runtime = "/opt/guard/hol-guard-runtime";
+    assert!(is_managed(
+        &join(&[runtime, "bounded-hook-bridge", &copilot_config()]),
+        None
+    ));
+    let other = config("cursor", json!(["guard", "hook", "--harness", "cursor"]));
+    assert!(!is_managed(
+        &join(&[runtime, "bounded-hook-bridge", &other]),
+        None
+    ));
+}

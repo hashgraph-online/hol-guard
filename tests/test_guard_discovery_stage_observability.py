@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority as native_runner_authority_module
 from codex_plugin_scanner.guard.adapters import harness_mcp_discovery
 from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer
 from codex_plugin_scanner.guard.local_clis.local_cli_api import (
@@ -167,10 +168,14 @@ def test_one_unreadable_harness_keeps_the_other_connections(monkeypatch) -> None
             ),
         )
 
+    native = native_runner_authority_module.native_runner_authority
+
     def grouped(kind: str, args: dict[str, object], guard_home: object = None) -> dict[str, object]:
         # The grouping itself is native and pinned by its Rust replay vectors;
         # the contract here is that one harness failing above does not take
         # the rest of the inventory with it.
+        if args["op"] != "group":
+            return native(kind, args)
         entries = args["servers"]
         assert kind == "harness_mcp_discovery"
         assert isinstance(entries, list)

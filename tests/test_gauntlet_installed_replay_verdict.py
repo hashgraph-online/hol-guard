@@ -92,7 +92,7 @@ def test_the_aged_codex_handler_is_one_guard_attributes_to_itself(tmp_path: Path
     product rightly keeps would fail the lane for honouring that boundary.
     """
 
-    from codex_plugin_scanner.guard.codex_hook_registration import remove_unlaunchable_guard_hook_events
+    from tests.codex_hook_publication_helpers import remove_unlaunchable_guard_hook_events
 
     age_home(tmp_path)
     hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))["hooks"]

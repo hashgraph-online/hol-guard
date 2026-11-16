@@ -366,7 +366,7 @@ def test_daemon_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     assert all(isinstance(part, str) for part in config["recovery_command"])
 
 
-def test_daemon_hook_keeps_the_python_bridge_without_the_native_feature(
+def test_daemon_hook_without_the_native_feature_asks_for_repair(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from codex_plugin_scanner.guard import native_runtime
@@ -379,7 +379,5 @@ def test_daemon_hook_keeps_the_python_bridge_without_the_native_feature(
     monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
-    argv = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)
-
-    assert argv[:2] == (sys.executable, "-c")
-    assert "recovery_command" not in json.loads(argv[-1])
+    with pytest.raises(RuntimeError, match="hol-guard repair"):
+        ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)

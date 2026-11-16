@@ -6,12 +6,12 @@ import json
 from pathlib import Path
 
 import pytest
+import tomllib
 
 from codex_plugin_scanner.guard import codex_lean_sessions as lean
 from codex_plugin_scanner.guard.cli import commands_router
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
 
-tomllib = lean.tomllib
 SIZE = 100_000
 
 USER_CONFIG = """# my Codex settings

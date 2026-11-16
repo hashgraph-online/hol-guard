@@ -209,7 +209,9 @@ def test_an_unverifiable_hook_manifest_is_not_reported_as_foreign(
 
     monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: None)
     manifest = json.dumps({"authentication": {"algorithm": HOOK_MANIFEST_MAC_ALGORITHM}})
-    secret = HookSecretMaterial(installation_id="install-1", key_id="key-1", key=b"k" * 32)
+    secret = HookSecretMaterial(
+        installation_id="install-1", key_id="key-1", fingerprint="f" * 64, guard_home=tmp_path
+    )
 
     with pytest.raises(CodexHookIntegrityError) as error:
         _ = authenticate_hook_manifest_text(tmp_path, manifest, _secret=secret)

@@ -122,16 +122,17 @@ class TestZCodeInstallUninstall:
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         handler = payload["hooks"]["events"]["PreToolUse"][0]["hooks"][0]
         command = handler["command"]
-        assert "bounded_cli_hook_bridge" in command
+        assert " bounded-hook-bridge " in command
         assert GUARD_MANAGED_MARKER in command
         assert handler["timeout"] == 30
 
-    def test_install_hook_command_avoids_interpreter_flags_when_frozen(self, tmp_path: Path, monkeypatch) -> None:
+    def test_install_hook_command_names_the_runtime_when_frozen(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
+        runtime = tmp_path / "hol-guard-runtime"
         monkeypatch.setattr("sys.frozen", True, raising=False)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
-            lambda: None,
+            "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.native_bridge_executable",
+            lambda *_args, **_kwargs: runtime,
         )
         get_adapter("zcode").install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
@@ -140,7 +141,7 @@ class TestZCodeInstallUninstall:
         import shlex
 
         tokens = shlex.split(command.split(" # ", 1)[0])
-        assert tokens[1] == "__guard-bounded-hook", tokens[:3]
+        assert tokens[:2] == [str(runtime), "bounded-hook-bridge"], tokens[:3]
         bridge_config = json.loads(tokens[2])
         assert bridge_config["harness"] == "zcode"
         assert bridge_config["frozen_launcher"] is True

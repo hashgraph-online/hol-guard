@@ -355,15 +355,13 @@ def test_claude_shell_command_uses_list2cmdline_on_windows():
     assert _shell_command(command, windows=True) == subprocess.list2cmdline(list(command))
 
 
-def test_claude_daemon_hook_command_uses_python_not_node(tmp_path, monkeypatch):
+def test_claude_daemon_hook_command_without_a_native_runtime_asks_for_repair(tmp_path, monkeypatch):
     monkeypatch.setattr(claude_code, "native_hook_bridge_executable", lambda *_args, **_kwargs: None)
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
-    command_parts = adapter._daemon_hook_command_parts(context)
 
-    assert command_parts[0] == sys.executable
-    assert command_parts[0] != "node"
-    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in command_parts[2]
+    with pytest.raises(RuntimeError, match="hol-guard repair"):
+        adapter._daemon_hook_command_parts(context)
 
 
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):

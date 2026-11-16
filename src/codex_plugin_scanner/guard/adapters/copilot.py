@@ -3,9 +3,8 @@
 The kind owns Copilot's paths, detection, the lifecycle locks and signed
 state, which hook entries are Guard's, the MCP plan, the install file plan
 and the uninstall restores and rewrites. This module keeps what must run in
-the Guard process: the bounded hook argv and the hook script it stages, the
-isolated hook interpreter, the launcher environment, Guard's proxy argv for
-each server, the shim and the ``--help`` probe subprocess.
+the Guard process: the bounded hook argv, the launcher environment, Guard's
+proxy argv for each server, the shim and the ``--help`` probe subprocess.
 """
 
 from __future__ import annotations
@@ -50,10 +49,9 @@ def _ask(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
         raise
 
 
-def _hook_fields(context: HarnessContext, staged: list[TransitionFile]) -> dict[str, object]:
-    """Guard's bounded hook argv for each hooks object, and the isolated bridge."""
-    from .bounded_cli_hook_bridge import bounded_cli_hook_command, bounded_hook_script_path
-    from .isolated_hook_python import isolated_cursor_hook_python
+def _hook_fields(context: HarnessContext) -> dict[str, object]:
+    """Guard's bounded hook argv for each hooks object."""
+    from .bounded_cli_hook_bridge import bounded_cli_hook_command
 
     spec = _ask("hook_spec", context)
 
@@ -66,17 +64,13 @@ def _hook_fields(context: HarnessContext, staged: list[TransitionFile]) -> dict[
                 cli_args=[str(part) for part in cli_args],
                 harness=_HARNESS,
                 timeout_seconds=int(spec["timeout_seconds"]),
-                prepared_files=staged,
             )
         )
 
     workspace = spec["workspace_cli_args"]
-    script = bounded_hook_script_path(context.guard_home, _HARNESS)
     return {
         "config_argv": argv(spec["cli_args"]),
         "workspace_argv": None if workspace is None else argv(workspace),
-        "interpreter": isolated_cursor_hook_python(),
-        "script": None if script is None else str(script),
     }
 
 
@@ -132,8 +126,7 @@ class CopilotHarnessAdapter(NativeHarnessAdapter):
         found = _ask("install_detection", context, create_key=create_key)
         if set(found) == {"transition_error"}:
             raise TransitionError(str(found["transition_error"]))
-        staged: list[TransitionFile] = []
-        fields = {**_hook_fields(context, staged), **_server_fields(context, found)}
+        fields = {**_hook_fields(context), **_server_fields(context, found)}
         shim = prepare_guard_shim(_HARNESS, context)
         answer = _ask(
             "prepare_install",
@@ -147,7 +140,7 @@ class CopilotHarnessAdapter(NativeHarnessAdapter):
             raise TransitionError(str(answer["transition_error"]))
         key = TransitionFile.identity_dependency(context.guard_home / "managed/adapter-state.key")
         unique: dict[Path, TransitionFile] = {}
-        for change in (key, *staged, *planned_files(answer), *shim.files):
+        for change in (key, *planned_files(answer), *shim.files):
             if change.path in unique and change != unique[change.path]:
                 raise TransitionError("adapter_preparation_generation_conflict")
             unique[change.path] = change
@@ -158,8 +151,7 @@ class CopilotHarnessAdapter(NativeHarnessAdapter):
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         from ..shims import remove_guard_shim
 
-        # Uninstall only reads which entries Guard owns; the staged hook script is never written.
-        finish = _ask("uninstall", context, **_hook_fields(context, []))["finish"]
+        finish = _ask("uninstall", context, **_hook_fields(context))["finish"]
         shim = remove_guard_shim(_HARNESS, context)
         answer = _ask("finish_uninstall", context, shim=json.dumps(shim, default=str), finish=finish)
         return json.loads(str(answer["manifest"]))

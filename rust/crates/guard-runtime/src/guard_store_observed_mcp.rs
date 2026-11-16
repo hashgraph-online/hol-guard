@@ -28,10 +28,10 @@ const MAX_NAMESPACE_CHARS: usize = 155;
 const MAX_CLI_ID_SEGMENTS: usize = 9;
 
 /// `ObservedMcpTool`, reduced to the fields the compiler reads.
-struct ObservedTool {
-    namespace: String,
-    qualified_name: String,
-    harness: String,
+pub(crate) struct ObservedTool {
+    pub(crate) namespace: String,
+    pub(crate) qualified_name: String,
+    pub(crate) harness: String,
 }
 
 impl ObservedTool {
@@ -95,7 +95,7 @@ fn flattened_tool(harness: &str, tool_name: &str, namespace: &str) -> Option<Obs
 
 /// `observed_mcp_tool`: parse a fully qualified MCP name and keep the
 /// connector boundary.
-fn observed_mcp_tool(harness: &str, tool_name: &str) -> Option<ObservedTool> {
+pub(crate) fn observed_mcp_tool(harness: &str, tool_name: &str) -> Option<ObservedTool> {
     // `str.strip` also drops the ASCII information separators.
     let harness = harness
         .trim_matches(|c: char| c.is_whitespace() || ('\x1c'..='\x1f').contains(&c))

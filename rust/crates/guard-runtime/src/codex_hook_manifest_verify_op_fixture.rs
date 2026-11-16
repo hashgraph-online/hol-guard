@@ -102,7 +102,8 @@ impl Fixture {
             }),
             canonical_paths,
             installed_python_package_files: Vec::new(),
-            command_argvs: BTreeMap::from([(EVENT_COMMAND.to_owned(), Some(argv()))]),
+            windows: false,
+            long_paths: BTreeMap::new(),
             private_groups: Vec::new(),
         }
     }

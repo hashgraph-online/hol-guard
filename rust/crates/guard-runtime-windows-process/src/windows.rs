@@ -56,7 +56,7 @@ mod process_identity;
 #[path = "process_lifecycle.rs"]
 mod process_lifecycle;
 pub use bound_open::{
-    directory_file_id, handle_file_id, handle_final_path, open_bound_executable_file,
+    directory_file_id, handle_file_id, handle_final_path, link_stat, open_bound_executable_file,
     open_bound_regular_file, open_bound_replaceable_file, open_skill_directory, path_stat,
     regular_file_id, FileId, PathStat,
 };
@@ -74,7 +74,8 @@ pub use file_identity::{
 };
 pub use job_guard::{attach_suspended_process, ChildJobGuard, ResourceLimits};
 pub use private_files::{
-    create_private_file, delete_private_file_handle, open_private_directory, open_private_file,
+    create_private_file, delete_private_file_handle, mark_handle_for_delete,
+    open_private_directory, open_private_file, rename_into_directory,
 };
 pub use process_command_line::{process_ids, ProcessQuery};
 pub use process_identity::{

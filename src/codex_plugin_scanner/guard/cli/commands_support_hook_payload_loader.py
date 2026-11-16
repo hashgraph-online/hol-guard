@@ -3,9 +3,26 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
-from ..adapters.hook_input_reader import read_stdin_text
+
+def read_stdin_text(limit: int | None = None) -> tuple[str, bool]:
+    """Read hook stdin as UTF-8, whatever the console code page is.
+
+    Harnesses send UTF-8 JSON. Text-mode ``sys.stdin`` decodes with the locale
+    encoding, which on Windows (cp1252) turns ``café`` into ``cafÃ©`` before
+    Guard reviews it. Returns the text and whether it exceeded ``limit`` bytes.
+    """
+
+    stream = getattr(sys.stdin, "buffer", None)
+    if stream is None:
+        text = sys.stdin.read() if limit is None else sys.stdin.read(limit + 1)
+        size = len(text.encode("utf-8", errors="replace"))
+        return text, limit is not None and size > limit
+    raw = stream.read() if limit is None else stream.read(limit + 1)
+    oversized = limit is not None and len(raw) > limit
+    return raw.decode("utf-8-sig", errors="replace"), oversized
 
 
 def load_hook_payload(

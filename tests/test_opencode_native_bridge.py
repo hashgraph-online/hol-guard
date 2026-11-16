@@ -35,7 +35,6 @@ def _offer_native(monkeypatch: pytest.MonkeyPatch, runtime: Path) -> None:
     def executable(feature: str, *, guard_home: Path | None = None) -> Path | None:
         return runtime if feature == NATIVE_BOUNDED_HOOK_FEATURE else None
 
-    monkeypatch.delenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", raising=False)
     monkeypatch.setattr(native_hook_bridge, "native_hook_bridge_executable", executable)
 
 
@@ -162,12 +161,3 @@ def test_unrunnable_native_runtime_falls_back_to_python(tmp_path: Path, monkeypa
     assert completed.returncode == 0, completed.stderr
     assert json.loads(completed.stdout) == {"exitCode": 0, "stdout": "python-fallback"}
     assert "nodeSpawn(command, args, spawnOptions)" in source
-
-
-def test_python_bridge_pin_installs_no_native_bridge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _offer_native(monkeypatch, _fake_runtime(tmp_path))
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", "python")
-
-    source = pretool_plugin_source(_context(tmp_path))
-
-    assert "} | null = null;" in source

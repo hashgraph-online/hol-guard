@@ -81,6 +81,18 @@ def inspect_codex_repair_native_runtime(*, deadline_monotonic: float) -> NativeR
             check_deadline()
             if mode == "auto" and version is not None and capabilities.runtime_version != version:
                 raise TransitionError("native_version_mismatch")
+            # A replaced runtime cannot vouch for itself, so a changed
+            # generation is refused before the runtime is asked to re-pin it.
+            try:
+                current = path.stat()
+            except OSError as exc:
+                raise TransitionError("native_runtime_generation_changed") from exc
+            if (current.st_size, current.st_mtime_ns, current.st_ino) != (
+                metadata.st_size,
+                metadata.st_mtime_ns,
+                metadata.st_ino,
+            ):
+                raise TransitionError("native_runtime_generation_changed")
             _pin_executable(
                 path,
                 deadline=deadline_monotonic,

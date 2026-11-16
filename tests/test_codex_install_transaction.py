@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegr
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction, require_codex_install_owner
+from tests import codex_hook_publication_helpers as publication_helpers
 
 
 def test_copied_context_cannot_borrow_another_threads_publication_owner(tmp_path):
@@ -246,7 +247,7 @@ if actor == "A":
                 raise TimeoutError("fixture synchronization expired")
             time.sleep(0.01)
         raise OSError("injected publication failure")
-    codex.build_authenticated_hook_manifest = fail_publish
+    codex._ask_install_plan = fail_publish
 try:
     codex.CodexHarnessAdapter().install(context)
 except RuntimeError as error:
@@ -308,7 +309,8 @@ def test_failed_installer_cannot_remove_separate_process_winner(
             [sys.executable, "-c", INSTALLER, str(tmp_path), "B"],
             env=environment,
             capture_output=True,
-            timeout=10,
+            # A whole install: native detection, plan, publication and readback.
+            timeout=60,
         )
         assert winner.returncode == 0, winner.stderr
         assert (tmp_path / "B-committed").exists()
@@ -360,7 +362,7 @@ except TimeoutError:
         victim = tmp_path / "victim"
         victim.write_bytes(b"preserve")
         (directory / "installation.lock").symlink_to(victim)
-        with pytest.raises(OSError), codex_install_transaction(unsafe_home, config, actor="unsafe"):
+        with pytest.raises(CodexHookIntegrityError), codex_install_transaction(unsafe_home, config, actor="unsafe"):
             pytest.fail("symlink was accepted")
         assert victim.read_bytes() == b"preserve"
 
@@ -400,7 +402,7 @@ def test_cached_launch_retains_exact_previous_artifact_identity(
         home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home", home_override_explicit=True
     )
     source_root = Path(codex.__file__).resolve().parents[3]
-    files = [path for _role, path in codex._hook_packaged_file_paths()]
+    files = [path for role, path in codex._hook_packaged_file_paths(Path(sys.executable)) if role != "bridge"]
     # Two immutable package layouts with identical reviewed code, so this
     # models a path/format migration without authenticating altered code.
     for generation in ("old", "new"):
@@ -413,7 +415,7 @@ def test_cached_launch_retains_exact_previous_artifact_identity(
     monkeypatch.setattr(codex, "__file__", str(tmp_path / "old" / adapter_path))
     codex.CodexHarnessAdapter().install(context)
     old_argv = codex._hook_command_parts(context)
-    config = json.loads(old_argv[3])
+    config = json.loads(old_argv[2])
     monkeypatch.setattr(codex, "__file__", str(tmp_path / "new" / adapter_path))
     codex.CodexHarnessAdapter().install(context)
     monkeypatch.setattr(
@@ -424,73 +426,21 @@ def test_cached_launch_retains_exact_previous_artifact_identity(
         state_path=config["state_path"],
         fallback_command=config["fallback_command"],
         start_command=config["start_command"],
-        config_json=old_argv[3],
+        config_json=old_argv[2],
     )
     assert trusted.cwd.exists()
     # A retained hash cannot permit modified artifact bytes.
-    old_bridge = Path(old_argv[2])
-    old_bridge.write_bytes(old_bridge.read_bytes() + b"\n# altered retained generation\n")
+    old_trust = tmp_path / "old" / "codex_plugin_scanner/guard/codex_hook_runtime_trust.py"
+    old_trust.write_bytes(old_trust.read_bytes() + b"\n# altered retained generation\n")
     with pytest.raises((CodexHookIntegrityError, ValueError)):
         validate_codex_hook_launch(
             manifest_path=config["manifest_path"],
             state_path=config["state_path"],
             fallback_command=config["fallback_command"],
             start_command=config["start_command"],
-            config_json=old_argv[3],
+            config_json=old_argv[2],
         )
     print("H2 pass retained_previous=allow altered_bytes=denied")
-
-
-def test_real_cached_bridge_denies_missing_manifest_without_replacing_authority(tmp_path: Path) -> None:
-    import json
-
-    from codex_plugin_scanner.guard.adapters import codex
-    from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
-
-    context = HarnessContext(
-        home_dir=tmp_path / "home",
-        workspace_dir=None,
-        guard_home=tmp_path / "guard-home",
-        home_override_explicit=True,
-    )
-    codex.CodexHarnessAdapter().install(context)
-    argv = codex._hook_command_parts(context)
-    config = context.home_dir / ".codex/config.toml"
-    before_config = config.read_bytes()
-    secret = hook_secret_path(context.guard_home)
-    before_secret = secret.stat()
-    manifest = hook_manifest_path(context.guard_home, config)
-    manifest.unlink()
-
-    # Exercise the actual cached -I bridge in a new process, with no daemon
-    # state to hide the missing fallback authority. No in-process validator
-    # patch or fabricated integrity error participates in this observation.
-    result = subprocess.run(
-        argv,
-        input=json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "true"}}),
-        capture_output=True,
-        text=True,
-        timeout=15,
-        env={**os.environ, "HOME": str(context.home_dir), "USERPROFILE": str(context.home_dir)},
-    )
-    assert result.returncode == 0, result.stderr
-    response = json.loads(result.stdout)
-    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-    diagnostic = json.loads(result.stderr)
-    assert diagnostic["schema"] == "hol-guard.codex-bridge-failure.v1"
-    assert any(cause["reason_code"] == "codex_hook_manifest_missing" for cause in diagnostic["causes"])
-    assert config.read_bytes() == before_config
-    assert not manifest.exists()
-    after_secret = secret.stat()
-    assert (after_secret.st_dev, after_secret.st_ino, after_secret.st_mtime_ns, after_secret.st_size) == (
-        before_secret.st_dev,
-        before_secret.st_ino,
-        before_secret.st_mtime_ns,
-        before_secret.st_size,
-    )
-    assert not (context.guard_home / "daemon-state.json").exists()
-    assert codex_native_hook_state(context)["protection_active"] is False
-    print("H1 pass bridge_decision=deny reason=codex_hook_manifest_missing key_rotated=false protection_active=false")
 
 
 def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
@@ -508,7 +458,7 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
     )
     source_root = Path(codex.__file__).resolve().parents[3]
     adapter_path = Path(codex.__file__).relative_to(source_root)
-    files = [path for _role, path in codex._hook_packaged_file_paths()]
+    files = [path for role, path in codex._hook_packaged_file_paths(Path(sys.executable)) if role != "bridge"]
     commands = []
     for number in range(10):
         root = tmp_path / f"generation-{number}"
@@ -526,7 +476,7 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
 
     def validate(number: int, config_json: str | None = None):
         argv = commands[number]
-        config = json.loads(argv[3])
+        config = json.loads(argv[2])
         monkeypatch.setattr(
             runtime_trust,
             "__file__",
@@ -537,14 +487,14 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
             state_path=config["state_path"],
             fallback_command=config["fallback_command"],
             start_command=config["start_command"],
-            config_json=argv[3] if config_json is None else config_json,
+            config_json=argv[2] if config_json is None else config_json,
         )
 
     assert validate(1).cwd.exists()
     assert validate(8).cwd.exists()
     with pytest.raises((ValueError, CodexHookIntegrityError)):
         validate(0)
-    forged = json.loads(commands[8][3])
+    forged = json.loads(commands[8][2])
     forged["query"] = "changed-unregistered-binding"
     with pytest.raises((ValueError, CodexHookIntegrityError)):
         validate(8, json.dumps(forged, separators=(",", ":")))
@@ -569,9 +519,9 @@ def test_uninstall_preserves_key_needed_by_other_authenticated_target(tmp_path: 
     # public install gate for an absent manifest beside an existing key.
     config = second.home_dir / ".codex/config.toml"
     payload = {"features": {"hooks": True}}
-    adapter._install_config_hooks(payload, second, config_path=config)
+    publication_helpers.install_config_hooks(payload, second, config_path=config)
     with codex_install_transaction(guard_home, config, actor="fixture-second-target"):
-        state = adapter._write_authenticated_hook_config(
+        state = publication_helpers.write_authenticated_hook_config(
             second, config_path=config, payload=payload, previous_manifest=None
         )
     assert state["protection_active"]

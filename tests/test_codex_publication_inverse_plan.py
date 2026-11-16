@@ -9,7 +9,7 @@ from dataclasses import replace
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_file_integrity as integrity
-from codex_plugin_scanner.guard import runtime_transition
+from codex_plugin_scanner.guard import native_runner_authority
 from codex_plugin_scanner.guard.adapters.codex import _hook_manifest_spec
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
@@ -37,20 +37,28 @@ def test_inverse_plan_is_read_only_and_binds_foreign_config_for_review(installed
         script = r"""
 import os, sys
 from pathlib import Path
+from codex_plugin_scanner.guard import native_transition_files
 from codex_plugin_scanner.guard.adapters import codex
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 home = Path(sys.argv[1])
 context = HarnessContext(home, None, home / '.hol-guard', home_override_explicit=True)
-original = codex.mark_owned_hook_publication_conflict
+original = native_transition_files.publication
 def conflict_after_publication(*args, **kwargs):
     config = home / '.codex/config.toml'
     config.write_bytes(config.read_bytes() + b'\n# intervening writer\n')
     raise OSError('injected readback failure with foreign config')
-def exit_after_signed_conflict(*args, **kwargs):
-    original(*args, **kwargs)
-    os._exit(17)
-codex._require_hook_semantics_readback = conflict_after_publication
-codex.mark_owned_hook_publication_conflict = exit_after_signed_conflict
+def exit_after_signed_conflict(op, *args, **kwargs):
+    if op != 'abort':
+        return original(op, *args, **kwargs)
+    try:
+        original(op, *args, **kwargs)
+    finally:
+        os._exit(17)
+from tests import codex_publication_steps
+codex._publish_hooks = codex_publication_steps.stepwise_publish_hooks
+codex.CodexHarnessAdapter._install_owned = codex_publication_steps.stepwise_install_owned
+codex_publication_steps.readback = conflict_after_publication
+native_transition_files.publication = exit_after_signed_conflict
 codex.CodexHarnessAdapter().install(context)
 raise RuntimeError('signed conflict boundary was not reached')
 """
@@ -194,16 +202,23 @@ def test_inverse_plan_forwards_original_deadline_to_artifact_comparison(installe
     before = participant_digests(context, config, manifest)
     with codex_install_transaction(context.guard_home, config, actor="review-artifact-deadline"):
         plan = prepare_authenticated_hook_publication_inverse(_hook_manifest_spec(context))
-        clock = [0.0]
-        monkeypatch.setattr(integrity.time, "monotonic", lambda: clock[0])
+        monkeypatch.setattr(integrity.time, "monotonic", lambda: 0.0)
+        forwarded: list[object] = []
+        ask = native_runner_authority.native_runner_authority
 
-        def expires_during_digest(*_args, **_kwargs):
-            clock[0] = 2.0
-            runtime_transition._check_inverse_deadline()
-            raise AssertionError("Original deadline was not forwarded to artifact hashing")
+        def expires_in_the_resident(kind: str, request: dict[str, object], **kwargs: object) -> dict[str, object]:
+            if kind != "transition_files" or request.get("op") != "compare" or "budget" not in request:
+                return ask(kind, request, **kwargs)
+            budget = request["budget"]
+            assert isinstance(budget, dict)
+            forwarded.append(min(value for value in budget.values() if isinstance(value, int)))
+            # The resident sees the original deadline already spent.
+            spent = {name: None if value is None else 0 for name, value in budget.items()}
+            return ask(kind, {**request, "budget": spent}, **kwargs)
 
-        monkeypatch.setattr(runtime_transition, "_artifact_digest", expires_during_digest)
+        monkeypatch.setattr(native_runner_authority, "native_runner_authority", expires_in_the_resident)
         with pytest.raises(TransitionError) as failure, integrity.hook_validation_deadline(1.0):
             plan.compare_before()
         assert failure.value.reason == "deadline_exceeded"
+        assert forwarded and forwarded[0] == 1000
     assert participant_digests(context, config, manifest) == before

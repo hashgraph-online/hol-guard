@@ -7,8 +7,9 @@
 
 use serde_json::{json, Map, Value};
 
-use super::codex::{registered, strings};
+use super::codex::{compact, registered, strings};
 use super::codex_merge::{get, payload, pop, py_eq, render, set, Entries};
+use super::codex_migration::{owners_op, without_legacy};
 use super::{Failure, Step};
 use crate::cursor_editor_plan::is_guard_proxy;
 use crate::pyjson::{self, PyVal};
@@ -39,24 +40,63 @@ fn launches(servers: &[(String, PyVal)], names: Option<&[String]>) -> Vec<(Strin
     found
 }
 
-/// `render_codex_alternate_cleanup` over a payload whose legacy Guard hooks
-/// Python already stripped (`legacy`).
+/// The hooks left once this install's exact legacy bridge entries are gone,
+/// or `None` when none was there: `_current_install_legacy_bindings`, then
+/// `remove_manifest_bound_hook_events`, over the legacy owner fields.
+fn legacy_cleaned(fields: &Map<String, Value>, payload: &[(String, PyVal)]) -> Step<Option<PyVal>> {
+    let Some(hooks @ PyVal::Dict(_)) = get(payload, "hooks") else {
+        return Ok(None);
+    };
+    let mut base = Map::new();
+    for key in [
+        "expected",
+        "argv",
+        "legacy_argv",
+        "statuses",
+        "windows",
+        "long_paths",
+    ] {
+        base.insert(
+            key.into(),
+            fields.get(key).cloned().ok_or(Failure::Invalid)?,
+        );
+    }
+    let hooks = compact(hooks, false);
+    let mut extra = Map::new();
+    extra.insert("hooks".into(), json!(hooks));
+    let legacy = owners_op(&base, "legacy", extra)?;
+    let bindings = legacy
+        .get("bindings")
+        .and_then(Value::as_str)
+        .ok_or(Failure::Invalid)?;
+    let mut extra = Map::new();
+    extra.insert("hooks".into(), json!(hooks));
+    extra.insert("bindings".into(), json!(bindings));
+    let removed = owners_op(&without_legacy(&base), "remove", extra)?;
+    if removed.get("changed").and_then(Value::as_bool) != Some(true) {
+        return Ok(None);
+    }
+    let cleaned = removed
+        .get("hooks")
+        .and_then(Value::as_str)
+        .ok_or(Failure::Invalid)?;
+    pyjson::parse(cleaned)
+        .map(Some)
+        .map_err(|_| Failure::Invalid)
+}
+
+/// `render_codex_alternate_cleanup`; with `remove_hooks`, this install's
+/// legacy Guard hooks go first.
 pub(super) fn alternate_cleanup(fields: &Map<String, Value>) -> Step<Value> {
     let original = payload(fields, "payload")?;
     let mut rendered = original.clone();
     let remove_hooks = fields.get("remove_hooks").and_then(Value::as_bool) == Some(true);
     if remove_hooks {
-        if let Some(legacy) = fields.get("legacy").and_then(Value::as_object) {
-            if legacy.get("removed").and_then(Value::as_bool) == Some(true) {
-                let cleaned = match legacy.get("cleaned").and_then(Value::as_str) {
-                    Some(raw) => pyjson::parse(raw).map_err(|_| Failure::Invalid)?,
-                    None => PyVal::Dict(Vec::new()),
-                };
-                if cleaned.as_dict().is_some_and(|hooks| !hooks.is_empty()) {
-                    set(&mut rendered, "hooks", cleaned);
-                } else {
-                    pop(&mut rendered, "hooks");
-                }
+        if let Some(cleaned) = legacy_cleaned(fields, &original)? {
+            if cleaned.as_dict().is_some_and(|hooks| !hooks.is_empty()) {
+                set(&mut rendered, "hooks", cleaned);
+            } else {
+                pop(&mut rendered, "hooks");
             }
         }
         if !registered(get(&rendered, "hooks")) {
@@ -109,6 +149,10 @@ pub(super) fn alternate_cleanup(fields: &Map<String, Value>) -> Step<Value> {
 
 /// `render_codex_managed_mcp`: refresh each Guard proxy's launch, then write
 /// or drop the managed servers Python rendered (`null` drops one).
+///
+/// With a workspace (`workspace_payload` present), a workspace entry of the
+/// same name shadows a managed server that was not itself read from the project, so
+/// that server is dropped rather than written over it.
 pub(super) fn managed_mcp(fields: &Map<String, Value>) -> Step<Value> {
     let mut rendered = payload(fields, "payload")?;
     let mut servers: Entries = get(&rendered, "mcp_servers")
@@ -172,6 +216,18 @@ pub(super) fn managed_mcp(fields: &Map<String, Value>) -> Step<Value> {
         }
     }
     migrated.sort();
+    let workspace_names: Option<Vec<String>> = match fields.get("workspace_payload") {
+        None | Some(Value::Null) => None,
+        Some(_) => Some(
+            get(&payload(fields, "workspace_payload")?, "mcp_servers")
+                .and_then(PyVal::as_dict)
+                .unwrap_or_default()
+                .iter()
+                .filter(|(_, server)| server.as_dict().is_some())
+                .map(|(name, _)| name.clone())
+                .collect(),
+        ),
+    };
     for server in fields
         .get("servers")
         .and_then(Value::as_array)
@@ -181,12 +237,16 @@ pub(super) fn managed_mcp(fields: &Map<String, Value>) -> Step<Value> {
             .get("name")
             .and_then(Value::as_str)
             .ok_or(Failure::Invalid)?;
+        let shadowed = workspace_names.as_ref().is_some_and(|names| {
+            server.get("source_scope").and_then(Value::as_str) != Some("project")
+                && names.iter().any(|shadow| shadow == name)
+        });
         match server.get("entry").and_then(Value::as_str) {
-            Some(raw) => {
+            Some(raw) if !shadowed => {
                 let entry = pyjson::parse(raw).map_err(|_| Failure::Invalid)?;
                 set(&mut servers, name, entry);
             }
-            None => {
+            _ => {
                 pop(&mut servers, name);
             }
         }

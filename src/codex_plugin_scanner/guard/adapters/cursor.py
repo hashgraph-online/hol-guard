@@ -91,15 +91,6 @@ def _facts(context: HarnessContext) -> str:
     )
 
 
-def _rendered(argv: list[str]) -> str | None:
-    from ..codex_hook_command_line import render_hook_command
-
-    try:
-        return render_hook_command(argv, windows=True)
-    except ValueError:
-        return None
-
-
 def _relaunch(args: list[str]) -> list[object]:
     from ..stable_guard_cli import guard_cli_launcher
     from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
@@ -137,7 +128,7 @@ def _servers(context: HarnessContext, detected: dict[str, Any]) -> str:
 
 def _answer(context: HarnessContext, op: str, key: str, value: Any, fields: dict[str, Any]) -> None:
     """Merge this process's answer to one reply into the request."""
-    from ..codex_hook_command_line import _expand_short_token
+    from ..codex_hook_command_line import _expand_short_token, short_path_facts
     from .hook_python import disposable_guard_hook_probe
 
     if key == "facts":
@@ -150,8 +141,8 @@ def _answer(context: HarnessContext, op: str, key: str, value: Any, fields: dict
         fields["cursor_probe"] = _cursor_agent_subcommand_available(str(value))
     elif key == "expand":
         fields["long_paths"] = {**fields.get("long_paths", {}), **{str(t): _expand_short_token(str(t)) for t in value}}
-    elif key == "render":
-        fields["rendered"] = [*fields.get("rendered", []), *([argv, _rendered(argv)] for argv in value)]
+    elif key == "shorten":
+        fields["short_names"] = {**fields.get("short_names", {}), **short_path_facts(value)}
     elif key == "relaunch":
         fields["relaunch"] = [*fields.get("relaunch", []), *([args, _relaunch(args)] for args in value)]
     elif key == "servers":

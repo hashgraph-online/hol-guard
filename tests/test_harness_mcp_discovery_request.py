@@ -53,9 +53,12 @@ def _server(harness: str, name: str, identity: McpServerIdentity | None) -> Mana
 
 def _fake(monkeypatch: pytest.MonkeyPatch, answer: object) -> list[dict[str, object]]:
     sent: list[dict[str, object]] = []
+    native = authority.native_runner_authority
 
     def fake_native(kind: str, request: dict[str, object]) -> object:
         assert kind == "harness_mcp_discovery"
+        if request["op"] == "proxy_env":
+            return native(kind, request)
         sent.append(request)
         if isinstance(answer, Exception):
             raise answer
