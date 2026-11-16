@@ -131,7 +131,8 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         // A lookup can print nothing; only a Git command reads a missing
         // revision as the same kind of operation.
         if value == git_value::COMMIT_VALUE
-            && !git_value::in_git_command(&masked, &substitutions, substitution.start)
+            && !(git_value::in_git_command(&masked, &substitutions, substitution.start)
+                && git_value::standalone(&masked, substitution))
         {
             return None;
         }

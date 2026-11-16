@@ -91,6 +91,7 @@ fn a_git_read_of_a_looked_up_commit_proceeds() {
             "git diff $(git merge-base HEAD main) --stat",
             "git diff $(git rev-parse --short HEAD~1) $(git rev-parse HEAD) --stat",
             "git log --oneline $(git merge-base HEAD main)..HEAD",
+            r#"git diff "$(git merge-base HEAD main)" --stat"#,
         ] {
             let verdict = classify(&home, harness, command);
             assert_eq!(
@@ -116,6 +117,9 @@ fn other_lookups_and_other_programs_keep_the_review() {
             "cat $(git rev-parse HEAD)",
             "git reset --hard $(git rev-parse HEAD~1)",
             "git diff $(git rev-parse HEAD) --output=../out.txt",
+            // Glued text: an empty lookup leaves an option or a file name.
+            "git diff $(git rev-parse HEAD)--output=../out.txt",
+            "git show HEAD:.$(git log -1 --format=%h -- README.md)env",
         ] {
             let verdict = classify(&home, harness, command);
             assert_ne!(

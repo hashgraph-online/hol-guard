@@ -20,7 +20,8 @@
 //! programs read: `grep -r TODO $(...)` would search the working directory.
 //! For a Git command a missing revision means `HEAD` or the working tree, the
 //! same kind of read or write, so the stand-in is used only inside a command
-//! that runs `git`.
+//! that runs `git`, and only where the lookup is a word of its own or one end
+//! of a range: text glued to it could turn into an option or a file name.
 
 use crate::shell_structure::ShellCommandSubstitution;
 
@@ -71,11 +72,41 @@ pub(super) fn in_git_command(
             _ => {}
         }
     }
-    if single || double {
+    // Inside double quotes the substitution is still Git's argument; inside
+    // single quotes it is not a substitution at all.
+    if single {
         return false;
     }
     let segment: String = chars[begins..start].iter().collect();
     segment.trim_start().starts_with("git ")
+}
+
+/// Whether the substitution is a word of its own, so that an empty lookup
+/// removes a revision and nothing else. Glued text would change meaning:
+/// `$(...)--output=x` becomes an option and `HEAD:.$(...)env` names `.env`.
+/// A whole double-quoted word (`"$(...)"`) becomes an empty argument, and a
+/// range end (`$(...)..HEAD`, `main..$(...)`) stays a range.
+pub(super) fn standalone(chars: &[char], substitution: &ShellCommandSubstitution) -> bool {
+    if super::double_quoted_word(chars, substitution) {
+        return true;
+    }
+    // Part of a longer quoted word: the value is spliced into that word.
+    if inside_double_quotes(&chars[..substitution.start]) {
+        return false;
+    }
+    let boundary = |character: Option<&char>, operators: &[char]| {
+        character.is_none_or(|character| {
+            character.is_ascii_whitespace() || operators.contains(character)
+        })
+    };
+    let range = |from: usize| chars.get(from..from + 2) == Some(&['.', '.'][..]);
+    let before = substitution
+        .start
+        .checked_sub(1)
+        .and_then(|at| chars.get(at));
+    let after_range = substitution.start >= 2 && range(substitution.start - 2);
+    (boundary(before, &[';', '|', '&', '(']) || after_range)
+        && (boundary(chars.get(substitution.end), &[';', '|', '&', ')']) || range(substitution.end))
 }
 
 fn body_character(character: char) -> bool {
@@ -168,6 +199,24 @@ fn head_relative(word: &str) -> bool {
 
 fn digits(text: &str) -> bool {
     !text.is_empty() && text.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Whether the end of `prefix` sits inside double quotes.
+fn inside_double_quotes(prefix: &[char]) -> bool {
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    for &character in prefix {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match character {
+            '\\' if !single => escaped = true,
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            _ => {}
+        }
+    }
+    double
 }
 
 #[cfg(test)]

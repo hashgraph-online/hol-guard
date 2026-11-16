@@ -1,4 +1,4 @@
-use super::{in_git_command, stand_in, COMMIT_VALUE};
+use super::{in_git_command, stand_in, standalone, COMMIT_VALUE};
 use crate::shell_structure::extract_command_substitution_spans;
 
 #[test]
@@ -68,4 +68,38 @@ fn the_value_is_read_only_inside_a_git_command() {
     assert!(!git_command("echo 'git x;' $(git rev-parse HEAD)"));
     assert!(!git_command("echo \"; git show\" $(git rev-parse HEAD)"));
     assert!(!git_command("FOO=1 git show $(git rev-parse HEAD)"));
+    assert!(git_command(
+        "git diff \"$(git merge-base HEAD main)\" --stat"
+    ));
+}
+
+fn own_word(command: &str) -> bool {
+    let chars: Vec<char> = command.chars().collect();
+    let spans = extract_command_substitution_spans(command);
+    standalone(&chars, spans.last().expect("a substitution"))
+}
+
+#[test]
+fn the_value_stands_in_only_for_a_whole_word_or_a_range_end() {
+    for command in [
+        "git show $(git rev-parse HEAD)",
+        "git diff $(git merge-base HEAD main) --stat",
+        "git log $(git merge-base HEAD main)..HEAD",
+        "git log main..$(git rev-parse HEAD)",
+        "git diff \"$(git merge-base HEAD main)\" --stat",
+        "(git show $(git rev-parse HEAD))",
+        "git show $(git rev-parse HEAD); git status",
+    ] {
+        assert!(own_word(command), "{command}");
+    }
+    for command in [
+        // An empty value would turn glued text into an option or a name.
+        "git diff $(git rev-parse HEAD)--output=../out.txt",
+        "git show HEAD:.$(git rev-parse HEAD)env",
+        "git show x$(git rev-parse HEAD)",
+        "git show \"HEAD:$(git rev-parse HEAD)\"",
+        "git show \"x $(git rev-parse HEAD) y\"",
+    ] {
+        assert!(!own_word(command), "{command}");
+    }
 }
