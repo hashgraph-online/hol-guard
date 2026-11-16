@@ -77,7 +77,6 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
-use super::evaluate_pre_tool_with_execution_context;
 use extract::extract_generic_signals;
 use result::{generic_action, generic_error_result, generic_result};
 use std::time::Instant;
@@ -873,7 +872,7 @@ fn evaluate_envelope(
         .as_deref()
         .filter(|_| !search_scope_proven && !apply_patch_proven)
         .map(|command| {
-            evaluate_pre_tool_with_execution_context(
+            super::evaluate_pre_tool_with_reported_guard_home(
                 &CommandModelRequestV1 {
                     command: command.to_owned(),
                     dialect: tools::command_dialect(signals.tool_name.as_deref()).to_owned(),
@@ -884,6 +883,7 @@ fn evaluate_envelope(
                 cwd,
                 deadline,
                 execution_environment,
+                context.guard_home,
             )
         });
     // Parsed benign commands may contain credential words as search patterns.

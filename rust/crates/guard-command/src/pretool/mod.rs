@@ -1009,6 +1009,22 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Result<PreToolDecisionV1, String> {
+    // Literal and offline callers cannot claim a hook-reported Guard home.
+    evaluate_pre_tool_with_reported_guard_home(
+        request, home_dir, cwd, deadline, execution_environment, None,
+    )
+}
+
+/// Preserve the active Guard store supplied by the hook through every bounded
+/// command rewrite. Other command-model callers continue without that proof.
+pub(super) fn evaluate_pre_tool_with_reported_guard_home(
+    request: &CommandModelRequestV1,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    deadline: Option<std::time::Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    guard_home: Option<&str>,
+) -> Result<PreToolDecisionV1, String> {
     // One submission is read again for every spelling a rewrite reaches, and
     // each reading may ask the include walk about a recursive root. The walk
     // is the one proof here that spends its own wall clock, so the clock is
@@ -1021,7 +1037,9 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     // starting one of its own, and the budget ends when the outermost
     // reading returns.
     let _budget = search_scope_budget::begin_include_scope_budget();
-    let decision = evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)?;
+    let decision = evaluate_rewritten(
+        request, home_dir, cwd, deadline, execution_environment, guard_home, 0,
+    )?;
     Ok(literal_secrets::review_command(request, decision))
 }
 
@@ -1052,10 +1070,11 @@ fn evaluate_rewritten(
     cwd: Option<&str>,
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    guard_home: Option<&str>,
     round: usize,
 ) -> Result<PreToolDecisionV1, String> {
     let decision =
-        evaluate_single_command(request, home_dir, cwd, deadline, execution_environment)?;
+        evaluate_single_command(request, home_dir, cwd, deadline, execution_environment, guard_home)?;
     if request.dialect != "posix" || decision.minimum_action != "review" {
         return Ok(decision);
     }
@@ -1071,6 +1090,7 @@ fn evaluate_rewritten(
         cwd,
         deadline,
         execution_environment,
+        guard_home,
         round,
     ) {
         return Ok(allowed);
@@ -1087,6 +1107,7 @@ fn evaluate_rewritten(
             cwd,
             deadline,
             execution_environment,
+            guard_home,
         ));
     };
     let rewritten_request = CommandModelRequestV1 {
@@ -1105,6 +1126,7 @@ fn evaluate_rewritten(
             cwd,
             deadline,
             execution_environment,
+            guard_home,
             round + 1,
         )
     } else {
@@ -1114,6 +1136,7 @@ fn evaluate_rewritten(
             cwd,
             deadline,
             execution_environment,
+            guard_home,
         )
     };
     match rewritten {
@@ -1164,6 +1187,7 @@ fn ungrouped_decision(
     cwd: Option<&str>,
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    guard_home: Option<&str>,
 ) -> PreToolDecisionV1 {
     let Some(command) = ungrouped_command_list(&request.command) else {
         return decision;
@@ -1172,7 +1196,7 @@ fn ungrouped_decision(
         command,
         ..request.clone()
     };
-    match evaluate_single_command(&ungrouped, home_dir, cwd, deadline, execution_environment) {
+    match evaluate_single_command(&ungrouped, home_dir, cwd, deadline, execution_environment, guard_home) {
         Ok(plain) if matches!(plain.minimum_action.as_str(), "allow" | "review" | "block") => plain,
         _ => decision,
     }
@@ -1256,10 +1280,14 @@ fn evaluate_single_command(
     cwd: Option<&str>,
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    guard_home: Option<&str>,
 ) -> Result<PreToolDecisionV1, String> {
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
-    let context = PathContext::for_session(home_dir, cwd, execution_environment);
+    let context = PathContext {
+        guard_home,
+        ..PathContext::for_session(home_dir, cwd, execution_environment)
+    };
     if shell_script::contains_credential_post(&model, context) {
         return Ok(pretool_decision(
             model,
