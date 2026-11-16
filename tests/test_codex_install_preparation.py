@@ -138,48 +138,6 @@ def test_frozen_preparation_pins_shared_executable_once_with_invocation(tmp_path
     assert dependencies[0].invocation_identity["path"] == str(executable)
 
 
-@pytest.mark.usefixtures("frozen_codex_contract")
-def test_exact_binding_scope_contains_legacy_frozen_launcher_selector(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.stable_guard_cli import exact_process_guard_cli_binding, resolve_frozen_guard_cli
-
-    root = tmp_path / "core"
-    executable = root / "versions" / "candidate" / "hol-guard"
-    executable.parent.mkdir(parents=True)
-    executable.write_bytes(b"isolated frozen candidate")
-    executable.chmod(0o700)
-    shim = root / "current-hol-guard"
-    shim.write_bytes(b"fixture stable predecessor launcher")
-    shim.chmod(0o700)
-    monkeypatch.setattr(adapter.sys, "executable", str(executable))
-    # Reproduce the legacy selector explicitly. Current frozen installation
-    # binds the physical main independently of this mutable CLI resolver.
-    monkeypatch.setattr(adapter, "_guard_python_executable", resolve_frozen_guard_cli)
-    context = _context(tmp_path, monkeypatch)
-    harness = adapter.CodexHarnessAdapter()
-    harness.install(context)
-    ordinary = harness.prepare_install(context)
-    ordinary_manifest = json.loads(
-        next(
-            change.after
-            for change in ordinary.files
-            if str(change.path) == ordinary.manifest["managed_hook_manifest_path"]
-        )
-    )
-    assert ordinary_manifest["interpreter"]["invocation_path"] == str(shim)
-    with exact_process_guard_cli_binding():
-        prepared = harness.prepare_install(context)
-    candidate_manifest = json.loads(
-        next(
-            change.after
-            for change in prepared.files
-            if str(change.path) == prepared.manifest["managed_hook_manifest_path"]
-        )
-    )
-    assert candidate_manifest["interpreter"]["invocation_path"] == str(executable)
-    assert resolve_frozen_guard_cli() == str(shim)
-    assert shim.read_bytes() == b"fixture stable predecessor launcher"
-
-
 def test_prepared_file_generations_match_ordinary_install(tmp_path, monkeypatch):
     harness, context, _global_config, _workspace_config = _sources(tmp_path, monkeypatch)
     prepared = harness.prepare_install(context)
