@@ -37,6 +37,11 @@ pub(super) fn package_root(ctx: &Ctx) -> Step<&str> {
     text(ctx, "package_root")
 }
 
+/// The Guard version the caller runs.
+pub(super) fn version(ctx: &Ctx) -> Step<&str> {
+    text(ctx, "version")
+}
+
 /// The caller's interpreter as its absolute path, unresolved.
 pub(super) fn executable(ctx: &Ctx) -> Step<&str> {
     text(ctx, "executable")

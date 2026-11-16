@@ -1,7 +1,6 @@
 """A retained receipt supplies exact authenticated bytes, never a repair grant."""
 
 import json
-import sys
 import time
 from pathlib import Path
 
@@ -259,7 +258,7 @@ def retained_installation(tmp_path, monkeypatch):
     monkeypatch.setenv("USERPROFILE", str(context.home_dir))
     source_root = Path(adapter.__file__).resolve().parents[3]
     adapter_relative = Path(adapter.__file__).relative_to(source_root)
-    sources = {path for role, path in adapter._hook_packaged_file_paths(Path(sys.executable)) if role != "bridge"} | {
+    sources = {path for role, path in adapter._hook_manifest_spec(context).packaged_file_paths if role != "bridge"} | {
         Path(adapter.__file__)
     }
     bridges = []

@@ -25,12 +25,11 @@ from codex_plugin_scanner.guard.frozen_runtime_commands import (
     frozen_windows_extension_control_commands,
 )
 from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
+from tests.codex_legacy_roles import without_package_roles
 
 
 @pytest.fixture
 def frozen_codex_contract(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    original_interpreter = codex_adapter._guard_python_executable
-    original_paths = codex_adapter._hook_packaged_file_paths
     original_validator = codex_hook_runtime_trust.validate_codex_hook_launch
     had_marker = hasattr(codex_adapter, "_HOL_GUARD_FROZEN_CODEX_RUNTIME")
     marker_value = getattr(codex_adapter, "_HOL_GUARD_FROZEN_CODEX_RUNTIME", None)
@@ -49,9 +48,7 @@ def frozen_codex_contract(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         # patches before restoring the source contract, otherwise pytest's
         # later monkeypatch teardown reinstates a temporary frozen function.
         monkeypatch.undo()
-        codex_adapter._guard_python_executable = original_interpreter
         native_caller._frozen_contract = False
-        codex_adapter._hook_packaged_file_paths = original_paths
         codex_hook_runtime_trust.validate_codex_hook_launch = original_validator
         if had_marker:
             codex_adapter._HOL_GUARD_FROZEN_CODEX_RUNTIME = marker_value
@@ -252,7 +249,7 @@ def test_frozen_codex_contract_binds_commands_and_roles_to_one_executable(
     bridge_config = json.loads(bridge_argv[2])
     fallback_argv = bridge_config["fallback_command"]
     daemon_argv = bridge_config["start_command"]
-    package_paths = codex_adapter._hook_packaged_file_paths(Path(bridge_argv[0]))
+    package_paths = codex_adapter._hook_manifest_spec(context).packaged_file_paths
     invocation = str(Path(sys.executable).expanduser().resolve(strict=True))
     executable_target = Path(sys.executable).expanduser().resolve(strict=True)
 
@@ -382,16 +379,7 @@ def test_retained_frozen_hook_can_be_validated_against_exact_transition_artifact
     candidate.write_bytes(b"isolated candidate frozen artifact fixture")
     candidate.chmod(0o700)
     monkeypatch.setattr(sys, "executable", str(previous))
-    with monkeypatch.context() as role_patch:
-        if legacy_roles:
-            roles = codex_adapter._hook_packaged_file_paths
-            role_patch.setattr(
-                codex_adapter,
-                "_hook_packaged_file_paths",
-                lambda native_bridge: tuple(
-                    (role, path) for role, path in roles(native_bridge) if role not in {"hook_probe", "native_receipt"}
-                ),
-            )
+    with without_package_roles(monkeypatch, {"hook_probe", "native_receipt"} if legacy_roles else set()):
         CodexHarnessAdapter().install(context)
     argv = codex_adapter._hook_command_parts(context)
     bridge = json.loads(argv[2])

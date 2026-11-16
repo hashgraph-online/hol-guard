@@ -126,7 +126,6 @@ def test_frozen_preparation_pins_shared_executable_once_with_invocation(tmp_path
     executable.write_bytes(b"isolated frozen executable identity")
     executable.chmod(0o700)
     monkeypatch.setattr(adapter.sys, "executable", str(executable))
-    monkeypatch.setattr(adapter, "_guard_python_executable", lambda: str(executable))
     context = _context(tmp_path, monkeypatch)
     harness = adapter.CodexHarnessAdapter()
     harness.install(context)

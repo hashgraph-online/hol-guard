@@ -15,6 +15,8 @@ mod config_hooks;
 mod main_plan;
 #[path = "tests_codex_migration.rs"]
 mod migration;
+#[path = "tests_codex_spec.rs"]
+mod spec;
 #[path = "tests_codex_uninstall.rs"]
 mod uninstall;
 #[path = "tests_codex_uninstall_config.rs"]

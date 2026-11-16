@@ -21,6 +21,17 @@ def install_frozen_contract() -> None:
     _frozen_contract = True
 
 
+def hook_python() -> str:
+    """The interpreter a hook relaunches: a frozen Guard by its resolved bytes
+    (the hook manifest authenticates exactly those), else this interpreter."""
+    from .frozen_runtime_commands import is_frozen_guard_runtime
+
+    executable = Path(sys.executable).expanduser()
+    if _frozen_contract or is_frozen_guard_runtime():
+        return str(executable.resolve(strict=True))
+    return str(executable.absolute())
+
+
 def caller_identity() -> dict[str, object]:
     """This process's interpreter, frozen state, launchers, package root and version."""
     from ..version import __version__

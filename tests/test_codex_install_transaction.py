@@ -403,7 +403,7 @@ def test_cached_launch_retains_exact_previous_artifact_identity(
         home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home", home_override_explicit=True
     )
     source_root = Path(codex.__file__).resolve().parents[3]
-    files = [path for role, path in codex._hook_packaged_file_paths(Path(sys.executable)) if role != "bridge"]
+    files = [path for role, path in codex._hook_manifest_spec(context).packaged_file_paths if role != "bridge"]
     # Two immutable package layouts with identical reviewed code, so this
     # models a path/format migration without authenticating altered code.
     for generation in ("old", "new"):
@@ -462,7 +462,7 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
     )
     source_root = Path(codex.__file__).resolve().parents[3]
     adapter_path = Path(codex.__file__).relative_to(source_root)
-    files = [path for role, path in codex._hook_packaged_file_paths(Path(sys.executable)) if role != "bridge"]
+    files = [path for role, path in codex._hook_manifest_spec(context).packaged_file_paths if role != "bridge"]
     commands = []
     for number in range(10):
         root = tmp_path / f"generation-{number}"

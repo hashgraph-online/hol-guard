@@ -15,10 +15,16 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
 )
 
 
-def test_codex_manifest_files_name_the_native_runtime_the_hook_runs(tmp_path: Path) -> None:
+def test_codex_manifest_files_name_the_native_runtime_the_hook_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     runtime = tmp_path / "hol-guard-runtime"
     runtime.write_bytes(b"fixture")
-    files = dict(codex._hook_packaged_file_paths(runtime))
+    context = HarnessContext(
+        home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=None, home_override_explicit=True
+    )
+    monkeypatch.setattr(codex, "_native_bridge_executable", lambda _home: runtime)
+    files = dict(codex._hook_manifest_spec(context).packaged_file_paths)
     assert files["bridge"] == runtime.resolve()
     assert "bridge_resume" not in files
     assert all(path.is_file() for path in files.values())

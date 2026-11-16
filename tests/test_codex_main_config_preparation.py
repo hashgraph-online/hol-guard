@@ -80,7 +80,7 @@ def _server(context, name, scope="global"):
 
 def test_mcp_renderer_refreshes_proxy_preserves_input_and_workspace_precedence(tmp_path, monkeypatch):
     context = replace(_context(tmp_path, monkeypatch), workspace_dir=tmp_path / "workspace")
-    monkeypatch.setattr(adapter, "_guard_python_executable", lambda: "/fixture/current-python")
+    monkeypatch.setattr(adapter, "hook_python", lambda: "/fixture/current-python")
     payload = {
         "model": "fixture",
         "mcp_servers": {

@@ -17,7 +17,7 @@ use super::files::{self, Doc};
 use super::{
     codex_alternate_plan, codex_config_hooks, codex_files, codex_live_read, codex_live_state,
     codex_main_plan, codex_merge, codex_migration, codex_publish, codex_servers, codex_sources,
-    codex_uninstall, codex_uninstall_config, codex_uninstall_plan, common, hook_render,
+    codex_spec, codex_uninstall, codex_uninstall_config, codex_uninstall_plan, common, hook_render,
     path_answer, path_text, Ctx, Failure, Spec, Step,
 };
 use crate::claude_hook_bridge_recovery::frozen_recovery_command;
@@ -87,11 +87,18 @@ pub(super) fn dispatch(
         "uninstall_config" => codex_uninstall_config::uninstall_config(ctx, fields),
         "uninstall_plan" => codex_uninstall_plan::uninstall_plan(ctx, fields),
         "uninstall" => super::codex_uninstall_op::uninstall(ctx, fields),
-        "live_hook_state" => codex_live_state::live_hook_state(ctx, fields),
-        "runtime_hooks_verified" => codex_live_read::runtime_hooks_verified(ctx, fields),
+        "manifest_spec" => codex_spec::manifest_spec(ctx, fields),
+        "live_hook_state" => {
+            codex_live_state::live_hook_state(ctx, &codex_spec::with_spec(ctx, fields)?)
+        }
+        "runtime_hooks_verified" => {
+            codex_live_read::runtime_hooks_verified(ctx, &codex_spec::with_spec(ctx, fields)?)
+        }
         "publish_hooks" => codex_publish::publish_hooks(ctx, fields),
-        "install" => super::codex_install::install(ctx, fields),
-        "install_plan" => super::codex_install_plan::install_plan(ctx, fields),
+        "install" => super::codex_install::install(ctx, &codex_spec::with_spec(ctx, fields)?),
+        "install_plan" => {
+            super::codex_install_plan::install_plan(ctx, &codex_spec::with_spec(ctx, fields)?)
+        }
         _ => common(spec, op, ctx),
     }
 }
@@ -199,7 +206,7 @@ fn int(value: i64) -> PyVal {
 /// A frozen Guard (`frozen`) is its own interpreter: the fallback drops the
 /// `-c` bootstrap and the start command is its private recovery argument.
 /// The handler itself is always the native runtime's `codex-hook-bridge`.
-fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+pub(super) fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let home_is_current = flag(fields, "home_is_current")?;
     let runtime_home = PathBuf::from(text(fields, "runtime_guard_home")?);
     let home = ctx.resolved(&ctx.home);
@@ -295,7 +302,7 @@ fn hook_env(ctx: &Ctx) -> Step<Vec<(String, PyVal)>> {
 }
 
 /// `_managed_hook_groups` and `_manifest_event_bindings`, as ordered JSON.
-fn groups(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+pub(super) fn groups(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let argv = strings(fields.get("argv"))?;
     let names = hook_render::names_for(fields, [&argv[..]], ctx.windows)?;
     let command = &hook_render::render(&argv, ctx.windows, &names)?;

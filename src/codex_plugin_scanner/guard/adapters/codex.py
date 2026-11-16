@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from ...version import __version__
 from ..aibom_detection import (
     detection_from_payload,
     extend_codex_runtime_inventory,
@@ -60,10 +59,10 @@ from ..codex_hook_trust import apply_codex_hook_trust_doctor
 from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
 from ..models import HarnessDetection
+from ..native_caller import hook_python
 from ..native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
 from ..native_path_anchor import anchor_to_process_directory
 from ..shims import shim_interpreter
-from ..stable_guard_cli import resolve_frozen_guard_cli
 from .base import HarnessContext, PreparedHarnessInstall
 from .codex_detect_sources import path_restorations, read_source_bytes
 from .codex_remote_control import (
@@ -158,29 +157,13 @@ def _json_object(path: Path) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _argv_fields(context: HarnessContext, *, home_is_current: bool) -> dict[str, object]:
-    guard_home = resolve_guard_home() if home_is_current else context.guard_home
-    return {
-        "home_is_current": home_is_current,
-        "runtime_guard_home": str(guard_home.resolve(strict=False)),
-        "workspace_explicit": context.workspace_override_explicit,
-    }
-
-
-def _guard_python_executable() -> str:
-    """Use a prune-safe frozen launcher, else the current interpreter identity."""
-
-    if bool(getattr(sys, "frozen", False)):
-        return resolve_frozen_guard_cli()
-    return str(Path(sys.executable).expanduser().absolute())
-
-
 def _home_is_current(context: HarnessContext) -> bool:
     return not context.home_override_explicit and context.home_dir.resolve() == Path.home().resolve()
 
 
-def _runtime_guard_home(context: HarnessContext) -> Path:
-    guard_home = resolve_guard_home() if _home_is_current(context) else context.guard_home
+def _runtime_guard_home(context: HarnessContext, *, home_is_current: bool | None = None) -> Path:
+    current = _home_is_current(context) if home_is_current is None else home_is_current
+    guard_home = resolve_guard_home() if current else context.guard_home
     return guard_home.resolve(strict=False)
 
 
@@ -188,22 +171,31 @@ def _native_bridge_executable(guard_home: Path) -> Path | None:
     return native_hook_bridge_executable(NATIVE_CODEX_HOOK_FEATURE, guard_home=guard_home)
 
 
-def _launch(context: HarnessContext, *, home_is_current: bool) -> dict[str, Any]:
-    """The bridge argv with the fallback and daemon start commands it launches through."""
+def _launch_fields(context: HarnessContext, *, home_is_current: bool | None = None) -> dict[str, object]:
+    """What the runtime cannot see of this launch: the home mode and Guard home,
+    the native runtime and the hook's manifest path and timeout. It derives
+    the argv, the interpreter, the package paths and the manifest spec from
+    these and the caller stamp."""
 
-    fields = _argv_fields(context, home_is_current=home_is_current)
-    guard_home = Path(str(fields["runtime_guard_home"]))
+    current = _home_is_current(context) if home_is_current is None else home_is_current
+    guard_home = _runtime_guard_home(context, home_is_current=current)
     # The native runtime answers each hook from the daemon without starting
     # Python. Without one, the adapter refuses and asks for repair.
     native_bridge = _native_bridge_executable(guard_home)
-    return _codex(
-        "argv",
-        context,
-        **fields,
-        native_bridge=None if native_bridge is None else str(native_bridge),
-        manifest_path=str(hook_manifest_path(guard_home, CodexHarnessAdapter._hook_config_path(context))),
-        long_timeout=_post_tool_hook_timeout_seconds(context),
-    )
+    return {
+        "home_is_current": current,
+        "runtime_guard_home": str(guard_home),
+        "workspace_explicit": context.workspace_override_explicit,
+        "native_bridge": None if native_bridge is None else str(native_bridge),
+        "manifest_path": str(hook_manifest_path(guard_home, CodexHarnessAdapter._hook_config_path(context))),
+        "long_timeout": _post_tool_hook_timeout_seconds(context),
+    }
+
+
+def _launch(context: HarnessContext, *, home_is_current: bool) -> dict[str, Any]:
+    """The bridge argv with the fallback and daemon start commands it launches through."""
+
+    return _codex("argv", context, **_launch_fields(context, home_is_current=home_is_current))
 
 
 def _hook_command_parts_for_home_mode(context: HarnessContext, *, home_is_current: bool) -> tuple[str, ...]:
@@ -257,42 +249,29 @@ def _managed_hook_groups(context: HarnessContext) -> dict[str, dict[str, object]
     return json.loads(_hook_registration(context).groups)
 
 
-def _manifest_event_bindings(context: HarnessContext) -> list[dict[str, object]]:
-    return json.loads(_hook_registration(context).bindings)
-
-
-def _hook_packaged_file_paths(native_bridge: Path) -> tuple[tuple[str, Path], ...]:
-    """Each authenticated role's file; ``bridge`` is the native runtime the hook runs."""
-    scanner_root = Path(__file__).resolve().parents[2]
-    guard_root = Path(__file__).resolve().parents[1]
-    return (
-        ("bridge", native_bridge.resolve()),
-        ("bridge_runtime", guard_root / "codex_hook_bridge_runtime.py"),
-        ("hook_probe", guard_root / "runtime_transition_hook_probe.py"),
-        ("native_receipt", guard_root / "native_decision_receipt.py"),
-        ("fallback_entrypoint", scanner_root / "cli.py"),
-        ("daemon_entrypoint", guard_root / "cli" / "daemon_serve.py"),
-        ("daemon_manager", guard_root / "native_daemon_manage.py"),
-        ("launch_runtime", guard_root / "codex_hook_launch_runtime.py"),
-        ("runtime_trust", guard_root / "codex_hook_runtime_trust.py"),
-        ("windows_job", guard_root / "codex_hook_windows_job.py"),
-    )
-
-
 def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
-    launch = _current_launch(context)
+    """The installation the runtime expects, as it builds it from this launch."""
+
+    fields: dict[str, object] = {"launch": _launch_fields(context)}
+    answer = _codex("manifest_spec", context, **fields)
+    if set(answer) == {"reply"}:
+        # A Windows path is rendered by its 8.3 name, which only this host knows.
+        answer = _codex("manifest_spec", context, **fields, short_names=short_path_facts(answer["reply"]["shorten"]))
+    spec = answer.get("spec")
+    if not isinstance(spec, dict):
+        raise ValueError("Harness adapter answer is malformed")
     return CodexHookManifestSpec(
-        guard_home=context.guard_home,
-        home_dir=context.home_dir,
-        runtime_guard_home=_runtime_guard_home(context),
-        workspace_dir=_hook_workspace_dir(context),
-        config_path=CodexHarnessAdapter._hook_config_path(context),
-        interpreter_path=Path(_guard_python_executable()),
-        package_version=__version__,
-        packaged_file_paths=_hook_packaged_file_paths(Path(str(launch["argv"][0]))),
-        fallback_argv=tuple(str(part) for part in launch["fallback"]),
-        daemon_start_argv=tuple(str(part) for part in launch["start"]),
-        event_bindings=tuple(_manifest_event_bindings(context)),
+        guard_home=Path(str(spec["guard_home"])),
+        home_dir=Path(str(spec["home_dir"])),
+        runtime_guard_home=Path(str(spec["runtime_guard_home"])),
+        workspace_dir=None if spec["workspace_dir"] is None else Path(str(spec["workspace_dir"])),
+        config_path=Path(str(spec["config_path"])),
+        interpreter_path=Path(str(spec["interpreter_path"])),
+        package_version=str(spec["package_version"]),
+        packaged_file_paths=tuple((str(role), Path(str(path))) for role, path in spec["packaged_file_paths"]),
+        fallback_argv=tuple(str(part) for part in spec["fallback_argv"]),
+        daemon_start_argv=tuple(str(part) for part in spec["daemon_start_argv"]),
+        event_bindings=tuple(dict(binding) for binding in spec["event_bindings"]),
         workspace_rebinding_allowed=not context.workspace_override_explicit,
     )
 
@@ -347,7 +326,7 @@ class _CodexInstallPlan:
 
 def _relaunch(asked: Mapping[str, object]) -> dict[str, object]:
     """Each Guard proxy's launch, the way this process would write it."""
-    python = _guard_python_executable()
+    python = hook_python()
     relaunch: dict[str, object] = {}
     for name, args in asked.items():
         _, python_args = python_proxy_launch(None, tuple(str(arg) for arg in cast(Sequence[object], args)))
@@ -457,7 +436,6 @@ def live_hook_ask(op: str, context: HarnessContext) -> dict[str, Any]:
     authenticates and verifies the hook manifest, and decides which managed
     events Guard owns."""
     from ..codex_hook_file_integrity import _python_package_roots, active_hook_validation_deadline
-    from ..codex_hook_manifest import _spec_payload
 
     # Verification gets ten seconds, or what is left of a hook's budget; a
     # spent budget leaves the installation unverified.
@@ -466,7 +444,7 @@ def live_hook_ask(op: str, context: HarnessContext) -> dict[str, Any]:
     if deadline is not None:
         timeout = min(timeout, deadline - time.monotonic())
     request: dict[str, Any] = {
-        "spec": _spec_payload(_hook_manifest_spec(context)),
+        "launch": _launch_fields(context),
         "package_roots": [str(root) for root in _python_package_roots()],
         "budget_spent": timeout <= 0,
         **short_path_fields(),
@@ -688,7 +666,11 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         managed_servers = managed_stdio_servers(detection)
         registration = _hook_registration(context)
         workspace = context.workspace_dir / ".codex/config.toml" if context.workspace_dir is not None else None
+        generation = generation_request(spec, previous_manifest=previous_manifest, create_key=enroll)
+        # The runtime builds the spec from the launch below.
+        generation.pop("spec")
         request: dict[str, Any] = {
+            "launch": _launch_fields(context),
             "pairs": [[str(config), str(hooks)] for config, hooks in pairs],
             "contents": {str(path): _b64(data) for path, data in contents.items()},
             "workspace_config": None if workspace is None else str(workspace),
@@ -706,7 +688,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             ],
             "generation": {
                 "home": os.path.abspath(spec.guard_home),
-                **generation_request(spec, previous_manifest=previous_manifest, create_key=enroll),
+                **generation,
             },
             "interpreter": shim_interpreter(),
             **_legacy_fields(context, registration),
@@ -761,7 +743,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         beside them. When those fail they restore themselves and the op
         withdraws the committed generation too, so legacy hooks never run
         beside their migration."""
-        from ..codex_hook_manifest import _spec_payload
         from ..codex_hook_recovery import _owned
         from ..runtime_transition import TransitionError, assert_transition_mutation_allowed
 
@@ -776,7 +757,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             home=os.path.abspath(context.guard_home),
             config=os.path.abspath(spec.config_path.expanduser()),
             operation_id=_owned(context.guard_home),
-            spec=_spec_payload(spec),
             budget_spent=False,
         )
         answer = _ask_install_plan(context, request, spec.guard_home, op="install")

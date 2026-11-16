@@ -63,6 +63,7 @@ mod codex_python_imports;
 mod codex_python_values;
 mod codex_servers;
 mod codex_sources;
+mod codex_spec;
 mod codex_uninstall;
 mod codex_uninstall_config;
 mod codex_uninstall_op;
