@@ -193,15 +193,32 @@ def test_the_bundle_check_runs_while_another_process_holds_the_turn(tmp_path, mo
 
     with installed_authority_migration_turn(tmp_path, wait_seconds=0.0) as held:
         assert held
-        assert migrate_installed_authority(store, wait_seconds=0.0, on_phase=steps.append) is False  # pyright: ignore[reportArgumentType]
+        assert migrate_installed_authority(store, wait_seconds=0.05, on_phase=steps.append) is False  # pyright: ignore[reportArgumentType]
 
     assert checks == ["bundle"]
     assert steps == ["bundle_checked"]
     assert store.calls == 0
 
-    assert migrate_installed_authority(store, wait_seconds=0.0, on_phase=steps.append) is True  # pyright: ignore[reportArgumentType]
+    assert migrate_installed_authority(store, wait_seconds=0.05, on_phase=steps.append) is True  # pyright: ignore[reportArgumentType]
     assert steps == ["bundle_checked", "bundle_checked", "turn_held"]
     assert store.calls == 1
+
+
+def test_a_caller_that_will_not_wait_skips_the_early_bundle_check(tmp_path, monkeypatch) -> None:
+    # An extension-control host gives up on a taken turn at once; checking
+    # the bundle first would only delay its fallback.
+    checks: list[str] = []
+    steps: list[str] = []
+    monkeypatch.setattr(extension_control_host, "_verify_installed_bundle_early", lambda: checks.append("bundle"))
+    store = _SlowStore(tmp_path, seconds=0.0)
+
+    with installed_authority_migration_turn(tmp_path, wait_seconds=0.0) as held:
+        assert held
+        assert migrate_installed_authority(store, wait_seconds=0.0, on_phase=steps.append) is False  # pyright: ignore[reportArgumentType]
+
+    assert checks == []
+    assert steps == []
+    assert store.calls == 0
 
 
 def test_a_failed_early_bundle_check_leaves_the_failure_to_the_migration(tmp_path, recorded, monkeypatch) -> None:

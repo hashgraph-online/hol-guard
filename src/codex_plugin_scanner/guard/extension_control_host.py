@@ -92,14 +92,19 @@ def migrate_installed_authority(
     False without recording a failure, leaving the migration pending.
 
     ``on_phase`` hears ``bundle_checked`` once the early bundle check is done
+    (only when ``wait_seconds`` is positive)
     and ``turn_held`` once this process holds the turn, so a cold start shows
     which of them it waited on.
     """
 
     report = on_phase or (lambda _step: None)
     started = time.monotonic()
-    _verify_installed_bundle_early()
-    report("bundle_checked")
+    if wait_seconds > 0:
+        # Only a caller that will wait has a wait to overlap. One that gives
+        # up at once (an extension-control host) would pay the check and then
+        # fall back anyway.
+        _verify_installed_bundle_early()
+        report("bundle_checked")
     try:
         with installed_authority_migration_turn(store.guard_home, wait_seconds=wait_seconds) as held:
             if not held:
