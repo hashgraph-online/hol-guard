@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { ContextAssistanceApiError } from "./api";
-import type { UsageMeter } from "./usage-api";
+import { readUsageMeter, type UsageMeter } from "./usage-api";
 import { pollUsage, USAGE_FAILURES_SHOWN } from "./usage-poll";
 
 const meter = (state: UsageMeter["state"], refreshing = false): UsageMeter =>
@@ -76,6 +76,41 @@ async function run(answers: (UsageMeter | Error)[]) {
   });
   assert.equal(reads, 1);
   assert.deepEqual(errors, []);
+}
+
+// A reply cut off after its headers is retried, not shown as numbers the page does not understand.
+{
+  const originalFetch = globalThis.fetch;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const storage = new Map<string, string>();
+  const browserStorage = { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => { storage.set(key, value); } };
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    location: new URL("http://127.0.0.1:4781/guard/settings?guard-token=usage-test-session"),
+    sessionStorage: browserStorage, localStorage: browserStorage,
+  } });
+  const replies = [
+    () => new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{"state":"rea')); c.error(new TypeError("network error")); } }), { status: 200 }),
+    () => new Response(JSON.stringify(meter("ready")), { status: 200 }),
+  ];
+  let fetches = 0;
+  globalThis.fetch = async () => replies[fetches++]!();
+  const shown: UsageMeter["state"][] = [];
+  const errors: string[] = [];
+  try {
+    await pollUsage(new AbortController().signal, {
+      read: readUsageMeter,
+      onMeter: (next) => shown.push(next.state),
+      onError: (message) => errors.push(message),
+      wait: async () => {},
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+    else Reflect.deleteProperty(globalThis, "window");
+  }
+  assert.equal(fetches, 2);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(shown, ["ready"]);
 }
 
 console.log("usage-poll tests passed");

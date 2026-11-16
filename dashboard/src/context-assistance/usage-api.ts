@@ -88,7 +88,12 @@ export async function readUsageMeter(signal?: AbortSignal): Promise<UsageMeter> 
   // A cold start runs Guard's helper process and the savings estimate (up to 8 s) before answering.
   const timeout = AbortSignal.timeout(30_000);
   const response = await fetchWithGuardAuth(PATH, { method: "GET", cache: "no-store", signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
-  const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) throw new ContextAssistanceApiError("usage_unavailable", "Guard could not read usage right now. Try again in a moment.");
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new ContextAssistanceApiError("usage_unavailable", "Guard could not read usage right now. Try again in a moment.");
+  }
+  // A reply cut off mid-body (dropped connection, timeout) rejects here and is retried;
+  // only a complete reply with the wrong shape is "numbers this page does not understand".
+  const body: unknown = await response.json();
   return parseUsageMeter(body);
 }

@@ -6068,8 +6068,11 @@ function parseUsageMeter(body) {
 async function readUsageMeter(signal) {
   const timeout = AbortSignal.timeout(3e4);
   const response = await fetchWithGuardAuth(PATH$1, { method: "GET", cache: "no-store", signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) throw new ContextAssistanceApiError("usage_unavailable", "Guard could not read usage right now. Try again in a moment.");
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => void 0);
+    throw new ContextAssistanceApiError("usage_unavailable", "Guard could not read usage right now. Try again in a moment.");
+  }
+  const body = await response.json();
   return parseUsageMeter(body);
 }
 const USAGE_POLL_MS = 3e3;
