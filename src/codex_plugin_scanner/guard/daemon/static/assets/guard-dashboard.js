@@ -12825,6 +12825,9 @@ function HiMiniPencilSquare(props) {
 function HiMiniPauseCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 10a8 8 0 1 1 16 0 8 8 0 0 1-16 0Zm5-2.25A.75.75 0 0 1 7.75 7h.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-.5a.75.75 0 0 1-.75-.75v-4.5Zm4 0a.75.75 0 0 1 .75-.75h.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-.5a.75.75 0 0 1-.75-.75v-4.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniPaperAirplane(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" }, "child": [] }] })(props);
+}
 function HiMiniNoSymbol(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "m5.965 4.904 9.131 9.131a6.5 6.5 0 0 0-9.131-9.131Zm8.07 10.192L4.904 5.965a6.5 6.5 0 0 0 9.131 9.131ZM4.343 4.343a8 8 0 1 1 11.314 11.314A8 8 0 0 1 4.343 4.343Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -13235,30 +13238,14 @@ function groupByCategory(receipts) {
   }
   return map;
 }
-const SAVED_EXPIRY = "Until you remove it, or until the action itself changes.";
-const SOURCE_EXPIRY = "Until you remove it. A changed command from this source still matches.";
-const ONCE_MINUTES = 15;
 function scopeChoiceWithDuration(choice, persistExactAction) {
   if (choice.value !== "artifact" || !persistExactAction) {
     return choice;
   }
   return {
     ...choice,
-    label: "Save this exact action",
-    description: "Guard skips review for this exact action until the command changes.",
-    appliesTo: "This exact action.",
-    expiry: SAVED_EXPIRY,
-    policyImpact: "Adds a saved allow for this exact action. A changed command still asks."
-  };
-}
-function blockScopeChoiceWithDuration(choice, persistExactBlock) {
-  if (choice.value !== "artifact" || !persistExactBlock) {
-    return choice;
-  }
-  return {
-    ...choice,
-    expiry: SAVED_EXPIRY,
-    policyImpact: "Adds a saved block for this exact action. Other actions keep their current policy."
+    label: "Always allow this exact action",
+    description: "Guard skips review for this exact action until you remove it or the command changes."
   };
 }
 function approvalDecisionSubjectKey(item) {
@@ -13284,84 +13271,54 @@ const DEFAULT_SCOPE_CHOICES = [
   {
     value: "artifact",
     label: "Allow just this once",
-    description: "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved.",
-    appliesTo: "This exact action, in this session.",
-    expiry: `Covers the agent's identical retry within ${ONCE_MINUTES} minutes, then ends.`,
-    policyImpact: "Nothing is saved. Guard's policy does not change."
+    description: "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved."
   },
   {
     value: "workspace",
     label: "Allow and remember for this project",
-    description: "Save this exact action for the current project. Matching actions skip review here until the action changes.",
-    appliesTo: "This exact action, in this project only.",
-    expiry: SAVED_EXPIRY,
-    policyImpact: "Adds a saved allow for this project. Other projects still ask."
+    description: "Save this exact action for the current project. Matching actions skip review here until the action changes."
   },
   {
     value: "publisher",
     label: "This source",
-    description: "Save this decision for all actions from the same source. Matching actions skip review in any project.",
-    appliesTo: "Matching actions from this source, in every project.",
-    expiry: SOURCE_EXPIRY,
-    policyImpact: "Adds a saved allow for this source on this machine."
+    description: "Save this decision for all actions from the same source. Matching actions skip review in any project."
   },
   {
     value: "harness",
     label: "This app",
-    description: "Save this decision for this AI app everywhere. Matching actions from this app skip review in all your projects.",
-    appliesTo: "This exact action from this AI app, in every project.",
-    expiry: SAVED_EXPIRY,
-    policyImpact: "Adds a saved allow for this app on this machine."
+    description: "Save this decision for this AI app everywhere. Matching actions from this app skip review in all your projects."
   },
   {
     value: "global",
     label: "Everywhere",
-    description: "Save this decision across all your projects on this machine. All matching actions skip review. Use only if you fully trust this.",
-    appliesTo: "This exact action from any AI app, in every project.",
-    expiry: SAVED_EXPIRY,
-    policyImpact: "Adds a saved allow for every project and app on this machine."
+    description: "Save this decision across all your projects on this machine. All matching actions skip review. Use only if you fully trust this."
   }
 ];
 const BLOCK_SCOPE_CHOICES = [
   {
     value: "artifact",
     label: "Block this action",
-    description: "Block only this exact action. Other actions still follow their current Guard policy.",
-    appliesTo: "This exact action.",
-    expiry: `Ends within ${ONCE_MINUTES} minutes. After that, Guard asks again.`,
-    policyImpact: "Nothing is saved. Guard's policy does not change."
+    description: "Block only this exact action. Other actions still follow their current Guard policy."
   },
   {
     value: "workspace",
     label: "Block in project",
-    description: "Block matching actions in the current project.",
-    appliesTo: "Matching actions in this project.",
-    expiry: SAVED_EXPIRY,
-    policyImpact: "Adds a saved block for this project."
+    description: "Block matching actions in the current project. Saved until you remove it."
   },
   {
     value: "publisher",
     label: "Block this source",
-    description: "Block matching actions from this source.",
-    appliesTo: "Matching actions from this source.",
-    expiry: SOURCE_EXPIRY,
-    policyImpact: "Adds a saved block for this source on this machine."
+    description: "Block matching actions from this source. Saved until you remove it."
   },
   {
     value: "harness",
     label: "Block in this app",
-    description: "Block matching actions from this AI app.",
-    appliesTo: "Matching actions from this AI app.",
-    expiry: SAVED_EXPIRY,
-    policyImpact: "Adds a saved block for this app on this machine."
+    description: "Block matching actions from this AI app. Saved until you remove it."
   },
   {
     value: "global",
     label: "Block everywhere",
-    description: "Block matching actions across every project and AI app on this machine.",
-    appliesTo: "Matching actions everywhere on this machine.",
-    expiry: SAVED_EXPIRY,
-    policyImpact: "Adds a machine-wide saved block."
+    description: "Block matching actions across every project and AI app on this machine. Saved until you remove it."
   }
 ];
 function hasScopeContractMetadata(item) {
@@ -14488,6 +14445,804 @@ function bulkApproveConsequenceCopyForSelection(actionCount, retryBlockedActionC
   if (retryBlockedActionCount <= 0) return defaultCopy(actionCount);
   return `Run once is unavailable for ${retryBlockedActionCount} of these ${actionCount} actions. Open those requests to inspect their execution limitations before approving the remaining actions.`;
 }
+const MCP_EFFECT_COPY = {
+  read: { label: "Looks things up", meaning: "The name suggests it reads or searches and does not change anything." },
+  write: { label: "Makes changes", meaning: "The name suggests it creates or changes something." },
+  send: { label: "Sends something", meaning: "The name suggests it sends or posts something to other people or services." },
+  delete: { label: "Deletes things", meaning: "The name suggests it removes or deletes something." },
+  "run-code": { label: "Runs code", meaning: "The name suggests it runs code or a command." },
+  connect: { label: "Changes connections", meaning: "The name suggests it connects or changes a linked account." },
+  unknown: { label: "Effect unclear", meaning: "The name does not say what it does." }
+};
+const DELETE_WORDS = /* @__PURE__ */ new Set([
+  "delete",
+  "remove",
+  "destroy",
+  "drop",
+  "purge",
+  "erase",
+  "revoke",
+  "uninstall",
+  "trash",
+  "clear",
+  "wipe",
+  "truncate",
+  "disconnect"
+]);
+const SEND_WORDS = /* @__PURE__ */ new Set([
+  "send",
+  "post",
+  "publish",
+  "reply",
+  "forward",
+  "share",
+  "invite",
+  "tweet",
+  "broadcast",
+  "notify",
+  "dm",
+  "submit"
+]);
+const RUN_WORDS = /* @__PURE__ */ new Set([
+  "run",
+  "execute",
+  "exec",
+  "bash",
+  "shell",
+  "workbench",
+  "eval",
+  "script",
+  "invoke",
+  "spawn"
+]);
+const CONNECT_WORDS = /* @__PURE__ */ new Set(["connect", "connection", "connections", "authorize", "authenticate", "login", "oauth", "unlink"]);
+const WRITE_WORDS = /* @__PURE__ */ new Set([
+  "create",
+  "update",
+  "edit",
+  "write",
+  "add",
+  "insert",
+  "set",
+  "modify",
+  "patch",
+  "upload",
+  "move",
+  "rename",
+  "archive",
+  "mark",
+  "import",
+  "append",
+  "save",
+  "put",
+  "merge",
+  "commit",
+  "push",
+  "pay",
+  "transfer",
+  "purchase",
+  "approve",
+  "enable",
+  "disable",
+  "install",
+  "deploy",
+  "assign",
+  "close",
+  "reopen",
+  "restore",
+  "sync",
+  "copy",
+  "duplicate",
+  "unarchive",
+  "unstar",
+  "follow",
+  "unfollow",
+  "subscribe",
+  "unsubscribe",
+  "reset",
+  "refresh",
+  "start",
+  "stop",
+  "cancel",
+  "unpin",
+  "untag",
+  "upsert",
+  "attach",
+  "detach",
+  "register",
+  "change",
+  "replace",
+  "make",
+  "generate"
+]);
+const READ_WORDS = /* @__PURE__ */ new Set([
+  "get",
+  "list",
+  "search",
+  "find",
+  "fetch",
+  "read",
+  "query",
+  "lookup",
+  "view",
+  "show",
+  "check",
+  "describe",
+  "count",
+  "retrieve",
+  "browse",
+  "download",
+  "inspect",
+  "preview",
+  "explore",
+  "discover",
+  "resolve",
+  "summarize",
+  "analyze",
+  "export",
+  "scan",
+  "stat",
+  "status",
+  "info",
+  "schema",
+  "schemas",
+  "catalog",
+  "load",
+  "poll"
+]);
+const NOUN_OR_VERB = /* @__PURE__ */ new Map([
+  ["comment", "send"],
+  ["label", "write"],
+  ["tag", "write"],
+  ["star", "write"],
+  ["pin", "write"],
+  ["order", "write"],
+  ["schedule", "write"],
+  ["book", "write"],
+  ["link", "connect"],
+  ["react", "send"],
+  ["build", "write"],
+  ["fork", "write"],
+  ["new", "write"],
+  ["watch", "write"]
+]);
+function nameWords(identifier2) {
+  return identifier2.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 0);
+}
+function classifyMcpEffect(identifier2) {
+  const words = nameWords(identifier2);
+  const firstRead = words.findIndex((word) => READ_WORDS.has(word));
+  const ambiguous = [];
+  words.forEach((word, index) => {
+    const kind = NOUN_OR_VERB.get(word);
+    if (kind !== void 0 && (firstRead === -1 || index < firstRead)) ambiguous.push(kind);
+  });
+  const has = (kind, set) => ambiguous.includes(kind) || words.some((word) => set.has(word));
+  if (has("delete", DELETE_WORDS)) return "delete";
+  if (has("run-code", RUN_WORDS)) return "run-code";
+  if (has("send", SEND_WORDS)) return "send";
+  if (has("connect", CONNECT_WORDS)) return "connect";
+  if (has("write", WRITE_WORDS)) return "write";
+  if (firstRead !== -1) return "read";
+  return "unknown";
+}
+const SEVERITY = {
+  read: 1,
+  unknown: 2,
+  connect: 3,
+  write: 4,
+  send: 5,
+  "run-code": 6,
+  delete: 7
+};
+function worstMcpEffect(effects) {
+  let worst = "read";
+  if (effects.length === 0) return "unknown";
+  for (const effect of effects) {
+    if (SEVERITY[effect] > SEVERITY[worst]) worst = effect;
+  }
+  return worst;
+}
+function firstActionWordIndex(words) {
+  return words.findIndex(
+    (word) => DELETE_WORDS.has(word) || SEND_WORDS.has(word) || RUN_WORDS.has(word) || CONNECT_WORDS.has(word) || WRITE_WORDS.has(word) || READ_WORDS.has(word) || NOUN_OR_VERB.has(word)
+  );
+}
+const INTENT_FIELDS = ["description", "justification"];
+const MAX_INTENT_CHARS = 300;
+const SHELL_TOOL_NAMES = /* @__PURE__ */ new Set([
+  "bash",
+  "shell",
+  "sh",
+  "zsh",
+  "terminal",
+  "run_command",
+  "run_terminal_command",
+  "run_shell_command",
+  "exec_command"
+]);
+const CODEX_TOOL_NAMESPACE = "functions.";
+const TOOL_INPUT_KEYS$1 = ["tool_input", "toolInput", "toolArgs", "arguments"];
+const UNSAFE_CHARACTERS = new RegExp(
+  "[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
+  "g"
+);
+function cleanAgentText(value, maxChars) {
+  const text2 = value.replace(UNSAFE_CHARACTERS, " ").replace(/\s+/g, " ").trim();
+  return text2.length > maxChars ? `${text2.slice(0, maxChars)}…` : text2;
+}
+function resolveAgentStatedIntent(item) {
+  const envelope = item.action_envelope_json;
+  if (!envelope) {
+    return null;
+  }
+  if (envelope.action_type !== "shell_command" && envelope.action_type !== "package_script") {
+    return null;
+  }
+  if (envelope.mcp_server) {
+    return null;
+  }
+  const raw = recordValue(envelope.raw_payload_redacted);
+  const toolName = envelope.tool_name ?? (typeof raw?.tool_name === "string" ? raw.tool_name : null);
+  if (toolName === null || !SHELL_TOOL_NAMES.has(shellToolName(toolName))) {
+    return null;
+  }
+  const toolInput = firstToolInput(raw);
+  if (toolInput === null) {
+    return null;
+  }
+  for (const field of INTENT_FIELDS) {
+    const value = toolInput[field];
+    if (typeof value !== "string") {
+      continue;
+    }
+    const text2 = value.replace(UNSAFE_CHARACTERS, " ").replace(/\s+/g, " ").trim();
+    if (text2.length === 0) {
+      continue;
+    }
+    return {
+      text: text2.length > MAX_INTENT_CHARS ? `${text2.slice(0, MAX_INTENT_CHARS)}…` : text2,
+      field
+    };
+  }
+  return null;
+}
+function firstToolInput(raw) {
+  if (raw === null) {
+    return null;
+  }
+  for (const key of TOOL_INPUT_KEYS$1) {
+    const value = raw[key];
+    const input = recordValue(value);
+    if (input !== null) {
+      return input;
+    }
+    if (typeof value !== "string" || value.trim().length === 0) {
+      continue;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+    if (recordValue(parsed) !== null) {
+      return null;
+    }
+  }
+  return null;
+}
+function shellToolName(toolName) {
+  const name = toolName.trim().toLowerCase();
+  return name.startsWith(CODEX_TOOL_NAMESPACE) ? name.slice(CODEX_TOOL_NAMESPACE.length) : name;
+}
+function recordValue(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+}
+const SERVICE_NAMES = /* @__PURE__ */ new Map([
+  ["composio", "Composio"],
+  ["gmail", "Gmail"],
+  ["googlecalendar", "Google Calendar"],
+  ["googledrive", "Google Drive"],
+  ["googledocs", "Google Docs"],
+  ["googlesheets", "Google Sheets"],
+  ["googleslides", "Google Slides"],
+  ["googlemeet", "Google Meet"],
+  ["googletasks", "Google Tasks"],
+  ["github", "GitHub"],
+  ["gitlab", "GitLab"],
+  ["slack", "Slack"],
+  ["discord", "Discord"],
+  ["notion", "Notion"],
+  ["linear", "Linear"],
+  ["jira", "Jira"],
+  ["asana", "Asana"],
+  ["trello", "Trello"],
+  ["airtable", "Airtable"],
+  ["hubspot", "HubSpot"],
+  ["salesforce", "Salesforce"],
+  ["stripe", "Stripe"],
+  ["shopify", "Shopify"],
+  ["youtube", "YouTube"],
+  ["linkedin", "LinkedIn"],
+  ["twitter", "X (Twitter)"],
+  ["reddit", "Reddit"],
+  ["facebook", "Facebook"],
+  ["instagram", "Instagram"],
+  ["dropbox", "Dropbox"],
+  ["outlook", "Outlook"],
+  ["zoom", "Zoom"],
+  ["figma", "Figma"],
+  ["sentry", "Sentry"],
+  ["posthog", "PostHog"],
+  ["supabase", "Supabase"],
+  ["vercel", "Vercel"],
+  ["cloudflare", "Cloudflare"],
+  ["openai", "OpenAI"],
+  ["perplexity", "Perplexity"],
+  ["firecrawl", "Firecrawl"],
+  ["context7", "Context7"],
+  ["playwright", "Playwright"],
+  ["filesystem", "Filesystem"],
+  ["postgres", "Postgres"],
+  ["sqlite", "SQLite"],
+  ["brave", "Brave Search"],
+  ["exa", "Exa"],
+  ["tavily", "Tavily"]
+]);
+function serviceDisplayName(key) {
+  const known = SERVICE_NAMES.get(key.trim().toLowerCase().replace(/[\s_-]+/g, ""));
+  if (known !== void 0) return known;
+  const words = nameWords(key);
+  if (words.length === 0) return key.trim();
+  return words.map(capitalize).join(" ");
+}
+function capitalize(word) {
+  return word.length === 0 ? word : `${word[0].toUpperCase()}${word.slice(1)}`;
+}
+function sentenceCase(identifier2) {
+  const words = nameWords(identifier2);
+  if (words.length === 0) return identifier2.trim();
+  return capitalize(words.join(" "));
+}
+function splitToolSlug(slug) {
+  const words = nameWords(slug);
+  const split = firstActionWordIndex(words);
+  if (split <= 0) {
+    return { app: null, action: sentenceCase(slug) };
+  }
+  return {
+    app: serviceDisplayName(words.slice(0, split).join("_")),
+    action: capitalize(words.slice(split).join(" "))
+  };
+}
+const NAME_PART = /^[a-zA-Z0-9_.:-]{1,120}$/;
+function parseNamespacedMcpName(raw) {
+  if (!raw || raw.length > 256 || !raw.startsWith("mcp__")) return null;
+  const parts = raw.slice(5).split("__");
+  if (parts.length < 2 || parts.some((part) => !NAME_PART.test(part))) return null;
+  const codexApp = parts[0] === "codex_apps" && parts.length > 2;
+  return { server: codexApp ? parts[1] : parts[0], tool: parts.slice(codexApp ? 2 : 1).join("__") };
+}
+function isPlainNamePart(value) {
+  return typeof value === "string" && NAME_PART.test(value);
+}
+function shortToolName(server, tool) {
+  const prefix = `${server.toLowerCase()}_`;
+  return tool.toLowerCase().startsWith(prefix) && tool.length > prefix.length ? tool.slice(prefix.length) : tool;
+}
+const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"];
+const TOOL_NAME_KEYS = ["tool_name", "toolName", "name", "tool"];
+const CORE_STRING_LIMIT = 240;
+const BIDI_CONTROLS = new RegExp("[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]", "g");
+const KEY_PATTERN = /^[A-Za-z0-9_.-]{1,60}$/;
+const VALUE_CHARS = 160;
+const MAX_FACTS = 8;
+const MAX_LIST_ITEMS = 6;
+const UNSAFE_CODE_CHARACTERS = new RegExp(
+  "[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
+  "g"
+);
+function recordOf(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+}
+function textOf(value, maxChars = VALUE_CHARS) {
+  if (typeof value !== "string") return null;
+  const text2 = cleanAgentText(value, maxChars);
+  return text2.length > 0 ? text2 : null;
+}
+function recordList(value, max = 20) {
+  if (!Array.isArray(value)) return [];
+  return value.map(recordOf).filter((item) => item !== null).slice(0, max);
+}
+function textList(value, max = 20) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => textOf(item, 80)).filter((item) => item !== null).slice(0, max);
+}
+function unique(values) {
+  const seen2 = /* @__PURE__ */ new Set();
+  return values.filter((value) => {
+    const key = value.toLowerCase();
+    if (seen2.has(key)) return false;
+    seen2.add(key);
+    return true;
+  });
+}
+function joinList(values, limit = 3) {
+  const shown = values.slice(0, limit);
+  const rest = values.length - shown.length;
+  const list = shown.length <= 2 ? shown.join(" and ") : `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
+  return rest > 0 ? `${shown.join(", ")} and ${rest} more` : list;
+}
+function codeOf(value) {
+  if (typeof value !== "string") return null;
+  const text2 = value.replace(UNSAFE_CODE_CHARACTERS, " ").trim();
+  return text2.length > 0 ? text2 : null;
+}
+const NO_INPUT = { record: null, text: null };
+function selectToolInput(raw) {
+  if (raw === null) return NO_INPUT;
+  const keyed = inputFromKeys(raw);
+  const hasKeyedInput = keyed !== null && (keyed.record === null || Object.keys(keyed.record).length > 0);
+  if (hasKeyedInput) return keyed;
+  return inputFromToolCalls(raw) ?? keyed ?? NO_INPUT;
+}
+function inputFromKeys(raw) {
+  for (const key of TOOL_INPUT_KEYS) {
+    const value = raw[key];
+    const record2 = recordOf(value);
+    if (record2 !== null) return inputFromRecord(record2);
+    if (typeof value !== "string" || value.trim().length === 0) continue;
+    if (coreSkipsString(value)) continue;
+    return { record: null, text: escapeBidi(value) };
+  }
+  return null;
+}
+function inputFromToolCalls(raw) {
+  const calls = raw.toolCalls;
+  if (!Array.isArray(calls)) return null;
+  const expected = TOOL_NAME_KEYS.map((key) => raw[key]).find(
+    (value) => typeof value === "string" && value.trim().length > 0
+  );
+  let chosen;
+  for (const item of calls) {
+    const call = recordOf(item);
+    const name = call?.name;
+    if (call === null || typeof name !== "string" || name.trim().length === 0) continue;
+    const args = recordOf(call.args);
+    if (chosen === void 0) chosen = args;
+    if (expected === void 0 || expected.trim() === name.trim()) {
+      chosen = args;
+      break;
+    }
+  }
+  return chosen === void 0 || chosen === null ? null : inputFromRecord(chosen);
+}
+function inputFromRecord(record2) {
+  try {
+    return { record: record2, text: escapeBidi(JSON.stringify(record2, null, 2)) };
+  } catch {
+    return { record: record2, text: null };
+  }
+}
+function coreSkipsString(text2) {
+  try {
+    return recordOf(JSON.parse(text2)) === null;
+  } catch {
+    return !looksLikeCutObject(text2);
+  }
+}
+function looksLikeCutObject(text2) {
+  return text2.endsWith("…") && text2.trimStart().startsWith("{") && Array.from(text2).length === CORE_STRING_LIMIT;
+}
+function escapeBidi(text2) {
+  return text2.replace(BIDI_CONTROLS, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+function scalarText(value) {
+  if (typeof value === "string") return textOf(value);
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value) && value.length > 0) {
+    if (value.every((item) => typeof item === "string" || typeof item === "number")) {
+      const shown = value.slice(0, MAX_LIST_ITEMS).map((item) => textOf(String(item), 60) ?? "");
+      const rest = value.length - shown.length;
+      return cleanAgentText(`${shown.filter(Boolean).join(", ")}${rest > 0 ? ` and ${rest} more` : ""}`, VALUE_CHARS);
+    }
+    return `${value.length} items`;
+  }
+  return null;
+}
+function scalarFacts(input, options = {}) {
+  if (input === null) return { facts: [], hidden: 0 };
+  const skip = new Set(options.skip ?? []);
+  const max = options.max ?? MAX_FACTS;
+  const facts = [];
+  let hidden = 0;
+  for (const [key, value] of Object.entries(input)) {
+    if (skip.has(key)) continue;
+    const text2 = KEY_PATTERN.test(key) ? scalarText(value) : null;
+    if (text2 === null || text2.length === 0 || facts.length >= max) {
+      hidden += value === null || value === "" ? 0 : 1;
+      continue;
+    }
+    facts.push({ label: sentenceCase(key), value: text2 });
+  }
+  return { facts, hidden };
+}
+const NAME_BASIS = "Read from the tool's name. Guard has not checked what it does.";
+const STEP_BASIS = "Read from the action names. Guard has not checked what they do.";
+const SEPARATE_CALL = "Running a tool is a separate call, and Guard reviews that call too.";
+const THOUGHT_CAPTION = "What the agent said it is doing";
+function explainComposioTool(shortTool, context) {
+  switch (shortTool.toLowerCase()) {
+    case "search_tools":
+      return searchTools(context);
+    case "get_tool_schemas":
+      return toolSchemas(context);
+    case "manage_connections":
+      return manageConnections(context);
+    case "multi_execute_tool":
+      return multiExecute(context);
+    case "remote_workbench":
+      return remoteCode(context, "Run code in Composio's workspace", "code_to_execute", "Code");
+    case "remote_bash_tool":
+      return remoteCode(context, "Run a command in Composio's workspace", "command", "Command");
+    default:
+      return null;
+  }
+}
+function searchTools({ harness, input }) {
+  const queries = input?.queries;
+  const entries = Array.isArray(queries) ? queries : [];
+  const records = recordList(queries);
+  const useCases = [
+    ...records.map((query) => textOf(query.use_case, 200)),
+    ...entries.map((query) => typeof query === "string" ? textOf(query, 200) : null)
+  ].filter((text2) => text2 !== null);
+  const apps = unique(records.flatMap((query) => appsFromKnownFields(query.known_fields)));
+  const count2 = Math.max(entries.length, 1);
+  return {
+    headline: `${harness} wants to search for tools in Composio`,
+    title: "Search for tools",
+    summary: `Composio connects the agent to other apps. This call asks it which tools could do the job. ${SEPARATE_CALL}`,
+    effect: "read",
+    effectBasis: NAME_BASIS,
+    facts: [
+      ...apps.length > 0 ? [{ label: "Apps in the search", value: apps.join(", ") }] : [],
+      ...count2 > 1 ? [{ label: "Searches", value: String(count2) }] : []
+    ],
+    steps: [],
+    quotes: useCases.length > 0 ? { caption: "What the agent said it is looking for", items: useCases.slice(0, 4) } : null,
+    code: null,
+    queueTitle: "Composio · Search for tools",
+    queueDetail: apps.length > 0 ? joinList(apps) : null
+  };
+}
+function appsFromKnownFields(value) {
+  const text2 = textOf(value, 400);
+  if (text2 === null) return [];
+  const apps = [];
+  for (const part of text2.split(/[,;]/)) {
+    const match = /^\s*(?:app|apps|toolkit|toolkits)\s*[:=]\s*(.{1,60})$/i.exec(part);
+    if (match) apps.push(serviceDisplayName(match[1].trim()));
+  }
+  return apps;
+}
+function toolSchemas({ harness, input }) {
+  const slugs = textList(input?.tool_slugs ?? input?.tools);
+  const named = slugs.map(slugLabel);
+  return {
+    headline: `${harness} wants to look up how Composio tools work`,
+    title: "Look up how tools work",
+    summary: `This call fetches the instructions for specific tools so the agent can call them correctly. ${SEPARATE_CALL}`,
+    effect: "read",
+    effectBasis: NAME_BASIS,
+    facts: named.length > 0 ? [{ label: "Tools", value: joinList(named, 6) }] : [],
+    steps: [],
+    quotes: null,
+    code: null,
+    queueTitle: "Composio · Look up how tools work",
+    queueDetail: named.length > 0 ? joinList(named) : null
+  };
+}
+function manageConnections({ harness, input }) {
+  const accounts = unique(textList(input?.toolkits ?? input?.apps).map(serviceDisplayName));
+  return {
+    headline: `${harness} wants to manage your connected accounts in Composio`,
+    title: "Manage connected accounts",
+    summary: "This call checks which of your accounts are linked to Composio and can ask to link another one.",
+    effect: "connect",
+    effectBasis: NAME_BASIS,
+    facts: accounts.length > 0 ? [{ label: "Accounts", value: accounts.join(", ") }] : [],
+    steps: [],
+    quotes: null,
+    code: null,
+    queueTitle: "Composio · Manage connected accounts",
+    queueDetail: accounts.length > 0 ? joinList(accounts) : null
+  };
+}
+const STEP_ROW_LIMIT = 10;
+function multiExecute({ harness, input }) {
+  const toolsValue = input?.tools;
+  const entries = Array.isArray(toolsValue) ? toolsValue : [];
+  const all = entries.map((entry, index) => toStep(recordOf(entry), index));
+  const steps = all.slice(0, STEP_ROW_LIMIT);
+  const hiddenSteps = all.length - steps.length;
+  const apps = unique(all.map((step) => step.app).filter((app) => app !== null));
+  const where = apps.length > 0 ? joinList(apps) : "Composio";
+  const count2 = all.length;
+  const thought = textOf(input?.thought, 300);
+  const first = all[0];
+  return {
+    headline: `${harness} wants to run ${actionCountPhrase(count2)} in ${where}`,
+    title: batchTitle(first, count2, apps),
+    summary: `Composio will carry out ${count2 === 1 ? "this action" : "these actions"} in your connected ${accountPhrase(apps)}, using the inputs below.`,
+    effect: worstMcpEffect(all.map((step) => step.effect)),
+    effectBasis: STEP_BASIS,
+    facts: [],
+    steps,
+    hiddenSteps,
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    code: null,
+    queueTitle: `Composio · ${first?.action ?? "Run actions"}${count2 > 1 ? ` and ${count2 - 1} more` : ""}`,
+    queueDetail: apps.length > 0 ? joinList(apps) : null
+  };
+}
+function actionCountPhrase(count2) {
+  if (count2 === 1) return "an action";
+  if (count2 === 0) return "some actions";
+  return `${count2} actions`;
+}
+function accountPhrase(apps) {
+  if (apps.length === 1) return `${apps[0]} account`;
+  return "accounts";
+}
+function batchTitle(first, count2, apps) {
+  if (count2 === 1 && first !== void 0) {
+    return first.app !== null ? `${first.action} in ${first.app}` : first.action;
+  }
+  const where = apps.length > 0 ? ` in ${joinList(apps)}` : "";
+  return `Run ${count2 === 0 ? "some" : count2} actions${where}`;
+}
+function toStep(tool, index) {
+  const slug = textOf(tool?.tool_slug, 120) ?? "";
+  const { app, action } = slug.length > 0 ? splitToolSlug(slug) : { app: null, action: "Unnamed action" };
+  const { facts, hidden } = scalarFacts(recordOf(tool?.arguments), { max: 5 });
+  return {
+    id: `${index}-${slug}`,
+    app,
+    action,
+    effect: slug.length > 0 ? classifyMcpEffect(slug) : "unknown",
+    details: facts,
+    hiddenDetails: hidden
+  };
+}
+function remoteCode(context, title, field, label) {
+  const code = codeOf(context.input?.[field]);
+  const thought = textOf(context.input?.thought, 300);
+  return {
+    headline: `${context.harness} wants to ${title.charAt(0).toLowerCase()}${title.slice(1)}`,
+    title,
+    summary: "Composio will run this in its remote workspace. Code can do anything its tools allow, so read it before you approve.",
+    effect: "run-code",
+    effectBasis: NAME_BASIS,
+    facts: [],
+    steps: [],
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    code: code !== null ? { label, text: code } : null,
+    queueTitle: `Composio · ${title}`,
+    queueDetail: null
+  };
+}
+function slugLabel(slug) {
+  const { app, action } = splitToolSlug(slug);
+  return app !== null ? `${app} · ${action}` : action;
+}
+const UNKNOWN_SERVER = "a connected server";
+const CODEX_APPS_SERVER = "codex_apps";
+const AGENT_TEXT_KEYS = ["thought", "use_case"];
+function explainMcpCall(item) {
+  const envelope = item.action_envelope_json;
+  if (!envelope) return null;
+  const ref = resolveMcpRef(envelope);
+  if (ref === null) return null;
+  const harness = harnessDisplayName(item.harness);
+  const raw = recordOf(envelope.raw_payload_redacted);
+  const selected = selectToolInput(raw);
+  const input = selected.record;
+  const connector = ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER;
+  const shortTool = shortToolName(ref.server, ref.tool);
+  const body = (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ?? explainGenericTool({ harness, connector, shortTool, input });
+  return {
+    ...body,
+    connector,
+    rawInput: selected.text,
+    truncated: wasTruncated(item, selected),
+    toolId: ref.server.length > 0 ? `${ref.server} / ${ref.tool}` : ref.tool,
+    whyAsked: `Guard has not reviewed ${ref.server.length > 0 ? `${connector}'s` : "this"} tool yet, and your policy asks before any unreviewed tool runs.`
+  };
+}
+function plainMcpReason(item, text2) {
+  if (text2 === null || !text2.includes("unreviewed MCP tool")) {
+    return text2;
+  }
+  return explainMcpCall(item)?.whyAsked ?? text2;
+}
+function resolveMcpRef(envelope) {
+  const fromToolName = parseNamespacedMcpName(envelope.tool_name);
+  const fromMcpTool = parseNamespacedMcpName(envelope.mcp_tool);
+  const isMcp = envelope.action_type === "mcp_tool" || fromToolName !== null || fromMcpTool !== null || isPlainNamePart(envelope.mcp_server);
+  if (!isMcp) return null;
+  const tool = recordedTool(envelope, fromToolName, fromMcpTool);
+  if (tool === null) return null;
+  return unwrapCodexApps({ server: recordedServer(envelope, fromToolName, fromMcpTool), tool });
+}
+function recordedTool(envelope, fromToolName, fromMcpTool) {
+  if (fromMcpTool !== null) return fromMcpTool.tool;
+  if (isPlainNamePart(envelope.mcp_tool)) return envelope.mcp_tool;
+  return fromToolName?.tool ?? null;
+}
+function recordedServer(envelope, fromToolName, fromMcpTool) {
+  if (envelope.mcp_server === CODEX_APPS_SERVER && fromMcpTool !== null) return fromMcpTool.server;
+  if (isPlainNamePart(envelope.mcp_server)) return envelope.mcp_server;
+  return fromMcpTool?.server ?? fromToolName?.server ?? "";
+}
+function unwrapCodexApps(ref) {
+  if (ref.server !== CODEX_APPS_SERVER) return ref;
+  const separator = ref.tool.indexOf("__");
+  if (separator <= 0 || separator + 2 >= ref.tool.length) return ref;
+  return { server: ref.tool.slice(0, separator), tool: ref.tool.slice(separator + 2) };
+}
+function explainGenericTool(context) {
+  const { harness, connector, shortTool, input } = context;
+  const effect = classifyMcpEffect(shortTool);
+  const title = sentenceCase(shortTool);
+  const { facts } = scalarFacts(input, { skip: AGENT_TEXT_KEYS });
+  const thought = textOf(input?.thought, 300);
+  const firstValue = facts[0]?.value ?? null;
+  return {
+    headline: `${harness} wants to ${effectPhrase(effect, connector)}`,
+    title,
+    summary: `${harness} is calling ${connector}'s “${title}” tool. ${MCP_EFFECT_COPY[effect].meaning}`,
+    effect,
+    effectBasis: effect === "unknown" ? "Guard cannot tell what this does from its name. Read the inputs below." : "Read from the tool's name. Guard has not checked what it does.",
+    facts,
+    steps: [],
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    code: null,
+    queueTitle: `${connector} · ${title}`,
+    queueDetail: firstValue !== null && firstValue.length > 0 ? firstValue : null
+  };
+}
+function effectPhrase(effect, connector) {
+  switch (effect) {
+    case "read":
+      return `look something up in ${connector}`;
+    case "write":
+      return `make a change in ${connector}`;
+    case "send":
+      return `send something with ${connector}`;
+    case "delete":
+      return `delete something in ${connector}`;
+    case "run-code":
+      return `run code with ${connector}`;
+    case "connect":
+      return `change a connection in ${connector}`;
+    case "unknown":
+      return `use ${connector}`;
+  }
+}
+function wasTruncated(item, selected) {
+  if ((item.action_explanation?.redaction.truncated_fields.length ?? 0) > 0) return true;
+  if (selected.record === null) return selected.text !== null && selected.text.length >= CORE_STRING_LIMIT;
+  return JSON.stringify(selected.record).length >= CORE_STRING_LIMIT && containsLongString(selected.record);
+}
+function containsLongString(value) {
+  if (typeof value === "string") return value.length >= CORE_STRING_LIMIT;
+  if (Array.isArray(value)) return value.some(containsLongString);
+  const record2 = recordOf(value);
+  return record2 !== null && Object.values(record2).some(containsLongString);
+}
 const APPROVAL_RETRY_BLOCKED_OVERRIDE = "approval-approved-retry-blocked";
 const APPROVAL_LEFT_STOPPED_LABEL = "Approved, still stopped";
 function approvalLeftActionStopped(receipt) {
@@ -14872,6 +15627,10 @@ function isPackageDependencyMutationRequest(request2) {
 function plainEnglishRequestTitle(request2) {
   if (request2.artifact_type === "native_bash_request") {
     return "Run this script?";
+  }
+  const mcpCall = explainMcpCall(request2);
+  if (mcpCall !== null) {
+    return mcpCall.headline;
   }
   const category = detectCategory({
     ...request2,
@@ -32299,7 +33058,7 @@ function ScannerEvidenceSection(props) {
 }
 function buildTopAlertItems(item) {
   const items = [];
-  const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
+  const secondaryRiskSummary = plainMcpReason(item, resolveSecondaryRiskSummary(item));
   const watchOnly = isWatchOnlyObservation(item);
   const ruleLines = watchOnly ? [] : ruleMatchLines(item.extension_coverage);
   const pauseReason = watchOnly || ruleLines.length > 0 ? null : whyPaused(item);
@@ -32444,7 +33203,7 @@ function ReviewScopeControls(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Block scope selection", children: props.blockScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         ScopeChoiceButton,
         {
-          choice: blockScopeChoiceWithDuration(choice, props.persistExactBlock === true),
+          choice,
           checked: props.blockScope === choice.value,
           onScopeChange: props.onBlockScopeChange
         },
@@ -32511,24 +33270,10 @@ function ScopeChoiceButton(props) {
       className: `rounded-xl border px-4 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-brand-blue/20 ${props.checked ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200/70 bg-white hover:bg-slate-50"}`,
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: props.choice.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-muted-foreground", children: props.choice.description }),
-        showsScopeTerms(props.choice, props.checked) && /* @__PURE__ */ jsxRuntimeExports.jsx(ScopeTerms, { choice: props.choice })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-muted-foreground", children: props.choice.description })
       ]
     }
   );
-}
-function showsScopeTerms(choice, checked) {
-  return choice.value !== "artifact" || checked;
-}
-function ScopeTerms(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs text-brand-dark/70", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "font-semibold", children: "Applies to" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: props.choice.appliesTo }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "font-semibold", children: "Expires" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: props.choice.expiry }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "font-semibold", children: "Policy" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: props.choice.policyImpact })
-  ] });
 }
 function allowButtonLabel(scope, versionBoundScript = false, persistExactAction = false) {
   if (scope === "artifact") {
@@ -32551,92 +33296,142 @@ function blockButtonLabel(scope) {
   }
   return "Block matching actions";
 }
-const INTENT_FIELDS = ["description", "justification"];
-const MAX_INTENT_CHARS = 300;
-const SHELL_TOOL_NAMES = /* @__PURE__ */ new Set([
-  "bash",
-  "shell",
-  "sh",
-  "zsh",
-  "terminal",
-  "run_command",
-  "run_terminal_command",
-  "run_shell_command",
-  "exec_command"
-]);
-const CODEX_TOOL_NAMESPACE = "functions.";
-const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"];
-const UNSAFE_CHARACTERS = new RegExp(
-  "[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
-  "g"
-);
-function resolveAgentStatedIntent(item) {
-  const envelope = item.action_envelope_json;
-  if (!envelope) {
-    return null;
-  }
-  if (envelope.action_type !== "shell_command" && envelope.action_type !== "package_script") {
-    return null;
-  }
-  if (envelope.mcp_server) {
-    return null;
-  }
-  const raw = recordValue(envelope.raw_payload_redacted);
-  const toolName = envelope.tool_name ?? (typeof raw?.tool_name === "string" ? raw.tool_name : null);
-  if (toolName === null || !SHELL_TOOL_NAMES.has(shellToolName(toolName))) {
-    return null;
-  }
-  const toolInput = firstToolInput(raw);
-  if (toolInput === null) {
-    return null;
-  }
-  for (const field of INTENT_FIELDS) {
-    const value = toolInput[field];
-    if (typeof value !== "string") {
-      continue;
-    }
-    const text2 = value.replace(UNSAFE_CHARACTERS, " ").replace(/\s+/g, " ").trim();
-    if (text2.length === 0) {
-      continue;
-    }
-    return {
-      text: text2.length > MAX_INTENT_CHARS ? `${text2.slice(0, MAX_INTENT_CHARS)}…` : text2,
-      field
-    };
-  }
-  return null;
+const EFFECT_ICONS = {
+  read: HiMiniMagnifyingGlass,
+  write: HiMiniPencilSquare,
+  send: HiMiniPaperAirplane,
+  delete: HiMiniTrash,
+  "run-code": HiMiniCommandLine,
+  connect: HiMiniLink,
+  unknown: HiMiniQuestionMarkCircle
+};
+function McpCallCard({ item, explanation }) {
+  const watchOnly = isWatchOnlyObservation(item);
+  const workingDirectory = resolveRequestWorkingDirectory(item);
+  const reason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
+  const facts = [
+    ...explanation.facts,
+    ...workingDirectory !== null ? [{ label: "Working directory", value: workingDirectory, mono: true }] : []
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "What the agent is asking to do", className: "mt-5 rounded-2xl border border-slate-200 bg-white", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 p-4 sm:p-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectorMark, { name: explanation.connector }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-semibold leading-snug text-brand-dark", children: explanation.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-sm text-brand-dark/70", children: [
+          "Tool from ",
+          explanation.connector
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EffectPill, { effect: explanation.effect })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 pb-4 sm:px-5", children: [
+      watchOnly && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 text-sm font-medium text-brand-dark", children: "Watch let this call through. Guard would have stopped it." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-[68ch] text-sm leading-relaxed text-brand-dark", children: explanation.summary }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-[68ch] text-xs leading-snug text-muted-foreground", children: explanation.effectBasis }),
+      reason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-[68ch] text-sm leading-snug text-brand-dark/80", children: reason })
+    ] }),
+    explanation.steps.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "border-t border-slate-100", "aria-label": "Actions in this call", children: [
+      explanation.steps.map((step) => /* @__PURE__ */ jsxRuntimeExports.jsx(StepRow, { step }, step.id)),
+      (explanation.hiddenSteps ?? 0) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "border-t border-slate-100 px-4 py-3 text-xs text-muted-foreground sm:px-5", children: [
+        explanation.hiddenSteps,
+        " more ",
+        explanation.hiddenSteps === 1 ? "action" : "actions",
+        " in the exact input"
+      ] })
+    ] }),
+    facts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FactList, { facts }) }),
+    explanation.quotes !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("figure", { className: "mx-4 mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 sm:mx-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("figcaption", { className: "text-xs font-medium text-brand-dark/70", children: explanation.quotes.caption }),
+      explanation.quotes.items.map((text2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("blockquote", { className: "mt-1 break-words text-sm text-brand-dark", children: [
+        "“",
+        text2,
+        "”"
+      ] }, text2)),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[11px] leading-snug text-muted-foreground", children: "In the agent's own words. Guard has not checked this, so decide from what the call does." })
+    ] }),
+    explanation.code !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-4 mb-4 sm:mx-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      LoggedActionPanel,
+      {
+        label: explanation.code.label,
+        text: explanation.code.text,
+        copyAriaLabel: `Copy ${explanation.code.label.toLowerCase()} to clipboard`
+      },
+      `${item.request_id}-code`
+    ) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "See the exact input" }),
+      explanation.rawInput !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        LoggedActionPanel,
+        {
+          label: "Input",
+          text: explanation.rawInput,
+          copyAriaLabel: "Copy the exact input to clipboard",
+          expandAriaLabel: "Expand the exact input",
+          collapseAriaLabel: "Collapse the exact input"
+        },
+        `${item.request_id}-input`
+      ) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "This call sent no input." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 break-all text-xs text-muted-foreground", children: [
+        "Tool ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "font-mono text-brand-dark/80", children: explanation.toolId })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "border-t border-slate-100 px-4 py-3 text-xs leading-snug text-muted-foreground sm:px-5", children: [
+      "Allow once and Always allow both match these exact inputs. If the agent asks again with different inputs, Guard asks again.",
+      explanation.truncated ? " Long text is shown shortened here." : ""
+    ] })
+  ] });
 }
-function firstToolInput(raw) {
-  if (raw === null) {
-    return null;
-  }
-  for (const key of TOOL_INPUT_KEYS) {
-    const value = raw[key];
-    const input = recordValue(value);
-    if (input !== null) {
-      return input;
+function ConnectorMark({ name }) {
+  const letter = name.trim().charAt(0).toUpperCase() || "?";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "span",
+    {
+      "aria-hidden": "true",
+      className: "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-base font-semibold text-brand-dark",
+      children: letter
     }
-    if (typeof value !== "string" || value.trim().length === 0) {
-      continue;
-    }
-    let parsed;
-    try {
-      parsed = JSON.parse(value);
-    } catch {
-      return null;
-    }
-    if (recordValue(parsed) !== null) {
-      return null;
-    }
-  }
-  return null;
+  );
 }
-function shellToolName(toolName) {
-  const name = toolName.trim().toLowerCase();
-  return name.startsWith(CODEX_TOOL_NAMESPACE) ? name.slice(CODEX_TOOL_NAMESPACE.length) : name;
+function EffectPill({ effect }) {
+  const Icon = EFFECT_ICONS[effect];
+  const tone = effect === "read" ? "border-slate-200 bg-slate-50 text-brand-dark/80" : "border-brand-attention/30 bg-brand-attention/[0.08] text-brand-dark";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+    MCP_EFFECT_COPY[effect].label
+  ] });
 }
-function recordValue(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+function StepRow({ step }) {
+  const Icon = EFFECT_ICONS[step.effect];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-start gap-3 border-b border-slate-100 px-4 py-3 last:border-b-0 sm:px-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-dark/60", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "min-w-0 break-words text-sm font-medium text-brand-dark", children: [
+          step.action,
+          step.app !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-normal text-brand-dark/70", children: [
+            " in ",
+            step.app
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-xs text-brand-dark/60", children: MCP_EFFECT_COPY[step.effect].label })
+      ] }),
+      step.details.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FactList, { facts: step.details }) }),
+      step.hiddenDetails > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-muted-foreground", children: [
+        step.hiddenDetails,
+        " more ",
+        step.hiddenDetails === 1 ? "field" : "fields",
+        " in the exact input"
+      ] })
+    ] })
+  ] });
+}
+function FactList({ facts }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "grid grid-cols-[minmax(5.5rem,auto)_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm", children: facts.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "contents", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-brand-dark/60", children: fact.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: `min-w-0 break-words text-brand-dark ${fact.mono === true ? "font-mono text-xs" : ""}`, children: fact.value })
+  ] }, `${fact.label}-${fact.value}`)) });
 }
 const PROTECTION_APPEARANCE = {
   protected: {
@@ -32745,6 +33540,13 @@ function ReviewEmptyState({ runtime: runtime2, resolutionMessage, codexResume, o
   ] });
 }
 function PrimaryActionCard({ item }) {
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(McpCallCard, { item, explanation: mcpCall });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(LoggedActionCard, { item });
+}
+function LoggedActionCard({ item }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
   const agentIntent = resolveAgentStatedIntent(item);
@@ -32791,6 +33593,10 @@ function PrimaryActionCard({ item }) {
 function buildWhatWouldHappen(item) {
   if (isWatchOnlyObservation(item)) {
     return `Watch allowed this action to continue. ${watchProtectedOutcome(item)}`;
+  }
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return `Without Guard, ${harnessDisplayName(item.harness)} would call ${mcpCall.connector} right away. Guard paused it so you can see what it asks for first.`;
   }
   const type = item.artifact_type;
   if (type?.includes("file_write") || type?.includes("file_read")) {
@@ -35260,7 +36066,6 @@ function ReviewDecisionCard(props) {
           exactActionPersistenceEligible: item.exact_action_persistence_eligible === true,
           versionBoundScript,
           rememberExactAction,
-          persistExactBlock,
           oneTimeRetryBlocked: retryCannotReuseApproval(item),
           retryWindowMinutes: oneTimeRetryWindowMinutes(item),
           allowScope,
@@ -36055,6 +36860,10 @@ function iconForQueueCategory(categoryId) {
 }
 function queueItemPreview(item) {
   const envelope = item.action_envelope_json;
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return mcpCall.queueDetail !== null ? `${mcpCall.queueTitle} — ${mcpCall.queueDetail}` : mcpCall.queueTitle;
+  }
   return envelope?.command ?? item.queue_preview ?? item.raw_command_text ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? resolveStoppedCommandText(item);
 }
 const QUEUE_PAGE_SIZE$1 = 10;

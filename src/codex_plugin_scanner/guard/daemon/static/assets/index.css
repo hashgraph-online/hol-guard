@@ -1995,6 +1995,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .grid-cols-\[minmax\(5\.5rem\,auto\)_minmax\(0\,1fr\)\] {
+    grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr);
+  }
+
   .grid-rows-7 {
     grid-template-rows: repeat(7, minmax(0, 1fr));
   }
@@ -3520,6 +3524,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-brand-attention\/\[0\.06\] {
       background-color: color-mix(in oklab, var(--brand-attention) 6%, transparent);
+    }
+  }
+
+  .bg-brand-attention\/\[0\.08\] {
+    background-color: var(--brand-attention);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-attention\/\[0\.08\] {
+      background-color: color-mix(in oklab, var(--brand-attention) 8%, transparent);
     }
   }
 
@@ -7837,6 +7851,10 @@
 
     .sm\:-mx-6 {
       margin-inline: calc(var(--spacing) * -6);
+    }
+
+    .sm\:mx-5 {
+      margin-inline: calc(var(--spacing) * 5);
     }
 
     .sm\:mt-0 {
