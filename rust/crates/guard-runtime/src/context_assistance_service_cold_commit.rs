@@ -95,6 +95,7 @@ pub(super) fn run(
     }
     deadline.finish();
     state.settings = prepared.settings.target_settings().clone();
+    publish_chosen(&state);
     state.generation = next;
     state.last_check = None;
     state.retiring = None;

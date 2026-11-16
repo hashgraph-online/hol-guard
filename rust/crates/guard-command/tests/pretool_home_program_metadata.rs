@@ -84,6 +84,7 @@ fn decisions(home: &Path, shell_home: &Path, command: &str) -> [(&'static str, S
             None,
             PathContext {
                 literal_words: &[],
+                guard_home: None,
                 home_dir: home.to_str(),
                 cwd: project.to_str(),
                 cdpath_unset: false,

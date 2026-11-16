@@ -237,6 +237,23 @@ fn hashed(text: &str) -> u64 {
     hasher.finish()
 }
 
+/// Whether the prompt points at code itself: a quoted phrase, a file it
+/// names, or a name written as code (`parse_basic_str`, `IntRange`).
+pub(super) fn anchored(prompt: &str) -> bool {
+    use crate::context_assistance_prompt_files::{named, phrases};
+    !(phrases(prompt).is_empty()
+        && named(prompt).is_empty()
+        && crate::context_assistance_prompt_words::spellings(prompt).is_empty())
+}
+
+pub(super) fn truncated(text: &str, max_bytes: usize) -> String {
+    let mut end = text.len().min(max_bytes);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text[..end].to_owned()
+}
+
 #[cfg(test)]
 #[path = "context_assistance_prompt_lookup_tests.rs"]
 mod tests;

@@ -249,3 +249,38 @@ fn a_rename_cuts_long_building_lines_of_a_withheld_file() {
     assert!(map.contains(cut), "{map}");
     assert!(!map.contains("perl"), "{map}");
 }
+
+/// A prompt that names no code gets no map from one plain word its words
+/// share with source: "the last step" is not `ProgressBar.make_step`. Two
+/// such words, or the word written as code, still place it.
+#[test]
+fn one_plain_word_alone_places_nothing() {
+    let bar =
+        "class ProgressBar:\n    def make_step(self, step):\n        self.pos += step\n        \
+return step\n";
+    let (home, _project, root) = project(ON, &[("src/termui.py", bar)]);
+    for prompt in [
+        "what did you change in the last step?",
+        "list the risks of this plan and how we handle each step",
+    ] {
+        assert_eq!(prompt_map(home.path(), &root, prompt), None, "{prompt}");
+    }
+    let named = prompt_map(home.path(), &root, "why does `step` move the bar twice?");
+    assert!(named.is_some_and(|text| text.contains("src/termui.py:")));
+}
+
+/// Many uses of one plain word cannot crowd out the one use that holds two
+/// prompt words: "the step and plan interaction" keeps its list.
+#[test]
+fn a_two_word_use_survives_many_one_word_uses() {
+    let mut text = String::new();
+    for n in 0..9 {
+        text.push_str(&format!(
+            "def walk_{n}(step):\n    a = step\n    b = step\n    c = step\n    return step\n\n\n"
+        ));
+    }
+    text.push_str("def combine(step, plan):\n    plan.add(step)\n    return plan\n");
+    let (home, _project, root) = project(ON, &[("src/flow.py", text.as_str())]);
+    let map = prompt_map(home.path(), &root, "explain the step and plan interaction");
+    assert!(map.is_some_and(|text| text.contains("combine")));
+}

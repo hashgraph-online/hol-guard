@@ -300,8 +300,7 @@ pub(super) fn map(
         })
         .collect();
     let mut chosen = named_definitions(&files, &names, asked, false);
-    // A name no definition here holds is looked for where it is used
-    // instead, and a renamed one where it is used as well.
+    // A name no definition holds, or a renamed one, is looked for where used.
     let placed: BTreeSet<&str> = (chosen.iter())
         .filter(|_| !asked.everywhere)
         .filter_map(|pick| files[pick.file].sections[pick.at].name.as_deref())
@@ -319,10 +318,11 @@ pub(super) fn map(
         .filter(|item| item.phrase || item.name || !pieces.contains(&item.text))
         .filter(|item| !asked.changes || item.phrase || item.name)
         .collect();
-    let (used, uses) = uses::uses(&files, &rare, asked.everywhere, until)?;
-    // A file the prompt names stands for its outline only when the prompt's
-    // words are placed nowhere: "utils.py where the timeout is ignored" means
-    // the lines using `timeout`, not the file's first definitions.
+    let pointed = asked.named.len() + asked.spellings.len() > 0;
+    let lone = chosen.is_empty() && !pointed && sought.iter().all(|i| !i.name && !i.phrase);
+    let (used, uses) = uses::uses(&files, &rare, (asked.everywhere, lone), until)?;
+    // A named file stands for its outline only when the prompt's words are placed nowhere:
+    // "utils.py where the timeout is ignored" means the lines using `timeout`.
     if chosen.is_empty() && uses.is_empty() {
         chosen = named_definitions(&files, &names, asked, true);
     }

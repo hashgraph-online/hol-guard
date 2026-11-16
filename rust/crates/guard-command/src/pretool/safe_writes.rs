@@ -75,6 +75,7 @@ pub(super) fn bounded_native_temporary_write_target(
         value,
         super::PathContext {
             literal_words: &[],
+            guard_home: None,
             home_dir,
             cwd,
             cdpath_unset: false,
