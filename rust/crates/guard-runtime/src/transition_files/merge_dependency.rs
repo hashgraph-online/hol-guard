@@ -20,9 +20,40 @@ pub(super) fn merge(call: &mut Call<'_>) -> Step<Value> {
             .and_then(Value::as_object)
             .ok_or(Fault::Transition("files_invalid"))
     };
-    let (previous, change) = (object("previous")?, object("change")?);
+    Ok(match contract(object("previous")?, object("change")?)? {
+        None => json!({ "same": true }),
+        Some((artifact, invocation)) => json!({
+            "artifact_identity": artifact,
+            "invocation_identity": invocation,
+        }),
+    })
+}
+
+/// `previous` carrying the merged contract, as `merge_transition_dependency`
+/// returns it; `previous` itself when the two pins are the same.
+pub(super) fn merged(
+    previous: &Map<String, Value>,
+    change: &Map<String, Value>,
+) -> Step<Map<String, Value>> {
+    let mut merged = previous.clone();
+    if let Some((artifact, invocation)) = contract(previous, change)? {
+        merged.insert("artifact_identity".to_owned(), artifact);
+        if invocation.is_null() {
+            merged.remove("invocation_identity");
+        } else {
+            merged.insert("invocation_identity".to_owned(), invocation);
+        }
+    }
+    Ok(merged)
+}
+
+/// The merged artifact and invocation identities, or `None` for one pin.
+fn contract(
+    previous: &Map<String, Value>,
+    change: &Map<String, Value>,
+) -> Step<Option<(Value, Value)>> {
     if previous == change {
-        return Ok(json!({ "same": true }));
+        return Ok(None);
     }
     let present =
         |item: &Map<String, Value>, key: &str| item.get(key).is_some_and(|v| !v.is_null());
@@ -59,8 +90,11 @@ pub(super) fn merge(call: &mut Call<'_>) -> Step<Value> {
         .filter(|value| value.as_object().is_none_or(|fields| !fields.is_empty()))
         .or(after)
         .unwrap_or(Value::Null);
-    Ok(json!({
-        "artifact_identity": first.get("artifact_identity").cloned().unwrap_or(Value::Null),
-        "invocation_identity": chosen,
-    }))
+    Ok(Some((
+        first
+            .get("artifact_identity")
+            .cloned()
+            .unwrap_or(Value::Null),
+        chosen,
+    )))
 }

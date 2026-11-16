@@ -17,7 +17,6 @@ from .codex_hook_file_integrity import (
     CodexHookIntegrityError,
     _native,
     active_hook_validation_deadline,
-    check_hook_validation_deadline,
 )
 from .codex_hook_integrity import manifest_refusal
 from .codex_hook_launch_runtime import (
@@ -150,25 +149,3 @@ def validate_codex_hook_launch(
         start_command=start_command,
         config_json=config_json,
     )
-
-
-def verify_captured_launch_generation(
-    manifest: Mapping[str, object],
-) -> tuple[dict[str, object], dict[str, dict[str, object]]]:
-    """Validate an authenticated captured layout without selecting or spawning it.
-
-    The caller must authenticate the enclosing manifest and retained argv
-    membership first. Normal launch verification still binds this module's
-    own physical path; this read-only check binds the recorded package root.
-    """
-    check_hook_validation_deadline()
-    _checked("captured", manifest=dict(manifest))
-    check_hook_validation_deadline()
-    interpreter = manifest.get("interpreter")
-    files = manifest.get("packaged_files")
-    if not isinstance(interpreter, dict) or not isinstance(files, list):
-        raise ValueError("managed Codex hook captured layout is invalid")
-    packaged = {
-        str(item["role"]): item for item in files if isinstance(item, dict) and isinstance(item.get("role"), str)
-    }
-    return interpreter, packaged

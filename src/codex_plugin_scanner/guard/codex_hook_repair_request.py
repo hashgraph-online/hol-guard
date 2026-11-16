@@ -18,8 +18,13 @@ from typing import cast
 from .codex_hook_authority_record import AuthorityRecordRefusedError, open_authority_record, seal_authority_record
 from .codex_hook_file_integrity import hook_validation_deadline
 from .codex_hook_integrity import hook_manifest_path, load_hook_secret
-from .codex_hook_manifest import CODEX_AUTHORITY_REPAIR_ACTION, CodexHookManifestSpec, PreparedCodexHookRepair
-from .codex_hook_recovery import _decode, load_hook_authority_receipt
+from .codex_hook_manifest import (
+    CODEX_AUTHORITY_REPAIR_ACTION,
+    CodexHookManifestSpec,
+    PreparedCodexHookRepair,
+    transition_file,
+)
+from .codex_hook_recovery import load_hook_authority_receipt
 from .codex_publication_inverse_plan import (
     PreparedCodexPublicationInverse,
     bind_codex_publication_inverse_verification,
@@ -30,7 +35,6 @@ from .native_transition_files import publication
 from .runtime_transition import (
     RuntimeTransition,
     TransitionError,
-    TransitionFile,
     check_transition_files,
     inverse_recovery_budget,
 )
@@ -130,21 +134,7 @@ def _plan_from_payload(value: object, *, home: Path, config: Path) -> PreparedCo
         or type(native["mtime_ns"]) is not int
     ):
         raise TransitionError("authority_repair_request_plan_invalid")
-    files = tuple(
-        TransitionFile(
-            path=Path(str(item["path"])),
-            before=_decode(item["before"]),
-            after=_decode(item["after"]),
-            before_mode=cast(int, item["before_mode"]),
-            after_mode=cast(int, item["after_mode"]),
-            kind=cast(str, item["kind"]),
-            no_follow=cast(bool, item.get("no_follow", False)),
-            expected_digest=cast(str | None, item.get("expected_digest")),
-            artifact_identity=cast(dict[str, object] | None, item.get("artifact_identity")),
-            invocation_identity=cast(dict[str, object] | None, item.get("invocation_identity")),
-        )
-        for item in _checked_files(value.get("files"))
-    )
+    files = tuple(transition_file(item) for item in _checked_files(value.get("files")))
     changes = [item for item in files if item.path == hook_manifest_path(home, config)]
     if len(changes) != 1:
         raise TransitionError("authority_repair_request_plan_invalid")

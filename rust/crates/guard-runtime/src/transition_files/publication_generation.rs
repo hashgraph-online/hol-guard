@@ -223,7 +223,7 @@ fn untrusted() -> Fault {
 }
 
 /// `TransitionFile.identity_dependency`: the key pinned by its digest.
-fn identity_dependency(call: &Call<'_>, path: &Path) -> Step<Value> {
+pub(super) fn identity_dependency(call: &Call<'_>, path: &Path) -> Step<Value> {
     let data = call
         .snapshot(path)?
         .ok_or(Fault::Transition("authority_dependency_missing"))?;

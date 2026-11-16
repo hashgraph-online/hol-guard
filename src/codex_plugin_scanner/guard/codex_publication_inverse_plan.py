@@ -14,7 +14,6 @@ from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .codex_hook_compatibility import retained_launch_generations
 from .codex_hook_file_integrity import (
     CodexHookIntegrityError,
     active_hook_validation_deadline,
@@ -24,9 +23,8 @@ from .codex_hook_file_integrity import (
 )
 from .codex_hook_integrity import (
     authenticate_hook_manifest_text,
-    hook_secret_path,
 )
-from .codex_hook_manifest import CodexHookManifestSpec, _verify_hook_manifest
+from .codex_hook_manifest import CodexHookManifestSpec, _verify_hook_manifest, transition_file
 from .codex_hook_recovery import (
     _MAX_RECORD,
     _decode,
@@ -37,7 +35,6 @@ from .codex_hook_recovery import (
     _snapshot,
 )
 from .codex_hook_rollback import rollback_file_identity
-from .codex_hook_runtime_trust import verify_captured_launch_generation
 from .codex_hook_sources import parse_toml_object
 from .codex_install_transaction import require_codex_install_owner
 from .native_runtime import NativeRuntimeIdentity
@@ -74,25 +71,14 @@ def _predecessor_dependencies(home: Path, manifest_bytes: bytes) -> tuple[Transi
 
 def _capture_predecessor_dependencies(home: Path, manifest_bytes: bytes) -> tuple[TransitionFile, ...]:
     authenticated = authenticate_hook_manifest_text(home, manifest_bytes.decode("utf-8"))
-    dependencies = {hook_secret_path(home): TransitionFile.identity_dependency(hook_secret_path(home))}
-    try:
-        for generation in (authenticated, *retained_launch_generations(authenticated)):
-            check_hook_validation_deadline()
-            interpreter, packaged = verify_captured_launch_generation(generation)
-            items = [TransitionFile.artifact_dependency(identity) for identity in packaged.values()]
-            target = interpreter.get("target")
-            if not isinstance(target, dict):
-                raise TransitionError("publication_inverse_predecessor_identity_invalid")
-            items.append(TransitionFile.artifact_dependency(target, invocation=interpreter))
-            for item in items:
-                previous = dependencies.get(item.path)
-                dependencies[item.path] = item if previous is None else merge_transition_dependency(previous, item)
-    except ValueError as exc:
-        raise CodexHookIntegrityError(
-            "codex_publication_inverse_retained_identity_invalid",
-            "Guard could not verify a retained Codex launch generation.",
-        ) from exc
-    return tuple(dependencies.values())
+    check_hook_validation_deadline()
+    answer = publication("inverse_dependencies", home, manifest=authenticated)
+    pinned = answer.get("files") if isinstance(answer, dict) else None
+    if not isinstance(pinned, list) or not all(isinstance(item, dict) for item in pinned):
+        raise TransitionError("native_transition_invalid")
+    dependencies = tuple(transition_file(item) for item in pinned)
+    RuntimeTransition._compare({"files": [item.payload() for item in dependencies]}, "before")
+    return dependencies
 
 
 def _reviewable_prior_inverse(home: Path, record: dict[str, object]) -> str | None:

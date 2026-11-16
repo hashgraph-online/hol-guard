@@ -23,7 +23,6 @@ from .codex_hook_file_integrity import (
 from .codex_hook_integrity import (
     _MANIFEST_MESSAGES,
     authenticate_hook_manifest_text,
-    hook_authority_receipt_path,
     hook_manifest_path,
     hook_secret_path,
     load_authenticated_hook_manifest,
@@ -259,27 +258,41 @@ class PreparedCodexHookRepair:
         return str(self._checked()["subject"])
 
 
+def transition_file(item: Mapping[str, object]) -> TransitionFile:
+    """One planned file as the runtime answered its payload."""
+    from .codex_hook_recovery import _decode
+    from .runtime_transition import TransitionFile
+
+    return TransitionFile(
+        path=Path(str(item["path"])),
+        before=_decode(item["before"]),
+        after=_decode(item["after"]),
+        before_mode=cast(int, item["before_mode"]),
+        after_mode=cast(int, item["after_mode"]),
+        kind=cast(str, item["kind"]),
+        no_follow=cast(bool, item.get("no_follow", False)),
+        expected_digest=cast("str | None", item.get("expected_digest")),
+        artifact_identity=cast("dict[str, object] | None", item.get("artifact_identity")),
+        invocation_identity=cast("dict[str, object] | None", item.get("invocation_identity")),
+    )
+
+
 def prepare_authenticated_hook_manifest_repair(spec: CodexHookManifestSpec) -> PreparedCodexHookRepair:
-    """Prepare only restoration of a missing manifest from retained authority."""
-    from .codex_hook_compatibility import retained_launch_generations
+    """Prepare only restoration of a missing manifest from retained authority.
+
+    The runtime pins the key, receipt, config and every captured launch
+    artifact; this keeps the receipt checks and the manifest change.
+    """
     from .codex_hook_recovery import _snapshot, load_hook_authority_receipt
-    from .codex_hook_runtime_trust import verify_captured_launch_generation
     from .codex_hook_sources import parse_toml_object
-    from .runtime_transition import RuntimeTransition, TransitionError, TransitionFile, merge_transition_dependency
+    from .native_transition_files import publication
+    from .runtime_transition import RuntimeTransition, TransitionError, TransitionFile
 
     check_hook_validation_deadline()
     config = spec.config_path.parent.resolve(strict=False) / spec.config_path.name
     manifest_path = hook_manifest_path(spec.guard_home, config)
     if _snapshot(manifest_path) is not None:
         raise TransitionError("authority_repair_manifest_present")
-    dependencies = []
-    for path in (
-        hook_secret_path(spec.guard_home),
-        hook_authority_receipt_path(spec.guard_home, config),
-        config,
-    ):
-        check_hook_validation_deadline()
-        dependencies.append(TransitionFile.identity_dependency(path))
     receipt = load_hook_authority_receipt(spec.guard_home, config)
     payload = parse_toml_object(receipt.config_bytes, path=config, label="Codex config file")
     check_hook_validation_deadline()
@@ -294,28 +307,13 @@ def prepare_authenticated_hook_manifest_repair(spec: CodexHookManifestSpec) -> P
     if state.get("integrity_status") != "valid":
         raise CodexHookIntegrityError(str(state["integrity_reason"]), str(state["integrity_message"]))
     manifest = authenticate_hook_manifest_text(spec.guard_home, receipt.manifest_bytes.decode("utf-8"))
-    try:
-        generations = [manifest, *retained_launch_generations(manifest)]
-        for generation in generations:
-            interpreter, packaged = verify_captured_launch_generation(generation)
-            for identity in packaged.values():
-                check_hook_validation_deadline()
-                dependencies.append(TransitionFile.artifact_dependency(identity))
-            target = interpreter.get("target")
-            if not isinstance(target, dict):
-                raise TransitionError("authority_repair_identity_invalid")
-            check_hook_validation_deadline()
-            dependencies.append(TransitionFile.artifact_dependency(target, invocation=interpreter))
-    except ValueError as exc:
-        raise CodexHookIntegrityError(
-            "codex_hook_repair_retained_identity_invalid", "Guard could not verify a retained Codex launch generation."
-        ) from exc
+    check_hook_validation_deadline()
+    answer = publication("repair_files", spec.guard_home, config=str(config), manifest=manifest)
+    pinned = answer.get("files") if isinstance(answer, dict) else None
+    if not isinstance(pinned, list) or not all(isinstance(item, dict) for item in pinned):
+        raise TransitionError("native_transition_invalid")
     change = TransitionFile(manifest_path, None, receipt.manifest_bytes, no_follow=True)
-    unique: dict[Path, TransitionFile] = {change.path: change}
-    for dependency in dependencies:
-        previous = unique.get(dependency.path)
-        unique[dependency.path] = dependency if previous is None else merge_transition_dependency(previous, dependency)
-    files = tuple(unique.values())
+    files = (change, *(transition_file(item) for item in pinned))
     RuntimeTransition._compare({"files": [item.payload() for item in files]}, "before")
     check_hook_validation_deadline()
     prepared = PreparedCodexHookRepair(change, files, spec.guard_home.resolve(strict=False), config, str(uuid.uuid4()))
