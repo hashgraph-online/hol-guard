@@ -928,6 +928,7 @@ mod mdm_integrity_snapshot;
 mod memory_decision_event;
 mod memory_decision_receipt;
 mod memory_pattern;
+mod native_admitted_call;
 #[cfg(target_os = "macos")]
 mod native_bash_client;
 mod native_bash_reply_validation;
