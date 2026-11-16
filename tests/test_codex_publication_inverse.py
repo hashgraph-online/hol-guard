@@ -174,7 +174,7 @@ def test_process_exit_preserves_explicit_inverse_for_fresh_recovery(inverse, bou
         def exit_after_owned_write(op, home, **fields):
             answer = original(op, home, **fields)
             target = {"intent": journal, "manifest": manifest, "config": config}[boundary]
-            path = journal if op == "inverse_record" else Path(fields["path"])
+            path = {"inverse_record": journal, "inverse_restore": Path(fields.get("path", ""))}.get(op)
             if path == target:
                 os._exit(17)
             return answer
