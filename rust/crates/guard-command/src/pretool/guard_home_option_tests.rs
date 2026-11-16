@@ -1,4 +1,6 @@
-use super::{normal_home, without_home_option, without_own_home};
+use super::{
+    guard_approval_inspection_command, normal_home, without_home_option, without_own_home,
+};
 
 fn words(text: &str) -> Vec<String> {
     text.split_whitespace().map(str::to_owned).collect()
@@ -112,4 +114,41 @@ fn windows_drive_homes_compare_as_windows_paths() {
     assert_eq!(normal_home("C:"), None);
     assert_eq!(normal_home("C:\\"), None);
     assert_eq!(normal_home("relative/home"), None);
+}
+
+#[test]
+fn approval_inspection_is_proven_only_on_the_hook_guard_home() {
+    let account = account("inspection");
+    let home = account.join("guard-home");
+    std::fs::create_dir_all(&home).unwrap();
+    let home_text = home.to_string_lossy().into_owned();
+    let cwd = account.to_string_lossy().into_owned();
+    let proven = |command: &str| guard_approval_inspection_command(command, &home_text, Some(&cwd));
+    for command in [
+        format!("hol-guard approvals wait abc123 --json --home {home_text}"),
+        format!("hol-guard approvals wait abc123 --home={home_text} --timeout 120"),
+        format!("hol-guard approvals retry-hint abc123 --home {home_text}"),
+        "hol-guard approvals wait abc123 --json".to_owned(),
+    ] {
+        assert!(proven(&command), "{command}");
+    }
+    let other = account.join("other-home").to_string_lossy().into_owned();
+    for command in [
+        format!("hol-guard approvals wait abc123 --home {other}"),
+        format!("hol-guard approvals approve abc123 --home {home_text}"),
+        format!("hol-guard approvals wait abc123 --home {home_text} > out.txt"),
+        format!("hol-guard approvals wait abc123 --home {home_text}; rm -rf x"),
+        format!("hol-guard approvals wait abc123 --home {home_text} | sh"),
+        format!("X=1 hol-guard approvals wait abc123 --home {home_text}"),
+        format!("env hol-guard approvals wait abc123 --home {home_text}"),
+        format!("./hol-guard approvals wait abc123 --home {home_text}"),
+        format!("hol-guard install claude-code --home {home_text}"),
+    ] {
+        assert!(!proven(&command), "{command}");
+    }
+    assert!(!guard_approval_inspection_command(
+        &format!("hol-guard approvals wait abc123 --home {home_text}"),
+        &home_text,
+        None,
+    ));
 }

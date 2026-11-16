@@ -41,12 +41,71 @@ pub(crate) fn apply_post_tool_policy(
     apply_post_tool_policy_with_delivery(snapshot, request, payload_kind, response, None, false)
 }
 
+#[cfg(test)]
 pub(crate) fn apply_post_tool_policy_with_delivery(
+    snapshot: &AdmittedPolicySnapshot,
+    request: &NativeHookRequestV1,
+    payload_kind: GuardHookPayloadKindV2,
+    response: HookReviewResponseV1,
+    delivery: Option<&VerifiedBashDelivery>,
+    recording_only: bool,
+) -> Result<HookReviewResponseV1, String> {
+    apply_post_tool_policy_with_witness(
+        snapshot,
+        request,
+        payload_kind,
+        response,
+        delivery,
+        || false,
+        recording_only,
+    )
+}
+
+/// `PostToolUse` policy for a hook whose envelope the policy store
+/// authenticated. That store's Guard home holds both the owner's verified
+/// delivery and the witness that this exact call ran on the user's approval.
+pub(crate) fn apply_post_tool_policy_for_hook(
+    snapshot: &AdmittedPolicySnapshot,
+    request: &NativeHookRequestV1,
+    payload_kind: GuardHookPayloadKindV2,
+    response: HookReviewResponseV1,
+    origin_store: Option<&crate::policy_store::PolicySnapshotStore>,
+    recording_only: bool,
+) -> Result<HookReviewResponseV1, String> {
+    let delivery = origin_store.and_then(|store| crate::bash_post_delivery::verify(request, store));
+    let admitted_call = || {
+        origin_store.is_some_and(|store| store.require_guard_home(&request.guard_home).is_ok())
+            && request.payload.as_object().is_some_and(|payload| {
+                crate::native_admitted_call::admitted_for_post(
+                    &request.guard_home,
+                    &request.harness,
+                    payload,
+                )
+            })
+    };
+    apply_post_tool_policy_with_witness(
+        snapshot,
+        request,
+        payload_kind,
+        response,
+        delivery.as_ref(),
+        admitted_call,
+        recording_only,
+    )
+}
+
+/// `apply_post_tool_policy_with_delivery`, plus `admitted_call`: whether the
+/// call's `PreToolUse` ran it on the user's Allow once or Always allow
+/// (`native_admitted_call`). Asked only when an overridable execution floor
+/// would hold a clean, fully scanned output, so ordinary calls never read
+/// the store.
+pub(crate) fn apply_post_tool_policy_with_witness(
     snapshot: &AdmittedPolicySnapshot,
     request: &NativeHookRequestV1,
     payload_kind: GuardHookPayloadKindV2,
     mut response: HookReviewResponseV1,
     delivery: Option<&VerifiedBashDelivery>,
+    admitted_call: impl FnOnce() -> bool,
     recording_only: bool,
 ) -> Result<HookReviewResponseV1, String> {
     if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
@@ -54,8 +113,7 @@ pub(crate) fn apply_post_tool_policy_with_delivery(
     }
     // Only a complete native output scan may reuse the execution admission.
     // A host-supplied marker alone cannot construct this opaque witness.
-    let verified_delivery = delivery.is_some()
-        && payload_kind == GuardHookPayloadKindV2::Inline
+    let clean_scan = payload_kind == GuardHookPayloadKindV2::Inline
         && plain_inline_output(&request.payload)
         && response.decision == "allow"
         && response.model_output_action == "allow_original"
@@ -66,6 +124,7 @@ pub(crate) fn apply_post_tool_policy_with_delivery(
         && response.reviewed_output_sha256.is_some()
         && response.reviewed_output_sha256
             == guard_hook_core::canonical_observed_output_sha256(&request.payload);
+    let verified_delivery = delivery.is_some() && clean_scan;
     let task_metadata = payload_kind == GuardHookPayloadKindV2::Inline
         && guard_command::pretool::bounded_task_metadata_output(&request.payload, &request.harness);
     let omp_output_action = (payload_kind == GuardHookPayloadKindV2::Inline)
@@ -99,29 +158,43 @@ pub(crate) fn apply_post_tool_policy_with_delivery(
         action_type,
         &response.reason_code,
     )?;
-    let (floor, floor_cause) = policy_floor_with_cause_and_delivery(
-        &snapshot.effective_policy,
-        &snapshot.compiled,
-        &harness,
-        action_type,
-        &FloorInput {
-            facts: &facts,
-            reason_code: if (task_metadata
-                || omp_output_action == Some(PreToolActionTypeV1::Harness))
-                && matches!(
-                    response.reason_code.as_str(),
-                    "output_scan_allow" | "source_full_scan_allow"
-                ) {
-                "native_agent_task_metadata"
-            } else {
-                &response.reason_code
+    let floor_reason = if (task_metadata || omp_output_action == Some(PreToolActionTypeV1::Harness))
+        && matches!(
+            response.reason_code.as_str(),
+            "output_scan_allow" | "source_full_scan_allow"
+        ) {
+        "native_agent_task_metadata"
+    } else {
+        response.reason_code.as_str()
+    };
+    let floor_for = |verified: bool| {
+        policy_floor_with_cause_and_delivery(
+            &snapshot.effective_policy,
+            &snapshot.compiled,
+            &harness,
+            action_type,
+            &FloorInput {
+                facts: &facts,
+                reason_code: floor_reason,
+                prompt_classes: &[],
+                benign_prompt: false,
+                package_scripts_disabled: false,
             },
-            prompt_classes: &[],
-            benign_prompt: false,
-            package_scripts_disabled: false,
-        },
-        verified_delivery,
-    )?;
+            verified,
+        )
+    };
+    let (mut floor, mut floor_cause) = floor_for(verified_delivery)?;
+    // The user approved this exact call before it ran. The floor that sent it
+    // to review may not withhold its clean output; only the execution floors
+    // `delivery_floor` lowers are lifted, so a secret, a network or a risk
+    // floor on the output still holds.
+    if !verified_delivery
+        && clean_scan
+        && action_rank(&floor) > action_rank(&intrinsic)
+        && admitted_call()
+    {
+        (floor, floor_cause) = floor_for(true)?;
+    }
     let effective = join_action(&intrinsic, &floor)?;
     response.policy_action = Some(effective.clone());
     // Mark only an actual clean completion, after every independent policy

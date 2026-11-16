@@ -120,6 +120,71 @@ fn without_home_option(arguments: &[String], own: &str) -> Option<Vec<String>> {
     found.then_some(rest)
 }
 
+/// Whether `command` is Guard's own approval inspection on the Guard home
+/// the hook itself reports: one plain `hol-guard approvals`, `approvals list`,
+/// `approvals wait <id>` or `approvals retry-hint <id>`, optionally with one
+/// `--home` naming `guard_home`. This is the wait Guard tells the agent to
+/// run after a review, `hol-guard approvals wait <id> --json --home <home>`,
+/// so it reads only the store that review was queued in.
+///
+/// The runtime uses this to keep a policy floor such as
+/// `subprocess_action: review` from holding Guard's own instructions for a
+/// review behind a second review.
+pub fn guard_approval_inspection_command(
+    command: &str,
+    guard_home: &str,
+    cwd: Option<&str>,
+) -> bool {
+    let Ok(model) = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: "posix".to_owned(),
+        transport: "shell_string".to_owned(),
+        extraction_provenance: "guard-shell".to_owned(),
+    }) else {
+        return false;
+    };
+    if model.confidence != "exact"
+        || model.uncertainty_reason.is_some()
+        || model.path_overridden
+        || !model.wrapper_chain.is_empty()
+    {
+        return false;
+    }
+    let [segment] = model.segments.as_slice() else {
+        return false;
+    };
+    let Some(executable) = segment.executable.as_deref() else {
+        return false;
+    };
+    if !matches!(executable, "hol-guard" | "hol-guard.exe")
+        || segment.pipeline_index != 0
+        || !segment.environment_names.is_empty()
+        || !segment.wrapper_chain.is_empty()
+        || segment.path_overridden
+        || segment.tokens.len() != segment.arguments.len() + 1
+    {
+        return false;
+    }
+    let names_home = segment
+        .arguments
+        .iter()
+        .any(|word| word == "--home" || word.starts_with("--home="));
+    let arguments = if names_home {
+        let Some(own) = normal_home(guard_home) else {
+            return false;
+        };
+        let Some(rest) = without_home_option(&segment.arguments, &own) else {
+            return false;
+        };
+        rest
+    } else {
+        segment.arguments.clone()
+    };
+    let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    super::guard_diagnostics::approval_inspection(&words)
+        && super::guard_diagnostics::safe_hol_guard_segment(executable, &arguments, cwd, 0)
+}
+
 #[cfg(test)]
 #[path = "guard_home_option_tests.rs"]
 mod tests;

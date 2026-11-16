@@ -1,0 +1,182 @@
+//! A call the user approved keeps its approval through `PostToolUse`, and
+//! Guard's own approval wait on the hook's Guard home is not a subprocess to
+//! review.
+
+use super::*;
+
+fn subprocess_review() -> PolicySnapshotV3 {
+    let mut reviewed = policy("allow");
+    reviewed.subprocess_action = "review".into();
+    snapshot(reviewed)
+}
+
+fn approved_ls_output() -> NativeHookRequestV1 {
+    let mut request = post_request(json!({
+        "tool_call_id": "call-1",
+        "tool_name": "bash",
+        "tool_input": {"command": "ls -la"},
+        "tool_response": "total 0"
+    }));
+    request.harness = "omp".into();
+    request
+}
+
+fn clean_scan() -> HookReviewResponseV1 {
+    let mut response = HookReviewResponseV1::allow("output_scan_allow");
+    response.model_output_action = "allow_original".into();
+    response.reviewed_output_sha256 =
+        guard_hook_core::canonical_observed_output_sha256(&approved_ls_output().payload);
+    assert!(response.reviewed_output_sha256.is_some());
+    response
+}
+
+fn post(
+    snapshot: &PolicySnapshotV3,
+    response: HookReviewResponseV1,
+    admitted: bool,
+) -> HookReviewResponseV1 {
+    crate::policy_enforcement::apply_post_tool_policy_with_witness(
+        &AdmittedPolicySnapshot::new(snapshot.clone()).unwrap(),
+        &approved_ls_output(),
+        GuardHookPayloadKindV2::Inline,
+        response,
+        None,
+        || admitted,
+        false,
+    )
+    .unwrap()
+}
+
+#[test]
+fn approved_call_output_is_not_held_again_by_the_subprocess_floor() {
+    let unapproved = post(&subprocess_review(), clean_scan(), false);
+    assert_eq!(unapproved.decision, "deny");
+    assert_eq!(unapproved.reason_code, "native_policy_review_required");
+
+    let approved = post(&subprocess_review(), clean_scan(), true);
+    assert_eq!(approved.decision, "allow");
+}
+
+#[test]
+fn approval_witness_is_only_read_when_a_floor_would_hold_the_output() {
+    let quiet = post(&snapshot(policy("allow")), clean_scan(), false);
+    assert_eq!(quiet.decision, "allow");
+    let read = std::cell::Cell::new(false);
+    crate::policy_enforcement::apply_post_tool_policy_with_witness(
+        &AdmittedPolicySnapshot::new(snapshot(policy("allow"))).unwrap(),
+        &approved_ls_output(),
+        GuardHookPayloadKindV2::Inline,
+        clean_scan(),
+        None,
+        || {
+            read.set(true);
+            true
+        },
+        false,
+    )
+    .unwrap();
+    assert!(!read.get());
+}
+
+#[test]
+fn approval_witness_never_releases_secret_output_or_a_block_floor() {
+    for code in [
+        "output_secret_match",
+        "source_secret_match",
+        "sensitive_path",
+    ] {
+        let held = post(
+            &subprocess_review(),
+            HookReviewResponseV1::deny(code, "blocked"),
+            true,
+        );
+        assert_eq!(held.decision, "deny", "{code}");
+        assert_eq!(held.reason_code, code);
+    }
+    let mut blocked = policy("allow");
+    blocked.subprocess_action = "block".into();
+    let held = post(&snapshot(blocked), clean_scan(), true);
+    assert_eq!(held.decision, "deny");
+}
+
+fn inspection_review() -> PreToolResultV1 {
+    let mut result = generic_result("review");
+    result.reason_code = "native_command_review_required".into();
+    result
+}
+
+#[test]
+fn own_approval_wait_passes_the_subprocess_floor() {
+    let admitted = AdmittedPolicySnapshot::new(subprocess_review()).unwrap();
+    let held = crate::policy_enforcement::apply_pre_tool_policy_with_inspection(
+        &admitted,
+        &json!({}),
+        inspection_review(),
+        false,
+    )
+    .unwrap();
+    assert_eq!(held.decision, "deny");
+
+    let passed = crate::policy_enforcement::apply_pre_tool_policy_with_inspection(
+        &admitted,
+        &json!({}),
+        inspection_review(),
+        true,
+    )
+    .unwrap();
+    assert_eq!(passed.decision, "allow");
+    assert_eq!(passed.reason_code, "native_exact_safe_command");
+}
+
+#[test]
+fn own_approval_wait_keeps_other_reviews_and_sensitive_targets() {
+    let admitted = AdmittedPolicySnapshot::new(subprocess_review()).unwrap();
+    let mut other = generic_result("review");
+    other.reason_code = "native_destructive_command".into();
+    let held = crate::policy_enforcement::apply_pre_tool_policy_with_inspection(
+        &admitted,
+        &json!({}),
+        other,
+        true,
+    )
+    .unwrap();
+    assert_eq!(held.decision, "deny");
+    assert_eq!(held.reason_code, "native_destructive_command");
+
+    let mut sensitive = inspection_review();
+    sensitive.action.sensitive_target = true;
+    let held = crate::policy_enforcement::apply_pre_tool_policy_with_inspection(
+        &admitted,
+        &json!({}),
+        sensitive,
+        true,
+    )
+    .unwrap();
+    assert_eq!(held.decision, "deny");
+}
+
+#[test]
+fn guard_home_must_match_for_the_inspection_witness() {
+    let payload = |command: &str| json!({"tool_name": "bash", "tool_input": {"command": command}});
+    let home = "/home/test/fixture/guard-home";
+    assert!(crate::policy_enforcement::guard_approval_inspection(
+        &payload("hol-guard approvals wait abc123 --json --home /home/test/fixture/guard-home"),
+        home,
+        Some("/home/test/fixture"),
+    ));
+    assert!(!crate::policy_enforcement::guard_approval_inspection(
+        &payload("hol-guard approvals wait abc123 --json --home /home/test/other"),
+        home,
+        Some("/home/test/fixture"),
+    ));
+    assert!(!crate::policy_enforcement::guard_approval_inspection(
+        &payload("hol-guard approvals approve abc123 --home /home/test/fixture/guard-home"),
+        home,
+        Some("/home/test/fixture"),
+    ));
+    assert!(!crate::policy_enforcement::guard_approval_inspection(
+        &payload("hol-guard approvals wait abc123 --home /home/test/fixture/guard-home; rm -rf x"),
+        home,
+        Some("/home/test/fixture"),
+    ));
+}
