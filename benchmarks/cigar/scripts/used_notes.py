@@ -17,10 +17,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from anatomy import sessions
 
-NAMED = re.compile(r"([\w./-]+\.(?:py|rs|go|ts|js|md|toml|cfg|txt|rst|ini|json|yml|yaml))"
-                   r"(?::\d+(?:-\d+)?| \(lines \d+)")
+EXT = r"(?:py|rs|go|ts|js|md|toml|cfg|txt|rst|ini|json|yml|yaml)"
+NAMED = re.compile(rf"([\w./-]+\.{EXT})(?::\d+(?:-\d+)?| \(lines \d+)")
 OTHERS = re.compile(r"Other matching files: ([^\n]+)")
-FILE = re.compile(r"[\w.-]+/[\w./-]+\.\w+|\b[\w-]+\.(?:py|rs|go|ts)\b")
+# A project file a call names: any path with a folder, or a root-level file with a note extension.
+FILE = re.compile(rf"[\w.-]+/[\w./-]+\.\w+|(?<![\w./-])[\w-]+\.{EXT}\b")
+TOKEN = re.compile(r"[\w.-]+(?:/[\w.-]+)*")
 
 
 def note_files(notes):
@@ -33,8 +35,16 @@ def note_files(notes):
     return {f for f in files if f}
 
 
+def same_file(token, path):
+    """A call's path token names the note's file: equal, or one is the other with a leading folder
+    (`./src/a.py`, an absolute path, or a bare `a.py` run from that folder). A different file that
+    shares part of the name (`test_a.py`) does not match."""
+    token, path = token.removeprefix("./"), path.removeprefix("./")
+    return token == path or token.endswith("/" + path) or path.endswith("/" + token)
+
+
 def touched(calls, files):
-    return any(f in call or Path(f).name in call for call in calls for f in files)
+    return any(same_file(token, f) for call in calls for token in TOKEN.findall(call) for f in files)
 
 
 def main():

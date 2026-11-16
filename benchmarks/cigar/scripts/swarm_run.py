@@ -1,4 +1,4 @@
-"""Swarm set (F13): one task that splits in three, done by one agent or by three cold agents.
+"""Swarm set: one task that splits in three, done by one agent or by three cold agents.
 
 Usage: swarm_run.py --arm <arm> --seed <n> --tag <tag> --mode one|cold
 
@@ -35,7 +35,10 @@ def plan(seed):
     paths, tasks = set(), []
     for kind, key in (("bug", "mutations"), ("bug", "mutations"), ("stub", "stubs")):
         fresh = [t for t in pool[key] if t["path"] not in paths]
-        t = rng.choice(fresh or pool[key])
+        if not fresh:
+            # Each piece must sit in its own file, or the three sessions would edit one file.
+            raise SystemExit(f"swarm seed {seed}: {name} has no {key} entry in a file not already used")
+        t = rng.choice(fresh)
         paths.add(t["path"])
         if kind == "bug":
             prompt = R.BUG_PROMPTS[2].format(qual=f"`{t['qual']}`")
@@ -45,23 +48,34 @@ def plan(seed):
     return name, pool, tasks
 
 
-def session(harness, where, project, python, prompt, box, out):
-    """Run one fresh session; return its ledger paths and token totals."""
+def session(harness, where, project, python, prompt, box, out, spent):
+    """Run one fresh session. Its ledger paths and token totals go into `spent` (paths, tokens, model)
+    even when the session fails or times out, so paid requests are never dropped from the row."""
     codex_home, home = where / "codex_home", where / "home"
     if harness == B.claude.HARNESS:
         thread = str(uuid.uuid4())
-        B.claude_exec(project, where, python, prompt, thread, False, out)
-        ledger = B.usage.claude_transcripts(B.claude_projects(), thread)
-        return ledger, B.usage.claude_transcript(ledger) if ledger else B.usage.empty(), B.claude.MODEL
+        try:
+            B.claude_exec(project, where, python, prompt, thread, False, out)
+        finally:
+            ledger = B.usage.claude_transcripts(B.claude_projects(), thread)
+            spent(ledger, B.usage.claude_transcript(ledger) if ledger else B.usage.empty(), B.claude.MODEL)
+        return
     if harness == O.HARNESS:
         env = B.agent_env(project, where / "codex_unused", None, python)
-        code = O.run(where, project, box / f"omp-{out.stem}", env, prompt, False, out, B.STEP_TIMEOUT)
+        code = None
+        try:
+            code = O.run(where, project, box / f"omp-{out.stem}", env, prompt, False, out, B.STEP_TIMEOUT)
+        finally:
+            spent([out], O.usage([out]) if out.exists() else B.usage.empty(), O.MODEL)
         if code != 0:
             raise B.StepError(f"omp exited {code}")
-        return [out], O.usage([out]), O.MODEL
-    B.codex_exec(project, codex_home, home if home.is_dir() else None, python, prompt, None, out)
-    rollout = B.rollout_path(codex_home, B.thread_of(B.events_of(out)) or "")
-    return ([rollout] if rollout else []), (B.usage.codex_rollout(rollout) if rollout else B.usage.empty()), B.MODEL
+        return
+    try:
+        B.codex_exec(project, codex_home, home if home.is_dir() else None, python, prompt, None, out)
+    finally:
+        thread = B.thread_of(B.events_of(out)) if out.exists() else None
+        rollout = B.rollout_path(codex_home, thread or "")
+        spent([rollout] if rollout else [], B.usage.codex_rollout(rollout) if rollout else B.usage.empty(), B.MODEL)
 
 
 def main():
@@ -99,15 +113,20 @@ def main():
     if a.mode == "cold":
         prompts = [t["prompt"] for t in tasks]
     ledger, tokens, model, started = [], B.usage.empty(), None, time.time()
+
+    def spent(paths, used, used_model):
+        nonlocal tokens, model
+        ledger.extend(paths)
+        tokens = {k: tokens[k] + used.get(k, 0) for k in tokens}
+        model = used_model
+
     for n, prompt in enumerate(prompts if error is None else [], 1):
         try:
-            paths, used, model = session(harness, where, project, python, prompt, box,
-                                         runs / f"{a.arm}-{a.mode}-s{a.seed}-{n}.jsonl")
+            session(harness, where, project, python, prompt, box,
+                    runs / f"{a.arm}-{a.mode}-s{a.seed}-{n}.jsonl", spent)
         except (B.StepError, R.subprocess.TimeoutExpired) as failure:
             error = f"session {n}: {failure}"
             break
-        ledger += paths
-        tokens = {k: tokens[k] + used.get(k, 0) for k in tokens}
     suite = R.suite(python, project, repo, pool)
     unchanged = R.tests_unchanged(project, repo, since)
     row = {

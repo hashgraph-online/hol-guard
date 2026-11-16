@@ -86,25 +86,34 @@ def main():
     B.preflight(project, codex_home, home if home.is_dir() else None, python)
     out, error, started = runs / f"{a.arm}-t{a.task}.jsonl", None, time.time()
     ledger, tokens, model = [], B.usage.empty(), None
+    thread = str(uuid.uuid4())
     try:
         if harness == B.claude.HARNESS:
-            thread = str(uuid.uuid4())
+            model = B.claude.MODEL
             B.claude_exec(project, where, python, task["prompt"], thread, False, out)
-            model, ledger = B.claude.MODEL, B.usage.claude_transcripts(B.claude_projects(), thread)
-            tokens = B.usage.claude_transcript(ledger) if ledger else tokens
         elif harness == O.HARNESS:
+            model = O.MODEL
             env = B.agent_env(project, where / "codex_unused", None, python)
             code = O.run(where, project, box / "omp-sessions", env, task["prompt"], False, out, B.STEP_TIMEOUT)
-            model, ledger, tokens = O.MODEL, [out], O.usage([out])
             if code != 0:
                 raise B.StepError(f"omp exited {code}")
         else:
+            model = B.MODEL
             B.codex_exec(project, codex_home, home if home.is_dir() else None, python, task["prompt"], None, out)
-            rollout = B.rollout_path(codex_home, B.thread_of(B.events_of(out)) or "")
-            model, ledger = B.MODEL, [rollout] if rollout else []
-            tokens = B.usage.codex_rollout(rollout) if rollout else tokens
     except (B.StepError, subprocess.TimeoutExpired) as failure:
         error = str(failure)
+    finally:
+        # Read usage whether or not the session finished: a failed session's requests were paid for.
+        if harness == B.claude.HARNESS:
+            ledger = B.usage.claude_transcripts(B.claude_projects(), thread)
+            tokens = B.usage.claude_transcript(ledger) if ledger else tokens
+        elif harness == O.HARNESS:
+            ledger = [out] if out.exists() else []
+            tokens = O.usage(ledger) if ledger else tokens
+        else:
+            rollout = B.rollout_path(codex_home, (B.thread_of(B.events_of(out)) if out.exists() else None) or "")
+            ledger = [rollout] if rollout else []
+            tokens = B.usage.codex_rollout(rollout) if rollout else tokens
     checks = check(task, project)
     row = {
         "arm": a.arm, "harness": harness, "task": a.task, "repo": task["repo"], "lang": task["lang"],

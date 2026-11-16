@@ -65,6 +65,9 @@ def git(*args, cwd, check=True):
 
 def env_for(lang, repo, tree):
     env = dict(os.environ, NO_COLOR="1")
+    # Upstream tests are third-party code: they never see a GitHub token.
+    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+        env.pop(name, None)
     if lang == "py":
         env["PYTHONPATH"] = os.pathsep.join([str(tree / "src"), str(tree)])
         env["PYTHONDONTWRITEBYTECODE"] = "1"

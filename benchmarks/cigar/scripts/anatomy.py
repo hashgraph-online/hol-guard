@@ -8,6 +8,7 @@ calls by type (read, search, edit, test, build, git, other), Guard holds, failed
 CIGAR note size. Reading only; nothing is run.
 """
 
+import bisect
 import json
 import re
 import sys
@@ -20,7 +21,7 @@ from rig import WORK
 TYPES = ("read", "search", "edit", "test", "build", "git", "other")
 RULES = [
     ("edit", r"apply_patch|\*\*\* Begin Patch|^(Edit|Write|MultiEdit|edit|write)$"),
-    ("test", r"\bpytest\b|\btox\b|unittest|\bnox\b|\bcargo test\b|\bnpm test\b"),
+    ("test", r"\bpytest\b|\btox\b|unittest|\bnox\b|\bcargo test\b|\bgo test\b|\bnpm test\b|\bvitest\b|\bjest\b"),
     ("build", r"\bpip\b|\buv\b|python3? -m build|\bwheel\b|\bhatch\b|setup\.py|\btwine\b|\bflit\b"),
     ("git", r"^\s*git\b|[;&|]\s*git\b"),
     ("search", r"^(Grep|Glob|grep|find|ls)$|\brg\b|\bgrep\b|\bfind\b|\bfd\b|^\s*ls\b"),
@@ -83,34 +84,54 @@ def codex(path, n):
     return steps
 
 
-def claude(path, n):
-    steps, at = [blank() for _ in range(n)], -1
-    for line in Path(path).read_text().splitlines():
+def claude_note(e):
+    """The decoded CIGAR note text of a Claude Code hook attachment, or None."""
+    content = (e.get("attachment") or {}).get("content")
+    text = "\n".join(c for c in content if isinstance(c, str)) if isinstance(content, list) else content
+    return text if isinstance(text, str) and NOTE in text else None
+
+
+def claude_event(e, step, seen):
+    """Add one Claude Code transcript event to a step. A request is a distinct message id with usage."""
+    m = e.get("message") if isinstance(e.get("message"), dict) else {}
+    if e.get("type") == "attachment":
+        text = claude_note(e)
+        if text:
+            step["note"] += len(text)
+            step["notes"].append(text)
+    elif e.get("type") == "assistant":
+        if m.get("usage") and m.get("id") and m["id"] not in seen:
+            seen.add(m["id"])
+            step["requests"] += 1
+        for part in m.get("content") or []:
+            if isinstance(part, dict) and part.get("type") == "tool_use":
+                args = part.get("input") or {}
+                step[kind_of(args.get("command") or part.get("name", ""))] += 1
+                step["calls"].append(json.dumps(args))
+    elif e.get("type") == "user":
+        for part in m.get("content") or []:
+            if isinstance(part, dict) and part.get("type") == "tool_result":
+                step["holds"] += bool(HOLD.search(flat(part.get("content"))))
+                step["failed"] += bool(part.get("is_error"))
+
+
+def claude(paths, n):
+    """The main transcript sets the steps; child-agent transcripts join the step running at their time."""
+    steps, at, starts, seen = [blank() for _ in range(n)], -1, [], set()
+    for line in Path(paths[0]).read_text().splitlines():
         e = json.loads(line)
         m = e.get("message") if isinstance(e.get("message"), dict) else {}
-        step = steps[at] if 0 <= at < n else None
         if e.get("type") == "user" and isinstance(m.get("content"), str):
             at += 1
-        elif e.get("type") == "attachment" and step:
-            text = json.dumps(e)
-            if NOTE in text:
-                step["note"] += len(text)
-                step["notes"].append(text)
-        elif step is None:
-            continue
-        elif e.get("type") == "api-request":
-            step["requests"] += 1
-        elif e.get("type") == "assistant":
-            for part in m.get("content") or []:
-                if isinstance(part, dict) and part.get("type") == "tool_use":
-                    args = part.get("input") or {}
-                    step[kind_of(args.get("command") or part.get("name", ""))] += 1
-                    step["calls"].append(json.dumps(args))
-        elif e.get("type") == "user":
-            for part in m.get("content") or []:
-                if isinstance(part, dict) and part.get("type") == "tool_result":
-                    step["holds"] += bool(HOLD.search(flat(part.get("content"))))
-                    step["failed"] += bool(part.get("is_error"))
+            starts.append(e.get("timestamp") or "")
+        elif 0 <= at < n:
+            claude_event(e, steps[at], seen)
+    for path in paths[1:]:
+        for line in Path(path).read_text().splitlines():
+            e = json.loads(line)
+            i = bisect.bisect_right(starts, e.get("timestamp") or "") - 1
+            if 0 <= i < n:
+                claude_event(e, steps[i], seen)
     return steps
 
 
@@ -141,15 +162,22 @@ def omp(paths, n):
 
 
 def sessions(tags):
-    """Yield (row, [(step kind, step)]) for every session of the given runs."""
+    """Yield (row, [(step kind, step)]) for every session of the given runs.
+
+    A row with no transcript (the first step failed before the harness wrote one) is reported on
+    stderr and left out, not counted as a session that did nothing.
+    """
     for tag in tags:
         for line in (WORK / "runs" / tag / "results.jsonl").read_text().splitlines():
             row = json.loads(line)
             kinds, ledger = row["kinds"], row["ledger"]
+            if not ledger:
+                print(f"skipped {tag} {row.get('arm')} seed {row.get('seed')}: no transcript", file=sys.stderr)
+                continue
             if row["harness"] == "codex":
                 steps = codex(ledger[0], len(kinds))
             elif row["harness"] == "claude-code":
-                steps = claude(ledger[0], len(kinds))
+                steps = claude(ledger, len(kinds))
             else:
                 steps = omp(ledger, len(kinds))
             yield row, list(zip(kinds, steps))
