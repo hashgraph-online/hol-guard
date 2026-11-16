@@ -97,7 +97,12 @@ def migrate_installed_authority(
     which of them it waited on.
     """
 
-    report = on_phase or (lambda _step: None)
+    def report(step: str) -> None:
+        # Progress is optional: a reporter that fails must not skip admission.
+        if on_phase is not None:
+            with suppress(Exception):
+                on_phase(step)
+
     started = time.monotonic()
     if wait_seconds > 0:
         # Only a caller that will wait has a wait to overlap. One that gives

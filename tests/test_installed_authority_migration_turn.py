@@ -233,3 +233,14 @@ def test_a_failed_early_bundle_check_leaves_the_failure_to_the_migration(tmp_pat
     assert migrate_installed_authority(store) is True  # pyright: ignore[reportArgumentType]
     assert store.calls == 1
     assert recorded == []
+
+
+def test_a_failing_phase_reporter_does_not_skip_the_migration(tmp_path, monkeypatch) -> None:
+    def broken(_step: str) -> None:
+        raise BrokenPipeError
+
+    monkeypatch.setattr(extension_control_host, "_verify_installed_bundle_early", lambda: None)
+    store = _SlowStore(tmp_path, seconds=0.0)
+
+    assert migrate_installed_authority(store, on_phase=broken) is True  # pyright: ignore[reportArgumentType]
+    assert store.calls == 1
