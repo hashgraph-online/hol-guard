@@ -131,6 +131,7 @@ pub(crate) fn apply_pre_tool_policy(
         && result.explicitly_benign
         && result.reason_code == "native_prompt_benign"
         && !facts.sensitive_target;
+    let mut operator_allowed_mcp_tool = false;
     if result.action.action_type == PreToolActionTypeV1::McpTool {
         // Tool arguments can themselves contain `tool_name` (dispatchers are
         // common). They are data, never the outer tool's authority selector.
@@ -210,16 +211,18 @@ pub(crate) fn apply_pre_tool_policy(
                 result.reason_code = "native_custom_mcp_tool_review".into();
                 result.reason =
                     "This MCP tool requires approval under its custom extension settings.".into();
-            } else if choice == Some("allow")
+            }
+            operator_allowed_mcp_tool = choice == Some("allow")
                 && !composio_execution
-                && result.minimum_action == "review"
-                && result.reason_code == "native_mcp_tool_review"
                 && result.action.bounded
                 && !facts.sensitive_target
                 && !facts.changed_hash
                 && result.command_extensions.as_ref().is_none_or(|evidence| {
                     evidence.binding.observation_count == 0 && evidence.evaluation_error.is_none()
-                })
+                });
+            if operator_allowed_mcp_tool
+                && result.minimum_action == "review"
+                && result.reason_code == "native_mcp_tool_review"
             {
                 // Only explicit operator authority in the admitted, authenticated
                 // snapshot can replace the unknown-tool review. Independent
@@ -266,6 +269,7 @@ pub(crate) fn apply_pre_tool_policy(
             prompt_classes: &result.prompt_risk_classes,
             benign_prompt,
             package_scripts_disabled: package_scripts_disabled(payload, &result),
+            operator_allowed_mcp_tool,
         },
     )?;
     let effective = join_action(&result.minimum_action, &policy_floor)?;

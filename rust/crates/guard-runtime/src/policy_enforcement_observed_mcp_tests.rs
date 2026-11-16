@@ -169,10 +169,6 @@ fn observed_mcp_allow_preserves_native_findings_and_security_policy() {
     let mut result = generic_result("review");
     result.action.harness = "codex".into();
     result.action.action_type = PreToolActionTypeV1::McpTool;
-    result.reason_code = "native_mcp_tool_review".into();
-    let output =
-        apply_pre_tool_policy(&snapshot, &json!({"tool_name": tool}), result.clone()).unwrap();
-    assert_eq!(output.minimum_action, "review");
     result.reason_code = "native_sensitive_access_review".into();
     let output =
         apply_pre_tool_policy(&snapshot, &json!({"tool_name": tool}), result.clone()).unwrap();
@@ -183,6 +179,39 @@ fn observed_mcp_allow_preserves_native_findings_and_security_policy() {
     let output = apply_pre_tool_policy(&snapshot, &json!({"tool_name": tool}), result).unwrap();
     assert_eq!(output.minimum_action, "block");
     assert_eq!(output.reason_code, "native_secret_exfiltration");
+}
+
+#[test]
+fn observed_mcp_allow_answers_the_unreviewed_tool_setting() {
+    let tool = "mcp__composio__COMPOSIO_SEARCH_TOOLS";
+    for (setting, expected) in [
+        ("review", "allow"),
+        ("require-reapproval", "allow"),
+        ("block", "block"),
+    ] {
+        let mut policy = policy("allow");
+        policy
+            .mcp_tool_actions
+            .insert(format!("claude-code:{tool}"), "allow".into());
+        policy
+            .risk_actions
+            .insert("mcp_dangerous_tool".into(), setting.into());
+        let snapshot = snapshot(policy);
+        let mut result = generic_result("review");
+        result.action.harness = "claude-code".into();
+        result.action.action_type = PreToolActionTypeV1::McpTool;
+        result.reason_code = "native_mcp_tool_review".into();
+        let output =
+            apply_pre_tool_policy(&snapshot, &json!({"tool_name": tool}), result.clone()).unwrap();
+        assert_eq!(output.minimum_action, expected, "{setting}");
+        let other = apply_pre_tool_policy(
+            &snapshot,
+            &json!({"tool_name": "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL"}),
+            result,
+        )
+        .unwrap();
+        assert_ne!(other.minimum_action, "allow", "{setting}");
+    }
 }
 
 #[test]

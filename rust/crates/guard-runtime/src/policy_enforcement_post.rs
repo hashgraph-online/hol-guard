@@ -119,6 +119,7 @@ pub(crate) fn apply_post_tool_policy_with_delivery(
             prompt_classes: &[],
             benign_prompt: false,
             package_scripts_disabled: false,
+            operator_allowed_mcp_tool: false,
         },
         verified_delivery,
     )?;
