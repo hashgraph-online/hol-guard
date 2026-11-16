@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import overload
 
 from ..native_decision_receipt import edge_receipt
 
@@ -99,3 +101,35 @@ def native_review_settle(
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
         return None
     return settled if settled in ("blocked", "allowed") else None
+
+
+@overload
+def admit_accepted_call(
+    store: object, *, harness: str, payload: Mapping[str, object], response: dict[str, object]
+) -> dict[str, object]: ...
+
+
+@overload
+def admit_accepted_call(
+    store: object, *, harness: str, payload: Mapping[str, object], response: dict[str, object] | None
+) -> dict[str, object] | None: ...
+
+
+def admit_accepted_call(
+    store: object, *, harness: str, payload: Mapping[str, object], response: dict[str, object] | None
+) -> dict[str, object] | None:
+    """Record the approval witness for a call let through on the user's answer.
+
+    The call's ``PostToolUse`` reads it back so the policy floor that sent the
+    call to review does not withhold the output of what the user approved. The
+    resident owns the witness key. A failed write only leaves that floor in
+    place, so it never blocks the approved call itself.
+    """
+
+    if response is None or response.get("approval_reuse_status") != "accepted":
+        return response
+    record = getattr(store, "record_native_admitted_call", None)
+    if callable(record):
+        with contextlib.suppress(OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+            record(harness=harness, payload=dict(payload), now=datetime.now(tz=timezone.utc).isoformat())
+    return response

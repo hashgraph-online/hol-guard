@@ -1,0 +1,195 @@
+import { cleanAgentText } from "../agent-stated-intent";
+import type { McpFact } from "./mcp-call-types";
+import { sentenceCase } from "./mcp-services";
+
+// The keys Core reads a tool's input from, in its order (see `agent-stated-intent.ts`).
+const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"] as const;
+// The keys Core reads the tool's name from, which picks the `toolCalls` item to use.
+const TOOL_NAME_KEYS = ["tool_name", "toolName", "name", "tool"] as const;
+/** Core cuts every string it records at this length. A cut string is exactly this long. */
+export const CORE_STRING_LIMIT = 240;
+// Bidirectional controls reorder text on screen, so the exact input shows them as escapes.
+const BIDI_CONTROLS = new RegExp("[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]", "g");
+const KEY_PATTERN = /^[A-Za-z0-9_.-]{1,60}$/;
+const VALUE_CHARS = 160;
+const MAX_FACTS = 8;
+const MAX_LIST_ITEMS = 6;
+// Everything except tab and newline, plus bidirectional overrides that could reorder code on screen.
+const UNSAFE_CODE_CHARACTERS = new RegExp(
+  "[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
+  "g",
+);
+
+export function recordOf(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+export function textOf(value: unknown, maxChars = VALUE_CHARS): string | null {
+  if (typeof value !== "string") return null;
+  const text = cleanAgentText(value, maxChars);
+  return text.length > 0 ? text : null;
+}
+
+export function recordList(value: unknown, max = 20): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(recordOf).filter((item): item is Record<string, unknown> => item !== null).slice(0, max);
+}
+
+export function textList(value: unknown, max = 20): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => textOf(item, 80))
+    .filter((item): item is string => item !== null)
+    .slice(0, max);
+}
+
+export function unique(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const key = value.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function joinList(values: string[], limit = 3): string {
+  const shown = values.slice(0, limit);
+  const rest = values.length - shown.length;
+  const list =
+    shown.length <= 2 ? shown.join(" and ") : `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
+  return rest > 0 ? `${shown.join(", ")} and ${rest} more` : list;
+}
+
+/** Code or a command with control and bidi characters removed but its lines kept. */
+export function codeOf(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.replace(UNSAFE_CODE_CHARACTERS, " ").trim();
+  return text.length > 0 ? text : null;
+}
+
+/** The input Core approves: as an object for the rows, and as text for the exact-input disclosure. */
+export type SelectedToolInput = { record: Record<string, unknown> | null; text: string | null };
+
+const NO_INPUT: SelectedToolInput = { record: null, text: null };
+
+/**
+ * Picks the tool input the way Core does, once, so the rows and the disclosure
+ * always describe the same value. A string input is never decoded for rows:
+ * Core redacts the encoded text, so decoding it could surface a secret the
+ * redaction hid. The disclosure shows that string as recorded.
+ */
+export function selectToolInput(raw: Record<string, unknown> | null): SelectedToolInput {
+  if (raw === null) return NO_INPUT;
+  const keyed = inputFromKeys(raw);
+  const hasKeyedInput = keyed !== null && (keyed.record === null || Object.keys(keyed.record).length > 0);
+  if (hasKeyedInput) return keyed;
+  // Core falls back to the matching `toolCalls` item's args when the top-level input is empty.
+  return inputFromToolCalls(raw) ?? keyed ?? NO_INPUT;
+}
+
+function inputFromKeys(raw: Record<string, unknown>): SelectedToolInput | null {
+  for (const key of TOOL_INPUT_KEYS) {
+    const value = raw[key];
+    const record = recordOf(value);
+    if (record !== null) return inputFromRecord(record);
+    if (typeof value !== "string" || value.trim().length === 0) continue;
+    if (coreSkipsString(value)) continue;
+    return { record: null, text: escapeBidi(value) };
+  }
+  return null;
+}
+
+function inputFromToolCalls(raw: Record<string, unknown>): SelectedToolInput | null {
+  const calls: unknown = raw.toolCalls;
+  if (!Array.isArray(calls)) return null;
+  const expected = TOOL_NAME_KEYS.map((key) => raw[key]).find(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+  let chosen: Record<string, unknown> | null | undefined;
+  for (const item of calls) {
+    const call = recordOf(item);
+    const name = call?.name;
+    if (call === null || typeof name !== "string" || name.trim().length === 0) continue;
+    const args = recordOf(call.args);
+    // The first named call stays the fallback even when it has no input, as it does in Core.
+    if (chosen === undefined) chosen = args;
+    if (expected === undefined || expected.trim() === name.trim()) {
+      chosen = args;
+      break;
+    }
+  }
+  return chosen === undefined || chosen === null ? null : inputFromRecord(chosen);
+}
+
+function inputFromRecord(record: Record<string, unknown>): SelectedToolInput {
+  try {
+    return { record, text: escapeBidi(JSON.stringify(record, null, 2)) };
+  } catch {
+    return { record, text: null };
+  }
+}
+
+/**
+ * Core skips a string under these keys when it is not an object once decoded.
+ * A string that does not decode is skipped too, unless it looks like an object
+ * Core cut: Core ends a cut string with an ellipsis at exactly its cut length,
+ * and an object starts with a brace. Core read the full text before the cut,
+ * so such a string may be the input it chose.
+ */
+function coreSkipsString(text: string): boolean {
+  try {
+    return recordOf(JSON.parse(text)) === null;
+  } catch {
+    return !looksLikeCutObject(text);
+  }
+}
+
+function looksLikeCutObject(text: string): boolean {
+  return text.endsWith("…") && text.trimStart().startsWith("{") && Array.from(text).length === CORE_STRING_LIMIT;
+}
+
+/** Writes bidi controls as `\uXXXX` so the disclosure shows what they are instead of reordering the text. */
+function escapeBidi(text: string): string {
+  return text.replace(BIDI_CONTROLS, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
+/** A value short enough for a one-line row, or null when it needs the full input to make sense. */
+export function scalarText(value: unknown): string | null {
+  if (typeof value === "string") return textOf(value);
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value) && value.length > 0) {
+    if (value.every((item) => typeof item === "string" || typeof item === "number")) {
+      const shown = value.slice(0, MAX_LIST_ITEMS).map((item) => textOf(String(item), 60) ?? "");
+      const rest = value.length - shown.length;
+      return cleanAgentText(`${shown.filter(Boolean).join(", ")}${rest > 0 ? ` and ${rest} more` : ""}`, VALUE_CHARS);
+    }
+    return `${value.length} items`;
+  }
+  return null;
+}
+
+/** One row per simple field in an input, plus how many fields were left for the full input. */
+export function scalarFacts(
+  input: Record<string, unknown> | null,
+  options: { skip?: string[]; max?: number } = {},
+): { facts: McpFact[]; hidden: number } {
+  if (input === null) return { facts: [], hidden: 0 };
+  const skip = new Set(options.skip ?? []);
+  const max = options.max ?? MAX_FACTS;
+  const facts: McpFact[] = [];
+  let hidden = 0;
+  for (const [key, value] of Object.entries(input)) {
+    if (skip.has(key)) continue;
+    const text = KEY_PATTERN.test(key) ? scalarText(value) : null;
+    if (text === null || text.length === 0 || facts.length >= max) {
+      hidden += value === null || value === "" ? 0 : 1;
+      continue;
+    }
+    facts.push({ label: sentenceCase(key), value: text });
+  }
+  return { facts, hidden };
+}

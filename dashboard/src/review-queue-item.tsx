@@ -35,6 +35,7 @@ import {
   type QueueCategoryId,
 } from "./queue-state";
 import { ExtensionBrandMark } from "./protection-center/components/extension-brand-mark";
+import { explainMcpCall } from "./mcp-call/explain-mcp-call";
 import type { RequestReadState } from "./request-read-state";
 
 type RiskLevel = "high" | "medium" | "low";
@@ -256,6 +257,10 @@ function iconForQueueCategory(categoryId: QueueCategoryId) {
 
 export function queueItemPreview(item: GuardApprovalRequest): string {
   const envelope = item.action_envelope_json;
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return mcpCall.queueDetail !== null ? `${mcpCall.queueTitle} — ${mcpCall.queueDetail}` : mcpCall.queueTitle;
+  }
   return (
     envelope?.command ??
     item.queue_preview ??

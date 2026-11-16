@@ -1000,3 +1000,6 @@ fn claude_user_question_outputs_are_quiet_without_lowering_output_floors() {
     .unwrap();
     assert_eq!(reviewed.decision, "deny");
 }
+
+#[path = "policy_enforcement_admitted_call_tests.rs"]
+mod admitted_call_tests;

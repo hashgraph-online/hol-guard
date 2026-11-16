@@ -34,17 +34,6 @@ pub(super) enum FloorCause {
     Risk(&'static str),
 }
 
-/// The policy floor and the first setting that reached it.
-pub(super) fn policy_floor_with_cause(
-    policy: &EffectiveNativePolicyV3,
-    compiled: &CompiledEffectivePolicy,
-    harness: &str,
-    action_type: PreToolActionTypeV1,
-    input: &FloorInput<'_>,
-) -> Result<(String, FloorCause), String> {
-    policy_floor_with_cause_and_delivery(policy, compiled, harness, action_type, input, false)
-}
-
 /// An already admitted owner invocation satisfies only duplicate, overridable
 /// execution-review floors. Hard actions and independent output risks remain.
 pub(super) fn policy_floor_with_cause_and_delivery(

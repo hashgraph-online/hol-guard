@@ -331,10 +331,8 @@ fn evaluate_validated_envelope<Lease>(
                 native,
             )?;
             let evaluated = if let Some(snapshot) = policy_snapshot {
-                crate::policy_enforcement::apply_pre_tool_policy(
-                    snapshot,
-                    &envelope.raw_payload,
-                    native,
+                crate::policy_enforcement::apply_pre_tool_policy_for_hook(
+                    snapshot, &envelope, native,
                 )?
             } else {
                 native
@@ -382,14 +380,12 @@ fn evaluate_validated_envelope<Lease>(
             };
             let native = review_post_tool(&request);
             let mut evaluated = if let Some(snapshot) = policy_snapshot {
-                let delivery = origin_store
-                    .and_then(|store| crate::bash_post_delivery::verify(&request, store));
-                crate::policy_enforcement::apply_post_tool_policy_with_delivery(
+                crate::policy_enforcement::apply_post_tool_policy_for_hook(
                     snapshot,
                     &request,
                     kind.clone(),
                     native,
-                    delivery.as_ref(),
+                    origin_store,
                     envelope.recording_only,
                 )?
             } else {

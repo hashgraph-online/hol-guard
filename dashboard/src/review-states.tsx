@@ -24,6 +24,8 @@ import type {
 } from "./guard-types";
 import { normalizeGuardAction } from "./guard-action";
 import { LoggedActionPanel } from "./logged-action-panel";
+import { explainMcpCall } from "./mcp-call/explain-mcp-call";
+import { McpCallCard } from "./mcp-call/mcp-call-card";
 import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
 
 const PROTECTION_APPEARANCE = {
@@ -199,6 +201,14 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
 }
 
 export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return <McpCallCard item={item} explanation={mcpCall} />;
+  }
+  return <LoggedActionCard item={item} />;
+}
+
+function LoggedActionCard({ item }: { item: GuardApprovalRequest }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
   const agentIntent = resolveAgentStatedIntent(item);
@@ -260,6 +270,10 @@ export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
 export function buildWhatWouldHappen(item: GuardApprovalRequest): string | null {
   if (isWatchOnlyObservation(item)) {
     return `Watch allowed this action to continue. ${watchProtectedOutcome(item)}`;
+  }
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return `Without Guard, ${harnessDisplayName(item.harness)} would call ${mcpCall.connector} right away. Guard paused it so you can see what it asks for first.`;
   }
   const type = item.artifact_type;
   if (type?.includes("file_write") || type?.includes("file_read")) {
