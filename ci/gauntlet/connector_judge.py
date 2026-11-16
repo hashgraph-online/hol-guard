@@ -38,8 +38,13 @@ _LINK = re.compile(r"https?://[^\s)>\]]+", re.IGNORECASE)
 _WAIT = re.compile(r"\bwait(?:ing|s)?\b", re.IGNORECASE)
 # A loopback review page with nothing signed after it opens without a session,
 # so the user who follows it cannot see the request. A relayed link must carry
-# its short approval code (`/requests/<id>/<code>`) or a session fragment.
-_BARE_REQUEST = re.compile(r"https?://(?:127\.0\.0\.1|localhost)(?::\d+)?/requests/[0-9a-f]{32}(?![0-9a-f/#])", re.I)
+# its short approval code (`/requests/<id>/<expires>-<code>`) or a session
+# fragment; an empty path or fragment continuation is still unsigned.
+_BARE_REQUEST = re.compile(
+    r"https?://(?:127\.0\.0\.1|localhost)(?::\d+)?/requests/[0-9a-f]{32}"
+    r"(?![0-9a-f])(?!/\d{9,}-[A-Za-z0-9_-]{8,})(?!#\S*guard-token=\S)",
+    re.IGNORECASE,
+)
 # A request that the user act so the blocked call can run, as opposed to a report of it.
 _PERMISSION_ASK = re.compile(
     r"\b(?:please|could you|can you|would you|if you)\b[^.?!\n]{0,60}"

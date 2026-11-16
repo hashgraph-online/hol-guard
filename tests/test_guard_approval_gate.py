@@ -2136,7 +2136,7 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
     assert review_url in response["error"]["message"]
     # The agent relays this link, so it must open signed in: a bare
     # /requests/<id> page has no session and cannot show the request.
-    request_id = store.list_approval_requests(limit=10)[0].request_id
+    request_id = store.list_approval_requests(limit=10)[0]["request_id"]
     assert review_url.startswith(f"http://127.0.0.1:5474/requests/{request_id}/"), review_url
     assert opened_urls == []
     assert len(store.list_approval_requests(limit=10)) == 1
