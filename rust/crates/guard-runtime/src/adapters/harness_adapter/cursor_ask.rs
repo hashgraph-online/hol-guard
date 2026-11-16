@@ -1,26 +1,15 @@
-//! What Python answers between Cursor ops: the facts about the attested
-//! Guard CLI and the native hook bridge, the long form of 8.3 names, Windows
-//! the 8.3 names of hook command paths, and Guard's proxy relaunches.
+//! What a Cursor op reads about the Guard process: the attested Guard CLI and
+//! the native hook bridge, the long form of 8.3 names, the 8.3 names of hook
+//! command paths, and Guard's proxy relaunches.
 
 use serde_json::{json, Map, Value};
 
-use super::cursor::{get, malformed, runtime, BRIDGE_UNAVAILABLE};
-use super::{caller, hook_render, proxy_launch, Ctx, Failure, Step};
-use crate::pyjson::{self, PyVal};
+use super::cursor::{malformed, runtime, BRIDGE_UNAVAILABLE};
+use super::{attested_cli, caller, hook_render, isolated_python, proxy_launch, Ctx, Failure, Step};
+use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 const BRIDGE_FEATURE: &str = "cursor-hook-bridge-v1";
 
-/// The Python interpreter the attested Guard CLI runs on.
-pub(super) struct HookPython {
-    pub(super) executable: String,
-    pub(super) target: String,
-    pub(super) import_roots: Vec<String>,
-}
-
-pub(super) struct Attestation {
-    pub(super) command: Vec<String>,
-    pub(super) identity: PyVal,
-    pub(super) python: Option<HookPython>,
-}
+pub(super) use super::attested_cli::Attested as Attestation;
 
 /// What the Guard process answered for `facts`.
 pub(super) struct Facts {
@@ -52,48 +41,13 @@ impl Facts {
     }
 }
 
-fn strings(value: Option<&PyVal>) -> Step<Vec<String>> {
-    value
-        .and_then(PyVal::as_list)
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|item| item.as_str().map(str::to_owned).ok_or(Failure::Invalid))
-        .collect()
-}
-
-fn optional_text(value: Option<&PyVal>) -> Step<Option<String>> {
-    match value {
-        None | Some(PyVal::Null) => Ok(None),
-        Some(PyVal::Str(text)) => Ok(Some(text.clone())),
-        Some(_) => Err(Failure::Invalid),
-    }
-}
-
-fn attestation(value: Option<&PyVal>) -> Step<Result<Attestation, String>> {
-    let entries = value.and_then(PyVal::as_dict).ok_or(Failure::Invalid)?;
-    if let Some(error) = get(entries, "error") {
-        return Ok(Err(error.as_str().ok_or(Failure::Invalid)?.to_owned()));
-    }
-    let python = match get(entries, "python") {
-        None | Some(PyVal::Null) => None,
-        Some(PyVal::Dict(python)) => Some(HookPython {
-            executable: optional_text(get(python, "executable"))?.ok_or(Failure::Invalid)?,
-            target: optional_text(get(python, "target"))?.ok_or(Failure::Invalid)?,
-            import_roots: strings(get(python, "import_roots"))?,
-        }),
-        Some(_) => return Err(Failure::Invalid),
-    };
-    Ok(Ok(Attestation {
-        command: strings(get(entries, "command"))?,
-        identity: get(entries, "identity").cloned().ok_or(Failure::Invalid)?,
-        python,
-    }))
-}
-
-/// One op's request and the facts Python merged into it.
+/// One op's request.
 pub(super) struct Ask<'a> {
     pub(super) ctx: &'a Ctx,
     pub(super) fields: &'a Map<String, Value>,
+    /// Whether the op only prepares an install, so an attestation probe runs
+    /// in a directory the op owns (`disposable_guard_hook_probe`).
+    pub(super) preparing: bool,
 }
 
 impl Ask<'_> {
@@ -101,32 +55,35 @@ impl Ask<'_> {
         Failure::Reply(json!({ key: value }))
     }
 
+    /// The attested Guard CLI, the isolated hook interpreter and the frozen
+    /// recovery command (`_facts`), with the native hook bridge.
     pub(super) fn facts(&self) -> Step<Facts> {
-        let Some(raw) = self.fields.get("facts") else {
-            return Err(Self::reply("facts", Value::Null));
-        };
-        let raw = raw.as_str().ok_or(Failure::Invalid)?;
-        let Ok(PyVal::Dict(facts)) = pyjson::parse(raw) else {
-            return Err(Failure::Invalid);
-        };
-        let pinned = self.ctx.env("HOL_GUARD_CURSOR_HOOK_BRIDGE") == Some("python")
-            && self.ctx.env("HOL_GUARD_TEST_MODE") == Some("1");
-        let bridge = proxy_launch::bridge(self.ctx, BRIDGE_FEATURE, Some(&self.ctx.guard_home))?
-            .filter(|_| !pinned);
-        let frozen_recovery = match get(&facts, "frozen_recovery") {
-            None | Some(PyVal::Null) => None,
-            value => Some(strings(value)?),
+        let ctx = self.ctx;
+        let pinned = ctx.env("HOL_GUARD_CURSOR_HOOK_BRIDGE") == Some("python")
+            && ctx.env("HOL_GUARD_TEST_MODE") == Some("1");
+        let bridge =
+            proxy_launch::bridge(ctx, BRIDGE_FEATURE, Some(&ctx.guard_home))?.filter(|_| !pinned);
+        let attestation = attested_cli::attested(ctx, self.preparing)?;
+        let frozen_recovery = match &attestation {
+            Ok(attested) if attested.python.is_none() => {
+                let launcher = caller::frozen_launcher(ctx)?;
+                Some(
+                    frozen_recovery_command(launcher, &ctx.guard_home, &ctx.home)
+                        .ok_or(Failure::Invalid)?,
+                )
+            }
+            _ => None,
         };
         Ok(Facts {
             bridge,
             pinned,
-            attestation: attestation(get(&facts, "attestation"))?,
-            interpreter: optional_text(get(&facts, "interpreter"))?,
-            frozen: caller::frozen(self.ctx)?,
-            frozen_launcher: caller::optional_frozen_launcher(self.ctx)?.map(str::to_owned),
-            executable: caller::executable(self.ctx)?.to_owned(),
+            attestation,
+            interpreter: isolated_python::for_root(ctx.env("SYSTEMROOT")),
+            frozen: caller::frozen(ctx)?,
+            frozen_launcher: caller::optional_frozen_launcher(ctx)?.map(str::to_owned),
+            executable: caller::executable(ctx)?.to_owned(),
             frozen_recovery,
-            can_rebind: caller::can_rebind(self.ctx)?,
+            can_rebind: caller::can_rebind(ctx)?,
         })
     }
 

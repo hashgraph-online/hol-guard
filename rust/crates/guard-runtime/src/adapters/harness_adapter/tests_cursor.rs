@@ -1,5 +1,4 @@
-//! Cursor through the `harness_adapter` kind, answering its replies the way
-//! the Python glue does.
+//! Cursor through the `harness_adapter` kind.
 
 use std::fs;
 use std::path::Path;
@@ -9,18 +8,19 @@ use serde_json::{json, Map, Value};
 use super::{after, caller, dispatch, Home};
 use crate::runner_authority_op::KindResult;
 
-fn facts() -> String {
-    json!({
-        "attestation": {"command": ["/g/bin/hol-guard"], "identity": {"sha256": "ab12cd"}, "python": null},
-        "interpreter": null,
-        "frozen_recovery": ["/g/bin/hol-guard", "cursor", "recover"],
-    })
-    .to_string()
-}
-
-/// The caller stamp whose native runtime is `bridge`, or has none when null.
-fn stamped(bridge: &Value) -> Value {
-    let mut stamp = caller(false);
+/// A frozen caller stamp whose launcher is a real executable in `home`, so
+/// the attestation reads its identity, and whose native runtime is `bridge`,
+/// or has none when null.
+fn stamped(home: &Home, bridge: &Value) -> Value {
+    let launcher = home.home().join("core").join("hol-guard-core");
+    write(&launcher, "#!/bin/sh\n");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let mut stamp = caller(true);
+    stamp["frozen_launcher"] = json!(launcher);
     if bridge.is_null() {
         stamp["native_runtime"] = Value::Null;
     } else {
@@ -36,29 +36,18 @@ fn ask(home: &Home, op: &str, fields: &Map<String, Value>) -> KindResult {
 fn ask_with(home: &Home, op: &str, fields: &Map<String, Value>, bridge: &Value) -> KindResult {
     let mut request =
         json!({"harness": "cursor", "op": op, "context": home.context(json!({"PATH": ""}))});
-    request["context"]["caller"] = stamped(bridge);
+    request["context"]["caller"] = stamped(home, bridge);
     for (key, value) in fields {
         request[key] = value.clone();
     }
     dispatch(&request)
 }
 
-/// Answer every reply until the op settles, as `_cursor_ask` does.
+/// One op, which settles without asking the Guard process anything.
 fn run(home: &Home, op: &str, bridge: Value) -> KindResult {
-    let mut fields = Map::new();
-    for _ in 0..16 {
-        let answer = ask_with(home, op, &fields, &bridge)?;
-        let Some(reply) = answer.get("reply").and_then(Value::as_object) else {
-            return Ok(answer);
-        };
-        let (key, _) = reply.iter().next().unwrap();
-        let answered = match key.as_str() {
-            "facts" => json!(facts()),
-            other => panic!("unexpected reply {other}"),
-        };
-        fields.insert(key.clone(), answered);
-    }
-    panic!("{op} never settled");
+    let answer = ask_with(home, op, &Map::new(), &bridge)?;
+    assert!(answer.get("reply").is_none(), "{op} asked {answer}");
+    Ok(answer)
 }
 
 fn bridge() -> Value {
@@ -71,10 +60,23 @@ fn write(path: &Path, text: &str) {
 }
 
 #[test]
-fn cursor_ops_ask_for_facts_before_planning() {
+fn a_frozen_cursor_install_attests_the_launcher_natively() {
     let home = Home::new();
-    let answer = ask(&home, "prepare_install", &Map::new()).unwrap();
-    assert_eq!(answer, json!({"reply": {"facts": null}}));
+    let answer = run(&home, "install", bridge()).unwrap();
+    let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
+    let identity = &manifest["guard_cli_identity"];
+    assert_eq!(identity["runtime"], "frozen-core");
+    assert_eq!(identity["entry_point"], "hol-guard");
+    let launcher = home.home().join("core").join("hol-guard-core");
+    assert_eq!(identity["command"], json!([launcher]));
+    assert_eq!(identity["interpreter"]["invocation_path"], json!(launcher));
+    assert_eq!(
+        identity["interpreter"]["target_sha256"]
+            .as_str()
+            .unwrap()
+            .len(),
+        64
+    );
 }
 
 #[test]
@@ -149,7 +151,6 @@ fn rebind_with_caller(caller: Value) -> Value {
         "context": home.context(json!({"PATH": ""})),
     });
     request["context"]["caller"] = caller;
-    request["facts"] = json!(facts());
     dispatch(&request).unwrap()
 }
 

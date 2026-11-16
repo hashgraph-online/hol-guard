@@ -364,7 +364,11 @@ pub(crate) fn dispatch(
     ctx: &Ctx,
     fields: &Map<String, Value>,
 ) -> Step<Value> {
-    let ask = Ask { ctx, fields };
+    let ask = Ask {
+        ctx,
+        fields,
+        preparing: op == "prepare_install",
+    };
     match op {
         "policy_path" => path_answer(
             &ctx.workspace

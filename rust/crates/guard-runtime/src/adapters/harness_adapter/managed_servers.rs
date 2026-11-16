@@ -211,7 +211,7 @@ fn proxy_fields(artifact: &Value, found: &Value) -> Step<(String, Map<String, Va
 /// `_kept`: each server artifact the `select` op answered, in detection
 /// order, beside the server it found. `include_proxy` also recovers the
 /// original servers behind Guard's own proxies, for observation only.
-fn kept<'a>(artifacts: &'a [Value], include_proxy: bool) -> Step<Vec<(&'a Value, Value)>> {
+fn kept(artifacts: &[Value], include_proxy: bool) -> Step<Vec<(&Value, Value)>> {
     let mut chosen = Vec::new();
     let mut requests = Vec::new();
     for artifact in servers(artifacts) {

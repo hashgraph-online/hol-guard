@@ -205,7 +205,7 @@ pub(super) fn select(artifacts: &[Value]) -> Step<Selection> {
     };
     let names = detected
         .iter()
-        .map(|artifact| named(*artifact))
+        .map(|artifact| named(artifact))
         .collect::<Step<Vec<_>>>()?;
     let mut positions = Vec::new();
     let mut requests = Vec::new();

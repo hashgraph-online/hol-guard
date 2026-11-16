@@ -39,53 +39,9 @@ def _dumps(value: object) -> str:
     return json.dumps(value, default=str)
 
 
-def _facts(context: HarnessContext) -> str:
-    """What this process knows about the Guard CLI the hooks launch."""
-    from ..frozen_runtime_commands import frozen_daemon_recovery_command
-    from .guard_cli_attestation import resolve_attested_guard_cli
-    from .isolated_hook_python import isolated_cursor_hook_python
-
-    attestation: dict[str, object]
-    recovery: list[str] | None = None
-    try:
-        attested = resolve_attested_guard_cli(context)
-    except RuntimeError as error:
-        attestation = {"error": str(error)}
-    else:
-        python = attested.python
-        attestation = {
-            "command": list(attested.command),
-            "identity": attested.manifest_payload(),
-            "python": None
-            if python is None
-            else {
-                "executable": str(python.executable),
-                "target": str(python.identity.target_path),
-                "import_roots": [str(root) for root in python.import_roots],
-            },
-        }
-        if python is None:
-            recovery = list(frozen_daemon_recovery_command(context.guard_home, context.home_dir))
-    return _dumps(
-        {
-            "attestation": attestation,
-            "interpreter": isolated_cursor_hook_python(),
-            "frozen_recovery": recovery,
-        }
-    )
-
-
-def _answer(context: HarnessContext, op: str, key: str, value: Any, fields: dict[str, Any]) -> None:
+def _answer(key: str, value: Any, fields: dict[str, Any]) -> None:
     """Merge this process's answer to one reply into the request."""
-    from .hook_python import disposable_guard_hook_probe
-
-    if key == "facts":
-        if op == "prepare_install":
-            with disposable_guard_hook_probe():
-                fields["facts"] = _facts(context)
-        else:
-            fields["facts"] = _facts(context)
-    elif key == "probe":
+    if key == "probe":
         fields["cursor_probe"] = _cursor_agent_subcommand_available(str(value))
     else:
         raise ValueError("Cursor adapter reply is malformed")
@@ -103,7 +59,7 @@ def _cursor_ask(
         if not isinstance(reply, dict) or len(reply) != 1:
             raise ValueError("Cursor adapter reply is malformed")
         ((key, value),) = reply.items()
-        _answer(context, op, key, value, fields)
+        _answer(key, value, fields)
     raise RuntimeError("Cursor adapter request did not settle")
 
 

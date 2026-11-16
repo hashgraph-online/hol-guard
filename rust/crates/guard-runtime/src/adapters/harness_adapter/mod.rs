@@ -27,6 +27,7 @@ use crate::harness_coverage::artifacts::resolve_lenient;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
+mod attested_cli;
 mod authorized_write;
 mod caller;
 mod claude;
@@ -243,6 +244,7 @@ pub(crate) fn path_text(path: &Path) -> String {
 }
 
 /// Why an op stopped, as the Python adapter raised it.
+#[derive(Debug)]
 pub(crate) enum Failure {
     Refusal(String),
     Os(String),
