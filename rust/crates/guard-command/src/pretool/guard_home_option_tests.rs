@@ -121,11 +121,11 @@ fn only_the_reported_guard_home_is_set_aside() {
     let account = account("reported");
     let store = account.join("lane-guard-home");
     let store_text = store.to_str().unwrap().to_owned();
+    // The temporary path can contain spaces, so it stays one argument.
     let wait = |reported: Option<&str>, value: &str| {
-        without_active_home(
-            &words(&format!("approvals wait abc --home {value}")),
-            reported,
-        )
+        let mut argv = words("approvals wait abc --home");
+        argv.push(value.to_owned());
+        without_active_home(&argv, reported)
     };
     assert_eq!(wait(Some(&store_text), &store_text), None, "missing store");
     std::fs::create_dir_all(&store).unwrap();
