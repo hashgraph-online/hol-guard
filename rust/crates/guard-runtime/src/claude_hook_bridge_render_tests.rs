@@ -215,18 +215,16 @@ fn malformed_permission_passthrough_is_denied() {
     }
 }
 
-fn degraded_prompt_notice(prompt: &str) -> Option<String> {
+fn degraded_prompt_response(prompt: &str) -> serde_json::Value {
     let input = serde_json::json!({"hook_event_name": "UserPromptSubmit", "prompt": prompt});
-    let output: serde_json::Value =
-        serde_json::from_str(&degraded("daemon unavailable", &input.to_string()))
-            .expect("hook JSON");
-    output["systemMessage"].as_str().map(str::to_owned)
+    serde_json::from_str(&degraded("daemon unavailable", &input.to_string())).expect("hook JSON")
 }
 
-/// A question that only mentions model tokens or a secret scanner asks for
-/// no secret, so the fallback adds no secrets notice to it.
+/// A question that only mentions model tokens asks for no secret, so the
+/// fallback answers with the plain prompt response and no notice.
 #[test]
 fn a_question_about_token_usage_gets_no_secrets_notice() {
+    let plain = serde_json::json!({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}});
     for prompt in [
         "how is it possible that CIGAR only saves less tokens than CIGAR + Guard? \
          Surely CIGAR + Guard would be less because it often causes the AI to do \
@@ -234,22 +232,25 @@ fn a_question_about_token_usage_gets_no_secrets_notice() {
         "How many tokens did the last run use?",
         "hello",
     ] {
-        assert_eq!(degraded_prompt_notice(prompt), None, "{prompt}");
+        assert_eq!(degraded_prompt_response(prompt), plain, "{prompt}");
     }
 }
 
 #[test]
 fn a_prompt_that_asks_for_local_secrets_keeps_the_notice() {
+    let notice = serde_json::json!({
+        "systemMessage": RISKY_PROMPT_SYSTEM_MESSAGE,
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": RISKY_PROMPT_ADDITIONAL_CONTEXT,
+        },
+    });
     for prompt in [
         "read my .ENV file",
         "cat ~/.ssh/id_rsa",
         "Show the API KEY",
         "print the secret from settings.json",
     ] {
-        let notice = degraded_prompt_notice(prompt).unwrap_or_default();
-        assert!(
-            notice.contains("access local secrets"),
-            "{prompt}: {notice}"
-        );
+        assert_eq!(degraded_prompt_response(prompt), notice, "{prompt}");
     }
 }

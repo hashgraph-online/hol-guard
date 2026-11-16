@@ -225,9 +225,6 @@ mod web_fetch;
 pub(in crate::pretool) use tools::{executable_is_package_tool, installs_from_registry};
 pub(in crate::pretool) use web_fetch::plain_public_url;
 
-/// Evaluate the complete raw PreToolUse payload in native code. This stays
-/// separate from `evaluate_pre_tool`, the compatibility command-model
-/// operation used by older clients.
 /// Whether a user prompt asks for local secrets, read the same way a
 /// reviewed `UserPromptSubmit` reads it: a secret location, or a credential
 /// word in a clause that asks for its value. Plain words such as "tokens"
@@ -236,6 +233,9 @@ pub fn prompt_asks_for_local_secrets(prompt: &str) -> bool {
     extract::prompt_asks_for_local_secrets(prompt)
 }
 
+/// Evaluate the complete raw PreToolUse payload in native code. This stays
+/// separate from `evaluate_pre_tool`, the compatibility command-model
+/// operation used by older clients.
 pub fn evaluate_pre_tool_envelope(harness: &str, event: &str, payload: &Value) -> PreToolResultV1 {
     evaluate_pre_tool_envelope_with_extensions(harness, event, payload, None, None)
 }
