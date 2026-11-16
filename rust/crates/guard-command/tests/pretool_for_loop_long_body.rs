@@ -118,7 +118,7 @@ fn a_long_loop_after_another_step_is_judged_by_its_steps() {
     let home = fixture();
     for before in [
         "gh pr view 6221 --repo example/project --json state 2>&1; echo '---'; ",
-        "gh pr list --repo example/project --limit 5 && ",
+        "gh pr view 6221 --repo example/project --json state && ",
     ] {
         let command = format!("{before}{}", pull_request_loop(23, ""));
         assert_eq!(action(&command, &home), "allow", "{before}");
