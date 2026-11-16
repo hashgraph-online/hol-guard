@@ -118,6 +118,7 @@ pub mod pretool_find_exec_programs;
 pub mod pretool_find_exec_sed_edits;
 pub mod pretool_find_hidden_home_links;
 pub mod pretool_find_hidden_home_match;
+pub mod pretool_find_newer_reference;
 pub mod pretool_find_project_skill_root;
 pub mod pretool_for_loop_conditionals;
 pub mod pretool_for_loop_home_words;
