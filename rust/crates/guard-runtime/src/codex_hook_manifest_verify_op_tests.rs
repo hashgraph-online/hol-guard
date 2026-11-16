@@ -284,8 +284,39 @@ fn hooks_that_are_not_a_table_are_missing() {
 fn a_handler_command_that_splits_differently_is_an_argv_mismatch() {
     let fixture = Fixture::new();
     let mut request = fixture.request();
-    request.command_argvs.insert(EVENT_COMMAND.to_owned(), None);
+    // Unbalanced quoting never splits, so no argv can match it.
+    set_commands(&mut request, "/guard/python -m 'guard hook");
     expect(&request, "codex_hook_manifest_argv_mismatch", "tampered");
+}
+
+#[test]
+fn a_windows_handler_command_splits_with_its_short_paths_expanded() {
+    let fixture = Fixture::new();
+    let mut request = fixture.request();
+    set_commands(&mut request, r"C:\GUARD~1\python -m guard hook");
+    request.windows = true;
+    let (reason, _) = reason_and_status(&request);
+    assert_eq!(reason, "codex_hook_manifest_argv_mismatch");
+    request.long_paths = std::collections::BTreeMap::from([(
+        r"C:\GUARD~1\python".to_owned(),
+        "/guard/python".to_owned(),
+    )]);
+    let (reason, _) = reason_and_status(&request);
+    assert_ne!(reason, "codex_hook_manifest_argv_mismatch");
+}
+
+fn set_commands(request: &mut CodexHookManifestVerifyRequestV1, command: &str) {
+    let events = manifest_mut(request)["events"]
+        .as_array_mut()
+        .expect("events");
+    for binding in events {
+        binding["handler"]["command"] = json!(command);
+    }
+    // Changed on both sides too, so the registration is not merely stale.
+    let expected = request.expected.as_mut().expect("expected");
+    for binding in &mut expected.event_bindings {
+        binding["handler"]["command"] = json!(command);
+    }
 }
 
 #[test]

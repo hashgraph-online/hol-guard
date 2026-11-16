@@ -2,7 +2,7 @@
 
 The resident decides whether the authenticated Codex hook manifest still
 describes the live installation; this module ships what the caller
-authenticated plus the path, package-root and command-split spellings only
+authenticated plus the path, package-root and 8.3 short-name spellings only
 this interpreter can produce. An unavailable resident reports
 the installation as unverified, never as valid.
 """
@@ -17,8 +17,9 @@ from pathlib import Path
 from uuid import uuid4
 
 from . import codex_hook_file_integrity as integrity
+from .codex_hook_command_line import hook_commands_use_windows_syntax, short_token_long_paths
 from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
-from .codex_hook_file_integrity import CodexHookIntegrityError, active_hook_validation_deadline, split_hook_command
+from .codex_hook_file_integrity import CodexHookIntegrityError, active_hook_validation_deadline
 from .native_context import _resolve_existing_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_store_policy import _payload
@@ -95,7 +96,8 @@ def _request(
         "expected": None,
         "canonical_paths": {},
         "installed_python_package_files": [],
-        "command_argvs": {},
+        "windows": False,
+        "long_paths": {},
         "private_groups": [],
     }
     if failure is None and manifest is not None and expected is not None:
@@ -142,14 +144,21 @@ def _interpreter_spellings(manifest: Mapping[str, object]) -> dict[str, object]:
             pass
         if integrity._is_installed_python_package_file(Path(spelling)):
             installed.append(spelling)
-    argvs: dict[str, list[str] | None] = {}
+    commands: list[str] = []
     events = manifest.get("events")
     for binding in events if isinstance(events, list) else ():
         handler = binding.get("handler") if isinstance(binding, dict) else None
         command = handler.get("command") if isinstance(handler, dict) else None
-        if isinstance(command, str) and command not in argvs:
-            argvs[command] = split_hook_command(command)
-    return {"canonical_paths": canonical, "installed_python_package_files": installed, "command_argvs": argvs}
+        if isinstance(command, str):
+            commands.append(command)
+    # The resident splits each handler command; only this host can look up an 8.3 name's long form.
+    windows = hook_commands_use_windows_syntax()
+    return {
+        "canonical_paths": canonical,
+        "installed_python_package_files": installed,
+        "windows": windows,
+        "long_paths": short_token_long_paths(commands) if windows else {},
+    }
 
 
 def _hooks_wire(hooks: object) -> dict[str, object] | None:

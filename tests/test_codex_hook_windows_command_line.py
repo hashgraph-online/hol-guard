@@ -13,12 +13,7 @@ from codex_plugin_scanner.guard import codex_hook_command_line
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_bridge_runtime import decode_bridge_config_argument
-from codex_plugin_scanner.guard.codex_hook_command_line import (
-    hook_command_launchable,
-    short_path_facts,
-    split_hook_command_line,
-)
-from codex_plugin_scanner.guard.codex_hook_file_integrity import split_hook_command
+from codex_plugin_scanner.guard.codex_hook_command_line import short_path_facts, short_token_long_paths
 from codex_plugin_scanner.guard.codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS
 from codex_plugin_scanner.guard.codex_hook_registration import (
     exact_legacy_hook_bindings,
@@ -115,10 +110,8 @@ def test_hook_command_round_trips_argv_and_json(windows: bool) -> None:
     argv = _argv(windows=windows)
     command = _rendered(argv, windows=windows)
 
-    assert split_hook_command_line(command, windows=windows) == argv
-    assert split_hook_command(command, windows=windows) == argv
     assert json.loads(decode_bridge_config_argument(argv[-1])) == _CONFIG
-    assert hook_command_launchable(command, windows=windows)
+    assert short_token_long_paths([command]) == {}
 
 
 def test_the_config_argument_is_plain_json_on_posix_and_a_plain_token_on_windows() -> None:
@@ -153,9 +146,7 @@ def test_windows_short_name_commands_parse_back_to_the_long_path(monkeypatch: py
     command = " ".join([_SHORT_PYTHON, *argv[1:]])
 
     assert not any(character in command for character in "\"'%!^&|<>$`;")
-    assert split_hook_command_line(command, windows=True) == argv
-    assert split_hook_command(command, windows=True) == argv
-    assert hook_command_launchable(command, windows=True)
+    assert short_token_long_paths([command]) == {_SHORT_PYTHON: _SPACED_PYTHON}
 
     hooks = _hooks(command)
     assert live_guard_codex_hooks_intercept(hooks, windows=True)
@@ -181,8 +172,8 @@ def test_windows_powershell_call_commands_parse_back(monkeypatch: pytest.MonkeyP
 
     assert command.startswith("& 'C:\\Program Files\\HOL Guard''s\\")
     assert '"' not in command
-    assert split_hook_command_line(command, windows=True) == argv
-    assert hook_command_launchable(command, windows=True)
+    assert short_token_long_paths([command]) == {}
+    assert live_guard_codex_hooks_intercept(_hooks(command), windows=True)
 
 
 def test_bridge_accepts_encoded_and_plain_config_arguments(tmp_path: Path) -> None:
@@ -202,8 +193,6 @@ def test_bridge_accepts_encoded_and_plain_config_arguments(tmp_path: Path) -> No
 def test_windows_treats_legacy_posix_entries_as_guard_but_not_launchable() -> None:
     legacy = _legacy_command()
 
-    assert split_hook_command(legacy, windows=True) == _legacy_argv()
-    assert not hook_command_launchable(legacy, windows=True)
     with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
         require_codex_hook_owner(legacy, ownership="unmanaged", windows=True)
 

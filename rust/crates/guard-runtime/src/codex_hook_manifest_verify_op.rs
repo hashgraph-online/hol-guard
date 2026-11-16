@@ -33,6 +33,7 @@ use rules::{
 };
 
 use crate::codex_hook_file_identity_op::{identity_answer, FileFacts, IdentityAsk};
+use crate::cursor_hook_command::Syntax;
 use crate::guard_config_update_value::py_eq;
 use crate::package_authority_op::request_digest_with_limit;
 
@@ -430,7 +431,8 @@ impl Verifier<'_> {
             }
             let split = match field(handler, "command") {
                 Value::String(command) => {
-                    self.request.command_argvs.get(command).cloned().flatten()
+                    Syntax::new(self.request.windows, self.request.long_paths.clone())
+                        .split_hook(command)
                 }
                 _ => None,
             };

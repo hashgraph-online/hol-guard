@@ -19,8 +19,6 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 
-from .codex_hook_command_line import split_hook_command_line
-
 
 class CodexHookIntegrityError(RuntimeError):
     """One stable, non-secret integrity failure suitable for status output."""
@@ -69,14 +67,6 @@ def hook_validation_deadline(deadline: float | None) -> Iterator[None]:
         check_hook_validation_deadline()
     finally:
         _VALIDATION_DEADLINE.reset(token)
-
-
-def split_hook_command(command: object, *, windows: bool | None = None) -> list[str] | None:
-    """Parse one persisted hook command without accepting malformed shell text."""
-
-    if not isinstance(command, str):
-        return None
-    return split_hook_command_line(command, windows=windows)
 
 
 def _python_package_roots() -> tuple[Path, ...]:
@@ -302,7 +292,6 @@ __all__ = [
     "canonical_path",
     "describe_executable_file",
     "describe_regular_file",
-    "split_hook_command",
     "validate_regular_file",
     "verify_executable_file_identity",
     "verify_regular_file_identity",

@@ -231,7 +231,7 @@ impl Syntax {
         }
     }
 
-    /// `split_hook_command_line`.
+    /// Split one hook command, reading legacy POSIX-quoted Windows entries with shell quoting.
     pub(crate) fn split_hook(&mut self, command: &str) -> Option<Vec<String>> {
         let leading = command.trim_start_matches(py_space);
         if !self.windows || leading.starts_with('\'') {
@@ -355,3 +355,7 @@ impl Syntax {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "cursor_hook_command_tests.rs"]
+mod tests;
