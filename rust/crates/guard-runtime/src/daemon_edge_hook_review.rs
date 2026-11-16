@@ -580,11 +580,12 @@ fn refusal(refused: &Value) -> Option<(&str, &str)> {
 /// daemon that needs repair, so each message names the command for that.
 ///
 /// The command names the refusing daemon's Guard home whenever it is not
-/// `<home_dir>/.hol-guard`, quoted for the shell, by the same rule the
-/// authority recovery block follows: a bare `hol-guard repair` would repair
-/// the default install and leave this one refusing.
+/// known to be `<home_dir>/.hol-guard`, quoted for the shell: a bare
+/// `hol-guard repair` would repair the default install and leave this one
+/// refusing. An unknown home directory cannot prove the home is the default,
+/// so it names the home too.
 fn capacity_reason(code: &str, guard_home: &Path, home_dir: &str) -> String {
-    let command = if home_dir.is_empty() || Path::new(home_dir).join(".hol-guard") == guard_home {
+    let command = if !home_dir.is_empty() && Path::new(home_dir).join(".hol-guard") == guard_home {
         "hol-guard repair".to_owned()
     } else {
         format!(

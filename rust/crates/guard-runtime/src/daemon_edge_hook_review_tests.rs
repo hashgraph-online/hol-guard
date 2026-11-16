@@ -120,7 +120,7 @@ fn a_capacity_refusal_names_a_non_default_guard_home() {
     );
     let unknown_home = capacity_reason(hook_scheduler::QUEUE_CAPACITY, Path::new("/srv/guard"), "");
     assert!(
-        unknown_home.ends_with("run `hol-guard repair`."),
+        unknown_home.ends_with("run `hol-guard repair --guard-home /srv/guard`."),
         "{unknown_home}"
     );
 }
