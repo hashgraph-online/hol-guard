@@ -599,7 +599,7 @@ class TestPiInstall:
         assert uninstall_manifest["active"] is False
         assert not extension_path.exists()
         assert omp_extension_path.exists()
-        assert json.loads(settings_path.read_text(encoding="utf-8"))["extensions"] == []
+        assert "extensions" not in json.loads(settings_path.read_text(encoding="utf-8"))
         assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == [str(omp_extension_path)]
 
     def test_uninstall_removes_verified_legacy_omp_extension(self, tmp_path: Path, monkeypatch) -> None:
@@ -625,7 +625,7 @@ class TestPiInstall:
         get_adapter("pi").uninstall(ctx)
 
         assert not omp_extension_path.exists()
-        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
+        assert "extensions" not in json.loads(omp_settings_path.read_text(encoding="utf-8"))
 
     def test_uninstall_removes_merge_base_previous_omp_extension(
         self,
@@ -654,7 +654,7 @@ class TestPiInstall:
         get_adapter("pi").uninstall(ctx)
 
         assert not omp_extension_path.exists()
-        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
+        assert "extensions" not in json.loads(omp_settings_path.read_text(encoding="utf-8"))
 
     def test_uninstall_preserves_modified_previous_omp_extension(
         self,

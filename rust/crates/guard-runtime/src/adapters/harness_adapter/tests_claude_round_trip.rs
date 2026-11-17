@@ -7,14 +7,6 @@ use serde_json::{json, Map, Value};
 use super::super::{after, dispatch, shim, Home};
 use super::{ask, facts, run, settings, RUNTIME};
 
-/// Drop the empty hook lists uninstall leaves behind; they hold no user data.
-fn without_empty_hook_lists(mut payload: Value) -> Value {
-    if let Some(hooks) = payload.get_mut("hooks").and_then(Value::as_object_mut) {
-        hooks.retain(|_, groups| groups.as_array().is_none_or(|list| !list.is_empty()));
-    }
-    payload
-}
-
 #[test]
 fn install_then_uninstall_returns_every_unrelated_user_setting() {
     let home = Home::new();
@@ -30,14 +22,26 @@ fn install_then_uninstall_returns_every_unrelated_user_setting() {
         "futureKey": {"nested": ["kept", 1, true, null]},
         "unicode": "caf\u{e9} \u{2014} \u{1f512}"
     });
-    fs::create_dir_all(settings(&home).parent().unwrap()).unwrap();
+    assert_eq!(round_trip(&home, &original), original);
+}
+
+/// A file with no hooks of its own must not come back with an empty `hooks`.
+#[test]
+fn install_then_uninstall_leaves_no_hooks_key_in_a_file_that_had_none() {
+    let home = Home::new();
+    let original = json!({"model": "synthetic-model", "env": {"SYNTHETIC_FLAG": "1"}});
+    assert_eq!(round_trip(&home, &original), original);
+}
+
+fn round_trip(home: &Home, original: &Value) -> Value {
+    fs::create_dir_all(settings(home).parent().unwrap()).unwrap();
     fs::write(
-        settings(&home),
-        serde_json::to_string_pretty(&original).unwrap(),
+        settings(home),
+        serde_json::to_string_pretty(original).unwrap(),
     )
     .unwrap();
     let answer = run(
-        &home,
+        home,
         "prepare_install",
         json!({"shim": shim()}),
         &facts(Some(RUNTIME), false),
@@ -49,11 +53,9 @@ fn install_then_uninstall_returns_every_unrelated_user_setting() {
         Value::Null,
         "install added nothing"
     );
-    fs::write(settings(&home), &with_guard).unwrap();
-    let answer = ask(&home, "prepare_uninstall", &Map::new());
-    let cleaned: Value =
-        serde_json::from_str(answer["writes"][0]["text"].as_str().unwrap()).unwrap();
-    assert_eq!(without_empty_hook_lists(cleaned), original);
+    fs::write(settings(home), &with_guard).unwrap();
+    let answer = ask(home, "prepare_uninstall", &Map::new());
+    serde_json::from_str(answer["writes"][0]["text"].as_str().unwrap()).unwrap()
 }
 
 /// Hooks always install into the user file; a workspace's own Claude files

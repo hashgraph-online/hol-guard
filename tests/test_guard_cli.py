@@ -2985,10 +2985,10 @@ args = ["workspace-skill.js", "--changed"]
         assert _command_handler_argv(install_settings_payload["hooks"]["Stop"][0]["hooks"][0]) == expected_hook_argv
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
-        assert settings_payload["hooks"]["SessionStart"] == []
+        assert "SessionStart" not in settings_payload["hooks"]
         assert settings_payload["hooks"]["PreToolUse"] == [{"command": "python guard-pre.py"}]
-        assert settings_payload["hooks"]["Notification"] == []
-        assert settings_payload["hooks"]["Stop"] == []
+        assert "Notification" not in settings_payload["hooks"]
+        assert "Stop" not in settings_payload["hooks"]
 
     def test_guard_uninstall_handles_non_dict_claude_hook_entries(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3075,9 +3075,9 @@ args = ["workspace-skill.js", "--changed"]
         assert uninstall_rc == 0
         assert output["managed_install"]["active"] is False
         assert payload["hooks"]["PreToolUse"] == [{"command": "python guard-pre.py"}]
-        assert payload["hooks"].get("UserPromptSubmit", []) == []
-        assert payload["hooks"]["Notification"] == []
-        assert payload["hooks"]["Stop"] == []
+        assert "UserPromptSubmit" not in payload["hooks"]
+        assert "Notification" not in payload["hooks"]
+        assert "Stop" not in payload["hooks"]
 
     def test_guard_install_claude_alias_persists_canonical_managed_install(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
