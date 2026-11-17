@@ -14,8 +14,8 @@ from codex_plugin_scanner.guard.codex_hook_repair_request import (
     load_codex_hook_repair_request,
     write_codex_hook_repair_request,
 )
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.codex_publication_inverse_plan import PUBLICATION_INVERSE_ACTION
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from codex_plugin_scanner.guard.store import GuardStore
 

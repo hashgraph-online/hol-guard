@@ -18,7 +18,7 @@ LOCK = Path(".config") / "opencode" / ".hol-guard-config.lock"
 def _skip_codex_owner_check(monkeypatch: pytest.MonkeyPatch) -> None:
     # The install owner check runs before the native call; the lock is what is under test.
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.codex_install_transaction.require_codex_install_owner",
+        "codex_plugin_scanner.guard.native_owned.require_codex_install_owner",
         lambda *_args, **_kwargs: None,
     )
 

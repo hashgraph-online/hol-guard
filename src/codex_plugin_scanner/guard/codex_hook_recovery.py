@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .codex_hook_file_integrity import CodexHookIntegrityError, check_hook_validation_deadline
-from .codex_install_transaction import require_codex_install_owner
+from .native_owned import require_codex_install_owner
 
 if TYPE_CHECKING:
     from .codex_hook_repair import PendingCodexHookRepair

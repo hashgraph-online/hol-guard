@@ -371,7 +371,7 @@ class NativeHarnessAdapter(HarnessAdapter):
     def _apply_install(self, context: HarnessContext, **options: object) -> dict[str, object]:
         """Prepare the shim and the plan and publish both in one native call."""
         from .. import native_transition_files
-        from ..codex_install_transaction import require_codex_install_owner
+        from ..native_owned import require_codex_install_owner
         from ..runtime_transition import assert_transition_mutation_allowed
         from ..shims import shell_profile_facts, shim_interpreter
 

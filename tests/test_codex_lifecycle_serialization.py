@@ -9,12 +9,12 @@ from threading import Event
 import pytest
 
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
-from codex_plugin_scanner.guard.codex_lifecycle_lock import (
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.native_owned import (
     codex_configuration_lock,
+    codex_install_transaction,
     codex_lifecycle_locks,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 
 def test_core_publication_transaction_shares_configuration_exclusion(tmp_path):
@@ -119,45 +119,6 @@ def test_separate_installation_owners_contend_and_process_exit_releases_lock(tmp
         parent_connection.close()
 
 
-def test_shared_workspace_contends_between_different_home_directories(tmp_path):
-    workspace = tmp_path / "workspace"
-    first = HarnessContext(home_dir=tmp_path / "one", workspace_dir=workspace, guard_home=tmp_path / "guard-one")
-    second = HarnessContext(home_dir=tmp_path / "two", workspace_dir=workspace, guard_home=tmp_path / "guard-two")
-    with (
-        codex_lifecycle_locks(first),
-        pytest.raises(RuntimeError, match="codex_lifecycle_busy"),
-        codex_lifecycle_locks(second),
-    ):
-        pytest.fail("competing workspace owner entered")
-    with codex_lifecycle_locks(second):
-        pass
-
-
-def test_lock_acquisition_does_not_create_codex_configuration_directories(tmp_path):
-    home = tmp_path / "home"
-    workspace = tmp_path / "workspace"
-    context = HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=tmp_path / "guard")
-    with codex_lifecycle_locks(context):
-        assert not (home / ".codex").exists()
-        assert not (workspace / ".codex").exists()
-
-
-def test_read_only_workspace_does_not_block_global_lifecycle_lock(tmp_path, monkeypatch):
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    original_mkdir = Path.mkdir
-
-    def read_only_mkdir(path, *args, **kwargs):
-        if path == workspace / ".codex":
-            raise PermissionError("read-only workspace")
-        return original_mkdir(path, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "mkdir", read_only_mkdir)
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=workspace, guard_home=tmp_path / "guard")
-    with codex_lifecycle_locks(context):
-        assert not (workspace / ".codex").exists()
-
-
 def test_owner_environment_does_not_split_a_configuration_lock(tmp_path, monkeypatch):
     first_runtime = tmp_path / "first-runtime"
     second_runtime = tmp_path / "second-runtime"
@@ -169,22 +130,3 @@ def test_owner_environment_does_not_split_a_configuration_lock(tmp_path, monkeyp
         monkeypatch.setenv("XDG_RUNTIME_DIR", str(second_runtime))
         with pytest.raises(RuntimeError, match="codex_lifecycle_busy"), codex_lifecycle_locks(context):
             pytest.fail("different owner environments bypassed configuration serialization")
-
-
-def test_configuration_directory_aliases_share_a_lock(tmp_path):
-    actual = tmp_path / "actual"
-    actual.mkdir()
-    first_home = tmp_path / "first"
-    second_home = tmp_path / "second"
-    first_home.mkdir()
-    second_home.mkdir()
-    (first_home / ".codex").symlink_to(actual, target_is_directory=True)
-    (second_home / ".codex").symlink_to(actual, target_is_directory=True)
-    first = HarnessContext(home_dir=first_home, workspace_dir=None, guard_home=tmp_path / "first-guard")
-    second = HarnessContext(home_dir=second_home, workspace_dir=None, guard_home=tmp_path / "second-guard")
-    with (
-        codex_lifecycle_locks(first),
-        pytest.raises(RuntimeError, match="codex_lifecycle_busy"),
-        codex_lifecycle_locks(second),
-    ):
-        pytest.fail("configuration alias bypassed the lock")

@@ -29,8 +29,8 @@ from .codex_hook_launch_runtime import (
 )
 from .codex_hook_recovery import _snapshot
 from .codex_hook_runtime_trust import TrustedCodexHookLaunch
-from .codex_install_transaction import require_codex_install_owner
 from .native_daemon_peer import DaemonArtifactBinding
+from .native_owned import require_codex_install_owner
 from .native_runtime import NativeRuntimeIdentity
 from .native_transition_files import publication
 from .runtime.command_activity_correlation import (

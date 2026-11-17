@@ -16,7 +16,7 @@ from codex_plugin_scanner.guard.codex_hook_recovery import (
     hook_publication_pending,
     recover_hook_publication,
 )
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
 from .test_codex_hook_recovery import installed  # noqa: F401 -- shared isolated fixture

@@ -21,9 +21,9 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
 )
 from codex_plugin_scanner.guard.codex_hook_recovery import recover_hook_publication
 from codex_plugin_scanner.guard.codex_hook_rollback import rollback_file_identity
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.transition_fault_support import STEPWISE_PUBLICATION
 

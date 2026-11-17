@@ -46,11 +46,9 @@ from .codex_hook_manifest import (
 from .codex_hook_manifest import (
     manifest_bindings as _manifest_bindings,
 )
-from .codex_hook_recovery import recover_hook_publication
 from .codex_hook_registration import codex_doctor_result
 from .codex_hook_self_binding import install_fields, short_path_fields
 from .codex_hook_trust import apply_codex_hook_trust_doctor
-from .codex_install_transaction import codex_install_transaction
 from .codex_remote_client import (
     codex_remote_launch_environment,
     guarded_codex_launch_command,
@@ -61,6 +59,7 @@ from .harness.base import HarnessContext, PreparedHarnessInstall
 from .harness.native_harness import NativeHarnessAdapter
 from .models import GuardArtifact, HarnessDetection
 from .native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
+from .native_owned import codex_install_transaction
 from .native_path_anchor import anchor_to_process_directory
 from .shims import shim_interpreter
 
@@ -347,9 +346,14 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
     def install(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         from .runtime_transition import assert_transition_mutation_allowed
 
-        with codex_install_transaction(context.guard_home, self._target_config_path(context), actor="install"):
+        with codex_install_transaction(
+            context.guard_home,
+            self._target_config_path(context),
+            actor="install",
+            check_pending=True,
+            recover=True,
+        ):
             assert_transition_mutation_allowed(context.guard_home)
-            recover_hook_publication(context.guard_home)
             return self._install_owned(context)
 
     def _install_owned(self, context: HarnessContext) -> dict[str, object]:
@@ -395,9 +399,14 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
     def uninstall(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         from .runtime_transition import assert_transition_mutation_allowed
 
-        with codex_install_transaction(context.guard_home, self._target_config_path(context), actor="uninstall"):
+        with codex_install_transaction(
+            context.guard_home,
+            self._target_config_path(context),
+            actor="uninstall",
+            check_pending=True,
+            recover=True,
+        ):
             assert_transition_mutation_allowed(context.guard_home)
-            recover_hook_publication(context.guard_home)
             return self._uninstall_owned(context)
 
     def _uninstall_owned(self, context: HarnessContext) -> dict[str, object]:

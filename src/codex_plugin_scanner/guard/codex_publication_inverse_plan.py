@@ -36,7 +36,7 @@ from .codex_hook_recovery import (
 )
 from .codex_hook_rollback import rollback_file_identity
 from .codex_hook_sources import parse_toml_object
-from .codex_install_transaction import require_codex_install_owner
+from .native_owned import require_codex_install_owner
 from .native_runtime import NativeRuntimeIdentity
 from .native_transition_files import publication
 from .private_file_io import read_private_regular_bytes

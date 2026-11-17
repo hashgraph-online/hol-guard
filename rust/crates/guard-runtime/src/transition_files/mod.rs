@@ -22,6 +22,9 @@ mod lease;
 mod lock_files;
 mod merge_dependency;
 mod output;
+mod owned;
+mod owned_locks;
+mod owned_ops;
 mod publication;
 mod publication_abort;
 mod publication_baseline;
@@ -40,6 +43,10 @@ mod publication_target;
 mod repair_claims;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_owned;
+#[cfg(test)]
+mod tests_owned_locks;
 #[cfg(test)]
 mod tests_publication_inverse_plan;
 #[cfg(test)]
@@ -240,6 +247,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
             Ok(publish(files()?, flag("removals"), flag("rollback"), &ask))
         }
         "journal" => journal::dispatch(args),
+        op if op.starts_with("owned_") => owned_ops::dispatch(op, args, &ask.budget),
         op @ ("lease_acquire" | "lease_release" | "lease_check") => lease::dispatch(op, args),
         op => publication_commit::dispatch(op, args, &ask.budget),
     }

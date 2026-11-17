@@ -22,7 +22,7 @@ class StoreCloudEventsMixin:
         manifest: dict[str, object],
         now: str,
     ) -> None:
-        from .codex_install_transaction import codex_install_transaction
+        from .native_owned import codex_install_transaction
         from .runtime_transition import assert_transition_mutation_allowed
 
         try:
@@ -58,7 +58,7 @@ class StoreCloudEventsMixin:
         can then recover its independently durable before/after byte states.
         """
         try:
-            from .codex_install_transaction import require_codex_install_owner
+            from .native_owned import require_codex_install_owner
 
             require_codex_install_owner(self.guard_home)
             harnesses = [change[0] for change in changes]

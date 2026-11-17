@@ -6,11 +6,10 @@ import os
 import shlex
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import ExitStack
 from dataclasses import dataclass, field
-from functools import cached_property, wraps
+from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 from ...path_support import resolves_within_root
 from ..harness.contracts import HarnessCoverageSummary, HarnessSetupContract, HarnessSetupStep, setup_contract_for
@@ -23,6 +22,7 @@ from ..harness.harness_diagnostics_bridge import (
     artifacts_use_guard,
 )
 from ..models import GuardArtifact, HarnessDetection
+from ..native_owned import owned_adapter_mutation
 
 if TYPE_CHECKING:
     from ..inventory_contract import GuardAgentInventorySnapshot
@@ -61,7 +61,7 @@ class PreparedHarnessInstall:
         journals the plan itself passes ``rollback=False`` and recovers from its
         own record; ``on_write`` sees each file just after it is written.
         """
-        from ..codex_install_transaction import require_codex_install_owner
+        from ..native_owned import require_codex_install_owner
         from ..native_transition_files import publish_files
         from ..runtime_transition import assert_transition_mutation_allowed
 
@@ -163,35 +163,6 @@ def _ensure_path_within_root(root: Path, path: Path, *, label: str) -> None:
         raise ValueError(f"{label} settings path escapes the managed root")
 
 
-_MutationResult = TypeVar("_MutationResult")
-
-
-def _owned_adapter_mutation(method: Callable[..., _MutationResult]) -> Callable[..., _MutationResult]:
-    @wraps(method)
-    def owned(self: HarnessAdapter, context: HarnessContext, *args: object, **kwargs: object) -> _MutationResult:
-        from ..codex_install_transaction import _home_owner_lock, codex_install_transaction
-        from ..runtime_transition import assert_transition_mutation_allowed
-
-        with ExitStack() as ownership:
-            if self.harness == "codex":
-                from ..codex_lifecycle_lock import codex_lifecycle_locks
-
-                ownership.enter_context(codex_lifecycle_locks(context))
-            ownership.enter_context(_home_owner_lock(context.guard_home))
-            assert_transition_mutation_allowed(context.guard_home)
-            self.preflight_management(context, operation=method.__name__)
-            with codex_install_transaction(
-                context.guard_home,
-                context.guard_home / "managed",
-                actor=f"adapter.{self.harness}.{method.__name__}",
-            ):
-                assert_transition_mutation_allowed(context.guard_home)
-                return method(self, context, *args, **kwargs)
-
-    owned.__dict__["_guard_mutation_owned"] = True
-    return owned
-
-
 class HarnessAdapter:
     """Common interface shared by harness adapters."""
 
@@ -226,7 +197,7 @@ class HarnessAdapter:
         for name in ("install", "uninstall"):
             method = cls.__dict__.get(name)
             if method is not None:
-                setattr(cls, name, _owned_adapter_mutation(method))
+                setattr(cls, name, owned_adapter_mutation(method))
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         raise NotImplementedError
@@ -287,7 +258,7 @@ class HarnessAdapter:
                 cisco_runs=cisco_runs,
             )
 
-    @_owned_adapter_mutation
+    @owned_adapter_mutation
     def install(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         from ..shims import install_guard_shim
 
@@ -299,7 +270,7 @@ class HarnessAdapter:
             **shim_manifest,
         }
 
-    @_owned_adapter_mutation
+    @owned_adapter_mutation
     def uninstall(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         from ..shims import remove_guard_shim
 

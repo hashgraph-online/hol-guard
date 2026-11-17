@@ -28,8 +28,8 @@ from codex_plugin_scanner.guard.codex_hook_self_binding import (
     install_fields,
     short_path_fields,
 )
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 
 
 def prepare_authenticated_hook_publication(

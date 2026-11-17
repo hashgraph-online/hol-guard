@@ -17,8 +17,8 @@ from pathlib import Path
 from .approval_gate import ApprovalGateError, ApprovalGateGrant, validate_grant
 from .cli.commands_lifecycle_gate import LifecycleGateRequirement, lifecycle_authority_home
 from .codex_hook_file_integrity import hook_validation_deadline
-from .codex_install_transaction import CodexInstallOwner, require_codex_install_owner
 from .codex_publication_inverse_plan import PUBLICATION_INVERSE_ACTION, PreparedCodexPublicationInverse
+from .native_owned import CodexInstallOwner, require_codex_install_owner
 from .runtime_transition import TransitionError, inverse_recovery_budget
 
 _claims: dict[str, tuple[str, str, int, float, float]] = {}

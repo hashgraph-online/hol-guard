@@ -27,7 +27,7 @@ from .codex_hook_recovery import (
     prepare_hook_publication,
     recover_hook_publication,
 )
-from .codex_install_transaction import CodexInstallOwner, record_codex_mutation, require_codex_install_owner
+from .native_owned import CodexInstallOwner, record_codex_mutation, require_codex_install_owner
 from .native_runtime import NativeRuntimeIdentity
 from .native_transition_files import publication as publication_record
 from .runtime_transition import (

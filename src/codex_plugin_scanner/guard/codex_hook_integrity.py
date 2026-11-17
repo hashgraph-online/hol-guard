@@ -21,11 +21,11 @@ from pathlib import Path
 from typing import Literal
 
 from .codex_hook_file_integrity import CodexHookIntegrityError, canonical_path, check_hook_validation_deadline
-from .codex_install_transaction import record_codex_mutation
 from .local_authority_integrity import (
     LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM,
     sign_local_authority_payload,
 )
+from .native_owned import record_codex_mutation
 
 HOOK_MANIFEST_SCHEMA_VERSION = 2
 HOOK_MANIFEST_MAC_ALGORITHM = LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM
@@ -75,7 +75,7 @@ def load_or_create_hook_secret(guard_home: Path) -> HookSecretMaterial:
 
 @contextmanager
 def _ordinary_hook_writer(guard_home: Path, target: Path, *, actor: str) -> Iterator[None]:
-    from .codex_install_transaction import codex_install_transaction
+    from .native_owned import codex_install_transaction
     from .runtime_transition import assert_transition_mutation_allowed
 
     assert_transition_mutation_allowed(guard_home)

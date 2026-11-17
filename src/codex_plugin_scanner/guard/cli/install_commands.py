@@ -7,12 +7,12 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from ..codex_install_transaction import codex_install_transaction
 from ..harness.base import HarnessAdapter, HarnessContext
 from ..harness.contracts import contract_for
 from ..harness.registry import get_adapter, list_adapters
 from ..managed_install_proof import verify_managed_install_proof
 from ..native_mcp_tool_evidence import NativeMcpToolEvidenceError, native_skill_firewall_metadata_patch
+from ..native_owned import codex_install_transaction
 from ..native_runner_authority import NativeRunnerAuthorityError
 from ..runtime.fleet_posture_common import DIAGNOSTICS_STATE_KEY, parse_timestamp
 from ..runtime.skill_protection import detect_skill_content_risk

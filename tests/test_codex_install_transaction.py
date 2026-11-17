@@ -16,8 +16,8 @@ from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_st
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction, require_codex_install_owner
 from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction, require_codex_install_owner
 from tests import codex_hook_publication_helpers as publication_helpers
 
 
@@ -36,7 +36,7 @@ def test_copied_context_cannot_borrow_another_threads_publication_owner(tmp_path
 FORK_OWNER = r"""
 import os, subprocess, sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import (
+from codex_plugin_scanner.guard.native_owned import (
     codex_install_transaction, require_codex_install_owner,
 )
 root = Path(sys.argv[1])
@@ -76,7 +76,7 @@ try:
     probe = '''
 import sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 home = Path(sys.argv[1])
 with codex_install_transaction(home, home / "config", actor="competitor",
                                deadline=time.monotonic() + 0.3):
@@ -105,7 +105,7 @@ def test_fork_does_not_retain_parent_lock_or_authority(tmp_path: Path, mode: str
 FORK_UNWIND = r"""
 import os, subprocess, sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 root = Path(sys.argv[1])
 ready_read, ready_write = os.pipe()
 release_read, release_write = os.pipe()
@@ -121,7 +121,7 @@ try:
         probe = '''
 import sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 home = Path(sys.argv[1])
 try:
     with codex_install_transaction(home, home / "config", actor="competitor",
@@ -159,7 +159,7 @@ def test_fork_child_unwind_cannot_unlock_live_parent(tmp_path: Path):
 FORK_THREAD_OWNER = r"""
 import os, sys, threading, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 root = Path(sys.argv[1])
 owned, release = threading.Event(), threading.Event()
 ready_read, ready_write = os.pipe()
@@ -330,15 +330,15 @@ def test_failed_installer_cannot_remove_separate_process_winner(
                 process.communicate(timeout=5)
 
 
-def test_transaction_rejects_symlink_and_bounds_separate_process_wait(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+def test_transaction_bounds_separate_process_wait_and_keeps_the_lock_file(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 
     home = tmp_path / "guard-home"
     config = tmp_path / "home/.codex/config.toml"
     code = """
 import sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 try:
     with codex_install_transaction(
         Path(sys.argv[1]), Path(sys.argv[2]), actor="contender", deadline=time.monotonic()+0.1
@@ -357,23 +357,13 @@ except TimeoutError:
     with codex_install_transaction(home, config, actor="next") as second:
         assert second.operation_id != first.operation_id
     assert lock.stat().st_ino == original.st_ino, "ownership lock must never be unlinked"
-    if os.name != "nt":
-        unsafe_home = tmp_path / "unsafe"
-        directory = unsafe_home / "managed/codex"
-        directory.mkdir(parents=True)
-        victim = tmp_path / "victim"
-        victim.write_bytes(b"preserve")
-        (directory / "installation.lock").symlink_to(victim)
-        with pytest.raises(CodexHookIntegrityError), codex_install_transaction(unsafe_home, config, actor="unsafe"):
-            pytest.fail("symlink was accepted")
-        assert victim.read_bytes() == b"preserve"
 
 
 def test_mutation_journal_contains_identities_and_no_private_contents(tmp_path: Path) -> None:
     import json
 
     from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_text, restore_private_file
-    from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+    from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 
     home = tmp_path / "guard-home"
     config = tmp_path / "home/.codex/config.toml"
@@ -512,7 +502,7 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
 def test_uninstall_preserves_key_needed_by_other_authenticated_target(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
     from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
-    from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+    from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 
     guard_home = tmp_path / "guard-home"
     first = HarnessContext(

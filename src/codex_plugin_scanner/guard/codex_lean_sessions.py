@@ -215,7 +215,7 @@ def _locked(guard_home: Path, path: Path) -> Iterator[None]:
 
     from .codex_hook_file_integrity import CodexHookIntegrityError
     from .codex_hook_recovery import recover_hook_publication
-    from .codex_install_transaction import codex_install_transaction
+    from .native_owned import codex_install_transaction
 
     with codex_install_transaction(guard_home, path, actor="lean-sessions"):
         try:

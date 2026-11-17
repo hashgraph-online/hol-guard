@@ -13,13 +13,13 @@ from codex_plugin_scanner.guard.codex_harness_client import _hook_manifest_spec,
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_recovery import commit_hook_publication, recover_hook_publication
 from codex_plugin_scanner.guard.codex_hook_rollback import rollback_file_identity
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.codex_publication_inverse_authorization import authorize_codex_publication_inverse
 from codex_plugin_scanner.guard.codex_publication_inverse_plan import (
     PUBLICATION_INVERSE_ACTION,
     bind_codex_publication_inverse_verification,
     prepare_authenticated_hook_publication_inverse,
 )
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
 from .test_codex_hook_recovery import installed  # noqa: F401 -- isolated fixture dependency

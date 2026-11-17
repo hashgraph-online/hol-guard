@@ -9,9 +9,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..codex_install_transaction import codex_install_transaction
 from ..harness.base import HarnessContext
 from ..managed_install_revision import bump_managed_install_revision
+from ..native_owned import codex_install_transaction
 from ..runtime_transition import TransitionError
 from ..store import GuardStore
 

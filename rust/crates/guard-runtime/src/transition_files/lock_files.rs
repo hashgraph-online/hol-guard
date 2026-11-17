@@ -173,6 +173,7 @@ pub(super) fn install_lock(guard_home: &Path) -> Result<(fs::File, PathBuf), Ref
     Ok((file, path))
 }
 
+#[cfg_attr(test, allow(dead_code))]
 fn account_home() -> std::io::Result<PathBuf> {
     #[cfg(unix)]
     {
@@ -193,8 +194,23 @@ fn account_home() -> std::io::Result<PathBuf> {
     }
 }
 
+/// Where the lifecycle locks live. Tests keep them out of the real account.
+fn lifecycle_base() -> std::io::Result<PathBuf> {
+    #[cfg(test)]
+    {
+        let parent =
+            std::env::temp_dir().join(format!("hol-guard-lifecycle-locks-{}", std::process::id()));
+        fs::create_dir_all(&parent)?;
+        Ok(parent.join(LIFECYCLE_BASE))
+    }
+    #[cfg(not(test))]
+    {
+        Ok(account_home()?.join(LIFECYCLE_BASE))
+    }
+}
+
 /// `os.path.normcase(str(directory.resolve()))`.
-fn configuration_identity(directory: &Path) -> String {
+pub(super) fn configuration_identity(directory: &Path) -> String {
     let resolved = resolve_lenient(directory).to_string_lossy().into_owned();
     if cfg!(windows) {
         resolved.replace('/', "\\").to_lowercase()
@@ -217,9 +233,7 @@ fn lifecycle_identity(path: &Path) -> Result<Option<(u64, u64)>, Refusal> {
 
 /// `codex_lifecycle_lock._target_lock`: open and check one lifecycle lock.
 pub(super) fn lifecycle_lock(directory: &Path) -> Result<(fs::File, PathBuf), Refusal> {
-    let base = account_home()
-        .map_err(|error| Refusal::lifecycle("directory", &error))?
-        .join(LIFECYCLE_BASE);
+    let base = lifecycle_base().map_err(|error| Refusal::lifecycle("directory", &error))?;
     lifecycle_lock_in(&base, directory)
 }
 

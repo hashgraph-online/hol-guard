@@ -6,9 +6,9 @@ import shutil
 import subprocess
 import sys
 
-from ..codex_install_transaction import codex_install_transaction
 from ..harness.base import HarnessContext
 from ..native_daemon_manage import retire_all_guard_daemons_for_home
+from ..native_owned import codex_install_transaction
 from ..native_resident_update_lock import NativeResidentUpdateLockError, hold_native_resident_update_lock
 from ..redaction import redact_sensitive_text
 from ..shims import package_shim_status, remove_guard_profile_blocks, uninstall_package_shims

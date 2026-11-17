@@ -598,13 +598,13 @@
         "path": [
           "src/codex_plugin_scanner/guard/codex_harness_client.py",
           "src/codex_plugin_scanner/guard/codex_harness_lifecycle.py",
-          "src/codex_plugin_scanner/guard/codex_lifecycle_lock.py",
+          "src/codex_plugin_scanner/guard/native_owned.py",
           "src/codex_plugin_scanner/guard/codex_remote_client.py",
           "src/codex_plugin_scanner/guard/mcp_server_client.py",
           "src/codex_plugin_scanner/guard/contained_sink_command.py",
           "src/codex_plugin_scanner/guard/windows_paths.py"
         ],
-        "reason": "Reviewed: adapters: harness registry targets (codex, the Grok approval resume, the thin MCP server client, cursor native approval, attestation and path helpers). guard/contained_sink_command.py builds the contained test sink command hook routes hand to the native runtime. Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope. guard/windows_paths.py is the trusted Windows profile lookup codex_lifecycle_lock uses to place its lock."
+        "reason": "Reviewed: adapters: harness registry targets (codex, the Grok approval resume, the thin MCP server client, cursor native approval, attestation and path helpers). guard/contained_sink_command.py builds the contained test sink command hook routes hand to the native runtime. Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope. guard/windows_paths.py is the trusted Windows profile lookup the native lifecycle lock uses to place its lock."
       },
       {
         "path": [
@@ -752,10 +752,9 @@
           "src/codex_plugin_scanner/guard/codex_hook_file_integrity.py",
           "src/codex_plugin_scanner/guard/codex_hook_integrity.py",
           "src/codex_plugin_scanner/guard/codex_hook_manifest.py",
-          "src/codex_plugin_scanner/guard/codex_install_transaction.py",
           "src/codex_plugin_scanner/guard/local_authority_integrity.py"
         ],
-        "reason": "Reviewed: Codex hook event names, manifest, integrity, compatibility and install transaction modules. The Codex hook bridge no longer imports them at load; launch validation and the installer load them lazily. The event-name tuple was previously imported eagerly by the Python binding-capture modules, which now run natively, and the manifest still loads it when launch trust reads the hook manifest. They stay counted as runtime because launch trust still runs them until the native resident owns that lane. local_authority_integrity.py signs and verifies the local authority payloads those modules write and read, and codex_hook_recovery, codex_hook_repair_request, codex_publication_inverse and runtime_transition reach it the same way; it is now reached only lazily because the one-shot approval mint moved into the native store, so it is named here to stay counted rather than drop out of the measurement. codex_hook_authority_record.py is the thin client codex_hook_integrity uses to ask the runtime for the Codex hook key identity; the runtime holds the key. codex_hook_bridge_runtime.py decodes the bridge config argument codex_hook_command_line reads back from a Windows registration, so it is counted with it."
+        "reason": "Reviewed: Codex hook event names, manifest, integrity and compatibility modules. The Codex hook bridge no longer imports them at load; launch validation and the installer load them lazily. The event-name tuple was previously imported eagerly by the Python binding-capture modules, which now run natively, and the manifest still loads it when launch trust reads the hook manifest. They stay counted as runtime because launch trust still runs them until the native resident owns that lane. local_authority_integrity.py signs and verifies the local authority payloads those modules write and read, and codex_hook_recovery, codex_hook_repair_request, codex_publication_inverse and runtime_transition reach it the same way; it is now reached only lazily because the one-shot approval mint moved into the native store, so it is named here to stay counted rather than drop out of the measurement. codex_hook_authority_record.py is the thin client codex_hook_integrity uses to ask the runtime for the Codex hook key identity; the runtime holds the key. codex_hook_bridge_runtime.py decodes the bridge config argument codex_hook_command_line reads back from a Windows registration, so it is counted with it."
       },
       {
         "path": "src/codex_plugin_scanner/guard/protection_coverage.py",

@@ -11,6 +11,8 @@
 //! a client killed mid-operation frees its lock for clients of other
 //! residents too.
 //!
+//! `owned` composes these leases into one owner's installation transaction.
+//!
 //! Three locks exist; `lock_files` opens and checks them. The installation lock is `managed/codex/installation.lock`
 //! under a Guard home, in a private directory repaired to owner-only. A
 //! lifecycle lock is one file per Codex configuration directory, under the
@@ -56,7 +58,7 @@ fn contended(error: &std::io::Error) -> bool {
 
 /// Python's `msvcrt.locking` needs a byte to lock, so an empty Windows lock
 /// file gets one first.
-fn try_lock(file: &mut fs::File) -> std::io::Result<bool> {
+pub(super) fn try_lock(file: &mut fs::File) -> std::io::Result<bool> {
     #[cfg(windows)]
     {
         use std::io::Write;
@@ -172,6 +174,46 @@ fn acquire(args: &Map<String, Value>) -> KindResult {
     );
     ensure_reaper();
     Ok(json!({ "ok": true, "lease": lease }))
+}
+
+/// Register a lock this caller already holds under a lease for the client
+/// process `pid`, so the reaper frees it if that process is gone.
+pub(super) fn adopt(file: fs::File, path: PathBuf, pid: u32) -> Result<String, &'static str> {
+    let marker = running_process_start_marker(pid).map_err(|_| ERR_INVALID)?;
+    let mut guard = LEASES.lock().unwrap_or_else(PoisonError::into_inner);
+    let leases = guard.get_or_insert_with(HashMap::new);
+    reap(leases);
+    if leases.len() >= MAX_LEASES {
+        return Err(ERR_INVALID);
+    }
+    let lease = token()?;
+    leases.insert(
+        lease.clone(),
+        Lease {
+            file,
+            path,
+            pid,
+            marker,
+        },
+    );
+    ensure_reaper();
+    Ok(lease)
+}
+
+/// Close the lease's handle, releasing its advisory lock.
+pub(super) fn release(lease: &str) {
+    let mut guard = LEASES.lock().unwrap_or_else(PoisonError::into_inner);
+    let leases = guard.get_or_insert_with(HashMap::new);
+    leases.remove(lease);
+    reap(leases);
+}
+
+/// Whether the lease is live and its lock file is still the one at the path.
+pub(super) fn held(lease: &str) -> bool {
+    let mut guard = LEASES.lock().unwrap_or_else(PoisonError::into_inner);
+    let leases = guard.get_or_insert_with(HashMap::new);
+    reap(leases);
+    leases.get(lease).is_some_and(check)
 }
 
 /// `check`: the lease is live and its lock file is still the one at the path.
