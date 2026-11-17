@@ -270,7 +270,6 @@
         "category": "install_config",
         "reason": "Codex/MCP setup, host inventory and registry browsing; configuration management, not enforcement.",
         "path": [
-          "src/codex_plugin_scanner/guard/runtime/codex_config_rpc.py",
           "src/codex_plugin_scanner/guard/runtime/codex_host_inventory.py",
           "src/codex_plugin_scanner/guard/runtime/codex_mcp_setup.py",
           "src/codex_plugin_scanner/guard/runtime/mcp_registry.py",

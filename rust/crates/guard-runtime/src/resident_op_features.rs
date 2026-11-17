@@ -276,6 +276,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-windows-process-lifecycle-v1",
     "native-local-skill-index-v1",
     "native-cloud-actions-host-config-v2",
+    "native-codex-mcp-setup-v1",
     "native-store-quarantine-forensics-v1",
     "native-network-status-validation-v1",
     "native-hermes-file-inspect-v1",

@@ -191,6 +191,7 @@ mod cloud_review_batch;
 mod cloud_review_event;
 mod cloud_sync_privacy;
 mod codex_app_server_socket;
+mod codex_config_rpc;
 #[path = "adapters/detection/codex_detect.rs"]
 mod codex_detect;
 mod codex_hook_artifacts;
@@ -227,6 +228,7 @@ mod codex_identity;
 mod codex_install_plan;
 mod codex_live_operation;
 mod codex_live_wait_build;
+mod codex_mcp_setup;
 mod codex_proxy;
 #[path = "adapters/codex_remote_launch.rs"]
 mod codex_remote_launch;

@@ -1147,6 +1147,14 @@
    "body": "c00dd6d42c8e"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "CPython's `Popen.terminate` on Windows is `TerminateProcess`, which is what `Child::kill` calls, so asking the app-server host to end is the same hard stop there as the Python it replaces. The follow-up kill after the grace period is then a no-op. The close sequence and its timings are the same code on both platforms.",
+   "file": "rust/crates/guard-runtime/src/codex_config_rpc.rs",
+   "item": "fn terminate(child: &mut Child)",
+   "cfg": "not(unix)",
+   "body": "3e9fd5560c1c"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
    "item": "pub(super) fn record_ingress(_state_path: &str, _raw_data: &str, _prepared: &Prepared)",
    "verdict": "windows-unsupported",
