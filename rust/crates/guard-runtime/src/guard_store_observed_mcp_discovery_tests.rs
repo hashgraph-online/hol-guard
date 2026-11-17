@@ -302,3 +302,33 @@ fn a_malformed_server_list_is_refused() {
         assert!(observed_mcp_discovery(&connection, &Args(args.as_object().unwrap())).is_err());
     }
 }
+
+#[test]
+fn grok_tools_are_found_under_their_prefixed_name() {
+    let connection = store();
+    receipt(&connection, "grok", "ads_api__list_ads", None);
+    receipt(&connection, "grok", "mcp__ads_api__get_report", None);
+    // A name with no server boundary is not an MCP tool, and other harnesses
+    // keep requiring the prefix.
+    receipt(&connection, "grok", "read_file", None);
+    receipt(&connection, "codex", "ads_api__list_ads", None);
+    let answer = discover(&connection, json!({}));
+    let found = connectors(&answer);
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0]["harness"], "grok");
+    assert_eq!(found[0]["namespace"], "mcp__ads_api__");
+    let mut names = tool_names(&found[0]);
+    names.sort_unstable();
+    assert_eq!(names, ["get_report", "list_ads"]);
+    let mut qualified = found[0]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| tool["qualified_name"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    qualified.sort_unstable();
+    assert_eq!(
+        qualified,
+        ["mcp__ads_api__get_report", "mcp__ads_api__list_ads"]
+    );
+}

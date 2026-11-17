@@ -217,13 +217,13 @@ pub(crate) fn require_current_schema(connection: &Connection) -> StoreResult<boo
     }
 }
 
-/// The label an observed tool is read from: the tool name a receipt or a
-/// paused request recorded, which is `raw_command_text` without its `tool:`
-/// prefix when it carries one and the artifact name otherwise. Every
-/// observable MCP tool name starts with `mcp__`, including the flattened
-/// spelling Oh My Pi uses, so the scan never reads a row without it.
-const OBSERVED_LABEL: &str = "substr(case when substr(raw_command_text, 1, 5) = 'tool:' \
-     then substr(raw_command_text, 6) else artifact_name end, 1, 5) = 'mcp__'";
+/// The label an observed tool is read from: `raw_command_text` without its
+/// `tool:` prefix when it carries one, the artifact name otherwise. MCP names
+/// start with `mcp__` (Oh My Pi's flattened ones too); Grok's are `<s>__<t>`.
+const OBSERVED_LABEL: &str = "(substr(case when substr(raw_command_text, 1, 5) = 'tool:' \
+     then substr(raw_command_text, 6) else artifact_name end, 1, 5) = 'mcp__' \
+     or (lower(harness) like '%grok%' and instr(case when substr(raw_command_text, 1, 5) \
+     = 'tool:' then substr(raw_command_text, 6) else artifact_name end, '__') > 1))";
 /// A quarter of the response cap for each of the two histories, so together
 /// they leave room for the envelope the resident frames them in and neither
 /// one can starve the other. A history past its budget keeps its newest rows:
