@@ -33,17 +33,9 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..native_hook_render import native_muse_bridge
+from .hook_failure_bridge import native_stderr_hook_failure
 
-# Only these events decide whether something runs. The rest report on work
-# that already happened or on the session itself, so a resident that cannot
-# answer has nothing to refuse there -- and exit 2 on ``Stop`` would keep the
-# agent from stopping.
-_DECIDING_EVENTS = frozenset({"pretooluse", "permissionrequest", "userpromptsubmit"})
 _UNAVAILABLE_REASON = "HOL Guard blocked this action."
-
-
-def _compact(event_name: str) -> str:
-    return event_name.replace("_", "").replace("-", "").lower()
 
 
 def muse_bridge_response(
@@ -64,9 +56,8 @@ def muse_bridge_response(
 
     rendered = native_muse_bridge(daemon_response, event_name=event_name, guard_home=guard_home, deadline=deadline)
     if rendered is None:
-        if _compact(event_name) not in _DECIDING_EVENTS:
-            return "", "", 0
-        return "", _UNAVAILABLE_REASON, 2
+        # The runtime's table says which events decide whether something runs.
+        return native_stderr_hook_failure("muse", event_name, _UNAVAILABLE_REASON)
     document, exit_code = rendered
     if document is None:
         return "", "", exit_code

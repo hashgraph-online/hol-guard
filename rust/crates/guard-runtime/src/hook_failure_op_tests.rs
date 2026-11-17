@@ -148,3 +148,33 @@ fn no_bounded_harness_can_turn_an_outage_into_an_allow() {
         );
     }
 }
+
+#[test]
+fn a_stderr_harness_refuses_only_where_something_would_run() {
+    let ask = |event: &str| {
+        dispatch(&json!({"harness": "muse", "event_name": event, "reason": REASON, "stderr": true}))
+            .expect("a well-formed request")
+    };
+    for event in ["PreToolUse", "PermissionRequest", "user_prompt-submit"] {
+        assert_eq!(
+            ask(event),
+            json!({"document": "", "stderr": REASON, "exit_code": 2}),
+            "{event}"
+        );
+    }
+    for event in ["PostToolUse", "SessionStart", "Stop"] {
+        assert_eq!(
+            ask(event),
+            json!({"document": "", "stderr": "", "exit_code": 0}),
+            "{event}"
+        );
+    }
+    assert!(dispatch(
+        &json!({"harness": "muse", "event_name": "Stop", "reason": REASON, "stderr": "yes"})
+    )
+    .is_err());
+    assert!(dispatch(
+        &json!({"harness": "muse", "event_name": "Stop", "reason": REASON, "other": true})
+    )
+    .is_err());
+}
