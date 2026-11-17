@@ -267,6 +267,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = codex_hook_paths_op::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if workspace_skills_scan_op::is_command(command) && flag == "--stdin" => {
+            let response = workspace_skills_scan_op::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if hook_exit_code_op::is_command(command) && flag == "--stdin" => {
             let response = hook_exit_code_op::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

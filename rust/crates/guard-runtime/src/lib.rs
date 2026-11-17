@@ -1277,6 +1277,7 @@ mod workspace_package_findings;
 mod workspace_rule_findings;
 mod workspace_runtime_findings;
 mod workspace_scan_targets;
+mod workspace_skills_scan_op;
 mod workspace_snapshot;
 mod workspace_snapshot_file;
 mod workspace_snapshot_git;
