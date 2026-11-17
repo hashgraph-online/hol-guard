@@ -86,10 +86,9 @@ pub(super) fn mcp_tool_name(payload: &Value, harness: &str) -> Result<Option<Str
 }
 
 /// Adds the qualified names one record gives its tool. Returns false when a
-/// name is incomplete, malformed or ambiguous, or when a tool input names no
-/// tool at all.
+/// name is incomplete, malformed or ambiguous. A tool input that holds only
+/// the tool's arguments adds nothing; the call still needs a name elsewhere.
 fn dispatched_names(record: &Map<String, Value>, input: bool, names: &mut Vec<String>) -> bool {
-    let before = names.len();
     let pairs: &[(&str, &str)] = if input {
         &[("server", "tool"), ("mcp_server", "mcp_tool")]
     } else {
@@ -99,7 +98,7 @@ fn dispatched_names(record: &Map<String, Value>, input: bool, names: &mut Vec<St
         match (record.get(*server), record.get(*tool)) {
             (None, None) => {}
             (Some(Value::String(server)), Some(Value::String(tool))) => {
-                match qualified(&format!("{}__{}", server.trim(), tool.trim())) {
+                match qualified_pair(server.trim(), tool.trim()) {
                     Some(name) => names.push(name),
                     None => return false,
                 }
@@ -119,14 +118,20 @@ fn dispatched_names(record: &Map<String, Value>, input: bool, names: &mut Vec<St
             }
         }
     }
-    !input || names.len() > before
+    true
+}
+
+/// `mcp__<server>__<tool>` from a `<server>__<tool>` name, with or without
+/// the `mcp__` prefix. `mcp__list_ads` can only be server `mcp`.
+fn qualified(name: &str) -> Option<String> {
+    let rest = name.strip_prefix("mcp__").unwrap_or(name);
+    let (server, tool) = rest.split_once("__").or_else(|| name.split_once("__"))?;
+    qualified_pair(server, tool)
 }
 
 /// `mcp__<server>__<tool>`, with exactly one boundary between two non-empty
 /// parts so that no other split names a different tool.
-fn qualified(name: &str) -> Option<String> {
-    let rest = name.strip_prefix("mcp__").unwrap_or(name);
-    let (server, tool) = rest.split_once("__")?;
+fn qualified_pair(server: &str, tool: &str) -> Option<String> {
     let valid = |part: &str| {
         !part.is_empty()
             && part.len() <= 128
@@ -408,6 +413,19 @@ mod tests {
         assert_eq!(
             mcp_tool_name(&wrapped("ads_api__delete_ads"), "grok").unwrap(),
             None
+        );
+        let prepared = |server: &str| {
+            json!({"toolName": "MCPTool", "mcp_server": server, "mcp_tool": "list_ads",
+                "tool_input": {"limit": 5}})
+        };
+        assert_eq!(mcp_tool_name(&prepared("ads_api"), "grok").unwrap(), list);
+        assert_eq!(
+            mcp_tool_name(&prepared("mcp"), "grok").unwrap(),
+            Some("mcp__mcp__list_ads".into())
+        );
+        assert_eq!(
+            named(json!({"server": "mcp", "tool": "list_ads", "tool_name": "mcp__list_ads"})),
+            Some("mcp__mcp__list_ads".into())
         );
         let codex = json!({"tool_name": "use_tool", "tool_input": {"tool_name": "ads_api__x"}});
         assert_eq!(
