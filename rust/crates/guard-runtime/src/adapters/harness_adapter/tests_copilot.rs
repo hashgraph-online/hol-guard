@@ -128,7 +128,7 @@ fn copilot_install_without_a_native_runtime_asks_for_repair() {
 }
 
 #[test]
-fn copilot_install_refuses_a_malformed_later_config_before_planning_any_write() {
+fn copilot_detection_skips_a_malformed_later_config_without_touching_it() {
     let home = Home::new();
     let ws = workspace(&home);
     let cli = ws.join(".mcp.json");
@@ -139,13 +139,16 @@ fn copilot_install_refuses_a_malformed_later_config_before_planning_any_write() 
     );
     write(&ide, "{not json");
     let before = (fs::read(&cli).unwrap(), fs::read(&ide).unwrap());
-    // Refused either as a failed call or as a transition error the caller raises.
-    let answer = ask(&home, "install_detection", json!({}));
-    let refused = match &answer {
-        Err(_) => true,
-        Ok(found) => found.get("transition_error").is_some(),
-    };
-    assert!(refused, "{:?}", answer.as_ref().ok());
+    // As `test_copilot_detect_tolerates_malformed_json`: the readable file is
+    // detected and the malformed one is skipped, never rewritten.
+    let found = ask(&home, "install_detection", json!({})).unwrap();
+    let names: Vec<&str> = found["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|artifact| artifact["name"].as_str())
+        .collect();
+    assert_eq!(names, ["cli_lab"], "{found}");
     assert_eq!((fs::read(&cli).unwrap(), fs::read(&ide).unwrap()), before);
 }
 
