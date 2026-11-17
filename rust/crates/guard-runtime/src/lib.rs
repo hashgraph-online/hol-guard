@@ -793,6 +793,7 @@ mod pack_lifecycle;
 mod pack_preparation;
 mod pyyaml_dump;
 mod runtime_output;
+mod runtime_output_directory;
 mod swarm_op;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.

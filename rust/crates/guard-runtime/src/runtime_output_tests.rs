@@ -1,4 +1,5 @@
 use super::*;
+use std::fs;
 
 fn arguments(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
@@ -181,7 +182,8 @@ fn a_held_rotation_lock_still_records_without_rotating() {
     let directory = home.path().join(LOG_DIRECTORY);
     let path = directory.join(FAILURE_LOG);
     fs::write(&path, vec![b'x'; MAX_FAILURE_LOG_BYTES as usize]).unwrap();
-    let held = rotation_lock(&directory).expect("rotation lock");
+    let log_directory = LogDirectory::open(home.path(), LOG_DIRECTORY).unwrap();
+    let held = rotation_lock(&log_directory).expect("rotation lock");
     let started = Instant::now();
     record_failure("while_locked", "error", None, &named);
     assert!(started.elapsed() < Duration::from_secs(5));
@@ -216,5 +218,70 @@ fn a_fifo_in_place_of_the_log_does_not_hold_up_the_exit() {
     assert!(
         receiver.recv_timeout(Duration::from_secs(10)).is_ok(),
         "recording a failure blocked on a FIFO"
+    );
+}
+
+#[test]
+fn an_unknown_first_argument_is_not_recorded() {
+    let record = failure_record("x", "error", None, &arguments(&["customer-alice"])).unwrap();
+    assert_eq!(record["subcommand"], "other");
+    assert!(!record.to_string().contains("customer-alice"));
+    let known = failure_record("x", "error", None, &arguments(&["daemon-serve"])).unwrap();
+    assert_eq!(known["subcommand"], "daemon-serve");
+}
+
+#[test]
+fn every_literal_runtime_subcommand_is_a_known_label() {
+    let source = include_str!("runtime_cli.rs");
+    let mut missing = Vec::new();
+    for piece in source.split("command == \"").skip(1) {
+        let name = piece.split('"').next().unwrap_or_default();
+        if !KNOWN_SUBCOMMANDS.contains(&name) {
+            missing.push(name.to_owned());
+        }
+    }
+    assert!(missing.is_empty(), "add to KNOWN_SUBCOMMANDS: {missing:?}");
+    let mut sorted = KNOWN_SUBCOMMANDS.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(sorted, KNOWN_SUBCOMMANDS);
+}
+
+#[cfg(unix)]
+#[test]
+fn an_existing_wide_log_is_made_private_before_it_is_written() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = tempfile::tempdir().unwrap();
+    let directory = home.path().join(LOG_DIRECTORY);
+    fs::create_dir(&directory).unwrap();
+    let path = directory.join(FAILURE_LOG);
+    fs::write(&path, b"").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+    let named = arguments(&[
+        "daemon-serve",
+        "--guard-home",
+        home.path().to_str().unwrap(),
+    ]);
+    record_failure("widened", "error", None, &named);
+    let mode = fs::metadata(&path).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o600);
+    assert!(fs::read_to_string(&path).unwrap().contains("widened"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_log_directory_swapped_for_a_symlink_after_opening_keeps_its_writes() {
+    let home = tempfile::tempdir().unwrap();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let directory = LogDirectory::open(home.path(), LOG_DIRECTORY).unwrap();
+    let moved = home.path().join("moved-logs");
+    fs::rename(home.path().join(LOG_DIRECTORY), &moved).unwrap();
+    std::os::unix::fs::symlink(elsewhere.path(), home.path().join(LOG_DIRECTORY)).unwrap();
+    let mut file = directory.open_file(FAILURE_LOG, true).unwrap();
+    file.write_all(b"kept\n").unwrap();
+    assert!(!elsewhere.path().join(FAILURE_LOG).exists());
+    assert_eq!(
+        fs::read_to_string(moved.join(FAILURE_LOG)).unwrap(),
+        "kept\n"
     );
 }

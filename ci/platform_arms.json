@@ -2588,11 +2588,11 @@
   },
   {
    "verdict": "windows-equivalent",
-   "note": "Creates the `logs` directory under the Guard home without a POSIX mode; Windows has no mode bits, and the directory inherits the Guard home's ACL. A failure only skips the diagnostic record.",
-   "file": "rust/crates/guard-runtime/src/runtime_output.rs",
-   "item": "fn create_private_directory(directory: &Path) -> Option<()>",
+   "note": "Path-based opens under the Guard home, which inherits its ACL; the directory and the log are refused when they are symlinks, and a rename never replaces one. Windows has no openat; the record is a diagnostic and writes nothing Guard reads back.",
+   "file": "rust/crates/guard-runtime/src/runtime_output_directory.rs",
+   "item": "mod imp",
    "cfg": "not(unix)",
-   "body": "e354d6f527e1"
+   "body": "4f17010d9edc"
   },
   {
    "verdict": "posix-primitive",

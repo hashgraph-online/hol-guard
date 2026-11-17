@@ -10,12 +10,14 @@
 //! survives a missing reader.
 
 use std::fmt;
-use std::fs::{self, File, OpenOptions, TryLockError};
+use std::fs::{File, TryLockError};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Map, Value};
+
+use crate::runtime_output_directory::LogDirectory;
 
 const LOG_DIRECTORY: &str = "logs";
 const FAILURE_LOG: &str = "runtime-failures.jsonl";
@@ -85,40 +87,22 @@ fn append_failure(
     location: Option<&str>,
     arguments: &[String],
 ) -> Option<()> {
-    if !guard_home.is_dir() || is_symlink(guard_home) {
-        return None;
-    }
-    let directory = guard_home.join(LOG_DIRECTORY);
-    if is_symlink(&directory) {
-        return None;
-    }
-    if !directory.exists() {
-        create_private_directory(&directory)?;
-    }
-    if !directory.is_dir() {
-        return None;
-    }
-    let path = directory.join(FAILURE_LOG);
-    if is_symlink(&path) {
-        return None;
-    }
     let mut line = failure_record(code, kind, location, arguments)?.to_string();
     line.push('\n');
+    let directory = LogDirectory::open(guard_home, LOG_DIRECTORY)?;
     // Only the holder of the rotation lock may move a full log aside; a
     // second launch that also saw it full would otherwise move the fresh log
     // over the one just kept. A launch that cannot get the lock in time
     // appends without rotating, so its record is never dropped.
     let rotation_lock = rotation_lock(&directory);
     if rotation_lock.is_some()
-        && fs::metadata(&path).is_ok_and(|metadata| metadata.len() >= MAX_FAILURE_LOG_BYTES)
+        && directory
+            .file_len(FAILURE_LOG)
+            .is_some_and(|length| length >= MAX_FAILURE_LOG_BYTES)
     {
-        let rotated = directory.join(ROTATED_FAILURE_LOG);
-        if is_symlink(&rotated) {
-            return None;
-        }
-        fs::rename(&path, &rotated).ok()?;
+        directory.rename(FAILURE_LOG, ROTATED_FAILURE_LOG)?;
     }
-    let mut file = open_regular(&path, OpenOptions::new().append(true).create(true))?;
+    let mut file = directory.open_file(FAILURE_LOG, true)?;
     // One write per record, so concurrent failing launches do not interleave.
     let written = file.write_all(line.as_bytes()).ok();
     drop(rotation_lock);
@@ -127,11 +111,8 @@ fn append_failure(
 
 /// The rotation lock, held until the returned file is dropped. The wait is
 /// bounded so that reporting a failure never holds up the exit it reports.
-fn rotation_lock(directory: &Path) -> Option<File> {
-    let lock = open_regular(
-        &directory.join(ROTATION_LOCK),
-        OpenOptions::new().write(true).create(true),
-    )?;
+fn rotation_lock(directory: &LogDirectory) -> Option<File> {
+    let lock = directory.open_file(ROTATION_LOCK, false)?;
     let deadline = Instant::now() + ROTATION_LOCK_WAIT;
     loop {
         match lock.try_lock() {
@@ -142,23 +123,6 @@ fn rotation_lock(directory: &Path) -> Option<File> {
             Err(_) => return None,
         }
     }
-}
-
-/// Opens `path` without following a symlink or waiting on a FIFO, and keeps
-/// it only if it is a regular file. A FIFO with no reader would otherwise
-/// block the open, and the runtime with it.
-fn open_regular(path: &Path, options: &mut OpenOptions) -> Option<File> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options
-            .mode(0o600)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-    }
-    let file = options.open(path).ok()?;
-    file.metadata()
-        .is_ok_and(|metadata| metadata.is_file())
-        .then_some(file)
 }
 
 /// The record holds labels only. Arguments and messages are left out: hook
@@ -187,7 +151,7 @@ pub(crate) fn failure_record(
         "recorded_at_ns".into(),
         Value::from(u64::try_from(recorded_at_ns).ok()?),
     );
-    record.insert("subcommand".into(), subcommand(arguments).into());
+    record.insert("subcommand".into(), Value::from(subcommand(arguments)));
     record.insert("version".into(), 1.into());
     Some(Value::Object(record))
 }
@@ -209,11 +173,76 @@ pub(crate) fn safe_label(value: &str) -> String {
     }
 }
 
-fn subcommand(arguments: &[String]) -> String {
+/// The runtime's own subcommand names. A first argument that is not one of
+/// them is recorded as `other`, so a stray argument never reaches the log.
+pub(crate) const KNOWN_SUBCOMMANDS: &[&str] = &[
+    "archive-inspect",
+    "bounded-hook-bridge",
+    "capabilities",
+    "claude-hook-bridge",
+    "cline-hook-worker",
+    "cloud-action",
+    "codex-hook-bridge",
+    "codex-sandbox-check",
+    "command-model",
+    "compile-business-policy",
+    "contained-readonly-windows",
+    "contained-workspace-launch",
+    "contained-workspace-sink",
+    "content-decode",
+    "context-assistance-enroll-local",
+    "context-assistance-install-operator",
+    "context-digest",
+    "cursor-hook-bridge",
+    "daemon-serve",
+    "enroll-approval-authority",
+    "enroll-approval-v4-authority",
+    "enroll-workspace-review-authority",
+    "hook",
+    "hook-client",
+    "mcp-config-assess",
+    "mcp-relay",
+    "migrate-policy",
+    "native-bash-execute-client",
+    "native-bash-host-context",
+    "pack-lifecycle",
+    "pi-hook-bridge",
+    "plugin-kit",
+    "plugin-telemetry",
+    "pre-tool",
+    "prepare-approval-enrollment",
+    "prepare-approval-v4-enrollment",
+    "provision-verifier-key",
+    "resident-client",
+    "resident-client-stream",
+    "resident-health",
+    "resident-prewarm",
+    "resident-reset-restart-budget",
+    "resident-stop",
+    "restricted-linux-launch",
+    "rule-contract",
+    "runtime-identity-assess",
+    "runtime-identity-probe",
+    "secrets-cli",
+    "self-test",
+    "serve",
+    "serve-managed",
+    "supervise-managed",
+    "workspace-export-preview",
+    "workspace-fix",
+    "workspace-review-decision",
+    "workspace-snapshot",
+];
+
+pub(crate) fn subcommand(arguments: &[String]) -> &'static str {
     match arguments.first() {
-        None => "hook".to_owned(),
-        Some(first) if first.starts_with('-') => "hook".to_owned(),
-        Some(first) => safe_label(first),
+        None => "hook",
+        Some(first) if first.starts_with('-') => "hook",
+        Some(first) => KNOWN_SUBCOMMANDS
+            .iter()
+            .find(|known| **known == first.as_str())
+            .copied()
+            .unwrap_or("other"),
     }
 }
 
@@ -266,31 +295,6 @@ fn parent_pid() -> Option<u32> {
 #[cfg(not(unix))]
 fn parent_pid() -> Option<u32> {
     None
-}
-
-#[cfg(unix)]
-fn create_private_directory(directory: &Path) -> Option<()> {
-    use std::os::unix::fs::DirBuilderExt;
-    let mut builder = fs::DirBuilder::new();
-    builder.mode(0o700);
-    match builder.create(directory) {
-        Ok(()) => Some(()),
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Some(()),
-        Err(_) => None,
-    }
-}
-
-#[cfg(not(unix))]
-fn create_private_directory(directory: &Path) -> Option<()> {
-    match fs::create_dir(directory) {
-        Ok(()) => Some(()),
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Some(()),
-        Err(_) => None,
-    }
-}
-
-fn is_symlink(path: &Path) -> bool {
-    fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink())
 }
 
 #[cfg(test)]
