@@ -203,10 +203,22 @@ note the extra cost of splitting falls to 1.3 to 1.5 times. The two Codex cold m
 jinja seeds) had no Guard hold or refusal in any session: each part's agent ran only its own
 focused test and stopped while another part's test still failed. No conflicting edits were seen.
 
-The third arm (N agents with shared context) was not built: Swarm children already run
-Guard's prompt hook and get the note, which is what closes most of the gap above; what is left
-(1.3–1.5x) is each child reading the project again, which shared hand-off facts would address.
-That is a design for the owner, not measured here.
+The third arm (N agents with shared context) is built in the runner, not in Guard:
+`swarm_run.py --mode warm` is `cold` plus a hand-off at the top of each later agent's prompt. For
+every earlier agent it lists the piece it was given, the files it changed and the test suite's
+last line after it finished. The prompt hook still sends its note. Alpha 3.60.0a110, seeds 1-6,
+full Guard; Claude Code and Codex cold and warm were run back to back:
+
+| harness | cold | warm | change |
+|---|---|---|---|
+| Oh My Pi (CIGAR) | 5/6, agents 2-3 $0.0183 | 6/6, agents 2-3 $0.0172 | −6% |
+| Codex | 5/6, $0.031 on the 5 both passed | 6/6, $0.031 | +0.6% |
+| Claude Code | 6/6, $1.452 | 6/6, $1.545 | +6.4% |
+
+The bar for building hand-offs in Guard was 30% under cold, so they were not built. Later agents
+already do one read, one edit and one test; the extra cost of splitting is each agent's fixed
+start (system prompt, tools, note), which a hand-off cannot remove. The suite line did win one
+pass: on seed 4 it showed the last agent tests an earlier part left failing.
 
 ## Commit-replay set
 
@@ -221,7 +233,7 @@ was never used for tuning, so it is also the fresh-task check. Saving counts tas
 |---|---|---|---|---|
 | Codex | full Guard vs no Guard | 23 (31) | 3.9% (23 tasks) | −111% / 17% / 53% |
 | Oh My Pi | CIGAR only vs no Guard | 18 (26) | 16.8% (16 tasks) | −73% / 47% / 73% |
-| Claude Code | not run | | | |
+| Claude Code | full Guard vs no Guard, alpha 3.60.0a110 | 14 (17) | 42.2% (13 tasks) | |
 
 Oh My Pi leaves out one TypeScript task (ufo #313) whose CIGAR session cost $0.093 against $0.006; a
 rerun cost $0.0048 against $0.0052, so it was a one-off. With it the total is −23%.
@@ -241,10 +253,14 @@ Why the pass counts fall:
   the description does not give; the cause was not traced further. One first-run CIGAR session
   (tomli) hung for an hour mid-stream in a model tool call, with no Guard call pending.
 
-Claude Code was not run: the account hit its weekly usage limit after 17 sessions, on the
-no-Guard arm.
+Claude Code ran later on alpha 3.60.0a110 (all 33 tasks on each arm, no session errors). Its prompt starts with one
+instruction line (`CLAUDE_LEAD` in `replay_run.py`, both arms): without it Haiku read the bare PR
+text as a question and stopped after one request with no edits (7 of 20 no-Guard and 2 of 21
+full-Guard sessions in a first try). Over all 33 tasks it saved 38.3% ($12.879 against $7.948);
+on the 13 both passed, 42.2% ($4.203 against $2.428). Three fewer passes with Guard is inside
+Haiku's spread on this set and needs a second run to call.
 
-The 40% target is missed by more than ten points (3.9% and 16.8%). The reason:
+The 40% target is missed by more than ten points on Codex and Oh My Pi (3.9% and 16.8%) and met on Claude Code (42.2%), which reads whole files and so has more for the note to replace. The reason:
 one-PR tasks on small libraries are already direct (median 15–17 requests a task, 93% of input
 from cache), so the note has few searches to replace. The large savings on the seeded sets come
 from multi-step sessions where the note replaces repeated searches; one-step work has less of that.
