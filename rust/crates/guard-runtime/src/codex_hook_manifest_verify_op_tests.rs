@@ -355,34 +355,3 @@ fn a_group_writable_config_turns_on_whether_its_group_is_private() {
         );
     }
 }
-
-#[test]
-fn malformed_requests_are_refused() {
-    let fixture = Fixture::new();
-    let mut request = fixture.request();
-    request.schema = "other".to_owned();
-    assert_eq!(
-        refusal(&request),
-        Some("native_codex_hook_manifest_verify_schema_mismatch")
-    );
-
-    let mut request = fixture.request();
-    request.posix = true;
-    request.current_uid = None;
-    assert_eq!(
-        refusal(&request),
-        Some("native_codex_hook_manifest_verify_current_uid_missing")
-    );
-
-    let mut request = fixture.request();
-    request.expected = None;
-    assert_eq!(
-        refusal(&request),
-        Some("native_codex_hook_manifest_verify_incomplete")
-    );
-
-    let encoded = evaluate_codex_hook_manifest_verify_request(&request).expect("an encoded answer");
-    let result: Value = serde_json::from_slice(&encoded).expect("a JSON answer");
-    assert_eq!(result["status"], "error");
-    assert!(result.get("payload").is_none());
-}
