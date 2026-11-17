@@ -199,7 +199,8 @@ def test_uninstall_handles_removed_file_config(tmp_path):
     settings.unlink()
     adapter.uninstall(context)
     assert not settings.exists()
-    assert json.loads(config.read_text()) == {"legacy": True, "mcp": {}, "plugins": {}}
+    # Install added the empty Desktop objects; uninstall hands back the user's file.
+    assert json.loads(config.read_text()) == {"legacy": True}
 
 
 def test_install_does_not_enable_disabled_user_handlers(tmp_path):

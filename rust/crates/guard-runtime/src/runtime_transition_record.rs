@@ -39,6 +39,8 @@ pub(crate) fn check_change(change: &Map<String, Value>) -> Result<(), (String, O
     plan::one(change)
 }
 
+pub(crate) use plan::check_files;
+
 const SCHEMA: &str = "runtime-transition-record.v1";
 const RECORD_SCHEMA: &str = "hol-guard.runtime-transition.v1";
 const PURPOSE: &str = "guard-runtime-transition-inverse";

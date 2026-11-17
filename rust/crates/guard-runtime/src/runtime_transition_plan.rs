@@ -102,3 +102,10 @@ pub(super) fn each(request: &Request) -> Result<Value, Refusal> {
     }
     Ok(json!({"ok": true}))
 }
+
+/// `check_transition_files`: the planned changes form one record.
+pub(crate) fn check_files(files: &[Value]) -> Result<(), Refusal> {
+    let mut wrapped = Map::new();
+    wrapped.insert("files".to_owned(), Value::Array(files.to_vec()));
+    record_files(&wrapped).map(|_| ())
+}

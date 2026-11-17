@@ -854,7 +854,7 @@
    "verdict": "posix-primitive",
    "note": "Tells the manifest verifier whether POSIX owner and mode bits exist. Windows has neither, so the verifier skips those two checks there and still checks the digests and the hook commands; Python passed `os.name != \"nt\"` for the same flag.",
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/codex_live_state.rs",
-   "item": "fn live_hook_state -- cfg! expression",
+   "item": "fn verified_state -- cfg! expression",
    "cfg": "unix",
    "body": "c995a2b7d895"
   },

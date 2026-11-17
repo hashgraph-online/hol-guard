@@ -188,3 +188,103 @@ fn a_binding_token_claims_the_handler_holding_the_same_scalar() {
     );
     assert_eq!(answers[1]["records"][0]["ownership"], json!("unmanaged"));
 }
+
+fn is_text(value: &Value) -> bool {
+    value.as_str().is_some()
+}
+
+fn is_text_or_null(value: &Value) -> bool {
+    value.is_null() || is_text(value)
+}
+
+fn is_count_or_null(value: &Value) -> bool {
+    value.is_null() || value.is_u64()
+}
+
+fn is_text_list(value: &Value) -> bool {
+    value
+        .as_array()
+        .is_some_and(|items| items.iter().all(is_text))
+}
+
+/// The shape a caller reads an answer by. The bridge builds its records from
+/// these fields without re-checking their types, so the types are held here.
+#[test]
+fn every_record_and_issue_has_the_fields_and_types_a_caller_reads() {
+    let source = inventory(json!([
+        ["PreToolUse", [group()]],
+        [
+            "PostToolUse",
+            [{"matcher": null, "hooks": [{"type": "command", "command": "echo"}, "not a handler"]}]
+        ],
+        ["Stop", "not a list of groups"],
+    ]));
+    let answers = answers(&request(vec![source], json!({})));
+    let records = answers[0]["records"].as_array().expect("records is a list");
+    assert!(records.len() >= 2);
+    for record in records {
+        let record = record.as_object().expect("a record is an object");
+        let mut keys: Vec<&str> = record.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "active",
+                "canonical_identity",
+                "command",
+                "command_argv",
+                "environment_keys",
+                "event_name",
+                "executable",
+                "group_index",
+                "handler_index",
+                "handler_type",
+                "matcher",
+                "ownership",
+                "timeout",
+            ]
+        );
+        assert!(is_text(&record["event_name"]));
+        assert!(record["group_index"].is_u64() && record["handler_index"].is_u64());
+        assert!(is_text_or_null(&record["matcher"]));
+        assert!(is_text_or_null(&record["handler_type"]));
+        assert!(is_text_or_null(&record["command"]));
+        assert!(record["command_argv"].is_null() || is_text_list(&record["command_argv"]));
+        assert!(record["timeout"].is_null() || record["timeout"].is_number());
+        assert!(is_text_list(&record["environment_keys"]));
+        assert!(record["active"].is_boolean() && record["executable"].is_boolean());
+        assert!(matches!(
+            record["ownership"].as_str(),
+            Some(
+                "authenticated_manifest"
+                    | "exact_legacy_adoption"
+                    | "self_install_binding"
+                    | "unmanaged"
+            )
+        ));
+        assert!(record["canonical_identity"]
+            .as_str()
+            .is_some_and(|identity| !identity.is_empty()));
+    }
+    let issues = answers[0]["issues"].as_array().expect("issues is a list");
+    assert!(!issues.is_empty());
+    for issue in issues {
+        let issue = issue.as_object().expect("an issue is an object");
+        let mut keys: Vec<&str> = issue.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "event_name",
+                "group_index",
+                "handler_index",
+                "message",
+                "reason_code"
+            ]
+        );
+        assert!(is_text(&issue["reason_code"]) && is_text(&issue["message"]));
+        assert!(is_text_or_null(&issue["event_name"]));
+        assert!(is_count_or_null(&issue["group_index"]));
+        assert!(is_count_or_null(&issue["handler_index"]));
+    }
+}
