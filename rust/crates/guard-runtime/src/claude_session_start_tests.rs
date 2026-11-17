@@ -57,7 +57,6 @@ fn write_settings(claude_home: &Path, state_path: &Path, url: &str) -> PathBuf {
 fn environment(home: &Path) -> SessionEnvironment {
     SessionEnvironment {
         home: Some(home.to_path_buf()),
-        cursor: false,
     }
 }
 
@@ -194,27 +193,15 @@ fn gates_before_the_daemon_hand_off() {
     let config = config_text(&home, &guard.state_path, &runtime_build());
     let other = guard.scratch("other home");
     fs::create_dir_all(&other).unwrap();
-    let cursor = SessionEnvironment {
-        home: Some(home.clone()),
-        cursor: true,
-    };
-    let cases: [(&str, String, SessionEnvironment); 6] = [
+    let cases: [(&str, String, SessionEnvironment); 5] = [
         ("bad config", "{}".to_owned(), environment(&home)),
         (
             "other build",
             config_text(&home, &guard.state_path, "0.0.0+other"),
             environment(&home),
         ),
-        ("cursor", config.clone(), cursor),
         ("other home", config.clone(), environment(&other)),
-        (
-            "no home",
-            config.clone(),
-            SessionEnvironment {
-                home: None,
-                cursor: false,
-            },
-        ),
+        ("no home", config.clone(), SessionEnvironment { home: None }),
         // The daemon state does not exist, so the daemon is not live.
         ("no daemon", config, environment(&home)),
     ];

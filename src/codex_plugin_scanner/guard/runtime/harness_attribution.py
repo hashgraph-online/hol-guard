@@ -214,30 +214,25 @@ def resolve_runtime_hook_harness(
     *,
     env: Mapping[str, str] | None = None,
 ) -> str:
-    """Re-attribute Claude-compatible hooks to Cursor when they run inside Cursor."""
+    """Re-attribute Claude-compatible hooks to Cursor when they run inside Cursor.
 
+    Claude Code's own markers win, so a Claude session started from a Cursor
+    terminal, which inherits Cursor's variables, stays Claude.
+    """
+
+    source = os.environ if env is None else env
     normalized = requested_harness.strip().lower().replace("_", "-")
-    if normalized in {"claude", "claude-code"} and cursor_runtime_detected(env):
+    if (
+        normalized in {"claude", "claude-code"}
+        and cursor_runtime_detected(source)
+        and not _env_marker_present(source, _CLAUDE_CODE_ENV_MARKERS)
+    ):
         return "cursor"
     return requested_harness
 
 
-def cursor_hook_query_extras(env: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Query parameters for the Claude daemon hook bridge when invoked from Cursor."""
-
-    source = os.environ if env is None else env
-    if not cursor_runtime_detected(source):
-        return {}
-    extras: dict[str, str] = {"runtime-harness": "cursor"}
-    project_dir = source.get("CURSOR_PROJECT_DIR")
-    if isinstance(project_dir, str) and project_dir.strip():
-        extras["workspace"] = project_dir.strip()
-    return extras
-
-
 __all__ = [
     "ORIGIN_HARNESS_ENV",
-    "cursor_hook_query_extras",
     "cursor_runtime_detected",
     "origin_harness_env",
     "resolve_environment_harness",
