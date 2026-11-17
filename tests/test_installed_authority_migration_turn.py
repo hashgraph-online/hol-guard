@@ -107,18 +107,28 @@ def test_an_extension_control_host_does_not_queue_behind_another_migration(tmp_p
 
 def test_a_pending_migration_backoff_keeps_refresh_from_blocking(tmp_path, monkeypatch) -> None:
     sentinel = object()
+    clock = [100.0]
+    attempts = 0
+
+    def fail_migration(*_args, **_kwargs) -> bool:
+        nonlocal attempts
+        attempts += 1
+        return False
+
     server = SimpleNamespace(
         store=SimpleNamespace(guard_home=tmp_path),
         _installed_authority_pending=True,
         _installed_authority_retry_at=0.0,
         runtime=SimpleNamespace(current=lambda: sentinel),
     )
-    monkeypatch.setattr(extension_control_host, "migrate_installed_authority", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(extension_control_host, "migrate_installed_authority", fail_migration)
+    monkeypatch.setattr(extension_control_host.time, "monotonic", lambda: clock[0])
     server._migrate_installed_authority = lambda: ExtensionControlHost._migrate_installed_authority(server)
 
     assert ExtensionControlHost.refresh(server) is sentinel  # pyright: ignore[reportArgumentType]
-    assert server._installed_authority_retry_at > time.monotonic()
+    assert server._installed_authority_retry_at == 105.0
     assert ExtensionControlHost.refresh(server) is sentinel  # pyright: ignore[reportArgumentType]
+    assert attempts == 1
 
 
 def test_a_busy_migration_turn_reports_busy_without_marking_failure(tmp_path) -> None:

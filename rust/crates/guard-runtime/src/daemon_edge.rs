@@ -10,7 +10,7 @@
 
 use std::io;
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -49,23 +49,20 @@ const HANDSHAKE_WAIT: Duration = Duration::from_secs(2);
 
 struct Slots {
     active: Mutex<usize>,
-    freed: Condvar,
     limit: usize,
 }
 
 impl Slots {
-    fn acquire(&self) {
+    fn try_acquire(&self) -> bool {
         let mut active = self
             .active
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
-        while *active >= self.limit {
-            active = self
-                .freed
-                .wait(active)
-                .unwrap_or_else(|poison| poison.into_inner());
+        if *active >= self.limit {
+            return false;
         }
         *active += 1;
+        true
     }
 
     fn release(&self) {
@@ -74,9 +71,10 @@ impl Slots {
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
         *active = active.saturating_sub(1);
-        self.freed.notify_one();
     }
 }
+
+const OVERLOAD_RESPONSE: &[u8] = b"HTTP/1.0 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\nRetry-After: 1\r\n\r\n";
 
 /// The Guard package version the launcher named, which outbound requests
 /// identify themselves with; the runtime's own version until it is set.
@@ -106,19 +104,16 @@ fn serve(
 ) -> io::Result<()> {
     let slots = Arc::new(Slots {
         active: Mutex::new(0),
-        freed: Condvar::new(),
         limit: limit.max(1),
     });
     let mut consecutive_errors = 0usize;
     loop {
-        slots.acquire();
         let client = match listener.accept() {
             Ok((client, _)) => {
                 consecutive_errors = 0;
                 client
             }
             Err(error) => {
-                slots.release();
                 consecutive_errors += 1;
                 if accept_error_is_transient(&error) && consecutive_errors <= 64 {
                     thread::sleep(Duration::from_millis(10));
@@ -127,6 +122,10 @@ fn serve(
                 return Err(error);
             }
         };
+        if !slots.try_acquire() {
+            reject_overloaded(client, stalled_write);
+            continue;
+        }
         let relay_slots = Arc::clone(&slots);
         let connection_reads = Arc::clone(&native_reads);
         let spawned = thread::Builder::new()
@@ -142,6 +141,14 @@ fn serve(
             slots.release();
         }
     }
+}
+
+fn reject_overloaded(client: TcpStream, stalled_write: Duration) {
+    let timeout = stalled_write.min(Duration::from_millis(25));
+    let _ = client.set_write_timeout(Some(timeout));
+    let mut client = client;
+    let _ = std::io::Write::write_all(&mut client, OVERLOAD_RESPONSE);
+    let _ = client.shutdown(Shutdown::Both);
 }
 
 /// Asks for a deeper listen backlog than the standard library's 128, so a
@@ -197,5 +204,22 @@ fn serve_connection(client: TcpStream, stalled_write: Duration, native_reads: &N
     if let Outcome::Relay(read_ahead) = reads::answer(&client, &config, native_reads, stalled_write)
     {
         replay::replay(&client, &config, read_ahead, stalled_write);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn full_edge_capacity_sheds_without_blocking_the_accept_loop() {
+        let slots = Slots {
+            active: Mutex::new(0),
+            limit: 1,
+        };
+        assert!(slots.try_acquire());
+        assert!(!slots.try_acquire());
+        slots.release();
+        assert!(slots.try_acquire());
     }
 }

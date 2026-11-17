@@ -17,6 +17,7 @@ use lookup::{anchored, lookup, truncated, Miss, Request};
 use names::held_names;
 use seen::{Session, Span};
 use serde_json::Value;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -87,6 +88,45 @@ pub(super) struct Rendered {
 /// the verdict is settled and its locks are released; `started` is when the
 /// hook began, so the lookup never outlasts the hook's own budget.
 pub(crate) fn harness_response(
+    envelope: &GuardHookEnvelopeV2,
+    harness: &str,
+    event: &str,
+    result: &Value,
+    store: Option<&PolicySnapshotStore>,
+    started: Instant,
+) -> Option<Value> {
+    let fallback = fallback_response(harness, event, result, envelope.recording_only);
+    advisory_or_fallback(fallback, || {
+        harness_response_inner(envelope, harness, event, result, store, started)
+    })
+}
+
+fn advisory_or_fallback(
+    fallback: Option<Value>,
+    advisory: impl FnOnce() -> Option<Value> + std::panic::UnwindSafe,
+) -> Option<Value> {
+    catch_unwind(AssertUnwindSafe(advisory))
+        .ok()
+        .flatten()
+        .or(fallback)
+}
+
+fn fallback_response(
+    harness: &str,
+    event: &str,
+    result: &Value,
+    recording_only: bool,
+) -> Option<Value> {
+    let mut response =
+        guard_command::hook_responses::render_edge_response(harness, event, result, recording_only)
+            .map(Value::Object)?;
+    if event == "UserPromptSubmit" && harness == "claude-code" && !recording_only {
+        let _ = crate::hook_direct::claude_prompt_text::brand(&mut response, result);
+    }
+    Some(response)
+}
+
+fn harness_response_inner(
     envelope: &GuardHookEnvelopeV2,
     harness: &str,
     event: &str,
