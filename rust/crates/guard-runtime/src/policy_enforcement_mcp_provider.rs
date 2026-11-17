@@ -261,13 +261,25 @@ fn unambiguous_arguments(payload: &Value) -> Option<&Value> {
 /// The arguments Grok's dispatcher passes to the tool it runs, nested one
 /// level inside its own input.
 fn dispatched_arguments(payload: &Value) -> Option<&Value> {
-    let inputs = envelopes(payload.as_object()?)
+    let raw = envelopes(payload.as_object()?)
         .into_iter()
         .flat_map(|envelope| ["tool_input", "toolInput"].map(|key| envelope.get(key)))
         .flatten()
-        .map(Value::as_object)
+        .collect::<Vec<_>>();
+    let inputs = raw
+        .iter()
+        .map(|value| value.as_object())
         .collect::<Option<Vec<_>>>()?;
-    one_value(inputs)
+    // Raw dispatcher arguments are nested; prepared MCPTool arguments are
+    // directly inside tool_input. Keep conflicting or malformed copies opaque.
+    if inputs
+        .iter()
+        .any(|input| ARGUMENT_KEYS.iter().any(|key| input.contains_key(*key)))
+    {
+        return one_value(inputs);
+    }
+    let first = *raw.first()?;
+    raw.iter().all(|other| *other == first).then_some(first)
 }
 
 /// The one argument value the records carry; two different values are none.
@@ -456,6 +468,40 @@ mod tests {
         assert_eq!(
             denied_provider_execution(&choices, "grok", &tool, &batch("SLACK_SEARCH_MESSAGES")),
             None
+        );
+        // Prepared adapter events carry the batch directly in tool_input.
+        let prepared = |slug: &str| {
+            json!({"toolName": "MCPTool", "mcp_server": "composio",
+                "mcp_tool": "COMPOSIO_MULTI_EXECUTE_TOOL",
+                "tool_input": {"tools": [{"tool_slug": slug, "arguments": {}}]}})
+        };
+        let prepared_tool = mcp_tool_name(&prepared("SLACK_SEND_MESSAGE"), "grok")
+            .unwrap()
+            .unwrap();
+        assert_eq!(prepared_tool, tool);
+        assert_eq!(
+            denied_provider_execution(
+                &choices, "grok", &prepared_tool, &prepared("SLACK_SEND_MESSAGE")
+            ),
+            Some("native_composio_denied_batch_member")
+        );
+        assert_eq!(
+            denied_provider_execution(
+                &choices, "grok", &prepared_tool, &prepared("SLACK_SEARCH_MESSAGES")
+            ),
+            None
+        );
+        let conflicting = json!({
+            "toolName": "MCPTool", "mcp_server": "composio",
+            "mcp_tool": "COMPOSIO_MULTI_EXECUTE_TOOL",
+            "tool_input": {"tools": [{"tool_slug": "SLACK_SEARCH_MESSAGES", "arguments": {}}]},
+            "tool_call": {
+                "tool_input": {"tools": [{"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {}}]}
+            }
+        });
+        assert_eq!(
+            denied_provider_execution(&choices, "grok", &prepared_tool, &conflicting),
+            Some("native_composio_opaque_execution_with_deny")
         );
     }
 }
