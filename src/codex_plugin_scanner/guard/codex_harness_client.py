@@ -264,14 +264,10 @@ def _check_sources(
 ) -> None:
     """Refuse a config or hooks source that is not a readable regular file or
     does not parse strictly; captured bytes are checked as they were captured."""
-    sources: list[dict[str, object]] = []
-    for config, hooks in pairs:
-        for path, label, kind in ((config, "Codex config file", "toml"), (hooks, "Codex hooks file", "json")):
-            source: dict[str, object] = {"path": str(path), "label": label, "kind": kind}
-            if captured is not None:
-                source["data"] = _b64(captured[path])
-            sources.append(source)
-    _codex("check_sources", context, sources=sources)
+    fields: dict[str, object] = {"pairs": [[str(config), str(hooks)] for config, hooks in pairs]}
+    if captured is not None:
+        fields["contents"] = {str(path): _b64(data) for path, data in captured.items()}
+    _codex("check_sources", context, **fields)
 
 
 def _plan_file(item: Mapping[str, Any]) -> TransitionFile:

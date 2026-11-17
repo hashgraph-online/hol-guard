@@ -59,7 +59,6 @@ from .harness.native_harness import NativeHarnessAdapter
 from .models import GuardArtifact, HarnessDetection
 from .native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
 from .native_owned import codex_install_transaction
-from .native_path_anchor import anchor_to_process_directory
 from .shims import shim_interpreter
 
 _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON = "codex_authoritative_hook_unavailable"
@@ -80,17 +79,6 @@ def _require_codex_authoritative_shell_hook(context: HarnessContext) -> None:
         "PreToolUse and PermissionRequest hooks are missing or disabled. Run `hol-guard install codex` "
         "or `hol-guard update` to repair the native-hook enforcement boundary."
     )
-
-
-def _path_restorations(paths: tuple[Path, ...]) -> dict[str, str]:
-    """Anchored (absolute) spelling to the spelling the context used."""
-
-    restore: dict[str, str] = {}
-    for path in paths:
-        anchored = anchor_to_process_directory(path)
-        if anchored != str(path):
-            restore[anchored] = str(path)
-    return restore
 
 
 def _located(path: Path) -> Path:
@@ -211,27 +199,20 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             captured = {path: config_contents[path] for pair in pairs for path in pair}
             # An install refuses a captured generation it cannot parse strictly.
             _check_sources(context, pairs, captured)
-            request["contents"] = {
-                anchor_to_process_directory(path): None if data is None else data.hex()
-                for path, data in captured.items()
-            }
+            request["contents"] = {str(path): None if data is None else data.hex() for path, data in captured.items()}
         # Without a capture the runtime reads each file once for both the
-        # legacy-ownership bindings and the inventory.
+        # legacy-ownership bindings and the inventory. It anchors the sources
+        # to this process's directory and spells them as the context did.
         authenticated_manifest = load_hook_manifest_baseline(_hook_manifest_spec(context))
         request.update(
             harness=self.harness,
             authenticated_bindings=_wire_bindings(_manifest_bindings(authenticated_manifest)),
-            sources=[
-                {
-                    "config_path": anchor_to_process_directory(source.config),
-                    "hooks_path": anchor_to_process_directory(source.hooks),
-                    "config_scope": source.scope,
-                    "hooks_scope": source.scope,
-                    "authenticated": source.config == paths.config,
-                }
+            pairs=[
+                {"config": str(source.config), "hooks": str(source.hooks), "scope": source.scope}
                 for source in paths.sources
             ],
-            restore=[list(item) for item in _path_restorations(tuple(path for pair in pairs for path in pair)).items()],
+            authenticated_config=str(paths.config),
+            cwd=os.getcwd(),
         )
         legacy: dict[str, object] = {**_legacy_fields(context), **short_path_fields()}
         payload = native_adapter_detection_payload("codex_detect", {**request, "legacy": legacy})
