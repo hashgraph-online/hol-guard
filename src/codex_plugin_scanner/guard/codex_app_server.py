@@ -43,21 +43,6 @@ def default_codex_app_server_socket_path(*, environ: Mapping[str, str] | None = 
     return Path(codex_home).expanduser() / "app-server-control" / "app-server-control.sock"
 
 
-def default_codex_app_server_socket_available(*, environ: Mapping[str, str] | None = None) -> bool:
-    """Return whether the current Codex app-server control socket is reachable."""
-
-    socket_path = default_codex_app_server_socket_path(environ=environ)
-    if not _is_trusted_local_socket(socket_path):
-        return False
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(0.2)
-            client.connect(str(socket_path))
-    except OSError:
-        return False
-    return True
-
-
 def _send_websocket_handshake(client: socket.socket) -> bytes:
     key = base64.b64encode(os.urandom(16)).decode("ascii")
     request = (

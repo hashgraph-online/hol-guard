@@ -356,6 +356,35 @@ pub(crate) fn trusted_local_socket(
     move |path| roots.is_safe(path) && is_trusted_socket(path)
 }
 
+/// `default_codex_app_server_socket_available`: the caller's default Codex
+/// control socket is a trusted local socket that accepts a connection within
+/// 200 ms. `codex_home` is the caller's `CODEX_HOME`, when it set one.
+#[cfg(unix)]
+pub(crate) fn default_socket_available(
+    request: &ContinueRequest<'_>,
+    codex_home: Option<&str>,
+) -> bool {
+    let roots = SocketRoots::new(request);
+    let Some(socket) = roots.default_socket(codex_home) else {
+        return false;
+    };
+    roots.is_safe(&socket)
+        && is_trusted_socket(&socket)
+        && crate::codex_app_server_socket::connect(
+            &socket,
+            Instant::now() + Duration::from_millis(200),
+        )
+        .is_ok()
+}
+
+#[cfg(not(unix))]
+pub(crate) fn default_socket_available(
+    _request: &ContinueRequest<'_>,
+    _codex_home: Option<&str>,
+) -> bool {
+    false
+}
+
 /// `_is_trusted_local_socket`: an owner-only socket in an owner-only directory.
 #[cfg(unix)]
 fn is_trusted_socket(path: &Path) -> bool {

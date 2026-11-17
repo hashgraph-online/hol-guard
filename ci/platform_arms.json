@@ -1315,6 +1315,14 @@
    "body": "342ca1d251b3"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The Codex control socket is an owner-only Unix socket; no Windows socket is trusted, so none is reachable (as the retired Python probe answered on nt).",
+   "file": "rust/crates/guard-runtime/src/codex_thread_continue_op.rs",
+   "item": "pub(crate) fn default_socket_available( _request: &ContinueRequest<'_>, _codex_home: Option<&str>, ) -> bool",
+   "cfg": "not(unix)",
+   "body": "75ab5bbc8652"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/codex_thread_continue_op.rs",
    "item": "fn is_trusted_socket(_path: &Path) -> bool",
    "verdict": "windows-unsupported",

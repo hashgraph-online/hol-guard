@@ -1,10 +1,10 @@
 """Codex browser approval resume orchestration and diagnostics.
 
 The native resident owns the resume record: it seeds it from the queued Codex
-operation, decides each retry, sends the continuation to the original thread
-and records the outcome (``codex_request_resume`` op). Python keeps the
-storage gate around the call, the live-hook checks a deferral needs and the
-capability report. A resident that cannot answer resumes nothing.
+operation, decides each retry, proves a waiting hook is still live, sends the
+continuation to the original thread, reads the capability report and records
+the outcome (``codex_request_resume`` op). Python keeps the storage gate around
+the call and renders the answer. A resident that cannot answer resumes nothing.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from .codex_app_server import default_codex_app_server_socket_available
 from .native_context import ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_store_policy import _payload
@@ -97,30 +96,23 @@ def defer_request_resume_to_live_hook(
     action: str,
     now: str,
 ) -> dict[str, object] | None:
-    """Let an active Codex hook consume the saved browser decision itself."""
+    """Let an active Codex hook consume the saved browser decision itself.
 
-    operation = store.get_guard_operation_for_approval_request(request_id)
-    if operation is None or str(operation.get("harness")) != "codex":
-        return None
-    if str(operation.get("status")) != "waiting_on_approval":
-        return None
-    metadata = operation.get("metadata")
-    if not isinstance(metadata, Mapping):
-        return None
-    event_name = str(metadata.get("hook_event_name") or metadata.get("event") or "")
-    if not _live_hook_wait_is_active(metadata=metadata, now=now) and not (
-        event_name == "PreToolUse" and _pretool_bridge_wait_is_active(store, operation, now=now)
-    ):
-        return None
-    payload = _resume_call(store, call="defer", request_id=request_id, now=now, action=action)
+    The resident proves the hook is still waiting; ``None`` means it is not.
+    """
+
+    payload = _resume_call(store, call="defer_live", request_id=request_id, now=now, action=action)
     if payload is None:
         raise ResumeUnavailableError()
     return _resume(payload)
 
 
 def inspect_codex_resume_capabilities(store: GuardStore) -> dict[str, object]:
-    socket_available = default_codex_app_server_socket_available()
-    latest_attempt = store.get_latest_request_resume(harness="codex")
+    # Without a native answer nothing is proven: no socket, no recorded attempt.
+    payload = _resume_call(store, call="capabilities", request_id="codex-capabilities", now=_now())
+    socket_available = payload is not None and payload.get("app_server_socket_available") is True
+    latest = payload.get("latest_attempt") if payload is not None else None
+    latest_attempt = dict(latest) if isinstance(latest, dict) else None
     return {
         "codex_binary_found": False,
         "app_server_support": socket_available,
@@ -138,51 +130,8 @@ def inspect_codex_resume_capabilities(store: GuardStore) -> dict[str, object]:
     }
 
 
-def _live_hook_wait_is_active(*, metadata: Mapping[str, object], now: str) -> bool:
-    if metadata.get("codex_hook_waits_for_browser_approval") is not True:
-        return False
-    from .live_process_identity import process_identity_matches
-
-    if not process_identity_matches(metadata.get("codex_browser_wait_process")):
-        return False
-    deadline = _first_string(metadata, ("codex_browser_wait_deadline_at", "browser_wait_deadline_at"))
-    if deadline is None:
-        return False
-    deadline_at = _parse_timestamp(deadline)
-    now_at = _parse_timestamp(now)
-    if deadline_at is None or now_at is None:
-        return False
-    return now_at <= deadline_at
-
-
-def _pretool_bridge_wait_is_active(
-    store: GuardStore,
-    operation: Mapping[str, object],
-    *,
-    now: str,
-) -> bool:
-    metadata = operation.get("metadata")
-    if not isinstance(metadata, Mapping):
-        return False
-    from .codex_live_hook_target import codex_live_hook_wait_deadline
-
-    deadline = codex_live_hook_wait_deadline(
-        store,
-        operation={**operation, "status": operation.get("status") or "waiting_on_approval"},
-        metadata={**metadata, "hook_event_name": metadata.get("hook_event_name") or "PreToolUse"},
-    )
-    now_at = _parse_timestamp(now)
-    return deadline is not None and now_at is not None and now_at <= deadline
-
-
-def _parse_timestamp(value: str) -> datetime | None:
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _resume_call(
@@ -218,6 +167,7 @@ def _resume_call(
         "home_dir": str(Path.home()),
         "temp_dir": tempfile.gettempdir(),
         "cwd": os.getcwd(),
+        "codex_home": os.environ.get("CODEX_HOME", "").strip() or None,
         "timeout_ms": timeout_ms,
     }
     if not ensure_resident_prerequisite(home):
@@ -246,11 +196,3 @@ def _resume_call(
 def _resume(payload: Mapping[str, object] | None) -> dict[str, object] | None:
     resume = payload.get("resume") if payload is not None else None
     return dict(resume) if isinstance(resume, dict) else None
-
-
-def _first_string(mapping: Mapping[str, object], keys: tuple[str, ...]) -> str | None:
-    for key in keys:
-        value = mapping.get(key)
-        if isinstance(value, str) and value.strip():
-            return value
-    return None

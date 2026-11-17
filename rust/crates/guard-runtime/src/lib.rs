@@ -232,6 +232,8 @@ mod codex_remote_launch;
 #[path = "adapters/codex_remote_prepare.rs"]
 mod codex_remote_prepare;
 mod codex_request_resume_busy;
+mod codex_request_resume_capabilities;
+mod codex_request_resume_live;
 mod codex_request_resume_op;
 mod codex_request_resume_store;
 mod codex_sandbox_check;
