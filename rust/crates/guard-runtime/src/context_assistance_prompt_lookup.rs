@@ -22,30 +22,51 @@ const READ_RESERVE: Duration = Duration::from_millis(300);
 /// CIGAR is advisory work. Cap prompt threads globally so many distinct
 /// workspaces cannot consume the daemon's thread budget.
 const MAX_PROMPT_THREADS: usize = 32;
-static PROMPT_THREADS: AtomicUsize = AtomicUsize::new(0);
 
-pub(super) struct PromptThreadPermit;
+struct PromptThreadBudget {
+    active: AtomicUsize,
+    limit: usize,
+}
+
+impl PromptThreadBudget {
+    const fn new(limit: usize) -> Self {
+        Self {
+            active: AtomicUsize::new(0),
+            limit,
+        }
+    }
+
+    fn try_acquire(&'static self) -> Option<PromptThreadPermit> {
+        let mut active = self.active.load(Ordering::Acquire);
+        while active < self.limit {
+            match self.active.compare_exchange_weak(
+                active,
+                active + 1,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return Some(PromptThreadPermit { budget: self }),
+                Err(observed) => active = observed,
+            }
+        }
+        None
+    }
+}
+
+static PROMPT_THREADS: PromptThreadBudget = PromptThreadBudget::new(MAX_PROMPT_THREADS);
+
+pub(super) struct PromptThreadPermit {
+    budget: &'static PromptThreadBudget,
+}
 
 impl Drop for PromptThreadPermit {
     fn drop(&mut self) {
-        PROMPT_THREADS.fetch_sub(1, Ordering::AcqRel);
+        self.budget.active.fetch_sub(1, Ordering::AcqRel);
     }
 }
 
 pub(super) fn try_prompt_thread() -> Option<PromptThreadPermit> {
-    let mut active = PROMPT_THREADS.load(Ordering::Acquire);
-    while active < MAX_PROMPT_THREADS {
-        match PROMPT_THREADS.compare_exchange_weak(
-            active,
-            active + 1,
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        ) {
-            Ok(_) => return Some(PromptThreadPermit),
-            Err(observed) => active = observed,
-        }
-    }
-    None
+    PROMPT_THREADS.try_acquire()
 }
 
 /// Why CIGAR gave a prompt no answer.

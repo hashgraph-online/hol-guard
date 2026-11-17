@@ -1,7 +1,5 @@
 use super::*;
 
-static PERMIT_TESTS: Mutex<()> = Mutex::new(());
-
 fn request(root: &Path, query: &str) -> Request {
     Request {
         root: root.to_path_buf(),
@@ -20,24 +18,19 @@ fn warming_now(key: &Key) -> bool {
 
 #[test]
 fn prompt_threads_have_a_process_wide_cap() {
-    let _serial = PERMIT_TESTS
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner());
+    let budget = Box::leak(Box::new(PromptThreadBudget::new(MAX_PROMPT_THREADS)));
     let mut permits = Vec::new();
-    while let Some(permit) = try_prompt_thread() {
+    while let Some(permit) = budget.try_acquire() {
         permits.push(permit);
     }
     assert!(permits.len() <= MAX_PROMPT_THREADS);
-    assert!(try_prompt_thread().is_none());
+    assert!(budget.try_acquire().is_none());
     drop(permits);
-    assert!(try_prompt_thread().is_some());
+    assert!(budget.try_acquire().is_some());
 }
 
 #[test]
 fn a_prompt_that_finds_cigar_starting_leaves_one_warm_up_for_the_next() {
-    let _serial = PERMIT_TESTS
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner());
     let home = tempfile::tempdir().unwrap();
     let project = tempfile::tempdir().unwrap();
     let key = (project.path().to_path_buf(), "claude-code".to_owned());
