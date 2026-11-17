@@ -415,7 +415,7 @@ export function plainEnglishRequestTitle(request: GuardApprovalRequest): string 
   }
 }
 
-const UNREVIEWED_MCP_TOOL = "Guard asks before a tool it has not reviewed runs.";
+export const UNREVIEWED_MCP_TOOL ="Guard asks before a tool it has not reviewed runs.";
 
 export function whyPaused(request: GuardApprovalRequest): string {
   const mcpCall = explainMcpCall(request) !== null;

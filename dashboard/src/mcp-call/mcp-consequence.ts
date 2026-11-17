@@ -8,6 +8,11 @@ import type { McpEffectKind } from "./mcp-effects";
  */
 export function consequenceFor(effect: McpEffectKind, where: string): McpConsequence {
   switch (effect) {
+    case "in-app":
+      return {
+        tone: "calm",
+        text: `By its name, this only changes what ${where} shows you. It does not reach your files, accounts or other apps.`,
+      };
     case "read":
       return { tone: "calm", text: `By its name, this looks something up in ${where}.` };
     case "write":

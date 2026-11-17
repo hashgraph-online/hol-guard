@@ -274,9 +274,10 @@ const SEARCH_INPUT = {
     .map((alert) => renderToStaticMarkup(<>{alert.content}</>))
     .join(" ");
   assert(!text.includes("unreviewed MCP tool setting"), "T-MCP-47: the policy setting name is not shown to the user");
+  const whyAsked = explainMcpCall(item)?.whyAsked ?? "";
   assert(
-    text.includes("Guard has not reviewed Composio") && text.includes("asks before any unreviewed tool runs"),
-    "T-MCP-48: the reason is given in plain words",
+    whyAsked.includes("has not reviewed this Composio tool") && !text.includes("has not reviewed"),
+    "T-MCP-48: the reason is given once, in plain words on the card, not repeated above it",
   );
   const plain = plainMcpReason(request(envelope(COMPOSIO_SEARCH, SEARCH_INPUT)), "A different reason.");
   assert(plain === "A different reason.", "T-MCP-49: any other reason is left as Core wrote it");

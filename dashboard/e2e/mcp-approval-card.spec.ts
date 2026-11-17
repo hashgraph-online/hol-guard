@@ -138,6 +138,50 @@ for (const width of [1280, 390]) {
   });
 }
 
+const WRAP_UP = "mcp__ccd_turn__wrap_up";
+const claudeSummary: GuardApprovalRequest = {
+  ...gmailSend,
+  request_id: "mcp-card-builtin",
+  harness: "cursor",
+  artifact_id: `tool:${WRAP_UP}`,
+  artifact_name: WRAP_UP,
+  launch_target: WRAP_UP,
+  action_envelope_json: {
+    ...gmailSend.action_envelope_json!,
+    action_id: "mcp-card-builtin",
+    harness: "cursor",
+    tool_name: WRAP_UP,
+    mcp_server: "ccd_turn",
+    mcp_tool: "wrap_up",
+    raw_payload_redacted: {
+      tool_name: WRAP_UP,
+      tool_input: { recap: "The tests pass and the change is pushed.", ask: "Merge it?", actions: [{ label: "Merge" }, { label: "Not now" }] },
+    },
+  },
+};
+
+for (const width of [1280, 390]) {
+  test(`a tool built into the Claude app reads as Claude's, with no internal names, at width ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1100 });
+    await mount(page, [], claudeSummary);
+    await page.goto(`/requests/${claudeSummary.request_id}?${DAEMON}`);
+
+    const card = page.getByRole("region", { name: "What the agent is asking to do" });
+    await expect(page.getByRole("heading", { name: "Claude wants to show you a summary and next-step buttons" })).toBeVisible();
+    await expect(card.getByText("Built into the Claude app", { exact: true })).toBeVisible();
+    await expect(card.getByText("Only in the app").first()).toBeVisible();
+    await expect(card.locator("dd").getByText("Merge it?", { exact: true })).toBeVisible();
+    // What a person sees, before opening the exact input, names no wrong app, server id or raw tool name.
+    const main = page.locator("main");
+    await expect(main.getByRole("button", { name: "Allow once" })).toBeVisible();
+    const visible = await main.innerText();
+    expect(visible).not.toMatch(/Cursor|ccd|wrap_up|Wrap up/i);
+    // Why Guard asked is said once, not three times.
+    expect(visible.match(/has not reviewed/g)?.length ?? 0).toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+}
+
 test("the MCP decision is two plain choices, and Always allow keeps the scope contract", async ({ page }) => {
   const bodies: Array<Record<string, unknown>> = [];
   await mount(page, bodies);

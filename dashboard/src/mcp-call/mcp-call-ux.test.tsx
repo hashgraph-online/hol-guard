@@ -9,7 +9,7 @@ import { ReviewDecisionControls } from "../review-decision-controls";
 import { explainMcpCall } from "./explain-mcp-call";
 import { consequenceFor } from "./mcp-consequence";
 import { simpleMcpChoiceApplies } from "./mcp-decision-choice";
-import { listedMcpPreview } from "./mcp-queue-name";
+import { listedMcpPreview, queueRequesterName } from "./mcp-queue-name";
 import { previewFieldsFor } from "./mcp-previews";
 import { emailAddresses, linkParts, valueKindOf } from "./mcp-values";
 
@@ -256,6 +256,58 @@ function request(env: GuardActionEnvelope | null, toolName: string, extra: Parti
   const secret = request(envelope("mcp__files__read_id_rsa", { path: "x" }), "mcp__files__read_id_rsa");
   assert(explainMcpCall(secret) !== null, "T-UX-57: the secret-named tool is still an MCP call");
   assert(whyPaused(secret) === "This file may contain passwords or keys. Guard stops this by default.", "T-UX-58: a specific reason is never hidden by the generic one");
+}
+
+// A tool built into the Claude app reads as Claude's own, in plain words, whatever the hook called the harness.
+{
+  const input = {
+    recap: "The card now names the app that asked.",
+    ask: "Merge it?",
+    actions: [{ label: "Yes, merge" }, { label: "Not now" }],
+  };
+  const call = request(envelope("mcp__ccd_turn__wrap_up", input), "mcp__ccd_turn__wrap_up", { harness: "cursor" });
+  const explained = explainMcpCall(call);
+  assert(explained !== null, "T-UX-59: a built-in tool is still explained");
+  assert(explained?.headline === "Claude wants to show you a summary and next-step buttons", "T-UX-60: the headline says what the tool does");
+  assert(explained?.requester === "Claude", "T-UX-61: the requester is Claude, not the hook's harness label");
+  assert(explained?.effect === "in-app", "T-UX-62: a summary card only changes the app");
+  assert(explained?.builtIn === true, "T-UX-63: the card knows the tool is built in");
+  const labels = (explained?.facts ?? []).map((item) => `${item.label}=${item.value}`);
+  assert(labels.includes("Summary=The card now names the app that asked."), "T-UX-64: the summary is shown");
+  assert(labels.includes("Question=Merge it?"), "T-UX-65: the question is shown");
+  assert(labels.includes("Buttons=Yes, merge · Not now"), "T-UX-66: the button labels are shown");
+  const shown = [explained?.headline, explained?.title, explained?.queueTitle, explained?.connector, explained?.requester].join(" ");
+  assert(!/ccd|wrap_up|Wrap up|Cursor/i.test(shown), "T-UX-67: no server id, raw tool name or wrong app reaches the headline");
+  assert(queueItemPreview(call) === "Claude · Show a summary and next steps", "T-UX-68: the queue row names Claude and the job");
+}
+
+// The task list tool shows each task with its state.
+{
+  const call = request(
+    envelope("mcp__ccd_turn__update_plan", { items: [{ content: "Write tests", status: "completed" }, { content: "Build", status: "in_progress" }, { content: "Push", status: "pending" }] }),
+    "mcp__ccd_turn__update_plan",
+  );
+  const facts = explainMcpCall(call)?.facts ?? [];
+  assert(facts[0]?.value === "Done: Write tests · Now: Build · Next: Push", "T-UX-69: tasks read Done / Now / Next");
+  const advance = request(envelope("mcp__ccd_turn__update_plan", { advance: true }), "mcp__ccd_turn__update_plan");
+  assert((explainMcpCall(advance)?.facts[0]?.label ?? "") === "Change", "T-UX-70: an advance says what changes");
+}
+
+// An unlisted Claude app tool is still Claude's, and its effect still comes from its name.
+{
+  const call = request(envelope("mcp__ccd_session__delete_session", { id: "s1" }), "mcp__ccd_session__delete_session");
+  const explained = explainMcpCall(call);
+  assert(explained?.requester === "Claude", "T-UX-71: an unlisted built-in tool is Claude's");
+  assert(explained?.effect === "delete", "T-UX-72: an unlisted built-in delete is not called in-app");
+}
+
+// A list row without its envelope still names Claude for a built-in tool.
+{
+  const row = request(null, "mcp__ccd_turn__wrap_up", { harness: "cursor" });
+  assert(listedMcpPreview(row) === "Claude · Show a summary and next steps", "T-UX-73: a listed built-in row is named for Claude");
+  assert(queueRequesterName(row) === "Claude", "T-UX-74: a listed built-in row's requester is Claude");
+  const other = request(null, "mcp__github__create_issue", { harness: "cursor" });
+  assert(queueRequesterName(other) === "Cursor", "T-UX-75: any other tool keeps the hook's harness");
 }
 
 console.log("mcp-call ux tests passed");

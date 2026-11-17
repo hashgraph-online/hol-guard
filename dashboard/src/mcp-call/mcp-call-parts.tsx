@@ -25,6 +25,7 @@ import {
 } from "react-icons/fa";
 import {
   HiMiniCommandLine,
+  HiMiniComputerDesktop,
   HiMiniExclamationTriangle,
   HiMiniInformationCircle,
   HiMiniLink,
@@ -39,6 +40,7 @@ import { MCP_EFFECT_COPY, type McpEffectKind } from "./mcp-effects";
 import { emailAddresses, linkParts } from "./mcp-values";
 
 const EFFECT_ICONS: Record<McpEffectKind, IconType> = {
+  "in-app": HiMiniComputerDesktop,
   read: HiMiniMagnifyingGlass,
   write: HiMiniPencilSquare,
   send: HiMiniPaperAirplane,
@@ -119,7 +121,7 @@ export function ConnectorMark({ name }: { name: string }) {
 export function EffectPill({ effect }: { effect: McpEffectKind }) {
   const Icon = EFFECT_ICONS[effect];
   const tone =
-    effect === "read"
+    effect === "read" || effect === "in-app"
       ? "border-slate-200 bg-slate-50 text-brand-dark/80"
       : "border-brand-attention/30 bg-brand-attention/[0.08] text-brand-dark";
   return (

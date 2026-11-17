@@ -22,6 +22,7 @@ function showsSteps(explanation: McpCallExplanation): boolean {
 }
 
 function subtitleOf(explanation: McpCallExplanation, app: string): string {
+  if (explanation.builtIn === true) return `Built into ${explanation.connector}`;
   return app === explanation.connector ? `Tool from ${explanation.connector}` : `${app}, through ${explanation.connector}`;
 }
 
@@ -29,7 +30,8 @@ function subtitleOf(explanation: McpCallExplanation, app: string): string {
 export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest; explanation: McpCallExplanation }) {
   const watchOnly = isWatchOnlyObservation(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
-  const reason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
+  // Why Guard asked is said here, once. The alerts above the card leave this sentence out.
+  const reason = plainMcpReason(item, buildPrimaryReviewAction(item).detail) ?? explanation.whyAsked;
   const app = actingApp(explanation);
   const facts: McpFact[] = [
     ...explanation.facts,
@@ -39,7 +41,7 @@ export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest;
   return (
     <section aria-label="What the agent is asking to do" className="mt-5 rounded-2xl border border-slate-200 bg-white">
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:p-5">
-        <ConnectorMark name={app} />
+        <ConnectorMark name={explanation.builtIn === true ? (explanation.requester ?? app) : app} />
         <div className="min-w-0">
           <h3 className="text-base font-semibold leading-snug text-brand-dark">{explanation.title}</h3>
           <p className="mt-0.5 break-words text-sm text-brand-dark/70">{subtitleOf(explanation, app)}</p>
@@ -124,7 +126,7 @@ export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest;
       </details>
 
       <div className="space-y-1 border-t border-slate-100 px-4 py-3 text-xs leading-snug text-muted-foreground sm:px-5">
-        {reason !== null && <p>{reason}</p>}
+        <p>{reason}</p>
         <p>
           Allow once and Always allow both match these exact inputs. If the agent asks again with different inputs,
           Guard asks again.

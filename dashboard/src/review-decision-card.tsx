@@ -40,6 +40,7 @@ import { plainEnglishRequestTitle } from "./evidence/plain-english";
 import type { DecisionScope, GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import { guardActionPresentation } from "./guard-action";
 import { buildEvidenceItems, buildTopAlertItems } from "./review-evidence";
+import { explainMcpCall } from "./mcp-call/explain-mcp-call";
 import { simpleMcpChoiceApplies } from "./mcp-call/mcp-decision-choice";
 import { ReviewDecisionControls } from "./review-decision-controls";
 import { decisionButtonLabels } from "./review-decision-labels";
@@ -214,7 +215,8 @@ export function ReviewDecisionCard(props: {
   const nativeDisplayOnly = item.native_business_review_display_only === true;
   const versionBoundScript = item.artifact_type === "native_bash_request";
   const plainTitle = nativeDisplayOnly ? item.artifact_name : plainEnglishRequestTitle(item);
-  const harnessName = harnessDisplayName(item.harness);
+  const mcpCall = nativeDisplayOnly ? null : explainMcpCall(item);
+  const harnessName = mcpCall?.requester ?? harnessDisplayName(item.harness);
   const whatWouldHappen = nativeDisplayOnly ? null : buildWhatWouldHappen(item);
   const topAlertItems = nativeDisplayOnly ? [] : buildTopAlertItems(item);
   const evidenceItems = nativeDisplayOnly ? [] : buildEvidenceItems(item);
@@ -261,9 +263,12 @@ export function ReviewDecisionCard(props: {
           <div className="min-w-0 flex-1">
             {!nativeDisplayOnly && <SectionLabel>{sectionLabel}</SectionLabel>}
             <h2 className={`${nativeDisplayOnly ? "" : "mt-2 "}text-lg font-semibold text-brand-dark`}>{plainTitle}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              From {harnessName}
-            </p>
+            {/* An MCP headline already names the app that asked. */}
+            {mcpCall === null && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                From {harnessName}
+              </p>
+            )}
           </div>
           <Badge tone={item.native_business_review_display_only || watchOnlyObservation ? "info" : actionPresentation.tone}>
             {badgeLabel}
@@ -466,7 +471,19 @@ export function ReviewDecisionCard(props: {
         </div>
       )}
 
-      <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+      {mcpCall === null ? (
+        <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+      ) : (
+        // The MCP card answers the question on its own; extra context is there for anyone who wants it.
+        <details className="rounded-xl border border-slate-100 px-4 py-3 sm:px-5">
+          <summary className="cursor-pointer select-none text-sm font-medium text-brand-dark/80">
+            Prepare more context for this decision
+          </summary>
+          <div className="mt-3">
+            <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+          </div>
+        </details>
+      )}
       <ReviewLastTimeCard detail={detail} />
 
       {pendingAction !== null && approvalGate !== null && (

@@ -37,6 +37,10 @@ export type McpCallExplanation = {
   headline: string;
   /** The service the call goes to, such as Composio or GitHub. */
   connector: string;
+  /** The tool is part of the agent app itself, not a server the user added. */
+  builtIn?: boolean;
+  /** The app that asked, in people's words. Set when the tool can only come from one app. */
+  requester?: string;
   /** The card heading: what the call does, in a few words. */
   title: string;
   /** A sentence of context for a tool whose name says little, such as a Composio meta-tool. */

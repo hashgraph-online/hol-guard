@@ -1,5 +1,8 @@
+import { harnessDisplayName } from "../approval-center-utils";
 import type { GuardApprovalRequest } from "../guard-types";
+import { explainMcpCall } from "./explain-mcp-call";
 import { composioToolTitle } from "./composio-calls";
+import { hostAppTool } from "./host-app-tools";
 import {
   parseNamespacedMcpName,
   sentenceCase,
@@ -28,11 +31,25 @@ export function listedMcpRef(item: GuardApprovalRequest): McpServerRef | null {
   return null;
 }
 
+/**
+ * The app that asked, for a list row. A tool built into one agent app can only
+ * come from that app, so its name wins over the hook's label.
+ */
+export function queueRequesterName(item: GuardApprovalRequest): string {
+  const fromCall = explainMcpCall(item)?.requester;
+  if (fromCall !== undefined) return fromCall;
+  const ref = listedMcpRef(item);
+  const host = ref !== null ? hostAppTool(ref.server, shortToolName(ref.server, ref.tool)) : null;
+  return host?.requester ?? harnessDisplayName(item.harness);
+}
+
 /** `Gmail · Send email`, for a list row that has only the tool's name. */
 export function listedMcpPreview(item: GuardApprovalRequest): string | null {
   const ref = listedMcpRef(item);
   if (ref === null) return null;
   const short = shortToolName(ref.server, ref.tool);
+  const host = hostAppTool(ref.server, short);
+  if (host !== null) return `${host.requester} · ${host.title}`;
   const title = ref.server.toLowerCase() === "composio" ? (composioToolTitle(short) ?? sentenceCase(short)) : sentenceCase(short);
   return `${serviceDisplayName(ref.server)} · ${title}`;
 }

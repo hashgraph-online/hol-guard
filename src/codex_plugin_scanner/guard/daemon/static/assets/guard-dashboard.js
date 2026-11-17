@@ -13492,6 +13492,8 @@ function willPersistExactAction(item, action, scope, requested) {
   return requested && normalizeDecisionScope(item, action, scope) === "artifact" && item.exact_action_persistence_eligible === true;
 }
 const MCP_EFFECT_COPY = {
+  // Only a built-in agent-app tool gets this; no name is read as in-app on its own.
+  "in-app": { label: "Only in the app", meaning: "It changes what the agent app shows you and nothing else." },
   read: { label: "Looks things up", meaning: "The name suggests it reads or searches and does not change anything." },
   write: { label: "Makes changes", meaning: "The name suggests it creates or changes something." },
   send: { label: "Sends something", meaning: "The name suggests it sends or posts something to other people or services." },
@@ -13673,6 +13675,7 @@ function classifyMcpEffect(identifier2) {
   return "unknown";
 }
 const SEVERITY = {
+  "in-app": 0,
   read: 1,
   unknown: 2,
   connect: 3,
@@ -13682,8 +13685,8 @@ const SEVERITY = {
   delete: 7
 };
 function worstMcpEffect(effects) {
-  let worst = "read";
   if (effects.length === 0) return "unknown";
+  let worst = effects[0];
   for (const effect of effects) {
     if (SEVERITY[effect] > SEVERITY[worst]) worst = effect;
   }
@@ -14095,7 +14098,7 @@ function scalarFacts(input, options = {}) {
   const skip = new Set(options.skip ?? []);
   const max = options.max ?? MAX_FACTS;
   const facts = promotedFacts(input, skip, options.tool, max);
-  const promoted = new Set(facts.map((fact) => fact.key));
+  const promoted = new Set(facts.map((fact2) => fact2.key));
   let hidden = 0;
   for (const [key, value] of Object.entries(input)) {
     if (skip.has(key) || promoted.has(key)) continue;
@@ -14117,7 +14120,7 @@ function promotedFacts(input, skip, tool, max) {
     if (facts.length >= max) break;
     for (const candidate of field.keys) {
       const key = keysByLowerCase.get(candidate);
-      if (key === void 0 || skip.has(key) || facts.some((fact) => fact.key === key)) continue;
+      if (key === void 0 || skip.has(key) || facts.some((fact2) => fact2.key === key)) continue;
       const text2 = KEY_PATTERN.test(key) ? scalarText(input[key]) : null;
       if (text2 === null || text2.length === 0) continue;
       facts.push({ label: field.label, value: text2, kind: field.kind ?? valueKindOf(text2), key });
@@ -14312,6 +14315,230 @@ function slugLabel(slug) {
   const { app, action } = splitToolSlug(slug);
   return app !== null ? `${app} · ${action}` : action;
 }
+const CLAUDE_APP = "the Claude app";
+const CLAUDE = "Claude";
+const CLAUDE_SERVER_PREFIX = "ccd_";
+const STATUS_WORDS = { completed: "Done", in_progress: "Now", pending: "Next" };
+function noFacts() {
+  return [];
+}
+function fact(label, value, key, kind = "text") {
+  return value !== null && value.length > 0 ? [{ label, value, key, kind }] : [];
+}
+function summaryFacts(input) {
+  const buttons = recordList(input?.actions, 4).map((action) => textOf(action.label, 40)).filter((label) => label !== null && label.length > 0);
+  return [
+    ...fact("Summary", textOf(input?.recap, 400), "recap", "long"),
+    ...fact("Question", textOf(input?.ask, 160), "ask"),
+    ...fact("Buttons", buttons.length > 0 ? buttons.join(" · ") : null, "actions")
+  ];
+}
+function taskFacts(input) {
+  const tasks = recordList(input?.items, 12).map((task) => {
+    const content = textOf(task.content, 80);
+    if (content === null || content.length === 0) return null;
+    const status = STATUS_WORDS[textOf(task.status, 20) ?? ""] ?? "Next";
+    return `${status}: ${content}`;
+  }).filter((line) => line !== null);
+  if (tasks.length > 0) return fact("Tasks", tasks.join(" · "), "items", "long");
+  return input?.advance === true ? [{ label: "Change", value: "Marks the current task done and starts the next one", key: "advance" }] : [];
+}
+function paneFacts(input) {
+  return fact("Panel", textOf(input?.pane ?? input?.kind ?? input?.name, 60), "pane");
+}
+function chapterFacts(input) {
+  return fact("Chapter", textOf(input?.title, 80), "title");
+}
+function sessionFacts(input) {
+  return fact("Task", textOf(input?.title, 120), "title");
+}
+const CLAUDE_TOOLS = /* @__PURE__ */ new Map([
+  ["ccd_turn/wrap_up", { title: "Show a summary and next steps", phrase: "show you a summary and next-step buttons", effect: "in-app", facts: summaryFacts }],
+  ["ccd_turn/update_plan", { title: "Update its task list", phrase: "update the task list under its reply", effect: "in-app", facts: taskFacts }],
+  ["ccd_view/show_pane", { title: "Open a side panel", phrase: "open a side panel", effect: "in-app", facts: paneFacts }],
+  ["ccd_view/close_pane", { title: "Close a side panel", phrase: "close a side panel", effect: "in-app", facts: paneFacts }],
+  ["ccd_view/get_layout", { title: "Check which panels are open", phrase: "check which panels are open", effect: "in-app", facts: noFacts }],
+  ["ccd_view/set_transcript_view", { title: "Change how the chat is shown", phrase: "change how the chat is shown", effect: "in-app", facts: noFacts }],
+  ["ccd_session/mark_chapter", { title: "Add a chapter to the chat", phrase: "add a chapter to the chat", effect: "in-app", facts: chapterFacts }],
+  ["ccd_session/dismiss_task", { title: "Withdraw a suggested task", phrase: "withdraw a task it suggested", effect: "in-app", facts: noFacts }],
+  ["ccd_session/start_session", { title: "Start another Claude session", phrase: "start another Claude session", effect: "write", facts: sessionFacts }]
+]);
+function hostAppTool(server, tool) {
+  const key = server.toLowerCase();
+  if (!key.startsWith(CLAUDE_SERVER_PREFIX)) return null;
+  const entry = CLAUDE_TOOLS.get(`${key}/${tool.toLowerCase()}`);
+  if (entry !== void 0) return { ...entry, app: CLAUDE_APP, requester: CLAUDE };
+  const title = sentenceCase(tool);
+  return {
+    app: CLAUDE_APP,
+    requester: CLAUDE,
+    title,
+    phrase: `use its “${title}” tool`,
+    effect: classifyMcpEffect(tool),
+    facts: noFacts
+  };
+}
+function explainHostAppTool(host, input) {
+  return {
+    headline: `${host.requester} wants to ${host.phrase}`,
+    title: host.title,
+    aside: null,
+    effect: host.effect,
+    effectBasis: "Read from the tool's name.",
+    facts: host.facts(recordOf(input)),
+    steps: [],
+    quotes: null,
+    code: null,
+    queueTitle: `${host.requester} · ${host.title}`,
+    queueDetail: null,
+    builtIn: true
+  };
+}
+function consequenceFor(effect, where) {
+  switch (effect) {
+    case "in-app":
+      return {
+        tone: "calm",
+        text: `By its name, this only changes what ${where} shows you. It does not reach your files, accounts or other apps.`
+      };
+    case "read":
+      return { tone: "calm", text: `By its name, this looks something up in ${where}.` };
+    case "write":
+      return { tone: "care", text: `By its name, this creates or changes something in ${where}.` };
+    case "send":
+      return {
+        tone: "danger",
+        text: `Sends something through ${where}. Once it goes out, it may not be possible to take back.`
+      };
+    case "delete":
+      return { tone: "danger", text: `Deletes something in ${where}. It may not be possible to recover.` };
+    case "run-code":
+      return { tone: "danger", text: "Runs code. It can do anything this tool's access allows, so read it first." };
+    case "connect":
+      return { tone: "care", text: `Checks or changes which accounts are linked to ${where}, and may ask you to link another.` };
+    case "unknown":
+      return { tone: "care", text: "Guard cannot tell what this does from the tool's name. Check the details below." };
+  }
+}
+const UNKNOWN_SERVER = "a connected server";
+const CODEX_APPS_SERVER = "codex_apps";
+const AGENT_TEXT_KEYS = ["thought", "use_case"];
+function explainMcpCall(item) {
+  const envelope = item.action_envelope_json;
+  if (!envelope) return null;
+  const ref = resolveMcpRef(envelope);
+  if (ref === null) return null;
+  const raw = recordOf(envelope.raw_payload_redacted);
+  const selected = selectToolInput(raw);
+  const input = selected.record;
+  const shortTool = shortToolName(ref.server, ref.tool);
+  const host = hostAppTool(ref.server, shortTool);
+  const harness = host?.requester ?? harnessDisplayName(item.harness);
+  const connector = host?.app ?? (ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER);
+  const body = (host !== null ? explainHostAppTool(host, input) : null) ?? (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ?? explainGenericTool({ harness, connector, shortTool, input });
+  return {
+    ...body,
+    consequence: consequenceFor(body.effect, whereItActs(body, connector)),
+    connector,
+    requester: harness,
+    rawInput: selected.text,
+    truncated: wasTruncated(item, selected),
+    toolId: ref.server.length > 0 ? `${ref.server} / ${ref.tool}` : ref.tool,
+    whyAsked: whyAskedFor(host, ref.server.length > 0 ? connector : null)
+  };
+}
+function whyAskedFor(host, connector) {
+  if (host !== null) return `Guard asks before any tool it has not reviewed, including tools built into ${host.app}.`;
+  if (connector !== null) return `Guard asks before any tool it has not reviewed, and it has not reviewed this ${connector} tool.`;
+  return "Guard asks before any tool it has not reviewed, and it has not reviewed this one.";
+}
+function whereItActs(body, connector) {
+  const apps = body.effectApps ?? [];
+  return apps.length > 0 ? joinList(apps) : connector;
+}
+function plainMcpReason(item, text2) {
+  if (text2 === null || !text2.includes("unreviewed MCP tool")) {
+    return text2;
+  }
+  return explainMcpCall(item)?.whyAsked ?? text2;
+}
+function resolveMcpRef(envelope) {
+  const fromToolName = parseNamespacedMcpName(envelope.tool_name);
+  const fromMcpTool = parseNamespacedMcpName(envelope.mcp_tool);
+  const isMcp = envelope.action_type === "mcp_tool" || fromToolName !== null || fromMcpTool !== null || isPlainNamePart(envelope.mcp_server);
+  if (!isMcp) return null;
+  const tool = recordedTool(envelope, fromToolName, fromMcpTool);
+  if (tool === null) return null;
+  return unwrapCodexApps({ server: recordedServer(envelope, fromToolName, fromMcpTool), tool });
+}
+function recordedTool(envelope, fromToolName, fromMcpTool) {
+  if (fromMcpTool !== null) return fromMcpTool.tool;
+  if (isPlainNamePart(envelope.mcp_tool)) return envelope.mcp_tool;
+  return fromToolName?.tool ?? null;
+}
+function recordedServer(envelope, fromToolName, fromMcpTool) {
+  if (envelope.mcp_server === CODEX_APPS_SERVER && fromMcpTool !== null) return fromMcpTool.server;
+  if (isPlainNamePart(envelope.mcp_server)) return envelope.mcp_server;
+  return fromMcpTool?.server ?? fromToolName?.server ?? "";
+}
+function unwrapCodexApps(ref) {
+  if (ref.server !== CODEX_APPS_SERVER) return ref;
+  const separator = ref.tool.indexOf("__");
+  if (separator <= 0 || separator + 2 >= ref.tool.length) return ref;
+  return { server: ref.tool.slice(0, separator), tool: ref.tool.slice(separator + 2) };
+}
+function explainGenericTool(context) {
+  const { harness, connector, shortTool, input } = context;
+  const effect = classifyMcpEffect(shortTool);
+  const title = sentenceCase(shortTool);
+  const { facts } = scalarFacts(input, { skip: AGENT_TEXT_KEYS, tool: shortTool });
+  const thought = textOf(input?.thought, 300);
+  const firstValue = facts[0]?.value ?? null;
+  return {
+    headline: `${harness} wants to ${effectPhrase(effect, connector)}`,
+    title,
+    aside: null,
+    effect,
+    effectBasis: effect === "unknown" ? "Guard cannot tell what this does from its name. Read the inputs below." : "Read from the tool's name. Guard has not checked what it does.",
+    facts,
+    steps: [],
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    code: null,
+    queueTitle: `${connector} · ${title}`,
+    queueDetail: firstValue !== null && firstValue.length > 0 ? firstValue : null
+  };
+}
+function effectPhrase(effect, connector) {
+  switch (effect) {
+    case "in-app":
+      return `change what ${connector} shows you`;
+    case "read":
+      return `look something up in ${connector}`;
+    case "write":
+      return `make a change in ${connector}`;
+    case "send":
+      return `send something with ${connector}`;
+    case "delete":
+      return `delete something in ${connector}`;
+    case "run-code":
+      return `run code with ${connector}`;
+    case "connect":
+      return `change a connection in ${connector}`;
+    case "unknown":
+      return `use ${connector}`;
+  }
+}
+function wasTruncated(item, selected) {
+  if ((item.action_explanation?.redaction.truncated_fields.length ?? 0) > 0) return true;
+  if (selected.record === null) return selected.text !== null && selected.text.length >= CORE_STRING_LIMIT;
+  return JSON.stringify(selected.record).length >= CORE_STRING_LIMIT && containsLongString(selected.record);
+}
+function containsLongString(value) {
+  if (typeof value === "string") return value.length >= CORE_STRING_LIMIT;
+  if (Array.isArray(value)) return value.some(containsLongString);
+  const record2 = recordOf(value);
+  return record2 !== null && Object.values(record2).some(containsLongString);
+}
 const TOOL_ID_PREFIX = "tool:";
 function listedMcpRef(item) {
   if (item.action_envelope_json != null) return null;
@@ -14324,10 +14551,19 @@ function listedMcpRef(item) {
   }
   return null;
 }
+function queueRequesterName(item) {
+  const fromCall = explainMcpCall(item)?.requester;
+  if (fromCall !== void 0) return fromCall;
+  const ref = listedMcpRef(item);
+  const host = ref !== null ? hostAppTool(ref.server, shortToolName(ref.server, ref.tool)) : null;
+  return host?.requester ?? harnessDisplayName(item.harness);
+}
 function listedMcpPreview(item) {
   const ref = listedMcpRef(item);
   if (ref === null) return null;
   const short = shortToolName(ref.server, ref.tool);
+  const host = hostAppTool(ref.server, short);
+  if (host !== null) return `${host.requester} · ${host.title}`;
   const title = ref.server.toLowerCase() === "composio" ? composioToolTitle(short) ?? sentenceCase(short) : sentenceCase(short);
   return `${serviceDisplayName(ref.server)} · ${title}`;
 }
@@ -15284,137 +15520,6 @@ function countRetryBlockedActions(groups, items) {
 function bulkApproveConsequenceCopyForSelection(actionCount, retryBlockedActionCount, defaultCopy) {
   if (retryBlockedActionCount <= 0) return defaultCopy(actionCount);
   return `Run once is unavailable for ${retryBlockedActionCount} of these ${actionCount} actions. Open those requests to inspect their execution limitations before approving the remaining actions.`;
-}
-function consequenceFor(effect, where) {
-  switch (effect) {
-    case "read":
-      return { tone: "calm", text: `By its name, this looks something up in ${where}.` };
-    case "write":
-      return { tone: "care", text: `By its name, this creates or changes something in ${where}.` };
-    case "send":
-      return {
-        tone: "danger",
-        text: `Sends something through ${where}. Once it goes out, it may not be possible to take back.`
-      };
-    case "delete":
-      return { tone: "danger", text: `Deletes something in ${where}. It may not be possible to recover.` };
-    case "run-code":
-      return { tone: "danger", text: "Runs code. It can do anything this tool's access allows, so read it first." };
-    case "connect":
-      return { tone: "care", text: `Checks or changes which accounts are linked to ${where}, and may ask you to link another.` };
-    case "unknown":
-      return { tone: "care", text: "Guard cannot tell what this does from the tool's name. Check the details below." };
-  }
-}
-const UNKNOWN_SERVER = "a connected server";
-const CODEX_APPS_SERVER = "codex_apps";
-const AGENT_TEXT_KEYS = ["thought", "use_case"];
-function explainMcpCall(item) {
-  const envelope = item.action_envelope_json;
-  if (!envelope) return null;
-  const ref = resolveMcpRef(envelope);
-  if (ref === null) return null;
-  const harness = harnessDisplayName(item.harness);
-  const raw = recordOf(envelope.raw_payload_redacted);
-  const selected = selectToolInput(raw);
-  const input = selected.record;
-  const connector = ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER;
-  const shortTool = shortToolName(ref.server, ref.tool);
-  const body = (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ?? explainGenericTool({ harness, connector, shortTool, input });
-  return {
-    ...body,
-    consequence: consequenceFor(body.effect, whereItActs(body, connector)),
-    connector,
-    rawInput: selected.text,
-    truncated: wasTruncated(item, selected),
-    toolId: ref.server.length > 0 ? `${ref.server} / ${ref.tool}` : ref.tool,
-    whyAsked: `Guard has not reviewed ${ref.server.length > 0 ? `${connector}'s` : "this"} tool yet, and your policy asks before any unreviewed tool runs.`
-  };
-}
-function whereItActs(body, connector) {
-  const apps = body.effectApps ?? [];
-  return apps.length > 0 ? joinList(apps) : connector;
-}
-function plainMcpReason(item, text2) {
-  if (text2 === null || !text2.includes("unreviewed MCP tool")) {
-    return text2;
-  }
-  return explainMcpCall(item)?.whyAsked ?? text2;
-}
-function resolveMcpRef(envelope) {
-  const fromToolName = parseNamespacedMcpName(envelope.tool_name);
-  const fromMcpTool = parseNamespacedMcpName(envelope.mcp_tool);
-  const isMcp = envelope.action_type === "mcp_tool" || fromToolName !== null || fromMcpTool !== null || isPlainNamePart(envelope.mcp_server);
-  if (!isMcp) return null;
-  const tool = recordedTool(envelope, fromToolName, fromMcpTool);
-  if (tool === null) return null;
-  return unwrapCodexApps({ server: recordedServer(envelope, fromToolName, fromMcpTool), tool });
-}
-function recordedTool(envelope, fromToolName, fromMcpTool) {
-  if (fromMcpTool !== null) return fromMcpTool.tool;
-  if (isPlainNamePart(envelope.mcp_tool)) return envelope.mcp_tool;
-  return fromToolName?.tool ?? null;
-}
-function recordedServer(envelope, fromToolName, fromMcpTool) {
-  if (envelope.mcp_server === CODEX_APPS_SERVER && fromMcpTool !== null) return fromMcpTool.server;
-  if (isPlainNamePart(envelope.mcp_server)) return envelope.mcp_server;
-  return fromMcpTool?.server ?? fromToolName?.server ?? "";
-}
-function unwrapCodexApps(ref) {
-  if (ref.server !== CODEX_APPS_SERVER) return ref;
-  const separator = ref.tool.indexOf("__");
-  if (separator <= 0 || separator + 2 >= ref.tool.length) return ref;
-  return { server: ref.tool.slice(0, separator), tool: ref.tool.slice(separator + 2) };
-}
-function explainGenericTool(context) {
-  const { harness, connector, shortTool, input } = context;
-  const effect = classifyMcpEffect(shortTool);
-  const title = sentenceCase(shortTool);
-  const { facts } = scalarFacts(input, { skip: AGENT_TEXT_KEYS, tool: shortTool });
-  const thought = textOf(input?.thought, 300);
-  const firstValue = facts[0]?.value ?? null;
-  return {
-    headline: `${harness} wants to ${effectPhrase(effect, connector)}`,
-    title,
-    aside: null,
-    effect,
-    effectBasis: effect === "unknown" ? "Guard cannot tell what this does from its name. Read the inputs below." : "Read from the tool's name. Guard has not checked what it does.",
-    facts,
-    steps: [],
-    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
-    code: null,
-    queueTitle: `${connector} · ${title}`,
-    queueDetail: firstValue !== null && firstValue.length > 0 ? firstValue : null
-  };
-}
-function effectPhrase(effect, connector) {
-  switch (effect) {
-    case "read":
-      return `look something up in ${connector}`;
-    case "write":
-      return `make a change in ${connector}`;
-    case "send":
-      return `send something with ${connector}`;
-    case "delete":
-      return `delete something in ${connector}`;
-    case "run-code":
-      return `run code with ${connector}`;
-    case "connect":
-      return `change a connection in ${connector}`;
-    case "unknown":
-      return `use ${connector}`;
-  }
-}
-function wasTruncated(item, selected) {
-  if ((item.action_explanation?.redaction.truncated_fields.length ?? 0) > 0) return true;
-  if (selected.record === null) return selected.text !== null && selected.text.length >= CORE_STRING_LIMIT;
-  return JSON.stringify(selected.record).length >= CORE_STRING_LIMIT && containsLongString(selected.record);
-}
-function containsLongString(value) {
-  if (typeof value === "string") return value.length >= CORE_STRING_LIMIT;
-  if (Array.isArray(value)) return value.some(containsLongString);
-  const record2 = recordOf(value);
-  return record2 !== null && Object.values(record2).some(containsLongString);
 }
 const APPROVAL_RETRY_BLOCKED_OVERRIDE = "approval-approved-retry-blocked";
 const APPROVAL_LEFT_STOPPED_LABEL = "Approved, still stopped";
@@ -33234,11 +33339,13 @@ function ScannerEvidenceSection(props) {
 }
 function buildTopAlertItems(item) {
   const items = [];
+  const mcpCall = explainMcpCall(item);
   const secondaryRiskSummary = plainMcpReason(item, resolveSecondaryRiskSummary(item));
   const watchOnly = isWatchOnlyObservation(item);
   const ruleLines = watchOnly ? [] : ruleMatchLines(item.extension_coverage);
-  const pauseReason = watchOnly || ruleLines.length > 0 ? null : whyPaused(item);
-  if (secondaryRiskSummary) {
+  const guessedReason = watchOnly || ruleLines.length > 0 ? null : whyPaused(item);
+  const pauseReason = mcpCall !== null && guessedReason === UNREVIEWED_MCP_TOOL ? null : guessedReason;
+  if (secondaryRiskSummary && !(mcpCall !== null && secondaryRiskSummary === mcpCall.whyAsked)) {
     items.push({
       id: "secondary-risk",
       title: "Additional risk",
@@ -33647,6 +33754,7 @@ function FaAws(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 640 512" }, "child": [{ "tag": "path", "attr": { "d": "M180.41 203.01c-.72 22.65 10.6 32.68 10.88 39.05a8.164 8.164 0 0 1-4.1 6.27l-12.8 8.96a10.66 10.66 0 0 1-5.63 1.92c-.43-.02-8.19 1.83-20.48-25.61a78.608 78.608 0 0 1-62.61 29.45c-16.28.89-60.4-9.24-58.13-56.21-1.59-38.28 34.06-62.06 70.93-60.05 7.1.02 21.6.37 46.99 6.27v-15.62c2.69-26.46-14.7-46.99-44.81-43.91-2.4.01-19.4-.5-45.84 10.11-7.36 3.38-8.3 2.82-10.75 2.82-7.41 0-4.36-21.48-2.94-24.2 5.21-6.4 35.86-18.35 65.94-18.18a76.857 76.857 0 0 1 55.69 17.28 70.285 70.285 0 0 1 17.67 52.36l-.01 69.29zM93.99 235.4c32.43-.47 46.16-19.97 49.29-30.47 2.46-10.05 2.05-16.41 2.05-27.4-9.67-2.32-23.59-4.85-39.56-4.87-15.15-1.14-42.82 5.63-41.74 32.26-1.24 16.79 11.12 31.4 29.96 30.48zm170.92 23.05c-7.86.72-11.52-4.86-12.68-10.37l-49.8-164.65c-.97-2.78-1.61-5.65-1.92-8.58a4.61 4.61 0 0 1 3.86-5.25c.24-.04-2.13 0 22.25 0 8.78-.88 11.64 6.03 12.55 10.37l35.72 140.83 33.16-140.83c.53-3.22 2.94-11.07 12.8-10.24h17.16c2.17-.18 11.11-.5 12.68 10.37l33.42 142.63L420.98 80.1c.48-2.18 2.72-11.37 12.68-10.37h19.72c.85-.13 6.15-.81 5.25 8.58-.43 1.85 3.41-10.66-52.75 169.9-1.15 5.51-4.82 11.09-12.68 10.37h-18.69c-10.94 1.15-12.51-9.66-12.68-10.75L328.67 110.7l-32.78 136.99c-.16 1.09-1.73 11.9-12.68 10.75h-18.3zm273.48 5.63c-5.88.01-33.92-.3-57.36-12.29a12.802 12.802 0 0 1-7.81-11.91v-10.75c0-8.45 6.2-6.9 8.83-5.89 10.04 4.06 16.48 7.14 28.81 9.6 36.65 7.53 52.77-2.3 56.72-4.48 13.15-7.81 14.19-25.68 5.25-34.95-10.48-8.79-15.48-9.12-53.13-21-4.64-1.29-43.7-13.61-43.79-52.36-.61-28.24 25.05-56.18 69.52-55.95 12.67-.01 46.43 4.13 55.57 15.62 1.35 2.09 2.02 4.55 1.92 7.04v10.11c0 4.44-1.62 6.66-4.87 6.66-7.71-.86-21.39-11.17-49.16-10.75-6.89-.36-39.89.91-38.41 24.97-.43 18.96 26.61 26.07 29.7 26.89 36.46 10.97 48.65 12.79 63.12 29.58 17.14 22.25 7.9 48.3 4.35 55.44-19.08 37.49-68.42 34.44-69.26 34.42zm40.2 104.86c-70.03 51.72-171.69 79.25-258.49 79.25A469.127 469.127 0 0 1 2.83 327.46c-6.53-5.89-.77-13.96 7.17-9.47a637.37 637.37 0 0 0 316.88 84.12 630.22 630.22 0 0 0 241.59-49.55c11.78-5 21.77 7.8 10.12 16.38zm29.19-33.29c-8.96-11.52-59.28-5.38-81.81-2.69-6.79.77-7.94-5.12-1.79-9.47 40.07-28.17 105.88-20.1 113.44-10.63 7.55 9.47-2.05 75.41-39.56 106.91-5.76 4.87-11.27 2.3-8.71-4.1 8.44-21.25 27.39-68.49 18.43-80.02z" }, "child": [] }] })(props);
 }
 const EFFECT_ICONS = {
+  "in-app": HiMiniComputerDesktop,
   read: HiMiniMagnifyingGlass,
   write: HiMiniPencilSquare,
   send: HiMiniPaperAirplane,
@@ -33716,7 +33824,7 @@ function ConnectorMark({ name }) {
 }
 function EffectPill({ effect }) {
   const Icon = EFFECT_ICONS[effect];
-  const tone = effect === "read" ? "border-slate-200 bg-slate-50 text-brand-dark/80" : "border-brand-attention/30 bg-brand-attention/[0.08] text-brand-dark";
+  const tone = effect === "read" || effect === "in-app" ? "border-slate-200 bg-slate-50 text-brand-dark/80" : "border-brand-attention/30 bg-brand-attention/[0.08] text-brand-dark";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
     MCP_EFFECT_COPY[effect].label
@@ -33774,23 +33882,23 @@ function StepRow({ step, position, total }) {
   ] });
 }
 function FactList({ facts }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "grid grid-cols-[minmax(5.5rem,auto)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm", children: facts.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "contents", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "pt-0.5 text-brand-dark/60", children: fact.label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "min-w-0 break-words text-brand-dark", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FactValue, { fact }) })
-  ] }, `${fact.label}-${fact.value}`)) });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "grid grid-cols-[minmax(5.5rem,auto)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm", children: facts.map((fact2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "contents", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "pt-0.5 text-brand-dark/60", children: fact2.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "min-w-0 break-words text-brand-dark", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FactValue, { fact: fact2 }) })
+  ] }, `${fact2.label}-${fact2.value}`)) });
 }
-function FactValue({ fact }) {
-  switch (fact.kind) {
+function FactValue({ fact: fact2 }) {
+  switch (fact2.kind) {
     case "email":
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(AddressChips, { value: fact.value });
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(AddressChips, { value: fact2.value });
     case "url":
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(LinkValue, { value: fact.value });
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(LinkValue, { value: fact2.value });
     case "long":
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(LongText, { value: fact.value });
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(LongText, { value: fact2.value });
     case "code":
-      return /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block whitespace-pre-wrap break-words rounded-md bg-slate-50 px-2 py-1 font-mono text-xs", children: fact.value });
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block whitespace-pre-wrap break-words rounded-md bg-slate-50 px-2 py-1 font-mono text-xs", children: fact2.value });
     default:
-      return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: fact.mono === true ? "font-mono text-xs" : "", children: fact.value });
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: fact2.mono === true ? "font-mono text-xs" : "", children: fact2.value });
   }
 }
 function AddressChips({ value }) {
@@ -33832,12 +33940,13 @@ function showsSteps(explanation) {
   return explanation.steps.some((step) => step.details.length > 0 || step.hiddenDetails > 0);
 }
 function subtitleOf(explanation, app) {
+  if (explanation.builtIn === true) return `Built into ${explanation.connector}`;
   return app === explanation.connector ? `Tool from ${explanation.connector}` : `${app}, through ${explanation.connector}`;
 }
 function McpCallCard({ item, explanation }) {
   const watchOnly = isWatchOnlyObservation(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
-  const reason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
+  const reason = plainMcpReason(item, buildPrimaryReviewAction(item).detail) ?? explanation.whyAsked;
   const app = actingApp(explanation);
   const facts = [
     ...explanation.facts,
@@ -33845,7 +33954,7 @@ function McpCallCard({ item, explanation }) {
   ];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "What the agent is asking to do", className: "mt-5 rounded-2xl border border-slate-200 bg-white", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:p-5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectorMark, { name: app }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectorMark, { name: explanation.builtIn === true ? explanation.requester ?? app : app }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-semibold leading-snug text-brand-dark", children: explanation.title }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 break-words text-sm text-brand-dark/70", children: subtitleOf(explanation, app) })
@@ -33901,7 +34010,7 @@ function McpCallCard({ item, explanation }) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 border-t border-slate-100 px-4 py-3 text-xs leading-snug text-muted-foreground sm:px-5", children: [
-      reason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: reason }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: reason }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
         "Allow once and Always allow both match these exact inputs. If the agent asks again with different inputs, Guard asks again.",
         explanation.truncated ? " Long text is shown shortened here." : ""
@@ -36401,7 +36510,8 @@ function ReviewDecisionCard(props) {
   const nativeDisplayOnly = item.native_business_review_display_only === true;
   const versionBoundScript = item.artifact_type === "native_bash_request";
   const plainTitle = nativeDisplayOnly ? item.artifact_name : plainEnglishRequestTitle(item);
-  const harnessName = harnessDisplayName(item.harness);
+  const mcpCall = nativeDisplayOnly ? null : explainMcpCall(item);
+  const harnessName = mcpCall?.requester ?? harnessDisplayName(item.harness);
   const whatWouldHappen = nativeDisplayOnly ? null : buildWhatWouldHappen(item);
   const topAlertItems = nativeDisplayOnly ? [] : buildTopAlertItems(item);
   const evidenceItems = nativeDisplayOnly ? [] : buildEvidenceItems(item);
@@ -36445,7 +36555,7 @@ function ReviewDecisionCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
           !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: sectionLabel }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: `${nativeDisplayOnly ? "" : "mt-2 "}text-lg font-semibold text-brand-dark`, children: plainTitle }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-muted-foreground", children: [
+          mcpCall === null && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-muted-foreground", children: [
             "From ",
             harnessName
           ] })
@@ -36607,7 +36717,13 @@ function ReviewDecisionCard(props) {
       ),
       showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, item.request_id) })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`),
+    mcpCall === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`) : (
+      // The MCP card answers the question on its own; extra context is there for anyone who wants it.
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-slate-100 px-4 py-3 sm:px-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80", children: "Prepare more context for this decision" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`) })
+      ] })
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewLastTimeCard, { detail }),
     pendingAction !== null && approvalGate !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalPasswordModal,
@@ -37210,7 +37326,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                   preview
                 ] }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
-                  harnessDisplayName(item.harness),
+                  queueRequesterName(item),
                   " · ",
                   formatQueueRequestDate(item),
                   watchOnlyObservation ? " · Would have stopped" : ""
@@ -37324,7 +37440,7 @@ function ReviewHeader({
   count: count2,
   filteredCount,
   progress,
-  activeHarness
+  requester
 }) {
   const isFiltered = filteredCount !== count2;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", children: [
@@ -37336,7 +37452,7 @@ function ReviewHeader({
       progress,
       isFiltered ? ` · ${filteredCount} of ${count2} shown` : "",
       " · from ",
-      harnessDisplayName(activeHarness)
+      requester
     ] })
   ] });
 }
@@ -39260,7 +39376,7 @@ function ReviewWorkspace(props) {
         count: requests.length,
         filteredCount: filteredRequests.length,
         progress,
-        activeHarness: activeItem.harness
+        requester: queueRequesterName(activeItem)
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
