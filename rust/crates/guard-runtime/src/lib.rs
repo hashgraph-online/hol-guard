@@ -686,6 +686,7 @@ mod harness_backup_restore;
 #[cfg(test)]
 #[path = "adapters/harness_backup_restore_tests.rs"]
 mod harness_backup_restore_tests;
+mod harness_contract_registry;
 mod harness_coverage;
 mod harness_coverage_command;
 mod harness_diagnostics;

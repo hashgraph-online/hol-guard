@@ -245,6 +245,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "devin_jsonc" => devin_jsonc::document(args),
         "harness_hook_settings" => harness_hook_settings::dispatch(args),
         "harness_settings_file" => harness_settings_file::dispatch(args),
+        "harness_contract_registry" => crate::harness_contract_registry::dispatch(args),
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
         "hook_failure" => crate::hook_failure_op::dispatch(args),
         "harness_setup_contract" => crate::harness_setup_contract::dispatch(args),
