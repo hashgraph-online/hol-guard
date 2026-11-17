@@ -286,6 +286,20 @@ fn python(ctx: &Ctx, scoped: Option<&tempfile::TempDir>) -> Step<Result<Attested
     Ok(attested.ok_or_else(|| REINSTALL.to_owned()))
 }
 
+/// `tempfile.TemporaryDirectory(prefix="hol-guard-hook-probe-")`: private
+/// (0700) like Python's, since the probe refuses a directory anyone else can
+/// enter.
+fn scoped_probe_dir(ctx: &Ctx) -> std::io::Result<tempfile::TempDir> {
+    let mut builder = tempfile::Builder::new();
+    builder.prefix("hol-guard-hook-probe-");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(std::fs::Permissions::from_mode(0o700));
+    }
+    builder.tempdir_in(caller_temp_dir(ctx))
+}
+
 /// `tempfile.gettempdir()` as the caller would answer it: its `TMPDIR`,
 /// `TEMP` or `TMP` when that names a directory, else this process's own. The
 /// resident's temp directory can be one the caller no longer has.
@@ -308,9 +322,7 @@ pub(super) fn attested(ctx: &Ctx, scoped: bool) -> Step<Result<Attested, String>
     if !scoped {
         return python(ctx, None);
     }
-    let directory = tempfile::Builder::new()
-        .prefix("hol-guard-hook-probe-")
-        .tempdir_in(caller_temp_dir(ctx));
+    let directory = scoped_probe_dir(ctx);
     match directory {
         Ok(directory) => python(ctx, Some(&directory)),
         Err(_) => Ok(Err(REINSTALL.into())),

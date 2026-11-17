@@ -3,7 +3,7 @@ use std::fs;
 use serde_json::json;
 
 use super::super::Ctx;
-use super::{attested, REINSTALL};
+use super::{attested, scoped_probe_dir, REINSTALL};
 use crate::pyjson::PyVal;
 
 fn ctx(home: &std::path::Path, caller: serde_json::Value) -> Ctx {
@@ -123,4 +123,18 @@ fn a_python_guard_whose_interpreter_is_missing_asks_for_a_reinstall() {
         }),
     );
     assert_eq!(attested(&ctx, true).unwrap().err().unwrap(), REINSTALL);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_scoped_probe_directory_is_private_like_pythons() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = tempfile::tempdir().unwrap();
+    let context = ctx(
+        home.path(),
+        json!({"executable": "/g/python", "frozen": false}),
+    );
+    let directory = scoped_probe_dir(&context).unwrap();
+    let mode = fs::metadata(directory.path()).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o700);
 }
