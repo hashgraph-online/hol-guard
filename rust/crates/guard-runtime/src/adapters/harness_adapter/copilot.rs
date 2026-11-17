@@ -6,10 +6,9 @@
 //! hook script it stages, the isolated hook interpreter, the launcher
 //! environment, Guard's proxy argv for each server, the shim and the runtime
 //! probe subprocess. Install is two asks: `install_detection` answers the
-//! detection Python derives the managed servers from, with a digest of what it
-//! read and the proxy relaunches the plan needs, and `prepare_install` holds
-//! the lifecycle locks, re-reads and refuses when the digest moved, and plans
-//! the files. `uninstall` holds the same locks while it restores the MCP
+//! detection with a digest of what it read, and `prepare_install` holds the
+//! lifecycle locks, re-reads and refuses when the digest moved, chooses the
+//! managed servers and their proxy launches, and plans the files. `uninstall` holds the same locks while it restores the MCP
 //! configs and rewrites the hooks.
 
 use std::path::{Path, PathBuf};
@@ -19,7 +18,8 @@ use sha2::{Digest, Sha256};
 
 use super::files::{self, Object};
 use super::{
-    common, detection, path_answer, path_text, resolved_executable, Ctx, Failure, Spec, Step,
+    common, detection, hook_config, path_answer, path_text, resolved_executable, Ctx, Failure,
+    Spec, Step,
 };
 use super::{copilot_install, which};
 use crate::copilot_detect::strip_jsonc;
@@ -34,7 +34,8 @@ pub(super) const MCP_KEYS: [&str; 2] = ["mcpServers", "servers"];
 pub(super) type Captured = [(PathBuf, Option<Vec<u8>>)];
 /// The workspace hook file's plan and the normalized file it edits.
 pub(super) type WorkspacePlan = (HookPlan, Vec<(String, PyVal)>);
-const UNANSWERED: &str = "Guard could not read which Copilot hooks it installed; the native Guard \
+pub(super) const UNANSWERED: &str =
+    "Guard could not read which Copilot hooks it installed; the native Guard \
                           runtime did not answer. Run `hol-guard doctor copilot` and try again.";
 
 pub(super) fn config_path(ctx: &Ctx) -> PathBuf {
@@ -282,6 +283,15 @@ fn hook_spec(ctx: &Ctx) -> Value {
     })
 }
 
+/// The commands the CLI config's and the workspace hook file's entries run:
+/// the `hook_argv` and `workspace_hook_argv` a `hook_spec` answers, with the
+/// workspace one `null` when there is no workspace.
+pub(super) fn hook_argvs(spec: &Spec, ctx: &Ctx) -> Step<(Value, Value)> {
+    let answer = hook_config::with_config(spec, ctx, hook_spec(ctx))?;
+    let argv = |key: &str| answer.get(key).cloned().ok_or(Failure::Invalid);
+    Ok((argv("hook_argv")?, argv("workspace_hook_argv")?))
+}
+
 pub(crate) fn dispatch(
     spec: &Spec,
     op: &str,
@@ -302,7 +312,7 @@ pub(crate) fn dispatch(
             "argv": command_path(spec, ctx).map(|path| json!([path, "--help"])),
         })),
         "hook_spec" => Ok(hook_spec(ctx)),
-        "install_detection" | "prepare_install" | "uninstall" | "finish_uninstall" => {
+        "install_detection" | "prepare_install" | "prepare_uninstall" | "finish_uninstall" => {
             copilot_install::dispatch(spec, op, ctx, fields)
         }
         _ => common(spec, op, ctx),

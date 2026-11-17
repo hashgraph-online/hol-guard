@@ -13,20 +13,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import (
-    CodexHarnessAdapter,
-    _codex,
-    _legacy_fields,
-    _relaunch,
-    _reply_text,
-    _runtime_guard_home,
-)
-from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer
-from codex_plugin_scanner.guard.adapters.native_harness import planned_files
 from codex_plugin_scanner.guard.codex_config import _restore_native, _Wire
-from codex_plugin_scanner.guard.codex_hook_self_binding import install_fields, settle_short_paths, short_path_fields
+from codex_plugin_scanner.guard.codex_harness_client import _codex, _legacy_fields, _reply_text, _runtime_guard_home
+from codex_plugin_scanner.guard.codex_hook_self_binding import install_fields, short_path_fields
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.native_harness import planned_files
+from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
+from tests.mcp_proxy_launcher import python_proxy_launcher_entry
 
 
 def _one_planned_file(answer: dict[str, Any]) -> TransitionFile:
@@ -63,7 +57,7 @@ def prepare_codex_hook_migration(
         **install_fields(_runtime_guard_home(context), None),
         **short_path_fields(),
     }
-    answer = settle_short_paths(lambda: _codex("hook_migration", context, **request), request, "hook_migration")
+    answer = _codex("hook_migration", context, **request)
     tokens = answer.get("tokens")
     if not isinstance(tokens, dict):
         raise ValueError("Harness adapter answer is malformed")
@@ -83,8 +77,10 @@ def render_codex_managed_mcp(
     workspace_payload: dict[str, object],
 ) -> tuple[dict[str, object], tuple[str, ...]]:
     """Render proxy refresh and workspace precedence from captured payloads."""
-    adapter = CodexHarnessAdapter()
-    entries = [(server, adapter._proxy_server_entry(context, server)) for server in managed_servers]
+    entries = [
+        (server, python_proxy_launcher_entry(proxy_command="codex-mcp-proxy", context=context, server=server))
+        for server in managed_servers
+    ]
     wire = _Wire(payload, workspace_payload, *(entry for _server, entry in entries))
     fields: dict[str, object] = {
         "payload": wire.text(payload),
@@ -95,8 +91,6 @@ def render_codex_managed_mcp(
         ],
     }
     answer = _codex("managed_mcp", context, **fields)
-    if set(answer) == {"reply"}:
-        answer = _codex("managed_mcp", context, **fields, relaunch=_relaunch(answer["reply"]["relaunch"]))
     rendered = wire.decode(_reply_text(answer, "rendered"))
     return rendered, tuple(str(name) for name in answer["migrated"])
 
@@ -119,7 +113,7 @@ def prepare_codex_alternate_cleanup(
         **install_fields(_runtime_guard_home(context), None),
         **short_path_fields(),
     }
-    answer = settle_short_paths(lambda: _codex("alternate_change", context, **request), request, "alternate_change")
+    answer = _codex("alternate_change", context, **request)
     change = _one_planned_file(answer)
     RuntimeTransition._compare({"files": [change.payload()]}, "before")
     return change

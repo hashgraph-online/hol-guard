@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.runtime import command_executors as command_executor_module
 from codex_plugin_scanner.guard.runtime.command_capability import CommandCapabilityError
 from codex_plugin_scanner.guard.runtime.command_queue_authority import authorize_command_queue_job

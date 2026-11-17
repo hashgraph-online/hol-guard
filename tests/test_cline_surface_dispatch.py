@@ -4,11 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_runtime import ClineHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.native_harness import ask
 from codex_plugin_scanner.guard.cli.install_commands import _apply_adapter_management
+from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
+from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter, ask
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -20,22 +18,28 @@ def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=guard_home)
 
 
-class _RecordingCline(ClineHarnessAdapter):
-    seen: tuple[str, str] | None = None
+class _RecordingCline(NativeHarnessAdapter):
+    seen: tuple[str, str | None] | None = None
 
-    def install(self, context: HarnessContext, *, surface: str = "auto") -> dict[str, object]:
+    def __init__(self) -> None:
+        super().__init__("cline", ("cline-cli", "cline-vscode"), "cline")
+
+    def install(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         del context
         self.seen = ("install", surface)
         return {"harness": "cline", "active": True, "surface": surface}
 
-    def uninstall(self, context: HarnessContext, *, surface: str = "all") -> dict[str, object]:
+    def uninstall(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         del context
         self.seen = ("uninstall", surface)
         return {"harness": "cline", "active": False, "surface": surface}
 
 
-class _RecordingCursor(CursorHarnessAdapter):
+class _RecordingCursor(NativeHarnessAdapter):
     seen: tuple[str, str] | None = None
+
+    def __init__(self) -> None:
+        super().__init__("cursor", (), "cursor-agent")
 
     def install(self, context: HarnessContext, *, surface: str = "all") -> dict[str, object]:
         del context

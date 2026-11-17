@@ -6,8 +6,8 @@ import json
 import sqlite3
 from pathlib import Path
 
-from ..adapters.base import HarnessContext
-from ..adapters.native_harness import ask
+from ..harness.base import HarnessContext
+from ..harness.native_harness import ask
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 from .managed_install_context import managed_install_context as repair_context_from_managed_install
@@ -51,8 +51,8 @@ def repair_grok_install(
 
 
 def _grok_hooks_are_current(context: HarnessContext) -> bool:
-    from ..adapters import get_adapter
-    from ..adapters.native_harness import NativeHarnessAdapter
+    from ..harness.native_harness import NativeHarnessAdapter
+    from ..harness.registry import get_adapter
 
     protection = grok_protection(context)
     hook_path = Path(protection["pretool_hook_path"])

@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters import copilot, cursor_hook_config
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import bounded_hook_script_path
+from codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge import bounded_hook_script_path
 from codex_plugin_scanner.guard.mdm import runtime_request
 
 GUARD_HOME = Path("/nonexistent-guard/home")

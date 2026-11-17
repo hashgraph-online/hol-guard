@@ -18,7 +18,7 @@
   "unparsed_templates": [],
   "sites": [
     {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_failure.py",
+      "file": "src/codex_plugin_scanner/guard/harness/bounded_cli_hook_failure.py",
       "func": "_observe_payload",
       "root": "hook",
       "reading": "acknowledges-observation",
@@ -28,7 +28,7 @@
       "note": "The reply to an observation event, which reports activity that already finished; failure_payload only routes here when hook_event_pauses_when_unavailable is false, so nothing is being authorized."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_failure.py",
+      "file": "src/codex_plugin_scanner/guard/harness/bounded_cli_hook_failure.py",
       "func": "_pause_payload",
       "root": "hook",
       "reading": "fails-closed",

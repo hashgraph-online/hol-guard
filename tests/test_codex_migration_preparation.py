@@ -7,8 +7,8 @@ from dataclasses import replace
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard import codex_hook_self_binding
-from codex_plugin_scanner.guard.adapters import codex as adapter
 from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from tests import codex_plan_segments as segments

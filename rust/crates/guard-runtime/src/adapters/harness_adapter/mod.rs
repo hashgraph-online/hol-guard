@@ -27,12 +27,15 @@ use crate::harness_coverage::artifacts::resolve_lenient;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
+mod attested_cli;
 mod authorized_write;
+mod caller;
 mod claude;
 mod claude_argv;
 mod claude_install_target;
 mod claude_settings;
 mod cline;
+mod cline_apply;
 mod cline_hooks;
 mod cline_install;
 mod cline_mcp;
@@ -62,6 +65,7 @@ mod codex_python_imports;
 mod codex_python_values;
 mod codex_servers;
 mod codex_sources;
+mod codex_spec;
 mod codex_uninstall;
 mod codex_uninstall_config;
 mod codex_uninstall_op;
@@ -72,6 +76,7 @@ mod copilot_mcp;
 mod copilot_state;
 mod copilot_uninstall;
 mod cursor;
+mod cursor_apply;
 mod cursor_ask;
 mod cursor_editor;
 mod cursor_files;
@@ -83,6 +88,7 @@ mod cursor_state;
 mod describe;
 mod describe_env;
 mod desktop_core;
+mod durable_runtime;
 mod files;
 mod grok;
 mod grok_install;
@@ -93,23 +99,33 @@ mod hermes_config;
 mod hermes_hooks;
 mod hermes_install;
 mod hermes_uninstall;
+mod hook_config;
 mod hook_render;
+mod install_apply;
 mod isolated_python;
 mod kimi;
+mod managed_record;
+mod managed_servers;
+mod mcp_servers;
 mod openclaw;
 mod opencode;
 mod opencode_build;
 mod opencode_checks;
 mod opencode_install;
+mod opencode_servers;
+mod opencode_workspace;
 mod paseo;
 mod paseo_install;
 mod paseo_paths;
 mod pi;
 mod pi_extension;
+mod probe_run;
 mod proof;
+mod proxy_launch;
 mod settings_hooks;
 mod shim_profile;
 mod shim_remove;
+mod shims_apply;
 mod simple;
 mod uninstall_apply;
 mod which;
@@ -122,6 +138,10 @@ mod tests;
 #[cfg(test)]
 #[path = "codex_owners_tests.rs"]
 mod codex_owners_tests;
+
+#[cfg(test)]
+#[path = "tests_mcp_launch.rs"]
+mod tests_mcp_launch;
 
 pub(crate) use codex_detect_legacy::DetectLegacy;
 pub(crate) use describe::Spec;
@@ -138,6 +158,10 @@ pub(crate) struct Ctx {
     pub(crate) env: BTreeMap<String, String>,
     pub(crate) executable_overrides: BTreeMap<String, String>,
     pub(crate) windows: bool,
+    /// Whether CLI probes may run; the passive global doctor turns them off.
+    pub(crate) probes: bool,
+    /// `native_caller.caller_identity()`: the Guard process that asked.
+    pub(crate) caller: Map<String, Value>,
 }
 
 impl Ctx {
@@ -176,6 +200,15 @@ impl Ctx {
             env: strings("env")?,
             executable_overrides: strings("executable_overrides")?,
             windows: cfg!(windows),
+            probes: match map.get("probes") {
+                None => true,
+                Some(value) => value.as_bool().ok_or(ERR_INVALID)?,
+            },
+            caller: match map.get("caller") {
+                None | Some(Value::Null) => Map::new(),
+                Some(Value::Object(caller)) => caller.clone(),
+                Some(_) => return Err(ERR_INVALID),
+            },
         })
     }
 
@@ -224,6 +257,7 @@ pub(crate) fn path_text(path: &Path) -> String {
 }
 
 /// Why an op stopped, as the Python adapter raised it.
+#[derive(Debug)]
 pub(crate) enum Failure {
     Refusal(String),
     Os(String),
@@ -277,15 +311,27 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     if op == "describe" {
         return Ok(describe::describe());
     }
+    if mcp_servers::handles(op) {
+        return answer(mcp_servers::dispatch(op, fields));
+    }
     let ctx = Ctx::parse(fields.get("context"))?;
     if op == "proof_verify" || op == "proof_bind" {
         return answer(proof::dispatch(op, &ctx, fields));
+    }
+    if op == "managed_install_record" {
+        return answer(managed_record::record(&ctx, fields));
+    }
+    if op == "managed_install_guidance" {
+        return answer(managed_record::guidance_after(&ctx, fields));
     }
     if op == "prepare_guard_shim" {
         return answer(guard_shim::prepare(&ctx, fields));
     }
     if op == "prepare_guard_shim_shell_profile" {
         return answer(shim_profile::prepare(&ctx, fields));
+    }
+    if op == "apply_guard_shims" {
+        return answer(shims_apply::apply_guard_shims(&ctx, fields));
     }
     if op == "prepare_guard_shim_removal" {
         return answer(shim_remove::prepare(&ctx, fields));
@@ -298,8 +344,25 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     if op == "apply_uninstall" {
         return uninstall_apply::apply(spec, &ctx, fields);
     }
+    if op == "apply_install" {
+        return answer(install_apply::apply(spec, &ctx, fields));
+    }
+    if op == "prepare_surfaces" && spec.harness == "cursor" {
+        return answer(cursor_apply::prepare(spec, &ctx, fields));
+    }
+    if op == "apply_plan" {
+        return answer(shims_apply::apply_plan(spec, &ctx, fields));
+    }
+    if op == "probe_runtime" {
+        return answer(probe_run::runtime(spec, &ctx, fields));
+    }
     answer(if op == "default_launch" {
         default_launch(spec, &ctx, fields)
+    } else if op == "hook_config" {
+        hook_config::answer(spec, &ctx, fields)
+    } else if op == "hook_spec" {
+        route(spec, op, &ctx, fields)
+            .and_then(|spec_answer| hook_config::with_config(spec, &ctx, spec_answer))
     } else {
         route(spec, op, &ctx, fields)
     })

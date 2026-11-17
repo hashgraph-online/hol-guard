@@ -193,15 +193,14 @@ pub(crate) fn apply_post_tool_policy_with_witness(
     let operator_allowed_mcp_tool = action_type == PreToolActionTypeV1::McpTool
         && !facts.sensitive_target
         && !facts.changed_hash
-        && super::policy_enforcement_mcp_provider::outer_tool_name(&request.payload)?.is_some_and(
-            |tool| {
+        && super::policy_enforcement_mcp_provider::mcp_tool_name(&request.payload, &harness)?
+            .is_some_and(|tool| {
                 super::policy_enforcement_mcp_provider::operator_allows_tool(
                     &snapshot.effective_policy.mcp_tool_actions,
                     &harness,
                     &tool,
                 )
-            },
-        );
+            });
     // As on the call, the allow is the review a `review` unknown-publisher
     // setting asks for; a stronger setting still holds.
     if operator_allowed_mcp_tool

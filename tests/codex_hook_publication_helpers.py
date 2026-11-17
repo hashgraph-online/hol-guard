@@ -14,8 +14,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from codex_plugin_scanner.guard.adapters import codex as adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard.codex_config import _Wire, dump_toml
 from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, hook_secret_path
 from codex_plugin_scanner.guard.codex_hook_manifest import (
@@ -27,10 +26,10 @@ from codex_plugin_scanner.guard.codex_hook_manifest import (
 from codex_plugin_scanner.guard.codex_hook_self_binding import (
     ask_hook_owners,
     install_fields,
-    settle_short_paths,
     short_path_fields,
 )
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 
 def prepare_authenticated_hook_publication(
@@ -128,7 +127,7 @@ def install_config_hooks(
         **install_fields(adapter._runtime_guard_home(context), None),
         **short_path_fields(),
     }
-    answer = settle_short_paths(lambda: adapter._codex("config_hooks", context, **request), request, "config_hooks")
+    answer = adapter._codex("config_hooks", context, **request)
     installed = wire.decode(adapter._reply_text(answer, "payload"))
     payload.clear()
     payload.update(installed)
@@ -212,7 +211,7 @@ def write_authenticated_hook_config_owned(
         "budget_spent": False,
         **short_path_fields(),
     }
-    answer = settle_short_paths(publish, request, "publish_hooks")
+    answer = publish()
     adapter._raise_publication_error(answer)
     state = json.loads(adapter._reply_text(answer, "state"))
     if not isinstance(state, dict):

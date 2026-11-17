@@ -6,8 +6,8 @@ import json
 
 import pytest
 
+from codex_plugin_scanner.guard import mcp_server_client as mcp_servers
 from codex_plugin_scanner.guard import native_runner_authority as authority
-from codex_plugin_scanner.guard.adapters import mcp_servers
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 _IDENTITY = {
@@ -39,6 +39,20 @@ def _fake(monkeypatch: pytest.MonkeyPatch, answer: object) -> list[dict[str, obj
 
     def fake_native(kind: str, request: dict[str, object], **_: object) -> object:
         assert kind == "harness_mcp_discovery"
+        sent.append(json.loads(json.dumps(request)))
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(authority, "native_runner_authority", fake_native)
+    return sent
+
+
+def _fake_adapter(monkeypatch: pytest.MonkeyPatch, answer: object) -> list[dict[str, object]]:
+    sent: list[dict[str, object]] = []
+
+    def fake_native(kind: str, request: dict[str, object], **_: object) -> object:
+        assert kind == "harness_adapter"
         sent.append(json.loads(json.dumps(request)))
         if isinstance(answer, Exception):
             raise answer
@@ -129,10 +143,58 @@ def test_install_selection_excludes_proxies_and_names_what_it_skips(monkeypatch:
     assert mcp_servers.managed_stdio_servers(detection) == ()
     assert [(row["include_proxy"], len(row["artifacts"])) for row in managed] == [(False, 2)]
 
-    skipped = _fake(monkeypatch, {"servers": [None]})
+    skipped = _fake_adapter(monkeypatch, {"skipped": [0]})
 
     assert mcp_servers.skipped_stdio_server_names(detection) == ("srv",)
-    assert [(row["include_proxy"], len(row["artifacts"])) for row in skipped] == [(False, 1)]
+    assert [row["op"] for row in skipped] == ["mcp_skipped"]
+    entries = skipped[0]["entries"]
+    assert isinstance(entries, list)
+    assert [entry["name"] for entry in entries] == ["srv", " "]
+    assert entries[0]["request"]["name"] == "srv"
+
+
+def test_an_unencodable_name_still_travels_as_a_position(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _fake_adapter(monkeypatch, {"skipped": [0, 1]})
+    detection = _detection(_artifact("bad\ud800"), _artifact("good"))
+
+    assert mcp_servers.skipped_stdio_server_names(detection) == ("bad\ud800", "good")
+    assert [(entry["name"], entry["request"] is None) for entry in sent[0]["entries"]] == [
+        ("bad?", True),
+        ("good", False),
+    ]
+
+
+def test_no_artifact_never_asks_for_skipped_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _fake_adapter(monkeypatch, {"skipped": []})
+
+    assert mcp_servers.skipped_stdio_server_names(_detection(_artifact("skill", artifact_type="skill"))) == ()
+    assert sent == []
+
+
+@pytest.mark.parametrize("answer", [{}, {"skipped": None}, {"skipped": [1]}, {"skipped": ["0"]}, {"skipped": [True]}])
+def test_a_malformed_skipped_answer_is_refused(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
+    _fake_adapter(monkeypatch, answer)
+
+    with pytest.raises(ValueError, match="native_mcp_server_select_malformed"):
+        mcp_servers.skipped_stdio_server_names(_detection(_artifact()))
+
+
+def test_a_native_failure_names_the_skipped_lookup_identity_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake_adapter(monkeypatch, authority.NativeRunnerAuthorityError("native runtime unavailable"))
+
+    with pytest.raises(ValueError, match="native_mcp_server_identity_unavailable"):
+        mcp_servers.skipped_stdio_server_names(_detection(_artifact()))
+
+
+def test_a_companion_is_asked_of_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _fake_adapter(monkeypatch, {"companion": True, "verified": False})
+
+    assert mcp_servers.is_guard_mcp_companion_name("hol-guard::x") is True
+    assert mcp_servers.is_verified_guard_mcp_companion("hol-guard::x", "node", ("s.js",)) is False
+    assert sent == [
+        {"op": "mcp_companion", "name": "hol-guard::x", "command": None, "args": []},
+        {"op": "mcp_companion", "name": "hol-guard::x", "command": "node", "args": ["s.js"]},
+    ]
 
 
 def test_no_server_never_asks(monkeypatch: pytest.MonkeyPatch) -> None:

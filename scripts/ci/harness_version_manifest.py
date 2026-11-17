@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from codex_plugin_scanner.guard.adapters.contracts import contract_for
+from codex_plugin_scanner.guard.harness.contracts import contract_for
 
 SCHEMA_VERSION = "hol-guard-harness-version-coverage.v1"
 MANIFEST_FILENAME = "harness_version_coverage_v1.json"

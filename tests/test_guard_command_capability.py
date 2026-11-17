@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.native_command_envelope import CommandEnvelopeUnavailableError
 from codex_plugin_scanner.guard.runtime import command_capability as command_capability_module
 from codex_plugin_scanner.guard.runtime import command_queue

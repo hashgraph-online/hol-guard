@@ -6,19 +6,27 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import codex_harness_client as codex
+from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 from codex_plugin_scanner.guard.codex_hook_file_integrity import _native
 from codex_plugin_scanner.guard.codex_hook_integrity import (
     hook_manifest_path,
     load_authenticated_hook_manifest_path,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from tests.native_runtime_stamp import stamp_native_runtime
 
 
-def test_codex_manifest_files_name_the_native_runtime_the_hook_runs(tmp_path: Path) -> None:
+def test_codex_manifest_files_name_the_native_runtime_the_hook_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     runtime = tmp_path / "hol-guard-runtime"
     runtime.write_bytes(b"fixture")
-    files = dict(codex._hook_packaged_file_paths(runtime))
+    context = HarnessContext(
+        home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=None, home_override_explicit=True
+    )
+    stamp_native_runtime(monkeypatch, runtime)
+    files = dict(codex._hook_manifest_spec(context).packaged_file_paths)
     assert files["bridge"] == runtime.resolve()
     assert "bridge_resume" not in files
     assert all(path.is_file() for path in files.values())
@@ -35,7 +43,7 @@ def test_installed_codex_manifest_verifies_after_adapter_reorganization(
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=home / ".hol-guard")
-    codex.CodexHarnessAdapter().install(context)
+    codex_lifecycle.CodexHarnessAdapter().install(context)
     manifest = load_authenticated_hook_manifest_path(context.guard_home, hook_manifest_path(context.guard_home, config))
     _native("captured", manifest=manifest)
     files = manifest["packaged_files"]

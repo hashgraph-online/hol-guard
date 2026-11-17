@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_remote_client as codex_remote_control
 from codex_plugin_scanner.guard import native_context
-from codex_plugin_scanner.guard.adapters import codex_remote_control
 
 
 @pytest.fixture(autouse=True)

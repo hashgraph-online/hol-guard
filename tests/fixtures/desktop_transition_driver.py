@@ -13,9 +13,9 @@ import time
 from pathlib import Path
 
 from codex_plugin_scanner.cli import _build_parser
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.cli import commands_lifecycle_gate
 from codex_plugin_scanner.guard.cli import desktop_runtime_transition as cli
+from codex_plugin_scanner.guard.harness.base import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity
 from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionFile
 from codex_plugin_scanner.guard.runtime_transition_admission import NativeProtectionAdmission, _seal_verified_admission

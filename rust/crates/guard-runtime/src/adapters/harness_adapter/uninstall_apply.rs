@@ -123,8 +123,16 @@ fn shim_only(spec: &Spec, ctx: &Ctx) -> Step<Value> {
 
 pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> KindResult {
     let mut events = Vec::new();
+    let _config = match super::install_apply::opencode_lock(spec, ctx) {
+        Ok(lock) => lock,
+        Err(failure) => return answer(Err(failure)),
+    };
     let step = if spec.install == Install::Shim {
         shim_only(spec, ctx)
+    } else if spec.harness == "cursor" {
+        super::cursor_apply::uninstall(spec, ctx, fields)
+    } else if spec.harness == "cline" {
+        super::cline_apply::uninstall(ctx, fields)
     } else {
         // The plan comes first, so a refusal leaves the launcher in place.
         route(spec, "prepare_uninstall", ctx, fields).and_then(|plan| {

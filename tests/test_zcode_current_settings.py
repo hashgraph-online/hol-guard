@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from tests.test_zcode_adapter import GUARD_MANAGED_MARKER, _ctx, _write_cli_config, is_guard_managed_hook_command
 
 

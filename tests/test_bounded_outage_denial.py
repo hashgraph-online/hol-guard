@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
+from codex_plugin_scanner.guard.harness import bounded_cli_hook_bridge as bridge
+from codex_plugin_scanner.guard.harness.bounded_cli_hook_failure import failure_payload
 
 from .bounded_cli_hook_test_support import config, run_hook
 

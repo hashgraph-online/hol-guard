@@ -132,7 +132,7 @@ class HookWorker(HookWorkerNativeMixin):
         # Resolve adapter modules before a managed hook request starts
         # its deadline. This lookup grants no authority; native policy
         # readiness remains the enforcement barrier.
-        from ..adapters import list_adapters
+        from ..harness.registry import list_adapters
 
         _ = list_adapters()
         self._owns_policy_snapshot_publisher = publish_native_policy

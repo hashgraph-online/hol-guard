@@ -4,8 +4,8 @@
 //! decides the state launch, doctor and install readback report.
 //!
 //! The caller sends only what its own process knows: the installation it
-//! expects (`spec`), its package roots, and the long form of any 8.3 short
-//! name a handler command carries.
+//! expects (`spec`) and its package roots. An 8.3 short name a handler command
+//! carries is expanded by this host.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -17,8 +17,8 @@ use guard_contracts::{
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
-use super::codex::{config_path, hooks_path, EVENTS};
-use super::codex_hook_state::{decide, with_syntax};
+use super::codex::{config_path, flag, hooks_path, EVENTS};
+use super::codex_hook_state::decide;
 use super::codex_live_read::{live_hooks, LiveHooks};
 use super::{path_text, Ctx, Failure, Step};
 use crate::codex_hook_manifest_auth as manifest_auth;
@@ -64,13 +64,6 @@ pub(super) fn live_hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
     } else {
         authenticated(ctx, spec, &config)?
     };
-    let commands = manifest.as_ref().map(handler_commands).unwrap_or_default();
-    let mut missing = expansions(with_syntax(fields, |syntax| {
-        for command in &commands {
-            syntax.split_hook(command);
-        }
-        Ok(())
-    }))?;
     let request = CodexHookManifestVerifyRequestV1 {
         schema: CODEX_HOOK_MANIFEST_VERIFY_REQUEST_SCHEMA.to_owned(),
         request_id: String::new(),
@@ -92,7 +85,7 @@ pub(super) fn live_hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
             .unwrap_or_default(),
         manifest,
         hooks: hooks_wire(live, &tokens),
-        windows: fields.get("windows").and_then(Value::as_bool) == Some(true),
+        windows: flag(fields, "windows")?,
         long_paths: super::codex_owners::long_paths(fields)?,
         private_groups: Vec::new(),
     };
@@ -116,38 +109,7 @@ pub(super) fn live_hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
     let mut base = fields.clone();
     base.insert("config_path".into(), json!(path_text(&config)));
     base.insert("hooks_path".into(), json!(path_text(&hooks_file)));
-    let answer = decide(ctx, &base, read, integrity, Some(&tokens));
-    // The caller expands short names once, so every name both steps met is
-    // asked for together.
-    match answer {
-        Err(failure) => {
-            missing.extend(expansions(Err(failure))?);
-            Err(expand(&missing))
-        }
-        Ok(_) if !missing.is_empty() => Err(expand(&missing)),
-        Ok(state) => Ok(state),
-    }
-}
-
-fn expand(names: &BTreeSet<String>) -> Failure {
-    Failure::Reply(json!({ "expand": names }))
-}
-
-/// The short names an answer asked to have expanded; any other failure
-/// stands.
-fn expansions(answer: Step<()>) -> Step<BTreeSet<String>> {
-    match answer {
-        Ok(()) => Ok(BTreeSet::new()),
-        Err(Failure::Reply(reply)) => match reply.get("expand").and_then(Value::as_array) {
-            Some(names) => Ok(names
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_owned)
-                .collect()),
-            None => Err(Failure::Reply(reply)),
-        },
-        Err(failure) => Err(failure),
-    }
+    decide(ctx, &base, read, integrity, Some(&tokens))
 }
 
 fn spec_text<'a>(spec: &'a Map<String, Value>, key: &str) -> Step<&'a str> {
@@ -355,20 +317,6 @@ fn installed(ctx: &Ctx, manifest: &Value, fields: &Map<String, Value>) -> Step<V
                 .any(|root| resolved.starts_with(root) && resolved != *root)
         })
         .collect())
-}
-
-fn handler_commands(manifest: &Value) -> Vec<String> {
-    manifest
-        .get("events")
-        .and_then(Value::as_array)
-        .map(|events| {
-            events
-                .iter()
-                .filter_map(|binding| binding.get("handler")?.get("command")?.as_str())
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 /// The live hooks as the verifier reads them: each managed event's group

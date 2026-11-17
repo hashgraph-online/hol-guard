@@ -16,11 +16,10 @@ except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
+from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 from codex_plugin_scanner.guard.codex_config import dump_toml
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import (
     CodexHookIntegrityError,
     describe_executable_file,
@@ -34,8 +33,13 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
     write_hook_manifest,
 )
 from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 from tests import codex_hook_publication_helpers as publication_helpers
+from tests.native_runtime_stamp import stamp_native_runtime
 from tests.transition_fault_support import interrupt_publication_at
+
+_CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -470,7 +474,7 @@ def test_guard_codex_native_hook_state_detects_bridge_content_mode_and_symlink_c
     bridge_path.parent.mkdir(parents=True)
     bridge_path.write_bytes(b"#!/bin/sh\nexit 0\n")
     bridge_path.chmod(0o644)
-    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda _guard_home: bridge_path)
+    stamp_native_runtime(monkeypatch, bridge_path)
     adapter = CodexHarnessAdapter()
     adapter.install(context)
 
@@ -509,7 +513,7 @@ def test_guard_codex_repair_refuses_to_authenticate_changed_same_version_bridge(
     bridge_path.parent.mkdir(parents=True)
     bridge_path.write_bytes(b"#!/bin/sh\nexit 0\n")
     bridge_path.chmod(0o644)
-    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda _guard_home: bridge_path)
+    stamp_native_runtime(monkeypatch, bridge_path)
     adapter = CodexHarnessAdapter()
     adapter.install(context)
     valid_state = codex_adapter.codex_native_hook_state(context)
@@ -664,8 +668,8 @@ def test_guard_codex_launch_uses_remote_control_for_dashboard_continuation(tmp_p
         captured.update(kwargs)
         return ["/usr/bin/codex", "--remote", "unix:///guarded.sock", "Fix it."]
 
-    monkeypatch.setattr(codex_adapter, "_require_codex_authoritative_shell_hook", lambda _context: None)
-    monkeypatch.setattr(codex_adapter, "guarded_codex_launch_command", fake_remote_launch)
+    monkeypatch.setattr(codex_lifecycle, "_require_codex_authoritative_shell_hook", lambda _context: None)
+    monkeypatch.setattr(codex_lifecycle, "guarded_codex_launch_command", fake_remote_launch)
     monkeypatch.setattr(CodexHarnessAdapter, "resolved_executable", lambda self, ctx: "/usr/bin/codex")
 
     command = CodexHarnessAdapter().launch_command(context, ["Fix it."])
@@ -683,7 +687,7 @@ def test_guard_codex_launch_uses_remote_control_for_dashboard_continuation(tmp_p
 def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    source_root = str(Path(codex_adapter.__file__).resolve().parents[3])
+    source_root = str(Path(codex_adapter.__file__).resolve().parents[2])
     monkeypatch.setenv("PYTHONPATH", str(tmp_path / "stale-site-packages"))
     _build_guard_fixture(home_dir, workspace_dir)
 
@@ -730,7 +734,7 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert (workspace_dir / ".codex" / "hooks.json").exists() is False
     assert 'API_BASE = "https://hol.org"' in config_text
     assert 'FEATURE_FLAG = "1"' in config_text
-    assert hooks_payload["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
+    assert hooks_payload["PreToolUse"][0]["matcher"] == _CODEX_GUARD_TOOL_MATCHER
     assert hooks_payload["PermissionRequest"][0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
     assert "UserPromptSubmit" in hooks_payload
     assert "matcher" not in hooks_payload["UserPromptSubmit"][0]
@@ -1149,7 +1153,7 @@ def test_guard_install_codex_refuses_unmanaged_existing_hook_entries(tmp_path, c
                 "hooks": {
                     "PreToolUse": [
                         {
-                            "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
+                            "matcher": _CODEX_GUARD_TOOL_MATCHER,
                             "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
                         }
                     ],
@@ -1286,7 +1290,7 @@ hooks = true
     assert len(workspace_config["hooks"]["PreToolUse"]) == 1
     assert workspace_config["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == "python3 custom-pre.py"
     assert len(home_config["hooks"]["PreToolUse"]) == 1
-    assert home_config["hooks"]["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
+    assert home_config["hooks"]["PreToolUse"][0]["matcher"] == _CODEX_GUARD_TOOL_MATCHER
 
 
 def test_guard_install_codex_migrates_global_and_workspace_hooks_to_toml(tmp_path, capsys):
@@ -1347,7 +1351,7 @@ def test_guard_install_codex_migrates_global_and_workspace_hooks_to_toml(tmp_pat
     assert home_config["hooks"]["SessionStart"][0]["hooks"][0]["command"] == "python3 global-start.py"
     assert "hooks" not in workspace_config
     assert len(home_config["hooks"]["PreToolUse"]) == 1
-    assert home_config["hooks"]["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
+    assert home_config["hooks"]["PreToolUse"][0]["matcher"] == _CODEX_GUARD_TOOL_MATCHER
     assert "codex_plugin_scanner.cli" in home_config["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
 
 
@@ -1389,7 +1393,7 @@ def test_guard_install_codex_migrates_legacy_bash_only_managed_hook(tmp_path, ca
     assert len(config_payload["hooks"]["PreToolUse"]) == 1
     assert len(config_payload["hooks"]["PermissionRequest"]) == 1
     assert len(config_payload["hooks"]["UserPromptSubmit"]) == 1
-    assert config_payload["hooks"]["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
+    assert config_payload["hooks"]["PreToolUse"][0]["matcher"] == _CODEX_GUARD_TOOL_MATCHER
     assert config_payload["hooks"]["PreToolUse"][0]["hooks"][0]["statusMessage"] == "HOL Guard checking tool action"
     assert len(config_payload["hooks"]["UserPromptSubmit"]) == 1
 
@@ -1570,7 +1574,7 @@ def test_guard_install_codex_refuses_ambiguous_legacy_wrapper_script_hook(tmp_pa
     wrapper_command = shlex.join([str(home_dir / ".codex" / "hooks" / "hol-guard-codex-hook.sh"), "--legacy"])
     managed_events = {
         "PreToolUse": {
-            "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
+            "matcher": _CODEX_GUARD_TOOL_MATCHER,
             "hooks": [
                 {
                     "type": "command",
@@ -1689,7 +1693,7 @@ def test_guard_install_codex_workspace_refuses_to_rebind_global_managed_hook(tmp
     assert len(home_config["hooks"]["PostToolUse"]) == 1
     assert home_config["hooks"]["PostToolUse"][0]["matcher"] == "Bash|Read|mcp__.*"
     managed_group = home_config["hooks"]["PreToolUse"][0]
-    assert managed_group["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
+    assert managed_group["matcher"] == _CODEX_GUARD_TOOL_MATCHER
     assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]
 
 
@@ -1786,7 +1790,7 @@ def test_guard_uninstall_codex_preserves_user_hooks_in_managed_bash_group(tmp_pa
                 "hooks": {
                     "PreToolUse": [
                         {
-                            "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
+                            "matcher": _CODEX_GUARD_TOOL_MATCHER,
                             "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
                         }
                     ]
@@ -1817,7 +1821,7 @@ def test_guard_uninstall_codex_preserves_user_hooks_in_managed_bash_group(tmp_pa
     assert uninstall_rc == 0
     assert restored_hooks["hooks"]["PreToolUse"] == [
         {
-            "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
+            "matcher": _CODEX_GUARD_TOOL_MATCHER,
             "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
         }
     ]

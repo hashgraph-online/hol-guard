@@ -243,20 +243,29 @@ def _portable_skill_artifacts(
     return [_artifact_wire(artifact) for artifact in artifacts]
 
 
+def portable_workspace_skills(harness: str, workspace_dir: Path | None) -> list[dict[str, object]] | None:
+    """The workspace skills a Windows walk finds, or None when the native walk answers."""
+    if workspace_dir is None or harness not in _WORKSPACE_CODEX_SKILL_HARNESSES or not _needs_portable_walk():
+        return None
+    try:
+        resolved = workspace_dir.resolve()
+    except OSError:
+        return None
+    if not resolved.is_dir():
+        return None
+    return _portable_skill_artifacts(
+        harness,
+        scope_dir=resolved,
+        skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
+        scope="project",
+    )
+
+
 def _workspace_request(harness: str, workspace_dir: Path) -> dict[str, object]:
     request: dict[str, object] = {"harness": harness, "workspace_dir": anchor_to_process_directory(workspace_dir)}
-    if harness in _WORKSPACE_CODEX_SKILL_HARNESSES and _needs_portable_walk():
-        try:
-            resolved = workspace_dir.resolve()
-        except OSError:
-            return request
-        if resolved.is_dir():
-            request["skills"] = _portable_skill_artifacts(
-                harness,
-                scope_dir=resolved,
-                skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
-                scope="project",
-            )
+    skills = portable_workspace_skills(harness, workspace_dir)
+    if skills is not None:
+        request["skills"] = skills
     return request
 
 

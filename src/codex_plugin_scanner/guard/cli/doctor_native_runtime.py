@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from typing_extensions import NotRequired, TypedDict
 
-from ..adapters.diagnostic_probes import skipped_command_probe
+from ..harness.diagnostic_probes import skipped_command_probe
 from ..native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY
 from ..native_resident_watchdog import published_process_alive, published_resident_process
 from ..resident_state_prune import probe_owner_lock

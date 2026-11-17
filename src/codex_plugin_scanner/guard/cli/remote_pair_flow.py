@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from ..adapters.base import HarnessContext
+from ..harness.base import HarnessContext
 from ..mdm.network import managed_urlopen
 from ..redaction import redact_sensitive_text
 from ..remote_pairing_constants import (
@@ -118,7 +118,7 @@ def _build_capability_summary(
     context: HarnessContext,
     no_root: bool,
 ) -> dict[str, object]:
-    from ..adapters import get_adapter
+    from ..harness.registry import get_adapter
 
     adapter = get_adapter(runtime)
     contract = adapter.setup_contract()
