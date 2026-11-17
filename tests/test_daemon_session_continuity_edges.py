@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.bounded_cli_hook_failure import failure_payload
 from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     availability_harness_response,
     cursor_unparseable_input_permission,
@@ -88,25 +87,6 @@ def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
     assert hook_event_is_permission_request("copilotPermissionRequest") is True
     assert hook_event_is_permission_request("PermissionDenied") is False
     assert hook_event_is_permission_request("PermissionRequestFoo") is False
-    camel, camel_code = failure_payload(
-        harness="copilot",
-        event_name="permissionRequestV2",
-        reason="native unavailable",
-        recording_only=False,
-    )
-    assert camel_code == 0
-    assert camel["behavior"] == "deny"
-    assert camel["interrupt"] is False
-    payload, code = failure_payload(
-        harness="copilot",
-        event_name="PermissionRequestV2",
-        reason="native unavailable",
-        recording_only=False,
-    )
-    assert code == 0
-    assert payload["behavior"] == "deny"
-    assert payload["interrupt"] is False
-    assert "permissionDecision" not in payload
     availability = availability_harness_response(
         harness="copilot",
         event_name="PermissionRequestV2",
@@ -198,27 +178,6 @@ def test_invalid_payload_reference_still_denies_a_repair_command(tmp_path: Path)
     assert isinstance(output, dict)
     assert output["permissionDecision"] == "deny"
     assert response["policy_action"] == "block"
-
-
-def test_bounded_cli_failure_uses_fail_closed_pretool_responses() -> None:
-    hermes, hermes_code = failure_payload(
-        harness="hermes",
-        event_name="PreToolUse",
-        reason="review failed",
-        recording_only=False,
-    )
-    assert hermes_code == 2
-    assert hermes["decision"] == "block"
-    cursor, cursor_code = failure_payload(
-        harness="cursor",
-        event_name="PreToolUse",
-        reason="review failed",
-        recording_only=False,
-    )
-    assert cursor_code == 2
-    output = cursor["hookSpecificOutput"]
-    assert isinstance(output, dict)
-    assert output["permissionDecision"] == "deny"
 
 
 def test_bounded_cli_cannot_finish_without_policy_action_denies_write(native_bridge_render) -> None:

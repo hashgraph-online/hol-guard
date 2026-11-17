@@ -168,3 +168,43 @@ def test_a_relative_guard_home_is_refused_by_the_runtime(
 
     assert returncode == 0
     assert _json_object(capfd.readouterr().out)["permissionDecision"] == "deny"
+
+
+def test_a_hook_the_runtime_cannot_answer_is_blocked_with_a_repair_message(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    assert bounded_cli_hook_bridge._refuse("copilot") == 2
+
+    captured = capfd.readouterr()
+    assert captured.out == ""
+    assert captured.err.strip() == bounded_cli_hook_bridge.RUNTIME_MISSING
+    assert "hol-guard repair" in captured.err
+
+
+def test_the_hook_failure_shim_returns_only_a_well_formed_native_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.harness.hook_failure_bridge import native_hook_failure
+
+    seen: list[tuple[str, dict[str, object]]] = []
+    answers: list[object] = [
+        {"document": "{}", "exit_code": 0},
+        {"document": "{}"},
+        {"document": "{}", "exit_code": True},
+    ]
+
+    def answer(kind: str, args: dict[str, object], *_rest: object, **_keywords: object) -> object:
+        seen.append((kind, args))
+        return answers.pop(0)
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", answer)
+
+    assert native_hook_failure("kimi", "PreToolUse", "why") == ("{}", 0)
+    assert seen == [("hook_failure", {"harness": "kimi", "event_name": "PreToolUse", "reason": "why"})]
+    assert native_hook_failure("kimi", "PreToolUse", "why") is None
+    assert native_hook_failure("kimi", "PreToolUse", "why") is None
+
+    def unavailable(*_args: object, **_keywords: object) -> object:
+        raise RuntimeError("no runtime")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+    assert native_hook_failure("kimi", "PreToolUse", "why") is None
