@@ -6,7 +6,6 @@ import shutil
 import subprocess
 import sys
 
-from ..codex_install_transaction import codex_install_transaction
 from ..harness.base import HarnessContext
 from ..native_daemon_manage import retire_all_guard_daemons_for_home
 from ..native_resident_update_lock import NativeResidentUpdateLockError, hold_native_resident_update_lock
@@ -336,22 +335,21 @@ def retire_native_resident_after_last_harness(context: HarnessContext, store: Gu
     if _resident_kept(context, store):
         return None
     try:
-        # Same order as self-uninstall: the update barrier, then the install
-        # transaction. Holding both, an install cannot activate a harness
-        # between the last check and the stop.
-        with (
-            hold_native_resident_update_lock(
-                context.guard_home,
-                initial_executable=resident_stop_executable(),
-            ),
-            codex_install_transaction(
-                context.guard_home, context.guard_home / "managed", actor="managed.retire_resident"
-            ),
+        # The update barrier alone serializes this stop against installs. The
+        # install transaction's lease is held by the resident, and every
+        # resident request takes the barrier's shared side, so while this
+        # process holds the exclusive side no install can take or use a lease.
+        # Asking for that lease here would contend with this very barrier.
+        with hold_native_resident_update_lock(
+            context.guard_home,
+            initial_executable=resident_stop_executable(),
         ):
             if _resident_kept(context, store):
                 return None
             return retire_native_resident_for_home(context.guard_home)
-    except (NativeResidentUpdateLockError, OSError, RuntimeError, TimeoutError):
+    except (NativeResidentUpdateLockError, OSError, RuntimeError, TimeoutError, ValueError):
+        # The harness is already disconnected; a resident that could not be
+        # stopped is reported, never turned into a failed uninstall.
         return False
 
 

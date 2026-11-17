@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from io import StringIO
@@ -10,10 +11,18 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
+from codex_plugin_scanner.guard import native_transition_files
 from codex_plugin_scanner.guard.cli import uninstall_commands
 from codex_plugin_scanner.guard.cli.render import _render_managed_install
 from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.native_resident_update_lock import NativeResidentUpdateLockError
+from codex_plugin_scanner.guard.native_resident_update_lock import (
+    RESIDENT_UPDATE_LOCK_NAME,
+    NativeResidentUpdateLockError,
+    _is_lock_contention,
+    _unlock,
+    open_private_lock_file,
+)
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -142,6 +151,88 @@ def test_unreadable_resident_state_keeps_the_uninstall_result(
 
     assert uninstall_commands.retire_native_resident_after_last_harness(context, store) is None
     assert events == []
+
+
+def _resident_request(guard_home: Path) -> None:
+    """Take and drop the barrier's shared side, as every resident client request does."""
+
+    descriptor = open_private_lock_file(guard_home, RESIDENT_UPDATE_LOCK_NAME)
+    try:
+        try:
+            if os.name == "nt":
+                from codex_plugin_scanner.guard.native_command_control_windows_lock import try_lock_authority_file
+
+                try_lock_authority_file(descriptor, shared=True)
+            else:
+                import fcntl
+
+                fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except OSError as error:
+            if _is_lock_contention(error):
+                raise NativeRunnerAuthorityError("native_resident_update_in_progress") from error
+            raise
+        _unlock(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def test_removing_the_last_harness_never_asks_the_resident_for_a_lease_under_the_barrier(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """`hol-guard uninstall zcode` as the last harness exited 2 with native_resident_update_in_progress.
+
+    The install transaction's lease is a resident request, and resident requests
+    take the update barrier's shared side, so asking for it while this process
+    held the exclusive side contended with itself.
+    """
+
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    events: list[str] = []
+
+    def lease_request(request: dict[str, object]) -> dict[str, object]:
+        _resident_request(context.guard_home)
+        return {"ok": True, "lease": "lease-1"} if request.get("op") == "lease_acquire" else {"ok": True}
+
+    def retire(_guard_home: Path) -> bool:
+        events.append("retire")
+        return True
+
+    monkeypatch.setattr(native_transition_files, "_lease_request", lease_request)
+    monkeypatch.setattr(uninstall_commands, "_active_managed_installs", lambda _store: ([], None))
+    monkeypatch.setattr(uninstall_commands, "resident_stop_executable", lambda: tmp_path / "runtime")
+    monkeypatch.setattr(uninstall_commands, "retire_native_resident_for_home", retire)
+    monkeypatch.setattr(uninstall_commands, "_resident_state_absent", lambda _guard_home: False)
+
+    assert uninstall_commands.retire_native_resident_after_last_harness(context, store) is True
+    assert events == ["retire"]
+    _resident_request(context.guard_home)
+
+
+@contextmanager
+def _no_transaction(*_args: object, **_kwargs: object) -> Iterator[None]:
+    yield
+
+
+def test_a_native_refusal_while_stopping_reports_the_resident_as_still_running(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    events: list[str] = []
+    _stub_resident(monkeypatch, tmp_path, events)
+
+    def retire(_guard_home: Path) -> bool:
+        raise NativeRunnerAuthorityError("native_resident_update_in_progress")
+
+    monkeypatch.setattr(uninstall_commands, "retire_native_resident_for_home", retire)
+    monkeypatch.setattr(uninstall_commands, "_active_managed_installs", lambda _store: ([], None))
+    monkeypatch.setattr(uninstall_commands, "codex_install_transaction", _no_transaction, raising=False)
+
+    assert uninstall_commands.retire_native_resident_after_last_harness(context, store) is False
+    assert events == ["acquire"]
 
 
 def test_terminal_output_names_a_resident_that_did_not_stop() -> None:
