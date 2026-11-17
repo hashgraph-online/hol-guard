@@ -241,6 +241,21 @@ fn matches_and_intercept_through_dispatch() {
 }
 
 #[test]
+fn a_hooks_value_that_is_not_a_table_routes_nothing() {
+    for hooks in ["[]", "null", "\"PreToolUse\"", "3"] {
+        let answer = ask("matches", json!({ "hooks": hooks }));
+        let events = answer["matches"].as_object().unwrap();
+        assert_eq!(events.len(), EVENTS.len(), "{hooks}");
+        assert!(
+            events.values().all(|found| found == &json!(false)),
+            "{hooks}"
+        );
+        assert_eq!(answer["intercept"], json!(false), "{hooks}");
+    }
+    assert_eq!(ask("matches", json!({ "hooks": "{" })), json!("refused"));
+}
+
+#[test]
 fn install_refuses_an_unowned_guard_handler_and_appends_otherwise() {
     let fields = |hooks: String| {
         json!({
@@ -282,7 +297,7 @@ fn overlay_keeps_stale_cli_ownership_only() {
 
 #[test]
 fn doctor_copy_and_status() {
-    let state = json!({ "config_present": true, "codex_hooks_enabled": true, "managed_hook_installed": true, "integrity_valid": true, "protection_active": true });
+    let state = json!({ "config_present": true, "codex_hooks_enabled": true, "managed_hook_installed": true, "integrity_status": "valid", "protection_active": true });
     let answer = ask(
         "doctor",
         json!({ "warnings": ["Guard is not installed for this harness."], "hook_state": state, "base_status": "partial" }),
@@ -298,8 +313,33 @@ fn doctor_copy_and_status() {
 }
 
 #[test]
+fn doctor_reads_the_integrity_status_not_a_flag() {
+    let ask_with = |status: Value| {
+        let state = json!({ "config_present": true, "codex_hooks_enabled": true, "managed_hook_installed": true, "integrity_status": status, "protection_active": true });
+        ask(
+            "doctor",
+            json!({ "warnings": [], "hook_state": state, "base_status": "partial" }),
+        )
+    };
+    assert_eq!(
+        ask_with(json!("valid")),
+        json!({ "warnings": [], "status": "active" })
+    );
+    for status in [json!("stale"), json!("invalid"), json!(true), json!(null)] {
+        let answer = ask_with(status.clone());
+        let warnings = answer["warnings"].as_array().unwrap();
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.as_str().unwrap().contains("do not match this Guard CLI")),
+            "{status}"
+        );
+    }
+}
+
+#[test]
 fn doctor_never_calls_untrusted_hooks_active() {
-    let state = |stale: bool| json!({ "config_present": true, "codex_hooks_enabled": true, "managed_hook_installed": true, "integrity_valid": true, "protection_active": true, "hook_trust_stale": stale });
+    let state = |stale: bool| json!({ "config_present": true, "codex_hooks_enabled": true, "managed_hook_installed": true, "integrity_status": "valid", "protection_active": true, "hook_trust_stale": stale });
     let ask_with = |stale: bool| {
         ask(
             "doctor",

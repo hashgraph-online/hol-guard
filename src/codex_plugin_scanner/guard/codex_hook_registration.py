@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from .codex_config import _Wire
-from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_self_binding import answer_text, ask_hook_owners, install_fields
 
 
@@ -103,26 +102,23 @@ def require_codex_hook_owner(
         raise RuntimeError(conflict)
 
 
-def _matches(hooks: object, windows: bool | None) -> dict[str, Any] | None:
-    if not isinstance(hooks, dict):
-        return None
+def _matches(hooks: object, windows: bool | None) -> dict[str, Any]:
     return ask_hook_owners("matches", windows=windows, hooks=_Wire(hooks).text(hooks))
 
 
 def live_owned_codex_event_matches(hooks: object, *, windows: bool | None = None) -> dict[str, bool]:
     """Return which managed Codex events still route a live Guard handler."""
 
-    answer = _matches(hooks, windows)
-    found = answer.get("matches") if answer is not None else None
-    found = found if isinstance(found, dict) else {}
-    return {event_name: found.get(event_name) is True for event_name in MANAGED_CODEX_HOOK_EVENTS}
+    found = _matches(hooks, windows).get("matches")
+    if not isinstance(found, dict):
+        raise RuntimeError("codex_hook_owners answered without matches")
+    return {str(event_name): matched is True for event_name, matched in found.items()}
 
 
 def live_guard_codex_hooks_intercept(hooks: object, *, windows: bool | None = None) -> bool:
     """Return whether live Codex config still routes Guard's launchable intercept hooks."""
 
-    answer = _matches(hooks, windows)
-    return answer is not None and answer.get("intercept") is True
+    return _matches(hooks, windows).get("intercept") is True
 
 
 def install_managed_codex_hook_groups(
@@ -153,15 +149,6 @@ def install_managed_codex_hook_groups(
     hooks.update(installed)
 
 
-_HOOK_STATE_FLAGS = (
-    "config_present",
-    "codex_hooks_enabled",
-    "managed_hook_installed",
-    "protection_active",
-    "hook_trust_stale",
-)
-
-
 def codex_doctor_result(
     warnings: Sequence[str],
     hook_state: Mapping[str, object],
@@ -169,12 +156,10 @@ def codex_doctor_result(
 ) -> tuple[list[str], object]:
     """Doctor's Codex warnings and setup status, decided from live hook proof."""
 
-    state = {flag: bool(hook_state.get(flag)) for flag in _HOOK_STATE_FLAGS}
-    state["integrity_valid"] = hook_state.get("integrity_status") == "valid"
     answer = ask_hook_owners(
         "doctor",
         warnings=[str(item) for item in warnings],
-        hook_state=state,
+        hook_state=dict(hook_state),
         base_status=base_status if isinstance(base_status, str) else None,
     )
     found = answer.get("warnings")

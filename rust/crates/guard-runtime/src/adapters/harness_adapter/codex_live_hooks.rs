@@ -81,7 +81,12 @@ pub(super) fn run(op: &str, fields: &Map<String, Value>, syntax: &mut Syntax) ->
             Ok(json!({ "conflict": conflict(command, ownership, place, syntax) }))
         }
         "matches" => {
-            let hooks = dict(fields, "hooks")?;
+            // A `hooks` value that is not a table routes nothing.
+            let hooks = match pyjson::parse(text(fields, "hooks")?) {
+                Ok(PyVal::Dict(entries)) => entries,
+                Ok(_) => Vec::new(),
+                Err(_) => return Err(Failure::Invalid),
+            };
             let matches = event_matches(&hooks, syntax);
             Ok(json!({ "matches": matches, "intercept": intercept(&hooks, syntax) }))
         }
@@ -430,6 +435,11 @@ fn state_flag(state: &Map<String, Value>, key: &str) -> bool {
     state.get(key).and_then(Value::as_bool).unwrap_or(false)
 }
 
+/// The hook manifest check passed: the state's `integrity_status` is `valid`.
+fn integrity_valid(state: &Map<String, Value>) -> bool {
+    state.get("integrity_status").and_then(Value::as_str) == Some("valid")
+}
+
 /// `finalize_codex_doctor_warnings` then `finalize_codex_doctor_setup_status`
 /// and the leftover-config adjustment (`doctor_status`).
 fn doctor(fields: &Map<String, Value>) -> Step<Value> {
@@ -449,7 +459,7 @@ fn doctor(fields: &Map<String, Value>) -> Step<Value> {
             warnings.push(format!(
                 "Codex config was found, but Guard's managed Codex hooks are missing. {REPAIR} to repair protection."
             ));
-        } else if !state_flag(state, "integrity_valid") {
+        } else if !integrity_valid(state) {
             warnings.push(format!(
                 "Codex hooks are installed but do not match this Guard CLI. {REPAIR} to rebind them."
             ));
