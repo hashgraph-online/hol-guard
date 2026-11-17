@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_resident_client as clients
+from codex_plugin_scanner.guard import native_resident_client_pool as pool_module
 from codex_plugin_scanner.guard import native_resident_stream as streams
 from codex_plugin_scanner.guard.native_process_stop_scope import native_process_stop_scope
 
@@ -38,7 +39,7 @@ def _pool(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> clients._Persisten
     pool = clients._PersistentNativeClientPool(
         executable=tmp_path / "runtime", state_dir=tmp_path / "native-runtime", environment={}
     )
-    monkeypatch.setattr(clients, "_PersistentNativeClient", _unexpected)
+    monkeypatch.setattr(pool_module, "_PersistentNativeClient", _unexpected)
     monkeypatch.setattr(clients, "_track_resident", _unexpected)
     monkeypatch.setattr(streams.subprocess, "Popen", _unexpected)
     return pool
@@ -136,8 +137,10 @@ def test_stop_during_idle_wait_keeps_parked_lease(tmp_path: Path, monkeypatch: p
     worker.start()
     with native_process_stop_scope(stop):
         answer = pool.request(
-            b"{}", deadline_monotonic=time.monotonic() + 3,
-            idle_only=True, idle_wait_seconds=2.0,
+            b"{}",
+            deadline_monotonic=time.monotonic() + 3,
+            idle_only=True,
+            idle_wait_seconds=2.0,
         )
     worker.join(timeout=2.0)
     assert not worker.is_alive()
@@ -151,7 +154,8 @@ def test_stop_during_idle_wait_keeps_parked_lease(tmp_path: Path, monkeypatch: p
 
 
 def test_idle_wait_does_not_take_lease_after_request_deadline(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     """A late parked stream must survive a caller whose request has expired."""
     pool = _pool(tmp_path, monkeypatch)
@@ -164,8 +168,10 @@ def test_idle_wait_does_not_take_lease_after_request_deadline(
 
     monkeypatch.setattr(pool._condition, "wait", parked_after_deadline)
     answer = pool.request(
-        b"{}", deadline_monotonic=time.monotonic() + 0.015,
-        idle_only=True, idle_wait_seconds=0.2,
+        b"{}",
+        deadline_monotonic=time.monotonic() + 0.015,
+        idle_only=True,
+        idle_wait_seconds=0.2,
     )
     assert answer is None
     assert pool._idle == [client]
@@ -175,7 +181,8 @@ def test_idle_wait_does_not_take_lease_after_request_deadline(
 
 
 def test_stop_without_pool_notification_interrupts_idle_wait_promptly(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     """A stopped publisher cannot wait its entire idle grace for a pool wake."""
     pool = _pool(tmp_path, monkeypatch)
@@ -201,8 +208,10 @@ def test_stop_without_pool_notification_interrupts_idle_wait_promptly(
     started = time.monotonic()
     with native_process_stop_scope(stop):
         answer = pool.request(
-            b"{}", deadline_monotonic=time.monotonic() + 2,
-            idle_only=True, idle_wait_seconds=0.8,
+            b"{}",
+            deadline_monotonic=time.monotonic() + 2,
+            idle_only=True,
+            idle_wait_seconds=0.8,
         )
     elapsed = time.monotonic() - started
     worker.join(timeout=1)
@@ -216,16 +225,22 @@ def test_stop_without_pool_notification_interrupts_idle_wait_promptly(
 
 
 def test_idle_only_zero_wait_borrows_parked_stream_immediately(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     pool = _pool(tmp_path, monkeypatch)
     client = _Client()
     pool._clients.add(client)
     pool._idle.append(client)
     monkeypatch.setattr(pool._condition, "wait", _unexpected)
-    assert pool.request(
-        b"{}", deadline_monotonic=time.monotonic() + 2,
-        idle_only=True, idle_wait_seconds=0.0,
-    ) == b"ok"
+    assert (
+        pool.request(
+            b"{}",
+            deadline_monotonic=time.monotonic() + 2,
+            idle_only=True,
+            idle_wait_seconds=0.0,
+        )
+        == b"ok"
+    )
     assert pool._idle == [client]
     assert client.calls == 1

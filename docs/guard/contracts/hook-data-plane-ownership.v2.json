@@ -480,6 +480,7 @@
    "class": "python_transport",
    "paths": [
     "src/codex_plugin_scanner/guard/native_resident_client.py",
+    "src/codex_plugin_scanner/guard/native_resident_client_pool.py",
     "src/codex_plugin_scanner/guard/native_resident_health.py",
     "src/codex_plugin_scanner/guard/native_resident_prerequisite_reason.py",
     "src/codex_plugin_scanner/guard/native_resident_update_lock.py",

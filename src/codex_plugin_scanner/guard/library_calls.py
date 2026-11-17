@@ -245,7 +245,7 @@ def run_library_call(guard_home: Path, request: bytes) -> dict[str, object]:
 
     try:
         decoded = json.loads(request.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
         return {"error": {"type": "LibraryCallError", "message": "invalid_request", "kind": "library_call"}}
     if not isinstance(decoded, dict):
         return {"error": {"type": "LibraryCallError", "message": "invalid_request", "kind": "library_call"}}
