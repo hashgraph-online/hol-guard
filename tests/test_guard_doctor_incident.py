@@ -12,6 +12,8 @@ import io
 import json
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli.commands_router import run_guard_command
 from codex_plugin_scanner.guard.cli.doctor_incident import run_codex_incident_export
@@ -293,14 +295,24 @@ def test_incident_export_rejects_repair_without_running_diagnostics(tmp_path: Pa
     assert json.loads(output.getvalue())["error"] == "incident_export_requires_codex_without_other_doctor_actions"
 
 
-def test_incident_export_names_an_unreadable_guard_config(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("error", "detail"),
+    [
+        (ValueError("guard config: Invalid value"), "ValueError"),
+        (FileNotFoundError("runtime missing"), "FileNotFoundError"),
+        (RuntimeError("incident_report refused"), "RuntimeError"),
+    ],
+)
+def test_incident_export_names_a_failed_report_with_its_reason(
+    tmp_path: Path, monkeypatch, error: Exception, detail: str
+) -> None:
     context = _context(tmp_path)
 
     def broken(*_args, **_kwargs):
-        raise ValueError("Invalid value")
+        raise error
 
     monkeypatch.setattr("codex_plugin_scanner.guard.cli.doctor_incident.live_hook_ask", broken)
     output = io.StringIO()
 
     assert run_codex_incident_export(argparse.Namespace(harness="codex"), context, output_stream=output) == 2
-    assert json.loads(output.getvalue()) == {"error": "guard_config_unreadable", "detail": "ValueError"}
+    assert json.loads(output.getvalue()) == {"error": "incident_report_failed", "detail": detail, "reason": str(error)}

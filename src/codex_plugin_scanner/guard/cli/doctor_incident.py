@@ -20,10 +20,12 @@ def run_codex_incident_export(args: object, context: HarnessContext, output_stre
         return 2
     try:
         answer = live_hook_ask("incident_report", context)
-    except (OSError, ValueError) as error:
-        # A broken Guard config is one of the states this report is for:
-        # name it instead of failing with a traceback.
-        print(json.dumps({"error": "guard_config_unreadable", "detail": type(error).__name__}), file=output)
+    except (OSError, ValueError, RuntimeError) as error:
+        # A broken Guard config, a refused op or a missing runtime are states
+        # this report is for: name the failure and keep its reason instead of
+        # failing with a traceback.
+        failure = {"error": "incident_report_failed", "detail": type(error).__name__, "reason": str(error)[:256]}
+        print(json.dumps(failure), file=output)
         return 2
     report = answer.get("report")
     if not isinstance(report, str):
