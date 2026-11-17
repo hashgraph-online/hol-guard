@@ -95,7 +95,8 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PlanRequest {
-    op: String,
+    #[serde(rename = "op")]
+    _op: String,
     ai_tool: String,
     before: Option<String>,
     entry: Value,
@@ -105,7 +106,8 @@ struct PlanRequest {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UndoRequest {
-    op: String,
+    #[serde(rename = "op")]
+    _op: String,
     ai_tool: String,
     current: String,
     written: Value,
@@ -307,7 +309,11 @@ fn plan(tool: &Tool, before: Option<&str>, wanted: &Fields, url: &str) -> Value 
                     format!("An entry named {SERVER_NAME} already exists with other settings.");
                 return answer("conflict", others, Some(problem.as_str()));
             }
-            Some(current) if current == *wanted => return answer("unchanged", others, None),
+            Some(current) if current == *wanted => {
+                let mut unchanged = answer("unchanged", others, None);
+                unchanged["after"] = json!(before);
+                return unchanged;
+            }
             Some(Fields::Url(current)) => previous_url = display_url(&current),
             Some(Fields::Bridge { .. }) => {}
         }

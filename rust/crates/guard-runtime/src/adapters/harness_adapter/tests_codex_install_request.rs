@@ -60,7 +60,9 @@ fn a_launch_completes_the_pairs_groups_and_legacy_bridge() {
     let expected: Value = serde_json::from_str(done["expected"].as_str().unwrap()).unwrap();
     let bindings: Value = serde_json::from_str(groups["bindings"].as_str().unwrap()).unwrap();
     assert_eq!(expected, bindings);
-    assert!(!done["expected"].as_str().unwrap().contains(", "));
+    // Both are the compact text of the same bindings; a launch argument may
+    // hold ", " inside a string, so the separators are compared, not searched.
+    assert_eq!(done["expected"], groups["bindings"]);
     assert_eq!(done["legacy_argv"][0], "/py");
     let statuses: Vec<&str> = done["statuses"]
         .as_array()

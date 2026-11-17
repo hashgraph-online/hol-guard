@@ -227,7 +227,7 @@ fn restore_answer(request: RestoreRequest) -> Option<Value> {
 }
 
 /// How a failed step reads to the person running the command.
-pub(super) fn settle(path: &Path, failure: Failure) -> WriteError {
+pub(in crate::cloud_actions_host_apply) fn settle(path: &Path, failure: Failure) -> WriteError {
     match failure {
         Failure::Write(error) => error,
         Failure::Io(error) => WriteError::new(
@@ -381,7 +381,7 @@ fn write_file(
     Ok(())
 }
 
-pub(super) fn publish(
+pub(in crate::cloud_actions_host_apply) fn publish(
     ops: &dyn Ops,
     temporary: &Path,
     path: &Path,

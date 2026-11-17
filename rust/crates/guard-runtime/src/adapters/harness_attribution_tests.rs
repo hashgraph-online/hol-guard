@@ -186,7 +186,10 @@ fn a_long_chain_is_cut_off_at_eight_ancestors() {
     table.push("20 1 /opt/apps/codex".to_owned());
     // Ten shells before the harness: past the bound.
     assert_eq!(parent_harness(&table.join("\n"), 10), None);
-    assert_eq!(parent_harness(&table.join("\n"), 12), Some("codex"));
+    // Eight rows are read starting at the parent itself, so the harness is
+    // reached from the seventh shell and missed from the eighth-from-last.
+    assert_eq!(parent_harness(&table.join("\n"), 12), None);
+    assert_eq!(parent_harness(&table.join("\n"), 13), Some("codex"));
 }
 
 #[test]

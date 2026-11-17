@@ -354,7 +354,7 @@ fn a_signed_file_that_changed_after_the_binding_was_read_refuses() {
 
 /// A legacy package: no probe envelope, an installation key and a store.
 fn legacy_fixture() -> (Fixture, tempfile::TempDir) {
-    let home = tempfile::tempdir().unwrap();
+    let home = super::private_home();
     build_database(&home.path().join("guard.db"));
     crate::hook_evidence_correlation::load_or_create_correlation_key(home.path()).unwrap();
     let plain = Answer {

@@ -121,16 +121,6 @@
       "note": "Same route: an argv shape that matches Guard's own sink is passed through to it, and the sink does the authorizing."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
-      "func": "_probe_response",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow"
-      ],
-      "note": "The edge's own route: a probe the native edge does not route to the sink gets the plain allow the resident would have answered, and the shell call itself is still judged at execution."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/hook_review/hook_fail_closed.py",
       "func": "render_silent_review_block",
       "root": "hook",

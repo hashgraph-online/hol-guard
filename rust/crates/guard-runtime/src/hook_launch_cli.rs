@@ -122,6 +122,12 @@ fn read_line(reader: &mut impl Read) -> Result<Vec<u8>, String> {
 }
 
 pub(crate) fn run_command(mut reader: impl Read + Send + 'static) -> Result<Vec<u8>, String> {
+    // The caller reads this launcher's output to its end. `Command` always
+    // creates a child with handle inheritance on, so a detached process the
+    // launched child starts (the daemon) would otherwise inherit the caller's
+    // pipes through this launcher and hold them open for its whole life.
+    #[cfg(windows)]
+    guard_runtime_windows_process::disinherit_standard_handles();
     let line = read_line(&mut reader)?;
     let request: Request =
         serde_json::from_slice(&line).map_err(|_| "hook_launch_request_invalid".to_owned())?;

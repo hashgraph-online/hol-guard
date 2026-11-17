@@ -56,7 +56,15 @@ def resolve_runtime_hook_harness(
     Claude-compatible hooks inside Cursor are Cursor's, but Claude Code's own
     markers win, so a Claude session started from a Cursor terminal stays Claude.
     """
-    harness = _ask("runtime_hook", requested=requested_harness, env=_environment(env)).get("harness")
+    from ..native_runner_authority import NativeRunnerAuthorityError
+
+    try:
+        harness = _ask("runtime_hook", requested=requested_harness, env=_environment(env)).get("harness")
+    except NativeRunnerAuthorityError:
+        # With no runtime to attribute the hook, the harness that was asked for
+        # stands: the hook still has to reach its fail-closed answer, and an
+        # error here would leave the harness with no answer at all.
+        return requested_harness
     return harness if isinstance(harness, str) else requested_harness
 
 

@@ -273,6 +273,17 @@ fn legacy_args(home: &std::path::Path, store_home: &std::path::Path) -> Map<Stri
     .clone()
 }
 
+/// A temporary directory is not private by default; a key's home must be.
+fn private_home() -> tempfile::TempDir {
+    let home = tempfile::tempdir().unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(home.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    home
+}
+
 fn reason(fault: Fault) -> String {
     match fault {
         Fault::Transition(reason) => reason.to_owned(),
@@ -284,7 +295,7 @@ fn reason(fault: Fault) -> String {
 fn a_legacy_observation_needs_its_store_and_one_stable_key() {
     let budget = Budget::none();
     let deadline = Instant::now() + Duration::from_secs(30);
-    let home = tempfile::tempdir().unwrap();
+    let home = private_home();
     let other = tempfile::tempdir().unwrap();
     let missing = Map::new();
     let error = Legacy::open(&legacy_call(&missing, &budget), home.path(), deadline)

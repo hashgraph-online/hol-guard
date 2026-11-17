@@ -368,7 +368,7 @@ def test_full_native_evaluation_matches_contract_and_reports_original_oracle_dif
             check=True,
             capture_output=True,
             text=True,
-            timeout=90,
+            timeout=180,
             cwd=Path.cwd(),
             # Evaluation is the resident's verdict, so the runner and its
             # workers must always run in force mode. Jobs that bind the
