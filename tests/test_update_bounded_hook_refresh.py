@@ -10,7 +10,6 @@ from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
 from codex_plugin_scanner.guard.cli.update_bounded_hook_refresh import refresh_bounded_hook_clients
 from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge import bounded_hook_script_path
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_bounded_runtime import use_bounded_runtime
@@ -26,8 +25,7 @@ def _context(tmp_path: Path) -> HarnessContext:
 
 
 def _seed_client(context: HarnessContext, harness: str, body: str) -> Path:
-    script_path = bounded_hook_script_path(context.guard_home, harness)
-    assert script_path is not None
+    script_path = context.guard_home / "managed" / "bounded-hooks" / f"{harness}.py"
     script_path.parent.mkdir(parents=True, exist_ok=True)
     script_path.write_text(body, encoding="utf-8")
     return script_path
@@ -82,48 +80,6 @@ def test_refresh_skips_inactive_or_missing_install(tmp_path: Path, active: bool 
 
     assert refreshed == []
     assert script_path.read_text(encoding="utf-8") == "stale\n"
-
-
-def test_refresh_does_not_create_or_follow_client_paths(tmp_path: Path) -> None:
-    context = _context(tmp_path)
-    store = GuardStore(context.guard_home)
-    store.set_managed_install("zcode", True, None, {"harness": "zcode"}, NOW)
-    store.set_managed_install("kimi", True, None, {"harness": "kimi"}, NOW)
-    outside = tmp_path / "outside.py"
-    outside.write_text("outside\n", encoding="utf-8")
-    zcode_path = bounded_hook_script_path(context.guard_home, "zcode")
-    assert zcode_path is not None
-    zcode_path.parent.mkdir(parents=True)
-    zcode_path.symlink_to(outside)
-
-    refreshed, warnings = _refresh(context, store)
-
-    assert refreshed == []
-    assert warnings == []
-    assert outside.read_text(encoding="utf-8") == "outside\n"
-    kimi_path = bounded_hook_script_path(context.guard_home, "kimi")
-    assert kimi_path is not None
-    assert not kimi_path.exists()
-
-
-def test_refresh_does_not_write_through_symlinked_client_directory(tmp_path: Path) -> None:
-    context = _context(tmp_path)
-    store = GuardStore(context.guard_home)
-    store.set_managed_install("zcode", True, None, {"harness": "zcode"}, NOW)
-    zcode_path = bounded_hook_script_path(context.guard_home, "zcode")
-    assert zcode_path is not None
-    outside_dir = tmp_path / "outside"
-    outside_dir.mkdir()
-    outside_client = outside_dir / zcode_path.name
-    outside_client.write_text("outside\n", encoding="utf-8")
-    zcode_path.parent.parent.mkdir(parents=True, exist_ok=True)
-    zcode_path.parent.symlink_to(outside_dir, target_is_directory=True)
-
-    refreshed, warnings = _refresh(context, store)
-
-    assert refreshed == []
-    assert warnings == []
-    assert outside_client.read_text(encoding="utf-8") == "outside\n"
 
 
 def test_update_repair_refreshes_stale_bounded_client(tmp_path: Path) -> None:

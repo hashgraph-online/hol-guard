@@ -48,6 +48,7 @@ pub(crate) fn dispatch(
         "runtime_probe" => Ok(runtime_probe(spec, ctx)),
         "plugin_refresh" => super::opencode_checks::plugin_refresh(ctx, fields),
         "protection" => super::opencode_checks::protection(ctx, fields),
+        "update_refresh" => super::opencode_update::update_refresh(spec, ctx, fields),
         "refresh_apply" => {
             let _config = super::install_apply::opencode_lock(spec, ctx)?;
             super::opencode_checks::refresh_apply(ctx)

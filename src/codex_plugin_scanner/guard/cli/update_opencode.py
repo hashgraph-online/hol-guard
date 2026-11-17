@@ -4,23 +4,13 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from pathlib import Path
 
 from ..harness.base import HarnessContext
 from ..harness.native_harness import ask
 from ..store import GuardStore
 from .managed_install_context import managed_install_context as _repair_context_from_managed_install
 
-
-def refresh_opencode_proxy_launchers(context: HarnessContext, *, warnings: list[str] | None = None) -> int:
-    """Refresh verified Guard CLI prefixes without changing server or tool authority.
-
-    The runtime holds the OpenCode config lock across the reads and writes.
-    """
-    answer = ask("refresh_apply", context, harness="opencode")
-    if warnings is not None:
-        warnings.extend(str(warning) for warning in answer["warnings"])
-    return int(answer["refreshed"])
+_INSPECT_FAILED = "Could not inspect OpenCode pretool plugin during update: "
 
 
 def _refresh_opencode_pretool_plugin(
@@ -28,6 +18,11 @@ def _refresh_opencode_pretool_plugin(
     context: HarnessContext,
     store: GuardStore,
 ) -> str | None:
+    """Refresh the companion launchers and the pretool plugin; return the note to show.
+
+    The native runtime holds the OpenCode config lock, refreshes the launchers,
+    rewrites a stale plugin and words the note.
+    """
     try:
         managed_install = store.get_managed_install("opencode")
     except (json.JSONDecodeError, sqlite3.Error):
@@ -36,35 +31,8 @@ def _refresh_opencode_pretool_plugin(
         return None
     try:
         repair_context, _ = _repair_context_from_managed_install(context, managed_install)
-    except ValueError as error:
-        return f"Could not inspect OpenCode pretool plugin during update: {error}"
-    companion_warning: str | None = None
-    refreshed_proxies = 0
-    config_warnings: list[str] = []
-    try:
-        refreshed_proxies = refresh_opencode_proxy_launchers(repair_context, warnings=config_warnings)
-        if config_warnings:
-            companion_warning = "Could not refresh OpenCode MCP companion launchers in every config: " + " ".join(
-                dict.fromkeys(config_warnings)
-            )
+        answer = ask("update_refresh", repair_context, harness="opencode")
     except (OSError, RuntimeError, ValueError) as error:
-        companion_warning = f"Could not refresh OpenCode MCP companion launchers during update: {error}"
-    try:
-        refresh = ask("plugin_refresh", repair_context, harness="opencode")
-    except (OSError, RuntimeError, ValueError) as error:
-        return f"Could not inspect OpenCode pretool plugin during update: {error}"
-    if refresh.get("current") is True:
-        refresh_note = (
-            "Refreshed OpenCode MCP companion launchers. Restart OpenCode to load them." if refreshed_proxies else None
-        )
-        parts = [part for part in (companion_warning, refresh_note) if part]
-        return " ".join(parts) if parts else None
-    try:
-        for value in refresh["paths"]:
-            path = Path(value)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(str(refresh["source"]), encoding="utf-8")
-    except (OSError, RuntimeError) as error:
-        return f"Could not refresh OpenCode pretool plugin during update: {error}"
-    plugin_note = "Refreshed the OpenCode pretool plugin during update. Restart OpenCode to load it."
-    return f"{companion_warning} {plugin_note}" if companion_warning else plugin_note
+        return f"{_INSPECT_FAILED}{error}"
+    note = answer["note"]
+    return note if isinstance(note, str) else None

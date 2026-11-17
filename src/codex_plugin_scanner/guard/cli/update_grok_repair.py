@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from pathlib import Path
 
 from ..harness.base import HarnessContext
 from ..harness.native_harness import ask
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 from .managed_install_context import managed_install_context as repair_context_from_managed_install
-from .native_install_checks import grok_protection
 
 
 def repair_grok_install(
@@ -51,84 +49,9 @@ def repair_grok_install(
 
 
 def _grok_hooks_are_current(context: HarnessContext) -> bool:
-    from ..harness.native_harness import NativeHarnessAdapter
-    from ..harness.registry import get_adapter
+    """Whether both Grok hook files already hold what an install would write now."""
 
-    protection = grok_protection(context)
-    hook_path = Path(protection["pretool_hook_path"])
-    if not hook_path.is_file():
-        return False
-    try:
-        payload = json.loads(hook_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    if _pretool_timeout(payload) != protection["pretool_timeout_seconds"]:
-        return False
-    command = _pretool_command(payload)
-    prompt_path = Path(protection["prompt_hook_path"])
-    try:
-        prompt_hooks = json.loads(prompt_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    expected = json.loads(ask("observe_hook", context, harness="grok", command=command)["hook"])
-    if not _prompt_hook_entries_are_current(prompt_hooks, expected):
-        return False
-    adapter = get_adapter("grok")
-    return isinstance(adapter, NativeHarnessAdapter) and command == adapter.current_hook_command(context)
-
-
-def _prompt_hook_entries_are_current(payload: object, expected: dict[str, object]) -> bool:
-    hooks = payload.get("hooks") if isinstance(payload, dict) else None
-    expected_hooks = expected.get("hooks")
-    if not isinstance(hooks, dict) or not isinstance(expected_hooks, dict):
-        return False
-    for event, required_groups in expected_hooks.items():
-        groups = hooks.get(event)
-        if not isinstance(groups, list):
-            return False
-        expected_hook = required_groups[0]["hooks"][0]
-        if not any(
-            isinstance(group, dict)
-            and not group.get("matcher")
-            and isinstance(group.get("hooks"), list)
-            and any(
-                isinstance(hook, dict) and all(hook.get(key) == value for key, value in expected_hook.items())
-                for hook in group["hooks"]
-            )
-            for group in groups
-        ):
-            return False
-    return True
-
-
-def _pretool_timeout(payload: object) -> int | None:
-    command = _pretool_entry(payload)
-    timeout = command.get("timeout") if command is not None else None
-    return timeout if isinstance(timeout, int) else None
-
-
-def _pretool_command(payload: object) -> str:
-    command = _pretool_entry(payload)
-    value = command.get("command") if command is not None else None
-    return value if isinstance(value, str) else ""
-
-
-def _pretool_entry(payload: object) -> dict[str, object] | None:
-    if not isinstance(payload, dict):
-        return None
-    hooks = payload.get("hooks")
-    if not isinstance(hooks, dict):
-        return None
-    pretool = hooks.get("PreToolUse")
-    if not isinstance(pretool, list) or not pretool:
-        return None
-    first = pretool[0]
-    if not isinstance(first, dict):
-        return None
-    inner = first.get("hooks")
-    if isinstance(inner, list) and inner and isinstance(inner[0], dict):
-        return inner[0]
-    return first
+    return ask("hooks_current", context, harness="grok")["current"] is True
 
 
 def append_grok_repair(

@@ -92,6 +92,7 @@ mod durable_runtime;
 mod files;
 mod grok;
 mod grok_install;
+mod grok_update;
 mod guard_shim;
 mod guard_shim_text;
 mod hermes;
@@ -113,6 +114,7 @@ mod opencode_build;
 mod opencode_checks;
 mod opencode_install;
 mod opencode_servers;
+mod opencode_update;
 mod opencode_workspace;
 mod paseo;
 mod paseo_install;
@@ -128,6 +130,8 @@ mod shim_remove;
 mod shims_apply;
 mod simple;
 mod uninstall_apply;
+mod update_bounded;
+mod update_support;
 mod which;
 mod zcode;
 
@@ -323,6 +327,12 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     }
     if op == "managed_install_guidance" {
         return answer(managed_record::guidance_after(&ctx, fields));
+    }
+    if op == "bounded_hook_scripts" {
+        return answer(update_bounded::scripts(&ctx));
+    }
+    if op == "remove_bounded_hook_script" {
+        return answer(update_bounded::remove(&ctx, fields));
     }
     if op == "prepare_guard_shim" {
         return answer(guard_shim::prepare(&ctx, fields));

@@ -16,6 +16,14 @@ def _refresh(context: HarnessContext) -> dict[str, Any]:
     return ask("plugin_refresh", context, harness="opencode")
 
 
+def refresh_opencode_proxy_launchers(context: HarnessContext, *, warnings: list[str] | None = None) -> int:
+    """Refresh the companion launchers as the native ``refresh_apply`` op does; return how many changed."""
+    answer = ask("refresh_apply", context, harness="opencode")
+    if warnings is not None:
+        warnings.extend(str(warning) for warning in answer["warnings"])
+    return int(answer["refreshed"])
+
+
 def pretool_plugin_source(context: HarnessContext) -> str:
     return str(_refresh(context)["source"])
 

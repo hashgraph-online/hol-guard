@@ -25,19 +25,9 @@ from .bounded_cli_hook_native import (
 
 RUNTIME_MISSING = "HOL Guard's native runtime is missing, so Guard blocked this hook. Run `hol-guard repair`."
 _TRAILING_MANAGED_MARKERS = frozenset({"HOL_GUARD_MANAGED_ZCODE"})
-_BOUNDED_HOOK_SCRIPT_DIR = ("managed", "bounded-hooks")
 # The native bridge answers within the hook deadline; this only bounds a
 # runtime that stopped answering.
 _NATIVE_EXIT_GRACE_SECONDS = 2.0
-
-
-def bounded_hook_script_path(guard_home: Path, harness: str) -> Path | None:
-    """The managed hook client path older installs wrote, so it can be recognised and removed."""
-
-    stem = harness.strip().lower().replace("_", "-")
-    if not stem or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789-" for character in stem):
-        return None
-    return guard_home.joinpath(*_BOUNDED_HOOK_SCRIPT_DIR, f"{stem}.py")
 
 
 def _config_argv(argv: Sequence[str]) -> dict[str, object] | None:
@@ -110,6 +100,5 @@ __all__ = [
     "NATIVE_BOUNDED_HOOK_COMMAND",
     "NATIVE_BOUNDED_HOOK_FEATURE",
     "RUNTIME_MISSING",
-    "bounded_hook_script_path",
     "main_from_argv",
 ]

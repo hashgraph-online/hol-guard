@@ -43,6 +43,8 @@ mod probe_run_family;
 mod shim_family;
 #[path = "tests_shims_apply.rs"]
 mod shims_apply_family;
+#[path = "update_tests.rs"]
+mod update_family;
 
 struct Home {
     _dir: TempDir,
