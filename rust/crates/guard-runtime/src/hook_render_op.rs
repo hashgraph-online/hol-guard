@@ -154,12 +154,25 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
         // Whether Cursor's probe moves into the sandbox, and whether a shell
         // call is the sink command a probe wrote, is the resident's reading
         // on the daemon path as on the direct lane.
+        //
+        // The daemon also asks which route a call takes before its edge
+        // reviews it (`route`), and what a reviewed probe is answered
+        // (`probe_response`).
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let value = match params.get("op").and_then(Value::as_str) {
+            None => crate::hook_direct::cursor::daemon_answer(params)?.unwrap_or(Value::Null),
+            Some("route") => {
+                let payload =
+                    object_of(params.get("payload")).ok_or("native_hook_render_invalid")?;
+                json!(crate::hook_direct::cursor_route::route_name(payload))
+            }
+            Some("probe_response") => {
+                crate::hook_direct::cursor_route::probe_response(params.get("edge"))
+            }
+            Some(_) => return Err("native_hook_render_invalid"),
+        };
         let mut document = Object::new();
-        document.insert(
-            "value".into(),
-            crate::hook_direct::cursor::daemon_answer(params)?.unwrap_or(Value::Null),
-        );
+        document.insert("value".into(), value);
         return Ok(cli_payload(CliOutcome::Document(document)));
     }
     if request.kind == "hermes_bridge" {

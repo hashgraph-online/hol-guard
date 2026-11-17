@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import io
-import os
 
 from rich.console import Console
 
 from codex_plugin_scanner.guard.cli import install_commands, render
-from codex_plugin_scanner.guard.cli.claude_settings_target import _command_text
 from codex_plugin_scanner.guard.harness import native_harness
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 
@@ -55,7 +53,12 @@ def test_the_panel_names_the_file_the_rollback_and_each_override():
             {"scope": "managed", "path": "/etc/claude-code/managed-settings.json", "guard_writes": False},
             {"scope": "user", "path": "/synthetic/.claude/settings.json", "guard_writes": True},
         ],
-        "rollback": {"command": ["hol-guard", "uninstall", "claude-code"], "effect": "Removes only Guard's entries."},
+        "rollback": {
+            "command": ["hol-guard", "uninstall", "claude-code"],
+            "command_text": "hol-guard uninstall claude-code",
+            "shell": "sh",
+            "effect": "Removes only Guard's entries.",
+        },
         "hook_overrides": [{"message": "/synthetic/project/.claude/settings.local.json sets disableAllHooks."}],
     }
 
@@ -82,24 +85,32 @@ def test_paths_render_literally_and_the_undo_is_shell_quoted():
     target = {
         "scope": "user",
         "settings_path": "/synthetic/[red]home/.claude/settings.json",
-        "rollback": {"command": ["hol-guard", "uninstall", "claude-code", "--home", "/synthetic/my home[/b]"]},
+        "rollback": {
+            "command": ["hol-guard", "uninstall", "claude-code", "--home", "/synthetic/my home[/b]"],
+            "command_text": "hol-guard uninstall claude-code --home '/synthetic/my home[/b]'",
+            "shell": "sh",
+        },
         "hook_overrides": [{"message": "/synthetic/[/red] sets disableAllHooks."}],
     }
 
     text = _text({"settings_target": target})
 
     assert "Writes: /synthetic/[red]home/.claude/settings.json" in text
-    quoted = '"/synthetic/my home[/b]"' if os.name == "nt" else "'/synthetic/my home[/b]'"
-    assert f"Undo: hol-guard uninstall claude-code --home {quoted}." in text
+    assert "Undo: hol-guard uninstall claude-code --home '/synthetic/my home[/b]'." in text
     assert "Warning: /synthetic/[/red] sets disableAllHooks." in text
 
 
-def test_a_copied_undo_uses_powershell_literal_quotes_on_windows():
-    words = ["hol-guard", "uninstall", "claude-code", "--home", r"C:\Guard State"]
-    assert _command_text(words, windows=True) == r"hol-guard uninstall claude-code --home 'C:\Guard State'"
-    assert _command_text(words, windows=False) == "hol-guard uninstall claude-code --home 'C:\\Guard State'"
-    assert _command_text(["--home", r"C:\Guard $cache"], windows=True) == r"--home 'C:\Guard $cache'"
-    assert _command_text(["--home", r"C:\Guard&State"], windows=True) == r"--home 'C:\Guard&State'"
-    assert _command_text(["--home", r"C:\it's"], windows=True) == r"--home 'C:\it''s'"
-    assert _command_text(["--home", "C:\\O\u2019Brien"], windows=True) == "--home 'C:\\O\u2019\u2019Brien'"
-    assert _command_text(["--home", r"C:\Guard"], windows=True) == r"--home C:\Guard"
+def test_the_undo_is_labelled_for_the_shell_the_runtime_quoted_it_for():
+    target = {
+        "scope": "user",
+        "settings_path": "C:\\Synthetic\\settings.json",
+        "rollback": {
+            "command": ["hol-guard", "uninstall", "claude-code", "--home", r"C:\Guard State"],
+            "command_text": r"hol-guard uninstall claude-code --home 'C:\Guard State'",
+            "shell": "powershell",
+        },
+    }
+
+    assert r"Undo (PowerShell): hol-guard uninstall claude-code --home 'C:\Guard State'." in _text(
+        {"settings_target": target}
+    )
