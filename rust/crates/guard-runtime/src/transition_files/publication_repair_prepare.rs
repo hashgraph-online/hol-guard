@@ -24,7 +24,7 @@ use crate::harness_adapter::{verify_captured, Failure, Verdict};
 const INVALID: Fault = Fault::Transition("native_transition_invalid");
 
 /// The fault the Python caller raises for a verification that failed.
-fn fault(failure: Failure) -> Fault {
+pub(super) fn fault(failure: Failure) -> Fault {
     match failure {
         Failure::Runtime(message) | Failure::Refusal(message) | Failure::NotFound(message) => {
             Fault::Runtime(message)
@@ -118,7 +118,7 @@ pub(super) fn prepare(call: &mut Call<'_>) -> Step<Value> {
 }
 
 /// `integrity_status` must be `valid`; anything else names its own refusal.
-fn settled(state: &Map<String, Value>) -> Step<()> {
+pub(super) fn settled(state: &Map<String, Value>) -> Step<()> {
     if state.get("integrity_status").and_then(Value::as_str) == Some("valid") {
         return Ok(());
     }

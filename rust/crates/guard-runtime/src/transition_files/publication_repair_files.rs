@@ -174,7 +174,7 @@ fn as_object(value: Value) -> Step<Object> {
 
 /// One dependency per path; a second pin of one artifact merges, and a pin
 /// of the manifest the caller writes is a conflict.
-fn add(files: &mut Vec<Object>, dependency: Object, written: Option<&Path>) -> Step<()> {
+pub(super) fn add(files: &mut Vec<Object>, dependency: Object, written: Option<&Path>) -> Step<()> {
     let path = dependency.get("path").cloned();
     let slot = written.map(|written| written.to_string_lossy().into_owned());
     if slot.is_some() && path.as_ref().and_then(Value::as_str) == slot.as_deref() {
@@ -281,7 +281,7 @@ fn artifacts(generation: &Object, roots: &[PathBuf], purpose: Purpose) -> Step<V
 
 /// `TransitionFile.artifact_dependency`: the exact artifact pinned by its
 /// digest, without journaling its bytes.
-fn artifact(identity: &Object, invocation: Option<&Object>) -> Step<Object> {
+pub(super) fn artifact(identity: &Object, invocation: Option<&Object>) -> Step<Object> {
     let invalid = Fault::Transition("artifact_dependency_invalid");
     let path = identity.get("path").and_then(Value::as_str);
     let mode = identity

@@ -208,13 +208,14 @@ def test_inverse_plan_forwards_original_deadline_to_artifact_comparison(installe
         ask = native_runner_authority.native_runner_authority
 
         def expires_in_the_resident(kind: str, request: dict[str, object], **kwargs: object) -> dict[str, object]:
-            if kind != "transition_files" or request.get("op") != "compare" or "budget" not in request:
+            asked = kind == "transition_files" and request.get("op") == "publication_inverse_verify"
+            if not asked or "budget" not in request:
                 return ask(kind, request, **kwargs)
             budget = request["budget"]
             assert isinstance(budget, dict)
             forwarded.append(min(value for value in budget.values() if isinstance(value, int)))
-            # The resident sees the original deadline already spent.
-            spent = {name: None if value is None else 0 for name, value in budget.items()}
+            # The resident sees the original inverse deadline already spent.
+            spent = {**budget, "inverse_ms": 0}
             return ask(kind, {**request, "budget": spent}, **kwargs)
 
         monkeypatch.setattr(native_runner_authority, "native_runner_authority", expires_in_the_resident)

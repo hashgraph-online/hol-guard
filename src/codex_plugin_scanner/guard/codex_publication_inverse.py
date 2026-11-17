@@ -20,7 +20,7 @@ from .codex_hook_file_integrity import hook_validation_deadline
 from .codex_hook_recovery import _load_record, _record_path, _remove_record
 from .codex_hook_rollback import rollback_file_identity
 from .codex_publication_inverse_authorization import CodexPublicationInverseAuthorization
-from .codex_publication_inverse_plan import _journal_bytes, _predecessor_dependencies, _with_native_dependency
+from .codex_publication_inverse_plan import _journal_bytes, native_runtime_wire, workspace_wire
 from .runtime_transition import RuntimeTransition, TransitionError, inverse_recovery_budget
 from .runtime_transition_admission import verified_admission_payload
 
@@ -74,14 +74,14 @@ class PendingCodexPublicationInverse:
                 raise TransitionError("publication_inverse_journal_changed")
             predecessor = plan.changes[1].after
             assert predecessor is not None
-            dependencies = _with_native_dependency(
-                _predecessor_dependencies(plan.guard_home, predecessor),
-                plan.native_runtime,
-                plan.verification_workspace,
+            native_transition_files.publication(
+                "inverse_pinned",
+                plan.guard_home,
+                manifest_text=predecessor.decode("utf-8"),
+                dependencies=[item.payload() for item in plan.dependencies],
+                native_runtime=native_runtime_wire(plan.native_runtime),
+                verification_workspace=workspace_wire(plan.verification_workspace),
             )
-            if [item.payload() for item in dependencies] != [item.payload() for item in plan.dependencies]:
-                raise TransitionError("publication_inverse_dependencies_invalid")
-            RuntimeTransition._compare({"files": [item.payload() for item in dependencies]}, "before")
             for index, (change, identity) in enumerate(zip(plan.changes, self._identities, strict=True)):
                 generation = "after" if index in self._restored else "before"
                 if rollback_file_identity(change.path) != identity:
