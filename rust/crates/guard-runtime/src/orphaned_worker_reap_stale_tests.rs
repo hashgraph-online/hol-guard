@@ -406,6 +406,27 @@ fn a_packaged_module_daemon_under_a_spaced_directory_is_retired() {
             1,
             &format!("/opt/Team Tools/node -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"),
         ),
+        // A shell or launcher that runs a relative python is not a spaced path.
+        line(
+            99,
+            1,
+            &format!("/bin/sh tools/python -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"),
+        ),
+        line(
+            100,
+            1,
+            &format!("/bin/sh python -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"),
+        ),
+        line(
+            101,
+            1,
+            &format!("/usr/bin/env python3 -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"),
+        ),
+        line(
+            102,
+            1,
+            &format!("/missing/launcher/bash tools/python -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"),
+        ),
     ]);
 
     assert_eq!(stale(&host), [93]);

@@ -146,8 +146,9 @@ fn python_daemon_at(command: &str) -> Option<usize> {
 /// `ps` joins arguments with spaces, so an interpreter under a directory
 /// whose name has a space arrives as several words. Those words are taken as
 /// one path only when it is absolute, no later word starts a new path or an
-/// option, and the file name itself is a Python interpreter: `sh /x/python`
-/// and `python3 -c pass` are still refused.
+/// option, the first word is not itself a program (an existing file or a
+/// shell or launcher name), and the file name is a Python interpreter:
+/// `sh /x/python`, `/bin/sh tools/python` and `python3 -c pass` are refused.
 fn runs_packaged_module(prefix: &str) -> bool {
     let words: Vec<&str> = py_split(prefix).collect();
     let [head @ .., flag, module] = words.as_slice() else {
@@ -167,6 +168,7 @@ fn runs_packaged_module(prefix: &str) -> bool {
     };
     if !rest.is_empty()
         && (!is_absolute_path(first)
+            || names_a_program(first)
             || rest
                 .iter()
                 .any(|word| word.starts_with(['/', '-']) || word.contains(':')))
@@ -176,6 +178,36 @@ fn runs_packaged_module(prefix: &str) -> bool {
     let last = rest.last().unwrap_or(first);
     let name = last.rsplit(['/', '\\']).next().unwrap_or_default();
     name.to_ascii_lowercase().starts_with("python")
+}
+
+/// Launchers that take a program as their next word. A spaced interpreter
+/// path never starts with one of these.
+const LAUNCHER_NAMES: &[&str] = &[
+    "sh",
+    "bash",
+    "zsh",
+    "dash",
+    "ksh",
+    "fish",
+    "csh",
+    "tcsh",
+    "env",
+    "nohup",
+    "nice",
+    "exec",
+    "sudo",
+    "xargs",
+    "timeout",
+    "caffeinate",
+    "arch",
+];
+
+/// Whether the first word of a multi-word interpreter is a program in its own
+/// right rather than the start of a directory name with a space in it.
+fn names_a_program(first: &str) -> bool {
+    let name = first.rsplit(['/', '\\']).next().unwrap_or_default();
+    LAUNCHER_NAMES.contains(&name.to_ascii_lowercase().as_str())
+        || std::path::Path::new(first).is_file()
 }
 
 fn is_bare_python_option(word: &str) -> bool {
