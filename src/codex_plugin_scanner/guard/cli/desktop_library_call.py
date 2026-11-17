@@ -29,6 +29,10 @@ from pathlib import Path
 _REQUEST_LIMIT_BYTES = 2_200_000
 # How many resident calls may run at once; the rest wait in order for a worker.
 _RESIDENT_CALL_LIMIT = 32
+# Call bytes read but not yet started. Past this the read loop waits for the
+# workers, so a pool that stops making progress cannot grow the queue without
+# bound; the daemon bounds its own side and replaces a process that stalls.
+_QUEUED_LIMIT_BYTES = 64 * 1024 * 1024
 _EXPIRES_IN = re.compile(rb'"expires_in_ms":(\d{1,9})[,}]')
 
 
@@ -91,10 +95,13 @@ def serve_lines(guard_home: Path, read_line: Callable[[], bytes], write: Callabl
     here rather than in the pipe, so the daemon's writes never stall behind
     a busy pool. A call still queued when the daemon has stopped waiting for
     it is dropped unrun, so a burst cannot leave the pool working through
-    answers nobody will read while live calls wait behind them.
+    answers nobody will read while live calls wait behind them. The queue
+    holds at most ``_QUEUED_LIMIT_BYTES`` of call lines.
     """
 
     write_lock = threading.Lock()
+    room = threading.Condition()
+    queued_bytes = 0
     calls: queue.SimpleQueue[tuple[bytes, float | None] | None] = queue.SimpleQueue()
     workers: list[threading.Thread] = []
 
@@ -104,6 +111,7 @@ def serve_lines(guard_home: Path, read_line: Callable[[], bytes], write: Callabl
             if item is None:
                 return
             request, expires_at = item
+            _taken(len(request))
             if expires_at is not None and time.monotonic() >= expires_at:
                 continue
             try:
@@ -112,6 +120,12 @@ def serve_lines(guard_home: Path, read_line: Callable[[], bytes], write: Callabl
                     write(line)
             except OSError:
                 pass
+
+    def _taken(size: int) -> None:
+        nonlocal queued_bytes
+        with room:
+            queued_bytes -= size
+            room.notify()
 
     status = 0
     while True:
@@ -123,7 +137,12 @@ def serve_lines(guard_home: Path, read_line: Callable[[], bytes], write: Callabl
             # this loop can stay in step with.
             status = 2
             break
-        calls.put((request, _expires_at(request, time.monotonic())))
+        received = time.monotonic()
+        with room:
+            while queued_bytes and queued_bytes + len(request) > _QUEUED_LIMIT_BYTES:
+                _ = room.wait()
+            queued_bytes += len(request)
+        calls.put((request, _expires_at(request, received)))
         if len(workers) < _RESIDENT_CALL_LIMIT:
             worker = threading.Thread(target=_work, daemon=True)
             worker.start()

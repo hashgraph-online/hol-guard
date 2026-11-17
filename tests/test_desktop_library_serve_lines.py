@@ -95,3 +95,37 @@ def test_the_deadline_is_read_from_the_head_of_the_line() -> None:
     assert desktop_library_call._expires_at(_line(1), 10.0) is None
     buried = b'{"id":1,"call":"x","args":{"pad":"' + b"y" * 200 + b'","expires_in_ms":5}}\n'
     assert desktop_library_call._expires_at(buried, 10.0) is None
+
+
+def test_the_read_loop_waits_once_the_queue_is_full(monkeypatch, tmp_path: Path) -> None:
+    release = threading.Event()
+
+    def _answer(_guard_home: Path, request: bytes) -> bytes:
+        release.wait(10)
+        return json.dumps({"id": json.loads(request)["id"], "ok": None}).encode() + b"\n"
+
+    monkeypatch.setattr(desktop_library_call, "answer_line", _answer)
+    monkeypatch.setattr(desktop_library_call, "_RESIDENT_CALL_LIMIT", 1)
+    line_size = len(_line(0))
+    monkeypatch.setattr(desktop_library_call, "_QUEUED_LIMIT_BYTES", line_size * 2)
+    lines = [_line(index) for index in range(8)]
+    read = 0
+
+    def _read_line() -> bytes:
+        nonlocal read
+        if read == len(lines):
+            return b""
+        read += 1
+        return lines[read - 1]
+
+    serving = threading.Thread(target=desktop_library_call.serve_lines, args=(tmp_path, _read_line, lambda _line: None))
+    serving.start()
+    time.sleep(0.3)
+    # One call is running and two wait in the queue; the read loop holds the
+    # fourth line until a worker takes one.
+    held = read
+    release.set()
+    serving.join(10)
+    assert not serving.is_alive()
+    assert held <= 4
+    assert read == len(lines)

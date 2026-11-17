@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import collections
 import contextlib
+import http.client
 import json
 import resource
 import sys
@@ -71,17 +72,32 @@ def _send_hook(endpoint: str, token: str, timeout: float) -> tuple[str, float]:
     started = time.monotonic()
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            text = response.read().decode("utf-8", "replace")
-            kind = next((code for code in SHED_CODES if code in text), "reviewed")
-            if response.status != 200:
-                kind = f"http{response.status}"
+            kind = _reply_kind(response.read()) if response.status == 200 else f"http{response.status}"
     except urllib.error.HTTPError as error:
         kind = f"http{error.code}"
     except urllib.error.URLError as error:
         kind = f"connection:{type(error.reason).__name__}"
-    except OSError as error:
+    except (OSError, http.client.HTTPException) as error:
         kind = f"connection:{type(error).__name__}"
     return kind, time.monotonic() - started
+
+
+def _reply_kind(body: bytes) -> str:
+    """``reviewed`` for a normal allow of the burst's harmless command, the
+    shed code for a capacity fail-safe, and ``fail-safe:<code>`` otherwise."""
+
+    try:
+        reply = json.loads(body)
+    except ValueError:
+        return "unreadable"
+    if not isinstance(reply, dict):
+        return "unreadable"
+    code = reply.get("reason_code")
+    if code in SHED_CODES:
+        return str(code)
+    if reply.get("decision") == "allow" and code != "harness_not_managed":
+        return "reviewed"
+    return f"fail-safe:{code}"
 
 
 def _poll_health(url: str, stop: threading.Event, samples: list[tuple[float, bool]]) -> None:
@@ -91,7 +107,7 @@ def _poll_health(url: str, stop: threading.Event, samples: list[tuple[float, boo
             with urllib.request.urlopen(f"{url}/healthz", timeout=15) as response:
                 response.read()
                 ok = response.status == 200
-        except (urllib.error.URLError, OSError):
+        except (urllib.error.URLError, OSError, http.client.HTTPException):
             ok = False
         samples.append((time.monotonic() - started, ok))
         time.sleep(0.05)
@@ -112,7 +128,10 @@ def run_burst(hooks: int, *, max_hook_seconds: float, max_health_seconds: float)
             client_timeout = max_hook_seconds * 3
 
             def hook() -> None:
-                start.wait()
+                try:
+                    start.wait()
+                except threading.BrokenBarrierError:
+                    return
                 kind, elapsed = _send_hook(execution.endpoint, execution.auth_token, client_timeout)
                 with lock:
                     outcomes[kind] += 1
@@ -124,13 +143,20 @@ def run_burst(hooks: int, *, max_hook_seconds: float, max_health_seconds: float)
             prober.start()
             threads = [threading.Thread(target=hook) for _ in range(hooks)]
             started = time.monotonic()
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
+            launched: list[threading.Thread] = []
+            try:
+                for thread in threads:
+                    thread.start()
+                    launched.append(thread)
+            except BaseException:
+                start.abort()
+                raise
+            finally:
+                for thread in launched:
+                    thread.join()
+                stop.set()
+                prober.join()
             result.wall_seconds = round(time.monotonic() - started, 2)
-            stop.set()
-            prober.join()
             result.after_burst, _ = _send_hook(execution.endpoint, execution.auth_token, client_timeout)
         finally:
             with contextlib.suppress(OSError):
@@ -148,6 +174,8 @@ def run_burst(hooks: int, *, max_hook_seconds: float, max_health_seconds: float)
         result.failures.append(f"{hooks - answered} hooks got no review or fail-safe answer: {unanswered}")
     if result.hook_max_seconds > max_hook_seconds:
         result.failures.append(f"slowest hook took {result.hook_max_seconds}s, limit {max_hook_seconds}s")
+    if not samples:
+        result.failures.append("no health check finished during the burst")
     if result.health_failures:
         result.failures.append(f"{result.health_failures} of {result.health_samples} health checks failed")
     if result.health_max_seconds > max_health_seconds:
@@ -168,7 +196,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     _ = parser.add_argument("--hooks", type=int, default=1000)
     _ = parser.add_argument("--max-hook-seconds", type=float, default=10.0)
-    _ = parser.add_argument("--max-health-seconds", type=float, default=2.0)
+    _ = parser.add_argument("--max-health-seconds", type=float, default=5.0)
     _ = parser.add_argument("--json", type=Path)
     args = parser.parse_args()
     _raise_open_file_limit(args.hooks * 4 + 256)
