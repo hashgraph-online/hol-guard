@@ -320,6 +320,24 @@ fn claude_launch_keeps_blocked_folders_on_every_turn() {
 }
 
 #[test]
+fn blocked_paths_refuse_a_link_to_a_folder_with_rule_syntax() {
+    let (dir, service, mut request) = fixture("");
+    let odd = dir.path().join("odd (copy)");
+    fs::create_dir(&odd).unwrap();
+    let link = dir.path().join("clean");
+    std::os::unix::fs::symlink(&odd, &link).unwrap();
+    request.harness = "claude-code".into();
+    request.workspace = link.to_string_lossy().into();
+    request.blocked = Some(Some(vec!["private".into()]));
+    assert_eq!(
+        service.launch(request.clone()).unwrap_err(),
+        "swarm_launch_invalid"
+    );
+    request.blocked = None;
+    assert!(service.launch(request).is_ok());
+}
+
+#[test]
 fn claude_structured_results_resume_the_exact_session_and_report_denials() {
     let body = r#"printf '%s\n' '{"type":"system","subtype":"init","session_id":"claude-session"}' '{"type":"assistant","message":{"content":[{"type":"text","text":"Read the project"},{"type":"thinking","thinking":"not public"}]}}' '{"type":"result","is_error":false,"session_id":"claude-session","permission_denials":[{"tool_name":"Bash"}],"usage":{"input_tokens":15,"output_tokens":4}}'"#;
     let (dir, service, mut request) = fixture(body);

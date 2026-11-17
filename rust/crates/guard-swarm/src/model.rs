@@ -131,6 +131,9 @@ pub struct Launch {
 }
 
 pub const MAX_BLOCKED: usize = 32;
+/// Characters Claude Code reads as permission-rule syntax; a project path
+/// holding any of them cannot anchor a blocked-path rule.
+pub(crate) const RULE_SYNTAX: [char; 8] = ['(', ')', '*', '?', '[', ']', '{', '}'];
 
 /// A project-relative path or glob that fits inside a Claude Code permission
 /// rule: no absolute or parent paths, no characters a rule could close on.
@@ -185,9 +188,7 @@ impl Launch {
                     paths.len() > MAX_BLOCKED
                         || (!paths.is_empty()
                             && (self.harness != "claude-code"
-                                || self
-                                    .workspace
-                                    .contains(['(', ')', '*', '?', '[', ']', '{', '}'])))
+                                || self.workspace.contains(RULE_SYNTAX)))
                         || !paths.iter().all(|p| valid_blocked(p))
                 })
         {

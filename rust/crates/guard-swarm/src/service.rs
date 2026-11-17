@@ -169,6 +169,16 @@ impl Service {
         if !workspace.is_dir() {
             return Err("swarm_workspace_invalid");
         }
+        // Rules name the resolved folder, so check it too: a clean link can
+        // point at a folder whose real path has rule syntax.
+        let blocks = request.blocked.as_ref().and_then(Option::as_ref);
+        if blocks.is_some_and(|paths| !paths.is_empty())
+            && workspace
+                .to_string_lossy()
+                .contains(crate::model::RULE_SYNTAX)
+        {
+            return Err("swarm_launch_invalid");
+        }
         let mut registry = self.registry.lock().map_err(|_| "swarm_unavailable")?;
         // Check again: the same request, a shutdown or other launches may
         // have landed while the lock was free.
