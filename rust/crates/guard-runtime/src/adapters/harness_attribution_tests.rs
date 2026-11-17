@@ -3,8 +3,7 @@ use std::collections::BTreeMap;
 use serde_json::{json, Value};
 
 use super::{
-    cursor_query_extras, dispatch, environment_harness, harness_from_executable, parent_harness,
-    runtime_hook_harness,
+    dispatch, environment_harness, harness_from_executable, parent_harness, runtime_hook_harness,
 };
 
 fn env(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
@@ -35,26 +34,16 @@ fn cursor_env_marks_a_claude_hook_as_cursor() {
 }
 
 #[test]
-fn cursor_query_extras_name_the_runtime_harness_and_workspace() {
-    let cursor = env(&[
-        ("CURSOR_VERSION", "1.2.3"),
-        ("CURSOR_PROJECT_DIR", " /Users/me/repo "),
-    ]);
-    assert_eq!(
-        cursor_query_extras(&cursor),
-        [
-            ("runtime-harness".to_owned(), "cursor".to_owned()),
-            ("workspace".to_owned(), "/Users/me/repo".to_owned())
-        ]
-    );
-    assert_eq!(
-        cursor_query_extras(&env(&[
-            ("CURSOR_TRACE_ID", "t"),
-            ("CURSOR_PROJECT_DIR", "  ")
-        ])),
-        [("runtime-harness".to_owned(), "cursor".to_owned())]
-    );
-    assert!(cursor_query_extras(&env(&[("CURSOR_VERSION", " ")])).is_empty());
+fn a_claude_session_started_from_a_cursor_terminal_stays_claude() {
+    for marker in ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"] {
+        let inherited = env(&[("CURSOR_VERSION", "2.0.0"), (marker, "1")]);
+        assert_eq!(
+            runtime_hook_harness("claude-code", &inherited),
+            "claude-code"
+        );
+    }
+    let blank = env(&[("CURSOR_VERSION", "2.0.0"), ("CLAUDECODE", " ")]);
+    assert_eq!(runtime_hook_harness("claude-code", &blank), "cursor");
 }
 
 #[test]

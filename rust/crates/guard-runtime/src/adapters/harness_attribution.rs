@@ -48,8 +48,9 @@ const ZCODE_ENV_MARKERS: [&str; 8] = [
 const ZCODE_BUNDLE_IDENTIFIER: &str = "dev.zcode.app";
 /// Presence-only, non-secret markers each harness runtime injects into the
 /// environment of the commands it runs, in the order that breaks a tie.
+const CLAUDE_CODE_ENV_MARKERS: [&str; 2] = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"];
 const FAMILIES: [(&[&str], &str); 7] = [
-    (&["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"], "claude-code"),
+    (&CLAUDE_CODE_ENV_MARKERS, "claude-code"),
     (&CURSOR_ENV_MARKERS, "cursor"),
     (&["CODEX_SANDBOX", "CODEX_THREAD_ID"], "codex"),
     (&["GROK_AGENT", "GROK_SESSION_ID"], "grok"),
@@ -134,28 +135,18 @@ fn cursor_detected(env: &Env) -> bool {
     present(env, &CURSOR_ENV_MARKERS)
 }
 
-/// The harness a hook invocation runs as.
+/// The harness a hook invocation runs as. Claude Code's own markers win, so a
+/// Claude session started from a Cursor terminal, which inherits Cursor's
+/// variables, stays Claude.
 pub(crate) fn runtime_hook_harness<'a>(requested: &'a str, env: &Env) -> &'a str {
-    if matches!(slug(requested).as_str(), "claude" | "claude-code") && cursor_detected(env) {
+    if matches!(slug(requested).as_str(), "claude" | "claude-code")
+        && cursor_detected(env)
+        && !present(env, &CLAUDE_CODE_ENV_MARKERS)
+    {
         "cursor"
     } else {
         requested
     }
-}
-
-/// Query parameters for the Claude daemon hook bridge when run from Cursor.
-pub(crate) fn cursor_query_extras(env: &Env) -> Vec<(String, String)> {
-    if !cursor_detected(env) {
-        return Vec::new();
-    }
-    let mut extras = vec![("runtime-harness".to_owned(), "cursor".to_owned())];
-    if let Some(project) = env.get("CURSOR_PROJECT_DIR") {
-        let project = py_strip(project);
-        if !project.is_empty() {
-            extras.push(("workspace".to_owned(), project.to_owned()));
-        }
-    }
-    extras
 }
 
 fn origin_env(harness: &str) -> Value {

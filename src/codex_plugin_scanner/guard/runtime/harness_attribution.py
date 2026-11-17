@@ -51,7 +51,11 @@ def resolve_runtime_hook_harness(
     *,
     env: Mapping[str, str] | None = None,
 ) -> str:
-    """The harness a hook runs as: Claude-compatible hooks inside Cursor are Cursor's."""
+    """The harness a hook runs as.
+
+    Claude-compatible hooks inside Cursor are Cursor's, but Claude Code's own
+    markers win, so a Claude session started from a Cursor terminal stays Claude.
+    """
     harness = _ask("runtime_hook", requested=requested_harness, env=_environment(env)).get("harness")
     return harness if isinstance(harness, str) else requested_harness
 

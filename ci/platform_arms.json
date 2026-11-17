@@ -1,6 +1,6 @@
 {
  "schema_version": 1,
- "comment": "Every non-Unix behaviour arm in rust/crates/*/src — `#[cfg(..)]` attribute or `cfg!(..)` expression — with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
+ "comment": "Every non-Unix behaviour arm in rust/crates/*/src \u2014 `#[cfg(..)]` attribute or `cfg!(..)` expression \u2014 with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
  "arms": [
   {
    "file": "rust/crates/guard-command/src/adapters/hook/hook_adapter_paths.rs",
@@ -1091,12 +1091,12 @@
    "body": "414921ce24d3"
   },
   {
-   "file": "rust/crates/guard-runtime/src/claude_session_start.rs",
-   "item": "fn hand_off(argv: &[String]) -> i32",
    "verdict": "windows-equivalent",
-   "note": "Spawns the fallback and returns its exit code because Windows has no `exec`. The shim stays resident as the parent for the child's lifetime.",
+   "note": "Spawns the fallback on the same stdio and returns its exit code because Windows has no `exec`. Used only when no SessionStart event was read; with one, both platforms run the same child that gets the event on stdin.",
+   "file": "rust/crates/guard-runtime/src/claude_session_start.rs",
+   "item": "fn replace(argv: &[String]) -> i32",
    "cfg": "not(unix)",
-   "body": "a4eef17b5531"
+   "body": "7ba0c4e1be96"
   },
   {
    "verdict": "other-platform",
@@ -1473,6 +1473,14 @@
    "item": "fn widen_backlog(_listener: &TcpListener)",
    "cfg": "not(unix)",
    "body": "8bbfd9931b65"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Windows has no SIGTERM to wait for: a daemon is ended there by `TerminateProcess`, which no process can observe. Guard's own retirements still record `retirement_requested` before terminating, and a daemon that ends without a record is named by the next daemon as `unclean_exit_detected`, so the exit is still accounted for.",
+   "file": "rust/crates/guard-runtime/src/daemon_edge_exit_records.rs",
+   "item": "pub(super) fn record_termination(_home: PathBuf)",
+   "cfg": "not(unix)",
+   "body": "65b14e7d9154"
   },
   {
    "verdict": "windows-permissive",
@@ -2260,6 +2268,14 @@
   },
   {
    "verdict": "windows-unsupported",
+   "note": "The daemon's maintenance tick reaps orphaned workers only on Unix, like the `daemon ensure` route: the selection reads POSIX `ps` output and signals by pid. The Windows arm answers `orphaned_worker_reap_unsupported` and signals nothing, so the tick is a no-op there.",
+   "file": "rust/crates/guard-runtime/src/orphaned_worker_reap.rs",
+   "item": "pub(crate) fn reap_from_daemon(_own_pid: u32, _budget: Duration) -> Value",
+   "cfg": "not(unix)",
+   "body": "890867b4ad15"
+  },
+  {
+   "verdict": "windows-unsupported",
    "note": "The macOS ownership walk reads Unix owner and mode bits, which Windows does not have. Without them every surface reports `ownership_acl_probe_failed`, so a Windows host never reads as healthy through this op; Windows surfaces go through `windows-probe` instead. ownership_acl_macos_tests.rs::without_unix_metadata_every_surface_fails_the_probe pins the refusal off Unix on the native-op gate in .github/actions/ci-job-windows-shim-admin/action.yml.",
    "file": "rust/crates/guard-runtime/src/ownership_acl_macos.rs",
    "item": "pub(super) fn lstat(_path: &Path) -> io::Result<Fingerprint>",
@@ -2697,6 +2713,14 @@
    "item": "fn open_without_following(path: &Path) -> std::io::Result<fs::File>",
    "cfg": "not(unix)",
    "body": "532a900bb473"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Owner uid does not exist on Windows, so any abandoned temp file counts as the user's own. The sweep reads only the Guard home, `native-runtime` and `native-runtime/direct-lane`, whose ACL the Guard home sets at creation, and it still removes only empty regular files named `.<name>.<suffix>.tmp` older than a day; links are never followed or removed. Reading the owner SID needs `GetSecurityInfo`, which is not ported.",
+   "file": "rust/crates/guard-runtime/src/storage_retention_temp.rs",
+   "item": "fn owned_by_this_user(_metadata: &fs::Metadata) -> bool",
+   "cfg": "not(unix)",
+   "body": "b26f34b2bd19"
   },
   {
    "verdict": "windows-equivalent",

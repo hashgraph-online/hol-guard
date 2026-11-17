@@ -71,7 +71,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     if op == "uninstall" {
         // `_json_payload`: text that is not a JSON object reads as `{}`.
         let (payload, lone) = read_payload(text.unwrap_or_default())?.unwrap_or_default();
-        return Ok(json!({ "text": uninstall_surface(payload, lone, saved)? }));
+        return Ok(json!({ "text": uninstall_surface(payload, lone, text, saved)? }));
     }
     let desktop = map["desktop"].as_bool().ok_or(ERR_INVALID)?;
     let matchers = map["matchers"]
@@ -108,7 +108,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     // Each surface registers hooks only after its own `hooks.enabled` opt-in.
     set_key(&mut after, "enabled", PyVal::Bool(true));
     set_key(&mut payload, "hooks", PyVal::Dict(after));
-    Ok(json!({ "text": render_file(payload, lone)?, "enabled": enabled }))
+    Ok(json!({ "text": render_file_over(payload, lone, text)?, "enabled": enabled }))
 }
 
 /// `json.loads(text)` when it is an object, `None` for text that is not one
@@ -183,6 +183,7 @@ pub(crate) fn enabled_text(
 fn uninstall_surface(
     mut payload: Dict,
     lone: bool,
+    original: Option<&str>,
     saved: impl Fn(&PyVal) -> Value,
 ) -> Result<Option<String>, &'static str> {
     let Some(hooks) = lookup(&payload, "hooks").filter(|hooks| hooks.as_dict().is_some()) else {
@@ -210,7 +211,7 @@ fn uninstall_surface(
         PyVal::Dict(entries) if entries.is_empty() => remove_key(&mut payload, "hooks"),
         after => set_key(&mut payload, "hooks", after),
     }
-    render_file(payload, lone).map(Some)
+    render_file_over(payload, lone, original).map(Some)
 }
 
 /// `json.dumps(value, indent=2)`. A lone surrogate escape, which CPython
@@ -228,6 +229,19 @@ fn render(value: &PyVal, lone: bool) -> Result<String, &'static str> {
 
 pub(crate) fn render_file(payload: Dict, lone: bool) -> Result<String, &'static str> {
     render(&PyVal::Dict(payload), lone).map(|text| text + "\n")
+}
+
+/// [`render_file`] laid over the formatting of `original`, the text the
+/// payload was read from, so members Guard did not touch keep the user's
+/// bytes and an uninstall hands back the file install started from.
+pub(crate) fn render_file_over(
+    payload: Dict,
+    lone: bool,
+    original: Option<&str>,
+) -> Result<String, &'static str> {
+    let rendered = render(&PyVal::Dict(payload), lone)?;
+    let original = original.filter(|_| !lone);
+    Ok(crate::json_splice::document(original, &rendered, "\n"))
 }
 
 fn marked(value: &PyVal) -> bool {

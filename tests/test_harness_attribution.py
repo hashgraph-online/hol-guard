@@ -82,6 +82,10 @@ def test_guard_hook_records_cursor_harness_for_cursor_env(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    # Claude Code's own markers would keep the hook Claude's; a run from inside
+    # a Claude session must not inherit them.
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
     monkeypatch.setenv("CURSOR_VERSION", "2.0.0")
     monkeypatch.setenv("CURSOR_PROJECT_DIR", str(workspace_dir))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")

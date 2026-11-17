@@ -179,23 +179,34 @@ pub(crate) fn decide_launch(
     })
 }
 
-/// Whether this device has no allow or block decision for the CLI: no grant
-/// row, a row in neither state, or one recorded for another identity. A
-/// missing store has none; an unreadable one is an error.
+/// Why this device has no allow or block decision for a CLI identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Undecided {
+    /// No grant row, a row in neither state, or a block recorded for another
+    /// identity.
+    Never,
+    /// The user allowed an earlier version of the file. The allow is bound to
+    /// that content, so it does not cover this one.
+    AllowedEarlierVersion,
+}
+
+/// `Some` when this device has no allow or block decision for the CLI: no
+/// grant row, a row in neither state, or one recorded for another identity.
+/// A missing store has none; an unreadable one is an error.
 pub(crate) fn grant_unset(
     guard_home: &str,
     cli_id: &str,
     identity_hash: &str,
-) -> Result<bool, &'static str> {
+) -> Result<Option<Undecided>, &'static str> {
     let store_path = local_store_read::require_store_path(&store_text(guard_home), guard_home)
         .map_err(store_error)?;
     let Some(connection) = local_store_read::open_read_only(&store_path).map_err(store_error)?
     else {
-        return Ok(true);
+        return Ok(Some(Undecided::Never));
     };
     require_supported_schema(&connection)?;
     if !table_exists(&connection, "local_cli_grant")? {
-        return Ok(true);
+        return Ok(Some(Undecided::Never));
     }
     let row: Option<(String, String)> = connection
         .query_row(
@@ -205,9 +216,15 @@ pub(crate) fn grant_unset(
         )
         .optional()
         .map_err(|_| STORE_UNAVAILABLE)?;
-    Ok(row.is_none_or(|(stored_hash, state)| {
-        stored_hash != identity_hash || !matches!(state.as_str(), "allowed" | "blocked")
-    }))
+    Ok(match row {
+        Some((stored_hash, state))
+            if stored_hash == identity_hash && matches!(state.as_str(), "allowed" | "blocked") =>
+        {
+            None
+        }
+        Some((_, state)) if state == "allowed" => Some(Undecided::AllowedEarlierVersion),
+        _ => Some(Undecided::Never),
+    })
 }
 
 fn store_text(guard_home: &str) -> String {

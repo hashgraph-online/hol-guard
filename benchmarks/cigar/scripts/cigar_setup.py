@@ -114,13 +114,13 @@ def builds():
     return found
 
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext  # noqa: E402
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter  # noqa: E402
+from codex_plugin_scanner.guard.harness.base import HarnessContext  # noqa: E402
+from codex_plugin_scanner.guard.harness.registry import get_adapter  # noqa: E402
 
 guard.mkdir(parents=True, exist_ok=True)
 # Installing hooks asks the resident daemon, so start it first on a fresh home.
 subprocess.run([exe, "daemon", "ensure", "--guard-home", str(guard)], env=env, capture_output=True, timeout=300)
-CodexHarnessAdapter().install(HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard))
+get_adapter("codex").install(HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard))
 log("codex hooks installed in rig home")
 subprocess.run([exe, "daemon", "ensure", "--guard-home", str(guard)], env=env, capture_output=True, timeout=300)
 if ctx("status").get("requested_enabled") is not True:

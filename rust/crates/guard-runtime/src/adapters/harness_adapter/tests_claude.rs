@@ -13,6 +13,7 @@ mod round_trip;
 fn facts() -> String {
     json!({
         "daemon_url": "http://127.0.0.1:4781",
+        "query_extras": [["runtime-harness", "cursor"], ["workspace", "/cursor/project"]],
     })
     .to_string()
 }
@@ -163,31 +164,11 @@ fn install_writes_session_start_and_every_runtime_group() {
         .as_str()
         .unwrap()
         .contains("schedule_guard_daemon_recovery"));
+    // Cursor markers in the installer's environment stay out of the hook.
     let query = config["query"].as_str().unwrap();
     assert!(query.starts_with("guard-home="), "{query}");
     assert!(!query.contains("runtime-harness"), "{query}");
-}
-
-#[test]
-fn a_hook_installed_from_cursor_names_cursor_in_its_daemon_query() {
-    let home = Home::new();
-    let caller = stamped(false, Some("/rt/hol-guard-runtime"));
-    let env = json!({"PATH": "", "CURSOR_VERSION": "2.0.0", "CURSOR_PROJECT_DIR": " /work/repo "});
-    let answer = run(
-        &home,
-        "prepare_install",
-        json!({"shim": shim(), "caller": caller, "env": env}),
-        &facts(),
-    );
-    let payload: Value = serde_json::from_str(&after(&answer["files"][0])).unwrap();
-    let query = pre_tool_config(&payload)["query"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    assert!(
-        query.ends_with("&runtime-harness=cursor&workspace=%2Fwork%2Frepo"),
-        "{query}"
-    );
+    assert!(!query.contains("cursor"), "{query}");
 }
 
 #[test]

@@ -18,7 +18,6 @@ from tests.native_runtime_stamp import stamp_native_runtime
 _REPO = Path(__file__).resolve().parents[1]
 _RUST_SOURCE = _REPO / "rust" / "crates" / "guard-runtime" / "src" / "claude_session_start.rs"
 _RUST_ARGV = _REPO / "rust" / "crates" / "guard-runtime" / "src" / "adapters" / "harness_adapter" / "claude_argv.rs"
-_CURSOR_ENV = ("CURSOR_VERSION", "CURSOR_PROJECT_DIR", "CURSOR_TRACE_ID", "CURSOR_SESSION_ID", "CURSOR_TRANSCRIPT_PATH")
 _HOOK_FEATURE = "claude-hook-bridge-v1"
 _SESSION_START_FEATURE = "claude-session-start-v1"
 _BOTH_FEATURES = (_HOOK_FEATURE, _SESSION_START_FEATURE)
@@ -32,8 +31,6 @@ def _own_home_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Harnes
     home = tmp_path / "home 雪 'quote'"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
-    for key in _CURSOR_ENV:
-        monkeypatch.delenv(key, raising=False)
     workspace = tmp_path / 'work "quoted"'
     workspace.mkdir()
     return HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=home / ".hol-guard")
@@ -143,8 +140,6 @@ def test_rust_lane_constants_match_the_installer() -> None:
     assert rust_const("SESSION_START_MODE", _RUST_ARGV.read_text(encoding="utf-8")) == _MODE
     assert rust_const("SESSION_START_MARKER") == _SESSION_MARKER
     assert rust_const("SESSION_START_FEATURE") == _SESSION_START_FEATURE
-    for key in _CURSOR_ENV:
-        assert f'"{key}"' in source
 
 
 @posix_only
