@@ -26,12 +26,12 @@ fn receipt(request_id: &str, decision: &str, action: &str) -> Value {
         "authority": "rust",
         "decision_id": "",
         "request_id": request_id,
-        "request_digest": "a".repeat(64),
+        "request_digest": if decision == "allow" { "a" } else { "b" }.repeat(64),
         "harness": "codex",
         "event_name": "PreToolUse",
         "payload_kind": "inline",
         "policy_generation": 1,
-        "policy_digest": null,
+        "policy_digest": "b".repeat(64),
         "rule_digest": null,
         "runtime_identity": RUNTIME.repeat(64),
         "decision": decision,
@@ -399,3 +399,7 @@ fn the_desktop_proxy_crosses_into_the_hook_only_when_explicit_and_absolute() {
     assert_eq!(context["HOL_GUARD_DESKTOP"], "1");
     assert_eq!(context["HOL_GUARD_DESKTOP_HOOK_PROXY"], PROXY);
 }
+
+#[cfg(unix)]
+#[path = "tests_publication_observe_run.rs"]
+mod run;

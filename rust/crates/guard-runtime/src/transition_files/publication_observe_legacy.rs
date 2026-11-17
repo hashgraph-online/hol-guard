@@ -26,7 +26,7 @@ const MAX_BUDGET_MS: u64 = 60_000;
 /// The longest the store waits for a lock; the deadline bounds the whole call.
 const LOCK_WAIT_MS: u64 = 500;
 const GENERATION_DOMAIN: &[u8] = b"transition-generation";
-pub(super) const EXPIRED: &str = "admission_deadline_expired";
+const EXPIRED: &str = "admission_deadline_expired";
 const LOOKUP_FAILURES: [&str; 5] = [
     EXPIRED,
     "legacy_probe_identity_invalid",
@@ -51,7 +51,7 @@ fn generation_tag(key: &InstallationCorrelationKey) -> String {
     hmac_hex(key.material(), GENERATION_DOMAIN)
 }
 
-fn expired(deadline: Instant) -> Step<()> {
+pub(super) fn expired(deadline: Instant) -> Step<()> {
     if Instant::now() >= deadline {
         return Err(Fault::Transition(EXPIRED));
     }

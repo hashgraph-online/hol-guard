@@ -40,6 +40,7 @@ mod publication_lean;
 mod publication_observe;
 mod publication_observe_check;
 mod publication_observe_legacy;
+mod publication_observe_run;
 mod publication_observer;
 mod publication_receipt;
 mod publication_repair_files;

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 
@@ -10,6 +11,7 @@ from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapt
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.native_owned import codex_install_transaction
+from codex_plugin_scanner.guard.native_process_stop_scope import native_process_stop_scope
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity
 from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     COMMAND_ACTIVITY_CORRELATION_KEY_FILE,
@@ -112,3 +114,28 @@ def test_invalid_configuration_never_launches_a_child(tmp_path, fault):
             workspace=workspace,
             deadline_monotonic=deadline,
         )
+
+
+def test_a_set_stop_scope_refuses_before_the_native_observation_starts(tmp_path, monkeypatch):
+    context, workspace, _store = installed_context(tmp_path)
+    config = context.home_dir / ".codex" / "config.toml"
+    calls = []
+    monkeypatch.setattr(observer, "publication", lambda *args, **kwargs: calls.append(args))
+    stop = threading.Event()
+    stop.set()
+    with (
+        native_process_stop_scope(stop),
+        codex_install_transaction(context.guard_home, config, actor="transition-probe"),
+        pytest.raises(TransitionError) as refused,
+    ):
+        observer.observe_configured_codex_hook(
+            operation_id=str(uuid.uuid4()),
+            artifact_generation="candidate",
+            expected_runtime=None,
+            guard_home=context.guard_home,
+            config_path=config,
+            workspace=workspace,
+            deadline_monotonic=time.monotonic() + 5,
+        )
+    assert refused.value.reason == "admission_hook_launch_failed"
+    assert calls == []

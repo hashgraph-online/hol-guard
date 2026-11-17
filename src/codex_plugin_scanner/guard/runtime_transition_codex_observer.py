@@ -22,6 +22,7 @@ from .codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_
 from .codex_hook_integrity import manifest_refusal
 from .native_daemon_peer import DaemonArtifactBinding
 from .native_owned import _OWNER, _bound
+from .native_process_stop_scope import native_process_stop_requested
 from .native_runtime import NativeRuntimeIdentity
 from .native_transition_files import publication
 from .runtime_transition import TransitionError
@@ -112,6 +113,10 @@ def _observe(
     artifact_binding: DaemonArtifactBinding | None,
     receipt_store: GuardStore | None,
 ) -> NativeProtectionAdmission:
+    if native_process_stop_requested():
+        # A launch under a set stop scope was always refused; the native
+        # launch no longer sees the event, so refuse before it starts.
+        raise TransitionError("admission_hook_launch_failed")
     remaining = max(0.0, deadline_monotonic - time.monotonic())
     request: dict[str, object] = {
         "operation_id": operation_id,

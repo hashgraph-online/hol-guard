@@ -11,43 +11,23 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
 use super::publication::Call;
-use super::publication_observe_check::{
-    canonical_uuid, digest, mapping, modern_receipt, protects, strings, PROBE_FIELD, PROBE_SCHEMA,
-};
-use super::publication_observe_legacy::{Legacy, EXPIRED};
+use super::publication_observe_check::{canonical_uuid, digest, mapping, strings};
+use super::publication_observe_legacy::{expired, Legacy};
+use super::publication_observe_run::{agreed, Run};
 use super::publication_observer::{invalid, observed, sha256, syntax_of, MISSING};
 use super::{Fault, Step};
-use crate::hook_evidence_correlation::derive_proven_request_correlation;
 use crate::hook_process_spawn::{
     desktop_hook_proxy_context, isolated_hook_environment, private_hook_runtime_cwd,
-    run_isolated_hook_process,
 };
-use crate::policy_bundle_time::micros_to_utc_isoformat;
-use crate::pyjson::{self, PyVal};
+use crate::pyjson::PyVal;
 
 const MAX_DEADLINE_MS: u64 = 600_000;
-const OUTPUT_LIMIT: usize = 64 * 1024;
-const POLL: Duration = Duration::from_millis(25);
 const CHANGED: &str = "admission_hook_binding_changed";
-const PROTECTION: &str = "admission_protection_failed";
-/// The two probes, in order: the command is a classification input only.
-const PROBES: [(&str, &str); 2] = [("pwd", "allow"), ("rm -rf /", "deny")];
-
-fn expired(deadline: Instant) -> Step<()> {
-    if Instant::now() >= deadline {
-        return Err(Fault::Transition(EXPIRED));
-    }
-    Ok(())
-}
-
-fn protection<T>() -> Step<T> {
-    Err(Fault::Transition(PROTECTION))
-}
 
 /// Request, besides the binding's: `operation_id`, `artifact_generation`,
 /// `runtime_sha256`, `owned` (the caller holds the transaction owner),
@@ -100,116 +80,32 @@ pub(super) fn observe(call: &mut Call<'_>) -> Step<Value> {
         expired(deadline)?;
         legacy.as_ref().map_or(Ok(()), Legacy::recheck)
     };
-    let unchanged = |call: &Call<'_>| -> Step<bool> {
-        Ok(call.snapshot(&config_path)? == Some(before_config.clone())
-            && call.snapshot(&manifest_path)? == Some(before_manifest.clone()))
-    };
-    if !unchanged(call)? {
-        return Err(Fault::Transition(CHANGED));
-    }
+    let signed = [
+        (config_path.as_path(), before_config.as_slice()),
+        (manifest_path.as_path(), before_manifest.as_slice()),
+    ];
+    intact(call, &signed)?;
     let workspace = call.text("workspace")?.to_owned();
     let runtime = call.text("runtime_sha256")?.to_owned();
-    let mut receipts: Vec<Value> = Vec::new();
-    let mut outputs: Vec<String> = Vec::new();
-    for (command, decision) in PROBES {
-        expired(deadline)?;
-        let request_id = format!("transition-hook-{}", random_hex()?);
-        let mut payload = Map::new();
-        payload.insert("hook_event_name".to_owned(), json!("PreToolUse"));
-        payload.insert("tool_name".to_owned(), json!("Bash"));
-        payload.insert("tool_input".to_owned(), json!({ "command": command }));
-        payload.insert("cwd".to_owned(), json!(workspace));
-        if launch.modern {
-            payload.insert(
-                PROBE_FIELD.to_owned(),
-                json!({
-                    "schema": PROBE_SCHEMA,
-                    "operation_id": operation_id,
-                    "request_id": request_id,
-                }),
-            );
-        } else {
-            payload.insert("tool_call_id".to_owned(), json!(request_id));
-        }
-        recheck(&legacy)?;
-        let since = now_isoformat()?;
-        // The manifest-authenticated command is the launch target; frozen
-        // Desktop bridge routing happens only after that exact configured
-        // command has parsed and validated this probe.
-        let result = run_isolated_hook_process(
-            &launch.argv,
-            &Value::Object(payload.clone()).to_string(),
-            &cwd,
-            &environment,
-            None,
-            Some(OUTPUT_LIMIT),
-            None,
-            Some(deadline),
-        );
-        expired(deadline)?;
-        if result.returncode != Some(0)
-            || result.timed_out
-            || result.containment_failed
-            || result.output_limit_exceeded
-        {
-            return Err(Fault::Transition("admission_hook_launch_failed"));
-        }
-        let Some(output) = pyjson::parse(&result.stdout)
-            .ok()
-            .filter(|output| output.as_dict().is_some())
-        else {
-            return protection();
-        };
-        let Some(json_output) = output.to_json() else {
-            return protection();
-        };
-        let receipt = if let Some(legacy) = &legacy {
-            let correlation =
-                derive_proven_request_correlation("codex", "PreToolUse", &payload, legacy.key());
-            let Ok(Some(correlation)) = correlation else {
-                return protection();
-            };
-            loop {
-                legacy.recheck()?;
-                if let Some(receipt) = legacy.receipt(&correlation, &since)? {
-                    break receipt;
-                }
-                expired(deadline)?;
-                std::thread::sleep(POLL.min(deadline.saturating_duration_since(Instant::now())));
-            }
-        } else {
-            match modern_receipt(&result.stderr, &operation_id, &request_id) {
-                Some(receipt) => receipt,
-                None => return protection(),
-            }
-        };
-        if !protects(&receipt, &json_output, decision, &runtime) {
-            return protection();
-        }
-        receipts.push(receipt);
-        outputs.push(digest(&output));
-    }
+    let run = Run {
+        argv: &launch.argv,
+        modern: launch.modern,
+        cwd: &cwd,
+        environment: &environment,
+        workspace: &workspace,
+        operation_id: &operation_id,
+        runtime: &runtime,
+        deadline,
+        legacy: legacy.as_ref(),
+    };
+    let probed = run.probes(&|| Ok(format!("transition-hook-{}", random_hex()?)))?;
     expired(deadline)?;
     recheck(&legacy)?;
-    if !unchanged(call)? {
-        return Err(Fault::Transition(CHANGED));
-    }
+    intact(call, &signed)?;
     expired(deadline)?;
-    let (allow, deny) = (&receipts[0], &receipts[1]);
-    let generation = allow
-        .get("policy_generation")
-        .cloned()
-        .unwrap_or(Value::Null);
-    let policy = allow.get("policy_digest").cloned().unwrap_or(Value::Null);
-    if !(generation.is_i64() || generation.is_u64()) || !policy.is_string() {
-        return Err(Fault::Transition("admission_policy_mismatch"));
-    }
-    if Some(&generation) != deny.get("policy_generation")
-        || Some(&policy) != deny.get("policy_digest")
-        || allow.get("request_digest") == deny.get("request_digest")
-    {
-        return Err(Fault::Transition("admission_policy_mismatch"));
-    }
+    let (generation, policy) = agreed(&probed.receipts)?;
+    let (allow, deny) = (&probed.receipts[0], &probed.receipts[1]);
+    let outputs = probed.outputs;
     let channel = if launch.modern {
         "probe-envelope"
     } else {
@@ -232,6 +128,16 @@ pub(super) fn observe(call: &mut Call<'_>) -> Step<Value> {
         "policy_digest": policy,
         "evidence": evidence,
     }))
+}
+
+/// The signed config and manifest still hold the bytes the binding authenticated.
+pub(super) fn intact(call: &Call<'_>, files: &[(&Path, &[u8])]) -> Step<()> {
+    for (path, bytes) in files {
+        if call.snapshot(path)?.as_deref() != Some(*bytes) {
+            return Err(Fault::Transition(CHANGED));
+        }
+    }
+    Ok(())
 }
 
 /// The binding's environment as the digest names it: strings only.
@@ -273,16 +179,6 @@ fn random_hex() -> Step<String> {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).map_err(|_| Fault::Transition("files_invalid"))?;
     Ok(hex::encode(bytes))
-}
-
-/// `datetime.now(timezone.utc).isoformat()`.
-fn now_isoformat() -> Step<String> {
-    let micros = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .and_then(|elapsed| i64::try_from(elapsed.as_micros()).ok())
-        .ok_or(Fault::Transition("files_invalid"))?;
-    micros_to_utc_isoformat(micros, "+00:00").ok_or(Fault::Transition("files_invalid"))
 }
 
 #[cfg(test)]

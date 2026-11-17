@@ -1069,3 +1069,7 @@ mod desktop_proxy_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "hook_process_spawn_tests.rs"]
+mod capture_tests;

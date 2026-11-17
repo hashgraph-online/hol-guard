@@ -60,22 +60,6 @@ pub(super) struct Launch {
     pub(super) manifest_sha256: String,
 }
 
-/// Request: `home`, `config`, `windows`, `long_paths`, `runtime_path` or
-/// `frozen`, and `package_roots`. Answer: the launch the observer may run. A
-/// short name `long_paths` does not name is expanded by this host.
-pub(super) fn binding(call: &mut Call<'_>) -> Step<Value> {
-    let mut syntax = syntax_of(call)?;
-    let launch = observed(call, &mut syntax)?;
-    Ok(json!({
-        "argv": launch.argv,
-        "environment": launch.environment,
-        "modern_channel": launch.modern,
-        "manifest_path": launch.manifest_path,
-        "config_sha256": launch.config_sha256,
-        "manifest_sha256": launch.manifest_sha256,
-    }))
-}
-
 /// The command syntax the request names: this host's, with the long spelling
 /// of every short path the caller already resolved.
 pub(super) fn syntax_of(call: &Call<'_>) -> Step<Syntax> {
