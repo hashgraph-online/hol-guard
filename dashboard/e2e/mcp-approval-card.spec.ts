@@ -81,7 +81,11 @@ const gmailSend: GuardApprovalRequest = {
   decision_v2_json: null,
 };
 
-async function mount(page: Page, bodies: Array<Record<string, unknown>>): Promise<void> {
+async function mount(
+  page: Page,
+  bodies: Array<Record<string, unknown>>,
+  request: GuardApprovalRequest = gmailSend,
+): Promise<void> {
   await page.route("**/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     let body: unknown = {};
@@ -92,7 +96,7 @@ async function mount(page: Page, bodies: Array<Record<string, unknown>>): Promis
       body = {
         resolved: true,
         item: null,
-        resolved_request: { ...gmailSend, status: "resolved", resolution_action: "allow", resolution_scope: "artifact" },
+        resolved_request: { ...request, status: "resolved", resolution_action: "allow", resolution_scope: "artifact" },
         remaining_pending_count: 0,
         next_selectable_request_id: null,
         remaining_pending_summaries: [],
@@ -102,9 +106,9 @@ async function mount(page: Page, bodies: Array<Record<string, unknown>>): Promis
         copy: null,
         codexResume: null,
       };
-    } else if (path.endsWith(`/requests/${gmailSend.request_id}`)) body = gmailSend;
+    } else if (path.endsWith(`/requests/${request.request_id}`)) body = request;
     else if (path.endsWith("/requests")) {
-      body = { items: [gmailSend], next_cursor: null, total_pending_count: 1, total_count: 1, status: "pending" };
+      body = { items: [request], next_cursor: null, total_pending_count: 1, total_count: 1, status: "pending" };
     } else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
     else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
     else if (path.endsWith("/settings")) body = defaultSettingsPayload;
@@ -163,6 +167,25 @@ test("Just this once allows one retry and saves nothing", async ({ page }) => {
   const bodies: Array<Record<string, unknown>> = [];
   await mount(page, bodies);
   await page.goto(`/requests/${gmailSend.request_id}?${DAEMON}`);
+
+  const group = page.getByRole("radiogroup", { name: "How long to allow this call" });
+  await expect(group.getByRole("radio", { name: /^Just this once/ })).toBeChecked();
+  await page.getByRole("button", { name: "Allow once", exact: true }).click();
+
+  await expect.poll(() => bodies.length).toBe(1);
+  expect(bodies[0]).toMatchObject({ action: "allow", scope: "artifact" });
+  expect(bodies[0].persist_policy).not.toBe(true);
+});
+
+test("a review that recommends the workspace still starts on Just this once, on the exact call", async ({ page }) => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const workspaceFirst: GuardApprovalRequest = {
+    ...gmailSend,
+    recommended_scope: "workspace",
+    recommended_scope_by_action: { allow: "workspace", block: "artifact" },
+  };
+  await mount(page, bodies, workspaceFirst);
+  await page.goto(`/requests/${workspaceFirst.request_id}?${DAEMON}`);
 
   const group = page.getByRole("radiogroup", { name: "How long to allow this call" });
   await expect(group.getByRole("radio", { name: /^Just this once/ })).toBeChecked();

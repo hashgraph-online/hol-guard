@@ -13958,7 +13958,7 @@ function linkParts(value) {
     const url = new URL(value);
     if (url.hostname.length === 0) return null;
     const rest = `${url.pathname === "/" ? "" : url.pathname}${url.search}${url.hash}`;
-    return { host: url.hostname, rest };
+    return { host: url.host, rest };
   } catch {
     return null;
   }
@@ -14239,6 +14239,10 @@ function multiExecute({ harness, input }) {
   const hiddenSteps = all.length - steps.length;
   const apps = unique(all.map((step) => step.app).filter((app) => app !== null));
   const where = apps.length > 0 ? joinList(apps) : "Composio";
+  const effect = worstMcpEffect(all.map((step) => step.effect));
+  const effectApps = unique(
+    all.filter((step) => step.effect === effect).map((step) => step.app).filter((app) => app !== null)
+  );
   const count2 = all.length;
   const thought = textOf(input?.thought, 300);
   const first = all[0];
@@ -14246,11 +14250,12 @@ function multiExecute({ harness, input }) {
     headline: `${harness} wants to run ${actionCountPhrase(count2)} in ${where}`,
     title: batchTitle(first, count2, apps),
     aside: `Composio carries out ${count2 === 1 ? "this action" : "these actions"} in your connected ${accountPhrase(apps)}, using the inputs below.`,
-    effect: worstMcpEffect(all.map((step) => step.effect)),
+    effect,
     effectBasis: STEP_BASIS,
     facts: [],
     steps,
     hiddenSteps,
+    effectApps,
     quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
     code: null,
     queueTitle: `Composio · ${first?.action ?? "Run actions"}${count2 > 1 ? ` and ${count2 - 1} more` : ""}`,
@@ -14314,7 +14319,7 @@ function listedMcpRef(item) {
   for (const candidate of candidates) {
     if (typeof candidate !== "string") continue;
     const name = candidate.startsWith(TOOL_ID_PREFIX) ? candidate.slice(TOOL_ID_PREFIX.length) : candidate;
-    const ref = unwrapConnector(parseNamespacedMcpName(name));
+    const ref = parseNamespacedMcpName(name);
     if (ref !== null) return ref;
   }
   return null;
@@ -14325,12 +14330,6 @@ function listedMcpPreview(item) {
   const short = shortToolName(ref.server, ref.tool);
   const title = ref.server.toLowerCase() === "composio" ? composioToolTitle(short) ?? sentenceCase(short) : sentenceCase(short);
   return `${serviceDisplayName(ref.server)} · ${title}`;
-}
-function unwrapConnector(ref) {
-  if (ref === null || ref.server !== "codex_apps") return ref;
-  const separator = ref.tool.indexOf("__");
-  if (separator <= 0 || separator + 2 >= ref.tool.length) return ref;
-  return { server: ref.tool.slice(0, separator), tool: ref.tool.slice(separator + 2) };
 }
 const REVIEW_SEMANTIC_GROUPS = [
   { id: "all", label: "All", matches: [] },
@@ -15289,9 +15288,9 @@ function bulkApproveConsequenceCopyForSelection(actionCount, retryBlockedActionC
 function consequenceFor(effect, where) {
   switch (effect) {
     case "read":
-      return { tone: "calm", text: `Looks something up in ${where}. It should not change anything.` };
+      return { tone: "calm", text: `By its name, this looks something up in ${where}.` };
     case "write":
-      return { tone: "care", text: `Creates or changes something in ${where}.` };
+      return { tone: "care", text: `By its name, this creates or changes something in ${where}.` };
     case "send":
       return {
         tone: "danger",
@@ -15302,7 +15301,7 @@ function consequenceFor(effect, where) {
     case "run-code":
       return { tone: "danger", text: "Runs code. It can do anything this tool's access allows, so read it first." };
     case "connect":
-      return { tone: "care", text: `Changes which accounts are linked to ${where}.` };
+      return { tone: "care", text: `Checks or changes which accounts are linked to ${where}, and may ask you to link another.` };
     case "unknown":
       return { tone: "care", text: "Guard cannot tell what this does from the tool's name. Check the details below." };
   }
@@ -15333,7 +15332,7 @@ function explainMcpCall(item) {
   };
 }
 function whereItActs(body, connector) {
-  const apps = unique(body.steps.map((step) => step.app).filter((app) => app !== null));
+  const apps = body.effectApps ?? [];
   return apps.length > 0 ? joinList(apps) : connector;
 }
 function plainMcpReason(item, text2) {
@@ -15834,8 +15833,9 @@ function plainEnglishRequestTitle(request2) {
       return `${app} wants to do something with ${name}`;
   }
 }
+const UNREVIEWED_MCP_TOOL = "Guard asks before a tool it has not reviewed runs.";
 function whyPaused(request2) {
-  if (explainMcpCall(request2) !== null) return "Guard asks before a tool it has not reviewed runs.";
+  const mcpCall = explainMcpCall(request2) !== null;
   const category = detectCategory({
     ...request2,
     timestamp: request2.created_at,
@@ -15857,8 +15857,9 @@ function whyPaused(request2) {
       if ((request2.artifact_name ?? "").startsWith("chrome-devtools:") || (request2.changed_fields ?? []).some((field) => field.toLowerCase().includes("browser"))) {
         return "This uses the browser. Confirm it if you meant to.";
       }
-      return "This uses an outside tool. Guard stops new tools by default.";
+      return mcpCall ? UNREVIEWED_MCP_TOOL : "This uses an outside tool. Guard stops new tools by default.";
     default:
+      if (mcpCall) return UNREVIEWED_MCP_TOOL;
       if (isPackageDependencyMutationRequest(request2)) {
         return "This package install mutates project dependencies and installed packages. Guard pauses dependency changes so you can review them before running.";
       }
@@ -36309,7 +36310,7 @@ function ReviewDecisionCard(props) {
   const decisionSubjectKey = item ? approvalDecisionSubjectKey(item) : null;
   reactExports.useEffect(() => {
     if (item) {
-      setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
+      setAllowScope(simpleMcpChoiceApplies(item) ? "artifact" : recommendedScopeForAction(item, "allow") ?? "artifact");
       setBlockScope(recommendedScopeForAction(item, "block") ?? "artifact");
       setRememberExactAction(false);
     }

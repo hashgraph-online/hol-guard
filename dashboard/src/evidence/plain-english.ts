@@ -415,8 +415,10 @@ export function plainEnglishRequestTitle(request: GuardApprovalRequest): string 
   }
 }
 
+const UNREVIEWED_MCP_TOOL = "Guard asks before a tool it has not reviewed runs.";
+
 export function whyPaused(request: GuardApprovalRequest): string {
-  if (explainMcpCall(request) !== null) return "Guard asks before a tool it has not reviewed runs.";
+  const mcpCall = explainMcpCall(request) !== null;
   const category = detectCategory({
     ...request,
     timestamp: request.created_at,
@@ -440,8 +442,9 @@ export function whyPaused(request: GuardApprovalRequest): string {
         || (request.changed_fields ?? []).some((field) => field.toLowerCase().includes("browser"))) {
         return "This uses the browser. Confirm it if you meant to.";
       }
-      return "This uses an outside tool. Guard stops new tools by default.";
+      return mcpCall ? UNREVIEWED_MCP_TOOL : "This uses an outside tool. Guard stops new tools by default.";
     default:
+      if (mcpCall) return UNREVIEWED_MCP_TOOL;
       if (isPackageDependencyMutationRequest(request)) {
         return "This package install mutates project dependencies and installed packages. Guard pauses dependency changes so you can review them before running.";
       }

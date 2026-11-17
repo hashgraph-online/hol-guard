@@ -9,9 +9,9 @@ import type { McpEffectKind } from "./mcp-effects";
 export function consequenceFor(effect: McpEffectKind, where: string): McpConsequence {
   switch (effect) {
     case "read":
-      return { tone: "calm", text: `Looks something up in ${where}. It should not change anything.` };
+      return { tone: "calm", text: `By its name, this looks something up in ${where}.` };
     case "write":
-      return { tone: "care", text: `Creates or changes something in ${where}.` };
+      return { tone: "care", text: `By its name, this creates or changes something in ${where}.` };
     case "send":
       return {
         tone: "danger",
@@ -22,7 +22,7 @@ export function consequenceFor(effect: McpEffectKind, where: string): McpConsequ
     case "run-code":
       return { tone: "danger", text: "Runs code. It can do anything this tool's access allows, so read it first." };
     case "connect":
-      return { tone: "care", text: `Changes which accounts are linked to ${where}.` };
+      return { tone: "care", text: `Checks or changes which accounts are linked to ${where}, and may ask you to link another.` };
     case "unknown":
       return { tone: "care", text: "Guard cannot tell what this does from the tool's name. Check the details below." };
   }

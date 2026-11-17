@@ -11,7 +11,6 @@ import {
   scalarFacts,
   selectToolInput,
   textOf,
-  unique,
   type SelectedToolInput,
 } from "./mcp-input";
 import {
@@ -61,9 +60,9 @@ export function explainMcpCall(item: GuardApprovalRequest): McpCallExplanation |
   };
 }
 
-/** The services a call acts in: the apps its actions name, else the connector it goes through. */
+/** The services the call's effect lands in: the apps of the actions that carry it, else the connector it goes through. */
 function whereItActs(body: McpCallBody, connector: string): string {
-  const apps = unique(body.steps.map((step) => step.app).filter((app): app is string => app !== null));
+  const apps = body.effectApps ?? [];
   return apps.length > 0 ? joinList(apps) : connector;
 }
 

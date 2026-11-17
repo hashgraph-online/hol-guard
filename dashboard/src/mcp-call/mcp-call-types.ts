@@ -50,6 +50,8 @@ export type McpCallExplanation = {
   steps: McpStep[];
   /** Actions past the rows the card lists. They still count toward the title and the effect. */
   hiddenSteps?: number;
+  /** The apps whose actions carry the call's effect, read from every action, listed or not. */
+  effectApps?: string[];
   quotes: McpAgentQuotes | null;
   code: McpCodeBlock | null;
   /** The exact input Guard matches an approval against. */

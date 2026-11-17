@@ -14,14 +14,15 @@ export function emailAddresses(value: string): string[] | null {
   return parts.every((part) => EMAIL.test(part)) ? parts : null;
 }
 
-/** A web address split so the host, the part that says where it goes, can stand out. Null for anything else. */
+/** A web address split so the host and port, the part that says where it goes, can stand out. Null for anything else. */
 export function linkParts(value: string): { host: string; rest: string } | null {
   if (!/^https?:\/\//i.test(value) || /\s/.test(value)) return null;
   try {
     const url = new URL(value);
     if (url.hostname.length === 0) return null;
     const rest = `${url.pathname === "/" ? "" : url.pathname}${url.search}${url.hash}`;
-    return { host: url.hostname, rest };
+    // `host` keeps a non-default port: the port says which service answers.
+    return { host: url.host, rest };
   } catch {
     return null;
   }

@@ -113,7 +113,9 @@ export function ReviewDecisionCard(props: {
 
   useEffect(() => {
     if (item) {
-      setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
+      // The two plain choices are "just this once" and "always allow this call", both on the exact call.
+      // A broader recommended scope would leave neither card selected, so it never starts selected here.
+      setAllowScope(simpleMcpChoiceApplies(item) ? "artifact" : (recommendedScopeForAction(item, "allow") ?? "artifact"));
       setBlockScope(recommendedScopeForAction(item, "block") ?? "artifact");
       setRememberExactAction(false);
     }

@@ -139,6 +139,10 @@ function multiExecute({ harness, input }: ComposioContext): McpCallBody {
   const hiddenSteps = all.length - steps.length;
   const apps = unique(all.map((step) => step.app).filter((app): app is string => app !== null));
   const where = apps.length > 0 ? joinList(apps) : "Composio";
+  const effect = worstMcpEffect(all.map((step) => step.effect));
+  const effectApps = unique(
+    all.filter((step) => step.effect === effect).map((step) => step.app).filter((app): app is string => app !== null),
+  );
   const count = all.length;
   const thought = textOf(input?.thought, 300);
   const first = all[0];
@@ -146,11 +150,12 @@ function multiExecute({ harness, input }: ComposioContext): McpCallBody {
     headline: `${harness} wants to run ${actionCountPhrase(count)} in ${where}`,
     title: batchTitle(first, count, apps),
     aside: `Composio carries out ${count === 1 ? "this action" : "these actions"} in your connected ${accountPhrase(apps)}, using the inputs below.`,
-    effect: worstMcpEffect(all.map((step) => step.effect)),
+    effect,
     effectBasis: STEP_BASIS,
     facts: [],
     steps,
     hiddenSteps,
+    effectApps,
     quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
     code: null,
     queueTitle: `Composio · ${first?.action ?? "Run actions"}${count > 1 ? ` and ${count - 1} more` : ""}`,

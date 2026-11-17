@@ -22,7 +22,7 @@ export function listedMcpRef(item: GuardApprovalRequest): McpServerRef | null {
   for (const candidate of candidates) {
     if (typeof candidate !== "string") continue;
     const name = candidate.startsWith(TOOL_ID_PREFIX) ? candidate.slice(TOOL_ID_PREFIX.length) : candidate;
-    const ref = unwrapConnector(parseNamespacedMcpName(name));
+    const ref = parseNamespacedMcpName(name);
     if (ref !== null) return ref;
   }
   return null;
@@ -35,12 +35,4 @@ export function listedMcpPreview(item: GuardApprovalRequest): string | null {
   const short = shortToolName(ref.server, ref.tool);
   const title = ref.server.toLowerCase() === "composio" ? (composioToolTitle(short) ?? sentenceCase(short)) : sentenceCase(short);
   return `${serviceDisplayName(ref.server)} · ${title}`;
-}
-
-/** Codex reaches a connector through `codex_apps`. The connector is the service the user knows. */
-function unwrapConnector(ref: McpServerRef | null): McpServerRef | null {
-  if (ref === null || ref.server !== "codex_apps") return ref;
-  const separator = ref.tool.indexOf("__");
-  if (separator <= 0 || separator + 2 >= ref.tool.length) return ref;
-  return { server: ref.tool.slice(0, separator), tool: ref.tool.slice(separator + 2) };
 }

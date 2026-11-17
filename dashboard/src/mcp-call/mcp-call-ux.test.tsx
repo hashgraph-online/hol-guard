@@ -139,9 +139,12 @@ function request(env: GuardActionEnvelope | null, toolName: string, extra: Parti
   assert(consequenceFor("send", "Gmail").tone === "danger" && consequenceFor("delete", "Gmail").tone === "danger", "T-UX-16: send and delete are the strongest tone");
   assert(consequenceFor("run-code", "x").tone === "danger", "T-UX-17: running code is the strongest tone");
   assert(consequenceFor("unknown", "x").tone === "care", "T-UX-18: a name Guard cannot read still asks for care");
-  assert(consequenceFor("read", "Gmail").text.includes("should not change anything"), "T-UX-19: a lookup is a hope, not a promise");
+  assert(consequenceFor("read", "Gmail").text.startsWith("By its name,") && !/not change|no change|nothing/i.test(consequenceFor("read", "Gmail").text), "T-UX-19: a lookup is read from the name, never promised");
   const all = (["read", "write", "send", "delete", "run-code", "connect", "unknown"] as const).map((effect) => consequenceFor(effect, "Gmail").text);
   assert(all.every((text) => !/\bsafe\b/i.test(text)), "T-UX-20: no consequence calls a tool safe");
+  assert(consequenceFor("write", "GitHub").text.startsWith("By its name,"), "T-UX-48: a change is read from the name too");
+  const connect = consequenceFor("connect", "Composio").text;
+  assert(connect.includes("Checks or changes") && connect.includes("may ask you to link another"), "T-UX-49: an account check does not claim a change always happens");
 }
 
 // The card names the one app a call acts in, and the connector it goes through.
@@ -214,6 +217,45 @@ function request(env: GuardActionEnvelope | null, toolName: string, extra: Parti
   assert(labels(true, true).persistExactAllow && !labels(false, true).persistExactAllow, "T-UX-41: only Always allow saves the call");
   assert(labels(true, false).allowLabel === "Approve and remember", "T-UX-42: other reviews keep their wording");
   assert(labels(false, true, true).allowLabel === "Keep allowing", "T-UX-43: a watch-only observation keeps its wording");
+}
+
+// A web address keeps its port, so a reviewer sees which service answers.
+{
+  assert(linkParts("http://localhost:8080/admin")?.host === "localhost:8080", "T-UX-50: a non-default port stays in the host");
+  assert(linkParts("https://example.com:443/a")?.host === "example.com", "T-UX-51: the default port is not shown");
+  assert(linkParts("https://example.com:8443/admin")?.rest === "/admin", "T-UX-52: the path stays separate");
+  assert(linkParts("https://trusted.com@evil.example/x")?.host === "evil.example", "T-UX-53: the host after the at-sign is the one shown");
+}
+
+// The service in the consequence comes from every action, listed or not, and only the actions that carry the effect.
+{
+  const fetches = Array.from({ length: 11 }, () => ({ tool_slug: "GMAIL_FETCH_EMAILS", arguments: { query: "x" } }));
+  const call = request(
+    envelope("mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", { tools: [...fetches, { tool_slug: "SLACK_DELETE_MESSAGE", arguments: { channel: "c1" } }] }),
+    "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+  );
+  const text = explainMcpCall(call)?.consequence.text ?? "";
+  assert(text.includes("Slack") && !text.includes("Gmail"), "T-UX-54: a hidden delete is named in Slack, not in the Gmail rows shown");
+  const mixed = request(
+    envelope("mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", {
+      tools: [{ tool_slug: "GMAIL_FETCH_EMAILS", arguments: { query: "x" } }, { tool_slug: "GMAIL_SEND_EMAIL", arguments: { recipient_email: "a@example.com" } }],
+    }),
+    "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+  );
+  assert((explainMcpCall(mixed)?.consequence.text ?? "").includes("through Gmail"), "T-UX-55: one app that sends is still named");
+}
+
+// A Codex connector row reads as the connector, from the shared name parser.
+{
+  const row = request(null, "mcp__codex_apps__github__create_issue");
+  assert(listedMcpPreview(row) === "GitHub · Create issue", "T-UX-56: a codex_apps row is named for its connector");
+}
+
+// Why paused keeps a specific reason, and names the unreviewed tool only where the reason would be generic.
+{
+  const secret = request(envelope("mcp__files__read_id_rsa", { path: "x" }), "mcp__files__read_id_rsa");
+  assert(explainMcpCall(secret) !== null, "T-UX-57: the secret-named tool is still an MCP call");
+  assert(whyPaused(secret) === "This file may contain passwords or keys. Guard stops this by default.", "T-UX-58: a specific reason is never hidden by the generic one");
 }
 
 console.log("mcp-call ux tests passed");
