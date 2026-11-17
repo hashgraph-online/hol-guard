@@ -267,7 +267,7 @@ impl Host for FakeHost {
         }
     }
 
-    fn owned_by_caller(&self, pid: u32) -> bool {
+    fn owned_by_caller(&self, pid: u32, _timeout: Duration) -> bool {
         !self.foreign.contains(&pid)
     }
 

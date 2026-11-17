@@ -82,8 +82,9 @@ pub(crate) trait Host {
     fn start_token(&self, pid: u32) -> Option<String>;
     /// Signal the pid's own process group, else the pid.
     fn signal(&self, pid: u32, stop: Stop);
-    /// Whether the pid belongs to the user this process runs as.
-    fn owned_by_caller(&self, pid: u32) -> bool;
+    /// Whether the pid belongs to the user this process runs as. A check
+    /// that cannot answer within `timeout` answers `false`.
+    fn owned_by_caller(&self, pid: u32, timeout: Duration) -> bool;
     /// Whether reading `path` answers "not found". Any other failure, and a
     /// link, count as present.
     fn path_absent(&self, path: &str) -> bool;
@@ -147,7 +148,8 @@ pub(crate) fn reap<H: Host>(host: &H, excluded: &[u32], budget: Option<Duration>
     };
     let processes = parse_process_snapshot(&output);
     let mut workers = orphaned_daemon_workers(&processes, excluded);
-    for process in stale::stale_guard_processes(host, &processes, excluded) {
+    let deadline = budget.map(|budget| started + budget);
+    for process in stale::stale_guard_processes(host, &processes, excluded, deadline) {
         if !workers.iter().any(|worker| worker.pid == process.pid) {
             workers.push(process);
         }

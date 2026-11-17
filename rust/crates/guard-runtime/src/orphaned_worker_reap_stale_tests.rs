@@ -11,13 +11,18 @@ const GONE_RUNTIME: &str = "/opt/guard/native-runtime/bb22/hol-guard-runtime";
 const CORE: &str = "/opt/Application Support/core/versions/3.6.3/hol-guard";
 const GONE_HOME: &str = "/tmp/scratch home/guard";
 const LIVE_HOME: &str = "/opt/guard";
+/// A live home whose path holds ` --`: `ps` cannot tell it from a flag.
+const FLAG_LIKE_HOME: &str = "/tmp/team --scratch/guard";
 
 /// A process table in which every listed process keeps its command and
-/// start token and exits on its first signal.
+/// start token and exits on its first signal. Only `present` paths exist.
 struct StaleHost {
     listing: String,
-    absent: Vec<&'static str>,
+    present: Vec<&'static str>,
     foreign: Vec<u32>,
+    /// Owner checks that hang until their timeout, as a stuck `ps` does.
+    slow_owner_checks: bool,
+    owner_timeouts: RefCell<Vec<Duration>>,
     sent: RefCell<Vec<(u32, Stop)>>,
     started: Instant,
     elapsed: Cell<Duration>,
@@ -27,8 +32,10 @@ impl StaleHost {
     fn new(lines: &[String]) -> Self {
         Self {
             listing: lines.join("\n"),
-            absent: vec![GONE_HOME, GONE_RUNTIME],
+            present: vec![LIVE_HOME, FLAG_LIKE_HOME, RUNTIME, CORE],
             foreign: Vec::new(),
+            slow_owner_checks: false,
+            owner_timeouts: RefCell::default(),
             sent: RefCell::default(),
             started: Instant::now(),
             elapsed: Cell::new(Duration::ZERO),
@@ -67,12 +74,16 @@ impl Host for StaleHost {
         self.sent.borrow_mut().push((pid, stop));
     }
 
-    fn owned_by_caller(&self, pid: u32) -> bool {
+    fn owned_by_caller(&self, pid: u32, timeout: Duration) -> bool {
+        self.owner_timeouts.borrow_mut().push(timeout);
+        if self.slow_owner_checks {
+            self.elapsed.set(self.elapsed.get() + timeout);
+        }
         !self.foreign.contains(&pid)
     }
 
     fn path_absent(&self, path: &str) -> bool {
-        self.absent.contains(&path)
+        !self.present.contains(&path)
     }
 
     fn now(&self) -> Instant {
@@ -101,7 +112,7 @@ fn relay(runtime: &str) -> String {
 }
 
 fn stale(host: &StaleHost) -> Vec<u32> {
-    stale_guard_processes(host, &parse_process_snapshot(&host.listing), &[])
+    stale_guard_processes(host, &parse_process_snapshot(&host.listing), &[], None)
         .iter()
         .map(|process| process.pid)
         .collect()
@@ -190,7 +201,10 @@ fn look_alike_and_foreign_processes_are_left_running() {
 fn the_caller_is_never_retired() {
     let host = StaleHost::new(&[line(50, 1, &native_daemon(GONE_HOME))]);
 
-    assert!(stale_guard_processes(&host, &parse_process_snapshot(&host.listing), &[50]).is_empty());
+    assert!(
+        stale_guard_processes(&host, &parse_process_snapshot(&host.listing), &[50], None)
+            .is_empty()
+    );
 }
 
 #[test]
@@ -203,7 +217,7 @@ fn a_reused_pid_is_not_signalled() {
     let processes = parse_process_snapshot(&listed.listing);
     let (signalled, forced) = super::super::terminate(
         &reused,
-        &stale_guard_processes(&listed, &processes, &[]),
+        &stale_guard_processes(&listed, &processes, &[], None),
         &[],
         Duration::ZERO,
     );
@@ -212,21 +226,74 @@ fn a_reused_pid_is_not_signalled() {
 }
 
 #[test]
-fn the_guard_home_runs_to_the_next_flag() {
+fn the_guard_home_is_read_at_every_place_it_could_end() {
     assert_eq!(
-        daemon_guard_home(&native_daemon(GONE_HOME)),
-        Some(GONE_HOME)
+        daemon_guard_homes(&native_daemon(GONE_HOME)),
+        Some(vec![GONE_HOME, "/tmp/scratch home/guard --port 5474"])
     );
     assert_eq!(
-        daemon_guard_home(&format!("{RUNTIME} daemon-serve --guard-home {GONE_HOME}")),
-        Some(GONE_HOME)
+        daemon_guard_homes(&format!("{RUNTIME} daemon-serve --guard-home {GONE_HOME}")),
+        Some(vec![GONE_HOME])
     );
     assert_eq!(
-        daemon_guard_home(&python_daemon(LIVE_HOME)),
-        Some(LIVE_HOME)
+        daemon_guard_homes(&native_daemon(FLAG_LIKE_HOME)),
+        Some(vec![
+            "/tmp/team",
+            FLAG_LIKE_HOME,
+            "/tmp/team --scratch/guard --port 5474",
+        ])
     );
     assert_eq!(
-        daemon_guard_home(&format!("{RUNTIME} daemon-serve --port 1")),
-        None
+        daemon_guard_homes(&format!("{RUNTIME} daemon-serve --port 1")),
+        Some(Vec::new())
     );
+    assert_eq!(daemon_guard_homes(&relay(RUNTIME)), None);
+}
+
+#[test]
+fn a_live_daemon_whose_home_holds_a_flag_like_space_is_kept() {
+    // `/tmp/team` does not exist, but the home the daemon serves does.
+    let host = StaleHost::new(&[
+        line(70, 1, &native_daemon(FLAG_LIKE_HOME)),
+        line(71, 1, &python_daemon(FLAG_LIKE_HOME)),
+        line(72, 1, &native_daemon("/tmp/gone --scratch/guard")),
+    ]);
+
+    let answer = reap(&host, &[], None);
+
+    assert_eq!(answer["selected"], json!([72]));
+    assert_eq!(host.signalled(), [72]);
+}
+
+#[test]
+fn owner_checks_stop_when_the_budget_is_spent() {
+    let mut host = StaleHost::new(&[
+        line(80, 1, &native_daemon(GONE_HOME)),
+        line(81, 1, &native_daemon(GONE_HOME)),
+        line(82, 1, &native_daemon(GONE_HOME)),
+    ]);
+    host.slow_owner_checks = true;
+    let deadline = host.now() + Duration::from_millis(700);
+
+    let selected = stale_guard_processes(
+        &host,
+        &parse_process_snapshot(&host.listing),
+        &[],
+        Some(deadline),
+    );
+
+    // The first check may take its full 500 ms, the second only the 200 ms
+    // left, and the third never runs.
+    assert_eq!(
+        selected
+            .iter()
+            .map(|process| process.pid)
+            .collect::<Vec<_>>(),
+        [80, 81]
+    );
+    assert_eq!(
+        *host.owner_timeouts.borrow(),
+        [Duration::from_millis(500), Duration::from_millis(200)]
+    );
+    assert!(host.now() <= deadline);
 }

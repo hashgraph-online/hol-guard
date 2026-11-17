@@ -115,10 +115,10 @@ impl Host for SystemHost {
         );
     }
 
-    fn owned_by_caller(&self, pid: u32) -> bool {
+    fn owned_by_caller(&self, pid: u32, timeout: Duration) -> bool {
         let Some(output) = run_ps(
             &["-p", &pid.to_string(), "-o", "uid="],
-            COMMAND_TIMEOUT,
+            timeout.min(COMMAND_TIMEOUT),
             COMMAND_LIMIT,
         ) else {
             return false;
