@@ -194,3 +194,35 @@ def test_a_project_file_changed_and_put_back_is_still_reported(tmp_path: Path, m
     assert project["bytes_identical"] is True
     assert result["passed"] is False
     assert "workspace/.claude/settings.local.json: changed by muse install" in result["failures"]
+
+
+def test_a_project_file_change_is_blamed_on_the_one_step_that_made_it(tmp_path: Path, monkeypatch) -> None:
+    contract = load_contract()
+    harnesses = ["claude-code", "muse"]
+
+    def install(runtime, harness, *, home, guard_home, workspace):
+        if harness == "claude-code":
+            (workspace / ".claude" / "settings.local.json").write_text("{}", encoding="utf-8")
+        return {"harness": harness, "exit_code": 0, "payload": {}, "stderr_tail": ""}
+
+    monkeypatch.setattr(installed_restore, "install_harness", install)
+    monkeypatch.setattr(
+        installed_restore,
+        "uninstall_harness",
+        lambda runtime, harness, *, home, guard_home, workspace: {
+            "harness": harness,
+            "exit_code": 0,
+            "stderr_tail": "",
+        },
+    )
+    monkeypatch.setattr(installed_restore, "stop_daemon", lambda runtime, *, home, guard_home: 0)
+    monkeypatch.setattr(
+        installed_restore,
+        "assess_harness",
+        lambda home, harness, expectation: {"harness": harness, "registered": True, "failures": []},
+    )
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    result = installed_restore.restore_pass(_Runtime(), harnesses, contract, home=tmp_path / "h", workspace=workspace)
+    blamed = [failure for failure in result["failures"] if "changed by" in failure]
+    assert blamed == ["workspace/.claude/settings.local.json: changed by claude-code install"]
