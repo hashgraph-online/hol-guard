@@ -234,6 +234,19 @@ def watch_revert_deadlines(config: GuardConfig) -> tuple[int | None, dict[str, i
     return cast("int | None", posture_at), cast("dict[str, int]", deadlines)
 
 
+def compose_watch_revert_deadlines(configs: Iterable[GuardConfig]) -> tuple[int | None, dict[str, int]]:
+    """Combine home and workspace Watch deadlines without extending any end."""
+    global_end: int | None = None
+    harness_ends: dict[str, int] = {}
+    for config in configs:
+        posture_end, override_ends = watch_revert_deadlines(config)
+        if posture_end is not None:
+            global_end = posture_end if global_end is None else min(global_end, posture_end)
+        for harness, end in override_ends.items():
+            harness_ends[harness] = min(harness_ends.get(harness, end), end)
+    return global_end, harness_ends
+
+
 def watch_auto_revert_due(config: GuardConfig, *, now: datetime | None = None) -> tuple[bool, tuple[str, ...]]:
     """Whether the machine-wide Watch posture and which harness overrides are due to revert.
 
