@@ -230,4 +230,12 @@ mod tests {
         slots.release();
         assert!(slots.try_acquire());
     }
+
+    #[test]
+    fn overload_response_is_recognizable_to_hook_bridges() {
+        let response = std::str::from_utf8(OVERLOAD_RESPONSE).expect("static response is utf8");
+        assert!(response.contains("503 Service Unavailable"));
+        assert!(response.contains("Retry-After: 1"));
+        assert!(response.ends_with("daemon overload\n"));
+    }
 }
