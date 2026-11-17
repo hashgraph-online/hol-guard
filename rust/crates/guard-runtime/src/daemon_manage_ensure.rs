@@ -1076,7 +1076,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         use std::path::Path;
         use std::process::Command;
-        use std::time::Duration;
+        use std::time::{Duration, Instant};
 
         use super::super::{child_exited, terminate, Caller};
 
@@ -1109,6 +1109,26 @@ mod tests {
                 .unwrap_or(0)
         }
 
+        /// Waits until `pid` has exited, leaving it a zombie so that `terminate` still has to
+        /// reap it. A fixed sleep would race a slow runner.
+        fn wait_unreaped(pid: u32) {
+            let until = Instant::now() + Duration::from_secs(20);
+            while Instant::now() < until {
+                let state = Command::new("ps")
+                    .args(["-o", "stat=", "-p", &pid.to_string()])
+                    .output()
+                    .unwrap();
+                if String::from_utf8_lossy(&state.stdout)
+                    .trim_start()
+                    .starts_with('Z')
+                {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            panic!("child {pid} did not exit");
+        }
+
         fn private_home() -> tempfile::TempDir {
             let home = tempfile::tempdir().unwrap();
             let mode = std::fs::Permissions::from_mode(0o700);
@@ -1124,8 +1144,8 @@ mod tests {
                 .spawn()
                 .unwrap();
             let pid = child.id();
-            // Let it exit without reaping it, as a launch that died does.
-            std::thread::sleep(Duration::from_millis(300));
+            // Wait for it to exit without reaping it, as a launch that died does.
+            wait_unreaped(pid);
             terminate(&caller(home.path()), &mut child);
             assert_eq!(retirements(home.path(), pid), 0);
             assert!(child_exited(&mut child));
