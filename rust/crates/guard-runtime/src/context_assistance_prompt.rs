@@ -41,7 +41,7 @@ mod names;
 #[path = "context_assistance_prompt_sections.rs"]
 mod sections;
 #[path = "context_assistance_prompt_seen.rs"]
-mod seen;
+pub(crate) mod seen;
 
 const MAX_WAIT: Duration = Duration::from_millis(2_500);
 const DEFAULT_WAIT: Duration = Duration::from_millis(2_000);
