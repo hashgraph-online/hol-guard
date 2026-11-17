@@ -157,47 +157,48 @@ fn mask_layout_nouns(value: &str) -> String {
 }
 
 /// A strong action verb up to three words before `format` names the
-/// operation, as in `run the same format on it`, unless a relation word such
-/// as `in` or `as` sits between them, as in `run tests in JSON format`. A
-/// relation word that only names who the work is for, as in `perform for me
-/// the format`, is skipped with its pronoun and does not count as a word.
+/// operation, as in `run the same format on it` or `perform for me the
+/// format`. It does not when a relation word introduces the phrase that ends
+/// in `format`, as in `run tests in JSON format` or `in a consistent format`:
+/// no pronoun follows the relation word, and a determiner may only come right
+/// after it. Relation words and pronouns do not count toward the three words.
 fn verb_leads(lead_text: &str) -> bool {
-    const VERBS: [&str; 8] = [
-        "run", "do", "perform", "execute", "trigger", "launch", "redo", "schedule",
+    const VERBS: [&str; 13] = [
+        "run", "do", "perform", "execute", "trigger", "launch", "redo", "schedule", "start",
+        "begin", "finish", "complete", "initiate",
     ];
     const RELATIONS: [&str; 14] = [
         "in", "as", "with", "using", "into", "to", "for", "from", "via", "per", "by", "at", "on",
         "of",
     ];
+    const PRONOUNS: [&str; 7] = ["me", "us", "you", "them", "him", "her", "it"];
+    const DETERMINERS: [&str; 12] = [
+        "the", "a", "an", "this", "that", "these", "those", "its", "their", "our", "your", "my",
+    ];
     let words = lead_text
         .split_whitespace()
-        .map(|word| word.trim_matches(|c| matches!(c, '*' | '_' | '`')))
+        .map(|word| word.trim_matches(|c| matches!(c, '*' | '_' | '`' | ',' | ';' | ':')))
         .filter(|word| !word.is_empty())
         .map(str::to_ascii_lowercase)
         .collect::<Vec<_>>();
-    const PRONOUNS: [&str; 7] = ["me", "us", "you", "them", "him", "her", "it"];
+    let has = |list: &[&str], word: &String| list.contains(&word.as_str());
+    let introduces = |after: &[String]| {
+        after
+            .iter()
+            .enumerate()
+            .all(|(index, word)| !has(&PRONOUNS, word) && (index == 0 || !has(&DETERMINERS, word)))
+    };
     let operates = |between: &[String]| {
-        let mut counted = 0;
-        let mut index = 0;
-        while index < between.len() {
-            let word = between[index].as_str();
-            if !word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-                return false;
-            }
-            if RELATIONS.contains(&word) {
-                if !between
-                    .get(index + 1)
-                    .is_some_and(|next| PRONOUNS.contains(&next.as_str()))
-                {
-                    return false;
-                }
-                index += 2;
-                continue;
-            }
-            counted += 1;
-            index += 1;
-        }
-        counted <= 3
+        between
+            .iter()
+            .all(|word| word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
+            && !(0..between.len())
+                .any(|index| has(&RELATIONS, &between[index]) && introduces(&between[index + 1..]))
+            && between
+                .iter()
+                .filter(|word| !has(&RELATIONS, word) && !has(&PRONOUNS, word))
+                .count()
+                <= 3
     };
     (0..=7).any(|gap| {
         let Some(at) = words.len().checked_sub(gap + 1) else {

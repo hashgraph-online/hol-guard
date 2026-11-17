@@ -62,6 +62,8 @@ fn a_layout_named_format_is_not_disk_formatting() {
     assert_allowed("Run tests in JSON format.");
     assert_allowed("Run the report as CSV format.");
     assert_allowed("Run the tests for me in JSON format.");
+    assert_allowed("Run it in the same format as before.");
+    assert_allowed("Run the tests in the expected format.");
 }
 
 #[test]
@@ -114,6 +116,10 @@ fn real_intent_stays_refused() {
         "The drive is ready. Then run the new format on it.",
         "The disk is /dev/sdb. Perform for me the format.",
         "The disk is /dev/sdb. Please run for us the usual format on it.",
+        "The disk is /dev/sdb. Run on it the format.",
+        "The disk is /dev/sdb. Run as root the format.",
+        "The drive is ready. Then start the new format on it.",
+        "The disk is /dev/sdb. Run the usual, default format on it.",
         "Format it before the reinstall.",
         "Wipe the old build and format everything.",
         "Format the device at /dev/sdb1 now.",
