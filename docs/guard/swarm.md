@@ -44,10 +44,12 @@ list project folders or files it can't open, and a switch (on by default)
 keeps `.env`, `.pem` and `.key` files closed. Swarm passes these to Claude Code
 as `--disallowedTools` `Read(...)` and `Edit(...)` rules on every turn, so its
 file tools cannot read or change them; shell commands still go through Guard's
-usual checks. Paths must stay inside the project (no absolute paths, `~`, `..`
-or `-` prefixes, at most 32). Codex has no matching control, so a Codex launch
+usual checks. Each rule names the project folder by its full path, so it still
+matches after the agent changes directory. Paths must stay inside the project
+(no absolute paths, `~`, `..` or `-` prefixes, at most 32), and a project folder
+whose path has brackets or wildcards can't have blocked paths. Codex has no matching control, so a Codex launch
 with blocked paths is refused and the composer says so. The inspector lists the
-paths under "Can't open" and the card shows how many there are. Launches use
+paths under "File tools can't open" and the card shows how many there are. Launches use
 the harness's normal protection and credential setup. The composer explains missing
 setup and concurrent work in the same directory. It never adds permission
 bypass flags or silently creates shared worktrees. The user can launch agents

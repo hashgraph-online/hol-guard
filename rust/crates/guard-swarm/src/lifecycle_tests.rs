@@ -314,8 +314,9 @@ fn claude_launch_keeps_blocked_folders_on_every_turn() {
         .unwrap();
     wait(&service, &run.id, |a| a.input_tokens == 10);
     let args = fs::read_to_string(dir.path().join("args.txt")).unwrap();
-    let rules = "--disallowedTools\nRead(./private)\nRead(./private/**)\nEdit(./private)\nEdit(./private/**)\n";
-    assert_eq!(args.matches(rules).count(), 2, "{args}");
+    let root = crate::adapter::rule_root(&request.workspace);
+    let rules = format!("--disallowedTools\nRead(/{root}/private)\nRead(/{root}/private/**)\nEdit(/{root}/private)\nEdit(/{root}/private/**)\n");
+    assert_eq!(args.matches(&rules).count(), 2, "{args}");
 }
 
 #[test]

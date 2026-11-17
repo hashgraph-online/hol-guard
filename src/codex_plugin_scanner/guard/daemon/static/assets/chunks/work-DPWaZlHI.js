@@ -26,8 +26,8 @@ function blockedPaths(text, secrets) {
   const paths = [];
   const bad = [];
   for (const raw of text.split(/[\n,]/)) {
+    if (!raw.trim()) continue;
     const path = raw.trim().replace(/^(\.\/)+/, "");
-    if (!path) continue;
     const parts = path.replace(/\/+$/, "").split("/");
     if (!PATH.test(path) || /^[-~]/.test(path) || parts.some((p) => p === "" || p === "." || p === "..")) bad.push(raw.trim());
     else if (!paths.includes(path)) paths.push(path);

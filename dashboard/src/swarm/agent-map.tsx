@@ -23,7 +23,7 @@ export function AgentMap({ agents, selected, onSelect, context, mode }: AgentMap
           <div className="swarm-node-top"><span className={`swarm-agent-icon swarm-agent-icon--${agent.harness}`}><HiMiniCommandLine aria-hidden="true" /></span>
             <strong>{agent.label}</strong><span className={`swarm-status swarm-status--${agent.state}`}><i aria-hidden="true" />{stateLabel[agent.state]}</span></div>
           <p className="swarm-task">{goalOf(agent.task) ?? "Work is happening in its app"}</p>
-          {agent.blocked?.length ? <p className="swarm-access">Can’t open {agent.blocked.length} {agent.blocked.length === 1 ? "path" : "paths"}</p> : null}
+          {agent.blocked?.length ? <p className="swarm-access">File tools can’t open {agent.blocked.length} {agent.blocked.length === 1 ? "path" : "paths"}</p> : null}
           {agent.activity ? <p id={`swarm-latest-${agent.id}`} className="swarm-latest" title={agent.activity}><HiMiniCommandLine aria-hidden="true" /><span>{agent.activity}</span></p> : null}
           <div className="swarm-node-foot"><span className={cigar.available ? "swarm-context-ready" : ""}><HiMiniCircleStack aria-hidden="true" />{cigar.label}{agent.context_calls > 0 ? ` · ${agent.context_calls} past calls` : ""}</span>
             <span>{agent.origin === "managed" ? "Managed" : "Observed"}<HiMiniArrowUpRight aria-hidden="true" /></span></div>

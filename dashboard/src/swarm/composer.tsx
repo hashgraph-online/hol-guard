@@ -4,9 +4,11 @@ import { GuardModalLayer } from "../guard-modal-layer";
 import { launchAgent, RejectedAction } from "./api";
 import { isLive, projectsFor } from "./model";
 import type { Agent, LaunchDraft, SwarmSnapshot } from "./types";
-import { blockedPaths, goalOf, MAX_BLOCKED, parseCommand, workText } from "./work";
+import { blockedPaths, goalOf, MAX_BLOCKED, parseCommand, workText, type WorkDefinition } from "./work";
 
 const pendingLaunches = new Map<string, LaunchDraft>();
+/** The form behind each pending launch, so a reopened composer shows the fields, not the built prompt. */
+const pendingForms = new Map<string, WorkDefinition & { blockedText: string; secrets: boolean }>();
 const COMMANDS: Record<string, string> = { codex: "codex", "claude-code": "claude" };
 const MAX_TASK_BYTES = 16384;
 
@@ -23,12 +25,13 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
     return retained?.model ? `${program} --model ${retained.model}` : program;
   });
   const [workspace, setWorkspace] = useState(retained?.workspace ?? initialProject);
-  const [goal, setGoal] = useState(goalOf(retained?.task ?? null) ?? "");
-  const [scope, setScope] = useState("");
-  const [done, setDone] = useState("");
-  const [avoid, setAvoid] = useState("");
-  const [blockedText, setBlockedText] = useState(retained?.blocked?.join("\n") ?? "");
-  const [secrets, setSecrets] = useState(retained ? false : true);
+  const form = retained ? pendingForms.get(retained.request_id) : undefined;
+  const [goal, setGoal] = useState(form?.goal ?? goalOf(retained?.task ?? null) ?? "");
+  const [scope, setScope] = useState(form?.scope ?? "");
+  const [done, setDone] = useState(form?.done ?? "");
+  const [avoid, setAvoid] = useState(form?.avoid ?? "");
+  const [blockedText, setBlockedText] = useState(form?.blockedText ?? retained?.blocked?.join("\n") ?? "");
+  const [secrets, setSecrets] = useState(form?.secrets ?? !retained);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uncertain, setUncertain] = useState(retained !== undefined);
@@ -40,6 +43,7 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
   let limitError: string | null = null;
   if (limits.bad.length) limitError = `These paths are not inside the project: ${limits.bad.join(", ")}`;
   else if (limits.paths.length > MAX_BLOCKED) limitError = `List at most ${MAX_BLOCKED} paths.`;
+  else if (limits.paths.length && /[()*?[\]{}]/.test(workspace)) limitError = "The project folder's name has brackets or wildcards, so Claude Code can't be kept out of paths in it. Use a folder without them, or clear the list.";
   const task = workText({ goal, scope, done, avoid }, limits.paths);
   const extraBytes = new TextEncoder().encode(task).length - MAX_TASK_BYTES;
   const sizeError = extraBytes > 0 ? `The work and paths are too long together. Shorten them by ${extraBytes} characters or more.` : null;
@@ -54,10 +58,12 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
     const draft = pending.current ?? fresh;
     pending.current = draft;
     pendingLaunches.set(draft.request_id, draft);
+    if (!pendingForms.has(draft.request_id)) pendingForms.set(draft.request_id, { goal, scope, done, avoid, blockedText, secrets });
     setBusy(true); setError(null);
-    try { const agent = await launchAgent(draft); pendingLaunches.delete(draft.request_id); onLaunched(agent); }
+    const forget = () => { pendingLaunches.delete(draft.request_id); pendingForms.delete(draft.request_id); };
+    try { const agent = await launchAgent(draft); forget(); onLaunched(agent); }
     catch (e) {
-      if (e instanceof RejectedAction) { pending.current = null; pendingLaunches.delete(draft.request_id); setUncertain(false); }
+      if (e instanceof RejectedAction) { pending.current = null; forget(); setUncertain(false); }
       else setUncertain(true);
       setError(e instanceof Error ? e.message : "Launch could not be confirmed.");
     } finally { setBusy(false); }

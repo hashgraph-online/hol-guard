@@ -1,6 +1,6 @@
 import { j as jsxRuntimeExports, c as HiMiniFolder, b as HiMiniCommandLine, d as HiMiniCircleStack, fw as HiMiniArrowUpRight } from "../guard-dashboard.js";
-import { p as projectsFor, c as contextFor, s as stateLabel } from "./swarm-workspace-BnSii4zV.js";
-import { g as goalOf } from "./work-DQ-mcUbu.js";
+import { p as projectsFor, c as contextFor, s as stateLabel } from "./swarm-workspace-r1YokWNT.js";
+import { g as goalOf } from "./work-DPWaZlHI.js";
 import "./swarm-handoff-BIqKreGh.js";
 function AgentMap({ agents, selected, onSelect, context, mode }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `swarm-stage swarm-stage--${mode}`, "aria-label": mode === "map" ? "Agent map by project" : "Agent list by project", children: projectsFor(agents).map((project) => /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "swarm-lane", "aria-label": `${project.name} agents`, children: [
@@ -34,7 +34,7 @@ function AgentMap({ agents, selected, onSelect, context, mode }) {
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "swarm-task", children: goalOf(agent.task) ?? "Work is happening in its app" }),
             agent.blocked?.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "swarm-access", children: [
-              "Can’t open ",
+              "File tools can’t open ",
               agent.blocked.length,
               " ",
               agent.blocked.length === 1 ? "path" : "paths"

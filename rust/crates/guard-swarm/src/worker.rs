@@ -221,6 +221,7 @@ fn prepare(registry: &Arc<Mutex<Registry>>, id: &str) -> Option<(Command, String
         &run.agent.harness,
         run.session.as_deref(),
         run.agent.model.as_deref(),
+        run.agent.workspace.as_deref()?,
         &run.agent.blocked,
     );
     run.controls();

@@ -183,7 +183,11 @@ impl Launch {
                 .and_then(Option::as_ref)
                 .is_some_and(|paths| {
                     paths.len() > MAX_BLOCKED
-                        || (!paths.is_empty() && self.harness != "claude-code")
+                        || (!paths.is_empty()
+                            && (self.harness != "claude-code"
+                                || self
+                                    .workspace
+                                    .contains(['(', ')', '*', '?', '[', ']', '{', '}'])))
                         || !paths.iter().all(|p| valid_blocked(p))
                 })
         {
@@ -301,6 +305,12 @@ mod tests {
         }
         request.blocked = Some(Some(vec!["x".into(); MAX_BLOCKED + 1]));
         assert!(request.validate().is_err());
+        // A project path with rule syntax in it could not be named exactly.
+        let workspace = request.workspace.clone();
+        request.blocked = Some(Some(vec!["private".into()]));
+        request.workspace = format!("{workspace}/odd (copy)");
+        assert!(request.validate().is_err());
+        request.workspace = workspace;
         // Codex cannot keep an agent out of a folder; refuse rather than pretend.
         request.harness = "codex".into();
         request.blocked = Some(Some(vec!["private".into()]));

@@ -1,8 +1,9 @@
 import { r as reactExports, j as jsxRuntimeExports, ec as GuardModalLayer, ak as HiMiniXMark, b as HiMiniCommandLine, I as HiMiniArrowRight, c as HiMiniFolder, K as HiMiniLockClosed } from "../guard-dashboard.js";
-import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-BnSii4zV.js";
-import { g as goalOf, p as parseCommand, b as blockedPaths, w as workText, M as MAX_BLOCKED } from "./work-DQ-mcUbu.js";
+import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-r1YokWNT.js";
+import { g as goalOf, p as parseCommand, b as blockedPaths, w as workText, M as MAX_BLOCKED } from "./work-DPWaZlHI.js";
 import "./swarm-handoff-BIqKreGh.js";
 const pendingLaunches = /* @__PURE__ */ new Map();
+const pendingForms = /* @__PURE__ */ new Map();
 const COMMANDS = { codex: "codex", "claude-code": "claude" };
 const MAX_TASK_BYTES = 16384;
 function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, onNavigate }) {
@@ -14,12 +15,13 @@ function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, o
     return retained?.model ? `${program} --model ${retained.model}` : program;
   });
   const [workspace, setWorkspace] = reactExports.useState(retained?.workspace ?? initialProject);
-  const [goal, setGoal] = reactExports.useState(goalOf(retained?.task ?? null) ?? "");
-  const [scope, setScope] = reactExports.useState("");
-  const [done, setDone] = reactExports.useState("");
-  const [avoid, setAvoid] = reactExports.useState("");
-  const [blockedText, setBlockedText] = reactExports.useState(retained?.blocked?.join("\n") ?? "");
-  const [secrets, setSecrets] = reactExports.useState(retained ? false : true);
+  const form = retained ? pendingForms.get(retained.request_id) : void 0;
+  const [goal, setGoal] = reactExports.useState(form?.goal ?? goalOf(retained?.task ?? null) ?? "");
+  const [scope, setScope] = reactExports.useState(form?.scope ?? "");
+  const [done, setDone] = reactExports.useState(form?.done ?? "");
+  const [avoid, setAvoid] = reactExports.useState(form?.avoid ?? "");
+  const [blockedText, setBlockedText] = reactExports.useState(form?.blockedText ?? retained?.blocked?.join("\n") ?? "");
+  const [secrets, setSecrets] = reactExports.useState(form?.secrets ?? !retained);
   const [busy, setBusy] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
   const [uncertain, setUncertain] = reactExports.useState(retained !== void 0);
@@ -31,6 +33,7 @@ function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, o
   let limitError = null;
   if (limits.bad.length) limitError = `These paths are not inside the project: ${limits.bad.join(", ")}`;
   else if (limits.paths.length > MAX_BLOCKED) limitError = `List at most ${MAX_BLOCKED} paths.`;
+  else if (limits.paths.length && /[()*?[\]{}]/.test(workspace)) limitError = "The project folder's name has brackets or wildcards, so Claude Code can't be kept out of paths in it. Use a folder without them, or clear the list.";
   const task = workText({ goal, scope, done, avoid }, limits.paths);
   const extraBytes = new TextEncoder().encode(task).length - MAX_TASK_BYTES;
   const sizeError = extraBytes > 0 ? `The work and paths are too long together. Shorten them by ${extraBytes} characters or more.` : null;
@@ -51,16 +54,21 @@ function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, o
     const draft = pending.current ?? fresh;
     pending.current = draft;
     pendingLaunches.set(draft.request_id, draft);
+    if (!pendingForms.has(draft.request_id)) pendingForms.set(draft.request_id, { goal, scope, done, avoid, blockedText, secrets });
     setBusy(true);
     setError(null);
+    const forget = () => {
+      pendingLaunches.delete(draft.request_id);
+      pendingForms.delete(draft.request_id);
+    };
     try {
       const agent = await launchAgent(draft);
-      pendingLaunches.delete(draft.request_id);
+      forget();
       onLaunched(agent);
     } catch (e) {
       if (e instanceof RejectedAction) {
         pending.current = null;
-        pendingLaunches.delete(draft.request_id);
+        forget();
         setUncertain(false);
       } else setUncertain(true);
       setError(e instanceof Error ? e.message : "Launch could not be confirmed.");

@@ -21,6 +21,8 @@ test("refuses other programs, flags that change safety, and missing CLIs", () =>
 test("keeps project paths and refuses ones that leave the project", () => {
   assert.deepEqual(blockedPaths("private/\n./notes, private/", false), { paths: ["private/", "notes"], bad: [] });
   assert.equal(blockedPaths("/etc\n../up\na/../b\n~/x\na b\na)b", false).bad.length, 6);
+  // "./" is the whole project, not a folder limit: report it instead of dropping it.
+  assert.deepEqual(blockedPaths("./\n././", false), { paths: [], bad: ["./", "././"] });
 });
 test("adds secret files when asked", () => {
   assert.deepEqual(blockedPaths("", true).paths, SECRET_PATHS);
