@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.consumer import artifact_hash
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from tests.artifact_risk_support import artifact_risk_signals_typed
 
@@ -46,7 +46,7 @@ def _config_reason(tmp_path: Path, name: str, content: str) -> object:
     """The reason detection gives for a Hermes config, or ``None`` when it parsed completely."""
 
     _write(tmp_path / ".hermes" / name, content)
-    detection = HermesHarnessAdapter().detect(_context(tmp_path))
+    detection = get_adapter("hermes").detect(_context(tmp_path))
     issues = [item for item in detection.artifacts if item.artifact_type == "configuration"]
     return issues[0].metadata["config_reason"] if issues else None
 
@@ -61,7 +61,7 @@ def test_skill_subfile_suffix_changes_full_hash_and_parent_directory_identity(tm
         skill.parent / "scripts" / "large.sh",
         "# safe preview\n" + ("# padding\n" * 8_000) + "echo first-suffix\n",
     )
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
 
     before = adapter.detect(_context(tmp_path))
     before_file = _artifact(before, "skill_file")
@@ -91,7 +91,7 @@ def test_yaml_server_after_old_preview_limit_is_parsed_from_complete_config(tmp_
         + "mcp_servers:\n  suffix-server:\n    command: python\n    args: ['-m', 'suffix']\n",
     )
 
-    detection = HermesHarnessAdapter().detect(_context(tmp_path))
+    detection = get_adapter("hermes").detect(_context(tmp_path))
 
     server = next(item for item in detection.artifacts if item.artifact_type == "mcp_server")
     assert config.stat().st_size > HERMES_PREVIEW_BYTES
@@ -110,7 +110,7 @@ def test_json_server_after_old_preview_limit_is_parsed_from_complete_config(tmp_
         ),
     )
 
-    detection = HermesHarnessAdapter().detect(_context(tmp_path))
+    detection = get_adapter("hermes").detect(_context(tmp_path))
 
     servers = [item for item in detection.artifacts if item.artifact_type == "mcp_server"]
     assert config.stat().st_size > HERMES_PREVIEW_BYTES
@@ -125,7 +125,7 @@ def test_oversized_config_is_hashed_but_never_partially_parsed(tmp_path: Path) -
     )
     assert config.stat().st_size > HERMES_CONFIG_MAX_BYTES
 
-    detection = HermesHarnessAdapter().detect(_context(tmp_path))
+    detection = get_adapter("hermes").detect(_context(tmp_path))
     issue = next(item for item in detection.artifacts if item.artifact_type == "configuration")
 
     assert not any(item.artifact_type == "mcp_server" for item in detection.artifacts)
@@ -200,7 +200,7 @@ def test_install_refuses_incomplete_config_without_writing_managed_bundle(
     context = _context(tmp_path)
 
     with pytest.raises(ValueError, match="Hermes config inspection failed"):
-        HermesHarnessAdapter().install(context)
+        get_adapter("hermes").install(context)
 
     managed_root = context.guard_home / "hermes"
     assert config.read_bytes() == original
@@ -215,7 +215,7 @@ def test_invalid_utf8_skill_is_explicitly_incomplete_and_non_reusable(tmp_path: 
     skill = _skill(tmp_path)
     skill.write_bytes(b"---\nname: invalid\n---\n\xff")
 
-    artifact = _artifact(HermesHarnessAdapter().detect(_context(tmp_path)), "skill")
+    artifact = _artifact(get_adapter("hermes").detect(_context(tmp_path)), "skill")
 
     assert artifact.metadata["inspection_complete"] is False
     assert artifact.metadata["inspection_reason"] == "file_invalid_utf8"
@@ -233,7 +233,7 @@ def test_skill_symlink_escape_marks_directory_identity_incomplete(tmp_path: Path
     except OSError as exc:
         pytest.skip(f"symlinks unavailable: {exc}")
 
-    detection = HermesHarnessAdapter().detect(_context(tmp_path))
+    detection = get_adapter("hermes").detect(_context(tmp_path))
     primary = _artifact(detection, "skill")
     subfile = _artifact(detection, "skill_file")
 

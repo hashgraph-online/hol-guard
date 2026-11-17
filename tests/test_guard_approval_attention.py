@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import list_adapters
+from codex_plugin_scanner.guard.harness.registry import list_adapters
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime.approval_attention import (
     ApprovalAttentionCoordinator,

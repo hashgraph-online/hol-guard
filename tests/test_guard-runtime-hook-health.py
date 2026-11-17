@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor import cursor_runtime_hooks_verified
 from codex_plugin_scanner.guard.approvals import _live_hook_verification
 from codex_plugin_scanner.guard.codex_hook_health import codex_runtime_hooks_verified
 from codex_plugin_scanner.guard.codex_hook_registration import live_guard_codex_hooks_intercept
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.cursor_client import cursor_runtime_hooks_verified
 from codex_plugin_scanner.guard.store import GuardStore
 
 _GUARD_CODEX_HOOK_COMMAND = (
@@ -325,7 +325,7 @@ def test_live_codex_hooks_pass_when_native_shell_protection_active(
         asked.append(op)
         return {"verified": True}
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex.live_hook_ask", runtime)
+    monkeypatch.setattr("codex_plugin_scanner.guard.codex_harness_client.live_hook_ask", runtime)
     assert codex_runtime_hooks_verified(ctx) is True
     assert asked == ["runtime_hooks_verified"]
 
@@ -339,7 +339,7 @@ def test_live_codex_hooks_fail_closed_when_the_runtime_cannot_answer(
     def unavailable(_op: str, _context: HarnessContext) -> dict[str, object]:
         raise RuntimeError("native runtime unavailable")
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex.live_hook_ask", unavailable)
+    monkeypatch.setattr("codex_plugin_scanner.guard.codex_harness_client.live_hook_ask", unavailable)
     assert codex_runtime_hooks_verified(ctx) is False
 
 

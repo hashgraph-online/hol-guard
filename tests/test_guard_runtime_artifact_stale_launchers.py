@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import runtime_artifact_reconciliation as reconciliation
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 
@@ -273,7 +273,7 @@ def test_an_adapter_that_writes_without_a_plan_is_read_through_its_manifest(tmp_
 
 
 def test_a_real_zcode_cli_setting_file_is_read_though_its_manifest_omits_it(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     home = tmp_path / "home"
     cli_root = home / ".zcode" / "cli"

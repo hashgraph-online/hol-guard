@@ -6,9 +6,9 @@ import time
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.codex import _hook_manifest_spec, codex_native_hook_state
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput
 from codex_plugin_scanner.guard.cli import codex_authority_repair as command
+from codex_plugin_scanner.guard.codex_harness_client import _hook_manifest_spec, codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_recovery import hook_publication_pending
 from codex_plugin_scanner.guard.codex_hook_repair_request import (
     load_codex_hook_repair_request,

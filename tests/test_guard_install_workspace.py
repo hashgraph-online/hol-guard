@@ -12,13 +12,13 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_support_workspace, update_commands
 from codex_plugin_scanner.guard.cli.commands import (
     _resolve_default_install_workspace,
     _resolve_guard_workspace,
 )
 from codex_plugin_scanner.guard.config import resolve_guard_home
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore

@@ -47,8 +47,8 @@ from .fleet_posture_tools import (
 )
 
 if TYPE_CHECKING:
-    from ..adapters.base import HarnessContext
     from ..config import GuardConfig
+    from ..harness.base import HarnessContext
     from ..store import GuardStore
 
 

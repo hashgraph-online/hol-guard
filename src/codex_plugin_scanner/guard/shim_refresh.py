@@ -78,7 +78,7 @@ def _adapter_launchers() -> list[list[object]]:
     the claude-code harness, guard-cursor-agent is cursor.
     """
 
-    from .adapters import list_adapters
+    from .harness.registry import list_adapters
 
     return [
         [

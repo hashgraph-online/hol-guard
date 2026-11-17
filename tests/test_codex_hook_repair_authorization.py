@@ -9,9 +9,9 @@ from dataclasses import replace
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard import codex_hook_manifest as manifests
 from codex_plugin_scanner.guard import codex_hook_repair as repair
-from codex_plugin_scanner.guard.adapters import codex as adapter
 from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateError,
     ApprovalGateInput,
@@ -56,11 +56,7 @@ def _protected_tree(root):
     # artifacts. The native resident writes operational lock/lease files under
     # ``native-runtime/`` (mtime + content churn on every spawn) which are not
     # part of the protected surface — exclude them from the snapshot.
-    return {
-        rel: meta
-        for rel, meta in _tree(root).items()
-        if "/native-runtime" not in rel
-    }
+    return {rel: meta for rel, meta in _tree(root).items() if "/native-runtime" not in rel}
 
 
 def test_exact_repair_grant_is_owner_bound_and_read_only(prepared_repair, tmp_path):

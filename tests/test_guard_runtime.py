@@ -30,7 +30,6 @@ from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import native_prompt
 from codex_plugin_scanner.guard import synced_policy as synced_policy_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import render as guard_render_module
@@ -39,6 +38,7 @@ from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.models import (
     GuardAction,
     GuardApprovalRequest,

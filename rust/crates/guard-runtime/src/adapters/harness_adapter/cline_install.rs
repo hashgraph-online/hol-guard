@@ -13,7 +13,7 @@ use super::cline::{
     adapter_state, adapter_state_path, canary_run, hosts, runtime, write_file, Hosts,
 };
 use super::cline_hooks::{self, judged};
-use super::{cline_mcp, cline_plugin, Ctx, Failure, Step};
+use super::{attested_cli, cline_mcp, cline_plugin, Ctx, Failure, Step};
 use crate::context_digest::python_strip;
 
 const SURFACES: [&str; 5] = ["auto", "hooks", "plugin", "cli", "all"];
@@ -82,10 +82,25 @@ fn install_plan(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     }))
 }
 
+/// `_facts`: the attested Guard CLI the managed transport runs, its argv
+/// before `--harness` and whether it runs on a standalone Python.
+fn facts(ctx: &Ctx) -> Step<Map<String, Value>> {
+    let attested = attested_cli::attested(ctx, false)?.map_err(runtime)?;
+    let mut facts = Map::new();
+    facts.insert(
+        "identity".into(),
+        attested.identity.to_json().unwrap_or(Value::Null),
+    );
+    facts.insert("guard_cli".into(), json!(attested.hook_prefix()));
+    facts.insert("python".into(), json!(attested.python.is_some()));
+    Ok(facts)
+}
+
 fn install_transport(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let facts = match fields.get("facts") {
-        Some(Value::Object(facts)) => facts,
-        _ => return Err(Failure::Invalid),
+    // Unit tests hand in the facts a Python caller cannot attest there.
+    let facts = &match fields.get("facts") {
+        Some(Value::Object(given)) if cfg!(test) => given.clone(),
+        _ => facts(ctx)?,
     };
     match text(fields, "transport")? {
         "plugin" => Ok(cline_plugin::install(ctx, facts)?),

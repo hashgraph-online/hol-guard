@@ -99,8 +99,7 @@ def _installed_binding(
     The runtime authenticates the manifest, checks the live config holds its
     Guard group once, splits the registered command and authenticates the
     launch its bridge config names. A Windows command can name 8.3 short
-    paths; the answer then lists them and the request is asked again with
-    their long forms.
+    paths; the runtime expands them itself.
     """
 
     frozen = None
@@ -121,34 +120,28 @@ def _installed_binding(
         "runtime_path": str(Path(codex_hook_runtime_trust.__file__)),
         "frozen": frozen,
     }
-    for _ in range(2):
-        try:
-            answer = publication("observer_binding", guard_home, **request)
-        except CodexHookIntegrityError as exc:
-            if exc.message == exc.reason:
-                # The runtime names a manifest refusal by its reason alone.
-                raise manifest_refusal(exc.reason) from exc
-            raise
-        except OSError as exc:
-            raise TransitionError("admission_hook_binding_invalid") from exc
-        if not isinstance(answer, dict):
-            raise TransitionError("native_transition_invalid")
-        expand = answer.get("expand")
-        if isinstance(expand, list):
-            request["long_paths"] = {str(name): _command_line._long_path(str(name)) or "" for name in expand}
-            continue
-        argv, environment = answer.get("argv"), answer.get("environment")
-        if (
-            not isinstance(argv, list)
-            or not all(isinstance(item, str) for item in argv)
-            or not isinstance(environment, dict)
-            or not all(isinstance(key, str) and isinstance(value, str) for key, value in environment.items())
-            or not isinstance(answer.get("modern_channel"), bool)
-            or not all(isinstance(answer.get(key), str) for key in _BINDING_TEXT)
-        ):
-            raise TransitionError("native_transition_invalid")
-        return answer
-    raise TransitionError("admission_hook_binding_invalid")
+    try:
+        answer = publication("observer_binding", guard_home, **request)
+    except CodexHookIntegrityError as exc:
+        if exc.message == exc.reason:
+            # The runtime names a manifest refusal by its reason alone.
+            raise manifest_refusal(exc.reason) from exc
+        raise
+    except OSError as exc:
+        raise TransitionError("admission_hook_binding_invalid") from exc
+    if not isinstance(answer, dict):
+        raise TransitionError("native_transition_invalid")
+    argv, environment = answer.get("argv"), answer.get("environment")
+    if (
+        not isinstance(argv, list)
+        or not all(isinstance(item, str) for item in argv)
+        or not isinstance(environment, dict)
+        or not all(isinstance(key, str) and isinstance(value, str) for key, value in environment.items())
+        or not isinstance(answer.get("modern_channel"), bool)
+        or not all(isinstance(answer.get(key), str) for key in _BINDING_TEXT)
+    ):
+        raise TransitionError("native_transition_invalid")
+    return answer
 
 
 def observe_configured_codex_hook(

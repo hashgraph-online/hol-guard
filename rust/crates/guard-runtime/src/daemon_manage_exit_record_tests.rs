@@ -187,3 +187,47 @@ fn a_recovery_records_how_it_ended() {
         .as_str()
         .is_some_and(|reason| !reason.is_empty()));
 }
+
+#[test]
+fn a_recovery_that_finds_protection_off_after_the_lock_records_its_ending() {
+    let home = private_home();
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .append(true)
+        .create(true)
+        .open(home.path().join("daemon-recovery.lock"))
+        .unwrap();
+    lock.lock().unwrap();
+    let request = json!({
+        "schema": "daemon-manage.v1",
+        "op": "recover",
+        "guard_home": home.path(),
+        "implicit_home": "/nonexistent-implicit-home/.hol-guard",
+        "budget_ms": 5000,
+        "failure_kind": "transport-failure",
+    });
+    let recovery = std::thread::spawn(move || {
+        serde_json::from_slice::<Value>(&run_command(request.to_string().as_bytes()).unwrap())
+            .unwrap()
+    });
+    let until = Instant::now() + Duration::from_secs(5);
+    while !journal(home.path())
+        .iter()
+        .any(|event| event["event"] == "recovery_requested")
+    {
+        assert!(Instant::now() < until, "the recovery never started");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let config = home.path().join("config.toml");
+    fs::write(&config, "protection_posture = \"watch\"\n").unwrap();
+    fs::set_permissions(&config, fs::Permissions::from_mode(0o600)).unwrap();
+    lock.unlock().unwrap();
+    let answer = recovery.join().unwrap();
+    let completed: Vec<Value> = journal(home.path())
+        .into_iter()
+        .filter(|event| event["event"] == "recovery_completed")
+        .collect();
+    assert!(answer["error"].is_string(), "{answer}");
+    assert_eq!(completed.len(), 1, "{completed:?}");
+    assert_eq!(completed[0]["reason"], "protection_off");
+}

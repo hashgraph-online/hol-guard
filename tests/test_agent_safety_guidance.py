@@ -6,12 +6,12 @@ from typing import final
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.agent_safety_guidance import (
     install_agent_safety_guidance,
     uninstall_agent_safety_guidance,
 )
 from codex_plugin_scanner.guard.cli import install_commands
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 
 

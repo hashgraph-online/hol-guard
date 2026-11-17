@@ -24,6 +24,8 @@ mod known_folders;
 #[cfg(windows)]
 mod owner;
 #[cfg(windows)]
+mod path_forms;
+#[cfg(windows)]
 mod registry;
 #[cfg(windows)]
 mod secure_storage;
@@ -87,6 +89,9 @@ pub use owner::{
 pub use windows::{
     command_line_to_argv, process_creation_time, process_owner_sid, terminate_if_creation_time,
 };
+
+#[cfg(windows)]
+pub use path_forms::{long_path_name, short_path_name};
 
 #[cfg(windows)]
 pub use registry::{read_machine_registry_string, MachineRegistryString};
@@ -180,6 +185,16 @@ pub fn real_directory(_path: &str) -> Option<String> {
 
 #[cfg(not(windows))]
 pub fn real_regular_file(_path: &str) -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn short_path_name(_path: &str) -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn long_path_name(_path: &str) -> Option<String> {
     None
 }
 

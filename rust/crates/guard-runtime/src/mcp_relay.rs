@@ -41,7 +41,7 @@ mod session {
     use crate::mcp_relay_resident::{ProcessFacts, ResidentRelayAuthority};
 
     fn fail(reason: &str, status: i32) -> i32 {
-        eprintln!("hol-guard mcp-relay: {reason}");
+        crate::runtime_output::stderr_line(format_args!("hol-guard mcp-relay: {reason}"));
         status
     }
 

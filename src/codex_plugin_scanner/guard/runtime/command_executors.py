@@ -7,8 +7,6 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
 from ..cli.install_commands import (
     apply_managed_install,
     build_harness_verification,
@@ -21,6 +19,8 @@ from ..cli.update_commands import (
 )
 from ..config import load_guard_config
 from ..continuation_runtime import continue_request_after_application
+from ..harness.base import HarnessContext
+from ..harness.registry import get_adapter
 from ..harness_resume import resume_harness_operation, safe_resume_metadata
 from ..local_supply_chain import (
     managed_install_audit_workspace_dirs,

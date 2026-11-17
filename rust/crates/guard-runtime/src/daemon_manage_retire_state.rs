@@ -85,3 +85,87 @@ pub(super) fn retire_state_daemon(
         }
     }
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::path::Path;
+    use std::process::{Child, Command};
+    use std::time::{Duration, Instant};
+
+    use serde_json::json;
+
+    use super::*;
+
+    struct Running(Child);
+
+    impl Drop for Running {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    fn caller(home: &Path) -> Caller {
+        Caller {
+            guard_home: home.to_path_buf(),
+            implicit_home: String::new(),
+            own_pid: i64::from(std::process::id()),
+            parent_pid: 0,
+            frozen_runtime: false,
+            frozen_parent_trusted: false,
+            executable_name: None,
+        }
+    }
+
+    fn retirements(home: &Path) -> usize {
+        let Ok(entries) = std::fs::read_dir(home.join("daemon-lifecycle")) else {
+            return 0;
+        };
+        entries
+            .filter_map(Result::ok)
+            .filter_map(|entry| std::fs::read(entry.path()).ok())
+            .filter_map(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+            .filter(|event| event["event"] == "retirement_requested")
+            .count()
+    }
+
+    fn retire(home: &Path, state: &Value) {
+        let state = state.as_object().unwrap();
+        let deadline = Deadline(Some(Instant::now() + Duration::from_secs(2)));
+        let (mut handled, mut retired) = (Vec::new(), Vec::new());
+        retire_state_daemon(
+            &caller(home),
+            state,
+            None,
+            "unhealthy_published",
+            deadline,
+            &mut handled,
+            &mut retired,
+        );
+        assert!(retired.is_empty());
+    }
+
+    #[test]
+    fn a_state_naming_a_foreign_process_journals_no_retirement() {
+        let home = tempfile::tempdir().unwrap();
+        let mut foreign = Running(Command::new("sleep").arg("30").spawn().unwrap());
+        let pid = foreign.0.id();
+        // A reused pid: the state's start marker names another generation.
+        retire(
+            home.path(),
+            &json!({
+                "pid": pid,
+                "port": 59733,
+                "process_start_marker": "another-generation",
+                "state_id": "state-1",
+            }),
+        );
+        // A markerless state is never signalled, so it is never journaled.
+        retire(
+            home.path(),
+            &json!({"pid": pid, "port": 59734, "state_id": "state-2"}),
+        );
+        assert_eq!(retirements(home.path()), 0);
+        assert!(foreign.0.try_wait().unwrap().is_none());
+    }
+}

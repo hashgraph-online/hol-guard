@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.stable_guard_cli import (
     argv0_is_ephemeral_desktop_cli,
     desktop_core_shim_for_executable,

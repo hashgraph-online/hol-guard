@@ -7,10 +7,8 @@ import math
 import time
 from pathlib import Path
 
-from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
-from ..adapters.codex import _hook_manifest_spec
 from ..approval_gate import ApprovalGateError, public_config, require_high_risk
+from ..codex_harness_client import _hook_manifest_spec
 from ..codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline
 from ..codex_hook_manifest import (
     CODEX_AUTHORITY_REPAIR_ACTION,
@@ -36,6 +34,8 @@ from ..codex_publication_inverse_plan import (
     bind_codex_publication_inverse_verification,
     prepare_authenticated_hook_publication_inverse,
 )
+from ..harness.base import HarnessContext
+from ..harness.registry import get_adapter
 from ..runtime_transition import TransitionError, assert_transition_mutation_allowed, inverse_recovery_budget
 from ..sqlite_tuning import sqlite_operation_deadline
 from ..store import GuardStore

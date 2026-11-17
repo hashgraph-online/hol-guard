@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use super::{dispatch, Home};
+use super::{caller, dispatch, Home};
 
 const MARKER: &str = "# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n";
 
@@ -26,13 +26,19 @@ fn managed(home: &Home) -> PathBuf {
     home.guard().join("managed/cline")
 }
 
-fn hook_facts(home: &Home) -> Value {
+/// The caller stamp whose native runtime is an empty file: it advertises every
+/// bridge but cannot answer a canary.
+fn stamped(home: &Home) -> Value {
     let runtime = home.root.join("native-runtime");
     fs::write(&runtime, b"").unwrap();
+    let mut stamp = caller(false);
+    stamp["native_runtime"]["path"] = json!(runtime);
+    stamp
+}
+
+fn hook_facts(_home: &Home) -> Value {
     json!({
         "python": true,
-        "runtime": runtime,
-        "hook_argv": ["guard", "hook"],
         "guard_cli": ["guard"],
         "identity": {"runtime": "python"},
     })
@@ -42,7 +48,12 @@ fn install_hooks(home: &Home) -> Value {
     home.ask(
         "cline",
         "install_transport",
-        json!({"transport": "hooks", "frozen": false, "facts": hook_facts(home)}),
+        json!({
+            "transport": "hooks",
+            "frozen": false,
+            "facts": hook_facts(home),
+            "caller": stamped(home),
+        }),
     )
 }
 
@@ -284,23 +295,16 @@ fn mcp_proxies_keep_remote_servers_and_restore_the_exact_text() {
         .join(".cline/data/settings/cline_mcp_settings.json");
     let original = "{\n  \"mcpServers\": {\n    \"local\": {\"command\": \"node\", \"args\": [\"server.js\"]},\n    \"remote\": {\"url\": \"https://example.invalid/mcp\"}\n  }\n}\n";
     write(&settings, original);
-    let scan = home.ask("cline", "mcp_scan", json!({}));
-    let found = &scan["candidates"][0];
-    assert_eq!(found["managed"][0]["name"], "local");
-    assert_eq!(found["remote"], json!(["remote"]));
-    let replacements =
-        json!({"local": {"command": "/py", "args": ["cline-mcp-proxy"], "type": "stdio"}});
-    let mut entry = found.clone();
-    entry["replacements"] = json!(replacements.to_string());
-    let applied = home.ask(
-        "cline",
-        "mcp_apply",
-        json!({"entries": json!([entry]).to_string()}),
-    );
+    let applied = home.ask("cline", "mcp_install", json!({}));
     assert_eq!(applied["managed_servers"], json!(["local"]));
     assert_eq!(applied["skipped_remote_servers"], json!(["remote"]));
     let managed: Value = serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
-    assert_eq!(managed["mcpServers"]["local"]["command"], "/py");
+    let local = &managed["mcpServers"]["local"];
+    assert_eq!(local["type"], "stdio");
+    assert!(local["args"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("cline-mcp-proxy")));
     assert_eq!(
         managed["mcpServers"]["remote"],
         json!({"url": "https://example.invalid/mcp"})
@@ -326,35 +330,13 @@ fn two_spellings_of_one_settings_file_plan_it_once() {
     let alias = home
         .home()
         .join(".cline/settings/../data/settings/cline_mcp_settings.json");
-    let scan = home.ask_env(
+    let applied = home.ask_env(
         "cline",
-        "mcp_scan",
+        "mcp_install",
         json!({}),
         json!({"CLINE_MCP_SETTINGS_PATH": alias}),
     );
-    assert_eq!(scan["candidates"].as_array().unwrap().len(), 1);
-}
-
-#[test]
-fn a_changed_settings_file_is_not_rewritten_from_a_stale_scan() {
-    let home = Home::new();
-    let settings = home
-        .home()
-        .join(".cline/data/settings/cline_mcp_settings.json");
-    write(
-        &settings,
-        r#"{"mcpServers": {"local": {"command": "node", "args": []}}}"#,
-    );
-    let scan = home.ask("cline", "mcp_scan", json!({}));
-    let mut entry = scan["candidates"][0].clone();
-    entry["replacements"] = json!(json!({"local": {"command": "/py"}}).to_string());
-    write(&settings, r#"{"mcpServers": {}}"#);
-    let answer = home.ask(
-        "cline",
-        "mcp_apply",
-        json!({"entries": json!([entry]).to_string()}),
-    );
-    assert_eq!(answer["integrity"], "target_changed");
+    assert_eq!(applied["changed_config_paths"].as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -417,6 +399,46 @@ fn the_hook_spec_names_the_guard_hook_command_and_its_budget() {
 }
 
 #[test]
+fn the_hook_spec_binds_the_callers_process_into_the_bounded_config() {
+    let home = Home::new();
+    let spec = home.ask("cline", "hook_spec", json!({}));
+    let config: Value = serde_json::from_str(spec["config"].as_str().unwrap()).unwrap();
+    assert_eq!(config["python_executable"], "/py");
+    assert_eq!(config["package_root"], "/opt/guard/site");
+    assert!(config["guard_home"].as_str().unwrap().ends_with("guard"));
+    assert_eq!(config["cli_args"], spec["cli_args"]);
+    assert_eq!(config["harness"], "cline");
+    assert_eq!(config["timeout_seconds"], 8);
+    assert_eq!(config["frozen_launcher"], false);
+    assert!(spec["workspace_config"].is_null());
+    // The compact JSON Python wrote, key for key.
+    let text = spec["config"].as_str().unwrap();
+    assert!(text.starts_with(
+        "{\"python_executable\":\"/py\",\"package_root\":\"/opt/guard/site\",\"guard_home\":\""
+    ));
+    assert!(
+        text.ends_with("\"harness\":\"cline\",\"timeout_seconds\":8,\"frozen_launcher\":false}")
+    );
+}
+
+#[test]
+fn the_hook_config_op_binds_the_requested_arguments() {
+    let home = Home::new();
+    let answer = home.ask(
+        "opencode",
+        "hook_config",
+        json!({"cli_args": [], "timeout_seconds": 25}),
+    );
+    let text = answer["config"].as_str().unwrap();
+    assert!(text.starts_with(
+        "{\"python_executable\":\"/py\",\"package_root\":\"/opt/guard/site\",\"guard_home\":\""
+    ));
+    assert!(text.ends_with(
+        "\"cli_args\":[],\"harness\":\"opencode\",\"timeout_seconds\":25,\"frozen_launcher\":false}"
+    ));
+}
+
+#[test]
 fn the_hook_spec_names_a_home_other_than_the_users() {
     let home = Home::new();
     let mut context = home.context(json!({"PATH": ""}));
@@ -426,4 +448,22 @@ fn the_hook_spec_names_a_home_other_than_the_users() {
     let args = spec["cli_args"].as_array().unwrap();
     assert_eq!(args[args.len() - 2], "--home");
     assert_eq!(args[args.len() - 1], json!(home.home()));
+}
+
+#[test]
+fn a_transport_install_attests_the_guard_cli_itself() {
+    let home = Home::new();
+    let answer = home.ask(
+        "cline",
+        "install_transport",
+        json!({"transport": "plugin", "frozen": false}),
+    );
+    assert_eq!(
+        answer["runtime_error"],
+        json!(super::super::attested_cli::REINSTALL)
+    );
+    assert!(!home
+        .home()
+        .join(".cline/plugins/hol-guard/package.json")
+        .exists());
 }

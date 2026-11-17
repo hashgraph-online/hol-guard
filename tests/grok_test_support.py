@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
@@ -24,8 +24,8 @@ def _fixture(name: str) -> dict[str, object]:
 
 def grok_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
     """The hook argv the native Grok adapter registers."""
-    from codex_plugin_scanner.guard.adapters import get_adapter
-    from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter
+    from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     adapter = get_adapter("grok")
     assert isinstance(adapter, NativeHarnessAdapter)

@@ -4,10 +4,11 @@
 use regex::{Captures, Regex};
 use std::sync::OnceLock;
 
-/// A storage word, numbered device names (`disk0`, `disk2s1`, `nvme0n1`)
-/// and any `/dev` path (`/dev/sda1`, `/dev/vg0/lv0`) included. The streams
+/// A storage word, numbered device names (`disk0`, `disk2s1`, `nvme0n1`),
+/// filesystems and mount points, and any `/dev`, `/mnt`, `/media` or
+/// `/Volumes` path (`/dev/sda1`, `/mnt/archive`) included. The streams
 /// and terminals in [`PSEUDO_DEVICE`] are taken out of the text first.
-const STORAGE_NOUN: &str = r"(?:\b(?:disks?|disk\d+(?:s\d+)?|drives?|volumes?|partitions?|usb|ssd|hdd|nvme\w*|sd\s*cards?|media)\b|/dev/\w)";
+const STORAGE_NOUN: &str = r"(?:\b(?:disks?|disk\d+(?:s\d+)?|drives?|volumes?|partitions?|usb|ssd|hdd|nvme\w*|sd\s*cards?|media|file\s*systems?|mount\s*points?|mounted)\b|/(?:dev|mnt|media|volumes)/\w)";
 
 /// `/dev` paths that are where output goes or comes from, not storage, such
 /// as `/dev/null` or `/dev/stderr`. Any other `/dev` path may be a disk.
@@ -16,9 +17,8 @@ const PSEUDO_DEVICE: &str =
 
 /// `--format`, `-format`, the `format:` value of `--pretty=format:` and
 /// `format` applied to what a program prints or to a piece of code (`format
-/// the value`, `format methods`) all choose how output is shaped; the bare
-/// word, or an assignment such as `operation=format`, still asks to format a
-/// disk.
+/// the value`, `format methods`) all choose how output is shaped. Any other
+/// `format` is then read by [`mask_layout_nouns`].
 ///
 /// Two of the printed nouns also name storage once another word follows them:
 /// `format the time machine disk`, `format the logs volume`. The mask reads
@@ -46,7 +46,7 @@ pub(super) fn mask_format_options(value: &str) -> String {
         Regex::new(&format!(r"(?i)^(?:[^.;!?\n]|\.\S)*?\.?{STORAGE_NOUN}"))
             .expect("bounded storage sentence")
     });
-    OPTION
+    let masked = OPTION
         .get_or_init(|| {
             Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report|values?|methods?|functions?|helpers?|calls?|spec(?:ifier)?s?|strings|fields?|names?|sizes?|templates?|placeholders?|widths?|headers?|errors?|exceptions?|tracebacks?|lines?|columns?|rows?|entries|entry|records?|items?|labels?)\b")
                 .expect("bounded format option")
@@ -62,8 +62,151 @@ pub(super) fn mask_format_options(value: &str) -> String {
                 "{}output-layout",
                 captures.get(1).map_or("", |prefix| prefix.as_str())
             )
-        })
-        .into_owned()
+        });
+    mask_layout_nouns(&masked)
+}
+
+/// `format` names a layout far more often than a disk operation: a `## Response
+/// format` heading, `the date format`, `the JSON format described below`. A
+/// `format` is masked only when it reads as a noun: a word such as `the`,
+/// `JSON` or `response` comes right before it, its line is a Markdown heading,
+/// or a word such as `of`, `is` or `described` comes right after it. A
+/// sentence that names storage (a disk word, a filesystem or mount point, a
+/// `/dev` path that is not a stream, a `/mnt` path, a drive letter such as
+/// `C:`) keeps every `format`, and so does `the format command`. A `format`
+/// after `run the`, `a` or `quick`, or up to three words after `run` or a
+/// like verb with no `in` or `as` between, names the operation and is never
+/// masked. Every other `format` stays a request. A sentence ends
+/// at `!`, `?`, `;`, a line break, or a dot before a space or the end of the
+/// text, and each sentence is scanned for storage once.
+fn mask_layout_nouns(value: &str) -> String {
+    static WORD: OnceLock<Regex> = OnceLock::new();
+    static STORAGE: OnceLock<Regex> = OnceLock::new();
+    static LEAD: OnceLock<Regex> = OnceLock::new();
+    static TAIL: OnceLock<Regex> = OnceLock::new();
+    static ACT: OnceLock<Regex> = OnceLock::new();
+    static PSEUDO: OnceLock<Regex> = OnceLock::new();
+    let word = WORD.get_or_init(|| Regex::new(r"(?i)\bformat\b").expect("bounded format word"));
+    let storage = STORAGE.get_or_init(|| {
+        Regex::new(&format!(
+            r"(?i){STORAGE_NOUN}|(?:^|[^a-z0-9])[a-z]:(?:[\\/]|\s|$)"
+        ))
+        .expect("bounded storage target")
+    });
+    let lead = LEAD.get_or_init(|| {
+        Regex::new(r"(?i)(?:^|[^a-z0-9-])(?:the|this|that|these|those|which|what|its|their|our|your|my|same|new|default|preferred|expected|required|desired|output|input|response|reply|answer|report|date|time|datetime|timestamp|number|currency|file|data|json|yaml|toml|csv|xml|html|markdown|text|string|message|log|commit|citation|export|table|wire|image|video|audio|serialization|display)[\s*_`]*$")
+            .expect("bounded format lead")
+    });
+    let tail = TAIL.get_or_init(|| {
+        Regex::new(r"(?i)^[\s*_`]*(?:(of|is|are|was|were|described|below|above)|(command|tool|utility|operation))(?:[^a-z0-9]|$)")
+            .expect("bounded format tail")
+    });
+    let act = ACT.get_or_init(|| {
+        Regex::new(r"(?i)(?:^|[^a-z0-9-])(?:a|an|quick|full|low-level|secure|clean|fresh|run|do|perform|start|execute|trigger|launch|begin|redo|finish|complete|schedule)(?:\s+(?:the|a|an|this|that|quick|full|low-level|secure|clean|fresh))*[\s*_`]*$")
+            .expect("bounded format action lead")
+    });
+    let pseudo = PSEUDO.get_or_init(|| Regex::new(PSEUDO_DEVICE).expect("bounded pseudo device"));
+    let bytes = value.as_bytes();
+    let ends = |index: usize| {
+        matches!(bytes[index], b'!' | b'?' | b';' | b'\n')
+            || (bytes[index] == b'.' && bytes.get(index + 1).is_none_or(u8::is_ascii_whitespace))
+    };
+    let mut output = String::with_capacity(value.len());
+    let mut start = 0;
+    while start < value.len() {
+        let end = (start..value.len())
+            .find(|&index| ends(index))
+            .map_or(value.len(), |index| index + 1);
+        let sentence = &value[start..end];
+        if !word.is_match(sentence) || storage.is_match(&pseudo.replace_all(sentence, "stream")) {
+            output.push_str(sentence);
+            start = end;
+            continue;
+        }
+        let heading = sentence.trim_start().starts_with('#');
+        let masked = word.replace_all(sentence, |captures: &Captures| {
+            let whole = captures.get(0).expect("whole match present");
+            let before = &sentence[..whole.start()];
+            let window = before.len().saturating_sub(48);
+            let window = (window..=before.len())
+                .find(|&index| before.is_char_boundary(index))
+                .unwrap_or(before.len());
+            let after = &sentence[whole.end()..];
+            let after = &after[..(0..=after.len().min(24))
+                .rev()
+                .find(|&index| after.is_char_boundary(index))
+                .unwrap_or(0)];
+            let follows = tail.captures(after);
+            let tool = follows.as_ref().is_some_and(|found| found.get(2).is_some());
+            let lead_text = &before[window..];
+            let noun = !act.is_match(lead_text)
+                && !verb_leads(lead_text)
+                && (heading
+                    || lead.is_match(lead_text)
+                    || follows.is_some_and(|found| found.get(1).is_some()));
+            if noun && !tool {
+                "layout".to_owned()
+            } else {
+                whole.as_str().to_owned()
+            }
+        });
+        output.push_str(&masked);
+        start = end;
+    }
+    output
+}
+
+/// A strong action verb up to three words before `format` names the
+/// operation, as in `run the same format on it` or `perform for me the
+/// format`. It does not when a relation word introduces the phrase that ends
+/// in `format`, as in `run tests in JSON format` or `in a consistent format`:
+/// no pronoun follows the relation word, and a determiner may only come right
+/// after it. Relation words and pronouns do not count toward the three words.
+fn verb_leads(lead_text: &str) -> bool {
+    const VERBS: [&str; 13] = [
+        "run", "do", "perform", "execute", "trigger", "launch", "redo", "schedule", "start",
+        "begin", "finish", "complete", "initiate",
+    ];
+    const RELATIONS: [&str; 14] = [
+        "in", "as", "with", "using", "into", "to", "for", "from", "via", "per", "by", "at", "on",
+        "of",
+    ];
+    const PRONOUNS: [&str; 7] = ["me", "us", "you", "them", "him", "her", "it"];
+    const DETERMINERS: [&str; 12] = [
+        "the", "a", "an", "this", "that", "these", "those", "its", "their", "our", "your", "my",
+    ];
+    let words = lead_text
+        .split_whitespace()
+        .map(|word| word.trim_matches(|c| matches!(c, '*' | '_' | '`' | ',' | ';' | ':')))
+        .filter(|word| !word.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect::<Vec<_>>();
+    let has = |list: &[&str], word: &String| list.contains(&word.as_str());
+    let introduces = |after: &[String]| {
+        after
+            .iter()
+            .enumerate()
+            .all(|(index, word)| !has(&PRONOUNS, word) && (index == 0 || !has(&DETERMINERS, word)))
+    };
+    let operates = |between: &[String]| {
+        between
+            .iter()
+            .all(|word| word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
+            && !(0..between.len())
+                .any(|index| has(&RELATIONS, &between[index]) && introduces(&between[index + 1..]))
+            && between
+                .iter()
+                .filter(|word| !has(&RELATIONS, word) && !has(&PRONOUNS, word))
+                .count()
+                <= 3
+    };
+    (0..=7).any(|gap| {
+        let Some(at) = words.len().checked_sub(gap + 1) else {
+            return false;
+        };
+        let verb = words[at].trim_start_matches(|c: char| !c.is_ascii_alphanumeric());
+        VERBS.contains(&verb) && operates(&words[at + 1..])
+    })
 }
 
 /// Replaces a credential word that only names a category of action or rule,

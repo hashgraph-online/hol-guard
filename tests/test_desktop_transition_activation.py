@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
 from codex_plugin_scanner.guard.cli import desktop_runtime_transition as module
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.runtime_transition import TransitionInstall
 from codex_plugin_scanner.guard.runtime_transition_coordinator import RuntimeTransitionCoordinator
 from codex_plugin_scanner.guard.runtime_transition_prepare import RuntimeTransitionPreparation

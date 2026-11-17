@@ -409,6 +409,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_guard_session"
         | "list_guard_sessions"
         | "list_events_after"
+        | "get_managed_install"
+        | "list_managed_installs"
         | "list_cloud_exceptions"
         | "get_guard_operation"
         | "list_guard_operations"
@@ -570,6 +572,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "set_sync_payload"
         | "rotate_installation_id"
         | "add_event"
+        | "set_managed_install"
         | "add_guard_event_v1"
         | "list_guard_events_v1"
         | "mark_guard_events_v1_uploaded"
@@ -940,6 +943,9 @@ fn dispatch(
         "set_sync_payload" => crate::guard_store_sync_state::set(connection, args),
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
+        "set_managed_install" => crate::guard_store_managed_installs::set(connection, args),
+        "get_managed_install" => crate::guard_store_managed_installs::get(connection, args),
+        "list_managed_installs" => crate::guard_store_managed_installs::list(connection, args),
         "list_events_after" => cloud_events::list_after(connection, args),
         "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),
         "cached_supply_chain_bundle" => {

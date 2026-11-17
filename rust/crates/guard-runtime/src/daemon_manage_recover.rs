@@ -135,7 +135,10 @@ pub(super) fn recover(
         record_recovery(caller, "kept_running");
         return json!({"url": url});
     }
+    // Protection may have been turned off while this recovery waited for the
+    // lock; the request it journaled still gets its ending.
     if posture(home) == "off" {
+        record_recovery(caller, "protection_off");
         return disabled_url(caller, request);
     }
     if deadline.passed() {

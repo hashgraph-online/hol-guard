@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext, artifacts_use_guard
+from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext, artifacts_use_guard
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 
@@ -114,7 +114,9 @@ def test_a_fault_in_the_adapter_own_words_stays_broken(tmp_path: Path, fault: st
 class _EditorStubAdapter(_StubAdapter):
     """A harness whose Guard hooks keep running without its command."""
 
-    command_absence_proves_uninstalled = False
+    @property
+    def command_absence_proves_uninstalled(self) -> bool:
+        return False
 
 
 def test_a_harness_running_without_its_command_stays_broken(tmp_path: Path) -> None:

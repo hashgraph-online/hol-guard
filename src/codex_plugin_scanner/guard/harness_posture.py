@@ -20,8 +20,8 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, NamedTuple, TypeGuard, cast
 
-from .adapters.contracts import HARNESS_CONTRACTS, contract_for
 from .config_file_io import ConfigFileTrustError
+from .harness.contracts import HARNESS_CONTRACTS, contract_for
 from .native_guard_config import resolve_native_guard_config
 from .protection_posture import (
     VALID_PROTECTION_POSTURES,

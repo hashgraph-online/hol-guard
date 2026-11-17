@@ -8,10 +8,11 @@
 //! Any problem opening it falls back to the null device: a daemon must never
 //! fail to start for want of a log.
 
-use std::fs::{self, File, OpenOptions};
-use std::io;
+use std::fs::File;
 use std::path::Path;
 use std::process::Stdio;
+
+use crate::runtime_output_directory::LogDirectory;
 
 const LOG_DIRECTORY: &str = "logs";
 const STDERR_LOG: &str = "daemon-serve.stderr";
@@ -23,69 +24,24 @@ pub(super) fn daemon_stderr(home: &Path) -> Stdio {
     open_stderr_log(home).map_or_else(Stdio::null, Stdio::from)
 }
 
+/// The log is opened through its directory's descriptor, without following
+/// a link and without waiting on a FIFO, and kept only if it is a regular,
+/// owner-only file; anything else falls back to the null device.
 fn open_stderr_log(home: &Path) -> Option<File> {
-    if !home.is_dir() || is_symlink(home) {
-        return None;
-    }
-    let directory = home.join(LOG_DIRECTORY);
-    if is_symlink(&directory) {
-        return None;
-    }
-    if !directory.exists() {
-        create_private_directory(&directory)?;
-    }
-    if !directory.is_dir() {
-        return None;
-    }
-    let path = directory.join(STDERR_LOG);
-    if is_symlink(&path) {
-        return None;
-    }
-    if fs::metadata(&path).is_ok_and(|metadata| metadata.len() >= MAX_STDERR_BYTES) {
-        let rotated = directory.join(ROTATED_STDERR_LOG);
-        if is_symlink(&rotated) {
-            return None;
-        }
-        fs::rename(&path, &rotated).ok()?;
-    }
-    let mut options = OpenOptions::new();
-    options.append(true).create(true);
-    #[cfg(unix)]
+    let directory = LogDirectory::open(home, LOG_DIRECTORY)?;
+    if directory
+        .file_len(STDERR_LOG)
+        .is_some_and(|length| length >= MAX_STDERR_BYTES)
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        directory.rename(STDERR_LOG, ROTATED_STDERR_LOG)?;
     }
-    options.open(&path).ok()
-}
-
-#[cfg(unix)]
-fn create_private_directory(directory: &Path) -> Option<()> {
-    use std::os::unix::fs::DirBuilderExt;
-    let mut builder = fs::DirBuilder::new();
-    builder.mode(0o700);
-    match builder.create(directory) {
-        Ok(()) => Some(()),
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Some(()),
-        Err(_) => None,
-    }
-}
-
-#[cfg(not(unix))]
-fn create_private_directory(directory: &Path) -> Option<()> {
-    match fs::create_dir(directory) {
-        Ok(()) => Some(()),
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Some(()),
-        Err(_) => None,
-    }
-}
-
-fn is_symlink(path: &Path) -> bool {
-    fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink())
+    directory.open_file(STDERR_LOG, true)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn the_log_is_private_and_rotates_at_launch() {
@@ -126,5 +82,28 @@ mod tests {
         std::os::unix::fs::symlink(elsewhere.path(), home.path().join(LOG_DIRECTORY)).unwrap();
         assert!(open_stderr_log(home.path()).is_none());
         assert!(!elsewhere.path().join(STDERR_LOG).exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_fifo_in_place_of_the_log_does_not_hold_up_the_launch() {
+        let home = tempfile::tempdir().unwrap();
+        let directory = home.path().join(LOG_DIRECTORY);
+        fs::create_dir(&directory).unwrap();
+        let path = directory.join(STDERR_LOG);
+        let status = std::process::Command::new("mkfifo")
+            .arg(&path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let home_path = home.path().to_path_buf();
+        std::thread::spawn(move || {
+            let _ = sender.send(open_stderr_log(&home_path).is_none());
+        });
+        let refused = receiver
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("opening the stderr log waited on a FIFO");
+        assert!(refused);
     }
 }

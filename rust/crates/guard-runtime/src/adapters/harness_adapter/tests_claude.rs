@@ -10,23 +10,29 @@ use super::{after, dispatch, shim, Home};
 #[path = "tests_claude_round_trip.rs"]
 mod round_trip;
 
-fn facts(bridge: Option<&str>, frozen: bool) -> String {
+fn facts() -> String {
     json!({
-        "bridge": bridge,
-        "session_runtime": bridge,
-        "runtime_build": "1.2.3+abc123",
-        "frozen": frozen,
-        "launcher": frozen.then_some("/g/bin/hol-guard"),
-        "python": "/usr/bin/python3",
-        "package_root": "/src",
         "daemon_url": "http://127.0.0.1:4781",
         "query_extras": [["harness", "claude-code"]],
-        "recovery_launcher": frozen.then_some("/g/bin/hol-guard-core"),
     })
     .to_string()
 }
 
-pub(super) const RUNTIME: &str = "/g/hol-guard-runtime";
+const RUNTIME: &str = "/g/hol-guard-runtime";
+
+/// The caller stamp, whose native runtime is `bridge` or absent.
+fn stamped(frozen: bool, bridge: Option<&str>) -> Value {
+    let mut stamp = super::caller(frozen);
+    stamp["native_runtime"] = match bridge {
+        None => Value::Null,
+        Some(path) => {
+            let mut runtime = stamp["native_runtime"].clone();
+            runtime["path"] = json!(path);
+            runtime
+        }
+    };
+    stamp
+}
 
 #[test]
 fn install_without_a_native_runtime_asks_for_repair() {
@@ -35,8 +41,8 @@ fn install_without_a_native_runtime_asks_for_repair() {
         let answer = run(
             &home,
             "prepare_install",
-            json!({"shim": shim()}),
-            &facts(None, frozen),
+            json!({"shim": shim(), "caller": stamped(frozen, None)}),
+            &facts(),
         );
         assert_eq!(
             answer["runtime_error"],
@@ -50,7 +56,12 @@ fn ask(home: &Home, op: &str, fields: &Map<String, Value>) -> Value {
     let mut request =
         json!({"harness": "claude-code", "op": op, "context": home.context(json!({"PATH": ""}))});
     for (key, value) in fields {
-        request[key] = value.clone();
+        // The calling process is stamped into the context, not the request.
+        if key == "caller" {
+            request["context"]["caller"] = value.clone();
+        } else {
+            request[key] = value.clone();
+        }
     }
     dispatch(&request).unwrap()
 }
@@ -78,11 +89,16 @@ fn installed(home: &Home, bridge: Option<&str>) -> Value {
 }
 
 fn installed_as(home: &Home, bridge: Option<&str>, frozen: bool) -> Value {
+    let caller = match (frozen, bridge) {
+        // A frozen caller names the durable copy of a runtime that exists.
+        (true, Some(_)) => super::frozen_with_runtime(home).0,
+        _ => stamped(frozen, bridge),
+    };
     let answer = run(
         home,
         "prepare_install",
-        json!({"shim": shim()}),
-        &facts(bridge, frozen),
+        json!({"shim": shim(), "caller": caller}),
+        &facts(),
     );
     serde_json::from_str(&after(&answer["files"][0])).unwrap()
 }
@@ -141,7 +157,7 @@ fn install_writes_session_start_and_every_runtime_group() {
     .unwrap();
     assert_eq!(config["fallback_daemon_url"], "http://127.0.0.1:4781");
     let recovery = config["recovery_command"].as_array().unwrap();
-    assert_eq!(recovery[..3], ["/usr/bin/python3", "-I", "-c"]);
+    assert_eq!(recovery[..3], ["/py", "-I", "-c"]);
     assert!(recovery[3]
         .as_str()
         .unwrap()
@@ -193,8 +209,11 @@ fn install_refuses_settings_that_are_not_an_object() {
 #[test]
 fn frozen_builds_launch_the_stable_cli() {
     let home = Home::new();
-    let frozen = facts(None, true);
-    let argv = |which: &str| run(&home, "argv", json!({"which": which}), &frozen)["argv"].clone();
+    let facts = facts();
+    let argv = |which: &str| {
+        let fields = json!({"which": which, "caller": stamped(true, None)});
+        run(&home, "argv", fields, &facts)["argv"].clone()
+    };
     assert_eq!(argv("hook")[0], "/g/bin/hol-guard");
     assert_eq!(argv("hook")[1], "hook");
     let session = argv("session_start");
@@ -206,17 +225,24 @@ fn frozen_builds_launch_the_stable_cli() {
 #[test]
 fn source_checkout_argv_imports_from_the_package_root() {
     let home = Home::new();
-    let source = facts(None, false);
-    let hook = run(&home, "argv", json!({"which": "hook"}), &source)["argv"].clone();
-    assert_eq!(hook[0], "/usr/bin/python3");
+    let source = facts();
+    let caller = stamped(false, None);
+    let hook = run(
+        &home,
+        "argv",
+        json!({"which": "hook", "caller": caller}),
+        &source,
+    )["argv"]
+        .clone();
+    assert_eq!(hook[0], "/py");
     assert!(hook[2]
         .as_str()
         .unwrap()
-        .contains("sys.path.insert(0, '/src')"));
+        .contains("sys.path.insert(0, '/opt/guard/site')"));
     let session = run(
         &home,
         "argv",
-        json!({"which": "python_session_start"}),
+        json!({"which": "python_session_start", "caller": caller}),
         &source,
     )["argv"]
         .clone();
@@ -239,7 +265,7 @@ fn uninstall_prunes_guard_entries_only() {
     let answer = ask(&home, "prepare_uninstall", &Map::new());
     let text = answer["writes"][0]["text"].as_str().unwrap();
     let cleaned: Value = serde_json::from_str(text).unwrap();
-    assert_eq!(cleaned["hooks"]["PreToolUse"], json!([]));
+    assert_eq!(cleaned["hooks"].get("PreToolUse"), None);
     assert_eq!(cleaned["hooks"]["Stop"][0]["hooks"][0]["command"], "notify");
     assert_eq!(
         answer["finish"]["notes"][0],
@@ -271,6 +297,25 @@ fn refresh_leaves_settings_without_hooks_alone() {
     let home = Home::new();
     let answer = ask(&home, "refresh", &Map::new());
     assert_eq!(answer["text"], Value::Null);
+}
+
+#[test]
+fn refresh_writes_the_settings_it_rewrote() {
+    let home = Home::new();
+    let path = settings(&home);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, r#"{"model": "kept", "hooks": {}}"#).unwrap();
+    let answer = run(
+        &home,
+        "refresh",
+        json!({"caller": stamped(false, Some(RUNTIME))}),
+        &facts(),
+    );
+    let text = answer["text"].as_str().unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), text);
+    let written: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(written["model"], "kept");
+    assert!(written["hooks"]["SessionStart"].is_array());
 }
 
 fn target(home: &Home, workspace: Option<&std::path::Path>, env: Value) -> Value {
@@ -474,12 +519,7 @@ fn install_target_does_not_read_a_device_or_an_oversized_settings_file() {
 #[test]
 fn install_notes_name_the_settings_file_and_the_rollback() {
     let home = Home::new();
-    let answer = run(
-        &home,
-        "prepare_install",
-        json!({"shim": shim()}),
-        &facts(Some(RUNTIME), false),
-    );
+    let answer = run(&home, "prepare_install", json!({"shim": shim()}), &facts());
     let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
     // Compare decoded strings: JSON text would escape Windows backslashes.
     let notes: Vec<&str> = manifest["notes"]

@@ -9,7 +9,7 @@
 //! holding one is left out (`wire_codex_hook_bindings`), so the hook it would
 //! have claimed stays reviewable as unmanaged.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use serde_json::{Map, Value};
 
@@ -31,7 +31,6 @@ const FIELDS: [&str; 6] = [
 pub(crate) struct DetectLegacy {
     legacy: Legacy,
     syntax: Syntax,
-    known: BTreeSet<String>,
 }
 
 impl DetectLegacy {
@@ -41,11 +40,9 @@ impl DetectLegacy {
             return None;
         }
         let long_paths = long_paths(fields).ok()?;
-        let known = long_paths.keys().cloned().collect();
         Some(Self {
             legacy: Legacy::parse(fields).ok()?,
             syntax: Syntax::new(flag(fields, "windows").ok()?, long_paths),
-            known,
         })
     }
 
@@ -63,16 +60,6 @@ impl DetectLegacy {
             .iter()
             .filter(|binding| !tokens.holds(binding))
             .filter_map(|binding| serde_json::from_str(&compact(binding, false)).ok())
-            .collect()
-    }
-
-    /// The 8.3 short names the host must expand before the answer holds.
-    pub(crate) fn unresolved(&self) -> Vec<String> {
-        self.syntax
-            .short_tokens()
-            .iter()
-            .filter(|token| !self.known.contains(*token))
-            .cloned()
             .collect()
     }
 }
@@ -211,33 +198,6 @@ mod tests {
         assert!(legacy.bindings(&HookVal::Dict(Vec::new())).is_empty());
         let listed = HookVal::Dict(vec![("hooks".into(), HookVal::List(Vec::new()))]);
         assert!(legacy.bindings(&listed).is_empty());
-        assert!(legacy.unresolved().is_empty());
-    }
-
-    #[test]
-    fn a_windows_short_name_is_asked_for() {
-        let mut legacy = legacy(true);
-        let short = HookVal::Dict(vec![(
-            "hooks".into(),
-            HookVal::Dict(vec![(
-                "PreToolUse".into(),
-                HookVal::List(vec![HookVal::Dict(vec![
-                    ("matcher".into(), HookVal::Str("*".into())),
-                    (
-                        "hooks".into(),
-                        HookVal::List(vec![HookVal::Dict(vec![(
-                            "command".into(),
-                            HookVal::Str(r"C:\PROGRA~1\Guard\python.exe -I bridge.py".into()),
-                        )])]),
-                    ),
-                ])]),
-            )]),
-        )]);
-        legacy.bindings(&short);
-        assert_eq!(
-            legacy.unresolved(),
-            vec![r"C:\PROGRA~1\Guard\python.exe".to_owned()]
-        );
     }
 
     #[test]

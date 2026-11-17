@@ -22,7 +22,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 
 
@@ -32,7 +32,7 @@ def _decoded(value: object) -> bytes | None:
 
 def readback(context: HarnessContext) -> dict[str, object]:
     """The verified live hook state, or the failure the runtime raises."""
-    from codex_plugin_scanner.guard.adapters import codex
+    from codex_plugin_scanner.guard import codex_harness_client as codex
 
     state = codex.codex_native_hook_state(context)
     if not state.get("protection_active"):
@@ -129,12 +129,13 @@ def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, o
     """The runtime's ``install`` op, one step at a time: plan, publish the
     generation with its backups ahead of it stepwise, then the remaining
     files, withdrawing the generation when those fail."""
-    from codex_plugin_scanner.guard.adapters import codex
-    from codex_plugin_scanner.guard.adapters.base import PreparedHarnessInstall
+    from codex_plugin_scanner.guard import codex_harness_client as codex
+    from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
     from codex_plugin_scanner.guard.codex_hook_file_integrity import _python_package_roots
     from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, remove_hook_secret_if_unused
     from codex_plugin_scanner.guard.codex_hook_manifest import _spec_payload
     from codex_plugin_scanner.guard.codex_hook_recovery import _owned
+    from codex_plugin_scanner.guard.harness.base import PreparedHarnessInstall
     from codex_plugin_scanner.guard.native_transition_files import publication as publication_op
     from codex_plugin_scanner.guard.runtime_transition import assert_transition_mutation_allowed
 
@@ -182,7 +183,7 @@ def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, o
                 "legacy JSON removal failed. Run `hol-guard install codex` to repair the installation."
             ) from error
         raise
-    codex._require_codex_authoritative_shell_hook(context)
+    codex_lifecycle._require_codex_authoritative_shell_hook(context)
     return codex._install_manifest(
         context,
         "install",
@@ -195,17 +196,19 @@ def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, o
 
 def use_stepwise_publication(monkeypatch: pytest.MonkeyPatch) -> None:
     """Publish this test's hook generations one step at a time."""
-    from codex_plugin_scanner.guard.adapters import codex
+    from codex_plugin_scanner.guard import codex_harness_client as codex
+    from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 
     monkeypatch.setattr(codex, "_publish_hooks", stepwise_publish_hooks)
-    monkeypatch.setattr(codex.CodexHarnessAdapter, "_install_owned", stepwise_install_owned)
+    monkeypatch.setattr(codex_lifecycle.CodexHarnessAdapter, "_install_owned", stepwise_install_owned)
 
 
 # The same switch for a child process script.
 STEPWISE_HOOKS = r"""
-from codex_plugin_scanner.guard.adapters import codex as _stepwise_codex
+from codex_plugin_scanner.guard import codex_harness_client as _stepwise_codex
+from codex_plugin_scanner.guard import codex_harness_lifecycle as _stepwise_codex_lifecycle
 from tests.codex_publication_steps import stepwise_publish_hooks as _stepwise_publish_hooks
 from tests.codex_publication_steps import stepwise_install_owned as _stepwise_install_owned
 _stepwise_codex._publish_hooks = _stepwise_publish_hooks
-_stepwise_codex.CodexHarnessAdapter._install_owned = _stepwise_install_owned
+_stepwise_codex_lifecycle.CodexHarnessAdapter._install_owned = _stepwise_install_owned
 """

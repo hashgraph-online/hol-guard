@@ -226,7 +226,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
     #[cfg(unix)]
     let _ = nix::unistd::setsid();
     let Some((arg_home, arg_port)) = parse_args(args) else {
-        eprintln!("usage: guard-runtime daemon-serve --guard-home H --port P < launch.json");
+        crate::runtime_output::stderr_line(format_args!(
+            "usage: guard-runtime daemon-serve --guard-home H --port P < launch.json"
+        ));
         return EXIT_USAGE;
     };
     let mut line = Vec::new();
@@ -240,16 +242,29 @@ pub(crate) fn run(args: &[String]) -> i32 {
         return EXIT_USAGE;
     }
     let Some(config) = LaunchConfig::parse(line.trim_ascii()) else {
-        eprintln!("daemon-serve: the launch configuration is invalid");
+        crate::runtime_output::stderr_line(format_args!(
+            "daemon-serve: the launch configuration is invalid"
+        ));
         exit_records::start_failed(Path::new(&arg_home), "launch_config_invalid");
         return EXIT_USAGE;
     };
     if config.guard_home != arg_home || config.port != arg_port {
-        eprintln!("daemon-serve: the launch configuration names another daemon");
+        crate::runtime_output::stderr_line(format_args!(
+            "daemon-serve: the launch configuration names another daemon"
+        ));
         exit_records::start_failed(Path::new(&arg_home), "launch_config_mismatch");
         return EXIT_USAGE;
     }
     let home = PathBuf::from(&config.guard_home);
+    // A panic anywhere from here on, while starting as while serving, is
+    // recorded with its location before it carries on unwinding.
+    exit_records::serve_recording_panic(&home, || start_and_serve(&home, &config))
+}
+
+/// Everything after the launch configuration is accepted: publish the
+/// daemon's state, start its workers, report ready and serve.
+fn start_and_serve(home: &Path, config: &LaunchConfig) -> i32 {
+    let home = home.to_path_buf();
     // Before any thread starts, so every later thread inherits the block.
     exit_records::record_termination(home.clone());
     // Pin the dashboard before reporting ready: the launcher that unpacked it
@@ -267,7 +282,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
     let listener = match TcpListener::bind(SocketAddr::new(host, config.port)) {
         Ok(listener) => listener,
         Err(error) => {
-            eprintln!("daemon-serve: cannot listen: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "daemon-serve: cannot listen: {error}"
+            ));
             exit_records::start_failed(&home, "listen_failed");
             return EXIT_LISTENER;
         }
@@ -281,10 +298,12 @@ pub(crate) fn run(args: &[String]) -> i32 {
         .launcher_pid
         .filter(|pid| *pid != 0)
         .unwrap_or_else(std::process::id);
-    let secret = match publish(&home, &config, port, pid) {
+    let secret = match publish(&home, config, port, pid) {
         Ok(secret) => secret,
         Err(error) => {
-            eprintln!("daemon-serve: cannot publish daemon state: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "daemon-serve: cannot publish daemon state: {error}"
+            ));
             exit_records::start_failed(&home, "publish_failed");
             return EXIT_STATE;
         }
@@ -322,11 +341,7 @@ pub(crate) fn run(args: &[String]) -> i32 {
         if let Some(reconcile) = reconcile {
             let _ = reconcile.join();
         }
-        if let Some(timeout) = config
-            .idle_timeout_seconds
-            .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
-            .map(std::time::Duration::from_secs_f64)
-        {
+        if let Some(timeout) = idle_timeout(config.idle_timeout_seconds) {
             workers::exit_when_idle(&reads, &registration, timeout);
         }
     }
@@ -335,27 +350,36 @@ pub(crate) fn run(args: &[String]) -> i32 {
     if config.workers {
         resident_prewarm::prewarm_resident(&home);
     }
-    println!("{}", json!({"port": port, "pid": pid}));
+    crate::runtime_output::stdout_line(format_args!("{}", json!({"port": port, "pid": pid})));
     let _ = io::stdout().flush();
     super::lifecycle::record(&home, "ready", None, Some(&session_id), Some(port));
-    exit_records::serve_recording_panic(&home, || {
-        match serve(
-            &listener,
-            MAX_ACTIVE_CONNECTIONS,
-            STALLED_WRITE_TIMEOUT,
-            reads,
-        ) {
-            Ok(()) => {
-                exit_records::exiting(&home, "listener_closed");
-                0
-            }
-            Err(error) => {
-                eprintln!("daemon-serve: listener failed: {error}");
-                exit_records::exiting(&home, "listener_failed");
-                EXIT_LISTENER
-            }
+    match serve(
+        &listener,
+        MAX_ACTIVE_CONNECTIONS,
+        STALLED_WRITE_TIMEOUT,
+        reads,
+    ) {
+        Ok(()) => {
+            exit_records::exiting(&home, "listener_closed");
+            0
         }
-    })
+        Err(error) => {
+            crate::runtime_output::stderr_line(format_args!(
+                "daemon-serve: listener failed: {error}"
+            ));
+            exit_records::exiting(&home, "listener_failed");
+            EXIT_LISTENER
+        }
+    }
+}
+
+/// The idle timeout a launch asked for. A value that is not finite and
+/// positive, or too large for a `Duration`, means no idle exit; it never
+/// panics the starting daemon.
+fn idle_timeout(seconds: Option<f64>) -> Option<std::time::Duration> {
+    seconds
+        .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
+        .and_then(|seconds| std::time::Duration::try_from_secs_f64(seconds).ok())
 }
 
 /// Ensures the Guard home's discovery key and auth secret, then writes the
