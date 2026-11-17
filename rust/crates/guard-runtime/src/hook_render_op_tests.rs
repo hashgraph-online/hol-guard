@@ -595,3 +595,38 @@ fn a_large_daemon_reply_still_fits_the_bridge_budget() {
         .expect("the bridge's own budget holds it");
     }
 }
+
+#[test]
+fn binding_recording_only_kind_reads_the_posture_map_and_the_mode() {
+    let ask = |cli: Value| {
+        let mut req = request("binding_recording_only");
+        req.cli = Some(cli);
+        decode(evaluate_hook_render_request(&req).expect("encoded"))
+            .payload
+            .expect("payload")["response"]["value"]
+            .clone()
+    };
+    let watch = json!({"mode": "enforce", "harness_postures": {"codex": "watch"}});
+    assert_eq!(ask(json!({"binding": watch, "harness": "codex"})), true);
+    assert_eq!(ask(json!({"binding": watch, "harness": "cursor"})), false);
+    assert_eq!(ask(json!({"binding": null, "harness": "codex"})), false);
+    assert_eq!(ask(json!({"harness": "codex"})), false);
+}
+
+#[test]
+fn cursor_probe_gate_needs_a_workspace_and_a_binding_that_stops() {
+    let ask = |cli: Value| {
+        let mut req = request("cursor_shell_route");
+        req.cli = Some(cli);
+        decode(evaluate_hook_render_request(&req).expect("encoded"))
+            .payload
+            .expect("payload")["response"]["value"]
+            .clone()
+    };
+    let enforce = json!({"mode": "enforce"});
+    let gate = |snapshot: Value, workspace: bool| json!({"op": "probe_gate", "snapshot": snapshot, "has_workspace": workspace});
+    assert_eq!(ask(gate(enforce.clone(), true)), true);
+    assert_eq!(ask(gate(enforce, false)), false);
+    assert_eq!(ask(gate(json!({"mode": "observe"}), true)), false);
+    assert_eq!(ask(gate(Value::Null, true)), false);
+}

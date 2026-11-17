@@ -26,7 +26,6 @@ from codex_plugin_scanner.guard.harness_posture import (
 from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicy, ManagedPolicyState
 from codex_plugin_scanner.guard.native_policy_snapshot_harness_postures import (
     read_harness_postures_sidecar,
-    recording_only_for_binding,
     write_harness_postures_sidecar,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -188,19 +187,6 @@ def test_settings_set_protection_payload_for_harness_and_inherit() -> None:
     }
     assert protection_settings_payload(None, harness="codex", inherit=True) == {"harness_postures": {"codex": None}}
     assert protection_settings_payload("watch", harness=None, inherit=False)["protection_posture"] == "watch"
-
-
-def test_recording_only_for_binding_semantics() -> None:
-    assert recording_only_for_binding(None, "codex") is False
-    assert recording_only_for_binding({"mode": "observe"}, "codex") is True
-    assert recording_only_for_binding({"mode": "enforce"}, "codex") is False
-    enforce_with_watch = {"mode": "enforce", "harness_postures": {"codex": "watch"}}
-    assert recording_only_for_binding(enforce_with_watch, "codex") is True
-    assert recording_only_for_binding(enforce_with_watch, "claude-code") is False
-    observe_with_protected = {"mode": "observe", "harness_postures": {"codex": "protected"}}
-    assert recording_only_for_binding(observe_with_protected, "codex") is False
-    assert recording_only_for_binding(observe_with_protected, "claude-code") is True
-    assert recording_only_for_binding({"mode": "enforce", "harness_postures": {"codex": "bogus"}}, "codex") is False
 
 
 def test_sidecar_is_bound_to_generation_and_digest_and_authenticated(tmp_path: Path) -> None:

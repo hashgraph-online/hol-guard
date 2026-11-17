@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import contained_sink_command, native_hook_render
-from codex_plugin_scanner.guard import native_policy_snapshot_harness_postures as postures
 from codex_plugin_scanner.guard.hook_review import cursor_shell_route as route
 
 _SHELL = {"hook_event_name": "PreToolUse", "tool_name": "Shell", "tool_input": {"command": "pytest -q"}}
@@ -24,6 +23,7 @@ _ROUTED = "native_contained_execution_routed"
 _SINK = {"command": "guard execute-contained-test", "cwd": "/w"}
 _SINK_PAYLOAD = {**_BEFORE_SHELL, "tool_input": {"command": "guard execute-contained-test --harness cursor"}}
 _ALLOW = {"policy_action": "allow"}
+_SNAPSHOT = {"mode": "enforce", "generation": 7}
 _ROUTED_ANSWER = {"policy_action": "allow", "reason_code": _ROUTED, "hookSpecificOutput": {"updatedInput": _SINK}}
 
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="Cursor's contained route is macOS and Linux only")
@@ -39,7 +39,6 @@ class _Resident:
         self.answers = answers or {}
         self.calls: list[tuple[str, str, dict[str, object], object]] = []
         monkeypatch.setattr(native_hook_render, "native_render_cli", self._render)
-        monkeypatch.setattr(postures, "recording_only_for_binding", lambda *_: False)
         monkeypatch.setattr(contained_sink_command, "contained_sink_command_prefix", lambda: ("guard", "-I"))
 
     def _render(
@@ -49,6 +48,8 @@ class _Resident:
         op = params.get("op")
         if op == "route":
             return ("document", {"value": self.route})
+        if op == "probe_gate":
+            return ("document", {"value": self.answers.get("probe_gate", True)})
         if op == "probe_response":
             return ("document", {"value": self.answers.get("probe_response")})
         return ("document", {"value": self.answers.get("sink")})
@@ -72,7 +73,7 @@ class _RoutingWorker:
         self.containment_sink: list[object] = []
 
     def _native_policy_snapshot(self, *_args: object, **_kwargs: object) -> object:
-        return object()
+        return _SNAPSHOT
 
     def _review_raw_hook_native(self, **kwargs: object) -> dict[str, object] | None:
         self.containment_sink.append(kwargs.get("containment_sink"))
@@ -156,7 +157,7 @@ def test_a_probe_the_edge_does_not_review_is_a_plain_allow(tmp_path: Path, monke
     resident = _Resident(monkeypatch, route="probe")
     assert _respond(_PROBE, tmp_path, _RoutingWorker(None)) == _ALLOW
     # beforeShellExecution still reviews the call; the resident is not asked for an answer.
-    assert resident.ops() == ["route"]
+    assert resident.ops() == ["route", "probe_gate"]
 
 
 @posix_only
@@ -167,8 +168,21 @@ def test_a_reviewed_probe_is_answered_as_the_resident_reads_it(tmp_path: Path, m
     assert _respond(_PROBE, tmp_path, worker) == _ROUTED_ANSWER
     # The edge is asked for the sink rewrite, and the resident reads its whole answer.
     assert worker.containment_sink == [True]
-    assert resident.ops() == ["route", "probe_response"]
-    assert resident.calls[1][2] == {"op": "probe_response", "edge": edge}
+    assert resident.ops() == ["route", "probe_gate", "probe_response"]
+    assert resident.calls[1][2] == {"op": "probe_gate", "snapshot": _SNAPSHOT, "has_workspace": True}
+    assert resident.calls[2][2] == {"op": "probe_response", "edge": edge}
+
+
+@posix_only
+@pytest.mark.parametrize("gate", [False, None, "yes"])
+def test_a_probe_the_resident_does_not_gate_in_is_not_reviewed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, gate: object
+) -> None:
+    resident = _Resident(monkeypatch, route="probe", answers={"probe_gate": gate})
+    worker = _RoutingWorker({"containment_route": "sink"})
+    assert _respond(_PROBE, tmp_path, worker) == _ALLOW
+    assert worker.containment_sink == []
+    assert resident.ops() == ["route", "probe_gate"]
 
 
 @posix_only

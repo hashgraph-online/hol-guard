@@ -16,8 +16,9 @@ re-authorizes the saved call before it runs anything, so admitting the
 command never widens what runs.
 
 The resident decides all of it through its ``cursor_shell_route`` render:
-which route a call takes (``route``), what a reviewed probe is answered
-(``probe_response``) and whether a sink command is admitted. This module
+which route a call takes (``route``), whether a probe is reviewed at all
+(``probe_gate``), what a reviewed probe is answered (``probe_response``) and
+whether a sink command is admitted. This module
 gathers the facts (the workspace, the policy snapshot, the daemon's edge
 review), asks, and returns the answer. A probe that fails anywhere here is
 the plain allow, and a sink call that fails is reviewed as usual.
@@ -102,12 +103,14 @@ def _probe_response(
     workspace: Path | None,
     deadline: float | None,
 ) -> dict[str, object] | None:
-    from ..native_policy_snapshot_harness_postures import recording_only_for_binding
-
-    if workspace is None:
-        return None
-    snapshot = worker._native_policy_snapshot(workspace, deadline=deadline)
-    if snapshot is None or recording_only_for_binding(snapshot, _CURSOR):
+    snapshot = worker._native_policy_snapshot(workspace, deadline=deadline) if workspace is not None else None
+    reviewed = _ask(
+        "probe_gate",
+        {"snapshot": snapshot, "has_workspace": workspace is not None},
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+    if reviewed is not True or workspace is None:
         return None
     edge = worker._review_raw_hook_native(
         payload=dict(payload),

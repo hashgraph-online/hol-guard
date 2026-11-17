@@ -833,6 +833,7 @@ mod hook_path_rules;
 mod hook_policy_config;
 mod hook_process_spawn;
 mod hook_render_op;
+mod hook_render_posture;
 mod insights_share_payload;
 mod installation_continuity;
 mod inventory_export_redaction;
