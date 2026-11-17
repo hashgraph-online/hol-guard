@@ -51,6 +51,32 @@ fn a_cursor_hook_names_cursor_and_its_project() {
 }
 
 #[test]
+fn claude_code_started_from_a_cursor_terminal_is_not_a_cursor_run() {
+    let inherited = [
+        ("CURSOR_TRACE_ID", "t"),
+        ("CURSOR_PROJECT_DIR", "/work/app"),
+        ("CLAUDECODE", "1"),
+        ("CLAUDE_CODE_ENTRYPOINT", "cli"),
+    ];
+    assert_eq!(cursor_run(lookup(&inherited)), None);
+    assert_eq!(
+        attributed_query(
+            "guard-home=%2Fh&runtime-harness=cursor",
+            cursor_run(lookup(&inherited)).as_ref()
+        ),
+        "guard-home=%2Fh"
+    );
+    // Only Claude Code's own marker counts; a blank or other value does not.
+    for value in ["", "0", "true"] {
+        assert_eq!(
+            cursor_run(lookup(&[("CURSOR_TRACE_ID", "t"), ("CLAUDECODE", value)])),
+            Some(CursorRun { project_dir: None }),
+            "{value}"
+        );
+    }
+}
+
+#[test]
 fn only_a_set_cursor_marker_makes_a_cursor_run() {
     assert_eq!(cursor_run(lookup(&[])), None);
     assert_eq!(cursor_run(lookup(&[("CURSOR_TRACE_ID", "  ")])), None);

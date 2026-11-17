@@ -117,7 +117,11 @@ def write_harness_postures_sidecar(
     """Persist overrides for the ACKed snapshot and return what readers will see.
 
     Failure only means no overrides. The publisher binds the returned value, so
-    its in-memory binding and readers of the signed file always agree.
+    its in-memory binding and readers of the signed file always agree. The
+    file is written even when there are no overrides: it is the signed proof
+    that there are none, which the native hook bridge needs before it trusts a
+    Watch snapshot, because the snapshot is saved first and a publish can stop
+    between the two writes.
     """
 
     guard_home = getattr(store, "guard_home", None)
@@ -127,7 +131,7 @@ def write_harness_postures_sidecar(
     path: Path | None = None
     try:
         path = _sidecar_path(guard_home)
-        verifier_key = _verifier_key_for_store(store) if verified else None
+        verifier_key = _verifier_key_for_store(store)
         if verifier_key is None:
             path.unlink(missing_ok=True)
             return {}

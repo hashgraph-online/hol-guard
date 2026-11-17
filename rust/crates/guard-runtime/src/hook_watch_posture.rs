@@ -13,9 +13,12 @@
 //! `harness-postures-v1.json` must carry the sidecar MAC under the same key
 //! and name the same generation and policy digest. A harness is in Watch when
 //! its override is `watch`, or when it has no override and the snapshot mode
-//! is `observe`, as `recording_only_for_binding` decides. Anything missing,
-//! unreadable, malformed or unauthenticated proves nothing, so the bridge
-//! keeps denying.
+//! is `observe`, as `recording_only_for_binding` decides. The sidecar is
+//! required even when there are no overrides: the snapshot is saved before
+//! the sidecar, so a snapshot without one may be a publish that stopped
+//! between the two writes, and the overrides it was meant to carry are
+//! unknown. Anything missing, unreadable, malformed or unauthenticated proves
+//! nothing, so the bridge keeps denying.
 //!
 //! The snapshot's expiry is not checked. It bounds how long the daemon may
 //! enforce a policy it has not refreshed; here the question is only which
@@ -72,14 +75,13 @@ pub(crate) fn harness_in_watch(guard_home: &Path, harness: &str) -> bool {
         "harness_postures",
         guard_home,
     ) {
-        Ok(None) => None,
         Ok(Some(bytes)) => match serde_json::from_slice::<Sidecar>(&bytes) {
-            Ok(sidecar) => Some(sidecar),
+            Ok(sidecar) => sidecar,
             Err(_) => return false,
         },
-        Err(_) => return false,
+        Ok(None) | Err(_) => return false,
     };
-    watch_for(&snapshot, sidecar.as_ref(), harness, &key)
+    watch_for(&snapshot, &sidecar, harness, &key)
 }
 
 /// The ACKed snapshot in the authority record, when its integrity MAC holds
@@ -115,25 +117,18 @@ fn authenticated_snapshot(
 }
 
 /// The Watch decision for `harness` from an authenticated snapshot and the
-/// sidecar beside it. An absent sidecar means no overrides; a sidecar that
-/// is present but not bound to this snapshot, or not authentic, proves
-/// nothing.
+/// sidecar beside it. A sidecar that is not bound to this snapshot, or not
+/// authentic, proves nothing.
 pub(crate) fn watch_for(
     snapshot: &PolicySnapshotV3,
-    sidecar: Option<&Sidecar>,
+    sidecar: &Sidecar,
     harness: &str,
     key: &[u8],
 ) -> bool {
-    let override_posture = match sidecar {
-        None => None,
-        Some(sidecar) => {
-            if !sidecar_authentic(sidecar, snapshot, key) {
-                return false;
-            }
-            sidecar.harness_postures.get(harness).map(String::as_str)
-        }
-    };
-    match override_posture {
+    if !sidecar_authentic(sidecar, snapshot, key) {
+        return false;
+    }
+    match sidecar.harness_postures.get(harness).map(String::as_str) {
         Some(posture) => posture == WATCH,
         None => snapshot.mode == OBSERVE_MODE,
     }
@@ -153,7 +148,8 @@ fn sidecar_authentic(sidecar: &Sidecar, snapshot: &PolicySnapshotV3, key: &[u8])
 }
 
 /// The bytes `_sidecar_mac` signs: `json.dumps` of the generation, digest and
-/// sorted overrides with sorted keys and compact separators. Only plain
+/// sorted overrides with sorted keys and compact separators. The overrides
+/// may be empty, which is the signed proof that there are none. Only plain
 /// harness keys, known postures and a hex digest are accepted, so the text is
 /// the same whichever JSON encoder writes it.
 pub(crate) fn sidecar_body(sidecar: &Sidecar) -> Option<String> {
@@ -168,8 +164,7 @@ pub(crate) fn sidecar_body(sidecar: &Sidecar) -> Option<String> {
             .policy_digest
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
-    if sidecar.harness_postures.is_empty()
-        || !digest_valid
+    if !digest_valid
         || sidecar
             .harness_postures
             .iter()

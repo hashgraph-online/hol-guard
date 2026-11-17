@@ -60,19 +60,17 @@ fn guard_home(label: &str, snapshot: &PolicySnapshotV3, sidecar: Option<&[u8]>) 
     home
 }
 
-/// Leave the signed state of a daemon that ACKed a snapshot in `mode` and,
-/// when `postures` is not empty, signed those per-harness overrides, in the
+/// Leave the signed state of a daemon that ACKed a snapshot in `mode` and
+/// signed `postures` as its per-harness overrides, which may be none, in the
 /// existing private Guard home `home`.
 pub(crate) fn sign_postures(home: &Path, mode: &str, postures: &[(&str, &str)]) {
     let snapshot = snapshot_in_mode(home, mode);
-    let signed = (!postures.is_empty()).then(|| {
-        sidecar_json(&sidecar(
-            snapshot.generation,
-            &snapshot.policy_digest,
-            postures,
-        ))
-    });
-    write_posture_state(home, &snapshot, signed.as_deref());
+    let signed = sidecar_json(&sidecar(
+        snapshot.generation,
+        &snapshot.policy_digest,
+        postures,
+    ));
+    write_posture_state(home, &snapshot, Some(&signed));
 }
 
 fn write_posture_state(home: &Path, snapshot: &PolicySnapshotV3, sidecar: Option<&[u8]>) {
@@ -139,7 +137,8 @@ fn a_signed_watch_override_proves_watch_for_that_harness_only() {
 fn a_global_watch_holds_unless_a_harness_is_overridden_away_from_it() {
     let probe = test_root("watch-global-probe");
     let snapshot = snapshot_in_mode(&probe, "observe");
-    let bare = guard_home("global", &snapshot, None);
+    let none = sidecar(snapshot.generation, &snapshot.policy_digest, &[]);
+    let bare = guard_home("global", &snapshot, Some(&sidecar_json(&none)));
     assert!(harness_in_watch(&bare, "claude-code"));
     let signed = sidecar(
         snapshot.generation,
@@ -149,6 +148,35 @@ fn a_global_watch_holds_unless_a_harness_is_overridden_away_from_it() {
     let overridden = guard_home("global-override", &snapshot, Some(&sidecar_json(&signed)));
     assert!(!harness_in_watch(&overridden, "claude-code"));
     assert!(harness_in_watch(&overridden, "cursor"));
+}
+
+#[test]
+fn a_watch_snapshot_without_its_signed_overrides_proves_nothing() {
+    // The snapshot is saved before the sidecar. A publish that stopped
+    // between the two writes leaves a Watch snapshot whose Protected
+    // override for this harness was never written.
+    let probe = test_root("watch-sidecar-missing-probe");
+    let snapshot = snapshot_in_mode(&probe, "observe");
+    let home = guard_home("sidecar-missing", &snapshot, None);
+    assert!(!harness_in_watch(&home, "claude-code"));
+
+    // An empty override map signed for an older generation is no proof
+    // either.
+    let older = sidecar(snapshot.generation - 1, &snapshot.policy_digest, &[]);
+    let home = guard_home("sidecar-older", &snapshot, Some(&sidecar_json(&older)));
+    assert!(!harness_in_watch(&home, "claude-code"));
+}
+
+#[test]
+fn the_empty_override_map_is_signed_as_the_python_publisher_signs_it() {
+    let none = sidecar(5, &"ab".repeat(32), &[]);
+    assert_eq!(
+        sidecar_body(&none).unwrap(),
+        format!(
+            "{{\"generation\":5,\"harness_postures\":{{}},\"policy_digest\":\"{}\"}}",
+            "ab".repeat(32)
+        )
+    );
 }
 
 #[test]
@@ -204,11 +232,6 @@ fn an_unsignable_override_proves_nothing() {
             mac: "0".repeat(64),
         };
         assert!(sidecar_body(&unsignable).is_none());
-        assert!(!watch_for(
-            &snapshot,
-            Some(&unsignable),
-            "claude-code",
-            &KEY
-        ));
+        assert!(!watch_for(&snapshot, &unsignable, "claude-code", &KEY));
     }
 }

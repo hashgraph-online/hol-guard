@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -219,14 +221,37 @@ def test_sidecar_is_bound_to_generation_and_digest_and_authenticated(tmp_path: P
     assert read_harness_postures_sidecar(store, generation=3, policy_digest=digest) == {}
 
 
-def test_sidecar_without_postures_removes_stale_file(tmp_path: Path) -> None:
+def test_sidecar_without_postures_signs_an_empty_override_map(tmp_path: Path) -> None:
+    import codex_plugin_scanner.guard.native_policy_snapshot_harness_postures as sidecar_module
+
     store = GuardStore(tmp_path / "guard-home")
     store._policy_integrity_secret_material(create=True)
     digest = "d" * 64
     write_harness_postures_sidecar(store, generation=1, policy_digest=digest, postures={"codex": "watch"})
-    write_harness_postures_sidecar(store, generation=2, policy_digest=digest, postures={})
+    assert write_harness_postures_sidecar(store, generation=2, policy_digest=digest, postures={}) == {}
     assert read_harness_postures_sidecar(store, generation=1, policy_digest=digest) == {}
-    assert not (tmp_path / "guard-home" / "native-runtime" / "harness-postures-v1.json").exists()
+    assert read_harness_postures_sidecar(store, generation=2, policy_digest=digest) == {}
+
+    document = json.loads(
+        (tmp_path / "guard-home" / "native-runtime" / "harness-postures-v1.json").read_text(encoding="utf-8")
+    )
+    assert document["generation"] == 2
+    assert document["harness_postures"] == {}
+    verifier_key = sidecar_module._verifier_key_for_store(store)
+    assert verifier_key is not None
+    assert (
+        document["mac"]
+        == hmac.new(
+            verifier_key,
+            b"hol-guard/harness-postures/v1\0"
+            + json.dumps(
+                {"generation": 2, "harness_postures": {}, "policy_digest": digest},
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+    )
 
 
 def test_full_settings_save_keeps_global_watch_timer(tmp_path: Path) -> None:

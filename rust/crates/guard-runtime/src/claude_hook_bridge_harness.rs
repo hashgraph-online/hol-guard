@@ -9,6 +9,12 @@
 //! later Claude Code call as Cursor's and held it under Cursor's posture. The
 //! bridge now drops any written `runtime-harness` and names Cursor only when
 //! the hook it is running carries Cursor's markers.
+//!
+//! Claude Code started from a Cursor terminal inherits those markers, so a
+//! hook that also carries Claude Code's own `CLAUDECODE=1` belongs to Claude
+//! Code: that marker is set by the Claude Code process itself, while the
+//! Cursor markers may only be left over from the terminal it was launched
+//! in.
 
 use crate::claude_hook_bridge_render::py_strip;
 use crate::claude_hook_bridge_url::py_unquote;
@@ -23,6 +29,9 @@ pub(crate) const CURSOR_ENV_MARKERS: [&str; 5] = [
     "CURSOR_TRANSCRIPT_PATH",
 ];
 
+/// Set to `1` by Claude Code in the environment of everything it runs.
+const CLAUDE_CODE_MARKER: &str = "CLAUDECODE";
+
 const RUNTIME_HARNESS: &str = "runtime-harness";
 const WORKSPACE: &str = "workspace";
 
@@ -34,8 +43,11 @@ pub(crate) struct CursorRun {
 }
 
 /// The Cursor run `lookup` describes, or `None` when no Cursor marker is set
-/// to a non-blank value.
+/// to a non-blank value or Claude Code marks the run as its own.
 pub(crate) fn cursor_run(lookup: impl Fn(&str) -> Option<String>) -> Option<CursorRun> {
+    if lookup(CLAUDE_CODE_MARKER).is_some_and(|value| py_strip(&value) == "1") {
+        return None;
+    }
     let set = |key: &str| lookup(key).filter(|value| !py_strip(value).is_empty());
     CURSOR_ENV_MARKERS
         .iter()
