@@ -68,6 +68,7 @@ pub(super) fn dispatch(
         "backup_path" => path_answer(&backup_path(ctx)),
         "paths" => Ok(paths(ctx)),
         "argv" => argv(ctx, fields),
+        "launch_env" => Ok(json!({ "env": { "CODEX_HOME": path_text(&ctx.home.join(".codex")) } })),
         "groups" => groups(ctx, fields),
         "doctor_status" => doctor_status(fields),
         "migration_backup" => codex_files::migration_backup(ctx, fields),

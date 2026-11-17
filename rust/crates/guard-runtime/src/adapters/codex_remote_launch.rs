@@ -62,6 +62,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     let map = args_object(args)?;
     match map.get("op").and_then(Value::as_str) {
         Some("plan") if map.len() == 3 => plan(map),
+        Some("launch") if map.len() == 4 => launch(map),
         Some("wait") if map.len() == 3 => wait(map),
         Some("reclaim") if map.len() == 3 => reclaim(map),
         Some("prepare") => super::codex_remote_prepare::prepare(map),
@@ -77,21 +78,98 @@ fn text<'a>(map: &'a Map<String, Value>, key: &str) -> Result<&'a str, &'static 
 /// preference order: the remote TUI first when the arguments allow it, then
 /// the arguments unchanged.
 fn plan(map: &Map<String, Value>) -> KindResult {
-    let args = map
-        .get("args")
+    let args = string_list(map.get("args"))?;
+    let socket = text(map, "socket")?;
+    Ok(json!({ "tails": tails(&args, socket) }))
+}
+
+fn string_list(value: Option<&Value>) -> Result<Vec<&str>, &'static str> {
+    value
         .and_then(Value::as_array)
         .ok_or(ERR_INVALID)?
         .iter()
-        .map(|arg| arg.as_str().ok_or(ERR_INVALID))
-        .collect::<Result<Vec<&str>, _>>()?;
-    let socket = text(map, "socket")?;
-    if !supports_remote_tui(&args) {
-        return Ok(json!({ "tails": [args] }));
+        .map(|item| item.as_str().ok_or(ERR_INVALID))
+        .collect()
+}
+
+fn tails(args: &[&str], socket: &str) -> Vec<Vec<String>> {
+    let plain: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+    if !supports_remote_tui(args) {
+        return vec![plain];
     }
-    let listener = format!("unix://{socket}");
-    let mut remote = vec!["--remote", listener.as_str()];
-    remote.extend(&args);
-    Ok(json!({ "tails": [remote, args] }))
+    let mut remote = vec!["--remote".to_owned(), format!("unix://{socket}")];
+    remote.extend(plain.iter().cloned());
+    vec![remote, plain]
+}
+
+const PREFIX_REFUSAL: &str = "Codex launch preparation requires a canonical executable prefix.";
+const SHARED_REFUSAL: &str =
+    "Codex launch candidates do not share one authorized executable prefix.";
+
+/// A home's Codex home: `<home>/.codex`.
+fn codex_home(home: &str) -> std::path::PathBuf {
+    Path::new(home)
+        .components()
+        .collect::<std::path::PathBuf>()
+        .join(".codex")
+}
+
+/// `default_codex_control_socket`.
+fn control_socket(home: &str) -> String {
+    codex_home(home)
+        .join("app-server-control")
+        .join("app-server-control.sock")
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Everything a launch needs before any process starts: the one authorized
+/// executable prefix (a refusal when the candidates do not share exactly one,
+/// or it is not canonical), the control socket under `home_dir`, the Codex
+/// home the launch runs with, the ordinary command, the remote command when
+/// the arguments allow the remote TUI, and every command preparation may
+/// select, remote first.
+fn launch(map: &Map<String, Value>) -> KindResult {
+    let mut chosen: Vec<Vec<&str>> = Vec::new();
+    for prefix in map
+        .get("prefixes")
+        .and_then(Value::as_array)
+        .ok_or(ERR_INVALID)?
+    {
+        let parts = string_list(Some(prefix))?;
+        if !parts.is_empty() && !chosen.contains(&parts) {
+            chosen.push(parts);
+        }
+    }
+    let refusal = |message: &str| -> KindResult { Ok(json!({ "refusal": message })) };
+    let [prefix] = chosen.as_slice() else {
+        return refusal(SHARED_REFUSAL);
+    };
+    if prefix.iter().any(|part| part.is_empty()) {
+        return refusal(PREFIX_REFUSAL);
+    }
+    let args = string_list(map.get("args"))?;
+    let home = text(map, "home_dir")?;
+    let socket = control_socket(home);
+    let candidates: Vec<Vec<String>> = tails(&args, &socket)
+        .into_iter()
+        .map(|tail| {
+            prefix
+                .iter()
+                .map(|part| (*part).to_owned())
+                .chain(tail)
+                .collect()
+        })
+        .collect();
+    let remote = (candidates.len() >= 2).then(|| candidates[0].clone());
+    Ok(json!({
+        "socket": socket,
+        "prefix": prefix,
+        "env": { "CODEX_HOME": codex_home(home).to_string_lossy() },
+        "plain": candidates.last(),
+        "remote": remote,
+        "candidates": candidates,
+    }))
 }
 
 /// A launch that already names a remote, only prints information, or runs a

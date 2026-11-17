@@ -50,10 +50,9 @@ from .codex_hook_registration import codex_doctor_result
 from .codex_hook_self_binding import install_fields, short_path_fields
 from .codex_hook_trust import apply_codex_hook_trust_doctor
 from .codex_remote_client import (
-    codex_remote_launch_environment,
     guarded_codex_launch_command,
     guarded_codex_launch_command_candidates,
-    guarded_codex_launch_command_from_prefix,
+    guarded_codex_launch_command_from_prefixes,
 )
 from .harness.base import HarnessContext, PreparedHarnessInstall
 from .harness.native_harness import NativeHarnessAdapter
@@ -168,18 +167,16 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         launch_environment: Mapping[str, str],
     ) -> list[str]:
         _require_codex_authoritative_shell_hook(context)
-        prefixes = {tuple(prefix) for prefix in authorized_executable_prefixes if prefix}
-        if len(prefixes) != 1:
-            raise ValueError("Codex launch candidates do not share one authorized executable prefix.")
-        return guarded_codex_launch_command_from_prefix(
-            executable_prefix=prefixes.pop(),
+        return guarded_codex_launch_command_from_prefixes(
+            executable_prefixes=authorized_executable_prefixes,
             home_dir=context.home_dir,
             passthrough_args=passthrough_args,
             environ=launch_environment,
         )
 
     def launch_environment(self, context: HarnessContext) -> dict[str, str]:
-        return codex_remote_launch_environment(context.home_dir)
+        environment = self._ask("launch_env", context).get("env")
+        return {str(key): str(value) for key, value in environment.items()} if isinstance(environment, dict) else {}
 
     @staticmethod
     def _hooks_path(context: HarnessContext) -> Path:
