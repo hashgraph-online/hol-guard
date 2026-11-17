@@ -35,14 +35,6 @@ if TYPE_CHECKING:
 
 CODEX_AUTHORITY_REPAIR_ACTION = "apps.repair.codex-authority"
 
-_TRANSPORT_PACKAGE_ROLES = (
-    "bridge",
-    "bridge_runtime",
-    "launch_runtime",
-    "runtime_trust",
-    "windows_job",
-)
-
 
 @dataclass(frozen=True, slots=True)
 class CodexHookManifestSpec:
