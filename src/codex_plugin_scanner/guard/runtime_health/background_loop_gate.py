@@ -41,7 +41,9 @@ _settled: set[tuple[str, str]] = set()
 _settled_lock = threading.Lock()
 
 
-def _ask(guard_home: Path, op: str, loop: str | None = None, failure_key: str | None = None) -> Mapping | None:
+def _ask(
+    guard_home: Path, op: str, loop: str | None = None, failure_key: str | None = None
+) -> Mapping[str, object] | None:
     from ..mdm.runtime_request import runtime_answer
 
     request: dict[str, object] = {"schema": _SCHEMA, "guard_home": str(guard_home), "op": op}
