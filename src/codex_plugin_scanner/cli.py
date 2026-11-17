@@ -35,9 +35,9 @@ def _load_guard_command_hub() -> None:
 def _supported_harness_values() -> tuple[str, ...]:
     # Deferred: product_model transitively imports the whole Guard command
     # surface, which short-lived invocations must not pay for.
-    from .guard.product_model import SUPPORTED_HARNESS_VALUES
+    from .guard.harness.contract_registry import harness_names
 
-    return SUPPORTED_HARNESS_VALUES
+    return harness_names()
 
 
 def _run_scan(args: argparse.Namespace) -> int:
