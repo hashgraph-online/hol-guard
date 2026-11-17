@@ -4,10 +4,11 @@ import { GuardModalLayer } from "../guard-modal-layer";
 import { launchAgent, RejectedAction } from "./api";
 import { isLive, projectsFor } from "./model";
 import type { Agent, LaunchDraft, SwarmSnapshot } from "./types";
-import { blockedPaths, MAX_BLOCKED, parseCommand, workText } from "./work";
+import { blockedPaths, goalOf, MAX_BLOCKED, parseCommand, workText } from "./work";
 
 const pendingLaunches = new Map<string, LaunchDraft>();
 const COMMANDS: Record<string, string> = { codex: "codex", "claude-code": "claude" };
+const MAX_TASK_BYTES = 16384;
 
 export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, onNavigate }: {
   snapshot: SwarmSnapshot; stale: boolean; initialProject: string; onClose: () => void;
@@ -22,7 +23,7 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
     return retained?.model ? `${program} --model ${retained.model}` : program;
   });
   const [workspace, setWorkspace] = useState(retained?.workspace ?? initialProject);
-  const [goal, setGoal] = useState(retained?.task ?? "");
+  const [goal, setGoal] = useState(goalOf(retained?.task ?? null) ?? "");
   const [scope, setScope] = useState("");
   const [done, setDone] = useState("");
   const [avoid, setAvoid] = useState("");
@@ -36,15 +37,19 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
   const parsed = parseCommand(command, available.map((a) => a.id));
   const harness = "harness" in parsed ? parsed.harness : "";
   const limits = harness === "claude-code" ? blockedPaths(blockedText, secrets) : { paths: [], bad: [] };
-  const limitError = limits.bad.length ? `These paths are not inside the project: ${limits.bad.join(", ")}`
-    : limits.paths.length > MAX_BLOCKED ? `List at most ${MAX_BLOCKED} paths.` : null;
+  let limitError: string | null = null;
+  if (limits.bad.length) limitError = `These paths are not inside the project: ${limits.bad.join(", ")}`;
+  else if (limits.paths.length > MAX_BLOCKED) limitError = `List at most ${MAX_BLOCKED} paths.`;
+  const task = workText({ goal, scope, done, avoid }, limits.paths);
+  const extraBytes = new TextEncoder().encode(task).length - MAX_TASK_BYTES;
+  const sizeError = extraBytes > 0 ? `The work and paths are too long together. Shorten them by ${extraBytes} characters or more.` : null;
   let launchLabel = "Start agent";
   if (busy) launchLabel = "Starting…";
   else if (uncertain) launchLabel = "Check launch";
   async function launch() {
-    if (busy || stale || "error" in parsed || limitError) return;
+    if (busy || stale || "error" in parsed || limitError || sizeError) return;
     const fresh: LaunchDraft = { request_id: crypto.randomUUID(), epoch: snapshot.epoch, harness: parsed.harness, workspace: workspace.trim(),
-      task: workText({ goal, scope, done, avoid }, limits.paths), model: parsed.model };
+      task, model: parsed.model };
     if (limits.paths.length) fresh.blocked = limits.paths;
     const draft = pending.current ?? fresh;
     pending.current = draft;
@@ -76,6 +81,7 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
         <label htmlFor="swarm-scope">Files in scope <span className="swarm-optional">Optional</span></label><input id="swarm-scope" value={scope} onChange={(e) => setScope(e.target.value)} maxLength={2048} placeholder="src/auth, tests/auth" autoComplete="off" />
         <label htmlFor="swarm-done">Done when <span className="swarm-optional">Optional</span></label><input id="swarm-done" value={done} onChange={(e) => setDone(e.target.value)} maxLength={2048} placeholder="The auth tests pass and the change is explained" autoComplete="off" />
         <label htmlFor="swarm-avoid">Not allowed <span className="swarm-optional">Optional</span></label><input id="swarm-avoid" value={avoid} onChange={(e) => setAvoid(e.target.value)} maxLength={2048} placeholder="Don’t change the database schema" autoComplete="off" />
+        {sizeError ? <p className="swarm-error">{sizeError}</p> : null}
       </fieldset>
       <fieldset className="swarm-composer-section" disabled={busy || uncertain}>
         <legend>What it can open</legend>
@@ -90,7 +96,7 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
       {error ? <p className="swarm-error" role="alert">{error}</p> : null}
       {uncertain ? <p className="swarm-muted">The launch may have succeeded. Check its status with the same request before creating another agent.</p> : null}
       {stale ? <p className="swarm-error">Reconnect to Guard before launching.</p> : null}
-      <div className="swarm-composer-footer"><button type="button" className="swarm-text-button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="swarm-button swarm-button--primary" disabled={busy || stale || !harness || !workspace.trim() || !goal.trim() || limitError !== null}>{launchLabel}<HiMiniArrowRight aria-hidden="true" /></button></div>
+      <div className="swarm-composer-footer"><button type="button" className="swarm-text-button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="swarm-button swarm-button--primary" disabled={busy || stale || !harness || !workspace.trim() || !goal.trim() || limitError !== null || sizeError !== null}>{launchLabel}<HiMiniArrowRight aria-hidden="true" /></button></div>
     </form>}
   </GuardModalLayer>;
 }

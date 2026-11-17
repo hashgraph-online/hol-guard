@@ -1,9 +1,10 @@
 import { r as reactExports, j as jsxRuntimeExports, ec as GuardModalLayer, ak as HiMiniXMark, b as HiMiniCommandLine, I as HiMiniArrowRight, c as HiMiniFolder, K as HiMiniLockClosed } from "../guard-dashboard.js";
-import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-Be_L-sEs.js";
-import { p as parseCommand, b as blockedPaths, M as MAX_BLOCKED, w as workText } from "./work-DQ-mcUbu.js";
+import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-BnSii4zV.js";
+import { g as goalOf, p as parseCommand, b as blockedPaths, w as workText, M as MAX_BLOCKED } from "./work-DQ-mcUbu.js";
 import "./swarm-handoff-BIqKreGh.js";
 const pendingLaunches = /* @__PURE__ */ new Map();
 const COMMANDS = { codex: "codex", "claude-code": "claude" };
+const MAX_TASK_BYTES = 16384;
 function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, onNavigate }) {
   const available = snapshot.adapters.filter((a) => a.installed && a.launch_supported);
   const retained = [...pendingLaunches.values()].find((draft) => draft.epoch === snapshot.epoch && (!initialProject || draft.workspace === initialProject));
@@ -13,7 +14,7 @@ function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, o
     return retained?.model ? `${program} --model ${retained.model}` : program;
   });
   const [workspace, setWorkspace] = reactExports.useState(retained?.workspace ?? initialProject);
-  const [goal, setGoal] = reactExports.useState(retained?.task ?? "");
+  const [goal, setGoal] = reactExports.useState(goalOf(retained?.task ?? null) ?? "");
   const [scope, setScope] = reactExports.useState("");
   const [done, setDone] = reactExports.useState("");
   const [avoid, setAvoid] = reactExports.useState("");
@@ -27,18 +28,23 @@ function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, o
   const parsed = parseCommand(command, available.map((a) => a.id));
   const harness = "harness" in parsed ? parsed.harness : "";
   const limits = harness === "claude-code" ? blockedPaths(blockedText, secrets) : { paths: [], bad: [] };
-  const limitError = limits.bad.length ? `These paths are not inside the project: ${limits.bad.join(", ")}` : limits.paths.length > MAX_BLOCKED ? `List at most ${MAX_BLOCKED} paths.` : null;
+  let limitError = null;
+  if (limits.bad.length) limitError = `These paths are not inside the project: ${limits.bad.join(", ")}`;
+  else if (limits.paths.length > MAX_BLOCKED) limitError = `List at most ${MAX_BLOCKED} paths.`;
+  const task = workText({ goal, scope, done, avoid }, limits.paths);
+  const extraBytes = new TextEncoder().encode(task).length - MAX_TASK_BYTES;
+  const sizeError = extraBytes > 0 ? `The work and paths are too long together. Shorten them by ${extraBytes} characters or more.` : null;
   let launchLabel = "Start agent";
   if (busy) launchLabel = "Starting…";
   else if (uncertain) launchLabel = "Check launch";
   async function launch() {
-    if (busy || stale || "error" in parsed || limitError) return;
+    if (busy || stale || "error" in parsed || limitError || sizeError) return;
     const fresh = {
       request_id: crypto.randomUUID(),
       epoch: snapshot.epoch,
       harness: parsed.harness,
       workspace: workspace.trim(),
-      task: workText({ goal, scope, done, avoid }, limits.paths),
+      task,
       model: parsed.model
     };
     if (limits.paths.length) fresh.blocked = limits.paths;
@@ -124,7 +130,8 @@ function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, o
           "Not allowed ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "swarm-optional", children: "Optional" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: "swarm-avoid", value: avoid, onChange: (e) => setAvoid(e.target.value), maxLength: 2048, placeholder: "Don’t change the database schema", autoComplete: "off" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: "swarm-avoid", value: avoid, onChange: (e) => setAvoid(e.target.value), maxLength: 2048, placeholder: "Don’t change the database schema", autoComplete: "off" }),
+        sizeError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "swarm-error", children: sizeError }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "swarm-composer-section", disabled: busy || uncertain, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { children: "What it can open" }),
@@ -153,7 +160,7 @@ function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, o
       stale ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "swarm-error", children: "Reconnect to Guard before launching." }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-composer-footer", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "swarm-text-button", onClick: onClose, disabled: busy, children: "Cancel" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "submit", className: "swarm-button swarm-button--primary", disabled: busy || stale || !harness || !workspace.trim() || !goal.trim() || limitError !== null, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "submit", className: "swarm-button swarm-button--primary", disabled: busy || stale || !harness || !workspace.trim() || !goal.trim() || limitError !== null || sizeError !== null, children: [
           launchLabel,
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
         ] })
