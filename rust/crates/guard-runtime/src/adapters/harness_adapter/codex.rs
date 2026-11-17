@@ -15,9 +15,9 @@ use sha2::{Digest, Sha256};
 
 use super::files::{self, Doc};
 use super::{
-    codex_alternate_plan, codex_config_hooks, codex_files, codex_install_request, codex_live_read,
-    codex_live_state, codex_main_plan, codex_manifest_verify, codex_merge, codex_migration,
-    codex_publish, codex_servers, codex_sources, codex_spec, codex_uninstall,
+    codex_alternate_plan, codex_config_hooks, codex_failure, codex_files, codex_install_request,
+    codex_live_read, codex_live_state, codex_main_plan, codex_manifest_verify, codex_merge,
+    codex_migration, codex_publish, codex_servers, codex_sources, codex_spec, codex_uninstall,
     codex_uninstall_config, codex_uninstall_plan, common, hook_render, path_answer, path_text, Ctx,
     Failure, Spec, Step,
 };
@@ -64,6 +64,8 @@ pub(super) fn dispatch(
     ctx: &Ctx,
     fields: &Map<String, Value>,
 ) -> Step<Value> {
+    let hosted = codex_install_request::host_syntax(ctx, fields);
+    let fields = &*hosted;
     match op {
         "policy_path" => path_answer(&config_path(ctx)),
         "backup_path" => path_answer(&backup_path(ctx)),
@@ -90,8 +92,9 @@ pub(super) fn dispatch(
         "uninstall_plan" => codex_uninstall_plan::uninstall_plan(ctx, fields),
         "uninstall" => {
             let request = codex_install_request::complete_uninstall(ctx, fields)?;
-            super::codex_uninstall_op::uninstall(ctx, &request)
+            super::codex_uninstall_op::uninstall(ctx, &request).map(codex_failure::with_raise)
         }
+        "detect_legacy" => codex_install_request::detect_legacy(ctx, fields),
         "manifest_spec" => codex_spec::manifest_spec(ctx, fields),
         "live_hook_state" => {
             let spec_fields = codex_spec::with_spec(ctx, fields)?;
@@ -102,16 +105,17 @@ pub(super) fn dispatch(
             let spec_fields = codex_spec::with_spec(ctx, fields)?;
             codex_live_read::runtime_hooks_verified(ctx, &spec_fields)
         }
-        "publish_hooks" => codex_publish::publish_hooks(ctx, fields),
+        "publish_hooks" => codex_publish::publish_hooks(ctx, fields).map(codex_failure::with_raise),
         "install" => {
             let request = codex_install_request::complete(ctx, fields, true)?;
             let spec_fields = codex_spec::with_spec(ctx, &request)?;
-            super::codex_install::install(ctx, &spec_fields)
+            super::codex_install::install(ctx, &spec_fields).map(codex_failure::with_raise)
         }
         "install_plan" => {
             let request = codex_install_request::complete(ctx, fields, false)?;
             let spec_fields = codex_spec::with_spec(ctx, &request)?;
             super::codex_install_plan::install_plan(ctx, &spec_fields)
+                .map(codex_failure::with_raise)
         }
         _ => common(spec, op, ctx),
     }

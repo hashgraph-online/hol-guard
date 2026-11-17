@@ -13,18 +13,14 @@ from __future__ import annotations
 
 import base64
 import json
-import sys
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from .codex_hook_compatibility import python_bridge_argv
 from .codex_hook_integrity import hook_manifest_path
 from .codex_hook_manifest import CodexHookManifestSpec
-from .codex_hook_registration import legacy_binding_fields
-from .codex_hook_self_binding import short_path_fields
 from .config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
 from .harness.base import HarnessContext
 from .harness.native_harness import ask
@@ -32,13 +28,6 @@ from .harness.native_harness import ask
 if TYPE_CHECKING:
     from .runtime_transition import TransitionFile
 
-_LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
-    "HOL Guard checking Bash command",
-    "HOL Guard checking tool action",
-    "HOL Guard checking prompt",
-    "HOL Guard checking Codex approval request",
-    "HOL Guard checking tool result",
-}
 _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 _LIVE_STATE_TIMEOUT_SECONDS = 10.0
 # A spent budget still needs the runtime to read the files and decide.
@@ -241,20 +230,13 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
     )
 
 
-def _legacy_fields(context: HarnessContext, registration: _HookRegistration | None = None) -> dict[str, Any]:
-    """What an exact current bridge entry is matched against for legacy re-adoption."""
-
-    registration = registration or _hook_registration(context)
-    current_argv = list(registration.argv)
-    # python_bridge_argv keeps the object sequence it was given. This argv is
-    # a string command, so only those strings identify the legacy registration.
-    legacy_tail = [part for part in python_bridge_argv(current_argv)[1:] if isinstance(part, str)]
-    return legacy_binding_fields(
-        expected_bindings=json.loads(registration.bindings),
-        current_argv=current_argv,
-        legacy_argv=[sys.executable, *legacy_tail],
-        legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES,
-    )
+def _legacy_fields(context: HarnessContext) -> dict[str, Any]:
+    """What an exact current bridge entry is matched against for legacy re-adoption,
+    as the runtime builds it from this launch."""
+    legacy = _codex("detect_legacy", context, launch=_launch_fields(context)).get("legacy")
+    if not isinstance(legacy, dict):
+        raise ValueError("Harness adapter answer is malformed")
+    return legacy
 
 
 def _check_sources(
@@ -290,65 +272,52 @@ def _plan_file(item: Mapping[str, Any]) -> TransitionFile:
 def _ask_install_plan(
     context: HarnessContext, request: dict[str, Any], enroll_home: Path | None, op: str = "install_plan"
 ) -> dict[str, Any]:
-    """One ``install_plan`` (or whole ``install``) answer, asked again with
-    each reply it needs.
+    """One ``install_plan`` (or whole ``install``) answer.
 
     An enrolling plan may create the hook key, so it runs under the key's
-    ordinary writer, as the generation always has."""
+    ordinary writer, as the generation always has. The runtime names the
+    failure the answer ends in; this only raises it."""
     from .codex_hook_file_integrity import check_hook_validation_deadline
     from .codex_hook_integrity import _ordinary_hook_writer, hook_secret_path
-    from .native_transition_files import _budget, _exception, _package_roots, _replay
-    from .runtime_transition import TransitionError
+    from .native_transition_files import _budget, _package_roots, _replay
 
     request["package_roots"] = _package_roots()
     request["budget"] = _budget()
-    for _ in range(4):
-        check_hook_validation_deadline()
-        if enroll_home is None:
-            answer = ask(op, context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
-        else:
-            with _ordinary_hook_writer(enroll_home, hook_secret_path(enroll_home), actor="codex.authority-key"):
-                answer = ask(op, context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
-        reply = answer.get("reply")
-        if not isinstance(reply, Mapping):
-            break
+    check_hook_validation_deadline()
+    if enroll_home is None:
+        answer = ask(op, context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
     else:
+        with _ordinary_hook_writer(enroll_home, hook_secret_path(enroll_home), actor="codex.authority-key"):
+            answer = ask(op, context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
+    if isinstance(answer.get("reply"), Mapping):
         raise RuntimeError(f"{op} did not settle its replies")
     check_hook_validation_deadline()
     _replay(answer.get("events"), None, None)
-    if answer.get("conflict") is True:
-        raise TransitionError("adapter_preparation_generation_conflict")
-    if "fault" in answer:
-        raise _exception(answer["fault"])
     _raise_publication_error(answer)
-    if "retire_error" in answer:
-        failure = _exception(answer["retire_error"])
-        if answer.get("withdrawn") is not True:
-            raise RuntimeError(
-                "codex_hook_migration_rollback_failed: Guard could not fully restore Codex hook sources after "
-                "legacy JSON removal failed. Run `hol-guard install codex` to repair the installation."
-            ) from failure
-        raise failure
     return answer
 
 
 def _raise_publication_error(answer: Mapping[str, object]) -> None:
-    """Raise a ``publish_hooks`` error, chained to its rollback's when that failed too."""
-    error, rollback = answer.get("error"), answer.get("rollback_error")
-    if error is None:
+    """Raise the failure the runtime names in ``raise``, chained to its rollback's when that failed too."""
+    raised = answer.get("raise")
+    if not isinstance(raised, Mapping):
         return
-    failure = _publication_fault(error)
-    if rollback is not None:
-        rollback_error = _publication_fault(rollback)
-        raised = RuntimeError(
-            "Codex hook transaction failed and rollback could not be completed: "
-            f"{type(rollback_error).__name__}: {rollback_error}"
-        )
-        add_note = getattr(raised, "add_note", None)
-        if callable(add_note):
-            add_note(f"rollback error: {rollback_error!r}")
-        raise raised from failure
-    raise failure
+    cause = raised.get("cause")
+    if isinstance(raised.get("runtime"), str):
+        raise RuntimeError(raised["runtime"]) from _publication_fault(cause)
+    failure = _publication_fault(raised.get("fault"))
+    rollback = raised.get("rollback")
+    if rollback is None:
+        raise failure
+    rollback_error = _publication_fault(rollback)
+    error = RuntimeError(
+        "Codex hook transaction failed and rollback could not be completed: "
+        f"{type(rollback_error).__name__}: {rollback_error}"
+    )
+    add_note = getattr(error, "add_note", None)
+    if callable(add_note):
+        add_note(f"rollback error: {rollback_error!r}")
+    raise error from failure
 
 
 def _live_budget() -> tuple[float, bool]:
@@ -374,7 +343,6 @@ def live_hook_ask(op: str, context: HarnessContext) -> dict[str, Any]:
         "launch": _launch_fields(context),
         "package_roots": [str(root) for root in _python_package_roots()],
         "budget_spent": spent,
-        **short_path_fields(),
     }
     return dict(ask(op, context, harness="codex", timeout_seconds=timeout, **request))
 
@@ -414,7 +382,6 @@ def verify_manifest_state(
         manifest_text=captured_text,
         package_roots=[str(root) for root in _python_package_roots()],
         budget_spent=spent,
-        **short_path_fields(),
     )
     state = answer.get("state")
     if not isinstance(state, dict):

@@ -46,6 +46,7 @@ mod codex;
 mod codex_alternate_plan;
 mod codex_config_hooks;
 mod codex_detect_legacy;
+mod codex_failure;
 mod codex_files;
 mod codex_hook_state;
 mod codex_install;

@@ -91,11 +91,48 @@ fn legacy_fields(ctx: &Ctx, registration: &Registration) -> Step<[(&'static str,
     ])
 }
 
+/// The command syntax a native owner check splits with: this host's. A field
+/// the request names is kept.
+pub(super) fn host_syntax<'a>(
+    ctx: &Ctx,
+    fields: &'a Map<String, Value>,
+) -> Cow<'a, Map<String, Value>> {
+    if fields.contains_key("windows") && fields.contains_key("long_paths") {
+        return Cow::Borrowed(fields);
+    }
+    let mut request = fields.clone();
+    fill(&mut request, "windows", json!(ctx.windows));
+    fill(&mut request, "long_paths", json!({}));
+    Cow::Owned(request)
+}
+
+/// `detect_legacy`: the legacy-adoption block `codex_detect` matches hook
+/// handlers against, built from the `launch` a caller sent.
+pub(super) fn detect_legacy(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    let launch = launch_of(fields)?.ok_or(Failure::Invalid)?;
+    let mut legacy = Map::new();
+    for (key, value) in legacy_fields(ctx, &registration(ctx, launch)?)? {
+        legacy.insert(key.to_owned(), value);
+    }
+    legacy.insert("windows".into(), json!(ctx.windows));
+    legacy.insert("long_paths".into(), json!({}));
+    Ok(json!({ "legacy": legacy }))
+}
+
 fn launch_of(fields: &Map<String, Value>) -> Step<Option<&Map<String, Value>>> {
     match fields.get("launch") {
         None => Ok(None),
         Some(Value::Object(launch)) => Ok(Some(launch)),
         Some(_) => Err(Failure::Invalid),
+    }
+}
+
+/// `install_fields`: the working directory and the Guard home the launch
+/// runs under; the caller names only its package root.
+fn fill_install(ctx: &Ctx, launch: &Map<String, Value>, request: &mut Map<String, Value>) {
+    fill(request, "cwd", json!(ctx.cwd.as_deref().map(path_text)));
+    if let Some(home) = launch.get("runtime_guard_home") {
+        fill(request, "guard_home", home.clone());
     }
 }
 
@@ -142,6 +179,7 @@ pub(super) fn complete<'a>(
         json!(pairs.get(1).map(|(config, _)| config)),
     );
     fill(&mut request, "managed", json!(registration.groups));
+    fill_install(ctx, launch, &mut request);
     for (key, value) in legacy_fields(ctx, &registration)? {
         fill(&mut request, key, value);
     }
@@ -167,6 +205,7 @@ pub(super) fn complete_uninstall<'a>(
     let legacy = legacy_fields(ctx, &registration(ctx, launch)?)?;
     let mut request = fields.clone();
     request.remove("launch");
+    fill_install(ctx, launch, &mut request);
     for (key, value) in legacy {
         fill(&mut request, key, value);
     }

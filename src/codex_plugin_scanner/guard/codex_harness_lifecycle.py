@@ -30,10 +30,9 @@ from .codex_harness_client import (
     _codex,
     _hook_manifest_spec,
     _launch_fields,
-    _legacy_fields,
     _plan_file,
+    _raise_publication_error,
     _reply_text,
-    _runtime_guard_home,
     codex_paths,
 )
 from .codex_hook_integrity import hook_authority_receipt_path, hook_manifest_path
@@ -45,7 +44,7 @@ from .codex_hook_manifest import (
     manifest_bindings as _manifest_bindings,
 )
 from .codex_hook_registration import codex_doctor_result
-from .codex_hook_self_binding import install_fields, short_path_fields
+from .codex_hook_self_binding import install_package_root
 from .codex_hook_trust import apply_codex_hook_trust_doctor
 from .codex_remote_client import (
     guarded_codex_launch_command,
@@ -212,7 +211,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             authenticated_config=str(paths.config),
             cwd=os.getcwd(),
         )
-        legacy: dict[str, object] = {**_legacy_fields(context), **short_path_fields()}
+        legacy = _codex("detect_legacy", context, launch=_launch_fields(context))["legacy"]
         payload = native_adapter_detection_payload("codex_detect", {**request, "legacy": legacy})
         artifacts, found_paths, warnings = detection_from_payload(payload)
         command_available = _command_available(context)
@@ -274,8 +273,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                 "create_key": enroll,
             },
             "interpreter": shim_interpreter(),
-            **install_fields(_runtime_guard_home(context), None),
-            **short_path_fields(),
+            "package_root": str(install_package_root()),
         }
         return request, detection
 
@@ -379,7 +377,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         receipt and manifest removals are journaled as they are written, and
         the hook key goes once no manifest uses it."""
         from .codex_hook_integrity import hook_key_refusal
-        from .native_transition_files import _budget, _exception, _package_roots, _replay
+        from .native_transition_files import _budget, _package_roots, _replay
 
         hook_config_path = self._hook_config_path(context)
         owned = _manifest_bindings(load_hook_manifest_baseline(_hook_manifest_spec(context)))
@@ -393,13 +391,11 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             "launch": _launch_fields(context),
             "package_roots": _package_roots(),
             "budget": _budget(),
-            **install_fields(_runtime_guard_home(context), None),
-            **short_path_fields(),
+            "package_root": str(install_package_root()),
         }
         answer = _codex("uninstall", context, **request)
         _replay(answer.get("events"), None, None)
-        if "fault" in answer:
-            raise _exception(answer["fault"])
+        _raise_publication_error(answer)
         if "key_error" in answer:
             raise hook_key_refusal(str(answer["key_error"]))
         from .codex_harness_client import _install_manifest
