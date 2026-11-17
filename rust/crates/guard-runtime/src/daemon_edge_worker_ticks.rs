@@ -1,6 +1,7 @@
 //! The background passes the daemon runs itself rather than as Guard
 //! library calls: the runtime heartbeat, the idle-shutdown hold and storage
-//! maintenance, which also rotates `daemon.log`. Each answers what its
+//! maintenance, which also rotates `daemon.log` and retires leftover Guard
+//! processes (`orphaned_worker_reap`). Each answers what its
 //! `workers/ticks.py` call did.
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -20,6 +21,8 @@ const UPLOADED_CLOUD_EVENT_RETAIN_DAYS: i64 = 7;
 /// Maintenance gives way to any request holding the store.
 const STORAGE_BUSY_MS: u64 = 25;
 const HOUSEKEEPING_BUSY_MS: u64 = 1;
+/// The longest a maintenance pass spends listing and stopping leftovers.
+const REAP_BUDGET: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// Runs `call` natively when the daemon owns it: `None` for a call that
 /// still goes to the Guard library, otherwise the pass's answer.
@@ -115,6 +118,10 @@ pub(super) fn maintain(reads: &NativeReads, config: &ReadConfig) -> bool {
     let now = now_micros();
     // The log rotates whatever the evidence settings say.
     crate::storage_retention::daemon_log::rotate(config.guard_home(), now);
+    // Leftover workers, daemons of deleted homes and host-less relays of a
+    // removed runtime are retired on every pass, not only when a launcher
+    // asks for background maintenance.
+    let _ = crate::orphaned_worker_reap::reap_from_daemon(std::process::id(), REAP_BUDGET);
     let Ok((retain_days, receipt_limit, event_limit)) =
         crate::guard_config_load::evidence_retention(config.guard_home())
     else {

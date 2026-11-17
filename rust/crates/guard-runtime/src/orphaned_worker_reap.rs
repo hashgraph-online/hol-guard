@@ -17,6 +17,10 @@
 //! the start token captured for that worker, so a reused pid is skipped. The
 //! answer lists the selected, signalled and forced pids. Off Unix the command
 //! answers `orphaned_worker_reap_unsupported`.
+//!
+//! The same pass also retires the Guard processes that serve nothing any
+//! more (`orphaned_worker_reap_stale.rs`): daemons whose Guard home is gone
+//! and host-less `mcp-relay` processes whose runtime was removed.
 
 // The selection and stop loop only run on Unix; their tests run everywhere.
 #![cfg_attr(not(unix), allow(dead_code))]
@@ -78,6 +82,11 @@ pub(crate) trait Host {
     fn start_token(&self, pid: u32) -> Option<String>;
     /// Signal the pid's own process group, else the pid.
     fn signal(&self, pid: u32, stop: Stop);
+    /// Whether the pid belongs to the user this process runs as.
+    fn owned_by_caller(&self, pid: u32) -> bool;
+    /// Whether reading `path` answers "not found". Any other failure, and a
+    /// link, count as present.
+    fn path_absent(&self, path: &str) -> bool;
     fn now(&self) -> Instant;
     fn sleep(&self, duration: Duration);
 }
@@ -136,7 +145,14 @@ pub(crate) fn reap<H: Host>(host: &H, excluded: &[u32], budget: Option<Duration>
     let Some(output) = host.listing(listing_timeout) else {
         return json!({ "listed": false, "selected": [], "signalled": [], "forced": [] });
     };
-    let workers = orphaned_daemon_workers(&parse_process_snapshot(&output), excluded);
+    let processes = parse_process_snapshot(&output);
+    let mut workers = orphaned_daemon_workers(&processes, excluded);
+    for process in stale::stale_guard_processes(host, &processes, excluded) {
+        if !workers.iter().any(|worker| worker.pid == process.pid) {
+            workers.push(process);
+        }
+    }
+    workers.sort_by_key(|process| process.pid);
     let grace = remaining(host).map_or(GRACE, |left| left.min(GRACE));
     let (signalled, forced) = terminate(host, &workers, excluded, grace);
     json!({
@@ -438,9 +454,25 @@ pub(crate) fn deliver(
     signal_pid();
 }
 
+/// Run one bounded reaping pass from inside the daemon `own_pid`, so
+/// leftovers are retired on the daemon's maintenance tick and not only when
+/// a launcher asks for background maintenance.
+#[cfg(unix)]
+pub(crate) fn reap_from_daemon(own_pid: u32, budget: Duration) -> Value {
+    reap(&system::SystemHost, &[own_pid], Some(budget))
+}
+
+#[cfg(not(unix))]
+pub(crate) fn reap_from_daemon(_own_pid: u32, _budget: Duration) -> Value {
+    json!({ "error": "orphaned_worker_reap_unsupported" })
+}
+
 #[cfg(unix)]
 #[path = "orphaned_worker_reap_system.rs"]
 mod system;
+
+#[path = "orphaned_worker_reap_stale.rs"]
+mod stale;
 
 #[cfg(test)]
 #[path = "orphaned_worker_reap_tests.rs"]

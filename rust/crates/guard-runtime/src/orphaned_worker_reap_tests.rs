@@ -187,6 +187,8 @@ struct FakeHost {
     dead: RefCell<Vec<u32>>,
     sent: RefCell<Vec<Sent>>,
     listing_timeouts: RefCell<Vec<Duration>>,
+    absent_paths: Vec<String>,
+    foreign: Vec<u32>,
     started: Instant,
     elapsed: Cell<Duration>,
 }
@@ -201,6 +203,8 @@ impl FakeHost {
             dead: RefCell::default(),
             sent: RefCell::default(),
             listing_timeouts: RefCell::default(),
+            absent_paths: Vec::new(),
+            foreign: Vec::new(),
             started: Instant::now(),
             elapsed: Cell::new(Duration::ZERO),
         }
@@ -261,6 +265,14 @@ impl Host for FakeHost {
         if stop == Stop::Kill || self.dies_on_terminate.contains(&pid) {
             self.dead.borrow_mut().push(pid);
         }
+    }
+
+    fn owned_by_caller(&self, pid: u32) -> bool {
+        !self.foreign.contains(&pid)
+    }
+
+    fn path_absent(&self, path: &str) -> bool {
+        self.absent_paths.iter().any(|absent| absent == path)
     }
 
     fn now(&self) -> Instant {
