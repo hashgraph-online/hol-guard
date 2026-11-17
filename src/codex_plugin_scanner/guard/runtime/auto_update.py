@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from ..cli.update_commands import build_guard_update_status_payload, run_guard_update
 
 if TYPE_CHECKING:
-    from ..adapters.base import HarnessContext
+    from ..harness.base import HarnessContext
     from ..store import GuardStore
 
 AUTO_UPDATE_THROTTLE_HOURS = 6

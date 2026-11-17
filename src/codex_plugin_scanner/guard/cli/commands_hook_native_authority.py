@@ -11,8 +11,8 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any, TextIO
 
-from ..adapters.base import HarnessContext
-from ..adapters.bounded_cli_hook_failure import failure_payload
+from ..harness.base import HarnessContext
+from ..harness.bounded_cli_hook_failure import failure_payload
 from ..hook_deadline import RuntimeHookDeadline
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
 from ..hook_review.hook_availability_policy import (
@@ -77,7 +77,7 @@ def _bridge_hook_output(
     """
 
     if canonical == "muse":
-        from ..adapters.muse_hook_render import muse_bridge_response
+        from ..harness.muse_hook_render import muse_bridge_response
 
         return muse_bridge_response(response, event_name=event_name, guard_home=guard_home, deadline=deadline)
     if canonical == "hermes":

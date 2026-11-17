@@ -10,9 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import claude_code, get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
+from codex_plugin_scanner.guard import claude_hook_entry as claude_code
+from codex_plugin_scanner.guard import native_caller
+from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
+from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
+from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -72,7 +75,7 @@ def _handler_argv(handler: dict[str, object]) -> tuple[str, ...]:
 
 def test_claude_detect_marks_local_cli_install_as_available_when_not_on_path(monkeypatch, tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
     actual_home = tmp_path / "actual-home"
     local_claude = actual_home / ".claude" / "local" / "claude"
     local_claude.parent.mkdir(parents=True, exist_ok=True)
@@ -89,7 +92,7 @@ def test_claude_detect_marks_local_cli_install_as_available_when_not_on_path(mon
 
 def test_claude_launch_command_uses_local_cli_install_when_not_on_path(monkeypatch, tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
     actual_home = tmp_path / "actual-home"
     local_claude = actual_home / ".claude" / "local" / "claude"
     local_claude.parent.mkdir(parents=True, exist_ok=True)
@@ -107,7 +110,7 @@ def test_claude_launch_command_uses_local_cli_install_when_not_on_path(monkeypat
 
 def test_claude_detect_ignores_non_executable_local_cli_candidate_when_not_on_path(monkeypatch, tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
     local_binary = tmp_path / "actual-home" / ".claude" / "local" / "claude"
     local_binary.parent.mkdir(parents=True, exist_ok=True)
     local_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -124,7 +127,7 @@ def test_claude_detect_ignores_non_executable_local_cli_candidate_when_not_on_pa
 
 def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idempotent(tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
 
     adapter.install(context)
     adapter.install(context)
@@ -176,12 +179,13 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
 def test_get_adapter_accepts_claude_alias():
     adapter = get_adapter("claude")
 
-    assert isinstance(adapter, ClaudeCodeHarnessAdapter)
+    assert isinstance(adapter, NativeHarnessAdapter)
+    assert adapter.harness == "claude-code"
 
 
 def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
     settings_path = context.home_dir / ".claude" / "settings.json"
     _write_json(
         settings_path,
@@ -257,7 +261,6 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
 
 def test_claude_refresh_adds_the_powershell_tool_to_an_older_matcher(tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
     settings_path = context.home_dir / ".claude" / "settings.json"
     older_matcher = "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
     guard_hook = {
@@ -278,7 +281,9 @@ def test_claude_refresh_adds_the_powershell_tool_to_an_older_matcher(tmp_path):
     claude_code.guard_daemon_url_for_home = lambda _guard_home: "http://127.0.0.1:5888"
     claude_code.load_guard_daemon_url = lambda _guard_home: "http://127.0.0.1:5999"
     try:
-        adapter.refresh_runtime_hook_urls(context)
+        claude_code.refresh_claude_hooks(
+            home_dir=context.home_dir, workspace_dir=context.workspace_dir, guard_home=context.guard_home
+        )
     finally:
         claude_code.guard_daemon_url_for_home = original_guard_daemon_url_for_home
         claude_code.load_guard_daemon_url = original_load_guard_daemon_url
@@ -291,7 +296,6 @@ def test_claude_refresh_adds_the_powershell_tool_to_an_older_matcher(tmp_path):
 
 def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
     settings_path = context.home_dir / ".claude" / "settings.json"
     _write_json(
         settings_path,
@@ -321,7 +325,9 @@ def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
     claude_code.guard_daemon_url_for_home = lambda _guard_home: "http://127.0.0.1:5888"
     claude_code.load_guard_daemon_url = lambda _guard_home: "http://127.0.0.1:5999"
     try:
-        adapter.refresh_runtime_hook_urls(context)
+        claude_code.refresh_claude_hooks(
+            home_dir=context.home_dir, workspace_dir=context.workspace_dir, guard_home=context.guard_home
+        )
     finally:
         claude_code.guard_daemon_url_for_home = original_guard_daemon_url_for_home
         claude_code.load_guard_daemon_url = original_load_guard_daemon_url
@@ -337,7 +343,7 @@ def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
 
 def test_claude_install_rejects_symlinked_settings_file(tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
     outside_settings = tmp_path / "outside-settings.json"
     outside_settings.write_text("{}", encoding="utf-8")
     settings_path = context.home_dir / ".claude" / "settings.json"
@@ -356,12 +362,11 @@ def test_claude_shell_command_uses_list2cmdline_on_windows():
 
 
 def test_claude_daemon_hook_command_without_a_native_runtime_asks_for_repair(tmp_path, monkeypatch):
-    monkeypatch.setattr(claude_code, "native_hook_bridge_executable", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(native_caller, "_native_runtime", lambda: None)
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
 
     with pytest.raises(RuntimeError, match="hol-guard repair"):
-        adapter._daemon_hook_command_parts(context)
+        claude_code.claude_argv("daemon", context)
 
 
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):
@@ -371,7 +376,7 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
         workspace_dir=initial_context.workspace_dir,
         guard_home=tmp_path / "different-guard-home",
     )
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
 
     adapter.install(initial_context)
     adapter.install(changed_context)
@@ -395,7 +400,7 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
 
 def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
     settings_path = context.home_dir / ".claude" / "settings.json"
     _write_json(
         settings_path,
@@ -432,9 +437,9 @@ def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
 
 def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
     settings_path = context.home_dir / ".claude" / "settings.json"
-    legacy_command = adapter._hook_command(context)
+    legacy_command = claude_code.claude_hook_command(context)
     _write_json(
         settings_path,
         {
@@ -461,7 +466,7 @@ def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
 
 def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
     _write_json(
         context.home_dir / ".claude" / "settings.json",
         {
@@ -543,7 +548,7 @@ def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path
 
 def test_claude_detect_keeps_mcp_server_when_name_collides_with_claude_md_id(tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
     (context.workspace_dir / "CLAUDE.md").write_text("# workspace instructions\n", encoding="utf-8")
     _write_json(
         context.workspace_dir / ".mcp.json",
@@ -571,7 +576,7 @@ def test_claude_detect_keeps_mcp_server_when_name_collides_with_claude_md_id(tmp
 
 def test_claude_detect_keeps_root_claude_md_when_rules_stem_collides(tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
     colliding_rule = context.workspace_dir / ".claude" / "rules" / "claude-md.md"
     colliding_rule.parent.mkdir(parents=True, exist_ok=True)
     colliding_rule.write_text("# benign rule\n", encoding="utf-8")
@@ -594,7 +599,7 @@ def test_claude_detect_keeps_root_claude_md_when_rules_stem_collides(tmp_path):
 )
 def test_claude_detect_tolerates_unreadable_markdown_artifacts(tmp_path):
     context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
+    adapter = get_adapter("claude-code")
     skill_path = context.workspace_dir / ".claude" / "skills" / "review" / "SKILL.md"
     skill_path.parent.mkdir(parents=True, exist_ok=True)
     skill_path.write_text("---\nname: review\ndescription: Review skill\n---\n", encoding="utf-8")
@@ -613,7 +618,7 @@ def test_claude_workspace_install_writes_global_settings_only(tmp_path: Path) ->
     # Deliberate design: Guard hooks live in ~/.claude/settings.json; a workspace
     # only scopes the hook URL. Pin it and ensure the manifest says so.
     context = _build_context(tmp_path)
-    manifest = ClaudeCodeHarnessAdapter().install(context)
+    manifest = get_adapter("claude-code").install(context)
 
     assert (context.home_dir / ".claude" / "settings.json").is_file()
     assert not (context.workspace_dir / ".claude").exists()

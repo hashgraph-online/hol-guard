@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS, HarnessProtectionContract, contract_for
+from codex_plugin_scanner.guard.harness.contracts import HARNESS_CONTRACTS, HarnessProtectionContract, contract_for
 
 
 class TestHarnessProtectionContract:
@@ -156,7 +156,7 @@ class TestContractAliasesMatchAdapter:
     """All install_aliases in every contract must be accepted by get_adapter()."""
 
     def test_all_install_aliases_are_resolvable(self) -> None:
-        from codex_plugin_scanner.guard.adapters import get_adapter
+        from codex_plugin_scanner.guard.harness.registry import get_adapter
 
         for contract in HARNESS_CONTRACTS:
             for alias in contract.install_aliases:

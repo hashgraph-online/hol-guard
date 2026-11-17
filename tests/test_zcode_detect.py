@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import get_adapter
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from tests.zcode_test_support import write_cli_config as _write_cli_config
 from tests.zcode_test_support import zcode_context as _ctx
 

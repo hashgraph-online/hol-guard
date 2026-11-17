@@ -6,11 +6,21 @@ import json
 import sqlite3
 from pathlib import Path
 
-from ..adapters.base import HarnessContext
-from ..adapters.native_harness import ask
-from ..adapters.opencode_runtime import plugin_render_args, refresh_opencode_proxy_launchers
+from ..harness.base import HarnessContext
+from ..harness.native_harness import ask
 from ..store import GuardStore
 from .managed_install_context import managed_install_context as _repair_context_from_managed_install
+
+
+def refresh_opencode_proxy_launchers(context: HarnessContext, *, warnings: list[str] | None = None) -> int:
+    """Refresh verified Guard CLI prefixes without changing server or tool authority.
+
+    The runtime holds the OpenCode config lock across the reads and writes.
+    """
+    answer = ask("refresh_apply", context, harness="opencode")
+    if warnings is not None:
+        warnings.extend(str(warning) for warning in answer["warnings"])
+    return int(answer["refreshed"])
 
 
 def _refresh_opencode_pretool_plugin(
@@ -40,7 +50,7 @@ def _refresh_opencode_pretool_plugin(
     except (OSError, RuntimeError, ValueError) as error:
         companion_warning = f"Could not refresh OpenCode MCP companion launchers during update: {error}"
     try:
-        refresh = ask("plugin_refresh", repair_context, harness="opencode", plugin=plugin_render_args(repair_context))
+        refresh = ask("plugin_refresh", repair_context, harness="opencode")
     except (OSError, RuntimeError, ValueError) as error:
         return f"Could not inspect OpenCode pretool plugin during update: {error}"
     if refresh.get("current") is True:

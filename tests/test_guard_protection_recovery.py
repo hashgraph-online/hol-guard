@@ -9,8 +9,6 @@ from pathlib import Path
 import pytest
 
 from ci.native_daemon_harness import NativeGuardDaemon
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.approvals import _live_hook_verification
 from codex_plugin_scanner.guard.cli.install_commands import (
     _grok_hook_command_is_guard,
@@ -22,6 +20,8 @@ from codex_plugin_scanner.guard.cli.native_install_checks import grok_runtime_ho
 from codex_plugin_scanner.guard.cloud_control.server_control_connect_flow import (
     _repair_command_activity_persistence_health,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.managed_install_proof import (
     bind_managed_install_proof,
     verify_managed_install_proof,

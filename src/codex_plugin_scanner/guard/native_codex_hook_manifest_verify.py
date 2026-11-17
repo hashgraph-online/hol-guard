@@ -17,7 +17,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from . import codex_hook_file_integrity as integrity
-from .codex_hook_command_line import hook_commands_use_windows_syntax, short_token_long_paths
+from .codex_hook_command_line import hook_commands_use_windows_syntax
 from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_file_integrity import CodexHookIntegrityError, active_hook_validation_deadline
 from .native_context import _resolve_existing_digest_home, ensure_resident_prerequisite
@@ -144,20 +144,13 @@ def _interpreter_spellings(manifest: Mapping[str, object]) -> dict[str, object]:
             pass
         if integrity._is_installed_python_package_file(Path(spelling)):
             installed.append(spelling)
-    commands: list[str] = []
-    events = manifest.get("events")
-    for binding in events if isinstance(events, list) else ():
-        handler = binding.get("handler") if isinstance(binding, dict) else None
-        command = handler.get("command") if isinstance(handler, dict) else None
-        if isinstance(command, str):
-            commands.append(command)
-    # The resident splits each handler command; only this host can look up an 8.3 name's long form.
+    # The resident splits each handler command and looks up an 8.3 name's long form itself.
     windows = hook_commands_use_windows_syntax()
     return {
         "canonical_paths": canonical,
         "installed_python_package_files": installed,
         "windows": windows,
-        "long_paths": short_token_long_paths(commands) if windows else {},
+        "long_paths": {},
     }
 
 

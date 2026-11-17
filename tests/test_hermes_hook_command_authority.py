@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 
 
 @pytest.mark.parametrize("cached_command", [["sh", "-c", "echo untrusted"], ["--eval=untrusted"], [], None])
@@ -21,7 +21,7 @@ def test_registration_regenerates_command_instead_of_trusting_cache(
     home = tmp_path / "home with spaces"
     home.mkdir()
     context = HarnessContext(home, None, home / ".hol-guard")
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     expected = adapter._hook_argv(context)  # pyright: ignore[reportPrivateUsage]
     cache = context.guard_home / "hermes" / "pretool-hook.json"
     cache.parent.mkdir(parents=True)

@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from ..adapters.base import HarnessAdapter, HarnessContext
+from ..harness.base import HarnessAdapter, HarnessContext
 from ..store import GuardStore
 from .local_runtime_fallbacks import best_effort_access_token
 
 
 def get_adapter(harness: str) -> HarnessAdapter:
-    from ..adapters import get_adapter as _get_adapter
+    from ..harness.registry import get_adapter as _get_adapter
 
     return _get_adapter(harness)
 

@@ -9,9 +9,9 @@ from typing import Any, TypedDict, TypeGuard, cast
 
 from ...models import ScanOptions
 from ..action_lattice import is_guard_action as _is_guard_action
-from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateGrant
 from ..config import GuardConfig
+from ..harness.base import HarnessContext
 from ..models import (
     DECISION_SCOPE_VALUES,
     DecisionScope,
@@ -455,7 +455,7 @@ def _persist_detected(
 def detect_all(context: HarnessContext) -> list[HarnessDetection]:
     """Run detection across all adapters."""
 
-    from ..adapters import list_adapters
+    from ..harness.registry import list_adapters
 
     return [adapter.detect(context) for adapter in list_adapters()]
 
@@ -463,7 +463,7 @@ def detect_all(context: HarnessContext) -> list[HarnessDetection]:
 def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
     """Detect a single harness."""
 
-    from ..adapters import get_adapter
+    from ..harness.registry import get_adapter
 
     return get_adapter(harness).detect(context)
 

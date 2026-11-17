@@ -14,13 +14,13 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from ..adapters.base import HarnessContext
+from ..harness.base import HarnessContext
 from ..native_runner_authority import NativeRunnerAuthorityError
 
 
 def claude_settings_target(context: HarnessContext) -> dict[str, object]:
     """The native answer for where Claude Code hooks go, shown before anything is written."""
-    from ..adapters.native_harness import ask
+    from ..harness.native_harness import ask
 
     try:
         return ask("install_target", context, harness="claude-code")

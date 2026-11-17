@@ -1,17 +1,18 @@
 """A retained receipt supplies exact authenticated bytes, never a repair grant."""
 
 import json
-import sys
 import time
 from pathlib import Path
 
 import pytest
 import tomllib
 
+from codex_plugin_scanner.guard import codex_harness_client as adapter
+from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
 from codex_plugin_scanner.guard import codex_hook_integrity as integrity
 from codex_plugin_scanner.guard import codex_hook_manifest as manifests
 from codex_plugin_scanner.guard import codex_hook_recovery as recovery
-from codex_plugin_scanner.guard.adapters import codex as adapter
+from codex_plugin_scanner.guard import native_caller
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline
 
 from .test_codex_hook_recovery import installed  # noqa: F401 -- shared isolated fixture
@@ -249,16 +250,16 @@ def test_signed_repair_file_inverse_restores_missing_manifest_state(
 
 @pytest.fixture
 def retained_installation(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
 
     context = HarnessContext(
         home_dir=tmp_path / "home", guard_home=tmp_path / "guard-home", workspace_dir=None, home_override_explicit=True
     )
     monkeypatch.setenv("HOME", str(context.home_dir))
     monkeypatch.setenv("USERPROFILE", str(context.home_dir))
-    source_root = Path(adapter.__file__).resolve().parents[3]
+    source_root = Path(adapter.__file__).resolve().parents[2]
     adapter_relative = Path(adapter.__file__).relative_to(source_root)
-    sources = {path for role, path in adapter._hook_packaged_file_paths(Path(sys.executable)) if role != "bridge"} | {
+    sources = {path for role, path in adapter._hook_manifest_spec(context).packaged_file_paths if role != "bridge"} | {
         Path(adapter.__file__)
     }
     bridges = []
@@ -270,7 +271,8 @@ def retained_installation(tmp_path, monkeypatch):
             destination.write_bytes(source.read_bytes())
             destination.chmod(0o644)
         monkeypatch.setattr(adapter, "__file__", str(root / adapter_relative))
-        adapter.CodexHarnessAdapter().install(context)
+        monkeypatch.setattr(native_caller, "__file__", str(root / "codex_plugin_scanner/guard/native_caller.py"))
+        adapter_lifecycle.CodexHarnessAdapter().install(context)
         bridges.append(root / "codex_plugin_scanner/guard/codex_hook_runtime_trust.py")
     return context, bridges
 
@@ -309,7 +311,7 @@ def test_retained_artifact_loss_refuses_repair_without_publishing(retained_insta
 
 @pytest.mark.usefixtures("frozen_codex_contract")
 def test_frozen_retained_repair_pins_both_physical_executables(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionError
 
     context = HarnessContext(
@@ -322,7 +324,7 @@ def test_frozen_retained_repair_pins_both_physical_executables(tmp_path, monkeyp
         executable.write_bytes(b"generated frozen executable identity")
         executable.chmod(0o700)
         monkeypatch.setattr(adapter.sys, "executable", str(executable))
-        adapter.CodexHarnessAdapter().install(context)
+        adapter_lifecycle.CodexHarnessAdapter().install(context)
         executables.append(executable)
     config = context.home_dir / ".codex/config.toml"
     manifest = integrity.hook_manifest_path(context.guard_home, config)

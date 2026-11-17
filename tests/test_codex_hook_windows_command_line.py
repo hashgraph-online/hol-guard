@@ -9,11 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import codex_hook_command_line
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard.codex_hook_bridge_runtime import decode_bridge_config_argument
-from codex_plugin_scanner.guard.codex_hook_command_line import short_path_facts, short_token_long_paths
 from codex_plugin_scanner.guard.codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS
 from codex_plugin_scanner.guard.codex_hook_registration import (
     exact_legacy_hook_bindings,
@@ -23,6 +20,7 @@ from codex_plugin_scanner.guard.codex_hook_registration import (
     require_codex_hook_owner,
 )
 from codex_plugin_scanner.guard.frozen_runtime_commands import FROZEN_CODEX_BRIDGE_ARG
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 _PYTHON = r"C:\Users\tester\.venv\Scripts\python.exe"
 _SPACED_PYTHON = r"C:\Program Files\HOL Guard's\.venv\Scripts\python.exe"
@@ -108,10 +106,7 @@ def _hooks(command: str) -> dict[str, object]:
 @pytest.mark.parametrize("windows", [False, True])
 def test_hook_command_round_trips_argv_and_json(windows: bool) -> None:
     argv = _argv(windows=windows)
-    command = _rendered(argv, windows=windows)
-
     assert json.loads(decode_bridge_config_argument(argv[-1])) == _CONFIG
-    assert short_token_long_paths([command]) == {}
 
 
 def test_the_config_argument_is_plain_json_on_posix_and_a_plain_token_on_windows() -> None:
@@ -121,58 +116,12 @@ def test_the_config_argument_is_plain_json_on_posix_and_a_plain_token_on_windows
     assert not any(character in command for character in "\"'%!^&|<>$`;")
 
 
-_SHORT_PYTHON = r"C:\PROGRA~1\HOLGUA~1\.venv\Scripts\python.exe"
-
-
-def _short_names(monkeypatch: pytest.MonkeyPatch, names: dict[str, str]) -> None:
-    longs = {short: long for long, short in names.items()}
-    monkeypatch.setattr(codex_hook_command_line, "_short_path", names.get)
-    monkeypatch.setattr(codex_hook_command_line, "_long_path", longs.get)
-
-
-def test_the_host_names_short_forms_for_the_native_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
-    _short_names(monkeypatch, {_SPACED_PYTHON: _SHORT_PYTHON})
-
-    assert short_path_facts([_SPACED_PYTHON, "C:\\no short"]) == {
-        _SPACED_PYTHON: [_SHORT_PYTHON, _SPACED_PYTHON],
-        "C:\\no short": [None, None],
-    }
-
-
-def test_windows_short_name_commands_parse_back_to_the_long_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    _short_names(monkeypatch, {_SPACED_PYTHON: _SHORT_PYTHON})
-    argv = [_SPACED_PYTHON, *_argv(windows=True)[1:]]
-    # Plain tokens read the same under PowerShell and under cmd.exe /C.
-    command = " ".join([_SHORT_PYTHON, *argv[1:]])
-
-    assert not any(character in command for character in "\"'%!^&|<>$`;")
-    assert short_token_long_paths([command]) == {_SHORT_PYTHON: _SPACED_PYTHON}
-
-    hooks = _hooks(command)
-    assert live_guard_codex_hooks_intercept(hooks, windows=True)
-    assert all(live_owned_codex_event_matches(hooks, windows=True).values())
-    with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
-        require_codex_hook_owner(command, ownership="unmanaged", windows=True)
-    expected = [{"event": event, "group": {"matcher": "Bash"}} for event in MANAGED_CODEX_HOOK_EVENTS]
-    bindings = exact_legacy_hook_bindings(
-        hooks,
-        expected_bindings=expected,
-        current_argv=argv,
-        legacy_argv=["C:\\old\\python.exe", *argv[1:]],
-        legacy_status_messages={_STATUS},
-        windows=True,
-    )
-    assert [binding["event"] for binding in bindings] == list(MANAGED_CODEX_HOOK_EVENTS)
-
-
-def test_windows_powershell_call_commands_parse_back(monkeypatch: pytest.MonkeyPatch) -> None:
-    _short_names(monkeypatch, {})
+def test_windows_powershell_call_commands_parse_back() -> None:
     argv = [_SPACED_PYTHON, *_argv(windows=True)[1:]]
     command = _powershell_call(argv)
 
     assert command.startswith("& 'C:\\Program Files\\HOL Guard''s\\")
     assert '"' not in command
-    assert short_token_long_paths([command]) == {}
     assert live_guard_codex_hooks_intercept(_hooks(command), windows=True)
 
 

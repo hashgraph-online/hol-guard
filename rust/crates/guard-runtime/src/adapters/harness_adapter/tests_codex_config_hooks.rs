@@ -11,7 +11,7 @@ fn managed(home: &Home) -> String {
     let answer = home.ask(
         "codex",
         "groups",
-        json!({"argv": BRIDGE, "env": "{}", "long_timeout": 85}),
+        json!({"argv": BRIDGE, "long_timeout": 85}),
     );
     answer["groups"].as_str().unwrap().to_owned()
 }

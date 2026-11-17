@@ -359,7 +359,7 @@ def test_cli_partial_results_exit_nonzero_and_name_the_error(
 def test_cli_reports_harnesses_whose_config_could_not_be_read(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
-    from codex_plugin_scanner.guard.adapters import harness_mcp_discovery
+    from codex_plugin_scanner.guard import mcp_discovery_client as harness_mcp_discovery
 
     def discovery(*_a: object, skipped: list[str], **_k: object) -> list[HarnessDetection]:
         skipped.append("codex")
@@ -462,7 +462,7 @@ def _patch_detections(
     *,
     path: str | None = None,
 ) -> None:
-    from codex_plugin_scanner.guard.adapters import harness_mcp_discovery
+    from codex_plugin_scanner.guard import mcp_discovery_client as harness_mcp_discovery
 
     monkeypatch.setattr(harness_mcp_discovery, "configured_harness_detections", lambda *_a, **_k: detections)
     if path is not None:

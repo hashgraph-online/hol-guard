@@ -5,9 +5,10 @@ from dataclasses import replace
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex as adapter
-from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer
+from codex_plugin_scanner.guard import codex_harness_client as adapter
+from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
 from codex_plugin_scanner.guard.codex_config import dump_toml
+from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer
 from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionError
 from tests import codex_plan_segments as segments
 
@@ -50,7 +51,7 @@ def test_backup_preparation_preserves_content_rule_without_writes(tmp_path, monk
 
 def test_existing_backup_retains_bytes_mode_and_inode(tmp_path, monkeypatch):
     context = _context(tmp_path, monkeypatch)
-    path = adapter.CodexHarnessAdapter._backup_path(context)
+    path = adapter_lifecycle.CodexHarnessAdapter._backup_path(context)
     path.parent.mkdir(parents=True)
     path.write_bytes(b"prior backup generation")
     path.chmod(0o640)
@@ -80,7 +81,8 @@ def _server(context, name, scope="global"):
 
 def test_mcp_renderer_refreshes_proxy_preserves_input_and_workspace_precedence(tmp_path, monkeypatch):
     context = replace(_context(tmp_path, monkeypatch), workspace_dir=tmp_path / "workspace")
-    monkeypatch.setattr(adapter, "_guard_python_executable", lambda: "/fixture/current-python")
+    # The native renderer relaunches the proxy with the caller stamp's interpreter.
+    monkeypatch.setattr("sys.executable", "/fixture/current-python")
     payload = {
         "model": "fixture",
         "mcp_servers": {
@@ -122,7 +124,7 @@ def test_signed_backup_inverse_preserves_prior_generation(
 ):
     runtime, plan, _bindings, _pointer = transition
     context = _context(tmp_path, monkeypatch)
-    path = adapter.CodexHarnessAdapter._backup_path(context)
+    path = adapter_lifecycle.CodexHarnessAdapter._backup_path(context)
     if existing:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"prior backup")

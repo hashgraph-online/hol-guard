@@ -72,6 +72,25 @@ fn try_lock(file: &mut fs::File) -> std::io::Result<bool> {
     }
 }
 
+/// The OpenCode config lock held by the caller's own handle for one native
+/// call, waiting up to `wait` while another Guard operation holds it. Answers
+/// `opencode_config_busy` when it stays busy and the lock file's refusal
+/// reason when the file cannot be opened safely.
+pub(crate) fn hold_opencode_lock(home_dir: &Path, wait: Duration) -> Result<fs::File, String> {
+    let (mut file, _) = opencode_lock(home_dir).map_err(|refusal| refusal.0)?;
+    let deadline = std::time::Instant::now() + wait;
+    loop {
+        match try_lock(&mut file) {
+            Ok(true) => return Ok(file),
+            Ok(false) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Ok(false) => return Err("opencode_config_busy".into()),
+            Err(error) => return Err(Refusal::lifecycle("lock", &error).0),
+        }
+    }
+}
+
 /// Drop every lease whose client process is gone, releasing its lock.
 fn reap(leases: &mut HashMap<String, Lease>) {
     leases.retain(|_, lease| {

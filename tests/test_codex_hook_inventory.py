@@ -9,8 +9,8 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
+from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_adapter_lifecycle
 from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
 from codex_plugin_scanner.guard.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_MALFORMED_GROUP,
@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE,
     enumerate_codex_hooks,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 
 def _write(path: Path, content: str) -> None:
@@ -243,7 +244,7 @@ def test_disabled_unmanaged_entry_and_metadata_only_event_are_preserved_without_
     trusted_interpreter = tmp_path / "trusted-python"
     _write(trusted_interpreter, "fixture interpreter\n")
     trusted_interpreter.chmod(0o700)
-    monkeypatch.setattr(codex_adapter, "_guard_python_executable", lambda: str(trusted_interpreter))
+    monkeypatch.setattr(codex_adapter.sys, "executable", str(trusted_interpreter))
     _write(
         hooks_path,
         json.dumps(
@@ -260,7 +261,7 @@ def test_disabled_unmanaged_entry_and_metadata_only_event_are_preserved_without_
         + "\n",
     )
 
-    codex_adapter.CodexHarnessAdapter().install(
+    codex_adapter_lifecycle.CodexHarnessAdapter().install(
         HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
     )
 

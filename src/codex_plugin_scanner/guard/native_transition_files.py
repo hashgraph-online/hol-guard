@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     from .runtime_transition import TransitionFile
 
 _TIMEOUT_SECONDS = 60.0
+# The budget a harness install or uninstall that publishes files gets.
+PUBLISH_TIMEOUT_SECONDS = _TIMEOUT_SECONDS
 _INVALID = "native_transition_invalid"
 # Three of the resident reaper's 50 ms passes over the leases.
 _RELEASE_GRACE_SECONDS = 0.15
@@ -102,10 +104,33 @@ def _ask(
     on_write: Callable[[TransitionFile], None] | None = None,
 ) -> Mapping[str, object]:
     from .native_runner_authority import native_runner_authority
+
+    request = {**request, **transition_context()}
+    answer = native_runner_authority("transition_files", request, timeout_seconds=_TIMEOUT_SECONDS)
+    return _settle(answer, files, on_write)
+
+
+def transition_context() -> dict[str, object]:
+    """The package roots and deadlines a ``transition_files`` request carries."""
+    return {"package_roots": _package_roots(), "budget": _budget()}
+
+
+def settle(answer: object) -> None:
+    """Journal and check a ``publish`` answer another native op ran."""
     from .runtime_transition import TransitionError
 
-    request = {**request, "package_roots": _package_roots(), "budget": _budget()}
-    answer = native_runner_authority("transition_files", request, timeout_seconds=_TIMEOUT_SECONDS)
+    if not isinstance(answer, Mapping):
+        raise TransitionError(_INVALID)
+    _settle(answer, None, None)
+
+
+def _settle(
+    answer: Mapping[str, object],
+    files: Sequence[TransitionFile] | None,
+    on_write: Callable[[TransitionFile], None] | None,
+) -> Mapping[str, object]:
+    from .runtime_transition import TransitionError
+
     _replay(answer.get("events"), files, on_write)
     error, restore_error = answer.get("error"), answer.get("restore_error")
     if restore_error is not None:

@@ -6,14 +6,14 @@
 //! Request fields: `pairs` (`[[config, hooks], ...]`, the main pair first),
 //! `contents` (`{path: base64 | null}` the caller captured for every path in
 //! `pairs`), the owner fields `main_plan` reads, `owned` and `managed`,
-//! `require_owners`, `servers` (`[{name, source_scope, config_path, entry}]`
-//! with each entry as JSON text), `relaunch` once the caller answered it,
+//! `require_owners`, `artifacts` (the detection's artifacts, private MCP
+//! metadata included), `relaunch` once the caller answered it,
 //! `generation` (the `publication_generation` request without its rendered
 //! config), `package_roots`, `budget` and `interpreter` (the launcher's).
 //!
 //! Answer: `{"files" (led by authority, manifest, receipt and config),
 //! "rendered_config", "backups", "shim_manifest",
-//! "backup_path", "migrated", "events"}`, `{"conflict": true}` when a file
+//! "backup_path", "migrated", "managed_servers", "skipped_servers", "events"}`, `{"conflict": true}` when a file
 //! changed after the caller read it, `{"fault": ..., "events"}` for a
 //! transition fault, or a `reply` the caller answers before asking again.
 
@@ -26,11 +26,14 @@ use super::codex_main_plan::main_plan;
 use super::codex_migration::{read_toml, render};
 use super::codex_servers::managed_mcp;
 use super::guard_shim;
+use super::managed_servers;
 use super::{Ctx, Failure, Step};
 use crate::codex_toml_read;
 
 const INVALID: &str = "native_transition_invalid";
 const CONFLICT: &str = "adapter_preparation_generation_conflict";
+/// The proxy subcommand each managed Codex server launches through.
+const PROXY: &str = "codex-mcp-proxy";
 
 /// Why a plan stopped short of an answer.
 enum Stop {
@@ -362,10 +365,7 @@ fn plan(ctx: &Ctx, transitions: &mut Transitions<'_>) -> Planned<Value> {
         .get("contents")
         .and_then(Value::as_object)
         .ok_or(Failure::Invalid)?;
-    let servers = fields
-        .get("servers")
-        .and_then(Value::as_array)
-        .ok_or(Failure::Invalid)?;
+    let (servers, managed_names, skipped) = managed_servers::wired(ctx, fields, PROXY)?;
     let ((main_config, main_hooks), alternates) = pairs.split_first().ok_or(Failure::Invalid)?;
 
     let main = main_plan(
@@ -399,10 +399,7 @@ fn plan(ctx: &Ctx, transitions: &mut Transitions<'_>) -> Planned<Value> {
         })
         .collect();
     mcp.insert("servers".into(), json!(wired));
-    if let Some(relaunch) = fields.get("relaunch") {
-        mcp.insert("relaunch".into(), relaunch.clone());
-    }
-    let managed = managed_mcp(&mcp)?;
+    let managed = managed_mcp(ctx, &mcp)?;
     let migrated = managed.get("migrated").cloned().ok_or(Failure::Invalid)?;
 
     // Every alternate config is planned before the generation, so a reply
@@ -477,6 +474,8 @@ fn plan(ctx: &Ctx, transitions: &mut Transitions<'_>) -> Planned<Value> {
         "backups": backups,
         "backup_path": backup.get("path"),
         "migrated": migrated,
+        "managed_servers": managed_names,
+        "skipped_servers": skipped,
         "shim_manifest": shim.get("manifest"),
     }))
 }

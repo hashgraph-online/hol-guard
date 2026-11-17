@@ -38,7 +38,7 @@ _FORBIDDEN = (
 _PROBE = """
 import json, sys
 import codex_plugin_scanner.guard.hook_review.hook_worker
-from codex_plugin_scanner.guard.adapters import list_adapters
+from codex_plugin_scanner.guard.harness.registry import list_adapters
 list_adapters()
 print(json.dumps(sorted(sys.modules)))
 """

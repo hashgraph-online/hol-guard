@@ -7,14 +7,14 @@ from unittest import mock
 import pytest
 import tomlkit
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import codex_native_hook_state
+from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_trust import (
     CODEX_HOOK_TRUST_WARNING,
     apply_codex_hook_trust_doctor,
     codex_command_hook_hash,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 
 GUARD_COMMAND = "/opt/guard/1.2.3/hol-guard-codex-hook --harness codex"
 

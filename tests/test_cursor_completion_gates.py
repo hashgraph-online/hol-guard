@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.cli.install_commands import (
     build_harness_verification,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.store import GuardStore
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -85,4 +85,4 @@ def test_cursor_contract_documents_unsupported_state() -> None:
     assert "unavailable" in text
     assert "unsupported" in text
     assert "must not offer a no-op repair" in text
-    assert CursorHarnessAdapter().harness == "cursor"
+    assert get_adapter("cursor").harness == "cursor"

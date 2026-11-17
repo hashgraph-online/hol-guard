@@ -144,7 +144,7 @@ def codex_install_transaction(
     actor: str,
     deadline: float | None = None,
 ) -> Iterator[CodexInstallOwner]:
-    from .adapters.codex_lifecycle_lock import codex_configuration_lock
+    from .codex_lifecycle_lock import codex_configuration_lock
 
     deadline = time.monotonic() + 5 if deadline is None else deadline
     home = guard_home.resolve(strict=False)

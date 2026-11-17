@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.harness.base import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.runtime_transition import TransitionError, TransitionFile
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -111,7 +111,7 @@ def test_preparation_captures_every_active_install_without_publication(preparati
 
 
 def test_preparation_composes_real_codex_and_claude_adapters_without_writes(preparation, monkeypatch):
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     module, _, context, store, _, _ = preparation
     monkeypatch.setattr(module, "get_adapter", get_adapter)

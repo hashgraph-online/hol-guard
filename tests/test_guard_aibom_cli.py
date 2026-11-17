@@ -11,8 +11,8 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import aibom_cli
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_dispatch_records as dispatch
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot, inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
@@ -65,7 +65,7 @@ def test_sync_uploads_exact_primary_hermes_content_after_legacy_ack(
 ) -> None:
     import urllib.error
 
-    from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
     from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
     home = tmp_path / "home"
@@ -83,7 +83,7 @@ def test_sync_uploads_exact_primary_hermes_content_after_legacy_ack(
     monkeypatch.setattr(
         aibom_cli,
         "detect_all",
-        lambda _context: (HermesHarnessAdapter().detect(context),),
+        lambda _context: (get_adapter("hermes").detect(context),),
     )
     requests: list[SimpleNamespace] = []
 
@@ -685,8 +685,8 @@ def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
     import urllib.error
 
     from codex_plugin_scanner.guard import aibom_cli
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
     from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
@@ -746,8 +746,8 @@ def test_sync_aibom_snapshots_404_reports_only_remaining_batch(
     import urllib.error
 
     from codex_plugin_scanner.guard import aibom_cli
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
     from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
@@ -821,8 +821,8 @@ def test_sync_aibom_snapshots_skips_oversized_snapshot_and_syncs_valid_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from codex_plugin_scanner.guard import aibom_cli
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
     from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
@@ -906,8 +906,8 @@ def test_sync_aibom_snapshots_preserves_oversized_rejection_when_valid_batch_is_
     import urllib.error
 
     from codex_plugin_scanner.guard import aibom_cli
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
     from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
@@ -993,8 +993,8 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
     import urllib.error
 
     from codex_plugin_scanner.guard import aibom_cli
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
     from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
@@ -1071,7 +1071,7 @@ def test_sync_aibom_snapshots_marks_oversized_rejection_partial_on_transport_fai
 
 def test_collect_aibom_snapshots_passes_cisco_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import aibom_cli
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
 
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -1151,8 +1151,8 @@ def test_collect_aibom_snapshots_passes_cisco_runs(tmp_path: Path, monkeypatch: 
 
 def test_sync_aibom_snapshots_uses_cloud_sync_cisco_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import aibom_cli
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
 
     store = GuardStore(tmp_path / "guard")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
@@ -1198,7 +1198,7 @@ def test_collect_aibom_snapshots_shares_cisco_timeout_budget_across_detections(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from codex_plugin_scanner.guard import aibom_cli
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
 
     context = HarnessContext(
         home_dir=tmp_path / "home",
@@ -1319,7 +1319,7 @@ def test_sync_reports_rejected_snapshots_instead_of_synced(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
     from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
     home = tmp_path / "home"
@@ -1329,7 +1329,7 @@ def test_sync_reports_rejected_snapshots_instead_of_synced(
     store = GuardStore(context.guard_home)
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
     monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "0")
-    monkeypatch.setattr(aibom_cli, "detect_all", lambda _context: (HermesHarnessAdapter().detect(context),))
+    monkeypatch.setattr(aibom_cli, "detect_all", lambda _context: (get_adapter("hermes").detect(context),))
     requests: list[SimpleNamespace] = []
 
     def guard_sync_request(_auth_context, *, request_url, method, data, extra_headers):

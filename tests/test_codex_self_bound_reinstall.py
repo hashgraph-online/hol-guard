@@ -10,15 +10,15 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_self_binding
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND
 from codex_plugin_scanner.guard.codex_hook_self_binding import (
     codex_hook_binds_guard_home,
     codex_hook_guard_home,
     self_bound_hook_bindings,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 from .test_codex_migration_preparation import migration_kept_hooks
 

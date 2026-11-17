@@ -86,7 +86,17 @@ pub(super) fn remove(spec: &Spec, ctx: &Ctx) -> Step<(Vec<(String, PyVal)>, Path
         spec.launcher_name
     };
     let label = spec.display_name.unwrap_or(spec.harness);
-    let plan = plan(ctx, shim_name, label, legacy_launcher_names(spec.harness))?;
+    remove_named(ctx, shim_name, label, legacy_launcher_names(spec.harness))
+}
+
+/// Removes the `shim_name` launcher and each `legacy` one under `label`.
+pub(super) fn remove_named(
+    ctx: &Ctx,
+    shim_name: &str,
+    label: &str,
+    legacy: &[&str],
+) -> Step<(Vec<(String, PyVal)>, PathBuf)> {
+    let plan = plan(ctx, shim_name, label, legacy)?;
     for change in &plan.changes {
         remove_no_follow(&change.path).map_err(|error| Failure::Os(error.to_string()))?;
     }

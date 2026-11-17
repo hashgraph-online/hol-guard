@@ -598,6 +598,7 @@ mod guard_store_local_cli_vectors_tests;
 mod guard_store_local_mcp_declarations;
 mod guard_store_local_mcp_observation;
 mod guard_store_local_once_mint;
+mod guard_store_managed_installs;
 mod guard_store_mcp_policy_requests;
 mod guard_store_mcp_provider_reads;
 #[cfg(test)]
@@ -693,6 +694,7 @@ mod harness_hook_settings;
 #[cfg(test)]
 #[path = "adapters/harness_hook_settings_tests.rs"]
 mod harness_hook_settings_tests;
+mod harness_launcher_artifact;
 #[path = "adapters/harness_mcp_discovery.rs"]
 mod harness_mcp_discovery;
 #[cfg(test)]
@@ -701,6 +703,7 @@ mod harness_mcp_discovery_tests;
 mod harness_protection_contract;
 #[path = "adapters/harness_settings_file.rs"]
 mod harness_settings_file;
+mod harness_setup_contract;
 #[path = "adapters/harness_shim_refresh.rs"]
 mod harness_shim_refresh;
 mod harness_version_compat;
@@ -788,6 +791,7 @@ mod mcp_config_discovery_tests;
 mod muse_detect;
 mod pack_lifecycle;
 mod pack_preparation;
+mod pyyaml_dump;
 mod swarm_op;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.

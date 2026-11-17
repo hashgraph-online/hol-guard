@@ -246,6 +246,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "harness_hook_settings" => harness_hook_settings::dispatch(args),
         "harness_settings_file" => harness_settings_file::dispatch(args),
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
+        "harness_setup_contract" => crate::harness_setup_contract::dispatch(args),
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
         "hook_python_identity" => crate::hook_python_identity::dispatch(args),
         "isolated_hook_python" => crate::harness_adapter::isolated_python(args),

@@ -7,13 +7,13 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.aibom_content_upload import (
     GuardAibomPrimaryContentSource,
     primary_content_sources_from_artifacts,
     upload_primary_content_sources,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.inventory_contract import (
     cloud_inventory_artifacts_from_detection,
     inventory_snapshot_from_detection,

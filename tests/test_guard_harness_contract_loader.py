@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import contract_registry
+from codex_plugin_scanner.guard.harness import contract_registry
 
 
 def _event(**overrides: object) -> dict[str, object]:

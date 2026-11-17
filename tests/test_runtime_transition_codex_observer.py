@@ -7,12 +7,11 @@ import uuid
 import pytest
 
 from codex_plugin_scanner.guard import runtime_transition_codex_observer as observer
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity, native_runtime_status
 from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
@@ -25,6 +24,7 @@ from codex_plugin_scanner.guard.runtime_transition_hook_probe import (
     transition_hook_observation,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.codex_legacy_roles import without_package_roles
 from tests.command_activity_correlation_key_support import write_correlation_key
 from tests.native_store_shims import count_command_shadow_observations
 from tests.test_native_decision_receipt import _receipt
@@ -106,15 +106,7 @@ def test_desktop_hook_proxy_context_is_explicit_and_minimal(monkeypatch, desktop
 def test_legacy_observer_refuses_unverified_state_without_relaunch(
     native_hook_force, tmp_path, monkeypatch, fault, reason
 ):
-    with monkeypatch.context() as role_patch:
-        paths = codex_adapter._hook_packaged_file_paths
-        role_patch.setattr(
-            codex_adapter,
-            "_hook_packaged_file_paths",
-            lambda native_bridge: tuple(
-                (role, path) for role, path in paths(native_bridge) if role not in {"hook_probe", "native_receipt"}
-            ),
-        )
+    with without_package_roles(monkeypatch, {"hook_probe", "native_receipt"}):
         context, workspace, store = installed_context(tmp_path)
     identity = NativeRuntimeIdentity(tmp_path / "fixture-native", 1, 1, "d" * 64)
     writer = None

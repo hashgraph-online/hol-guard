@@ -15,6 +15,8 @@ use super::dispatch;
 mod claude_family;
 #[path = "tests_cline.rs"]
 mod cline_family;
+#[path = "tests_cline_opencode_apply.rs"]
+mod cline_opencode_apply_family;
 #[path = "tests_codex.rs"]
 mod codex_family;
 #[path = "tests_copilot.rs"]
@@ -25,14 +27,24 @@ mod cursor_family;
 mod grok_zcode;
 #[path = "tests_hermes.rs"]
 mod hermes_family;
+#[path = "tests_hook_config.rs"]
+mod hook_config_family;
+#[path = "tests_install_apply.rs"]
+mod install_apply_family;
+#[path = "tests_mcp_servers.rs"]
+mod mcp_servers_family;
 #[path = "tests_opencode.rs"]
 mod opencode_family;
 #[path = "tests_pi.rs"]
 mod pi_family;
+#[path = "tests_probe_run.rs"]
+mod probe_run_family;
 #[path = "tests_round_trip.rs"]
 mod round_trip;
 #[path = "tests_shims.rs"]
 mod shim_family;
+#[path = "tests_shims_apply.rs"]
+mod shims_apply_family;
 
 struct Home {
     _dir: TempDir,
@@ -70,6 +82,7 @@ impl Home {
             "cwd": self.root,
             "user_home": self.home(),
             "env": env,
+            "caller": caller(false),
         })
     }
 
@@ -80,10 +93,66 @@ impl Home {
     fn ask_env(&self, harness: &str, op: &str, extra: Value, env: Value) -> Value {
         let mut request = json!({"harness": harness, "op": op, "context": self.context(env)});
         for (key, value) in extra.as_object().unwrap() {
-            request[key] = value.clone();
+            // A test's own `caller` replaces the context's default one.
+            if key == "caller" {
+                request["context"]["caller"] = value.clone();
+            } else {
+                request[key] = value.clone();
+            }
         }
         dispatch(&request).unwrap()
     }
+}
+
+/// `native_caller.caller_identity()` for a source (or `frozen`) Guard.
+fn caller(frozen: bool) -> Value {
+    json!({
+        "executable": "/py",
+        "executable_resolved": "/py",
+        "frozen": frozen,
+        "launcher": if frozen { "/g/bin/hol-guard" } else { "/py" },
+        "frozen_launcher": frozen.then_some("/g/bin/hol-guard-core"),
+        "cli_executable": "/py",
+        "package_root": "/opt/guard/site",
+        "version": "0.0.0",
+        "native_runtime": {
+            "path": "/g/hol-guard-runtime",
+            "size": 3,
+            "sha256": "0".repeat(64),
+            "features": NATIVE_FEATURES,
+        },
+    })
+}
+
+/// What the stamped test runtime advertises: every hook bridge.
+const NATIVE_FEATURES: [&str; 8] = [
+    "codex-hook-bridge-v1",
+    "cursor-hook-bridge-v1",
+    "claude-hook-bridge-v1",
+    "claude-session-start-v1",
+    "cline-hook-worker-v1",
+    "pi-hook-bridge-v1",
+    "bounded-hook-bridge-v1",
+    "bounded-hook-bridge-muse-v1",
+];
+
+/// A frozen `caller` whose native runtime is a real three-byte file, so the
+/// durable copy under the Guard home can be published. Returns the stamp and
+/// the copy's path.
+fn frozen_with_runtime(home: &Home) -> (Value, String) {
+    let runtime = home.root.join("bundle").join("hol-guard-runtime");
+    fs::create_dir_all(runtime.parent().unwrap()).unwrap();
+    fs::write(&runtime, b"abc").unwrap();
+    let sha = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    let mut stamp = caller(true);
+    stamp["native_runtime"] =
+        json!({"path": runtime, "size": 3, "sha256": sha, "features": NATIVE_FEATURES});
+    let copy = home
+        .guard()
+        .join("native-runtime")
+        .join(sha)
+        .join("hol-guard-runtime");
+    (stamp, copy.to_string_lossy().into_owned())
 }
 
 fn shim() -> String {
@@ -126,6 +195,37 @@ fn describe_lists_every_adapter_this_kind_owns() {
             "codex"
         ]
     );
+}
+
+#[test]
+fn describe_names_the_hermes_and_copilot_preparation_and_hook_ownership() {
+    let answer = dispatch(&json!({"op": "describe"})).unwrap();
+    let find = |name: &str| {
+        answer["adapters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|adapter| adapter["harness"] == name)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(find("hermes")["prepare"], "unavailable");
+    assert_eq!(find("devin")["prepare"], "plan");
+    let copilot = find("copilot");
+    assert_eq!(copilot["prepare"], "detected");
+    assert_eq!(copilot["launch_op"], "launch_command");
+    assert_eq!(find("grok")["launch_op"], "");
+    // Cursor resolves `cursor-agent` or `cursor agent` itself.
+    assert_eq!(find("cursor")["launch_op"], "launch_command");
+    assert!(copilot["hook_ownership"]["message"]
+        .as_str()
+        .unwrap()
+        .starts_with("Guard could not read which Copilot hooks"));
+    assert_eq!(
+        copilot["hook_ownership"]["ops"].as_array().unwrap().len(),
+        4
+    );
+    assert_eq!(find("cursor")["hook_ownership"], Value::Null);
 }
 
 #[test]

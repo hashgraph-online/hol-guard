@@ -5,10 +5,10 @@ import os
 
 from rich.console import Console
 
-from codex_plugin_scanner.guard.adapters import native_harness
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import install_commands, render
 from codex_plugin_scanner.guard.cli.claude_settings_target import _command_text
+from codex_plugin_scanner.guard.harness import native_harness
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 
 def _context(tmp_path):

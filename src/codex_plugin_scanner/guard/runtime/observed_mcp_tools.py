@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from typing import TYPE_CHECKING
 
-from ..adapters.contracts import display_name_for
+from ..harness.contracts import display_name_for
 from ..local_cli_errors import LocalCliCatalogLimitError
 from ..native_policy_snapshot_codec import _normalized_harness_selector_v3
 from ..store_local_cli_retention import LocalCliReplaySkippedError
