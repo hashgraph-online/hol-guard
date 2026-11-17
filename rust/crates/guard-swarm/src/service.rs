@@ -213,6 +213,7 @@ impl Service {
             context_calls: 0,
             input_tokens: 0,
             output_tokens: 0,
+            blocked: request.blocked.clone().flatten().unwrap_or_default(),
             parent_pid: None,
             detail: "Starting a task with the CLI's existing configuration and permissions.".into(),
             activity: None,

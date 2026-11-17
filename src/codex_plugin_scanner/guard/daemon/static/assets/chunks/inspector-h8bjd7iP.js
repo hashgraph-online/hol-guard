@@ -1,6 +1,6 @@
 import { r as reactExports, j as jsxRuntimeExports, ak as HiMiniXMark, b as HiMiniCommandLine, d as HiMiniCircleStack, fx as HiMiniArrowUp } from "../guard-dashboard.js";
 import { s as setSwarmContextTarget } from "./swarm-handoff-BIqKreGh.js";
-import { r as relativeTime, a as readEvents, c as contextFor, s as stateLabel, d as directAgent, R as RejectedAction } from "./swarm-workspace-CcNVkqUm.js";
+import { r as relativeTime, a as readEvents, c as contextFor, s as stateLabel, d as directAgent, R as RejectedAction } from "./swarm-workspace-Be_L-sEs.js";
 function Activity({ agent, stale }) {
   const [events, setEvents] = reactExports.useState([]);
   const [error, setError] = reactExports.useState(false);
@@ -179,6 +179,10 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onAccepted, o
       agent.model ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Model" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: agent.model })
+      ] }) : null,
+      agent.origin === "managed" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Can’t open" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: agent.blocked?.length ? agent.blocked.join(", ") : "No limits beyond the CLI’s own settings" })
       ] }) : null,
       agent.pid ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Process" }),

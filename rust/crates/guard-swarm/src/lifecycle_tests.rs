@@ -22,6 +22,7 @@ fn fixture(body: &str) -> (tempfile::TempDir, Service, Launch) {
         workspace: directory.path().to_string_lossy().into(),
         task: "review $(touch escaped)\n--dangerously-bypass-approvals".into(),
         model: None,
+        blocked: None,
     };
     (directory, service, request)
 }
@@ -291,6 +292,30 @@ fn oversized_output_fails_the_turn_and_does_not_grow_event_memory() {
     run.event("message", "🦀".repeat(4096));
     assert!(run.events.back().unwrap().text.len() <= 4096);
     assert!(run.events.back().unwrap().text.ends_with('…'));
+}
+
+#[test]
+fn claude_launch_keeps_blocked_folders_on_every_turn() {
+    let body = r#"printf '%s\n' '{"type":"system","subtype":"init","session_id":"claude-session"}' '{"type":"result","is_error":false,"session_id":"claude-session","usage":{"input_tokens":5,"output_tokens":1}}'"#;
+    let (dir, service, mut request) = fixture(body);
+    request.harness = "claude-code".into();
+    request.blocked = Some(Some(vec!["private".into()]));
+    let run = service.launch(request.clone()).unwrap();
+    assert_eq!(run.blocked, ["private"]);
+    let ready = wait(&service, &run.id, |a| a.controls.message && a.pid.is_none());
+    service
+        .action(action(
+            &request,
+            &ready,
+            "blocked-follow",
+            "message",
+            Some("go on"),
+        ))
+        .unwrap();
+    wait(&service, &run.id, |a| a.input_tokens == 10);
+    let args = fs::read_to_string(dir.path().join("args.txt")).unwrap();
+    let rules = "--disallowedTools\nRead(./private)\nRead(./private/**)\nEdit(./private)\nEdit(./private/**)\n";
+    assert_eq!(args.matches(rules).count(), 2, "{args}");
 }
 
 #[test]

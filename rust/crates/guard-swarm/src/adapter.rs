@@ -13,6 +13,7 @@ pub(crate) fn configure(
     harness: &str,
     session: Option<&str>,
     model: Option<&str>,
+    blocked: &[String],
 ) {
     if harness == "codex" {
         command.arg("exec");
@@ -32,7 +33,27 @@ pub(crate) fn configure(
         if let Some(model) = model {
             command.args(["--model", model]);
         }
+        if !blocked.is_empty() {
+            command.arg("--disallowedTools").args(deny_rules(blocked));
+        }
     }
+}
+
+/// Claude Code permission rules that keep its file tools out of each path.
+/// `Read` rules cover Read, Grep and Glob; `Edit` rules cover every file
+/// writer. Paths are project-relative and checked by `valid_blocked`.
+fn deny_rules(blocked: &[String]) -> Vec<String> {
+    let mut rules = Vec::new();
+    for path in blocked {
+        let path = path.trim_end_matches('/');
+        for tool in ["Read", "Edit"] {
+            rules.push(format!("{tool}(./{path})"));
+            if !path.ends_with("**") {
+                rules.push(format!("{tool}(./{path}/**)"));
+            }
+        }
+    }
+    rules
 }
 
 #[derive(Default, Debug)]
@@ -275,13 +296,13 @@ mod tests {
     #[test]
     fn commands_use_exact_resume_ids_and_never_disable_protection() {
         let mut command = Command::new("codex");
-        configure(&mut command, "codex", Some("session-1"), None);
+        configure(&mut command, "codex", Some("session-1"), None, &[]);
         assert_eq!(
             command.get_args().collect::<Vec<_>>(),
             ["exec", "resume", "session-1", "--json", "-"]
         );
         let mut command = Command::new("claude");
-        configure(&mut command, "claude-code", None, Some("sonnet"));
+        configure(&mut command, "claude-code", None, Some("sonnet"), &[]);
         assert_eq!(
             command.get_args().collect::<Vec<_>>(),
             [
@@ -293,6 +314,31 @@ mod tests {
                 "sonnet"
             ]
         );
+    }
+    #[test]
+    fn blocked_paths_become_claude_deny_rules_for_reading_and_editing() {
+        let mut command = Command::new("claude");
+        let blocked = ["private/".to_owned(), "**/.env.*".to_owned()];
+        configure(&mut command, "claude-code", Some("s-1"), None, &blocked);
+        let args: Vec<_> = command.get_args().map(|a| a.to_str().unwrap()).collect();
+        let deny = args.iter().position(|a| *a == "--disallowedTools").unwrap();
+        assert_eq!(
+            args[deny + 1..],
+            [
+                "Read(./private)",
+                "Read(./private/**)",
+                "Edit(./private)",
+                "Edit(./private/**)",
+                "Read(./**/.env.*)",
+                "Read(./**/.env.*/**)",
+                "Edit(./**/.env.*)",
+                "Edit(./**/.env.*/**)",
+            ]
+        );
+        // Codex has no such control; a Codex launch with paths is refused.
+        let mut command = Command::new("codex");
+        configure(&mut command, "codex", None, None, &blocked);
+        assert!(!command.get_args().any(|a| a == "--disallowedTools"));
     }
     #[test]
     fn only_completed_context_tools_are_usage_and_thinking_is_private() {

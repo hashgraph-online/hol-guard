@@ -1,5 +1,6 @@
 import { j as jsxRuntimeExports, c as HiMiniFolder, b as HiMiniCommandLine, d as HiMiniCircleStack, fw as HiMiniArrowUpRight } from "../guard-dashboard.js";
-import { p as projectsFor, c as contextFor, s as stateLabel } from "./swarm-workspace-CcNVkqUm.js";
+import { p as projectsFor, c as contextFor, s as stateLabel } from "./swarm-workspace-Be_L-sEs.js";
+import { g as goalOf } from "./work-DQ-mcUbu.js";
 import "./swarm-handoff-BIqKreGh.js";
 function AgentMap({ agents, selected, onSelect, context, mode }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `swarm-stage swarm-stage--${mode}`, "aria-label": mode === "map" ? "Agent map by project" : "Agent list by project", children: projectsFor(agents).map((project) => /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "swarm-lane", "aria-label": `${project.name} agents`, children: [
@@ -19,7 +20,7 @@ function AgentMap({ agents, selected, onSelect, context, mode }) {
           type: "button",
           className: `swarm-node ${selected === agent.id ? "is-selected" : ""}`,
           "aria-pressed": selected === agent.id,
-          "aria-label": `${agent.label}: ${agent.task ?? "Observed app"}, ${stateLabel[agent.state]}`,
+          "aria-label": `${agent.label}: ${goalOf(agent.task) ?? "Observed app"}, ${stateLabel[agent.state]}`,
           "aria-describedby": agent.activity ? `swarm-latest-${agent.id}` : void 0,
           onClick: () => onSelect(agent.id),
           children: [
@@ -31,7 +32,13 @@ function AgentMap({ agents, selected, onSelect, context, mode }) {
                 stateLabel[agent.state]
               ] })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "swarm-task", children: agent.task ?? "Work is happening in its app" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "swarm-task", children: goalOf(agent.task) ?? "Work is happening in its app" }),
+            agent.blocked?.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "swarm-access", children: [
+              "Can’t open ",
+              agent.blocked.length,
+              " ",
+              agent.blocked.length === 1 ? "path" : "paths"
+            ] }) : null,
             agent.activity ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { id: `swarm-latest-${agent.id}`, className: "swarm-latest", title: agent.activity, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCommandLine, { "aria-hidden": "true" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: agent.activity })
