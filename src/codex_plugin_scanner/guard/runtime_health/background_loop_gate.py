@@ -8,6 +8,9 @@ module only forwards the question and checks the answer's shape.
 Every helper falls back to what the loop did before the ledger existed: a
 loop runs when the runtime cannot answer, and a failure it could not gate is
 logged. None of these loops decides whether a command is allowed.
+
+A line counts as said only when a sink took it. The ledger is told so with
+the ``logged`` op; a line no sink took is offered again on the next outcome.
 """
 
 from __future__ import annotations
@@ -33,10 +36,13 @@ _FAILING_FIELDS = frozenset({"loop", "state", "failures", "failing_for_seconds",
 _MAX_COUNT = 2**64 - 1
 # Startup loops this process has already reported healthy to the ledger, so a
 # later success here costs no runtime call. A failure reported here clears the
-# entry. One reported by another process is cleared by the next process that
-# starts healthy; until then it only delays a log line, since these loops are
-# never held back. The catalog refresh is asked every time, because its wait
-# is what the ledger is for.
+# entry. A failure reported by another process is not seen here: it stays in
+# the ledger until a process without this entry reports a success. Until then
+# `doctor` shows the loop failing, and a later failure in this process extends
+# that streak instead of starting a new one. These loops are never held back,
+# so the cost is a status line and a longer streak, not a skipped run. The
+# catalog refresh is asked every time, because its wait is what the ledger is
+# for.
 _settled: set[tuple[str, str]] = set()
 _settled_lock = threading.Lock()
 
@@ -94,14 +100,21 @@ def failure_is_due(guard_home: Path, loop: str, failure_key: str) -> tuple[bool,
     return True, suffix
 
 
+def failure_logged(guard_home: Path, loop: str, failure_key: str) -> None:
+    """Tell the ledger a sink took the line ``failure_is_due`` offered."""
+
+    _ = _ask(guard_home, "logged", loop, failure_key)
+
+
 def report_failure(guard_home: Path, loop: str, failure_key: str, lines: tuple[tuple[str, str], ...]) -> None:
     """Log each ``(event, detail)`` line when this failure is new, changed or due again."""
 
     due, suffix = failure_is_due(guard_home, loop, failure_key)
     if not due:
         return
-    for event, detail in lines:
-        record_background_event(event, detail + suffix)
+    taken = [record_background_event(event, detail + suffix) for event, detail in lines]
+    if all(taken):
+        failure_logged(guard_home, loop, failure_key)
 
 
 def report_success(guard_home: Path, loop: str) -> None:
@@ -115,11 +128,15 @@ def report_success(guard_home: Path, loop: str) -> None:
     answer = _ask(guard_home, "outcome", loop)
     if answer is None:
         return
+    if answer.get("recovered") is True and _count(answer.get("failures")):
+        if not record_background_notice(f"{loop}_recovered", f"failures={answer['failures']}"):
+            # No sink took it, so the ledger offers it again on the next
+            # success; this process must ask again rather than settle.
+            return
+        _ = _ask(guard_home, "logged", loop)
     if cached:
         with _settled_lock:
             _settled.add(key)
-    if answer.get("recovered") is True and _count(answer.get("failures")):
-        record_background_notice(f"{loop}_recovered", f"failures={answer['failures']}")
 
 
 def loop_status(guard_home: Path) -> list[dict[str, object]] | None:
@@ -154,6 +171,7 @@ __all__ = [
     "CATALOG_REFRESH",
     "FEATURE",
     "failure_is_due",
+    "failure_logged",
     "loop_status",
     "may_attempt",
     "report_failure",

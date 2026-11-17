@@ -58,7 +58,11 @@ def release_sink(sink: BackgroundSink) -> None:
 
 
 def record_background_event(event: str, detail: str) -> bool:
-    """Record one background diagnostic. Returns whether a sink took it."""
+    """Record one background diagnostic.
+
+    Returns whether a sink took it: a sink that answers ``False``, as a full or
+    closed daemon log queue does, did not take it.
+    """
 
     with _lock:
         sink = _sink
@@ -66,8 +70,7 @@ def record_background_event(event: str, detail: str) -> bool:
         return False
     # A background worker must never die because diagnostics are closing.
     with suppress(Exception):
-        sink(event, detail)
-        return True
+        return sink(event, detail) is not False
     return False
 
 

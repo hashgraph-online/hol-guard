@@ -40,7 +40,9 @@ class Ledger:
         self.calls.append((op, loop))
         if op == "status":
             return {"ok": True, "loops": [{"loop": name, "state": "healthy"} for name in background_loop_gate.LOOPS]}
-        state = self.loops.setdefault(loop or "", {"failures": 0, "key": None, "attempt": None})
+        state = self.loops.setdefault(
+            loop or "", {"failures": 0, "key": None, "attempt": None, "pending": False, "recovery": 0}
+        )
         if op == "attempt":
             failures = int(state["failures"])
             last = state["attempt"]
@@ -48,13 +50,18 @@ class Ledger:
                 return {"ok": True, "run": False}
             state["attempt"] = self.now
             return {"ok": True, "run": True}
+        if op == "logged":
+            if failure_key is None:
+                state["recovery"] = 0
+            elif state["key"] == failure_key:
+                state["pending"] = False
+            return {"ok": True}
         if failure_key is None:
-            failures = int(state["failures"])
-            state.update(failures=0, key=None)
+            failures = int(state["failures"]) or int(state["recovery"])
+            state.update(failures=0, key=None, pending=False, recovery=failures)
             return {"ok": True, "log": False, "recovered": failures > 0, "failures": failures}
-        log = state["failures"] == 0 or state["key"] != failure_key
-        state["failures"] = int(state["failures"]) + 1
-        state["key"] = failure_key
+        log = state["failures"] == 0 or state["key"] != failure_key or bool(state["pending"])
+        state.update(failures=int(state["failures"]) + 1, key=failure_key, pending=log, recovery=0)
         return {"ok": True, "log": log, "recovered": False, "failures": state["failures"], "repeats": 0}
 
 
@@ -202,6 +209,131 @@ def test_a_protected_enrollment_after_a_skip_recovers(tmp_path, monkeypatch, led
     assert ledger.calls.count(("outcome", background_loop_gate.AUTHORITY_ENROLLMENT)) == 2
 
 
+def test_a_failure_no_sink_took_is_logged_once_one_listens(tmp_path, monkeypatch, ledger) -> None:
+    # A refresh can run before the daemon installs its sink, or while its
+    # queue is full. That failure must not count as said for six hours.
+    home = tmp_path.absolute()
+    _failing_fetch(monkeypatch)
+    events: list[tuple[str, str]] = []
+    taking = [False]
+
+    def sink(event: str, detail: str) -> bool:
+        if taking[0]:
+            events.append((event, detail))
+        return taking[0]
+
+    background_diagnostics.install_sink(sink, notice=sink)
+    try:
+        for minute, listening in ((0, False), (10, True), (30, True)):
+            taking[0] = listening
+            ledger.now = minute * 60
+            _fresh_library_process(monkeypatch, home)
+            discovery._refresh(home, SimpleNamespace())
+    finally:
+        background_diagnostics.release_sink(sink)
+
+    assert [event for event, _ in events] == [
+        "catalog_publication_refresh_failed",
+        "catalog_publication_restore_failed",
+    ]
+    assert events[0][1].endswith(" failures=2")
+
+
+def test_a_saved_view_is_used_while_a_failing_refresh_waits(tmp_path, monkeypatch, ledger, recorded) -> None:
+    home = tmp_path.absolute()
+    fetches = _failing_fetch(monkeypatch)
+    discovery._refresh(home, SimpleNamespace())
+    saved = object()
+    monkeypatch.setattr(current_refresh, "restore", lambda _store: saved)
+
+    ledger.now = 120
+    _fresh_library_process(monkeypatch, home)
+    discovery._refresh(home, SimpleNamespace())
+
+    assert len(fetches) == 1, "the wait still holds back the fetch"
+    assert discovery._handle is saved
+    assert ledger.loops[background_loop_gate.CATALOG_REFRESH]["failures"] == 1
+
+
+def test_a_failed_refresh_with_a_saved_view_is_logged_and_waits(tmp_path, monkeypatch, ledger, recorded) -> None:
+    home = tmp_path.absolute()
+    fetches = _failing_fetch(monkeypatch)
+    saved = object()
+    monkeypatch.setattr(current_refresh, "restore", lambda _store: saved)
+
+    for minute in (0, 3):
+        ledger.now = minute * 60
+        _fresh_library_process(monkeypatch, home)
+        discovery._refresh(home, SimpleNamespace())
+
+    assert len(fetches) == 1, "a refresh that failed waits even when a saved view serves"
+    assert discovery._handle is saved
+    assert recorded == [
+        (
+            "catalog_publication_refresh_failed",
+            "error=ValueError detail=release transport body length invalid failures=1",
+        )
+    ]
+
+
+def test_a_different_kind_of_refresh_failure_is_logged_again(tmp_path, monkeypatch, ledger, recorded) -> None:
+    home = tmp_path.absolute()
+    _failing_fetch(monkeypatch)
+    errors = iter(
+        [
+            HTTPError("https://example.invalid/release", 503, "Service Unavailable", {}, None),  # type: ignore[arg-type]
+            ValueError("publication signature invalid"),
+        ]
+    )
+
+    def refresh(_store):
+        raise next(errors)
+
+    monkeypatch.setattr(current_refresh, "refresh", refresh)
+    for minute in (0, 10):
+        ledger.now = minute * 60
+        _fresh_library_process(monkeypatch, home)
+        discovery._refresh(home, SimpleNamespace())
+        # The first line was taken, so only a different kind of failure is new.
+        ledger.loops[background_loop_gate.CATALOG_REFRESH]["pending"] = False
+
+    refreshes = [detail for event, detail in recorded if event == "catalog_publication_refresh_failed"]
+    assert refreshes == [
+        "error=HTTPError detail=HTTP 503 Service Unavailable failures=1",
+        "error=ValueError detail=publication signature invalid failures=2",
+    ]
+
+
+def test_a_recovery_no_sink_took_is_said_by_a_later_success(tmp_path, monkeypatch, ledger) -> None:
+    views = iter([AuthorityHealth.TAMPERED, AuthorityHealth.PROTECTED, AuthorityHealth.PROTECTED])
+    store = SimpleNamespace(
+        guard_home=tmp_path,
+        enroll_extension_control_authority_by_default=lambda _digest: SimpleNamespace(health=next(views)),
+    )
+    events: list[tuple[str, str]] = []
+    taking = [True]
+
+    def sink(event: str, detail: str) -> bool:
+        if taking[0]:
+            events.append((event, detail))
+        return taking[0]
+
+    background_diagnostics.install_sink(sink, notice=sink)
+    try:
+        for listening in (True, False, True):
+            taking[0] = listening
+            host = object.__new__(extension_control_host.ExtensionControlHost)
+            host.store = store
+            host._enroll_authority_by_default()
+    finally:
+        background_diagnostics.release_sink(sink)
+
+    assert events == [
+        ("default_authority_enrollment_skipped", "health=tampered failures=1"),
+        ("default_authority_enrollment_recovered", "failures=1"),
+    ]
+
+
 def test_an_http_error_names_its_status_and_not_its_url() -> None:
     error = HTTPError("https://example.invalid/private/path?id=abc", 404, "Not Found", {}, None)  # type: ignore[arg-type]
 
@@ -260,6 +392,7 @@ def test_the_runtime_ledger_holds_a_failing_loop_across_processes(tmp_path) -> N
     loop = background_loop_gate.CATALOG_REFRESH
     assert ask(op="attempt", loop=loop)["run"] is True
     assert ask(op="outcome", loop=loop, failure_key="refresh_failed")["log"] is True
+    assert ask(op="logged", loop=loop, failure_key="refresh_failed") == {"ok": True}
     # A new process, as a restarted library process is.
     assert ask(op="attempt", loop=loop)["run"] is False
     assert ask(op="outcome", loop=loop, failure_key="refresh_failed")["log"] is False

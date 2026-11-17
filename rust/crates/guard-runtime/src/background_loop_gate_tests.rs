@@ -22,7 +22,8 @@ fn attempt(home: &Path, now: u64) -> bool {
     answer["run"].as_bool().expect("a run flag")
 }
 
-fn fail(home: &Path, key: &str, now: u64) -> Value {
+/// A failure whose line, when one is offered, no log takes.
+fn fail_unheard(home: &Path, key: &str, now: u64) -> Value {
     call(
         home,
         json!({"op": "outcome", "loop": "catalog_publication_refresh", "failure_key": key, "now_ms": now}),
@@ -30,12 +31,37 @@ fn fail(home: &Path, key: &str, now: u64) -> Value {
     .expect("an outcome answer")
 }
 
-fn succeed(home: &Path, now: u64) -> Value {
+/// A failure whose line, when one is offered, the log takes.
+fn fail(home: &Path, key: &str, now: u64) -> Value {
+    let answer = fail_unheard(home, key, now);
+    if answer["log"] == true {
+        logged(home, Some(key), now);
+    }
+    answer
+}
+
+fn logged(home: &Path, key: Option<&str>, now: u64) {
+    let mut request = json!({"op": "logged", "loop": "catalog_publication_refresh", "now_ms": now});
+    if let Some(key) = key {
+        request["failure_key"] = json!(key);
+    }
+    call(home, request).expect("a logged answer");
+}
+
+fn succeed_unheard(home: &Path, now: u64) -> Value {
     call(
         home,
         json!({"op": "outcome", "loop": "catalog_publication_refresh", "now_ms": now}),
     )
     .expect("an outcome answer")
+}
+
+fn succeed(home: &Path, now: u64) -> Value {
+    let answer = succeed_unheard(home, now);
+    if answer["recovered"] == true {
+        logged(home, None, now);
+    }
+    answer
 }
 
 #[test]
@@ -142,6 +168,75 @@ fn recovery_is_reported_once_and_clears_the_wait() {
         fail(home.path(), "refresh:ValueError", START + 4 * MINUTE)["log"],
         true
     );
+}
+
+#[test]
+fn a_failure_no_log_took_is_offered_again_until_one_does() {
+    // The daemon's log is not listening yet when the first failure is seen.
+    let home = tempfile::tempdir().unwrap();
+    let first = fail_unheard(home.path(), "refresh:ValueError", START);
+    assert_eq!(first["log"], true);
+    let second = fail_unheard(home.path(), "refresh:ValueError", START + MINUTE);
+    assert_eq!(second["log"], true);
+    assert_eq!(second["repeats"], 1, "the unheard first attempt is counted");
+    let third = fail(home.path(), "refresh:ValueError", START + 2 * MINUTE);
+    assert_eq!(third["log"], true);
+    assert_eq!(third["repeats"], 2);
+    assert_eq!(
+        fail(home.path(), "refresh:ValueError", START + 3 * MINUTE)["log"],
+        false
+    );
+}
+
+#[test]
+fn a_confirmation_for_an_older_failure_silences_nothing() {
+    let home = tempfile::tempdir().unwrap();
+    fail(home.path(), "refresh:ValueError", START);
+    assert_eq!(
+        fail_unheard(home.path(), "refresh:HTTPError:404", START + MINUTE)["log"],
+        true
+    );
+    logged(home.path(), Some("refresh:ValueError"), START + MINUTE);
+    assert_eq!(
+        fail_unheard(home.path(), "refresh:HTTPError:404", START + 2 * MINUTE)["log"],
+        true
+    );
+}
+
+#[test]
+fn a_recovery_no_log_took_is_offered_again_until_one_does() {
+    let home = tempfile::tempdir().unwrap();
+    fail(home.path(), "refresh:ValueError", START);
+    fail(home.path(), "refresh:ValueError", START + MINUTE);
+    let unheard = succeed_unheard(home.path(), START + 2 * MINUTE);
+    assert_eq!(unheard["recovered"], true);
+    assert_eq!(unheard["failures"], 2);
+    let again = succeed(home.path(), START + 3 * MINUTE);
+    assert_eq!(again["recovered"], true);
+    assert_eq!(again["failures"], 2);
+    assert_eq!(succeed(home.path(), START + 4 * MINUTE)["recovered"], false);
+    let status = call(
+        home.path(),
+        json!({"op": "status", "now_ms": START + 4 * MINUTE}),
+    )
+    .unwrap();
+    assert_eq!(status["loops"][0]["state"], "healthy");
+}
+
+#[test]
+fn a_new_failure_drops_a_recovery_no_log_took() {
+    let home = tempfile::tempdir().unwrap();
+    fail(home.path(), "refresh:ValueError", START);
+    assert_eq!(
+        succeed_unheard(home.path(), START + MINUTE)["recovered"],
+        true
+    );
+    assert_eq!(
+        fail(home.path(), "refresh:ValueError", START + 2 * MINUTE)["log"],
+        true
+    );
+    let recovered = succeed(home.path(), START + 3 * MINUTE);
+    assert_eq!(recovered["failures"], 1, "only the new streak is reported");
 }
 
 #[test]

@@ -15,6 +15,7 @@ from contextvars import Context, ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError
 
 from ..file_identity import full_stat_identity
 from ..native_resident_client import native_resident_client_request
@@ -283,18 +284,64 @@ def _engine_mismatch_with_nothing_kept(refresh_error, restore_error):
     return None
 
 
-def _note_engine_mismatch(mismatch) -> None:
-    """Say once, when the current publication changes, that it was built for another engine."""
+def _note_engine_mismatch(mismatch) -> bool:
+    """Say once, when the current publication changes, that it was built for another engine.
+
+    True when the note is said: written now, or already written for this
+    publication by this process.
+    """
 
     global _noted_engine_mismatch
     with _ready_lock:
         if _noted_engine_mismatch == mismatch.publication_id:
-            return
+            return True
     # A refresh can run before the daemon installs its sink. Only a note that
     # was written counts, so the daemon still gets one once it is listening.
     if record_background_notice("catalog_publication_engine_pending", mismatch.describe()):
         with _ready_lock:
             _noted_engine_mismatch = mismatch.publication_id
+        return True
+    return False
+
+
+def _failure_kind(error: BaseException) -> str:
+    """A bounded name for a failure: its type and any HTTP status, never its text or URL."""
+
+    kind = type(error).__name__[:64]
+    code = getattr(error, "code", None)
+    if isinstance(error, HTTPError) and isinstance(code, int):
+        kind += f":{code}"
+    return kind
+
+
+def _restore_while_waiting(home: Path, store) -> None:
+    """Use the saved complete view while a failing refresh waits to fetch again.
+
+    A replaced library process starts with no view. The wait holds back only
+    the network: restoring what was saved needs no fetch, and its failure adds
+    nothing to the failure the wait already stands for.
+    """
+
+    global _handle, _failures
+    with _ready_lock:
+        if _home != home or _handle is not None:
+            return
+    from .current_refresh import restore
+
+    try:
+        if store is None:
+            from ..store import GuardStore
+
+            store = GuardStore(home)
+        handle = restore(store)
+    except Exception:
+        return
+    if handle is None:
+        return
+    with _ready_lock:
+        if _home == home and _handle is None:
+            _handle = handle
+            _failures = 0
 
 
 def _refresh(home, store):
@@ -306,6 +353,7 @@ def _refresh(home, store):
         # nothing had changed. The runtime's ledger outlives the process, so a
         # failing refresh waits longer each time; a healthy one never waits.
         if not background_loop_gate.may_attempt(home, background_loop_gate.CATALOG_REFRESH):
+            _restore_while_waiting(home, store)
             return
         from .current_refresh import refresh, restore
 
@@ -331,6 +379,15 @@ def _refresh(home, store):
                         _noted_engine_mismatch = None
         if refresh_error is None and handle is not None:
             background_loop_gate.report_success(home, background_loop_gate.CATALOG_REFRESH)
+        elif refresh_error is not None and handle is not None:
+            # The saved view keeps serving, but the catalog still cannot
+            # update: that is a failed refresh, and it waits like one.
+            background_loop_gate.report_failure(
+                home,
+                background_loop_gate.CATALOG_REFRESH,
+                f"refresh_failed:{_failure_kind(refresh_error)}",
+                (("catalog_publication_refresh_failed", failure_detail(refresh_error)),),
+            )
     except Exception as error:
         # Complete previous view and active protection remain independent, so
         # this stays non-fatal; it is recorded because a publication that never
@@ -339,7 +396,7 @@ def _refresh(home, store):
             background_loop_gate.report_failure(
                 home,
                 background_loop_gate.CATALOG_REFRESH,
-                "refresh_failed",
+                f"refresh_failed:{_failure_kind(error)}",
                 (("catalog_publication_refresh_failed", failure_detail(error)),),
             )
         elif (mismatch := _engine_mismatch_with_nothing_kept(refresh_error, error)) is not None:
@@ -348,20 +405,20 @@ def _refresh(home, store):
             # serving. It is a state to note, not a failure every five minutes.
             # It still counts as a failed refresh, so a restart does not refetch
             # it, and a new publication is still noted when it is first seen.
-            due, _ = background_loop_gate.failure_is_due(
-                home, background_loop_gate.CATALOG_REFRESH, f"engine_pending:{mismatch.publication_id}"
-            )
-            if due:
-                _note_engine_mismatch(mismatch)
+            key = f"engine_pending:{mismatch.publication_id}"
+            due, _ = background_loop_gate.failure_is_due(home, background_loop_gate.CATALOG_REFRESH, key)
+            if due and _note_engine_mismatch(mismatch):
+                background_loop_gate.failure_logged(home, background_loop_gate.CATALOG_REFRESH, key)
         else:
             # A failed fallback only says no complete view was kept. The
             # refresh failure is what says why the catalog cannot update. The
-            # failure is keyed by its shape, not its text: a transport error
-            # that alternates between two messages is still one failure.
+            # failure is keyed by the kind of each error, not its text: a
+            # transport error that alternates between two messages is still
+            # one failure, and a different kind of error is a new one.
             background_loop_gate.report_failure(
                 home,
                 background_loop_gate.CATALOG_REFRESH,
-                "refresh_and_restore_failed",
+                f"refresh_and_restore_failed:{_failure_kind(refresh_error)}:{_failure_kind(error)}",
                 (
                     ("catalog_publication_refresh_failed", failure_detail(refresh_error)),
                     ("catalog_publication_restore_failed", failure_detail(error)),

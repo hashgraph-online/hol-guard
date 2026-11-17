@@ -19,6 +19,11 @@
 //!   changes, and then at most every six hours while it stays the same, and the
 //!   loop's recovery is reported once.
 //!
+//! A line counts as said only once the caller's log has taken it: the caller
+//! confirms with the `logged` op. Until then the same failure, or the same
+//! recovery, is offered again on the next outcome, so a failure seen before
+//! the daemon's log is listening is not silenced for six hours.
+//!
 //! A healthy loop is never held back, so a host that is working refreshes
 //! exactly as often as before. Nothing here decides whether a command is
 //! allowed: these loops only maintain the catalog and its authority, and every
@@ -93,6 +98,12 @@ pub(crate) struct LoopState {
     pub(crate) last_attempt_ms: u64,
     pub(crate) last_logged_ms: u64,
     pub(crate) suppressed: u64,
+    /// A line was offered for the current failure and no log has taken it.
+    #[serde(default)]
+    pub(crate) log_pending: bool,
+    /// The failures a recovery ended, while no log has taken that recovery.
+    #[serde(default)]
+    pub(crate) recovery_pending: u64,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -182,6 +193,19 @@ fn answer(request: &Request) -> Result<Value, String> {
             })?;
             Ok(verdict)
         }
+        "logged" => {
+            let name = loop_name(request.r#loop.as_deref())?;
+            let failure = request
+                .failure_key
+                .as_deref()
+                .map(failure_digest)
+                .transpose()?;
+            with_ledger(&home, |ledger| {
+                let state = ledger.loops.entry(name.to_owned()).or_default();
+                record_logged(state, failure.as_deref(), now).then_some(())
+            })?;
+            Ok(json!({"ok": true}))
+        }
         _ => Err("background_loop_gate_request_invalid".to_owned()),
     }
 }
@@ -189,13 +213,19 @@ fn answer(request: &Request) -> Result<Value, String> {
 /// Apply one outcome and say whether it is worth a line in the log.
 pub(crate) fn record_outcome(state: &mut LoopState, failure: Option<String>, now: u64) -> Value {
     let Some(failure) = failure else {
-        let recovered = state.failures > 0;
-        let failures = state.failures;
+        // A recovery no log has taken yet is offered again, with the count it
+        // ended, until one does or the loop fails again.
+        let failures = if state.failures > 0 {
+            state.failures
+        } else {
+            state.recovery_pending
+        };
         *state = LoopState {
             last_attempt_ms: state.last_attempt_ms,
+            recovery_pending: failures,
             ..LoopState::default()
         };
-        return json!({"ok": true, "log": false, "recovered": recovered, "failures": failures});
+        return json!({"ok": true, "log": false, "recovered": failures > 0, "failures": failures});
     };
     let started = state.failures == 0;
     let changed = state.failure.as_deref() != Some(failure.as_str());
@@ -203,17 +233,20 @@ pub(crate) fn record_outcome(state: &mut LoopState, failure: Option<String>, now
         now.saturating_sub(state.last_logged_ms) >= RELOG_INTERVAL_MS || now < state.last_logged_ms;
     if started {
         state.failing_since_ms = now;
+        state.last_logged_ms = 0;
+        state.suppressed = 0;
     }
+    state.recovery_pending = 0;
     state.failures = state.failures.saturating_add(1);
     state.failure = Some(failure);
-    let log = started || changed || due;
+    // The previous line for this failure was never taken, so this one is
+    // still the first the log will see.
+    let log = started || changed || due || state.log_pending;
     let repeats = state.suppressed;
-    if log {
-        state.last_logged_ms = now;
-        state.suppressed = 0;
-    } else {
-        state.suppressed = state.suppressed.saturating_add(1);
-    }
+    // Every attempt counts as unlogged until a log confirms it took the line;
+    // the confirmation then clears the count.
+    state.suppressed = state.suppressed.saturating_add(1);
+    state.log_pending = log;
     json!({
         "ok": true,
         "log": log,
@@ -221,6 +254,30 @@ pub(crate) fn record_outcome(state: &mut LoopState, failure: Option<String>, now
         "failures": state.failures,
         "repeats": if log { repeats } else { 0 },
     })
+}
+
+/// Note that a log took the line offered for `failure`, or the recovery
+/// offered when `failure` is `None`. A confirmation for a failure that is no
+/// longer current changes nothing, so a late caller cannot silence a newer one.
+pub(crate) fn record_logged(state: &mut LoopState, failure: Option<&str>, now: u64) -> bool {
+    match failure {
+        Some(failure) => {
+            if !state.log_pending || state.failure.as_deref() != Some(failure) {
+                return false;
+            }
+            state.log_pending = false;
+            state.last_logged_ms = now;
+            state.suppressed = 0;
+            true
+        }
+        None => {
+            if state.recovery_pending == 0 {
+                return false;
+            }
+            state.recovery_pending = 0;
+            true
+        }
+    }
 }
 
 /// How long a loop that has failed `failures` times in a row waits.
