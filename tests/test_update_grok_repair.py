@@ -263,7 +263,7 @@ def test_grok_repair_rewrites_versioned_desktop_core_when_shim_exists(
     shim.write_text("#!/bin/sh\n", encoding="utf-8")
     shim.chmod(0o755)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.harness.native_harness.sys.executable",
+        "codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge.sys.executable",
         str(versioned),
     )
     monkeypatch.setattr(

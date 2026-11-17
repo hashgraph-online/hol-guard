@@ -111,7 +111,7 @@ fn plan(text: &str) -> Step<Value> {
 
 /// Every settings file under the home with servers to plan:
 /// `{path, digest, key, managed, remote}`.
-fn scan(ctx: &Ctx) -> Step<Value> {
+pub(super) fn scan(ctx: &Ctx) -> Step<Value> {
     let home = ctx.resolved(&ctx.home);
     let mut seen = std::collections::HashSet::new();
     let mut found = Vec::new();

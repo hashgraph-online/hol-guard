@@ -48,6 +48,12 @@ def _frozen_guard(monkeypatch: pytest.MonkeyPatch, executable: str) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.stable_guard_cli.prune_safe_cli_executable", lambda executable: executable
     )
+    # The caller stamp reports a frozen Guard only when its executable exists;
+    # ``executable`` names a launcher this host does not have.
+    from codex_plugin_scanner.guard.harness import native_harness
+
+    stamped = native_harness.caller_identity
+    monkeypatch.setattr(native_harness, "caller_identity", lambda: {**stamped(), "frozen": True, "attest_facts": None})
 
 
 def _hook_argv(tmp_path: Path, harness: str) -> tuple[str, ...]:

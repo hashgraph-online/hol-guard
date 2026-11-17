@@ -249,7 +249,7 @@ if actor == "A":
                 raise TimeoutError("fixture synchronization expired")
             time.sleep(0.01)
         raise OSError("injected publication failure")
-    codex._ask_install_plan = fail_publish
+    codex_lifecycle._ask_install_plan = fail_publish
 try:
     codex_lifecycle.CodexHarnessAdapter().install(context)
 except RuntimeError as error:

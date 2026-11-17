@@ -86,12 +86,14 @@ fn a_plan_publishes_through_apply_plan() {
 }
 
 #[test]
-fn a_plan_waiting_on_a_reply_hands_it_back_before_any_write() {
+fn a_plan_whose_cli_cannot_be_attested_refuses_before_any_write() {
     let home = Home::new();
     let answer = home.ask(
         "cursor",
         "apply_plan",
         json!({"plan_op": "hooks_install", "removals": true, "transition": transition()}),
     );
-    assert_eq!(answer, json!({"reply": {"facts": null}}));
+    // The runtime attests the Guard CLI itself now; a host without one refuses.
+    assert!(answer["runtime_error"].is_string(), "{answer}");
+    assert!(!home.home().join(".cursor/hooks.json").exists());
 }

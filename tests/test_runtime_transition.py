@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.approval_gate import (
     require_high_risk,
     update_settings,
 )
+from codex_plugin_scanner.guard.claude_hook_entry import refresh_claude_hooks
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity
 from codex_plugin_scanner.guard.runtime_transition import (
@@ -625,7 +626,7 @@ def test_native_claude_binding_plan_restores_user_hooks_and_launchers(transition
     assert json.loads(candidate)["theme"] == "user-theme"
     assert b"user-stop-hook" in candidate
     with pytest.raises(TransitionError, match="pending_transition"):
-        adapter.refresh_runtime_hook_urls(ctx)
+        refresh_claude_hooks(home_dir=ctx.home_dir, workspace_dir=ctx.workspace_dir, guard_home=ctx.guard_home)
     assert settings.read_bytes() == candidate
     runtime.restore_files(plan.operation_id, first_cause="candidate protected hook failed")
     assert settings.read_bytes() == previous

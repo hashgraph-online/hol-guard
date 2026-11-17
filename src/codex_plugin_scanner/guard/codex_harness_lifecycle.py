@@ -30,7 +30,6 @@ from .codex_harness_client import (
     _codex,
     _hook_manifest_spec,
     _hook_registration,
-    _install_manifest,
     _launch_fields,
     _legacy_fields,
     _plan_file,
@@ -101,8 +100,15 @@ def _located(path: Path) -> Path:
 
 
 def _wire_artifact(artifact: GuardArtifact) -> dict[str, object]:
-    """A detected MCP server as the runtime reads it, private launch metadata included."""
-    return {**artifact.to_dict(), "runtime_private_metadata": dict(artifact.runtime_private_metadata)}
+    """A detected MCP server as the runtime reads it: its own arguments, URL,
+    environment and private launch metadata, not the redacted public view."""
+    return {
+        **artifact.to_dict(),
+        "args": list(artifact.args),
+        "url": artifact.url,
+        "metadata": dict(artifact.metadata),
+        "runtime_private_metadata": dict(artifact.runtime_private_metadata),
+    }
 
 
 def _plan_report(answer: Mapping[str, Any], detection: HarnessDetection) -> tuple[dict[str, Any], dict[str, object]]:
@@ -309,6 +315,8 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         self, context: HarnessContext, answer: Mapping[str, Any], detection: HarnessDetection
     ) -> _CodexInstallPlan:
         """The prepared install an ``install_plan`` answer describes."""
+        from .codex_harness_client import _install_manifest
+
         files = tuple(_plan_file(item) for item in answer["files"])
         # The plan leads with the publication: authority, manifest, receipt, config.
         authority, manifest_change, receipt_change, config_change = files[:4]
@@ -373,6 +381,8 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         if not isinstance(hook_state, dict):
             raise TransitionError("native_transition_invalid")
         _require_codex_authoritative_shell_hook(context)
+        from .codex_harness_client import _install_manifest
+
         return _install_manifest(
             context,
             "install",
@@ -419,6 +429,8 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             raise _exception(answer["fault"])
         if "key_error" in answer:
             raise hook_key_refusal(str(answer["key_error"]))
+        from .codex_harness_client import _install_manifest
+
         return _install_manifest(
             context,
             "uninstall",

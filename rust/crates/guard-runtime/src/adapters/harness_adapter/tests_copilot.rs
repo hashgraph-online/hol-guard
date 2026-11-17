@@ -139,7 +139,13 @@ fn copilot_install_refuses_a_malformed_later_config_before_planning_any_write() 
     );
     write(&ide, "{not json");
     let before = (fs::read(&cli).unwrap(), fs::read(&ide).unwrap());
-    assert!(ask(&home, "install_detection", json!({})).is_err());
+    // Refused either as a failed call or as a transition error the caller raises.
+    let answer = ask(&home, "install_detection", json!({}));
+    let refused = match &answer {
+        Err(_) => true,
+        Ok(found) => found.get("transition_error").is_some(),
+    };
+    assert!(refused, "{:?}", answer.as_ref().ok());
     assert_eq!((fs::read(&cli).unwrap(), fs::read(&ide).unwrap()), before);
 }
 

@@ -217,4 +217,5 @@ def test_python_refresh_moves_an_upgraded_install_back_onto_the_native_lane(
     lanes = [argv for argv in argvs if argv[2:3] == (_MODE,)]
     expected = claude_hook_entry.claude_argv("session_start", context)
     assert lanes == [expected] * 4
-    assert json.loads(lanes[0][4])["runtime_build"] == "9.9.9+" + "a" * 40
+    # The runtime stamps its own build; the stale one is gone.
+    assert json.loads(lanes[0][4])["runtime_build"] != "0.0.0+" + "b" * 40

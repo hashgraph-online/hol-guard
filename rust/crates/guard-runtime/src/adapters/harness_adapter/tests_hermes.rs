@@ -125,7 +125,12 @@ fn install_registers_a_fail_closed_hook_and_approves_only_its_command() {
             .iter()
             .map(|arg| arg.as_str().unwrap())
             .collect();
-        assert_eq!(&args[args.len() - 3..], ["--server", key, "--stdio"]);
+        if key == "yaml:github" {
+            // A stdio server with its own command runs under the module-form proxy.
+            assert_eq!(&args[args.len() - 3..], ["stdio", "--command", "npx"]);
+        } else {
+            assert_eq!(&args[args.len() - 3..], ["--server", key, "--stdio"]);
+        }
         assert_eq!(entry["metadata"]["guard_transport"], transport);
     }
 }

@@ -81,7 +81,9 @@ def test_frozen_generated_grok_hook_is_recognized(
     monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
     command = _command(tmp_path)
     assert json.loads(command[-1])["frozen_launcher"] is True
-    assert is_grok_hook_command(_shell_command(command)) is True
+    # A frozen hook names the durable runtime copy under its Guard home.
+    context = HarnessContext(tmp_path / "home", tmp_path / "workspace", tmp_path / "guard")
+    assert is_grok_hook_command(_shell_command(command), context) is True
 
 
 def test_grok_hook_is_bound_to_its_owner(tmp_path: Path, runtime: Path) -> None:

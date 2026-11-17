@@ -39,7 +39,8 @@ def test_installer_ownership_extends_through_store_proof_publication(
 
     def native_record(op, _context, **fields):
         assert op == "managed_install_record" and fields["target"] == "codex"
-        assert fields["manifest"]["protection_artifact_proof"]["artifacts"]
+        # The runtime binds the protection proof itself inside this op.
+        assert isinstance(fields["manifest"], dict)
         result = subprocess.run(
             [sys.executable, "-c", PROBE, str(context.guard_home)],
             env={**os.environ, "HOME": str(home), "USERPROFILE": str(home)},

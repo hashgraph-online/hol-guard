@@ -48,9 +48,10 @@ fn a_cline_surface_the_runtime_does_not_know_is_refused() {
     let home = Home::new();
     let answer = home.ask("cline", "apply_uninstall", json!({"surface": "telepathy"}));
     assert_eq!(
-        answer,
-        json!({"refusal": "Unsupported Cline surface: telepathy"})
+        answer["refusal"],
+        json!("Unsupported Cline surface: telepathy")
     );
+    assert_eq!(answer["events"], json!([]));
 }
 
 fn lock_path(home: &Home) -> std::path::PathBuf {

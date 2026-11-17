@@ -24,7 +24,20 @@ fn stamped(home: &Home, bridge: &Value) -> Value {
     if bridge.is_null() {
         stamp["native_runtime"] = Value::Null;
     } else {
-        stamp["native_runtime"]["path"] = bridge.clone();
+        // A frozen caller's hooks run a durable copy of the runtime, so the
+        // stamped runtime is a real file whose size and digest match.
+        let runtime = home.home().join("runtime").join("hol-guard-runtime");
+        let bytes = b"#!/bin/sh\n";
+        write(&runtime, std::str::from_utf8(bytes).unwrap());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&runtime, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        stamp["native_runtime"]["path"] = json!(runtime);
+        stamp["native_runtime"]["size"] = json!(bytes.len());
+        stamp["native_runtime"]["sha256"] =
+            json!(hex::encode(<sha2::Sha256 as sha2::Digest>::digest(bytes)));
     }
     stamp
 }

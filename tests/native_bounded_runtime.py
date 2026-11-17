@@ -6,10 +6,12 @@ The native ``harness_adapter`` kind reads the bridge from the caller stamp's
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.harness import native_hook_bridge
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.harness.native_harness import raise_failure, wire_context
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
@@ -19,13 +21,30 @@ from .native_runtime_stamp import stamp_native_runtime
 BOUNDED_FEATURES = ("bounded-hook-bridge-v1", "bounded-hook-bridge-muse-v1")
 
 
-def use_bounded_runtime(monkeypatch: pytest.MonkeyPatch, runtime: Path) -> str:
-    """Stamp ``runtime`` as the bounded bridge and return its SHA-256."""
+def use_bounded_runtime(monkeypatch: pytest.MonkeyPatch, runtime: Path, guard_home: Path | None = None) -> str:
+    """Stamp ``runtime`` as the bounded bridge and return its SHA-256.
+
+    ``guard_home`` is the Guard home a frozen lookup without one falls back to.
+    """
 
     runtime.parent.mkdir(parents=True, exist_ok=True)
     if not runtime.exists():
         runtime.write_bytes(b"native runtime")
     digest = stamp_native_runtime(monkeypatch, runtime, BOUNDED_FEATURES)
+
+    default_home = guard_home
+
+    def bridge(feature: str, *, guard_home: Path | None = None, **_kwargs: object) -> Path | None:
+        # Validation looks the bridge up the way install named it: the stamped
+        # runtime, or a frozen Guard's durable copy of it under ``guard_home``.
+        if feature not in BOUNDED_FEATURES:
+            return None
+        if not getattr(sys, "frozen", False):
+            return runtime
+        home = guard_home or default_home
+        return None if home is None else durable_copy(home, runtime, digest)
+
+    monkeypatch.setattr(native_hook_bridge, "native_hook_bridge_executable", bridge)
     return digest
 
 

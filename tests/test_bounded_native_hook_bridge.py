@@ -58,7 +58,7 @@ def test_other_harnesses_have_no_bounded_hook(tmp_path: Path, monkeypatch: pytes
     _offer_native(monkeypatch, tmp_path / "hol-guard-runtime", (NATIVE_BOUNDED_HOOK_FEATURE,))
 
     with pytest.raises(RuntimeError, match="hol-guard repair"):
-        _command(tmp_path, "claude")
+        _command(tmp_path, "claude-code")
 
 
 def test_a_runtime_without_the_native_feature_asks_for_repair(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1590,11 +1590,12 @@
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/harness/native_harness_steps.py",
         "symbols": [
+          "install_delegated",
           "prepared_from_detection",
           "prepared_surfaces"
         ],
         "entry_points": [],
-        "reason": "The rebind Copilot plans from what the native runtime detected: the launcher shim, the enrolled state key dependency and the native file plan.",
+        "reason": "The rebind Copilot plans from what the native runtime detected: the launcher shim, the enrolled state key dependency and the native file plan, and the delegated install that installs each provider and binds its proof.",
         "evidence": "prepared_from_detection is called only from NativeHarnessAdapter.prepare_install, which is excluded by adapter-native-harness-setup and invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       }
     ],

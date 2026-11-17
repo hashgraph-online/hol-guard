@@ -188,6 +188,32 @@ def _fetch_pi_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.Mo
     monkeypatch.setenv("HOL_GUARD_PI_HOOK_BRIDGE", "fetch")
 
 
+@pytest.fixture(autouse=True)
+def _python_mcp_proxy_launcher(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install MCP proxies with the Python launcher argv unless a test opts in.
+
+    Most install and refresh tests pin the Python proxy entry. Tests marked
+    ``native_mcp_relay`` keep the native relay selection. The native runtime
+    picks the relay from the runtime the caller stamp reports, so the stamp
+    stops advertising the relay feature.
+    """
+
+    if request.node.get_closest_marker("native_mcp_relay") is not None:
+        return
+    from codex_plugin_scanner.guard import native_caller
+
+    advertised = native_caller._native_runtime
+
+    def without_relay() -> dict[str, object] | None:
+        runtime = advertised()
+        if runtime is None:
+            return None
+        features = [feature for feature in runtime["features"] if feature != "mcp-stdio-relay-v1"]  # type: ignore[union-attr]
+        return {**runtime, "features": features}
+
+    monkeypatch.setattr(native_caller, "_native_runtime", without_relay)
+
+
 _session_daemon_runtime_fingerprint: list[str] = []
 _daemon_runtime_fingerprint_attempts: list[None] = []
 

@@ -33,7 +33,9 @@ pub(super) fn opencode_lock(spec: &Spec, ctx: &Ctx) -> Step<Option<std::fs::File
         })
 }
 
-const OPENCODE_LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+/// Shorter than the caller's five-second runner budget, so a held lock comes
+/// back as the busy answer instead of an expired call.
+const OPENCODE_LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
 pub(super) const OPENCODE_BUSY: &str =
     "Another Guard operation is updating OpenCode config; try again shortly";
 
@@ -138,7 +140,9 @@ pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step
     for key in ["launcher_name", "display_name", "interpreter"] {
         shim_fields.insert(key.into(), fields.get(key).cloned().unwrap_or(Value::Null));
     }
-    let shim = guard_shim::prepare(ctx, &shim_fields)?;
+    let Some(shim) = shim_or_refusal(ctx, &shim_fields)? else {
+        return Ok(refused("file_target_invalid"));
+    };
     let shim_manifest = shim
         .get("manifest")
         .and_then(Value::as_str)
@@ -171,6 +175,15 @@ pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step
     Ok(json!({ "manifest": manifest, "publish": published }))
 }
 
+/// The launcher plan, or `None` when a launcher path is a link: the plan is
+/// refused before any write, as the publish would refuse it.
+fn shim_or_refusal(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Option<Value>> {
+    match guard_shim::prepare(ctx, fields) {
+        Err(Failure::Integrity("target_invalid")) => Ok(None),
+        other => other.map(Some),
+    }
+}
+
 /// The only reason an answer of just `transition_error` names.
 fn transition_refusal(answer: &Value) -> Option<&str> {
     let answer = answer.as_object()?;
@@ -199,7 +212,9 @@ fn copilot(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         "interpreter".into(),
         fields.get("interpreter").cloned().unwrap_or(Value::Null),
     );
-    let shim = guard_shim::prepare(ctx, &shim_fields)?;
+    let Some(shim) = shim_or_refusal(ctx, &shim_fields)? else {
+        return Ok(refused("file_target_invalid"));
+    };
     let shim_manifest = shim
         .get("manifest")
         .and_then(Value::as_str)

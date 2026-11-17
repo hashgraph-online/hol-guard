@@ -44,7 +44,7 @@ def _redirect(command: tuple[str, ...], target: Path, option: str) -> tuple[str,
 def _runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The host's native runtime, as install and validation both find it."""
     runtime = tmp_path / "hol-guard-runtime"
-    use_bounded_runtime(monkeypatch, runtime)
+    use_bounded_runtime(monkeypatch, runtime, tmp_path / "guard")
 
 
 def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPatch) -> tuple[str, ...]:

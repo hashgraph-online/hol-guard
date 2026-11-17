@@ -286,6 +286,18 @@ fn python(ctx: &Ctx, scoped: Option<&tempfile::TempDir>) -> Step<Result<Attested
     Ok(attested.ok_or_else(|| REINSTALL.to_owned()))
 }
 
+/// `tempfile.gettempdir()` as the caller would answer it: its `TMPDIR`,
+/// `TEMP` or `TMP` when that names a directory, else this process's own. The
+/// resident's temp directory can be one the caller no longer has.
+fn caller_temp_dir(ctx: &Ctx) -> std::path::PathBuf {
+    ["TMPDIR", "TEMP", "TMP"]
+        .iter()
+        .filter_map(|key| ctx.env(key).filter(|value| !value.is_empty()))
+        .map(|value| ctx.absolute(std::path::Path::new(value)))
+        .find(|path| path.is_dir())
+        .unwrap_or_else(std::env::temp_dir)
+}
+
 /// `resolve_attested_guard_cli`: the attested CLI, or the error a harness
 /// reports. `scoped` runs a non-frozen probe in a directory this request
 /// owns and removes, as an install preparation does.
@@ -298,7 +310,7 @@ pub(super) fn attested(ctx: &Ctx, scoped: bool) -> Step<Result<Attested, String>
     }
     let directory = tempfile::Builder::new()
         .prefix("hol-guard-hook-probe-")
-        .tempdir();
+        .tempdir_in(caller_temp_dir(ctx));
     match directory {
         Ok(directory) => python(ctx, Some(&directory)),
         Err(_) => Ok(Err(REINSTALL.into())),

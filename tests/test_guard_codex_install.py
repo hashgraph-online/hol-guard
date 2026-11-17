@@ -17,6 +17,7 @@ except ModuleNotFoundError:
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
+from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import (
@@ -667,8 +668,8 @@ def test_guard_codex_launch_uses_remote_control_for_dashboard_continuation(tmp_p
         captured.update(kwargs)
         return ["/usr/bin/codex", "--remote", "unix:///guarded.sock", "Fix it."]
 
-    monkeypatch.setattr(codex_adapter, "_require_codex_authoritative_shell_hook", lambda _context: None)
-    monkeypatch.setattr(codex_adapter, "guarded_codex_launch_command", fake_remote_launch)
+    monkeypatch.setattr(codex_lifecycle, "_require_codex_authoritative_shell_hook", lambda _context: None)
+    monkeypatch.setattr(codex_lifecycle, "guarded_codex_launch_command", fake_remote_launch)
     monkeypatch.setattr(CodexHarnessAdapter, "resolved_executable", lambda self, ctx: "/usr/bin/codex")
 
     command = CodexHarnessAdapter().launch_command(context, ["Fix it."])
