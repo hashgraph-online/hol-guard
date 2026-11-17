@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from typing_extensions import NotRequired, TypedDict
 
-from ..harness.diagnostic_probes import skipped_command_probe
+from ..harness.diagnostic_probes import command_probes_enabled
 from ..native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY
 from ..native_resident_watchdog import published_process_alive, published_resident_process
 from ..resident_state_prune import probe_owner_lock
@@ -161,7 +161,7 @@ def _passive_availability(guard_home: Path | None) -> NativeAvailabilityResult:
 def doctor_native_availability(guard_home: Path | None = None) -> NativeAvailabilityResult:
     """Report native availability, never a failure the caller did not let us check."""
     # This only queries the passive scope; its command metadata is not emitted.
-    if skipped_command_probe(["hol-guard-runtime", "capabilities", "--json"]) is not None:
+    if not command_probes_enabled():
         return _passive_availability(guard_home)
 
     from ..native_runtime import native_runtime_status
@@ -339,7 +339,7 @@ def native_runtime_section(
     # do. The question itself rides the resident's reserved control lane, so a
     # busy resident answers it too: a published pid alone cannot tell a wedged
     # resident from a working one.
-    asks_the_resident = skipped_command_probe(["hol-guard-runtime", "capabilities", "--json"]) is None
+    asks_the_resident = command_probes_enabled()
     if resident["live"] is True and guard_home is not None and asks_the_resident:
         from ..native_resident_health import native_resident_health
 

@@ -8,6 +8,10 @@
 //! The CLI gets no input, runs in its own process group and is stopped with
 //! that group at the deadline or once it writes more than 1 MiB.
 //!
+//! A caller that runs no probes (the global doctor's passive checks) sends
+//! `{"command", "probes": false}` instead; the answer is the record that says
+//! the probe was skipped, and nothing runs.
+//!
 //! The answer is the probe record the doctor reads: the argv, whether it
 //! exited 0, its return code and its trimmed output. A program that is not
 //! there answers "command not found"; one that ran out of time keeps what it
@@ -28,6 +32,12 @@ const MAX_TIMEOUT_SECONDS: u64 = 60;
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {
     let map = args_object(args)?;
+    if map.get("probes") == Some(&Value::Bool(false)) {
+        if map.len() != 2 || !map.contains_key("command") {
+            return Err(ERR_INVALID);
+        }
+        return Ok(skipped(&strings(map.get("command"))?));
+    }
     if map.len() != KEYS.len() || KEYS.iter().any(|key| !map.contains_key(*key)) {
         return Err(ERR_INVALID);
     }
@@ -134,6 +144,19 @@ fn environment(map: &Map<String, Value>) -> Result<BTreeMap<String, String>, &'s
         env.insert(key.clone(), value.ok_or(ERR_INVALID)?.to_owned());
     }
     Ok(env)
+}
+
+/// The record of a probe a passive check chose not to run.
+fn skipped(command: &[String]) -> Value {
+    json!({
+        "command": command,
+        "ok": null,
+        "return_code": null,
+        "stdout": "",
+        "stderr": "",
+        "skipped": true,
+        "skip_reason": "global_doctor_passive_checks",
+    })
 }
 
 /// The probe record `_run_command_probe` answered; `None` when the program

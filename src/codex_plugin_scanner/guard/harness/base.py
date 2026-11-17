@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..harness.contracts import HarnessCoverageSummary, HarnessSetupContract, HarnessSetupStep, setup_contract_for
-from ..harness.diagnostic_probes import skipped_command_probe
+from ..harness.diagnostic_probes import command_probes_enabled
 from ..harness.harness_diagnostics_bridge import (
     artifacts_use_guard,
     guard_warnings,
@@ -102,11 +102,11 @@ def _run_command_probe(
     envelope stamps them.
     """
 
-    skipped = skipped_command_probe(command)
-    if skipped is not None:
-        return skipped
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
+    if not command_probes_enabled():
+        # The runtime answers the record that says nothing ran.
+        return native_runner_authority("command_probe", {"command": [str(part) for part in command], "probes": False})
     request = {
         "command": [str(part) for part in command],
         "cwd": str((cwd or Path.cwd()).absolute()),
