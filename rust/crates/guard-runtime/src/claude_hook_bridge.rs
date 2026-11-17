@@ -1,16 +1,17 @@
-//! Native Claude Code hook bridge: a port of `main` in
-//! `adapters/claude_daemon_hook_bridge.py`. Claude Code runs this once per
+//! Native Claude Code hook bridge, started by the installed hook command or
+//! by the legacy launcher `adapters/claude_daemon_hook_bridge.py`. Claude Code runs this once per
 //! hook. It forwards the hook to the authenticated loopback Guard daemon and
 //! recovers a dead daemon once, waiting for it to come back up, all inside the harness's hook deadline. Every
 //! failure ends in a hook response that denies or degrades the action; nothing
 //! here decides a verdict itself, and no Python hook command runs in its place.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use crate::claude_hook_bridge_http::{remaining, MINIMUM_OPERATION};
+use crate::claude_hook_bridge_recovery::launcher_recovery;
 use crate::claude_hook_bridge_render::{
     control_plane_failure, degraded, event_name, limit_denied, py_strip, should_suppress_output,
     valid_hook_json_or_degraded,
@@ -26,6 +27,7 @@ use crate::codex_hook_bridge_direct_resident::DirectMiss;
 use crate::hook_bridge_daemon_start::{await_daemon, Attempt, MINIMUM_REQUEST};
 use crate::hook_env_stamp::{current_environment, stamp_hook_input_text, Stamp};
 use crate::hook_process_spawn::{isolated_hook_environment, run_isolated_hook_process};
+use guard_command::harness_attribution::resolve_environment_harness_from;
 
 /// argv marker that selects the bridge, mirroring the Python module path.
 pub(crate) const BRIDGE_MARKER: &str = "HOL_GUARD_CLAUDE_DAEMON_HOOK";
@@ -67,14 +69,21 @@ pub(crate) fn parse_config(text: &str) -> Option<BridgeConfig> {
     if string_list(payload.get("fallback_command"))?.is_empty() {
         return None;
     }
-    let recovery_command = match payload.get("recovery_command") {
-        None => Vec::new(),
-        value => string_list(value)?,
+    let state_path = text_field("state_path")?;
+    let query = text_field("query")?;
+    let recovery_command = match (
+        payload.get("recovery_command"),
+        payload.get("recovery_launcher"),
+    ) {
+        (None, None) => Vec::new(),
+        (None, Some(launcher)) => launcher_recovery(&state_path, &query, launcher.as_object()?)?,
+        (value, None) => string_list(value)?,
+        (Some(_), Some(_)) => return None,
     };
     Some(BridgeConfig {
-        state_path: text_field("state_path")?,
+        state_path,
         fallback_daemon_url: text_field("fallback_daemon_url")?,
-        query: text_field("query")?,
+        query,
         recovery_command,
     })
 }
@@ -139,8 +148,26 @@ fn hook_environment() -> BTreeMap<String, String> {
     environment
 }
 
+/// The daemon query this hook is reviewed under. Cursor can run the hooks in
+/// the user's Claude settings, so a hook that fires inside Cursor is reviewed
+/// as Cursor. That answer comes from this hook process's own environment,
+/// never from whoever installed the hook, and Claude Code's own markers win,
+/// so a Claude session started from a Cursor terminal stays Claude.
+pub(crate) fn attributed_query(query: &str, environment: &HashMap<String, String>) -> String {
+    let query = endpoint_query(query);
+    let names_harness = query
+        .split('&')
+        .any(|pair| pair.split('=').next() == Some("runtime-harness"));
+    if names_harness || resolve_environment_harness_from(environment).as_deref() != Some("cursor") {
+        return query;
+    }
+    let separator = if query.is_empty() { "" } else { "&" };
+    format!("{query}{separator}runtime-harness=cursor")
+}
+
 struct Bridge<'a> {
     config: &'a BridgeConfig,
+    query: String,
     data: String,
     deadline: Instant,
 }
@@ -166,9 +193,8 @@ impl Bridge<'_> {
                 "Guard daemon hook request exhausted its absolute deadline".to_owned(),
             ));
         }
-        let query = endpoint_query(&self.config.query);
         let response =
-            authenticated_claude_hook_response(state_path, &query, &self.data, timeout, miss)?;
+            authenticated_claude_hook_response(state_path, &self.query, &self.data, timeout, miss)?;
         valid_hook_json_or_degraded(&response, malformed, &self.data).map_err(json_failure)
     }
 
@@ -178,12 +204,11 @@ impl Bridge<'_> {
     /// miss takes the daemon path.
     fn direct_response(&self, state_path: &Path) -> Result<String, DirectMiss> {
         let guard_home = state_path.parent().ok_or(DirectMiss::NoState)?;
-        let query = endpoint_query(&self.config.query);
         let event = event_name(&self.data);
         let text = direct_answer_reporting(
             CLAUDE_CODE,
             guard_home,
-            &query,
+            &self.query,
             &event.name,
             &self.data,
             self.deadline,
@@ -325,6 +350,17 @@ pub(crate) fn hook_response(config_text: &str, input: &mut impl Read) -> Option<
     };
     let bridge = Bridge {
         config: &config,
+        query: attributed_query(
+            &config.query,
+            &std::env::vars_os()
+                .map(|(key, value)| {
+                    (
+                        key.to_string_lossy().into_owned(),
+                        value.to_string_lossy().into_owned(),
+                    )
+                })
+                .collect(),
+        ),
         data,
         deadline,
     };

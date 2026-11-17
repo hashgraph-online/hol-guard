@@ -4,6 +4,11 @@ Local harness protection works without signing in to Guard Cloud. Cloud adds syn
 history, visibility, and team controls around the same adapters. See
 [Local Guard vs Guard Cloud](./local-vs-cloud.md).
 
+The per-event claims, including what happens when Guard cannot answer and what is
+not covered, are generated from the harness protection contract in
+[Harness protection claims](./harness-claims.md). Where this page and that one
+differ, the generated page is current.
+
 ## Hook verdict exit codes
 
 `guard/cli/native_hook_exit_code.py::native_hook_verdict_exit_code` is the
@@ -45,7 +50,7 @@ Current Guard support in this repo:
   - when no Codex thread binding is available, returns an explicit manual fallback instead of a false resume success
 - `claude-code`
   - detects global and project settings, hooks, `.mcp.json`, and workspace agents
-  - supports local hook install and uninstall in `.claude/settings.local.json`
+  - installs and removes Guard's hook entries in the user file `~/.claude/settings.json`, also when installed from a workspace (see [Claude Code settings](./claude-code-settings.md))
   - has native `PreToolUse`, `PermissionRequest` and `UserPromptSubmit` Guard hook coverage, so a typed prompt is screened before Claude reads it
   - when CIGAR project context is on, the `UserPromptSubmit` answer also carries short excerpts from the project files that match the prompt (see [CIGAR runtime and settings](./cigar-integration/runtime-and-settings.md#prompt-context-in-claude-code-and-codex))
   - carries package-manager shell intent and pre-execution block state through the shared Guard runtime envelope before Claude sees the denied tool response
@@ -78,11 +83,11 @@ Current Guard support in this repo:
   - records synthetic bridge canaries separately from live Cline runtime proofs and does not mark a transport ready from file presence alone
   - reports JetBrains protection as unverified until a live pre-tool proof exists; see [Cline local protection contract](cline-local-protection-contract.md)
 - `antigravity`
-  - detects user settings in `~/.config/antigravity/user/settings.json` and `~/.config/Antigravity/User/settings.json`, macOS Application Support settings, and `%APPDATA%\Antigravity\User\settings.json`
+  - detects user settings in `~/.config/antigravity/user/settings.json` and `~/.config/Antigravity/User/settings.json`, macOS Application Support settings, and `~/AppData/Roaming/Antigravity/User/settings.json`
   - reads those two XDG paths once when the filesystem is case-insensitive; when both files exist, their MCP servers keep separate artifact ids
   - detects extension manifests in `~/.antigravity/extensions/extensions.json` and MCP configuration in `.gemini/antigravity/mcp_config.json`
   - discovers skill directories under `.gemini/antigravity/skills/` (`skills`), `.gemini/antigravity/builtin/skills/` (`builtin-skills`), and `.gemini/config/plugins/` (`plugin-skills`), plus workspace `.agents/skills/` (`agents-skills`). Home `.agents/skills/` stays with the harnesses that own it. Each prefix is one path segment, so a nested directory under the primary skills root cannot reuse another root's artifact id. See [Skill directory identity](./skill-directory-identity.md)
-  - uses Rust runner authority `antigravity_detect`
+  - uses Rust runner authority `antigravity_detect`; see [Antigravity harness support specification](./antigravity-harness-support-spec.md)
   - supports wrapper-mode management state; install smoke is `hol-guard install antigravity --dry-run`
   - uses the local approval center for blocked artifact changes
   - shell commands are not observable through the Antigravity hook surface
@@ -250,7 +255,7 @@ Explicit non-support:
 
 ## Protection Contract Summary
 
-Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
+Generated from `src/codex_plugin_scanner/guard/harness/contracts.py`.
 
 | Harness | Install Aliases | Native Approval | Browser Fallback | Resume | Event Surfaces |
 |---------|-----------------|-----------------|------------------|--------|----------------|

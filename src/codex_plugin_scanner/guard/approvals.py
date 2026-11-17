@@ -19,8 +19,6 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from ..version import __version__
 from .action_lattice import normalize_guard_action_result
-from .adapters import get_adapter
-from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
 from .approval_once_eligibility import requires_local_once_approval
 from .approval_resolution import require_resolvable_approval_request
@@ -45,6 +43,8 @@ from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
 )
+from .harness.base import HarnessContext
+from .harness.registry import get_adapter
 from .harness_posture import harness_posture_summary
 from .local_dashboard_session import (
     build_approval_browser_url as build_approval_browser_url,
@@ -1073,7 +1073,7 @@ def _live_hook_verification(
                 verified[harness] = codex_runtime_hooks_verified(context)
                 continue
             if harness == "cursor":
-                from .adapters.cursor import cursor_runtime_hooks_verified
+                from .harness.cursor_client import cursor_runtime_hooks_verified
 
                 proven = cursor_runtime_hooks_verified(context)
                 if proven is None:
@@ -1712,6 +1712,8 @@ def bulk_allow_read_only_once(
         }
 
     bulk_subject = f"approval-request-batch:{uuid.uuid5(uuid.NAMESPACE_URL, chr(0).join(sorted(eligible_ids))).hex}"
+    if approval_gate_input is not None:
+        approval_gate_input = replace(approval_gate_input, pulse_batch_request_ids=tuple(eligible_ids))
     bulk_gate_grant = require_approval_decision(
         store.guard_home,
         action=bulk_resolution_action,

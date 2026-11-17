@@ -467,3 +467,34 @@ fn anchor_keeps_call_ids_for_another_harness_sending_a_conversation_id() {
     retry.raw_payload["tool_use_id"] = serde_json::json!("call-retry");
     assert_ne!(anchor(&retry, &published), baseline);
 }
+
+/// The Gauntlet observer stamps each Oh My Pi hook with a transition probe
+/// whose operation id is new on every call. The probe only asks for the
+/// receipt back, so an identical retry still reaches the approval, while a
+/// probe-shaped field inside the tool input stays part of the action.
+#[test]
+fn anchor_reaches_a_probed_omp_retry() {
+    let published = snapshot();
+    let probe = |operation: &str| {
+        serde_json::json!({
+            "schema": "hol-guard.transition-hook-probe.v1",
+            "operation_id": operation,
+            "request_id": format!("transition-hook-{}", "0".repeat(32)),
+        })
+    };
+    let mut request = review_envelope();
+    request.0.harness = "omp".into();
+    request.0.raw_payload["session_id"] = serde_json::json!("session-one");
+    request.0.raw_payload["tool_call_id"] = serde_json::json!("call-first");
+    request.0.raw_payload["guard_transition_probe"] = probe("11111111-1111-1111-1111-111111111111");
+    let baseline = anchor(&request, &published);
+    let intent = execution_intent_digest(&request).expect("intent");
+    let mut retry = request.0.clone();
+    retry.raw_payload["tool_call_id"] = serde_json::json!("call-retry");
+    retry.raw_payload["guard_transition_probe"] = probe("22222222-2222-2222-2222-222222222222");
+    assert_eq!(anchor(&retry, &published), baseline);
+    assert_eq!(execution_intent_digest(&retry).expect("intent"), intent);
+    let mut nested = retry.clone();
+    nested.raw_payload["tool_input"]["guard_transition_probe"] = probe("3");
+    assert_ne!(anchor(&nested, &published), baseline);
+}

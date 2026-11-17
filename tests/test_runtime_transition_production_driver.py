@@ -22,8 +22,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateError,
     ApprovalGateInput,
@@ -31,7 +29,9 @@ from codex_plugin_scanner.guard.approval_gate import (
     update_settings,
 )
 from codex_plugin_scanner.guard.cli.desktop_runtime_transition import run_desktop_runtime_transition
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.live_process_identity import process_start_token
 from codex_plugin_scanner.guard.native_daemon_manage import (
@@ -190,12 +190,13 @@ try:
         runtime.restore_files(operation_id, first_cause="candidate_hook_failed")
         if phase == "inverse-restored":
             finish()
-        original = runtime._write
-        def crash_after_previous(payload):
-            original(payload)
-            if payload.get("phase") == "PreviousFunctional":
+        original = runtime._commit
+        def crash_after_previous(*args, **kwargs):
+            phase_now = original(*args, **kwargs)
+            if phase_now == "PreviousFunctional":
                 finish()
-        runtime._write = crash_after_previous
+            return phase_now
+        runtime._commit = crash_after_previous
         runtime.finish_rollback(operation_id, functional_proof=proof(predecessor_generation))
     raise SystemExit("crash boundary was not reached")
 finally:

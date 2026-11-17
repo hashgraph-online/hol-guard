@@ -32,6 +32,8 @@ mod counters;
 mod cursor_sink;
 #[path = "daemon_edge_hook_lifecycle.rs"]
 mod lifecycle;
+#[path = "daemon_edge_hook_managed.rs"]
+mod managed;
 
 /// The daemon's fixed hook replies, declared once for every harness.
 const ENVELOPES: &str = include_str!(
@@ -260,9 +262,13 @@ impl Hook<'_> {
     /// Whether the hook belongs to an app Guard is not protecting: its own
     /// managed-install row is inactive or, with no row, another app's is
     /// active. A store that cannot be read keeps the hook reviewed.
-    fn unmanaged(&self, harness: &str) -> bool {
-        crate::local_store_read::hook_store_probe(Path::new(&self.config.guard_home), harness, None)
-            .is_ok_and(|probe| probe.harness_unmanaged)
+    /// Hooks that arrived together share one read (see `managed`).
+    fn unmanaged(&self, harness: &str, arrived: std::time::Instant) -> bool {
+        let guard_home = &self.config.guard_home;
+        managed::shared().unmanaged(&format!("{guard_home}\0{harness}"), arrived, || {
+            crate::local_store_read::hook_store_probe(Path::new(guard_home), harness, None)
+                .is_ok_and(|probe| probe.harness_unmanaged)
+        })
     }
 
     /// Audits a directory the request named and the daemon refused. The
@@ -340,7 +346,7 @@ impl Hook<'_> {
         };
         // An unmanaged app's hooks never reach a workspace, so its refused
         // workspace is not audited.
-        if self.unmanaged(&self.managed_harness()) {
+        if self.unmanaged(&self.managed_harness(), std::time::Instant::now()) {
             return (
                 200,
                 json!({
@@ -385,6 +391,7 @@ impl Hook<'_> {
     /// `POST /v1/hooks/<harness>`: admits the hook under its deadline and the
     /// scheduler's capacity, and answers the worker's review or a fail-safe.
     fn runtime(&self, mut payload: Map<String, Value>, direct_miss: Option<&str>) -> Value {
+        let arrived = std::time::Instant::now();
         let event = runtime_event(&payload);
         let (hint, missing) = take_hint(&mut payload);
         // A hook with no time hint has a client that waits for its answer;
@@ -470,21 +477,8 @@ impl Hook<'_> {
         }
         // Leftover hooks of an app Guard is not protecting pass through.
         let managed_harness = self.managed_harness();
-        if self.unmanaged(&managed_harness) {
+        if self.unmanaged(&managed_harness, arrived) {
             return envelope("unmanaged", &managed_harness, &[]);
-        }
-        let Some(prepared) = self.call_by(
-            "hook.prepare",
-            json!({
-                "workspace": workspace,
-                "remaining_seconds": remaining(),
-            }),
-            expires,
-        ) else {
-            return unavailable();
-        };
-        if let Some(refused) = prepared.get("fail_safe") {
-            return refusal(refused).map_or_else(unavailable, |(reason, code)| fail(reason, code));
         }
         // A referenced payload is read only where Guard's own writer could
         // have put it, and reserves the most a reference may carry.
@@ -516,9 +510,28 @@ impl Hook<'_> {
             Ok(permit) => permit,
             Err(code) => {
                 scheduler.record_harness_rejection(capacity_harness);
-                return fail(capacity_reason(code), code);
+                return fail(
+                    &capacity_reason(code, Path::new(&self.config.guard_home), &self.home()),
+                    code,
+                );
             }
         };
+        // The policy barrier runs inside the admitted slot: it can hold a
+        // library worker for most of the hook's deadline, so a burst must
+        // queue for it here, bounded, rather than all at once in the library.
+        let Some(prepared) = self.call_by(
+            "hook.prepare",
+            json!({
+                "workspace": workspace,
+                "remaining_seconds": remaining(),
+            }),
+            expires,
+        ) else {
+            return unavailable();
+        };
+        if let Some(refused) = prepared.get("fail_safe") {
+            return refusal(refused).map_or_else(unavailable, |(reason, code)| fail(reason, code));
+        }
         if let Some(answer) = self.lifecycle(&reply_harness, &event, &payload, expires) {
             permit.release();
             return answer;
@@ -572,13 +585,30 @@ fn refusal(refused: &Value) -> Option<(&str, &str)> {
     ))
 }
 
-/// The message a capacity refusal carries.
-fn capacity_reason(code: &str) -> &'static str {
-    if code == hook_scheduler::DEADLINE_EXHAUSTED {
-        "HOL Guard could not complete local review within the hook deadline. Retry this action."
+/// The message a capacity refusal carries. A retry usually succeeds once a
+/// cold start or a burst has passed; one that keeps failing points at a
+/// daemon that needs repair, so each message names the command for that.
+///
+/// The command names the refusing daemon's Guard home whenever it is not
+/// known to be `<home_dir>/.hol-guard`, quoted for the shell: a bare
+/// `hol-guard repair` would repair the default install and leave this one
+/// refusing. An unknown home directory cannot prove the home is the default,
+/// so it names the home too.
+fn capacity_reason(code: &str, guard_home: &Path, home_dir: &str) -> String {
+    let command = if !home_dir.is_empty() && Path::new(home_dir).join(".hol-guard") == guard_home {
+        "hol-guard repair".to_owned()
     } else {
-        "HOL Guard is safely queueing the maximum local review workload. Retry this action."
-    }
+        format!(
+            "hol-guard repair --guard-home {}",
+            crate::mcp_proxy_shlex::quote(&guard_home.to_string_lossy())
+        )
+    };
+    let cause = if code == hook_scheduler::DEADLINE_EXHAUSTED {
+        "HOL Guard could not complete local review within the hook deadline."
+    } else {
+        "HOL Guard is safely queueing the maximum local review workload."
+    };
+    format!("{cause} Retry this action; if it keeps failing, run `{command}`.")
 }
 
 /// The harness's answer when the hook worker could not review the hook:

@@ -8,10 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
+from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_adapter_lifecycle
 from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
 from codex_plugin_scanner.guard.codex_hook_identity import CodexHookGroupQuestion, canonical_codex_hook_group_identities
+from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 from codex_plugin_scanner.guard.codex_hook_inventory import enumerate_codex_hooks
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import (
@@ -19,7 +20,12 @@ from codex_plugin_scanner.guard.consumer.service import (
     artifact_hash,
     diff_artifact,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from tests import codex_plan_segments as segments
+from tests import codex_publication_steps
+from tests.codex_publication_steps import use_stepwise_publication
+from tests.transition_fault_support import interrupt_publication_at
 
 
 def _write(path: Path, text: str) -> None:
@@ -188,7 +194,7 @@ def test_detect_inventories_every_toml_event_and_deduplicates_mixed_sources(tmp_
     )
     _write(hooks_path, json.dumps({"hooks": {"FutureAgentEvent": [shared_json_group]}}) + "\n")
 
-    detection = codex_adapter.CodexHarnessAdapter().detect(
+    detection = codex_adapter_lifecycle.CodexHarnessAdapter().detect(
         HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=tmp_path / "guard-home")
     )
     hook_artifacts = [artifact for artifact in detection.artifacts if artifact.artifact_type == "hook"]
@@ -213,7 +219,7 @@ def test_default_hook_activation_keeps_existing_hooks_active_during_install(
         _write(config_path, dump_toml({"hooks": hooks}))
     else:
         _write(hooks_path, json.dumps({"hooks": hooks}) + "\n")
-    adapter = codex_adapter.CodexHarnessAdapter()
+    adapter = codex_adapter_lifecycle.CodexHarnessAdapter()
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=tmp_path / "guard-home")
 
     detection = adapter.detect(context)
@@ -232,7 +238,7 @@ def test_default_hook_activation_keeps_existing_hooks_active_during_install(
 def test_authenticated_guard_hooks_do_not_become_consumer_artifacts(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = codex_adapter.CodexHarnessAdapter()
+    adapter = codex_adapter_lifecycle.CodexHarnessAdapter()
 
     adapter.install(context)
     detection = adapter.detect(context)
@@ -246,7 +252,7 @@ def test_hash_diff_and_approval_identity_survive_json_to_toml_format_change(tmp_
     hooks_path = home_dir / ".codex" / "hooks.json"
     _write(config_path, dump_toml({"features": {"hooks": True}}))
     _write(hooks_path, json.dumps({"hooks": {"FutureAgentEvent": [_group()]}}) + "\n")
-    adapter = codex_adapter.CodexHarnessAdapter()
+    adapter = codex_adapter_lifecycle.CodexHarnessAdapter()
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=tmp_path / "guard-home")
     json_detection = adapter.detect(context)
     json_artifact = _hook_artifact(json_detection, "FutureAgentEvent")
@@ -277,34 +283,31 @@ def test_hash_diff_and_approval_identity_survive_json_to_toml_format_change(tmp_
 
 def test_migration_deduplicates_only_canonical_equivalents_and_surfaces_conflicts(tmp_path: Path) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
+    config_path = tmp_path / "home" / ".codex" / "config.toml"
+    hooks_path = config_path.with_name("hooks.json")
+    config_path.parent.mkdir(parents=True)
     config_payload: dict[str, object] = {
         "features": {"hooks": True},
         "hooks": {"PreToolUse": [_group("python3 hook.py", timeout=12)]},
     }
+    config_path.write_text(dump_toml(config_payload), encoding="utf-8")
     equivalent: dict[str, object] = {"hooks": {"PreToolUse": [_group("python3   hook.py", timeout=12.0)]}}
+    hooks_path.write_text(json.dumps(equivalent), encoding="utf-8")
 
-    changed = codex_adapter._migrate_hooks_json_into_config(
-        config_payload,
-        equivalent,
-        context=context,
-        source_scope="global",
-    )
+    prepared = segments.prepare_codex_hook_migration(context, config_path=config_path, hooks_path=hooks_path)
 
-    assert changed is False
-    config_hooks = config_payload["hooks"]
+    config_change = prepared.files[0]
+    assert config_change.after == config_change.before
+    config_hooks = prepared.config_payload["hooks"]
     assert isinstance(config_hooks, dict)
     pre_tool_use = config_hooks["PreToolUse"]
     assert isinstance(pre_tool_use, list)
     assert len(pre_tool_use) == 1
 
     conflicting: dict[str, object] = {"hooks": {"PreToolUse": [_group("python3 hook.py", timeout=13)]}}
+    hooks_path.write_text(json.dumps(conflicting), encoding="utf-8")
     with pytest.raises(RuntimeError, match="codex_hook_migration_conflict"):
-        codex_adapter._migrate_hooks_json_into_config(
-            config_payload,
-            conflicting,
-            context=context,
-            source_scope="global",
-        )
+        segments.prepare_codex_hook_migration(context, config_path=config_path, hooks_path=hooks_path)
 
 
 def test_readback_failure_preserves_original_toml_and_legacy_json(
@@ -323,10 +326,11 @@ def test_readback_failure_preserves_original_toml_and_legacy_json(
     def _fail_readback(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("injected canonical readback failure")
 
-    monkeypatch.setattr(codex_adapter, "_require_hook_semantics_readback", _fail_readback)
+    use_stepwise_publication(monkeypatch)
+    monkeypatch.setattr(codex_publication_steps, "readback", _fail_readback)
 
     with pytest.raises(RuntimeError, match="injected canonical readback failure"):
-        codex_adapter.CodexHarnessAdapter().install(
+        codex_adapter_lifecycle.CodexHarnessAdapter().install(
             HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
         )
 
@@ -357,20 +361,10 @@ def test_partial_unlink_failure_restores_every_legacy_source_and_keeps_toml_back
     _write(workspace_config, original_workspace_config)
     _write(home_hooks, original_home_hooks)
     _write(workspace_hooks, original_workspace_hooks)
-    original_unlink = Path.unlink
-    failed = False
-
-    def _unlink(path: Path, missing_ok: bool = False) -> None:
-        nonlocal failed
-        if path == workspace_hooks and not failed:
-            failed = True
-            raise OSError("injected legacy unlink failure")
-        original_unlink(path, missing_ok=missing_ok)
-
-    monkeypatch.setattr(Path, "unlink", _unlink)
+    interrupt_publication_at(monkeypatch, workspace_hooks, OSError("injected legacy unlink failure"))
 
     with pytest.raises(OSError, match="injected legacy unlink failure"):
-        codex_adapter.CodexHarnessAdapter().install(
+        codex_adapter_lifecycle.CodexHarnessAdapter().install(
             HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
         )
 
@@ -379,7 +373,7 @@ def test_partial_unlink_failure_restores_every_legacy_source_and_keeps_toml_back
     assert home_config.read_text(encoding="utf-8") == original_home_config
     assert workspace_config.read_text(encoding="utf-8") == original_workspace_config
     assert not codex_adapter.hook_manifest_path(guard_home, home_config).exists()
-    assert not codex_adapter.hook_secret_path(guard_home).exists()
+    assert not hook_secret_path(guard_home).exists()
     backup_payloads = [
         json.loads(path.read_text(encoding="utf-8"))
         for path in (guard_home / "managed" / "codex" / "migration-backups").glob("*.json")
@@ -389,24 +383,3 @@ def test_partial_unlink_failure_restores_every_legacy_source_and_keeps_toml_back
         original_workspace_config,
     }
     print("H4 pass stage=legacy_json_removal config_restored=true manifest_absent=true key_absent=true")
-
-
-def test_hook_comparisons_ignore_settings_too_large_to_send(tmp_path: Path) -> None:
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
-    unrelated = {"notes": "x" * (5 * 1024 * 1024), "features": {"hooks": True, "other": "y" * 1024}}
-    expected = {**unrelated, "hooks": {"PreToolUse": [_group()]}}
-    actual = {"hooks": {"PreToolUse": [_group()]}, **unrelated}
-    source = tmp_path / "config.toml"
-
-    codex_adapter._require_hook_semantics_readback(
-        expected, actual, source_scope="global", source_path=source, context=context
-    )
-    codex_adapter._require_migrated_hooks(context, expected, actual, source_scope="global")
-
-    changed = {**unrelated, "hooks": {"PreToolUse": [_group("python3 other.py")]}}
-    with pytest.raises(Exception, match="codex_hook_migration_readback_mismatch"):
-        codex_adapter._require_hook_semantics_readback(
-            expected, changed, source_scope="global", source_path=source, context=context
-        )
-    with pytest.raises(Exception, match="codex_hook_migration_readback_mismatch"):
-        codex_adapter._require_migrated_hooks(context, expected, changed, source_scope="global")

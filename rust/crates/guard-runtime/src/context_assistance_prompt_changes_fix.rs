@@ -3,7 +3,9 @@
 //! as they read now, an agent still ran the tests first to see the failure
 //! and read each file whole before its edit, a request each. The lead says
 //! the fix can start from the code shown, and names the one test run that
-//! checks it.
+//! checks it. Codex's apply_patch needs no read before an edit, so its lead
+//! asks for the edit and the check from one exec script, with no read; other
+//! harnesses' edit tools want the range read first.
 use super::code::TITLE;
 use super::used::Changed;
 use std::path::Path;
@@ -20,10 +22,16 @@ pub(super) fn about_failure(prompt: &str) -> bool {
     })
 }
 
-/// `changed` with the lead after its first paragraph, when `newest` is set,
-/// `prompt` says something broke or fails and the note shows the changed
-/// definitions.
-pub(super) fn led(mut changed: Changed, newest: bool, prompt: &str, root: &Path) -> Changed {
+/// `changed` with the lead after its first paragraph, worded for `app`, when
+/// `newest` is set, `prompt` says something broke or fails and the note shows
+/// the changed definitions.
+pub(super) fn led(
+    mut changed: Changed,
+    newest: bool,
+    prompt: &str,
+    root: &Path,
+    app: &str,
+) -> Changed {
     let shown = changed.text.contains(&format!("\n\n{TITLE}"));
     if !newest || !shown || !about_failure(prompt) {
         return changed;
@@ -35,10 +43,21 @@ pub(super) fn led(mut changed: Changed, newest: bool, prompt: &str, root: &Path)
         || "then run the tests that use it once to check".to_owned(),
         |command| format!("then run `{command}` once to check"),
     );
+    let how = if app == "codex" {
+        format!(
+            "without running the tests first or opening the file: the code shown is what it \
+holds now, and apply_patch needs no read first. From one exec script, call apply_patch with the \
+edit, {check}"
+        )
+    } else {
+        format!(
+            "without running the tests first: open just the range you change (a file must be \
+read before it is edited), edit it, {check}"
+        )
+    };
     changed.text = format!(
         "{head}\n\nThis note shows the newest change. Where it caused the failure, fix it from \
-the code shown here without running the tests first: open just the range you change (a file \
-must be read before it is edited), edit it, {check}.\n\n{tail}"
+the code shown here {how}.\n\n{tail}"
     );
     changed
 }

@@ -18,7 +18,7 @@
   "unparsed_templates": [],
   "sites": [
     {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_failure.py",
+      "file": "src/codex_plugin_scanner/guard/harness/bounded_cli_hook_failure.py",
       "func": "_observe_payload",
       "root": "hook",
       "reading": "acknowledges-observation",
@@ -28,7 +28,7 @@
       "note": "The reply to an observation event, which reports activity that already finished; failure_payload only routes here when hook_event_pauses_when_unavailable is false, so nothing is being authorized."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_failure.py",
+      "file": "src/codex_plugin_scanner/guard/harness/bounded_cli_hook_failure.py",
       "func": "_pause_payload",
       "root": "hook",
       "reading": "fails-closed",
@@ -36,16 +36,6 @@
         "block"
       ],
       "note": "The reply to an event that pauses when review cannot finish."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
-      "func": "_deny_event",
-      "root": "hook",
-      "reading": "fails-closed",
-      "actions": [
-        "block"
-      ],
-      "note": "The bridge's deny rendering for each Claude event shape."
     },
     {
       "file": "src/codex_plugin_scanner/guard/approvals.py",
@@ -521,17 +511,6 @@
         "allow"
       ],
       "note": "Files the receipt for an app action the user already ran from the dashboard; the stored decision labels history and no hook reads it."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_template.py",
-      "func": "BOUNDED_HOOK_SCRIPT_TEMPLATE:_decide",
-      "root": "hook",
-      "reading": "acknowledges-observation",
-      "actions": [
-        "allow",
-        "block"
-      ],
-      "note": "The standalone Grok client's own fail-safe when no native runtime answers: a prompt blocks, a tool or permission event denies, and a lifecycle or completed-tool event is acknowledged, matching the shared failure_payload contract. The allow is only ever the acknowledgement branch."
     }
   ]
 }

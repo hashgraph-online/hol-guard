@@ -6,16 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import (
-    _render_bounded_hook_script,
-    bounded_hook_script_path,
-)
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
 from codex_plugin_scanner.guard.cli.update_bounded_hook_refresh import refresh_bounded_hook_clients
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge import bounded_hook_script_path
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_bounded_runtime import use_bounded_runtime
 
 NOW = "2026-10-08T00:00:00+00:00"
 
@@ -35,35 +33,41 @@ def _seed_client(context: HarnessContext, harness: str, body: str) -> Path:
     return script_path
 
 
-def _current_zcode_client(context: HarnessContext) -> str:
-    return _render_bounded_hook_script(guard_home=context.guard_home, harness="zcode", timeout_seconds=25)
+@pytest.fixture(autouse=True)
+def runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    path = tmp_path / "hol-guard-runtime"
+    use_bounded_runtime(monkeypatch, path)
+    return path
 
 
-def test_refresh_rewrites_stale_client_for_active_install(tmp_path: Path) -> None:
+def _refresh(context: HarnessContext, store: GuardStore) -> tuple[list[dict[str, object]], list[str]]:
+    return refresh_bounded_hook_clients(context=context, store=store, workspace=None, now=NOW)
+
+
+def _zcode_hook_commands(context: HarnessContext) -> str:
+    return (context.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8")
+
+
+def test_refresh_moves_an_old_client_to_the_native_runtime(tmp_path: Path, runtime: Path) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     store.set_managed_install("zcode", True, None, {"harness": "zcode"}, NOW)
     script_path = _seed_client(context, "zcode", "TIMEOUT_SECONDS = 25\n# client from an older release\n")
 
-    refreshed, warnings = refresh_bounded_hook_clients(context=context, store=store)
+    refreshed, warnings = _refresh(context, store)
 
     assert [item["harness"] for item in refreshed] == ["zcode"]
     assert warnings == []
-    assert script_path.read_text(encoding="utf-8") == _current_zcode_client(context)
+    assert not script_path.exists()
+    assert f"{runtime} bounded-hook-bridge" in _zcode_hook_commands(context)
 
 
-def test_refresh_leaves_current_client_untouched(tmp_path: Path) -> None:
+def test_refresh_without_an_old_client_does_nothing(tmp_path: Path) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     store.set_managed_install("zcode", True, None, {"harness": "zcode"}, NOW)
-    script_path = _seed_client(context, "zcode", _current_zcode_client(context))
-    before = script_path.stat().st_mtime_ns
 
-    refreshed, warnings = refresh_bounded_hook_clients(context=context, store=store)
-
-    assert refreshed == []
-    assert warnings == []
-    assert script_path.stat().st_mtime_ns == before
+    assert _refresh(context, store) == ([], [])
 
 
 @pytest.mark.parametrize("active", [False, None])
@@ -74,7 +78,7 @@ def test_refresh_skips_inactive_or_missing_install(tmp_path: Path, active: bool 
         store.set_managed_install("zcode", active, None, {"harness": "zcode"}, NOW)
     script_path = _seed_client(context, "zcode", "stale\n")
 
-    refreshed, _warnings = refresh_bounded_hook_clients(context=context, store=store)
+    refreshed, _warnings = _refresh(context, store)
 
     assert refreshed == []
     assert script_path.read_text(encoding="utf-8") == "stale\n"
@@ -92,7 +96,7 @@ def test_refresh_does_not_create_or_follow_client_paths(tmp_path: Path) -> None:
     zcode_path.parent.mkdir(parents=True)
     zcode_path.symlink_to(outside)
 
-    refreshed, warnings = refresh_bounded_hook_clients(context=context, store=store)
+    refreshed, warnings = _refresh(context, store)
 
     assert refreshed == []
     assert warnings == []
@@ -115,7 +119,7 @@ def test_refresh_does_not_write_through_symlinked_client_directory(tmp_path: Pat
     zcode_path.parent.parent.mkdir(parents=True, exist_ok=True)
     zcode_path.parent.symlink_to(outside_dir, target_is_directory=True)
 
-    refreshed, warnings = refresh_bounded_hook_clients(context=context, store=store)
+    refreshed, warnings = _refresh(context, store)
 
     assert refreshed == []
     assert warnings == []
@@ -137,7 +141,7 @@ def test_update_repair_refreshes_stale_bounded_client(tmp_path: Path) -> None:
     )
 
     assert any(item.get("harness") == "zcode" for item in repaired)
-    assert script_path.read_text(encoding="utf-8") == _current_zcode_client(context)
+    assert not script_path.exists()
 
 
 def test_frozen_launcher_env_does_not_pin_extraction_directory(monkeypatch: pytest.MonkeyPatch) -> None:

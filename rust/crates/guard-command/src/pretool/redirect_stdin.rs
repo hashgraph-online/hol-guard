@@ -325,8 +325,12 @@ pub(in crate::pretool) fn skip_bodies(
 /// meets: it may import modules, the project's own included, but needs
 /// neither the network nor a credential store. The sandbox, not this scan,
 /// bounds what it does; the scan keeps a program that would fail there on
-/// review. The source has to be plain ASCII with no coding declaration, so
-/// the text scanned is the text Python runs.
+/// review. It must also stay inside the workspace: a program that observes
+/// or signals other processes, runs code built at run time, or names a path
+/// outside the checkout or inside its `.git` directory keeps its review,
+/// since the sandbox still exposes those (`script_content::host_reach`). The source
+/// has to be plain ASCII with no coding declaration, so the text scanned is
+/// the text Python runs.
 /// Such a program is only taken when it is the whole command
 /// (`script_content::fed::python_alone`).
 fn python_program_fits(body: &[&str]) -> bool {
@@ -343,6 +347,7 @@ fn python_program_fits(body: &[&str]) -> bool {
             crate::pretool::script_content::Language::Python,
             &source,
         )
+        && !crate::pretool::script_content::host_reach::python_reaches_host(&source)
 }
 
 /// A bare CR changes Python's physical source-line boundaries; CRLF is fine.

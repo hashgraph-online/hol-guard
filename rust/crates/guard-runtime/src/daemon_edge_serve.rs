@@ -27,6 +27,8 @@ use super::reads::{dashboard_build_id, NativeReads, HANDSHAKE_SCHEMA};
 use super::{serve, MAX_ACTIVE_CONNECTIONS, STALLED_WRITE_TIMEOUT};
 use crate::daemon_policy_authority::{canonical_discovery_payload, hmac_sha256_raw};
 
+#[path = "daemon_edge_resident_prewarm.rs"]
+mod resident_prewarm;
 #[path = "daemon_edge_workers.rs"]
 mod workers;
 
@@ -221,7 +223,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
     #[cfg(unix)]
     let _ = nix::unistd::setsid();
     let Some((arg_home, arg_port)) = parse_args(args) else {
-        eprintln!("usage: guard-runtime daemon-serve --guard-home H --port P < launch.json");
+        crate::runtime_output::stderr_line(format_args!(
+            "usage: guard-runtime daemon-serve --guard-home H --port P < launch.json"
+        ));
         return EXIT_USAGE;
     };
     let mut line = Vec::new();
@@ -234,11 +238,15 @@ pub(crate) fn run(args: &[String]) -> i32 {
         return EXIT_USAGE;
     }
     let Some(config) = LaunchConfig::parse(line.trim_ascii()) else {
-        eprintln!("daemon-serve: the launch configuration is invalid");
+        crate::runtime_output::stderr_line(format_args!(
+            "daemon-serve: the launch configuration is invalid"
+        ));
         return EXIT_USAGE;
     };
     if config.guard_home != arg_home || config.port != arg_port {
-        eprintln!("daemon-serve: the launch configuration names another daemon");
+        crate::runtime_output::stderr_line(format_args!(
+            "daemon-serve: the launch configuration names another daemon"
+        ));
         return EXIT_USAGE;
     }
     // Pin the dashboard before reporting ready: the launcher that unpacked it
@@ -256,10 +264,13 @@ pub(crate) fn run(args: &[String]) -> i32 {
     let listener = match TcpListener::bind(SocketAddr::new(host, config.port)) {
         Ok(listener) => listener,
         Err(error) => {
-            eprintln!("daemon-serve: cannot listen: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "daemon-serve: cannot listen: {error}"
+            ));
             return EXIT_LISTENER;
         }
     };
+    super::widen_backlog(&listener);
     let Ok(port) = listener.local_addr().map(|address| address.port()) else {
         return EXIT_LISTENER;
     };
@@ -271,10 +282,14 @@ pub(crate) fn run(args: &[String]) -> i32 {
     let secret = match publish(&home, &config, port, pid) {
         Ok(secret) => secret,
         Err(error) => {
-            eprintln!("daemon-serve: cannot publish daemon state: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "daemon-serve: cannot publish daemon state: {error}"
+            ));
             return EXIT_STATE;
         }
     };
+    // Each start step is journaled, so a slow cold start names the step that spent it.
+    super::lifecycle::record(&home, "published", None, None, Some(port));
     let reads = Arc::new(NativeReads::new(None));
     reads.mark_standalone();
     if let Some(state) = crate::daemon_policy_authority::load_authenticated_daemon_state(&home) {
@@ -290,24 +305,33 @@ pub(crate) fn run(args: &[String]) -> i32 {
     if config.workers {
         // Guard-owned hooks and launchers are brought in line with this
         // runtime before the daemon reports ready, as its start always did.
-        workers::reconcile_artifacts(&reads, config.user_home.as_deref());
-        workers::start(
-            &reads,
-            workers::Registration {
-                session_id: session_id.clone(),
-                guard_home: home.clone(),
-                host: config.host.clone(),
-                port,
-                started_at: now_iso(),
-            },
-            config
-                .idle_timeout_seconds
-                .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
-                .map(std::time::Duration::from_secs_f64),
-        );
+        let reconcile = workers::reconcile_beside(&reads, config.user_home.clone(), home.clone());
+        let registration = workers::Registration {
+            session_id: session_id.clone(),
+            guard_home: home.clone(),
+            host: config.host.clone(),
+            port,
+            started_at: now_iso(),
+        };
+        workers::start(&reads, registration.clone());
+        super::lifecycle::record(&home, "workers_started", None, None, None);
+        if let Some(reconcile) = reconcile {
+            let _ = reconcile.join();
+        }
+        if let Some(timeout) = config
+            .idle_timeout_seconds
+            .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
+            .map(std::time::Duration::from_secs_f64)
+        {
+            workers::exit_when_idle(&reads, &registration, timeout);
+        }
     }
     warm_hook_worker(&reads, port, pid);
-    println!("{}", json!({"port": port, "pid": pid}));
+    super::lifecycle::record(&home, "hook_worker_warming", None, None, None);
+    if config.workers {
+        resident_prewarm::prewarm_resident(&home);
+    }
+    crate::runtime_output::stdout_line(format_args!("{}", json!({"port": port, "pid": pid})));
     let _ = io::stdout().flush();
     super::lifecycle::record(&home, "ready", None, Some(&session_id), Some(port));
     match serve(
@@ -318,7 +342,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
     ) {
         Ok(()) => 0,
         Err(error) => {
-            eprintln!("daemon-serve: listener failed: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "daemon-serve: listener failed: {error}"
+            ));
             EXIT_LISTENER
         }
     }

@@ -1,0 +1,508 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "zendesk",
+    "name": "Zendesk",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "{subdomain}.zendesk.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "read",
+      "write"
+    ]
+  },
+  "connection": {
+    "values": {
+      "subdomain": {
+        "title": "Zendesk subdomain",
+        "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+        "maxLength": 63
+      }
+    }
+  },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "zendesk"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "zendesk.tickets.get",
+      "title": "Read a ticket",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "{subdomain}.zendesk.com",
+          "path": "/api/v2/tickets/{ticket_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "ticket_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 16,
+          "pattern": "^[1-9][0-9]{0,15}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "ticket.id"
+            }
+          },
+          {
+            "name": "status",
+            "value": {
+              "from": "ticket.status"
+            }
+          },
+          {
+            "name": "subject",
+            "value": {
+              "from": "ticket.subject"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "updated_at",
+            "value": {
+              "from": "ticket.updated_at"
+            }
+          },
+          {
+            "name": "error",
+            "value": {
+              "from": "error"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "reads one ticket",
+          "kind": "safe",
+          "connection": {
+            "subdomain": "example-help"
+          },
+          "arguments": {
+            "ticket_id": "35436"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://example-help.zendesk.com/api/v2/tickets/35436"
+            },
+            "response": "{\"ticket\":{\"id\":35436,\"status\":\"open\",\"subject\":\"Printer jam\",\"updated_at\":\"2026-11-01T10:00:00Z\"}}",
+            "projection": {
+              "id": 35436,
+              "status": "open",
+              "subject": "Printer jam",
+              "updated_at": "2026-11-01T10:00:00Z"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a ticket id with a path",
+          "kind": "risky",
+          "connection": {
+            "subdomain": "example-help"
+          },
+          "arguments": {
+            "ticket_id": "1/../../users"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "zendesk.tickets.add_internal_note",
+      "title": "Add an internal note to a ticket",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PUT",
+          "host": "{subdomain}.zendesk.com",
+          "path": "/api/v2/tickets/{ticket_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "ticket",
+                "value": {
+                  "object": [
+                    {
+                      "name": "comment",
+                      "value": {
+                        "object": [
+                          {
+                            "name": "body",
+                            "value": {
+                              "arg": "body"
+                            }
+                          },
+                          {
+                            "name": "public",
+                            "value": {
+                              "const": false
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "ticket_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 16,
+          "pattern": "^[1-9][0-9]{0,15}$"
+        },
+        "body": {
+          "type": "string",
+          "required": true,
+          "maxLength": 8000
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "reversibility": {
+          "const": "permanent"
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "ticket.id"
+            }
+          },
+          {
+            "name": "status",
+            "value": {
+              "from": "ticket.status"
+            }
+          },
+          {
+            "name": "error",
+            "value": {
+              "from": "error"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "adds a private note",
+          "kind": "safe",
+          "connection": {
+            "subdomain": "example-help"
+          },
+          "arguments": {
+            "ticket_id": "35436",
+            "body": "Called the customer back."
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"ticket\":{\"comment\":{\"body\":\"Called the customer back.\",\"public\":false}}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PUT",
+              "url": "https://example-help.zendesk.com/api/v2/tickets/35436"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a ticket id that is not a number",
+          "kind": "risky",
+          "connection": {
+            "subdomain": "example-help"
+          },
+          "arguments": {
+            "ticket_id": "all",
+            "body": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "zendesk.tickets.set_status",
+      "title": "Change a ticket status",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PUT",
+          "host": "{subdomain}.zendesk.com",
+          "path": "/api/v2/tickets/{ticket_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "ticket",
+                "value": {
+                  "object": [
+                    {
+                      "name": "status",
+                      "value": {
+                        "arg": "status"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "ticket_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 16,
+          "pattern": "^[1-9][0-9]{0,15}$"
+        },
+        "status": {
+          "type": "string",
+          "required": true,
+          "maxLength": 7,
+          "pattern": "^(open|pending|hold|solved)$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "reversibility": {
+          "const": "reversible"
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "ticket.id"
+            }
+          },
+          {
+            "name": "status",
+            "value": {
+              "from": "ticket.status"
+            }
+          },
+          {
+            "name": "error",
+            "value": {
+              "from": "error"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "solves a ticket",
+          "kind": "safe",
+          "connection": {
+            "subdomain": "example-help"
+          },
+          "arguments": {
+            "ticket_id": "35436",
+            "status": "solved"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"ticket\":{\"status\":\"solved\"}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PUT",
+              "url": "https://example-help.zendesk.com/api/v2/tickets/35436"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses closing a ticket for good",
+          "kind": "risky",
+          "connection": {
+            "subdomain": "example-help"
+          },
+          "arguments": {
+            "ticket_id": "35436",
+            "status": "closed"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

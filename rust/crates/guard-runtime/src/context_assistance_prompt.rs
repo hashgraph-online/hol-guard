@@ -1,28 +1,30 @@
 //! Adds the project code a typed prompt is about to the hook's answer, when
-//! someone turned on CIGAR project context for their AI apps.
-//!
-//! The prompt hook answers in time whatever happens here: the walk and the
-//! lookup share what is left of the hook's budget, the lookup runs on its own
-//! thread, a repeat of the same prompt joins the lookup already running, a
-//! prompt CIGAR cannot answer yet gets the matched files, and anything failed
-//! or off adds nothing.
+//! someone turned on CIGAR project context for their AI apps. The prompt hook
+//! answers in time whatever happens here: the walk and the lookup share what
+//! is left of the hook's budget, the lookup runs on its own thread, a repeat
+//! of the same prompt joins the lookup already running, a prompt CIGAR cannot
+//! answer yet gets the matched files, and anything failed or off adds nothing.
 //! Only an allowed prompt gets context, and only for harnesses that show
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
 use crate::context_assistance_engine::{project_context_on, quick_excerpts};
-use crate::context_assistance_prompt_files::{named, phrases, project_root, walk};
-use crate::context_assistance_prompt_words::marked_terms;
+use crate::context_assistance_prompt_files::{named, phrases, project_root, walk_exact};
+use crate::context_assistance_prompt_words::{marked_terms, spellings};
+use crate::context_assistance_savings as savings;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
-use lookup::{lookup, Miss, Request};
+use lookup::{anchored, lookup, truncated, Miss, Request};
 use names::held_names;
 use seen::{Session, Span};
 use serde_json::Value;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 #[path = "context_assistance_prompt_changes.rs"]
 mod changes;
+#[path = "context_assistance_prompt_chores.rs"]
+mod chores;
 #[path = "context_assistance_prompt_excerpts.rs"]
 mod excerpts;
 use excerpts::render;
@@ -30,7 +32,7 @@ use excerpts::render;
 use excerpts::{fence_for, language};
 #[path = "context_assistance_prompt_ending.rs"]
 mod ending;
-use ending::{end_note, prompt_session};
+use ending::{end_note, fit_note, prompt_session};
 #[path = "context_assistance_prompt_lookup.rs"]
 mod lookup;
 #[path = "context_assistance_prompt_map.rs"]
@@ -40,7 +42,7 @@ mod names;
 #[path = "context_assistance_prompt_sections.rs"]
 mod sections;
 #[path = "context_assistance_prompt_seen.rs"]
-mod seen;
+pub(crate) mod seen;
 
 const MAX_WAIT: Duration = Duration::from_millis(2_500);
 const DEFAULT_WAIT: Duration = Duration::from_millis(2_000);
@@ -73,17 +75,6 @@ const MATCHED_HEADER: &str = "HOL Guard CIGAR matched these project files to thi
 best first. Open them for context:";
 const REPEATED_HEADER: &str = "HOL Guard CIGAR matched code it already added earlier in this \
 session. Open the files if those excerpts are no longer in view.";
-/// Claude Code models tend to send one tool call per turn, and every turn
-/// re-sends the whole conversation, so the reads and edits a note makes
-/// possible cost least when they go out together.
-const BATCHING: &str = "Each tool call re-sends this whole conversation. When you already know \
-several ranges to read or several edits to make, make those tool calls together in one response, \
-not one per turn.";
-/// Codex models tend to read again lines a note already shows, then patch and
-/// test in separate turns; each turn re-sends the whole conversation.
-const ACT_ON_IT: &str = "The code and diffs in this note are what the files hold now: work from \
-them instead of reading those lines again. When you can, make the edit and run its check in the \
-same tool call (one exec script can apply the patch and run the tests).";
 
 /// A prompt's context and the excerpts it shows.
 #[derive(Clone, Debug, PartialEq)]
@@ -97,6 +88,45 @@ pub(super) struct Rendered {
 /// the verdict is settled and its locks are released; `started` is when the
 /// hook began, so the lookup never outlasts the hook's own budget.
 pub(crate) fn harness_response(
+    envelope: &GuardHookEnvelopeV2,
+    harness: &str,
+    event: &str,
+    result: &Value,
+    store: Option<&PolicySnapshotStore>,
+    started: Instant,
+) -> Option<Value> {
+    let fallback = fallback_response(harness, event, result, envelope.recording_only);
+    advisory_or_fallback(fallback, || {
+        harness_response_inner(envelope, harness, event, result, store, started)
+    })
+}
+
+fn advisory_or_fallback(
+    fallback: Option<Value>,
+    advisory: impl FnOnce() -> Option<Value> + std::panic::UnwindSafe,
+) -> Option<Value> {
+    catch_unwind(AssertUnwindSafe(advisory))
+        .ok()
+        .flatten()
+        .or(fallback)
+}
+
+fn fallback_response(
+    harness: &str,
+    event: &str,
+    result: &Value,
+    recording_only: bool,
+) -> Option<Value> {
+    let mut response =
+        guard_command::hook_responses::render_edge_response(harness, event, result, recording_only)
+            .map(Value::Object)?;
+    if event == "UserPromptSubmit" && harness == "claude-code" && !recording_only {
+        let _ = crate::hook_direct::claude_prompt_text::brand(&mut response, result);
+    }
+    Some(response)
+}
+
+fn harness_response_inner(
     envelope: &GuardHookEnvelopeV2,
     harness: &str,
     event: &str,
@@ -125,9 +155,22 @@ pub(crate) fn harness_response(
     if let Some(store) = store.filter(|store| !cigar_off(store, workspace, harness)) {
         let slot = envelope.recording_only && open_slot(&mut response);
         let before = context_len(&response);
-        attach(&mut response, envelope, harness, store, started);
         let session = prompt_session(envelope, harness, store);
-        end_note(&mut response, harness, before, session.as_ref());
+        let seen_before = session.as_ref().map(seen::earlier).unwrap_or_default();
+        let mut shown = Vec::new();
+        attach(&mut response, envelope, harness, store, started, &mut shown);
+        let session = session.as_ref();
+        fit_note(
+            &mut response,
+            harness,
+            before,
+            (session, &seen_before),
+            &mut shown,
+        );
+        let added = context_len(&response).saturating_sub(before);
+        let payload = &envelope.raw_payload;
+        savings::noted(store.guard_home(), payload, harness, added, shown);
+        end_note(&mut response, harness, before, session);
         if harness == "kimi" {
             kimi_message(&mut response);
         }
@@ -154,11 +197,12 @@ fn prompt_cwd(envelope: &GuardHookEnvelopeV2) -> Option<&str> {
         .or_else(|| raw.pointer("/workspaceRoots/0").and_then(Value::as_str))
 }
 
-/// The prompt's text: top-level `prompt`, or Cline's `userPromptSubmit.prompt`.
+/// A typed prompt's text (`prompt` or Cline's `userPromptSubmit.prompt`); none if the app wrote it.
 fn prompt_text(raw: &Value) -> Option<&str> {
     (raw.get("prompt"))
         .or_else(|| raw.pointer("/userPromptSubmit/prompt"))
         .and_then(Value::as_str)
+        .filter(|prompt| !crate::context_assistance_prompt_generated::by_app(prompt))
 }
 
 /// Watch answers some apps' prompts without a context slot; one is opened
@@ -214,6 +258,7 @@ fn attach(
     harness: &str,
     store: &PolicySnapshotStore,
     started: Instant,
+    shown: &mut Vec<String>,
 ) {
     if !takes_context(harness, &envelope.raw_payload) || !allowed(response) {
         return;
@@ -263,6 +308,10 @@ fn attach(
     if let Some(changed) = &changed {
         add_context(response, &changed.text);
     }
+    let chores_by = Instant::now() + left() / 3;
+    if chores::added(response, &root, prompt, &context_on, chores_by) && changed.is_none() {
+        return;
+    }
     let Some(budget) = left().checked_sub(MIN_WAIT) else {
         return;
     };
@@ -277,10 +326,11 @@ fn attach(
         && !marked.iter().any(|(_, name)| *name)
     {
         let at = (store.guard_home(), &*root, harness, session.as_ref());
-        changes::used::add_tests(response, at, changed, &earlier, budget, context_on);
+        changes::used::add_tests(response, at, changed, &earlier, budget, context_on, shown);
         return;
     }
-    let searched = walk(&root, &words, &quoted, &named(prompt), budget);
+    let (names, exact) = (named(prompt), spellings(prompt));
+    let searched = walk_exact(&root, &words, &quoted, &names, &exact, budget);
     let found = searched.found(&words);
     let held = held_names(prompt, &words, &searched.spelled);
     if found.is_empty() {
@@ -315,10 +365,14 @@ fn attach(
         .map(|context| changes::removed::added(context, home, envelope, &root, harness, deadline))
         .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness));
     if let Some(context) = mapped {
-        if let Some(session) = &session {
-            seen::remember(session, &context.shown);
-        }
+        seen::keep(session.as_ref(), &context.shown, shown);
         add_context(response, &context.text);
+        return;
+    }
+    // With nothing mapped, excerpts ranked on plain words alone ("keep
+    // going", "so is it fixed?") are a guess: mostly a README or changelog.
+    // They need the prompt to name a file, a quoted phrase or code by name.
+    if !anchored(prompt) {
         return;
     }
     // An excerpt holding only the quoted text is still about the request.
@@ -352,14 +406,11 @@ fn attach(
     let Some(context) = context else {
         return;
     };
-    if let Some(session) = &session {
-        seen::remember(session, &context.shown);
-    }
+    seen::keep(session.as_ref(), &context.shown, shown);
     add_context(response, &context.text);
 }
 
-/// What a prompt gets: CIGAR's answer, or Guard's own read when CIGAR is
-/// starting, busy or late.
+/// What a prompt gets: CIGAR's answer, or Guard's own read when CIGAR is starting, busy or late.
 fn answered(
     lookup: Result<Option<Rendered>, Miss>,
     own_read: impl FnOnce() -> Option<Rendered>,
@@ -440,14 +491,6 @@ fn waiting_time(budget_ms: Option<u64>) -> Duration {
             .saturating_sub(HOOK_MARGIN)
             .min(MAX_WAIT)
     })
-}
-
-fn truncated(text: &str, max_bytes: usize) -> String {
-    let mut end = text.len().min(max_bytes);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    text[..end].to_owned()
 }
 
 fn add_context(response: &mut Value, context: &str) {

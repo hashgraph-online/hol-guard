@@ -77,7 +77,6 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
-use super::evaluate_pre_tool_with_execution_context;
 use extract::extract_generic_signals;
 use result::{generic_action, generic_error_result, generic_result};
 use std::time::Instant;
@@ -225,6 +224,14 @@ mod web_fetch;
 pub(in crate::pretool) use tools::{executable_is_package_tool, installs_from_registry};
 pub(in crate::pretool) use web_fetch::plain_public_url;
 
+/// Whether a user prompt asks for local secrets, read the same way a
+/// reviewed `UserPromptSubmit` reads it: a secret location, or a credential
+/// word in a clause that asks for its value. Plain words such as "tokens"
+/// in a question about usage are not a request.
+pub fn prompt_asks_for_local_secrets(prompt: &str) -> bool {
+    extract::prompt_asks_for_local_secrets(prompt)
+}
+
 /// Evaluate the complete raw PreToolUse payload in native code. This stays
 /// separate from `evaluate_pre_tool`, the compatibility command-model
 /// operation used by older clients.
@@ -262,6 +269,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
         deadline,
         crate::pretool::PathContext {
             literal_words: &[],
+            guard_home: None,
             home_dir,
             cwd,
             cdpath_unset: false,
@@ -292,8 +300,12 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
     let _cursor = super::cursor_session_outputs::scope(harness, context.cwd);
-    let mut context =
-        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
+    // The session is rebuilt from the execution environment; the Guard home
+    // the hook reported is not part of it, so it is carried across.
+    let mut context = super::PathContext {
+        guard_home: context.guard_home,
+        ..super::PathContext::for_session(context.home_dir, context.cwd, execution_environment)
+    };
     let (projected_payload, cline_payload);
     let mut payload = payload;
     let within;
@@ -436,8 +448,10 @@ fn evaluate_envelope(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     project_redirects: bool,
 ) -> PreToolResultV1 {
-    let context =
-        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
+    let context = super::PathContext {
+        guard_home: context.guard_home,
+        ..super::PathContext::for_session(context.home_dir, context.cwd, execution_environment)
+    };
     let super::PathContext { home_dir, cwd, .. } = context;
     let yield_payload = (harness == "omp")
         .then(|| omp::yield_signal_payload(payload))
@@ -481,7 +495,7 @@ fn evaluate_envelope(
             ("claude-code", Some("Glob")) => {
                 super::search_scope::claude_glob_scope_proven(payload, home_dir, cwd)
             }
-            ("grok", Some("Grep")) => {
+            ("grok", Some("Grep" | "grep")) => {
                 super::search_scope::grok_grep_directory_scope_proven(payload, home_dir, cwd)
             }
             _ => false,
@@ -858,7 +872,7 @@ fn evaluate_envelope(
         .as_deref()
         .filter(|_| !search_scope_proven && !apply_patch_proven)
         .map(|command| {
-            evaluate_pre_tool_with_execution_context(
+            super::evaluate_pre_tool_with_reported_guard_home(
                 &CommandModelRequestV1 {
                     command: command.to_owned(),
                     dialect: tools::command_dialect(signals.tool_name.as_deref()).to_owned(),
@@ -869,6 +883,7 @@ fn evaluate_envelope(
                 cwd,
                 deadline,
                 execution_environment,
+                context.guard_home,
             )
         });
     // Parsed benign commands may contain credential words as search patterns.
@@ -1384,6 +1399,10 @@ fn evaluate_envelope(
             execution_environment,
         );
     }
+    crate::native_command_controls::explain_expired_proof(
+        &mut result,
+        super::git_probe::probe_budget_spent(deadline),
+    );
     result
 }
 

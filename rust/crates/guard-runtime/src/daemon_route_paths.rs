@@ -39,6 +39,10 @@ const HEADLESS_APP_ACTIONS: &[&str] = &["connect", "repair", "disconnect", "stat
 const HARNESS_ACTIONS: &[&str] = &["install", "verify", "repair", "uninstall"];
 
 const TOKEN_REQUIRED_PATHS: &[&str] = &[
+    "/v1/swarm",
+    "/v1/swarm/launch",
+    "/v1/swarm/action",
+    "/v1/swarm/events",
     "/v1/context-assistance/workspace",
     "/v1/context-assistance/workspace-access",
     "/v1/context-assistance/workspace-grant",
@@ -80,6 +84,11 @@ const TOKEN_REQUIRED_PATHS: &[&str] = &[
     "/v1/approval-gate/totp/enroll",
     "/v1/approval-gate/totp/verify",
     "/v1/approval-gate/totp/disable",
+    "/v1/approval-gate/pulse/enroll",
+    "/v1/approval-gate/pulse/confirm",
+    "/v1/approval-gate/pulse/poll",
+    "/v1/approval-gate/pulse/disable",
+    "/v1/approval-gate/pulse/recover",
     "/v1/daemon/repair",
     "/v1/protection/repair",
     "/v1/repair",
@@ -219,6 +228,11 @@ const LOCAL_SURFACE_PATHS: &[&str] = &[
     "/v1/approval-gate/totp/enroll",
     "/v1/approval-gate/totp/verify",
     "/v1/approval-gate/totp/disable",
+    "/v1/approval-gate/pulse/enroll",
+    "/v1/approval-gate/pulse/confirm",
+    "/v1/approval-gate/pulse/poll",
+    "/v1/approval-gate/pulse/disable",
+    "/v1/approval-gate/pulse/recover",
     "/v1/daemon/repair",
     "/v1/protection/repair",
     "/v1/repair",
@@ -306,6 +320,15 @@ pub(crate) fn hosted_dashboard_api_path(path: &str) -> bool {
 }
 
 pub(crate) fn local_surface_session_allowed(method: &str, path: &str) -> bool {
+    if path == "/v1/swarm" {
+        return method == "GET";
+    }
+    if matches!(
+        path,
+        "/v1/swarm/launch" | "/v1/swarm/action" | "/v1/swarm/events"
+    ) {
+        return method == "POST";
+    }
     if LOCAL_SURFACE_PATHS.contains(&path) || REMOTE_REVIEW_POST_ROUTES.contains(&path) {
         return true;
     }

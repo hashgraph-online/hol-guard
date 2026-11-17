@@ -27,6 +27,7 @@ from .approval_retry_persistent import collect as collect_approval_persistent
 from .approval_retry_persistent import stage as stage_approval_persistent
 from .approval_retry_persistent import write_package_review_config
 from .approval_retry_relay import (
+    DESKTOP_RELAY_CASE,
     RELAY_MARKER,
     RELAY_ORACLE,
     SIGNED_LINK_REDACTIONS,
@@ -127,8 +128,8 @@ def install_harness_hooks(name: str, daemon: Any, *, home: Path, guard_home: Pat
     This is the code ``hol-guard install`` runs after its operator approval prompt,
     applied to a disposable HOME and Guard home the operator never uses.
     """
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
+    from codex_plugin_scanner.guard.harness.base import HarnessContext
 
     context = HarnessContext(
         home_dir=home,
@@ -250,7 +251,7 @@ def run_harness_case(
                     )
                 )
             if scenario.oracle == RELAY_ORACLE:
-                case["review_policy"] = write_relay_config(guard_home)
+                case["review_policy"] = write_relay_config(guard_home, desktop=scenario.id == DESKTOP_RELAY_CASE)
             if CONNECTOR_PROFILE in scenario.profiles:
                 connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
                 connector_state = state_digest(connector.state_dir)

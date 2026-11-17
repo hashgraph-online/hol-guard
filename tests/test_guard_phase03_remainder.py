@@ -11,9 +11,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install, list_harness_setup_items
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cursor_test_support import cursor_agent_on_path
@@ -586,7 +586,7 @@ def test_doctor_reports_partial_setup_for_found_unprotected_harness(
     config_path.write_text(json.dumps({"mcpServers": {"local": {"command": "node"}}}), encoding="utf-8")
     cursor_agent_on_path(monkeypatch, tmp_path, present=False)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     payload = get_adapter("cursor").diagnostics(context)
 
@@ -606,7 +606,7 @@ def test_doctor_does_not_mark_harness_command_presence_as_guard_active(
     config_path.write_text(json.dumps({"mcpServers": {"local": {"command": "node"}}}), encoding="utf-8")
     cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     payload = get_adapter("cursor").diagnostics(context)
 
@@ -646,7 +646,7 @@ def test_codex_doctor_marks_partial_native_hook_install_as_broken(tmp_path: Path
         encoding="utf-8",
     )
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     payload = get_adapter("codex").diagnostics(context)
 
@@ -676,7 +676,7 @@ def test_doctor_treats_guard_launcher_shim_as_active_install(
         "2026-05-13T00:00:00Z",
     )
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     payload = get_adapter("cursor").diagnostics(context)
 
@@ -703,7 +703,7 @@ def test_doctor_marks_guard_launcher_shim_without_harness_command_broken(
     )
     cursor_agent_on_path(monkeypatch, tmp_path, present=False)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     payload = get_adapter("cursor").diagnostics(context)
 
@@ -721,7 +721,7 @@ def test_doctor_ignores_non_utf8_guard_launcher_shim(
     shim_path.write_bytes(b"\xff\xfe\x00")
     cursor_agent_on_path(monkeypatch, tmp_path, present=False)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     payload = get_adapter("cursor").diagnostics(context)
 
@@ -743,7 +743,7 @@ def test_doctor_recognizes_legacy_guard_launcher_shim(
         ),
         encoding="utf-8",
     )
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     payload = get_adapter("claude-code").diagnostics(context)
 
@@ -765,7 +765,7 @@ def test_doctor_treats_guard_command_artifact_as_managed(
     )
     cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     payload = get_adapter("cursor").diagnostics(context)
 
@@ -790,15 +790,15 @@ def test_doctor_keeps_active_setup_status_for_runtime_probe_timeout(
     )
     cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
-    from codex_plugin_scanner.guard.adapters import get_adapter
-    from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
-    def runtime_probe_timeout(self: CursorHarnessAdapter, context: HarnessContext) -> dict[str, object]:
+    def runtime_probe_timeout(context: HarnessContext) -> dict[str, object]:
         return {"timed_out": True}
 
-    monkeypatch.setattr(CursorHarnessAdapter, "runtime_probe", runtime_probe_timeout)
+    adapter = get_adapter("cursor")
+    monkeypatch.setattr(adapter, "runtime_probe", runtime_probe_timeout)
 
-    payload = get_adapter("cursor").diagnostics(context)
+    payload = adapter.diagnostics(context)
 
     assert payload["setup_status"] == "active"
     assert any("timed out" in warning for warning in payload["warnings"])

@@ -149,7 +149,11 @@ const REPARSED: &[char] = &['"', '&', '|', '<', '>', '^', '%', '!', '(', ')', '\
 /// ids beside them -- keep their review there, and only where the text holds
 /// one of those characters. The explicit `.exe` spelling names a real program,
 /// which is read once.
-fn arguments_reach_the_launcher(basename: &str, arguments: &[String], windows_host: bool) -> bool {
+pub(super) fn arguments_reach_the_launcher(
+    basename: &str,
+    arguments: &[String],
+    windows_host: bool,
+) -> bool {
     !windows_host
         || basename.ends_with(".exe")
         || arguments.iter().all(|word| !word.contains(REPARSED))
@@ -488,7 +492,7 @@ fn posture_inspection(words: &[&str]) -> bool {
 /// user's own approval center rather than printing anything, so it stays on
 /// the review path with the other launches. `--json` is lifted out before the
 /// path is read, so neither it nor `--timeout` has to be written last.
-fn approval_inspection(words: &[&str]) -> bool {
+pub(super) fn approval_inspection(words: &[&str]) -> bool {
     let json_flags = words.iter().filter(|word| **word == "--json").count();
     let rest: Vec<&str> = words
         .iter()

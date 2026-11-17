@@ -8,9 +8,8 @@
 //! The map holds little code. A harness keeps each prompt's context for the
 //! rest of the session and sends it again with every request, so a range costs
 //! a few words where code costs its length on every request after. A short
-//! function or method the prompt names is the exception: the agent reads it
-//! anyway, that read stays in the session just the same, and the request it
-//! takes is what costs most. It is shown once per session.
+//! function or method the prompt names is the exception: the read it saves is
+//! what costs most (in Claude Code, only the first). It is shown once per session.
 //!
 //! Every file goes through the checks Guard's own read applies, and nothing
 //! here runs `git` or any other program in the project.
@@ -103,7 +102,7 @@ pub(super) struct Asked {
     pub(super) docs: bool,
     /// About a docstring or doctest, which a long function's head is enough
     /// for.
-    pub(super) docstring: bool,
+    pub(super) docstring: docstring::Asks,
     pub(super) changelog: bool,
     pub(super) named: Vec<String>,
     /// A rename: every use of a named definition is listed, not only the
@@ -113,6 +112,8 @@ pub(super) struct Asked {
     pub(super) changes: bool,
     /// A question that asks for no change: its tests are listed, not shown.
     pub(super) lookup: bool,
+    /// Claude Code reads a file before editing it: only the first definition is shown whole.
+    pub(super) reads_first: bool,
     /// What earlier prompts of the session showed, which is not shown again.
     pub(super) earlier: Vec<Span>,
     /// Names the prompt writes as code, as written (`_batched`).
@@ -123,6 +124,9 @@ pub(super) struct Asked {
     pub(super) root: PathBuf,
     /// Files Guard keeps out of the context for what they hold, by path.
     pub(super) kept_out: Vec<(String, String)>,
+    /// How many project files hold each spelling as a word, when the walk
+    /// read them all.
+    pub(super) exact: Vec<(String, usize)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -210,17 +214,19 @@ pub(super) fn mapped(
     let kept_out = withheld_texts(home, root, app, &files, &texts, until);
     let asked = Asked {
         docs: more::asks_for_docs(prompt),
-        docstring: docstring::asks_for_docstring(prompt),
+        docstring: docstring::asks(prompt),
         changelog: more::asks_for_changelog(prompt),
         named: named(prompt),
         changes: about_changes,
         everywhere: more::asks_everywhere(prompt),
         lookup: crate::context_assistance_prompt_words::asks_no_change(prompt),
+        reads_first: app == "claude-code",
         earlier: earlier.to_vec(),
         spellings: spellings(prompt),
         renames: renames(prompt),
         root: root.to_path_buf(),
         kept_out,
+        exact: walk.exact.clone(),
     };
     let mapped = map(&texts, &sought, &asked, until);
     withheld::added(mapped, &asked.kept_out, &sought, &asked, until)
@@ -294,8 +300,7 @@ pub(super) fn map(
         })
         .collect();
     let mut chosen = named_definitions(&files, &names, asked, false);
-    // A name no definition here holds is looked for where it is used
-    // instead, and a renamed one where it is used as well.
+    // A name no definition holds, or a renamed one, is looked for where used.
     let placed: BTreeSet<&str> = (chosen.iter())
         .filter(|_| !asked.everywhere)
         .filter_map(|pick| files[pick.file].sections[pick.at].name.as_deref())
@@ -313,10 +318,11 @@ pub(super) fn map(
         .filter(|item| item.phrase || item.name || !pieces.contains(&item.text))
         .filter(|item| !asked.changes || item.phrase || item.name)
         .collect();
-    let (used, uses) = uses::uses(&files, &rare, asked.everywhere, until)?;
-    // A file the prompt names stands for its outline only when the prompt's
-    // words are placed nowhere: "utils.py where the timeout is ignored" means
-    // the lines using `timeout`, not the file's first definitions.
+    let pointed = asked.named.len() + asked.spellings.len() > 0;
+    let lone = chosen.is_empty() && !pointed && sought.iter().all(|i| !i.name && !i.phrase);
+    let (used, uses) = uses::uses(&files, &rare, (asked.everywhere, lone), until)?;
+    // A named file stands for its outline only when the prompt's words are placed nowhere:
+    // "utils.py where the timeout is ignored" means the lines using `timeout`.
     if chosen.is_empty() && uses.is_empty() {
         chosen = named_definitions(&files, &names, asked, true);
     }
@@ -364,10 +370,10 @@ pub(super) fn map(
     if let Some((title, line)) = rewrite.and_then(|rewrite| rewrite.block(&tests, &asked.root)) {
         blocks.insert(0, (title, vec![Entry::plain(line)]));
     }
+    let tests = rename::check::with(tests, &files, &chosen, asked);
     blocks.push(("Tests:".to_owned(), tests));
-    // A function left to be written: what is defined beside it, for the
-    // helpers it can call, and where else it is named, with the text. A line
-    // inside a neighbor's code shown here is not listed again.
+    // A function left to be written: what is defined beside it (helpers it can
+    // call) and where else it is named; code shown here is not listed again.
     let near = (!asked.everywhere)
         .then(|| beside::beside(&files, &chosen, asked, &shown))
         .flatten();
@@ -472,29 +478,23 @@ fn kind(path: &str) -> Kind {
 }
 
 #[cfg(test)]
-#[path = "context_assistance_prompt_map_tests.rs"]
-mod tests;
-
-#[cfg(test)]
-#[path = "context_assistance_prompt_map_nested_tests.rs"]
-mod nested_tests;
-
-#[cfg(test)]
-#[path = "context_assistance_prompt_map_project_tests.rs"]
-mod project_tests;
-
-#[cfg(test)]
-#[path = "context_assistance_prompt_map_rename_tests.rs"]
-mod rename_tests;
-
-#[cfg(test)]
-#[path = "context_assistance_prompt_map_imports_tests.rs"]
-mod imports_tests;
-
-#[cfg(test)]
 #[path = "context_assistance_prompt_map_beside_tests.rs"]
 mod beside_tests;
-
 #[cfg(test)]
 #[path = "context_assistance_prompt_map_docstring_tests.rs"]
 mod docstring_tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_imports_tests.rs"]
+mod imports_tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_nested_tests.rs"]
+mod nested_tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_project_tests.rs"]
+mod project_tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_rename_tests.rs"]
+mod rename_tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_tests.rs"]
+mod tests;

@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Final, cast
 
 from codex_plugin_scanner.guard.action_lattice import guard_action_severity, is_guard_action
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
+from codex_plugin_scanner.guard.harness.contracts import HARNESS_CONTRACTS
 from codex_plugin_scanner.guard.models import GuardAction
 
 from .effect_contract import EffectKind, UncertaintyKind

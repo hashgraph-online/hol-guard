@@ -7,6 +7,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from .release_budgets import budget_lines
+
 USAGE_KEYS = ("prompt_tokens", "completion_tokens", "total_tokens", "cached_tokens", "reasoning_tokens")
 
 
@@ -103,6 +105,7 @@ def render_summary_markdown(report: dict[str, Any], binding: dict[str, Any], bui
             else []
         ),
         "",
+        *budget_lines(report.get("release_budgets")),
         "Hook HTTP round-trip latency (nearest-rank; milliseconds):",
         f"Samples: {report['hook_latency']['samples']}; missing: {report['hook_latency']['missing_samples']}; "
         f"failed attempts: {report['hook_latency']['failed_attempts']}",

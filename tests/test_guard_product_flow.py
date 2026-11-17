@@ -14,11 +14,11 @@ import pytest
 from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import native_artifact_content_hash as content_hash_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.product import build_guard_status_payload
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import detect_all
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -1038,7 +1038,6 @@ args = ["workspace-skill.js", "--changed"]
                     "PYTHONPATH": str(runtime_pythonpath),
                     "HOL_GUARD_NATIVE": "force",
                     "HOL_GUARD_NATIVE_BINARY": os.environ["HOL_GUARD_NATIVE_BINARY"],
-                    "HOL_GUARD_CODEX_HOOK_BRIDGE": os.environ["HOL_GUARD_CODEX_HOOK_BRIDGE"],
                 },
                 check=False,
                 timeout=15,

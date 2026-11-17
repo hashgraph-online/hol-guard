@@ -76,6 +76,11 @@ const SECRET_PATH_MARKERS: [&str; 13] = [
     ".docker/config.json",
 ];
 
+/// Whether `name` is one of the groups a command can fall in.
+pub(crate) fn is_risk_group(name: &str) -> bool {
+    GROUPS.contains(&name)
+}
+
 /// The groups of `command`, in Cloud's order, or none when nothing is known.
 pub(crate) fn command_risk_groups(command: &str) -> Vec<&'static str> {
     let mut found = [false; GROUPS.len()];

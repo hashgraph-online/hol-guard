@@ -70,7 +70,7 @@ pub(super) fn run() -> Result<(), String> {
             std::process::exit(codex_hook_bridge::run(python_argv))
         }
         [command, python_argv @ ..]
-            if command == bounded_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
+            if command == bounded_hook_bridge::BRIDGE_COMMAND && !python_argv.is_empty() =>
         {
             std::process::exit(bounded_hook_bridge::run(python_argv))
         }
@@ -233,6 +233,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if hermes_file_inspect::is_command(command) && flag == "--stdin" => {
             let response = hermes_file_inspect::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if runtime_transition_record::is_command(command) && flag == "--stdin" => {
+            let response = runtime_transition_record::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if codex_hook_authority_record::is_command(command) && flag == "--stdin" => {
@@ -494,6 +498,20 @@ pub(super) fn run() -> Result<(), String> {
         {
             managed_resident::client_stream(std::path::Path::new(state_dir))
         }
+        [command, flag, state_dir, retire_flag, hold_flag, guard_home]
+            if command == "resident-stop"
+                && flag == "--state-dir"
+                && retire_flag == "--retire-clients"
+                && hold_flag == "--hold-install-lock" =>
+        {
+            // Held until the stop returns: an install that holds its lease
+            // finishes first, and none can take one while the resident goes.
+            let _install = crate::transition_files::hold_install_lock(
+                std::path::Path::new(guard_home),
+                std::time::Duration::from_secs(1),
+            )?;
+            managed_resident::stop_managed(std::path::Path::new(state_dir), true)
+        }
         [command, flag, state_dir, retire_flag]
             if command == "resident-stop"
                 && flag == "--state-dir"
@@ -505,7 +523,14 @@ pub(super) fn run() -> Result<(), String> {
             managed_resident::stop_managed(std::path::Path::new(state_dir), false)
         }
         [command, flag, state_dir] if command == "resident-prewarm" && flag == "--state-dir" => {
-            managed_resident::prewarm(std::path::Path::new(state_dir))
+            managed_resident::prewarm(std::path::Path::new(state_dir), None)
+        }
+        [command, flag, state_dir, session_flag, session]
+            if command == "resident-prewarm"
+                && flag == "--state-dir"
+                && session_flag == claude_session_start::RESTARTED_SESSION_FLAG =>
+        {
+            managed_resident::prewarm(std::path::Path::new(state_dir), Some(session.as_str()))
         }
         [command, flag, state_dir]
             if command == "resident-reset-restart-budget" && flag == "--state-dir" =>
@@ -713,7 +738,7 @@ pub(super) fn run() -> Result<(), String> {
             )
         }
         _ => Err(
-            "usage: hol-guard-runtime compile-business-policy --stdin | capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID --origin ORIGIN | enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD | enroll-workspace-review-authority --state-dir STATE_DIR --record RECORD | workspace-review-decision --stdin STATE_DIR --request-id REQUEST_ID | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | resident-client-stream --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | archive-inspect --stdin | content-decode --stdin | secrets-cli --stdin | context-digest --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR [--retire-clients] | resident-prewarm --state-dir STATE_DIR | resident-reset-restart-budget --state-dir STATE_DIR | resident-health --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA"
+            "usage: hol-guard-runtime compile-business-policy --stdin | capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID --origin ORIGIN | enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD | enroll-workspace-review-authority --state-dir STATE_DIR --record RECORD | workspace-review-decision --stdin STATE_DIR --request-id REQUEST_ID | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | resident-client-stream --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | archive-inspect --stdin | content-decode --stdin | secrets-cli --stdin | context-digest --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR [--retire-clients] | resident-prewarm --state-dir STATE_DIR [--restarted-session ID] | resident-reset-restart-budget --state-dir STATE_DIR | resident-health --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA"
                 .into(),
         ),
     }

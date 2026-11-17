@@ -18,6 +18,14 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde_json::{Map, Value};
 
+#[path = "literal_secret_bare.rs"]
+mod bare;
+#[path = "literal_secret_code.rs"]
+mod code;
+#[path = "literal_secret_letters.rs"]
+mod letters;
+#[path = "literal_secret_oauth.rs"]
+mod oauth;
 #[path = "literal_secret_pairs.rs"]
 mod pairs;
 #[path = "literal_secret_strong.rs"]
@@ -220,6 +228,9 @@ fn holds_spelled_secret(text: &str) -> bool {
             && !NOT_A_SECRET_NAME.is_match(&found["k"])
             && value.is_some_and(|value| looks_random(value.as_str()))
     }) || strong::holds_proven_secret(text)
+        || oauth::holds_oauth_credential(text)
+        || bare::holds_bare_secret(text)
+        || code::holds_code_secret(text)
 }
 
 /// The rows a patch adds: a Codex `apply_patch` body in `command`, or an Oh

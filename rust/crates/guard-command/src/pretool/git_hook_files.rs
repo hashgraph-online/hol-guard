@@ -62,6 +62,11 @@ pub(super) fn below_null_device(path: &str, hook: &str) -> bool {
 /// `value` is decoded already, so any other spelling, such as `" /dev/null "`
 /// with its quoted spaces, names a different directory.
 pub(super) fn names_no_hooks(value: &str) -> bool {
+    is_null_device(value)
+}
+
+/// `value` is the null device itself, which reads as empty.
+pub(super) fn is_null_device(value: &str) -> bool {
     value == "/dev/null" && null_device()
 }
 

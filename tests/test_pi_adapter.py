@@ -7,12 +7,12 @@ import json
 import os
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _approval_surface_policy_for_flow
 from codex_plugin_scanner.guard.consumer import artifact_hash
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.contracts import contract_for
+from codex_plugin_scanner.guard.harness.registry import get_adapter, list_adapters
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
@@ -395,6 +395,12 @@ class TestPiInstall:
         assert "if (response.observe_mode === true) return undefined;" in tool_call
         tool_result = source.split('  pi.on("tool_result", async (event, ctx) => {', 1)[1]
         assert "WATCH_WITHHELD_OUTPUT_CODES" in tool_result
+        assert "response.observe_mode === true && WATCH_WITHHELD_OUTPUT_CODES.has(response.reason_code)" in tool_result
+        assert "The protected text was not shown to the model." in tool_result
+        assert (
+            "return reviewedToolResult([{ type: 'text', text: watchNotice }], event.details, false, hookDeadlineAt);"
+            in tool_result
+        )
 
     def test_install_writes_managed_extension_that_denies_on_hook_errors(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
@@ -596,7 +602,7 @@ class TestPiInstall:
         assert uninstall_manifest["active"] is False
         assert not extension_path.exists()
         assert omp_extension_path.exists()
-        assert json.loads(settings_path.read_text(encoding="utf-8"))["extensions"] == []
+        assert "extensions" not in json.loads(settings_path.read_text(encoding="utf-8"))
         assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == [str(omp_extension_path)]
 
     def test_uninstall_removes_verified_legacy_omp_extension(self, tmp_path: Path, monkeypatch) -> None:
@@ -622,7 +628,7 @@ class TestPiInstall:
         get_adapter("pi").uninstall(ctx)
 
         assert not omp_extension_path.exists()
-        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
+        assert "extensions" not in json.loads(omp_settings_path.read_text(encoding="utf-8"))
 
     def test_uninstall_removes_merge_base_previous_omp_extension(
         self,
@@ -651,7 +657,7 @@ class TestPiInstall:
         get_adapter("pi").uninstall(ctx)
 
         assert not omp_extension_path.exists()
-        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
+        assert "extensions" not in json.loads(omp_settings_path.read_text(encoding="utf-8"))
 
     def test_uninstall_preserves_modified_previous_omp_extension(
         self,

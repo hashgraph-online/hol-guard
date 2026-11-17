@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Final
 
-from ..adapters.contracts import HARNESS_CONTRACTS
+from ..harness.contracts import HARNESS_CONTRACTS
 from .discovery import VersionObservation
 
 OBSERVATION_MAX_AGE_SECONDS = 15 * 60
@@ -32,7 +32,14 @@ _TIMEOUT_SECONDS: Final = 10.0
 def _contracts() -> dict[str, list[dict[str, object]]]:
     return {
         contract.harness: [
-            {"event": row.event, "transport": row.transport, "declared_actions": list(row.declared_actions)}
+            {
+                "event": row.event,
+                **({"tools": list(row.tools)} if row.tools else {}),
+                **({"surface": row.surface} if row.surface else {}),
+                "transport": row.transport,
+                "declared_actions": list(row.declared_actions),
+                "mode": row.mode,
+            }
             for row in contract.capability_events
         ]
         for contract in HARNESS_CONTRACTS

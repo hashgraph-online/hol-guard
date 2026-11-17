@@ -13,7 +13,7 @@ from .extension_catalog_fixtures import CATALOG_CASE, CATALOG_CHECK
 from .fast_forward_fixtures import FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE
 from .file_write_cases import FILE_WRITE_BLOCK_REASONS, FILE_WRITE_CHECK, FILE_WRITE_ORACLE
 from .task_brief_cases import TASK_BRIEF_BLOCK_REASONS, TASK_BRIEF_ORACLE
-from .input_evidence import input_digest, input_matches, post_input_matches
+from .input_evidence import edit_headers, input_digest, input_matches, post_input_matches
 from .native_routes import native_route_error
 from .remote_code import REMOTE_CODE_CASES
 from .review_fixtures import (
@@ -169,6 +169,43 @@ def prompt_answer_error(observation: dict[str, Any]) -> str | None:
     return None
 
 
+def stopped_prompt_reason(observations: object) -> str | None:
+    """The reason code of a well-formed Guard denial of the case prompt, or ``None``."""
+    if not isinstance(observations, list):
+        return None
+    for observation in observations:
+        if (
+            is_prompt_answer(observation)
+            and observation.get("decision") == "deny"
+            and prompt_answer_error({**observation, "decision": "allow"}) is None
+        ):
+            reason = observation.get("reason_code")
+            return reason if isinstance(reason, str) and reason else "unnamed"
+    return None
+
+
+def lifecycle_outcome(scenario: Any, case: dict[str, Any], calls: list[Any]) -> tuple[str, str] | None:
+    """The outcome of a host run that did not complete cleanly, or ``None``.
+
+    The Pi and Oh My Pi extensions exit nonzero when Guard stops a headless prompt. That one
+    nonzero exit is named as the stop; a timeout, setup error or failed cleanup still is not.
+    """
+    failed = "harness-error", "host process or owned daemon lifecycle did not complete"
+    if (
+        "execution_error" in case
+        or type(case.get("returncode")) is not int
+        or case.get("timed_out") is not False
+        or case.get("cleanup_ok") is not True
+    ):
+        return failed
+    if not calls and (stop := stopped_prompt_reason(case.get("guard_observations"))):
+        # A stopped prompt never reaches the tool call a protection case exists for, and on an
+        # ordinary case it is the false positive itself.
+        outcome = "false-positive" if scenario.expectation == "allow" else "not-exercised"
+        return outcome, f"Guard stopped the case prompt before any tool call ({stop})"
+    return failed if case["returncode"] != 0 else None
+
+
 def guard_inventory(
     calls: list[dict[str, Any]],
     observations: list[dict[str, Any]],
@@ -259,7 +296,7 @@ def _edit_path(args: dict[str, Any]) -> str | None:
     text = args["input"]
     if not isinstance(text, str):
         return None
-    headers = [header.strip(" \t") for header in re.findall(r"^\[([^\n]+)#[0-9A-Fa-f]{4}\]$", text, re.MULTILINE)]
+    headers = edit_headers(text)
     if len(headers) != 1 or not headers[0]:
         return None
     path = _fixture_path(headers[0])

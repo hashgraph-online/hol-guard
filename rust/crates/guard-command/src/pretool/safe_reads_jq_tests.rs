@@ -137,6 +137,16 @@ fn a_second_filter_or_no_filter_is_refused() {
     assert!(!safe_jq_stdin_arguments(&arguments(&[])));
 }
 
+/// Unpiped, every word after the filter is an input file, however many there
+/// are. Piped, a file operand would replace standard input, so the filter
+/// is not located there.
+#[test]
+fn the_filter_is_located_before_any_number_of_input_files() {
+    let files = arguments(&["-c", "{n: .number}", "/tmp/a.json", "/tmp/b.json"]);
+    assert_eq!(jq_filter_position(&files, false), Some(1));
+    assert_eq!(jq_filter_position(&files, true), None);
+}
+
 /// A name `--arg` or `--argjson` binds may be read back, and only that name.
 /// `$ENV` and `$__loc__` stay refused even when the command line binds them,
 /// since jq answers them from the process and the program text.

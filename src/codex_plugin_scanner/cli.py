@@ -371,15 +371,15 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
     if not bool(getattr(sys, "frozen", False)):
         return None
     if requested_argv[:1] == ["__guard-bounded-hook"]:
-        from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
+        from .guard.harness.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(requested_argv[1:])
     if requested_argv[:1] == ["__guard-cursor-hook"]:
-        from .guard.adapters.cursor import run_frozen_cursor_hook
+        from .guard.harness.cursor_client import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(requested_argv[1:])
     if requested_argv[:1] == ["__guard-claude-hook"]:
-        from .guard.adapters.claude_code import run_frozen_claude_hook
+        from .guard.claude_hook_entry import run_frozen_claude_hook
 
         return run_frozen_claude_hook(requested_argv[1:])
     from .guard.shims import resolve_frozen_package_shim_path, run_frozen_package_shim
@@ -415,11 +415,11 @@ def main(argv: list[str] | None = None) -> int:
     argv = _frozen_module_argv(sys.argv[1:] if argv is None else argv)
     effective_argv = argv
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-bounded-hook"]:
-        from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
+        from .guard.harness.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(effective_argv[1:])
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-cursor-hook"]:
-        from .guard.adapters.cursor import run_frozen_cursor_hook
+        from .guard.harness.cursor_client import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(effective_argv[1:])
     program_name = _program_name(sys.argv[0])
@@ -479,6 +479,16 @@ def main(argv: list[str] | None = None) -> int:
             except ValueError as exc:
                 print(str(exc), file=sys.stderr)
                 return 2
+            except Exception as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+        from .guard.cli.desktop_daemon_workers import is_daemon_workers_fast_path_argv, run_daemon_workers_cli
+
+        if is_daemon_workers_fast_path_argv(requested_argv):
+            # Fast path: the native daemon starts its worker host on every cold
+            # start and is not ready until the host publishes policy.
+            try:
+                return run_daemon_workers_cli(requested_argv)
             except Exception as exc:
                 print(str(exc), file=sys.stderr)
                 return 1

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.mcp_servers import (
+from codex_plugin_scanner.guard.mcp_server_client import (
     ManagedMcpServer,
     proxy_cli_args,
     stable_mcp_server_identifier,
@@ -364,7 +364,9 @@ def test_call_projection_risk_categories_detect_network_and_process_bypass_shape
         transport="stdio",
     )
 
-    assert expected_categories.issubset(set(_projected_call(native_context_digest, artifact, arguments).risk_categories))
+    assert expected_categories.issubset(
+        set(_projected_call(native_context_digest, artifact, arguments).risk_categories)
+    )
 
 
 def test_call_projection_risk_categories_ignore_benign_network_vocabulary(native_context_digest: Path) -> None:

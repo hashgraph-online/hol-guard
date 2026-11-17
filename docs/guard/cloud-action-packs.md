@@ -121,6 +121,61 @@ result. Turning `emptyOk` on is a widening change in `diff`. Size `maxBytes` for
 can send back, including any argument it echoes: GitHub returns the full issue or pull request body, so those
 actions allow 512 KiB.
 
+## Brokered sign-in
+
+A pack may name the sign-in brokers whose toolkits can carry its requests, so a hosted gateway can use a provider
+whose sign-in a broker holds instead of the gateway itself
+([ADR 0016](adr/0016-brokered-sign-in-transport.md)):
+
+```json
+"transports": {"partner": [{"partner": "composio", "toolkit": "outlook"}]}
+```
+
+`partner` comes from a closed list (today only `composio`), and `toolkit` is a lowercase slug of 2 to 64 letters,
+digits and underscores that starts with a letter. A pack names each partner once, at most four in total. A pack
+whose `auth.mode` is `none` has no sign-in to broker, and a broker proxy carries only plain HTTP requests, so
+neither that pack nor one with any `remote-mcp` or `broker` action can declare one.
+
+The block grants nothing by itself. It changes no fact, decision or rendered request: a brokered call sends the same
+absolute `https` URL on the same declared host as a direct one. A pack without the block serializes and digests
+exactly as before. Adding a transport, or changing its toolkit, is a widening change in `diff`.
+
+The shipped packs that name a toolkit are Outlook (`outlook`), OneDrive (`one_drive`), Teams (`microsoft_teams`),
+Dropbox (`dropbox`), HubSpot (`hubspot`), Figma (`figma`), Discord (`discordbot`), Linear (`linear`), Airtable
+(`airtable`), monday.com (`monday`), Zoom (`zoom`), QuickBooks (`quickbooks`), Zendesk (`zendesk`), Intercom
+(`intercom`), Mailchimp (`mailchimp`), Trello (`trello`), ClickUp (`clickup`) and Calendly (`calendly`). Discord
+names the broker's bot toolkit because its actions post and delete messages with bot permissions, which a Discord
+user sign-in does not carry. The broker
+proxy refuses a host on a different registrable domain from its toolkit's, but may accept a sibling host on the same
+domain and attach the credential there. It is not the check that keeps a call on the right host: the gateway sends
+only to the exact host the pack declares, after the provider host check on the rendered URL, so a toolkit whose base
+URL is on another domain fails closed and a sibling host is never reached through a pack.
+
+## Connection values
+
+Some services address one customer's data by a value that belongs to the connection, not the call: a help desk's
+subdomain, an accounting company id, a cloud site id, the server a chat bot was added to. A pack declares each such
+value once, with bounds:
+
+```json
+"connection": {"values": {"subdomain": {"title": "Help desk subdomain", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$", "maxLength": 63}}}
+```
+
+A request template uses a value by name wherever it can use a required string argument: a path placeholder, a query
+value or a body field. A value may also be the leftmost label of a host, as in `{subdomain}.example.com`; the rest of
+that host must be an exact DNS name of two or more labels, and the value must then render as one lowercase DNS label.
+
+The host fills every value from the verified connection when it renders a request (`render_connected`, or the
+`connection` object of the CLI `render` operation and of a fixture). A caller can never supply one: a value may not
+share a name with any action argument, an argument with that name is `unknown_argument`, and rendering refuses a
+missing value (`connection_value_missing`), an undeclared one (`connection_value_unknown`) and one outside its
+bounds (`connection_value_invalid`). So no argument can move a request to another customer's tenant.
+
+A pack declares one to four values, each with a snake_case name, a display `title`, an anchored `pattern` and a
+`maxLength` of 1 to 128. As with transports, a pack whose `auth.mode` is `none`, or with any non-HTTP action, may not
+declare one. A pack without the block serializes and digests exactly as before. Adding, changing or removing a
+value is a widening change in `diff`, since each one changes which tenant a request can reach.
+
 ## Fixtures
 
 Every action in a source pack carries at least one `safe` and one `risky` fixture. A fixture states the arguments
@@ -154,7 +209,7 @@ activates an artifact.
 
 `diff` compares two packs or artifacts for the same provider and lists each change with a code. A change is
 widening when it lets a pack do more than before: a new host, scope or action, a looser argument, a weaker effect,
-a dropped capability, a new response field, a removed untrusted label, looser limits, a changed executor or
+a dropped capability, a new brokered transport, a changed connection value, a new response field, a removed untrusted label, looser limits, a changed executor or
 link, or any changed fact extractor. Any edit to a pattern or forbidden rule counts as widening, because whether a new pattern accepts less
 cannot be decided in general. A widening pack version needs fresh review.
 
@@ -173,7 +228,7 @@ Both read one JSON request per line on standard input and write one JSON result 
 | `test` | `pack` | fixture `report` |
 | `compile` | `pack` | `artifact` |
 | `diff` | `old`, `new` (pack or artifact) | `diff` |
-| `render` | `pack` or `artifact`, `actionId`, `arguments` | `request` |
+| `render` | `pack` or `artifact`, `actionId`, `arguments`, optional `connection` values | `request` |
 | `extract` | `pack` or `artifact`, `actionId`, `arguments` | `facts` |
 | `project` | `pack` or `artifact`, `actionId`, `response` | `projection` |
 | `policy` | `preset` name or `policyPack` | `preset`, `packDigest`, `factRules`, `unclassified` |
@@ -269,8 +324,8 @@ arguments, so each tool is one action whose arguments are open but bounded in to
 constants: the class and object the tool works on, never a count it cannot prove. HubSpot is read-only. Stripe money
 movement (`send_money`, `transfer_money`, `convert_currency`) is class `pay` and adding a payout recipient is `admin`.
 Tools that multiplex several operations behind one name (Stripe `stripe_api_write`, Atlassian `executeRead`,
-`executeWrite` and `executeDestructive`, HubSpot `manage_*`) and Linear, whose tool names are not published, are not
-covered.
+`executeWrite` and `executeDestructive`, HubSpot `manage_*`) and Linear's MCP server, whose tool names are not published,
+are not covered; `linear.json` covers Linear's API instead, as described below.
 
 Fourteen more tool-level packs follow the same pattern for developer, operations and support servers:
 `github-mcp.json` (GitHub's hosted MCP server), `gitlab-mcp.json`, `azure-devops-mcp.json`, `buildkite-mcp.json`,
@@ -305,19 +360,42 @@ GraphQL endpoint) and AWS (SigV4 request signing) are not packed.
 
 `quickbooks.json` and `monday.json` cover accounting and work management. QuickBooks Online reads an invoice, emails
 it to one named address, and voids or deletes it; deleting an invoice is permanent, so Relaxed and Balanced review
-it and Strict blocks it. monday.com creates and deletes items and deletes boards through fixed GraphQL mutations
+it and Strict blocks it. The QuickBooks company id is a connection value, so every call goes to the company the
+connection was made for. monday.com creates and deletes items and deletes boards through fixed GraphQL mutations
 whose ids travel only as variables, so an argument cannot add a second operation. A deleted board takes every item
-with it, so Balanced and Strict block it. Zendesk and Shopify (a host per account), Xero (a tenant header per call),
-Trello (credentials in the query string), and the Intercom and ClickUp REST APIs (OAuth without scopes) are not
-packed; Intercom's MCP server is, as described below.
+with it, so Balanced and Strict block it. `linear.json` covers Linear's GraphQL API the same way: it lists a team's
+first 50 issues, creates an issue and comments on one. Each operation is a fixed query whose team and issue ids must
+be UUIDs (an issue may also be named by its short id, such as `ENG-123`) and travel only as variables. Deleting an
+issue is not packed: Linear also moves the issue's sub-issues to the trash, so one call can change records the review
+never saw. Shopify (a host per account and no broker that pins it) and Xero (a tenant header per call) are not
+packed.
+
+`zendesk.json`, `intercom.json`, `trello.json`, `clickup.json`, `mailchimp.json` and `calendly.json` cover support,
+task and audience tools. Each one reads a single record, and its writes touch one record per call:
+
+- Zendesk adds a private note to a ticket and moves a ticket between open, pending, on hold and solved; closing a
+  ticket for good is not packed. Its host is `{subdomain}.zendesk.com`, filled from the connection.
+- Intercom adds an internal note to a conversation and closes one. A closed conversation can be reopened.
+- Trello comments on a card and archives one. The broker adds Trello's key and token itself, so the rendered request
+  carries neither.
+- ClickUp comments on a task without notifying anyone and changes a task's status.
+- Mailchimp reads an audience and one member, named by the MD5 hash of the address, and archives a member, which can
+  be added back. Sending a campaign is not packed. Its host is `{dc}.api.mailchimp.com`, with the data centre filled
+  from the connection.
+- Calendly reads a scheduled event and cancels one with a reason. A cancel cannot be undone and tells the invitee,
+  so Relaxed and Balanced review it and Strict blocks it.
+
+Intercom, ClickUp, Mailchimp and Calendly sign-ins carry no scopes Guard can name: the sign-in can do whatever the
+person can, and the pack is the only limit on what an agent may do. Those packs use the scope `api` for the whole
+sign-in.
 
 `sendgrid.json`, `zoom.json`, `figma.json` and `discord.json` cover messaging and collaboration. SendGrid sends one
 plain-text message whose recipients come only from the `to` argument, so the recipient facts name every address.
 Zoom lists upcoming meetings, deletes a meeting, and moves a meeting's recordings to the trash or deletes them
 permanently as separate actions with different reversibility. Figma reads, adds and deletes file comments. Discord
 posts with every mention turned off, deletes one message, and bulk-deletes up to 100; a bulk delete of 100 needs a
-fresh approval in Balanced. Twilio, Mailchimp, DocuSign, Calendly and Zapier are not packed: their credentials carry
-no scopes Guard can name, or the action needs a per-account host.
+fresh approval in Balanced. Twilio, DocuSign and Zapier are not packed: their credentials carry no scopes Guard
+can name, or the action needs a per-account host.
 
 `stripe.json` covers the Stripe REST API for money movement the MCP server multiplexes: reading the balance,
 refunds, payouts, transfers to connected accounts and new prices, all with form bodies. Payouts, transfers and

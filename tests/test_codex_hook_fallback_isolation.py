@@ -17,10 +17,9 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_hook_launch_runtime as launch_runtime
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
     isolated_daemon_start_command,
@@ -28,6 +27,7 @@ from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
     run_isolated_hook_process,
 )
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 
 def _installed_launch(tmp_path: Path) -> tuple[HarnessContext, tuple[str, ...], dict[str, object]]:
@@ -41,7 +41,7 @@ def _installed_launch(tmp_path: Path) -> tuple[HarnessContext, tuple[str, ...], 
     )
     CodexHarnessAdapter().install(context)
     bridge_command = codex_adapter._hook_command_parts(context)
-    config = json.loads(bridge_command[3])
+    config = json.loads(bridge_command[-1])
     assert isinstance(config, dict)
     return context, bridge_command, config
 
@@ -52,7 +52,7 @@ def _trusted_launch(bridge_command: tuple[str, ...], config: dict[str, object]):
         state_path=str(config["state_path"]),
         fallback_command=_config_command(config, "fallback_command"),
         start_command=_config_command(config, "start_command"),
-        config_json=bridge_command[3],
+        config_json=bridge_command[-1],
     )
 
 
@@ -182,7 +182,7 @@ def test_tampered_bridge_launch_contract_fails_closed_without_executing_project_
     environment = dict(os.environ)
     environment["PYTHONPATH"] = str(workspace)
     result = subprocess.run(
-        [*bridge_command[:3], tampered_json],
+        [*bridge_command[:2], tampered_json],
         input=json.dumps({"hook_event_name": "PreToolUse"}),
         capture_output=True,
         text=True,
@@ -231,7 +231,7 @@ def test_signed_runtime_guard_home_is_canonical_across_directory_aliases(tmp_pat
 
     CodexHarnessAdapter().install(context)
     bridge_command = codex_adapter._hook_command_parts(context)
-    config = json.loads(bridge_command[3])
+    config = json.loads(bridge_command[-1])
     trusted = _trusted_launch(bridge_command, config)
     canonical_guard_home = context.guard_home.resolve(strict=True)
 

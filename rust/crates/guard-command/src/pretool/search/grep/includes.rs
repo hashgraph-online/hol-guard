@@ -39,6 +39,11 @@ impl Includes {
         true
     }
 
+    /// Every glob, in the order the line gives them.
+    pub(super) fn globs(&self) -> &[String] {
+        &self.all
+    }
+
     /// True while every glob the screen refused selects no sensitive file
     /// below the operands.
     ///

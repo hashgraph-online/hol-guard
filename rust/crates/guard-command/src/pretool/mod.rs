@@ -7,6 +7,11 @@ use std::path::Path;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PathContext<'a> {
     pub home_dir: Option<&'a str>,
+    /// The Guard home the hook reported: the store this decision is made
+    /// against. Guard's own read-only commands may name it with `--home`,
+    /// because that reads the store the hook already uses. Literal contexts
+    /// leave this unset.
+    pub guard_home: Option<&'a str>,
     pub cwd: Option<&'a str>,
     pub cdpath_unset: bool,
     /// No inherited `RUSTUP_TOOLCHAIN` or `RUSTUP_HOME` can change which
@@ -115,6 +120,7 @@ pub(crate) mod directory_targets;
 pub(crate) mod workspace_git_config;
 pub(crate) mod workspace_git_environment;
 pub(crate) use directory_targets::safe_directory_target;
+mod archive_listing;
 mod awk_reads;
 mod base64_reads;
 mod brace_words;
@@ -177,9 +183,11 @@ pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
 mod guard_home_option;
+pub use guard_home_option::guard_approval_inspection_command;
 mod guard_names;
 mod helm_usage;
 pub(crate) mod help_probes;
+mod home_program_metadata;
 mod hook_neutering;
 mod installed_program_path;
 mod list_wrapper;
@@ -192,8 +200,10 @@ mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
 mod npmrc_keys;
+mod path_lookup_program;
 mod path_word_reads;
 mod pip_reads;
+mod piped_group;
 mod pnpm_reads;
 mod postgres_reads;
 mod printf_words;
@@ -229,6 +239,7 @@ pub(crate) use restricted_test_commands::{manager_local_bin_arguments, manager_s
 mod rust_toolchain;
 mod rustfmt_writes;
 mod safe_links;
+pub(crate) use safe_links::{every_removal_temporary, temporary_removal_segments};
 pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
@@ -263,6 +274,7 @@ mod stdin_filters;
 mod symlink_writes;
 mod tool_inventory_reads;
 mod tree_reads;
+mod tree_writers;
 pub(crate) mod version_probes;
 pub(crate) mod wget_reads;
 #[cfg(test)]
@@ -299,6 +311,7 @@ pub use generic::bindable_setting;
 pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
+pub use generic::prompt_asks_for_local_secrets;
 pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
@@ -316,7 +329,9 @@ pub(crate) use script_content::{
     sole_program_sources, sourced_program_sources, sourcing_bounded_sources,
 };
 pub use search_scope_tracked::proven_project_document;
-pub(crate) use segment_proof::{benign_command_segments, leading_cd_segment, without_stderr_merge};
+pub(crate) use segment_proof::{
+    benign_command_segments, leading_cd_segment, segments_safe_alone, without_stderr_merge,
+};
 pub(crate) use worktree_add::entered_checkouts;
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
@@ -995,6 +1010,27 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Result<PreToolDecisionV1, String> {
+    // Literal and offline callers cannot claim a hook-reported Guard home.
+    evaluate_pre_tool_with_reported_guard_home(
+        request,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+        None,
+    )
+}
+
+/// Preserve the active Guard store supplied by the hook through every bounded
+/// command rewrite. Other command-model callers continue without that proof.
+pub(super) fn evaluate_pre_tool_with_reported_guard_home(
+    request: &CommandModelRequestV1,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    deadline: Option<std::time::Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    guard_home: Option<&str>,
+) -> Result<PreToolDecisionV1, String> {
     // One submission is read again for every spelling a rewrite reaches, and
     // each reading may ask the include walk about a recursive root. The walk
     // is the one proof here that spends its own wall clock, so the clock is
@@ -1007,22 +1043,36 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     // starting one of its own, and the budget ends when the outermost
     // reading returns.
     let _budget = search_scope_budget::begin_include_scope_budget();
-    let decision = evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)?;
+    let decision = evaluate_rewritten(
+        request,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+        guard_home,
+        0,
+    )?;
     Ok(literal_secrets::review_command(request, decision))
 }
 
 /// How many rewrites one submission may go through. A wrapper around a loop
-/// needs two - the wrapper comes off, then the loop unrolls - and the bound
-/// stops a recognizer whose output another recognizer reads from running
-/// without end.
+/// needs two (the wrapper comes off, then the loop unrolls); the bound stops
+/// recognizers that read each other's output from running without end.
 const MAX_REWRITE_ROUNDS: usize = 3;
 
 /// The command list a rewrite reads this text as, in the order the
 /// recognizers are tried.
 fn rewritten_command_list(command: &str) -> Option<String> {
-    for_loop_unroll::unroll(command)
+    rewritten_command_list_at(command, None)
+}
+
+/// [`rewritten_command_list`] with a known home, so a `~/` loop word unrolls,
+/// read without its comments, as the parser reads every step.
+fn rewritten_command_list_at(command: &str, home_dir: Option<&str>) -> Option<String> {
+    let command = &crate::shell_comment_lines::mask_comments(command);
+    for_loop_unroll::unroll_at(command, home_dir)
         .or_else(|| control_flow_flatten::flatten(command))
-        .or_else(|| control_flow_chain::spliced(command))
+        .or_else(|| control_flow_chain::spliced(command, home_dir))
         .or_else(|| list_wrapper::unwrapped(command))
 }
 
@@ -1032,10 +1082,17 @@ fn evaluate_rewritten(
     cwd: Option<&str>,
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    guard_home: Option<&str>,
     round: usize,
 ) -> Result<PreToolDecisionV1, String> {
-    let decision =
-        evaluate_single_command(request, home_dir, cwd, deadline, execution_environment)?;
+    let decision = evaluate_single_command(
+        request,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+        guard_home,
+    )?;
     if request.dialect != "posix" || decision.minimum_action != "review" {
         return Ok(decision);
     }
@@ -1045,7 +1102,22 @@ fn evaluate_rewritten(
     // through the same proofs and replaces the construct's decision: an allow
     // there admits the construct, a block is never softened, and a review
     // carries the rewritten model so later layers judge modeled commands.
-    let Some(rewritten) = rewritten_command_list(&request.command) else {
+    if let Some(allowed) = piped_group::decision(
+        request,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+        guard_home,
+        round,
+    ) {
+        return Ok(allowed);
+    }
+    // A loop word spelled `~/` names the home the shell expands, so it is
+    // written out only when that is shown to be the declared home.
+    let loop_home =
+        home_dir.filter(|_| PathContext::shell_home_matches_for(home_dir, execution_environment));
+    let Some(rewritten) = rewritten_command_list_at(&request.command, loop_home) else {
         return Ok(ungrouped_decision(
             request,
             decision,
@@ -1053,6 +1125,7 @@ fn evaluate_rewritten(
             cwd,
             deadline,
             execution_environment,
+            guard_home,
         ));
     };
     let rewritten_request = CommandModelRequestV1 {
@@ -1071,6 +1144,7 @@ fn evaluate_rewritten(
             cwd,
             deadline,
             execution_environment,
+            guard_home,
             round + 1,
         )
     } else {
@@ -1080,6 +1154,7 @@ fn evaluate_rewritten(
             cwd,
             deadline,
             execution_environment,
+            guard_home,
         )
     };
     match rewritten {
@@ -1130,6 +1205,7 @@ fn ungrouped_decision(
     cwd: Option<&str>,
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    guard_home: Option<&str>,
 ) -> PreToolDecisionV1 {
     let Some(command) = ungrouped_command_list(&request.command) else {
         return decision;
@@ -1138,7 +1214,14 @@ fn ungrouped_decision(
         command,
         ..request.clone()
     };
-    match evaluate_single_command(&ungrouped, home_dir, cwd, deadline, execution_environment) {
+    match evaluate_single_command(
+        &ungrouped,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+        guard_home,
+    ) {
         Ok(plain) if matches!(plain.minimum_action.as_str(), "allow" | "review" | "block") => plain,
         _ => decision,
     }
@@ -1222,10 +1305,14 @@ fn evaluate_single_command(
     cwd: Option<&str>,
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    guard_home: Option<&str>,
 ) -> Result<PreToolDecisionV1, String> {
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
-    let context = PathContext::for_session(home_dir, cwd, execution_environment);
+    let context = PathContext {
+        guard_home,
+        ..PathContext::for_session(home_dir, cwd, execution_environment)
+    };
     if shell_script::contains_credential_post(&model, context) {
         return Ok(pretool_decision(
             model,
@@ -1377,7 +1464,10 @@ fn evaluate_single_command(
             "The Rust command authority proved this push sends the checked-out branch to a credential-free GitHub HTTPS origin through trusted Git, credential helpers and hooks.",
         ));
     }
-    if exact_safe_command_with_context(&model, false, context)
+    // A full path to the file the bare name finds on `PATH` is proven as that bare name.
+    if (exact_safe_command_with_context(&model, false, context)
+        || path_lookup_program::bare_name_model(&model, execution_environment)
+            .is_some_and(|bare| exact_safe_command_with_context(&bare, false, context)))
         && !bun_eval::inherited_preload_configured(&model, execution_environment)
     {
         let reason_code = docker_start::proven_reason_code(&model)

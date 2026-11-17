@@ -28,7 +28,7 @@ from .approval_gate_prompt import (
 )
 
 if TYPE_CHECKING:
-    from ..adapters.base import HarnessContext
+    from ..harness.base import HarnessContext
 
 _ENROLLMENT_NOTICE = (
     "Local Guard approval protection is not enabled. Guard Cloud sign-in and account MFA are separate from this "
@@ -347,7 +347,7 @@ def _apps_disconnect_confirmation_matches(args: argparse.Namespace) -> bool:
     if not harness:
         return False
     try:
-        from ..adapters import get_adapter
+        from ..harness.registry import get_adapter
         from .install_commands import uninstall_confirmation_token
 
         expected = uninstall_confirmation_token(get_adapter(harness).harness)

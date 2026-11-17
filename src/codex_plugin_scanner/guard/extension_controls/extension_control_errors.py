@@ -55,17 +55,44 @@ _CAUSE_RECOVERY_ACTIONS = {
 class ExtensionControlApiError(Exception):
     """Stable error envelope shared by inspection, Test Lab, and mutation APIs."""
 
-    def __init__(self, status: int, code: str, *, cause: str | None = None) -> None:
+    def __init__(
+        self,
+        status: int,
+        code: str,
+        *,
+        cause: str | None = None,
+        details: dict[str, object] | None = None,
+    ) -> None:
         super().__init__(status, code)
         self.status = status
         self.code = code
         self.cause = cause
+        # Only the Pulse request a caller must approve: its id, match code and deadline.
+        self.details = dict(details or {})
 
     def to_payload(self) -> dict[str, object]:
-        payload: dict[str, object] = {"error": self.code}
+        payload: dict[str, object] = {**self.details, "error": self.code}
         if self.cause is not None:
             payload["cause"] = self.cause
         action = _CAUSE_RECOVERY_ACTIONS.get(self.cause or "") or _RECOVERY_ACTIONS.get(self.code)
         if action is not None:
             payload["recovery"] = {"action": action}
         return payload
+
+
+def approval_gate_api_error(error: object, *, status: int, code: str) -> ExtensionControlApiError:
+    """Map an approval-gate refusal to the extension-control envelope.
+
+    A Pulse refusal keeps its own code and the request to approve, so the CLI
+    and the dashboard can wait for the YID app and submit again. Any other
+    refusal becomes ``status`` and ``code``, as before.
+    """
+    pulse_code = getattr(error, "code", "")
+    if isinstance(pulse_code, str) and pulse_code.startswith("approval_gate_pulse_"):
+        details = getattr(error, "details", None)
+        return ExtensionControlApiError(
+            int(getattr(error, "status", status)),
+            pulse_code,
+            details=details if isinstance(details, dict) else None,
+        )
+    return ExtensionControlApiError(status, code)

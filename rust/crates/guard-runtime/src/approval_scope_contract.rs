@@ -163,10 +163,12 @@ pub(crate) fn contract(view: &View<'_>) -> ScopeContract {
         persistence_eligible,
     );
     ScopeContract {
-        recommended_allow: if allow_scopes.contains(&"workspace") {
-            Some("workspace")
-        } else if allow_scopes.contains(&"artifact") {
+        // The default is the narrowest choice: the exact reviewed action.
+        // Broader scopes stay available but are never preselected.
+        recommended_allow: if allow_scopes.contains(&"artifact") {
             Some("artifact")
+        } else if allow_scopes.contains(&"workspace") {
+            Some("workspace")
         } else {
             None
         },

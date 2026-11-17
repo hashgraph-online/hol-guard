@@ -1,0 +1,440 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "trello",
+    "name": "Trello",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.trello.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "read",
+      "write"
+    ]
+  },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "trello"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "trello.cards.get",
+      "title": "Read a card",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "api.trello.com",
+          "path": "/1/cards/{card_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "query": [
+            {
+              "name": "fields",
+              "value": {
+                "const": "id,name,closed,url"
+              }
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "card_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 24,
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "closed",
+            "value": {
+              "from": "closed"
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "from": "url"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "reads one card",
+          "kind": "safe",
+          "arguments": {
+            "card_id": "5abbe4b7ddc1b351ef961414"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://api.trello.com/1/cards/5abbe4b7ddc1b351ef961414?fields=id%2Cname%2Cclosed%2Curl"
+            },
+            "response": "{\"id\":\"5abbe4b7ddc1b351ef961414\",\"name\":\"Launch plan\",\"closed\":false,\"url\":\"https://trello.com/c/abc123/1-launch-plan\"}",
+            "projection": {
+              "id": "5abbe4b7ddc1b351ef961414",
+              "name": "Launch plan",
+              "closed": false,
+              "url": "https://trello.com/c/abc123/1-launch-plan"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a card id with a path",
+          "kind": "risky",
+          "arguments": {
+            "card_id": "5abbe4b7ddc1b351ef96/../"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "trello.cards.comment",
+      "title": "Comment on a card",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.trello.com",
+          "path": "/1/cards/{card_id}/actions/comments",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "text",
+                "value": {
+                  "arg": "text"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "card_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 24,
+          "pattern": "^[0-9a-f]{24}$"
+        },
+        "text": {
+          "type": "string",
+          "required": true,
+          "maxLength": 16384
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "reversibility": {
+          "const": "reversible"
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "type",
+            "value": {
+              "from": "type"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "comments on a card",
+          "kind": "safe",
+          "arguments": {
+            "card_id": "5abbe4b7ddc1b351ef961414",
+            "text": "Moved to next sprint."
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"text\":\"Moved to next sprint.\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.trello.com/1/cards/5abbe4b7ddc1b351ef961414/actions/comments"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an empty card id",
+          "kind": "risky",
+          "arguments": {
+            "card_id": "",
+            "text": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "trello.cards.archive",
+      "title": "Archive a card",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PUT",
+          "host": "api.trello.com",
+          "path": "/1/cards/{card_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "closed",
+                "value": {
+                  "const": true
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "card_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 24,
+          "pattern": "^[0-9a-f]{24}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "reversibility": {
+          "const": "reversible"
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "closed",
+            "value": {
+              "from": "closed"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "archives a card",
+          "kind": "safe",
+          "arguments": {
+            "card_id": "5abbe4b7ddc1b351ef961414"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"closed\":true}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PUT",
+              "url": "https://api.trello.com/1/cards/5abbe4b7ddc1b351ef961414"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a board id in place of a card",
+          "kind": "risky",
+          "arguments": {
+            "card_id": "board"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

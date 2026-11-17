@@ -15,6 +15,7 @@ mod options;
 mod repeat_walk_tests;
 mod rg;
 mod rg_whitelist;
+mod rg_whitelist_file;
 mod roots;
 mod sibling;
 mod tree;
@@ -27,7 +28,7 @@ use options::unsafe_search_value;
 pub(super) use rg::{rg_hidden_whitelist_reason, safe_rg_stdin_arguments};
 pub(super) use sibling::named_path as sibling_repository_named_file;
 pub(super) use tree::{
-    glob_matches_nothing, safe_glob_operand, safe_literal_bracket_read_target,
+    glob_matches_nothing, key_file_name, safe_glob_operand, safe_literal_bracket_read_target,
     safe_literal_bracket_tree, safe_recursive_listing_target, safe_recursive_target,
     safe_recursive_target_through_links, safe_unmatched_glob_operand, SECRET_EXTENSIONS,
 };
@@ -284,6 +285,7 @@ fn glob_selects_sensitive_path(value: &str, path_operand: bool) -> bool {
     ];
     patterns.iter().any(|pattern| {
         pattern.split('/').any(|component| {
+            let component = &*glob_class::widen_unmodeled_class(component);
             let bytes = component.as_bytes();
             let code_extension = component
                 .rsplit_once('.')

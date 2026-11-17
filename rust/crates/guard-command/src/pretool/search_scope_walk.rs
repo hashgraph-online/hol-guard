@@ -23,16 +23,18 @@ const MAX_SCOPE_ENTRIES: usize = 20_000;
 /// A names-only walk checks only entry metadata and links, never contents,
 /// so it may cover an ordinary mid-size repository in full.
 const MAX_NAME_SCOPE_ENTRIES: usize = 100_000;
-/// The entries an include walk may inspect.
+/// The entries an include walk may inspect: as many as a plain recursive
+/// walk.
 ///
-/// Every other reading of a recursive search answers before this one and
-/// walks the tree to do it, so an include walk spends what is left of a
-/// single evaluation's budget. A directory an include selects from -- the
-/// documentation or source tree the globs name -- fits well inside this
-/// count, and a larger tree leaves the reading unproven instead of spending
-/// the evaluation on it. Withholding it only returns the answer the readings
-/// above already reached.
-const MAX_INCLUDE_SCOPE_ENTRIES: usize = 2_000;
+/// The include walk inspects entry metadata only, like the plain walk, and it
+/// already stops on the shared wall clock in `search_scope_budget`, which is
+/// what keeps it inside the evaluation. A lower count bought no time on top of
+/// that clock. It only refused ordinary project folders -- a few thousand
+/// generated reports beside the documentation an agent searches -- that the
+/// clock would have let it finish. A tree too large for either still leaves
+/// the reading unproven, which only returns the answer the readings above
+/// already reached.
+pub(in crate::pretool) const MAX_INCLUDE_SCOPE_ENTRIES: usize = MAX_SCOPE_ENTRIES;
 /// Which ignore files a walk honors, matching the host that searches.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Ignores {

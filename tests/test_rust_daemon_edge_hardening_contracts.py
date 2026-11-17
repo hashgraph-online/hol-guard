@@ -6,7 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_production_native_resident_client_has_bounded_admission() -> None:
-    from codex_plugin_scanner.guard.native_resident_client import _MAX_PERSISTENT_CLIENTS, _MAX_PERSISTENT_POOLS
+    from codex_plugin_scanner.guard.native_resident_client import _MAX_PERSISTENT_POOLS
+    from codex_plugin_scanner.guard.native_resident_client_pool import _MAX_PERSISTENT_CLIENTS
 
     assert 0 < _MAX_PERSISTENT_CLIENTS <= 16
     assert 0 < _MAX_PERSISTENT_POOLS <= 16

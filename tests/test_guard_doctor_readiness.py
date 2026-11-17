@@ -3,19 +3,27 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from io import StringIO
+from typing import Any
 
 import pytest
 from rich.console import Console
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters import list_adapters
-from codex_plugin_scanner.guard.adapters.base import _run_command_probe
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.adapters.diagnostic_probes import without_command_probes
 from codex_plugin_scanner.guard.cli.doctor_readiness import doctor_runtime_readiness
 from codex_plugin_scanner.guard.cli.render import _render_doctor, emit_guard_payload
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
+from codex_plugin_scanner.guard.harness.base import _run_command_probe
+from codex_plugin_scanner.guard.harness.diagnostic_probes import without_command_probes
+from codex_plugin_scanner.guard.harness.registry import list_adapters
+from tests.codex_hook_state_support import fixed_hook_state
+
+
+def _doctor_json(rc: int, capsys: pytest.CaptureFixture[str]) -> Any:
+    """Doctor's JSON report; an empty report names the exit code and stderr."""
+    captured = capsys.readouterr()
+    assert captured.out.strip(), f"doctor printed no report (rc={rc}): {captured.err[-2000:]}"
+    return json.loads(captured.out)
 
 
 @pytest.mark.parametrize(
@@ -73,7 +81,7 @@ def test_doctor_json_does_not_promote_registration_or_cli_success_to_readiness(
             str(tmp_path / "workspace"),
         ]
     )
-    payload = json.loads(capsys.readouterr().out)
+    payload = _doctor_json(rc, capsys)
 
     assert rc == 0
     assert payload["setup_status"] == setup_status
@@ -96,7 +104,7 @@ def test_global_doctor_reports_readiness_for_every_registered_harness(tmp_path, 
             str(tmp_path / "workspace"),
         ]
     )
-    payload = json.loads(capsys.readouterr().out)
+    payload = _doctor_json(rc, capsys)
 
     assert rc == 0
     assert {item["harness"] for item in payload["adapters"]} == {item.harness for item in list_adapters()}
@@ -219,10 +227,16 @@ def test_doctor_identifies_known_nested_probe_failures(key, timed_out) -> None:
 
 
 def test_global_doctor_validates_registration_without_executable_probes(tmp_path, monkeypatch, capsys) -> None:
-    def unexpected_subprocess(*_args, **_kwargs):
-        pytest.fail("Global doctor must not run harness CLI probes")
+    from codex_plugin_scanner.guard import native_runner_authority as authority_module
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.base.subprocess.run", unexpected_subprocess)
+    original = authority_module.native_runner_authority
+
+    def no_probes(kind, *args, **kwargs):
+        if kind == "command_probe":
+            pytest.fail("Global doctor must not run harness CLI probes")
+        return original(kind, *args, **kwargs)
+
+    monkeypatch.setattr(authority_module, "native_runner_authority", no_probes)
     home = tmp_path / "home"
     codex_home = home / ".codex"
     codex_home.mkdir(parents=True)
@@ -247,14 +261,10 @@ def test_global_doctor_validates_registration_without_executable_probes(tmp_path
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda *_args: True)
+    monkeypatch.setattr("codex_plugin_scanner.guard.codex_harness_lifecycle._command_available", lambda *_args: True)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.codex._verify_live_hook_manifest",
-        lambda _context, **_kwargs: {
-            "event_matches": {"PreToolUse": False, "PermissionRequest": False},
-            "integrity_status": "tampered",
-            "integrity_reason": "codex_hook_interpreter_path_mismatch",
-        },
+        "codex_plugin_scanner.guard.codex_harness_client.codex_native_hook_state",
+        fixed_hook_state(verified=False, reason="codex_hook_interpreter_path_mismatch"),
     )
     rc = main(
         [
@@ -269,7 +279,7 @@ def test_global_doctor_validates_registration_without_executable_probes(tmp_path
             str(tmp_path / "workspace"),
         ]
     )
-    payload = json.loads(capsys.readouterr().out)
+    payload = _doctor_json(rc, capsys)
     codex = next(item for item in payload["adapters"] if item["harness"] == "codex")
 
     assert rc == 0
@@ -281,11 +291,12 @@ def test_global_doctor_validates_registration_without_executable_probes(tmp_path
 def test_passive_probe_scope_resets_after_nested_scope_and_exception(monkeypatch) -> None:
     calls = []
 
-    def run(command, **_kwargs):
-        calls.append(command)
-        return subprocess.CompletedProcess(command, returncode=0, stdout="probe", stderr="")
+    def run(kind, request, **_kwargs):
+        assert kind == "command_probe"
+        calls.append(request["command"])
+        return {"command": request["command"], "ok": True, "return_code": 0, "stdout": "probe", "stderr": ""}
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.base.subprocess.run", run)
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_runner_authority.native_runner_authority", run)
     with pytest.raises(ValueError, match="fixture failure"), without_command_probes():
         with without_command_probes():
             skipped = _run_command_probe(["fixture-cli", "--help"])

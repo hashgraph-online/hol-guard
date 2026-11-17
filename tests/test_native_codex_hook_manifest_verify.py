@@ -25,7 +25,6 @@ def replies(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[object]:
     monkeypatch.setattr(verify, "_resolve_existing_digest_home", lambda home: str(tmp_path))
     monkeypatch.setattr(verify, "ensure_resident_prerequisite", lambda home: True)
     monkeypatch.setattr(verify, "_ask", lambda wire, home: queue.pop(0) if queue else None)
-    monkeypatch.setattr(integrity, "_owner_is_only_group_member", lambda uid, gid: True)
     return queue
 
 
@@ -64,44 +63,6 @@ def test_a_malformed_reply_leaves_the_installation_unverified(
     replies: list[object], tmp_path: Path, reply: dict[str, object]
 ) -> None:
     replies.append(reply)
-    assert _run(tmp_path) == _UNAVAILABLE
-
-
-def test_a_question_asked_twice_is_refused(replies: list[object], tmp_path: Path) -> None:
-    question = {"owner_uid": 501, "group_gid": 20}
-    replies.extend(
-        [
-            {"private_group_questions": [question], "state": _UNAVAILABLE},
-            {"private_group_questions": [question], "state": _UNAVAILABLE},
-            {"private_group_questions": [], "state": _valid_state()},
-        ]
-    )
-    assert _run(tmp_path) == _UNAVAILABLE
-
-
-def test_answers_carry_into_the_next_round(
-    replies: list[object], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    sent: list[list[object]] = []
-    queue = [
-        {"private_group_questions": [{"owner_uid": 501, "group_gid": 20}], "state": _UNAVAILABLE},
-        {"private_group_questions": [], "state": _valid_state()},
-    ]
-
-    def ask(wire: dict[str, object], home: Path) -> object:
-        sent.append(list(wire["private_groups"]))
-        return queue.pop(0)
-
-    monkeypatch.setattr(verify, "_ask", ask)
-    assert _run(tmp_path) == _valid_state()
-    assert sent == [[], [{"owner_uid": 501, "group_gid": 20, "private": True}]]
-
-
-def test_rounds_are_bounded(replies: list[object], tmp_path: Path) -> None:
-    replies.extend(
-        {"private_group_questions": [{"owner_uid": 501, "group_gid": gid}], "state": _UNAVAILABLE}
-        for gid in range(verify._MAX_ROUNDS + 1)
-    )
     assert _run(tmp_path) == _UNAVAILABLE
 
 

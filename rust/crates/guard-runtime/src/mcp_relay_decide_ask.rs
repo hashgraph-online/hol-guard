@@ -266,16 +266,22 @@ impl Prepared {
         let (request_id, notice) = write(request, &oauth_source, args)?;
         let row = read_back(request, &request_id)?;
         let review_url = review_url(&row, &center, &request_id);
-        let message = format!(
-            "HOL Guard stopped tool call {} from {}. Approve request {request_id} at \
-             {review_url}, then retry the same action.",
+        let stopped = format!(
+            "HOL Guard stopped tool call {} from {}",
             request.build.tool_name, request.build.server_name
         );
+        let agent = super::review_link::agent_review(
+            &request.guard_home,
+            &stopped,
+            &request_id,
+            &review_url,
+        );
+        let message = agent.message;
         let data = json!({
             "approvalCenterUrl": center,
             "approvalRequests": [Value::Object(row)],
             "guardPolicyAction": policy_action,
-            "reviewUrl": review_url,
+            "reviewUrl": agent.review_url,
         });
         // `_notify_pending_approval` once the row is written. A notice the
         // resident cannot read stays on the record for the daemon to raise.

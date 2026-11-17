@@ -18,12 +18,19 @@
 //!   "detection", "warnings"}` answers `{"setup_status": "active" | "broken" |
 //!   "partial" | "not_found"}`.
 //! - `{"op": "uses_guard", "artifacts"}` answers `{"uses_guard": bool}`.
+//! - `{"op": "readiness", "setup_status", "runtime_probe"}` answers the
+//!   doctor's runtime readiness; `harness_diagnostics_readiness` has it.
+//! - `{"op": "launcher_artifact", ...}` answers the artifact for the Guard
+//!   launcher shim a harness installed; `harness_launcher_artifact` has the
+//!   request and answer.
 //!
 //! A detection is `{"config_paths", "command_available", "artifacts"}` and an
 //! artifact is `{"artifact_type", "command", "args", "harness"}`. The native
 //! request parser refuses any array wider than 4096 entries, so every list
 //! (config paths, artifacts, an artifact's args, warnings) crosses as a list
 //! of chunks that join back here in order.
+
+use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
@@ -94,8 +101,24 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
             let listed = artifacts(fields.get("artifacts"))?;
             Ok(json!({ "uses_guard": listed.iter().any(Artifact::uses_guard) }))
         }
+        "launcher_artifact" => crate::harness_launcher_artifact::answer(fields),
+        "readiness" => {
+            expect_keys(fields, &["op", "setup_status", "runtime_probe"])?;
+            crate::harness_diagnostics_readiness::answer(fields)
+        }
         _ => Err(ERR_INVALID),
     }
+}
+
+/// Whether `path` is a launcher shim Guard wrote: a readable UTF-8 file that
+/// names its CLI module and the `guard run` command.
+pub(crate) fn is_launcher_shim(path: &Path) -> bool {
+    path.is_file()
+        && std::fs::read_to_string(path).is_ok_and(|text| {
+            ["codex_plugin_scanner.cli", "guard", "run"]
+                .iter()
+                .all(|needle| text.contains(needle))
+        })
 }
 
 struct Adapter<'a> {

@@ -47,57 +47,15 @@ const CENTER: &str = "approval-center";
 pub(crate) const PASEO_DELEGATES: [&str; 6] =
     ["claude-code", "codex", "copilot", "opencode", "pi", "omp"];
 
-/// Every variable a request's `env` may carry.
-pub(crate) const ENV_NAMES: [&str; 30] = [
-    "PATH",
-    "PATHEXT",
-    "NoDefaultCurrentDirectoryInExePath",
-    "KIMI_CODE_HOME",
-    "APPDATA",
-    "XDG_CONFIG_HOME",
-    "PASEO_HOME",
-    "GROK_HOME",
-    "ProgramFiles",
-    "ProgramFiles(x86)",
-    "LOCALAPPDATA",
-    "ZCODE_HOME",
-    "__CFBundleIdentifier",
-    "ZCODE_BASE_URL",
-    "ZCODE_APP_VERSION",
-    "ZCODE_ENV",
-    "ZCODE_RUNTIME_ENV",
-    "ZCODE_PROCESS_LABEL",
-    "ZCODE_RG_BINARY",
-    "ZAI_OAUTH_ORIGIN",
-    "ZAI_OAUTH_CLIENT_ID",
-    "HOL_GUARD_DESKTOP_RUNTIME_OWNER",
-    "XDG_DATA_HOME",
-    "CLINE_DATA_DIR",
-    "CLINE_DIR",
-    "CLINE_MCP_SETTINGS_PATH",
-    "HOL_GUARD_CURSOR_HOOK_BRIDGE",
-    "HOL_GUARD_TEST_MODE",
-    "HERMES_HOME",
-    "HERMES_HOST_HOME",
+/// Copilot ops that read or rewrite Guard's hook entries.
+const COPILOT_HOOK_OPS: [&str; 4] = [
+    "install_detection",
+    "prepare_install",
+    "apply_install",
+    "apply_uninstall",
 ];
 
-/// Prefixes of the variables that redirect Paseo's native runtimes.
-pub(crate) const ENV_PREFIXES: [&str; 14] = [
-    "CLAUDE_CONFIG_DIR",
-    "CLAUDE_CODE_DISABLE_HOOKS",
-    "CLAUDE_CODE_SIMPLE",
-    "CODEX_HOME",
-    "COPILOT_HOME",
-    "COPILOT_CONFIG_DIR",
-    "XDG_CONFIG_HOME",
-    "OPENCODE_CONFIG",
-    "OPENCODE_DISABLE",
-    "PI_CODING_AGENT_DIR",
-    "PI_CONFIG_DIR",
-    "PI_PROFILE",
-    "OMP_AGENT_DIR",
-    "OMP_PROFILE",
-];
+pub(crate) use super::describe_env::{ENV_NAMES, ENV_PREFIXES};
 
 pub(crate) const SPECS: [Spec; 18] = [
     Spec {
@@ -470,8 +428,48 @@ impl Spec {
                 Install::Delegated => "delegated",
             },
             "dynamic": self.dynamic,
+            // Hermes signs its manifest, which may create the state key, so it
+            // has no rebind preparation; Copilot plans one from what it detected.
+            "prepare": match self.harness {
+                "hermes" | "cline" => "unavailable",
+                "copilot" => "detected",
+                // Cursor plans the editor and CLI surfaces in one op.
+                "cursor" => "surfaces",
+                _ => "plan",
+            },
+            // Copilot and Cursor name their own launch argv and preview only
+            // that one; Cursor picks `cursor-agent` or `cursor agent`.
+            "launch_op": if matches!(self.harness, "copilot" | "cursor") {
+                "launch_command"
+            } else {
+                ""
+            },
+            // Copilot's hook ops refuse to touch a file the runtime did not plan.
+            "hook_ownership": if self.harness == "copilot" {
+                json!({"message": super::copilot::UNANSWERED, "ops": COPILOT_HOOK_OPS})
+            } else {
+                Value::Null
+            },
             // Grok resolves its own trusted executable and retires stale hook
             // commands the CLI's validator names.
+            // Cline answers its own doctor warnings, needs the frozen-runtime
+            // fact to pick a transport, and runs probes inside its install.
+            "warnings_op": self.harness == "cline",
+            "frozen_fact": self.harness == "cline",
+            "install_timeout": if self.harness == "cline" { json!(INSTALL_PROBE_TIMEOUT) } else { Value::Null },
+            // OpenCode launches through its own runner kind, which renders the
+            // inline config overlay and the argv around the caller's arguments.
+            "launch_runner": if self.harness == "opencode" { "opencode_launch" } else { "" },
+            // Cursor's editor runs Guard's hooks on its own, so a missing
+            // `cursor-agent` says nothing about whether Cursor is installed;
+            // an uninstall also removes the older `cursor` launcher, and
+            // Claude's the `claude-code` one.
+            "absence_proves_uninstalled": self.harness != "cursor",
+            "legacy_launchers": match self.harness {
+                "cursor" => json!(["cursor"]),
+                "claude-code" => json!(["claude-code"]),
+                _ => json!([]),
+            },
             "trusted_launcher": self.harness == "grok",
             "retired_hooks": self.harness == "grok",
             // Paseo and the Pi family add to the generic doctor report.
@@ -487,10 +485,14 @@ impl Spec {
     }
 }
 
+/// Cline's install may run the hook canary and `node --check` twice (once
+/// per transport) and the hook state once more, each up to 20 seconds.
+const INSTALL_PROBE_TIMEOUT: u64 = 90;
+
 pub(crate) fn describe() -> Value {
     json!({
         "adapters": SPECS.iter().map(Spec::describe).collect::<Vec<_>>(),
-        "env_names": ENV_NAMES,
+        "env_names": ENV_NAMES.as_slice(),
         "env_prefixes": ENV_PREFIXES,
     })
 }

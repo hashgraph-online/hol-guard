@@ -5,8 +5,8 @@
 //! commands with a single quote (legacy installs) and on POSIX hosts; on
 //! Windows a PowerShell `&` call with single-quoted literals, or the Microsoft
 //! C runtime rules. An 8.3 short name in a Windows token is mapped back to its
-//! long path only from `long_paths`, which Python resolves on the host; every
-//! short name met is reported so Python can resolve the ones it has not sent.
+//! long path from `long_paths` when the caller names it and otherwise by this
+//! host's own lookup; every short name met is still reported.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -15,7 +15,7 @@ use crate::local_mcp_grant_identity::shlex_split;
 pub(crate) const HOOK_SCRIPT_NAME: &str = "hol-guard-cursor-hook.py";
 const FROZEN_COMMAND: &str = "__guard-cursor-hook";
 const NATIVE_COMMAND: &str = "cursor-hook-bridge";
-const FROZEN_LAUNCHERS: &[&str] = &[
+pub(crate) const FROZEN_LAUNCHERS: &[&str] = &[
     "current-hol-guard",
     "current-hol-guard.cmd",
     "current-hol-guard.exe",
@@ -37,7 +37,7 @@ fn separator(ch: char) -> bool {
 }
 
 /// `[A-Za-z]:[A-Za-z0-9_.~\\-]+`, the shape of an 8.3 Windows path token.
-fn is_short_token(token: &str) -> bool {
+pub(crate) fn is_short_token(token: &str) -> bool {
     let mut chars = token.chars();
     let drive = chars.next().is_some_and(|ch| ch.is_ascii_alphabetic());
     if !drive || chars.next() != Some(':') {
@@ -196,7 +196,8 @@ fn client_tokens(tokens: Vec<String>) -> Vec<String> {
     tokens
 }
 
-/// The host command syntax plus the short names Python resolved.
+/// The host command syntax plus the short names expanded so far: those the
+/// caller named, then this host's own answer for the rest.
 pub(crate) struct Syntax {
     windows: bool,
     long_paths: BTreeMap<String, String>,
@@ -225,14 +226,18 @@ impl Syntax {
             return token;
         }
         self.short_tokens.insert(token.clone());
-        match self.long_paths.get(&token) {
-            Some(long) if !long.is_empty() => long.clone(),
-            _ => token,
+        let long = self.long_paths.entry(token.clone()).or_insert_with(|| {
+            guard_runtime_windows_process::long_path_name(&token).unwrap_or_default()
+        });
+        if long.is_empty() {
+            token
+        } else {
+            long.clone()
         }
     }
 
-    /// `split_hook_command_line`.
-    fn split_hook(&mut self, command: &str) -> Option<Vec<String>> {
+    /// Split one hook command, reading legacy POSIX-quoted Windows entries with shell quoting.
+    pub(crate) fn split_hook(&mut self, command: &str) -> Option<Vec<String>> {
         let leading = command.trim_start_matches(py_space);
         if !self.windows || leading.starts_with('\'') {
             return shlex_split(command);
@@ -273,7 +278,7 @@ impl Syntax {
     }
 
     /// `hook_token_name`: the final path component of one token.
-    fn name(&self, token: &str) -> String {
+    pub(crate) fn name(&self, token: &str) -> String {
         if !self.windows {
             return last_part(token, '/');
         }
@@ -355,3 +360,7 @@ impl Syntax {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "cursor_hook_command_tests.rs"]
+mod tests;

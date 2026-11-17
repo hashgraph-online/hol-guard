@@ -46,6 +46,7 @@ const CLEARABLE_FAMILIES: &[&str] = &[
     "npm registry credentials",
     "Python package credentials",
     "Terraform variable secrets",
+    "Wrangler local secrets file",
 ];
 
 /// A search pattern that is proven absent from the sensitive files a search

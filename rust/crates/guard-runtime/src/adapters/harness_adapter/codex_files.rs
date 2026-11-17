@@ -14,7 +14,7 @@ use crate::pyjson::PyVal;
 
 const PRIVATE_MODE: u32 = 0o600;
 
-fn existing(ctx: &Ctx, path: &Path) -> Step<(Option<Vec<u8>>, u32)> {
+pub(super) fn existing(ctx: &Ctx, path: &Path) -> Step<(Option<Vec<u8>>, u32)> {
     let before = files::snapshot(ctx, path)?;
     let mode = match before {
         Some(_) => files::mode(ctx, path).unwrap_or(PRIVATE_MODE),
@@ -214,4 +214,21 @@ pub(super) fn manifest(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> S
         str_list(&names(fields, "source_config_paths")?),
     );
     files::manifest_answer(doc)
+}
+
+/// `TransitionFile` serializes `path.resolve(strict=False)`: each planned
+/// change's `path`, and each bare path in `paths`, in that spelling.
+pub(super) fn canonical(ctx: &Ctx, changes: &mut [Value], paths: &mut [Value]) -> Step<()> {
+    let resolve = |path: Option<&Value>| -> Step<Value> {
+        let path = path.and_then(Value::as_str).ok_or(Failure::Invalid)?;
+        Ok(json!(path_text(&ctx.resolved(Path::new(path)))))
+    };
+    for change in changes.iter_mut() {
+        let path = resolve(change.get("path"))?;
+        change["path"] = path;
+    }
+    for path in paths.iter_mut() {
+        *path = resolve(Some(path))?;
+    }
+    Ok(())
 }

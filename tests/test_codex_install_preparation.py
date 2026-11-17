@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex as adapter
-from codex_plugin_scanner.guard.adapters import codex_install_plan as install_plan
+from codex_plugin_scanner.guard import codex_harness_client as adapter
+from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
 from codex_plugin_scanner.guard.codex_hook_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
@@ -16,10 +16,13 @@ from .test_codex_publication_preparation import _context, _tree
 from .test_frozen_codex_runtime import frozen_codex_contract  # noqa: F401 -- shared pytest fixture
 from .test_runtime_transition import begin, transition  # noqa: F401 -- shared pytest fixture
 
+SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
+SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
+
 
 def _sources(tmp_path, monkeypatch):
     context = replace(_context(tmp_path, monkeypatch), workspace_dir=tmp_path / "workspace")
-    harness = adapter.CodexHarnessAdapter()
+    harness = adapter_lifecycle.CodexHarnessAdapter()
     harness.install(context)
     global_config = harness._target_config_path(context)
     global_config.write_text(
@@ -42,11 +45,7 @@ def _sources(tmp_path, monkeypatch):
             )
         )
     context.home_dir.joinpath(".zshenv").write_bytes(
-        b"\xffKEEP\n\n"
-        + install_plan.SHELL_GUARD_BEGIN.encode()
-        + b"\nlegacy\n"
-        + install_plan.SHELL_GUARD_END.encode()
-        + b"\nAFTER\xfe\n"
+        b"\xffKEEP\n\n" + SHELL_GUARD_BEGIN.encode() + b"\nlegacy\n" + SHELL_GUARD_END.encode() + b"\nAFTER\xfe\n"
     )
     guard = context.guard_home / "managed/codex/codex-zshenv-guard.zsh"
     guard.write_bytes(b"legacy guard script")
@@ -116,7 +115,7 @@ def test_preparation_refuses_missing_authority_without_enrollment(tmp_path, monk
     context = _context(tmp_path, monkeypatch)
     before = _tree(tmp_path)
     with pytest.raises(CodexHookIntegrityError):
-        adapter.CodexHarnessAdapter().prepare_install(context)
+        adapter_lifecycle.CodexHarnessAdapter().prepare_install(context)
     assert _tree(tmp_path) == before
 
 
@@ -126,9 +125,8 @@ def test_frozen_preparation_pins_shared_executable_once_with_invocation(tmp_path
     executable.write_bytes(b"isolated frozen executable identity")
     executable.chmod(0o700)
     monkeypatch.setattr(adapter.sys, "executable", str(executable))
-    monkeypatch.setattr(adapter, "_guard_python_executable", lambda: str(executable))
     context = _context(tmp_path, monkeypatch)
-    harness = adapter.CodexHarnessAdapter()
+    harness = adapter_lifecycle.CodexHarnessAdapter()
     harness.install(context)
     before = _tree(tmp_path)
     prepared = harness.prepare_install(context)
@@ -137,48 +135,6 @@ def test_frozen_preparation_pins_shared_executable_once_with_invocation(tmp_path
     assert len(dependencies) == 1
     assert dependencies[0].expected_digest is not None
     assert dependencies[0].invocation_identity["path"] == str(executable)
-
-
-@pytest.mark.usefixtures("frozen_codex_contract")
-def test_exact_binding_scope_contains_legacy_frozen_launcher_selector(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.stable_guard_cli import exact_process_guard_cli_binding, resolve_frozen_guard_cli
-
-    root = tmp_path / "core"
-    executable = root / "versions" / "candidate" / "hol-guard"
-    executable.parent.mkdir(parents=True)
-    executable.write_bytes(b"isolated frozen candidate")
-    executable.chmod(0o700)
-    shim = root / "current-hol-guard"
-    shim.write_bytes(b"fixture stable predecessor launcher")
-    shim.chmod(0o700)
-    monkeypatch.setattr(adapter.sys, "executable", str(executable))
-    # Reproduce the legacy selector explicitly. Current frozen installation
-    # binds the physical main independently of this mutable CLI resolver.
-    monkeypatch.setattr(adapter, "_guard_python_executable", resolve_frozen_guard_cli)
-    context = _context(tmp_path, monkeypatch)
-    harness = adapter.CodexHarnessAdapter()
-    harness.install(context)
-    ordinary = harness.prepare_install(context)
-    ordinary_manifest = json.loads(
-        next(
-            change.after
-            for change in ordinary.files
-            if str(change.path) == ordinary.manifest["managed_hook_manifest_path"]
-        )
-    )
-    assert ordinary_manifest["interpreter"]["invocation_path"] == str(shim)
-    with exact_process_guard_cli_binding():
-        prepared = harness.prepare_install(context)
-    candidate_manifest = json.loads(
-        next(
-            change.after
-            for change in prepared.files
-            if str(change.path) == prepared.manifest["managed_hook_manifest_path"]
-        )
-    )
-    assert candidate_manifest["interpreter"]["invocation_path"] == str(executable)
-    assert resolve_frozen_guard_cli() == str(shim)
-    assert shim.read_bytes() == b"fixture stable predecessor launcher"
 
 
 def test_prepared_file_generations_match_ordinary_install(tmp_path, monkeypatch):
@@ -235,14 +191,16 @@ def test_prepared_file_generations_match_ordinary_install(tmp_path, monkeypatch)
 
 def test_foreign_source_during_migration_prevents_plan_without_overwriting(tmp_path, monkeypatch):
     harness, context, _global_config, workspace_config = _sources(tmp_path, monkeypatch)
-    migrate = adapter.prepare_codex_hook_migration
+    ask = adapter.ask
 
-    def foreign_write(*args, **kwargs):
-        result = migrate(*args, **kwargs)
-        workspace_config.write_text('model="foreign"\n')
-        return result
+    def foreign_write(op, *args, **kwargs):
+        # The sources were captured before the plan; a write while it runs
+        # must fail the plan's own comparison against disk.
+        if op == "install_plan":
+            workspace_config.write_text('model="foreign"\n')
+        return ask(op, *args, **kwargs)
 
-    monkeypatch.setattr(adapter, "prepare_codex_hook_migration", foreign_write)
+    monkeypatch.setattr(adapter, "ask", foreign_write)
     with pytest.raises(TransitionError):
         harness.prepare_install(context)
     assert workspace_config.read_text() == 'model="foreign"\n'

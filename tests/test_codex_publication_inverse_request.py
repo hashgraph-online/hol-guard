@@ -6,9 +6,9 @@ import time
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.codex import _hook_manifest_spec, codex_native_hook_state
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput
 from codex_plugin_scanner.guard.cli import codex_authority_repair as command
+from codex_plugin_scanner.guard.codex_harness_client import _hook_manifest_spec, codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_recovery import hook_publication_pending
 from codex_plugin_scanner.guard.codex_hook_repair_request import (
     load_codex_hook_repair_request,
@@ -133,7 +133,7 @@ def test_mac_valid_request_cannot_change_live_inverse_or_replay_expired_review(i
     secret = load_hook_secret(context.guard_home)
     value["authentication"] = sign_local_authority_payload(
         value,
-        key=secret.key,
+        key_home=str(secret.guard_home),
         key_id=secret.key_id,
         signed_at=plan.operation_id,
         purpose="codex-authority-repair-request" if change == "purpose" else "codex-publication-inverse-request",

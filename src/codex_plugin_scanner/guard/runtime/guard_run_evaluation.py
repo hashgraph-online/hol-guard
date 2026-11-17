@@ -13,8 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..adapters.base import HarnessContext
 from ..config import GuardConfig
+from ..harness.base import HarnessContext
 from ..models import GuardArtifact, HarnessDetection
 from ..native_prompt import NativePromptAnalysisError
 from ..native_prompt import analyze as _prompt_analyze_native
@@ -313,7 +313,7 @@ def prompt_requests_to_artifacts(
 
 
 def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) -> Path:
-    from ..adapters import get_adapter
+    from ..harness.registry import get_adapter
 
     config_candidates = _prompt_config_candidates(detection, context)
     if context.workspace_dir is not None:

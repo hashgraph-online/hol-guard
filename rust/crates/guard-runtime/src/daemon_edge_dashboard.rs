@@ -32,7 +32,7 @@ const ROOT_STATIC_FILES: [&str; 4] = [
     "/favicon-32x32.png",
 ];
 /// `_is_dashboard_route`'s exact paths.
-const DASHBOARD_ROUTES: [&str; 19] = [
+const DASHBOARD_ROUTES: [&str; 20] = [
     "/",
     "/home",
     "/dashboard",
@@ -48,6 +48,7 @@ const DASHBOARD_ROUTES: [&str; 19] = [
     "/releases",
     "/settings",
     "/cigar",
+    "/swarm",
     "/about",
     "/protection/repair",
     "/requests",

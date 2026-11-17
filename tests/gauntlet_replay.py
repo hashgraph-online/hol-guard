@@ -58,6 +58,7 @@ FIXED = {
     # Gate cases name these tools for Claude Code only, so one spelling is enough.
     "web_fetch": "WebFetch",
     "agent": "Agent",
+    "edit": "edit",
 }
 # Abstract tools upstream Pi also ships; omp-only tools (eval, task, todo, glob, ...) are not mirrored.
 PI_TOOLS = frozenset({"shell", "read", "write", "grep", "ls"})
@@ -243,13 +244,14 @@ def cursor_route_probe(
     probe = {**payload, "tool_input": {**tool_input, "cwd": payload["cwd"]}, "cursor_route_probe": True}
     answer = review_with_unavailable_retry(
         case_id,
-        lambda: worker.review_http_payload(
+        lambda deadline: worker.review_http_payload(
             payload=probe,
             params={},
             default_harness="cursor",
             home_dir=fixture.home,
             guard_home=fixture.guard_home,
             workspace=workspace,
+            deadline=deadline,
         ),
         on_retry=on_retry,
     )

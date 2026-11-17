@@ -6,6 +6,7 @@ installer grant nor a serialized native assertion can retire this journal.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import math
 import os
@@ -14,14 +15,12 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from . import native_transition_files
 from .codex_hook_file_integrity import hook_validation_deadline
-from .codex_hook_integrity import atomic_write_bytes, canonical_manifest_bytes, load_hook_secret
-from .codex_hook_recovery import _MAX_RECORD, _PURPOSE, _load_record, _record_path, _remove_record, _snapshot
+from .codex_hook_recovery import _load_record, _record_path, _remove_record
 from .codex_hook_rollback import rollback_file_identity
-from .codex_install_transaction import record_codex_mutation
 from .codex_publication_inverse_authorization import CodexPublicationInverseAuthorization
 from .codex_publication_inverse_plan import _journal_bytes, _predecessor_dependencies, _with_native_dependency
-from .local_authority_integrity import sign_local_authority_payload
 from .runtime_transition import RuntimeTransition, TransitionError, inverse_recovery_budget
 from .runtime_transition_admission import verified_admission_payload
 
@@ -92,10 +91,25 @@ class PendingCodexPublicationInverse:
                     raise TransitionError("publication_inverse_generation_changed")
         authorization.check()
 
+    def guard(self) -> list[dict[str, object]]:
+        """What ``compare`` checks, for the native op to repeat before it writes."""
+        plan = self.authorization.plan
+        entries: list[dict[str, object]] = [
+            {"file": item.payload(), "generation": "before", "identity": None} for item in plan.dependencies
+        ]
+        for index, (change, identity) in enumerate(zip(plan.changes, self._identities, strict=True)):
+            entries.append(
+                {
+                    "file": change.payload(),
+                    "generation": "after" if index in self._restored else "before",
+                    "identity": list(identity) if identity is not None else None,
+                }
+            )
+        return entries
+
     def _write_record(self, *, phase: str, observation: dict[str, object] | None = None) -> None:
         self.compare()
         plan = self.authorization.plan
-        payload = dict(self._record)
         marker: dict[str, object] = {
             "schema": "hol-guard.codex-explicit-publication-inverse.v1",
             "subject": self.authorization.approved_subject,
@@ -109,40 +123,45 @@ class PendingCodexPublicationInverse:
         }
         if observation is not None:
             marker["native_verification"] = observation
-        payload["publication_inverse"] = marker
-        secret = load_hook_secret(plan.guard_home)
-        authentication = sign_local_authority_payload(
-            payload,
-            key=secret.key,
-            key_id=secret.key_id,
-            purpose=_PURPOSE,
-            signed_at=self.authorization.owner_operation_id,
-        )
-        encoded = canonical_manifest_bytes({**payload, "authentication": authentication}) + b"\n"
-        if len(encoded) > _MAX_RECORD:
-            raise TransitionError("publication_inverse_record_too_large")
         self.compare()
-        published: list[tuple[int, int, int, int, int]] = []
-        atomic_write_bytes(
-            _record_path(plan.guard_home),
-            encoded,
-            mode=0o600,
-            private=True,
-            on_publish=published.append,
-            before_publish=self.compare,
-        )
-        identity = published[0] if len(published) == 1 else None
-        if (
-            identity is None
-            or rollback_file_identity(_record_path(plan.guard_home)) != identity
-            or _journal_bytes(_record_path(plan.guard_home)) != encoded
-            or rollback_file_identity(_record_path(plan.guard_home)) != identity
+        with (
+            inverse_recovery_budget(self.authorization.deadline_monotonic),
+            hook_validation_deadline(self.authorization.deadline_monotonic),
         ):
-            raise TransitionError("publication_inverse_journal_changed")
+            answer = native_transition_files.publication(
+                "inverse_record",
+                plan.guard_home,
+                record=self._record,
+                marker=marker,
+                journal_sha256=self._journal_sha256,
+                journal_identity=list(self._journal_identity),
+                signed_at=self.authorization.owner_operation_id,
+                guard=self.guard(),
+            )
+        payload, sha256, identity = _record_answer(answer)
         object.__setattr__(self, "_record", payload)
-        object.__setattr__(self, "_journal_sha256", hashlib.sha256(encoded).hexdigest())
+        object.__setattr__(self, "_journal_sha256", sha256)
         object.__setattr__(self, "_journal_identity", identity)
         self.compare()
+
+
+def _identity(value: object) -> tuple[int, int, int, int, int] | None:
+    if (
+        not isinstance(value, list)
+        or len(value) != 5
+        or not all(isinstance(item, int) and not isinstance(item, bool) for item in value)
+    ):
+        return None
+    return (value[0], value[1], value[2], value[3], value[4])
+
+
+def _record_answer(answer: object) -> tuple[dict[str, object], str, tuple[int, int, int, int, int]]:
+    record = answer.get("record") if isinstance(answer, dict) else None
+    sha256 = answer.get("sha256") if isinstance(answer, dict) else None
+    identity = _identity(answer.get("identity") if isinstance(answer, dict) else None)
+    if not isinstance(record, dict) or not isinstance(sha256, str) or identity is None:
+        raise TransitionError("publication_inverse_journal_changed")
+    return record, sha256, identity
 
 
 def publish_codex_publication_inverse(
@@ -185,26 +204,21 @@ def publish_codex_publication_inverse(
             change = plan.changes[index]
             assert change.after is not None
             identity = pending._identities[index]
-            if _snapshot(change.path) != change.after or (
-                os.name != "nt" and change.path.stat().st_mode & 0o777 != change.after_mode
+            with (
+                inverse_recovery_budget(authorization.deadline_monotonic),
+                hook_validation_deadline(authorization.deadline_monotonic),
             ):
-                published: list[tuple[int, int, int, int, int]] = []
-                atomic_write_bytes(
-                    change.path,
-                    change.after,
-                    mode=0o600,
-                    private=True,
-                    on_publish=published.append,
-                    before_publish=pending.compare,
+                answer = native_transition_files.publication(
+                    "inverse_restore",
+                    plan.guard_home,
+                    path=os.path.abspath(change.path),
+                    after=base64.b64encode(change.after).decode("ascii"),
+                    after_mode=change.after_mode,
+                    identity=list(identity) if identity is not None else None,
+                    guard=pending.guard(),
                 )
-                identity = published[0] if len(published) == 1 else None
-                record_codex_mutation("explicit_inverse_provisional", change.path, change.before, change.after)
-            if (
-                identity is None
-                or rollback_file_identity(change.path) != identity
-                or _snapshot(change.path) != change.after
-                or rollback_file_identity(change.path) != identity
-            ):
+            identity = _identity(answer.get("identity") if isinstance(answer, dict) else None)
+            if identity is None:
                 raise TransitionError("publication_inverse_generation_changed")
             identities = list(pending._identities)
             identities[index] = identity

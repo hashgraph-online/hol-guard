@@ -183,7 +183,7 @@ class WorkerHost:
         thread.start()
         self._threads.append(thread)
 
-    def start(self) -> None:
+    def start(self, on_phase: Callable[[str], None] | None = None) -> None:
         from ..browser_opener import open_browser_url
         from ..cloud_control.command_queue_worker import start_command_queue_worker
         from ..native_resident_watchdog import start_native_resident_watchdog
@@ -197,8 +197,11 @@ class WorkerHost:
         # Python daemon did at startup. A snapshot bound to packs an older
         # engine compiled is refused by the resident, so publishing first
         # would fail every hook closed until something else migrated it.
-        self._admit_installed_release()
+        report = on_phase or (lambda _step: None)
+        self._admit_installed_release(on_phase=report)
+        report("admitted")
         self._start_policy_publication()
+        report("publishing")
         if not self._installed_authority_admitted:
             self._loop("installed-authority", self._admit_installed_release, _INSTALLED_AUTHORITY_RETRY_SECONDS)
         attention = ApprovalAttentionCoordinator(
@@ -233,14 +236,18 @@ class WorkerHost:
         if isinstance(assessment, threading.Thread):
             self._threads.append(assessment)
 
-    def _admit_installed_release(self) -> None:
-        """Migrates the active command packs to the installed engine, once it succeeds."""
+    def _admit_installed_release(self, on_phase: Callable[[str], None] | None = None) -> None:
+        """Migrates the active command packs to the installed engine, once it succeeds.
+
+        Only the first attempt, during start, reports its steps; the retry
+        loop runs after the daemon has stopped reading them.
+        """
 
         if self._installed_authority_admitted:
             return
         from ..extension_control_host import migrate_installed_authority
 
-        self._installed_authority_admitted = migrate_installed_authority(self.store)
+        self._installed_authority_admitted = migrate_installed_authority(self.store, on_phase=on_phase)
 
     def _start_policy_publication(self) -> None:
         """Keeps the native policy snapshot, its direct-lane ACK and evidence drain live.
@@ -327,6 +334,13 @@ class WorkerHost:
                 _LOGGER.exception("Guard worker host could not stop native policy publication")
 
 
+def _report_phase(step: str) -> None:
+    """Tells the daemon which start step just finished; it journals each one."""
+
+    _ = sys.stdout.write(f"phase {step}\n")
+    sys.stdout.flush()
+
+
 def run_worker_host(guard_home: Path) -> int:
     """Runs the workers until standard input closes."""
 
@@ -339,8 +353,10 @@ def run_worker_host(guard_home: Path) -> int:
     writer = BackgroundLogWriter(store.guard_home)
     try:
         install_sink(writer.error, notice=writer.notice)
+        _report_phase("launched")
         host = WorkerHost(store, home_dir=Path.home().expanduser().resolve(strict=False))
-        host.start()
+        host.start(on_phase=_report_phase)
+        _report_phase("started")
         host.wait_for_policy_publication()
         # The daemon announces itself only after this line, so its first hook
         # finds a published policy, as it did when the daemon's own hook worker

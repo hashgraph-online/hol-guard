@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
 from codex_plugin_scanner.guard.continuation_runtime import (
     continuation_offer_payload,
     continue_request_after_application,
 )
+from codex_plugin_scanner.guard.harness.contracts import HARNESS_CONTRACTS
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore

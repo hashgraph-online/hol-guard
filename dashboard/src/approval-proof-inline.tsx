@@ -24,7 +24,21 @@ export function approvalProofRecentlySatisfied(gate: GuardApprovalGatePublicConf
 }
 
 export function approvalProofRequiresPassword(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
-  return gate?.totp_enabled !== true;
+  return gate?.totp_enabled !== true && !approvalProofUsesPulse(gate);
+}
+
+/** Pulse replaces the password and the authenticator code: the user approves in the YID app. */
+export function approvalProofUsesPulse(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
+  return gate?.enabled === true && gate.pulse_enabled === true;
+}
+
+export function PulseApprovalProofNotice() {
+  return (
+    <p className="text-sm leading-6 text-brand-dark/75" role="note">
+      You will approve this in the YID app with a face scan. Check that the app shows the same match code as
+      this page.
+    </p>
+  );
 }
 
 
@@ -93,6 +107,9 @@ export function isApprovalProofSubmitDisabled(
   if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
     return false;
   }
+  if (approvalProofUsesPulse(gate)) {
+    return false;
+  }
   if (approvalProofRequiresPassword(gate)) {
     return credentials.approvalPassword.trim() === "";
   }
@@ -111,6 +128,10 @@ export function buildApprovalProofCredentials(
     return {};
   }
   if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
+    return {};
+  }
+  if (approvalProofUsesPulse(gate)) {
+    // No local secret: the request layer runs the Pulse approval for this exact action.
     return {};
   }
   if (approvalProofRequiresPassword(gate)) {
@@ -145,6 +166,9 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
         Recently confirmed with your authenticator. A new code is not needed yet.
       </p>
     );
+  }
+  if (approvalProofUsesPulse(props.approvalGate)) {
+    return <PulseApprovalProofNotice />;
   }
   const needsPassword = approvalProofRequiresPassword(props.approvalGate);
   return (

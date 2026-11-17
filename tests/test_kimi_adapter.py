@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
+from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
@@ -236,12 +236,15 @@ class TestKimiHookQuoting:
         )
         parts = tuple(get_adapter("kimi")._hook_argv(ctx))  # pyright: ignore[reportAttributeAccessIssue]
         windows_cmd = _shell_command(parts, windows=True)
-        # The workspace path with '&' must live inside the quoted -c argument,
-        # not be exposed as a cmd.exe metacharacter. list2cmdline quotes the
-        # entire -c argument because it contains spaces.
-        assert ' -c "' in windows_cmd
+        # The workspace path with '&' must live inside the quoted config
+        # argument, not be exposed as a cmd.exe metacharacter. list2cmdline
+        # quotes the whole config because it contains spaces.
+        assert ' bounded-hook-bridge "' in windows_cmd
         assert windows_cmd.endswith('"')
         assert "workspace & tools" in windows_cmd
+        assert windows_cmd.count("workspace & tools") == windows_cmd.split('bounded-hook-bridge "', 1)[1].count(
+            "workspace & tools"
+        )
 
 
 class TestKimiLaunchCommand:

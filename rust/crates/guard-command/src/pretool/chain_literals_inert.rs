@@ -94,6 +94,9 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         }
     }
     let mut out = String::with_capacity(command.len());
+    // The command as it runs when every Git lookup prints nothing.
+    let mut unfound = String::with_capacity(command.len());
+    let mut looked_up = false;
     // The projection's shell text, heredoc bodies still blanked.
     let mut shell = String::with_capacity(command.len());
     let mut cursor = 0usize;
@@ -128,17 +131,35 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
                 )
             }
         };
+        // A lookup can print nothing; only a Git command reads a missing
+        // revision as the same kind of operation.
+        if value == git_value::COMMIT_VALUE
+            && !(git_value::in_git_command(&masked, &substitutions, substitution.start)
+                && git_value::standalone(&masked, substitution))
+        {
+            return None;
+        }
         if !judged.contains(&judged_text) {
             judged.push(judged_text);
         }
         temporary |= value == TEMPORARY_VALUE;
+        looked_up |= value == git_value::COMMIT_VALUE;
         out.extend(&chars[cursor..substitution.start]);
+        unfound.extend(&chars[cursor..substitution.start]);
         out.push_str(&value);
+        if value != git_value::COMMIT_VALUE {
+            unfound.push_str(&value);
+        }
         shell.extend(&masked[cursor..substitution.start]);
         cursor = substitution.end;
     }
     out.extend(&chars[cursor..]);
+    unfound.extend(&chars[cursor..]);
     shell.extend(&masked[cursor..]);
+    // An empty lookup shifts the words after it, so that command must pass too.
+    if looked_up {
+        judged.push(unfound);
+    }
     // A substitution the scan did not delimit is still in the text.
     if shell.contains("$(") || shell.contains('`') {
         return None;
@@ -154,6 +175,35 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         .iter()
         .all(|text| allowed(text.as_str()))
         .then_some(out)
+}
+
+/// Whether a bare `cat`, judged as a command of its own, runs without any
+/// control refusing it.
+///
+/// It is the program a `$(cat <<'EOF' ...)` substitution runs, it reads only
+/// the literal heredoc the projection already read, and no rule names it. On
+/// a host with a workspace sandbox it therefore runs contained. A host with
+/// no sandbox, Cursor's among them, has nowhere to contain it, so it gets the
+/// plain review every command no rule proves gets, with nothing matched. That
+/// review is not a refusal: the same `cat` prints the same message either
+/// way, and judging the projected command is what decides the chain. A
+/// control that did refuse it matches a rule or blocks, which this keeps.
+pub(super) fn cat_unrefused(verdict: &guard_contracts::PreToolResultV1) -> bool {
+    let contained = verdict.minimum_action == "sandbox-required"
+        && verdict.reason_code == "native_workspace_containment_required";
+    let unmatched = verdict
+        .command_extensions
+        .as_ref()
+        .is_some_and(|extensions| {
+            extensions.observations.is_empty()
+                && extensions.permission_observations.is_empty()
+                && extensions.evaluation_error.is_none()
+                && extensions.binding.uncertainty_count == 0
+        });
+    contained
+        || (verdict.minimum_action == "review"
+            && verdict.reason_code == "native_command_review_required"
+            && unmatched)
 }
 
 /// The literal text a `$(cat <<'EOF' ... EOF)` prints, when that is the whole
@@ -333,6 +383,9 @@ fn patterned_word(chars: &[char], substitution: &ShellCommandSubstitution) -> bo
 /// The stand-in for a substitution body that is one simple value-producing
 /// command with literal arguments.
 fn stand_in(body: &str) -> Option<&'static str> {
+    if let Some(value) = git_value::stand_in(body) {
+        return Some(value);
+    }
     if body.len() > MAX_BODY_CHARS
         || !body.chars().all(|c| {
             c.is_ascii_alphanumeric() || matches!(c, ' ' | '+' | '%' | '_' | ':' | '.' | '-')
@@ -402,6 +455,9 @@ fn date_arguments(arguments: &[&str]) -> bool {
     }
     true
 }
+
+#[path = "chain_literals_git_value.rs"]
+mod git_value;
 
 #[path = "chain_literals_temp_cd.rs"]
 pub(crate) mod temp_cd;

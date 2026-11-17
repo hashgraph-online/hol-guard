@@ -1,6 +1,5 @@
 //! The Grok answers of the bounded hook bridge: the pure steps of the
-//! generated Grok hook script (`bounded_cli_hook_script_template.py`
-//! rendered for `grok`), byte for byte.
+//! Grok hook client older releases generated, byte for byte.
 //!
 //! The script is the oracle. Its event names, daemon answer rendering,
 //! fail-closed payloads, approval request ids, decision rewrite and the

@@ -13,12 +13,9 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     tomllib = importlib.import_module("tomli")
 
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import HOOK_MANIFEST_SCHEMA_VERSION
-from codex_plugin_scanner.guard.codex_hook_manifest import assert_package_reauthentication_is_safe
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
+from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX executable fixtures are required")
@@ -86,14 +83,3 @@ def test_guard_install_codex_ignores_proxy_with_scalar_args(
 
     assert installed["migrated_proxy_servers"] == []
     assert installed["runtime_restart_required"] is False
-
-
-def test_reauthentication_rejects_incomplete_package_identity() -> None:
-    manifest = {
-        "schema_version": HOOK_MANIFEST_SCHEMA_VERSION,
-        "package_version": "2.1.0a6",
-        "packaged_files": [],
-    }
-
-    with pytest.raises(CodexHookIntegrityError, match="changed same-version hook code"):
-        assert_package_reauthentication_is_safe(manifest, manifest)

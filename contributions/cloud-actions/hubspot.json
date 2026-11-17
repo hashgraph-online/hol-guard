@@ -23,6 +23,14 @@
       "crm.schemas.custom.write"
     ]
   },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "hubspot"
+      }
+    ]
+  },
   "actions": [
     {
       "actionId": "hubspot.objects.list",

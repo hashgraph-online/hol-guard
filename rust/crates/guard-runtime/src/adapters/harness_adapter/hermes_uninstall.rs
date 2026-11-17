@@ -83,7 +83,6 @@ fn cleanup_values(
 /// `_remove_guard_from_hermes_config_yaml`, as the texts to write.
 fn rewrite(
     ctx: &Ctx,
-    fields: &Map<String, Value>,
     config: &Path,
     managed: &[String],
     previous: Option<PyVal>,
@@ -132,7 +131,7 @@ fn rewrite(
         }
         None => raw.0.retain(|(key, _)| key != "guard"),
     }
-    let rendered = hermes::yaml(fields, &raw.value())?;
+    let rendered = hermes::yaml(&raw.value());
     let mut writes = Vec::new();
     if let Some((path, text)) = allowlist {
         writes.push(json!({"path": path_text(&path), "text": text, "no_follow": true}));
@@ -142,7 +141,7 @@ fn rewrite(
     Ok(writes)
 }
 
-pub(super) fn prepare(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+pub(super) fn prepare(ctx: &Ctx, _fields: &Map<String, Value>) -> Step<Value> {
     let root = hermes::managed_root(ctx);
     let (manifest, ordered) = hermes::manifest(ctx)?;
     let authenticated = hermes::verified(ctx, &manifest);
@@ -159,7 +158,7 @@ pub(super) fn prepare(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         None => Vec::new(),
         Some(config) => {
             let (managed, previous) = cleanup_values(ctx, ordered.as_ref(), authenticated, config);
-            rewrite(ctx, fields, config, &managed, previous)?
+            rewrite(ctx, config, &managed, previous)?
         }
     };
     for name in ["managed-servers.json", "previous-guard-section.json"] {

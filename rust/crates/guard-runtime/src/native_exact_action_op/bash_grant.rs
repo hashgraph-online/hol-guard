@@ -318,7 +318,9 @@ pub(crate) fn execute_authorized(
                 match journal.uncertain(gate.dispatched) {
                     Ok(operation) => Some(Box::new(operation)),
                     Err(_) => {
-                        eprintln!("native_bash_uncertain_record_unavailable");
+                        crate::runtime_output::stderr_line(format_args!(
+                            "native_bash_uncertain_record_unavailable"
+                        ));
                         code = Some("native_bash_uncertain_record_unavailable");
                         None
                     }

@@ -19,6 +19,9 @@ use serde_json::{Map, Value};
 #[path = "search_scope_claude.rs"]
 mod claude;
 pub(super) use claude::claude_grep_directory_scope_proven;
+#[path = "search_scope_grok.rs"]
+mod grok;
+pub(super) use grok::grok_grep_directory_scope_proven;
 #[path = "search_scope_grep_include.rs"]
 mod grep_include;
 pub(super) use grep_include::{grep_include_scope_proven, grep_include_walk_proven};
@@ -45,44 +48,6 @@ const CLAUDE_GREP_KEYS: &[&str] = &[
     "offset",
     "multiline",
 ];
-
-/// True when a Grok `Grep` directory search cannot reach a sensitive file.
-/// Grok's search includes hidden files and searches a gitignored file its
-/// `glob` matches, so neither the glob nor any ignore file narrows the walk:
-/// any sensitive file below the directory fails the proof unless the search
-/// pattern provably cannot match it. A single-file target returns false so
-/// the file-read proof decides.
-pub(super) fn grok_grep_directory_scope_proven(
-    payload: &Value,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-) -> bool {
-    let Some(input) = grep_input(payload, true) else {
-        return false;
-    };
-    let target = match input.get("path") {
-        None => ".",
-        Some(Value::String(path)) if !path.is_empty() => path.as_str(),
-        Some(_) => return false,
-    };
-    // A glob is matched below the searched folder; one spelled as an
-    // absolute path or climbing out of it is not modeled.
-    let contained = |glob: &str| {
-        !glob.starts_with(['/', '~', '\\'])
-            && glob.as_bytes().get(1) != Some(&b':')
-            && !glob.split(['/', '\\']).any(|part| part == "..")
-    };
-    // A plain pattern that no reachable sensitive file contains cannot print
-    // a line from one, so those files need not hold the search.
-    let clearance = input
-        .get("pattern")
-        .and_then(Value::as_str)
-        .and_then(PatternClearance::new);
-    input
-        .get("glob")
-        .is_none_or(|glob| glob.as_str().is_some_and(contained))
-        && content_search_scope_proven(target, home_dir, cwd, clearance.as_ref())
-}
 
 /// Shell `rg` with `-g` inclusions the name screen cannot clear, such as
 /// `*.md` or `README*`: true when below each directory root no sensitive
@@ -190,10 +155,26 @@ pub(super) fn content_search_scope_proven(
     cwd: Option<&str>,
     clearance: Option<&PatternClearance>,
 ) -> bool {
+    SearchFilter::from_input(&Map::new()).is_some_and(|filter| {
+        filtered_content_search_scope_proven(target, &filter, home_dir, cwd, clearance)
+    })
+}
+
+/// [`content_search_scope_proven`] for a host that opens only the files
+/// `filter` selects. Every directory is still entered, hidden and ignored
+/// ones included, so a selected file anywhere below the root is screened.
+fn filtered_content_search_scope_proven(
+    target: &str,
+    filter: &SearchFilter,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    clearance: Option<&PatternClearance>,
+) -> bool {
     unfiltered_directory_root(target, home_dir, cwd).is_some_and(|root| {
         (!super::read_paths::inside_agent_state_tree(&root, home_dir)
             || super::read_paths::agent_state_tree_holds_only_documents(&root, home_dir))
-            && unfiltered_walk_cleared(&root, clearance, home_dir)
+            && walk_scope_cleared(&root, filter, Ignores::None, clearance, home_dir, &mut None)
+                .is_ok()
     })
 }
 
@@ -417,7 +398,9 @@ fn claude_grep_input(payload: &Value) -> Option<&Map<String, Value>> {
 /// the snake-case values and the input was not truncated.
 fn grep_input(payload: &Value, mirrored: bool) -> Option<&Map<String, Value>> {
     let root = payload.as_object()?;
-    if root.get("tool_name").and_then(Value::as_str) != Some("Grep") {
+    // Grok names its tool `grep`; Claude Code names it `Grep`.
+    let name = root.get("tool_name").and_then(Value::as_str);
+    if name != Some("Grep") && !(mirrored && name == Some("grep")) {
         return None;
     }
     let input = root.get("tool_input")?.as_object()?;

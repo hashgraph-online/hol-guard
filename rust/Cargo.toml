@@ -17,6 +17,7 @@ members = [
     "crates/guard-scanner",
     "crates/guard-seatbelt",
     "crates/guard-secure-fs",
+    "crates/guard-swarm",
     "crates/guard-hook-core",
     "crates/guard-hook-payload",
     "crates/guard-policy-snapshot",

@@ -9,70 +9,70 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import native_hook_bridge
-from codex_plugin_scanner.guard.adapters.extension_runtime import (
-    PI_HOOK_BRIDGE_FEATURE,
-    PI_HOOK_BRIDGE_SWITCH,
-    pi_native_hook_runtime,
-)
+from tests.native_runtime_stamp import stamp_native_runtime
 from tests.pi_extension_support import managed_extension_source
 from tests.pi_extension_template import DUMMY_VALUES, fragment, render
 from tests.test_pi_hook_latency import _bun_executable, _decode_json_object
 
 pytestmark = pytest.mark.native_pi_hook_bridge
 
+PI_HOOK_BRIDGE_FEATURE = "pi-hook-bridge-v1"
+PI_HOOK_BRIDGE_SWITCH = "HOL_GUARD_PI_HOOK_BRIDGE"
 RUNTIME = Path("/opt/hol-guard/hol-guard-runtime")
 
 
+def _source(tmp_path: Path) -> str:
+    return managed_extension_source(
+        guard_home=tmp_path / "guard-home",
+        home_dir=tmp_path,
+        settings_path=tmp_path / "settings.json",
+        harness="omp",
+        display_name="Oh My Pi",
+    )
+
+
 @pytest.fixture
-def advertised_runtime(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Path | None]]:
-    """A native runtime that advertises only the Pi hook bridge."""
+def advertised_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A native runtime in the caller stamp that advertises the Pi hook bridge."""
 
-    calls: list[tuple[str, Path | None]] = []
-
-    def executable(feature: str, *, guard_home: Path | None = None) -> Path | None:
-        calls.append((feature, guard_home))
-        return RUNTIME if feature == PI_HOOK_BRIDGE_FEATURE else None
-
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"native runtime")
     monkeypatch.delenv(PI_HOOK_BRIDGE_SWITCH, raising=False)
-    monkeypatch.setattr(native_hook_bridge, "native_hook_bridge_executable", executable)
-    return calls
-
-
-def test_extension_spawns_the_runtime_that_advertises_the_pi_bridge(
-    tmp_path: Path,
-    advertised_runtime: list[tuple[str, Path | None]],
-) -> None:
-    assert pi_native_hook_runtime(guard_home=tmp_path, platform_name="posix") == RUNTIME
-    assert advertised_runtime == [(PI_HOOK_BRIDGE_FEATURE, tmp_path)]
-    rendered = render("active", "omp", {**DUMMY_VALUES, "native_hook_runtime": json.dumps(str(RUNTIME))})
-    assert f"\nconst GUARD_NATIVE_HOOK_RUNTIME: string | null = {json.dumps(str(RUNTIME))};\n" in rendered
-
-
-def test_windows_and_the_fetch_switch_keep_the_daemon_request(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    advertised_runtime: list[tuple[str, Path | None]],
-) -> None:
-    assert pi_native_hook_runtime(guard_home=tmp_path, platform_name="nt") is None
-    monkeypatch.setenv(PI_HOOK_BRIDGE_SWITCH, "fetch")
-    assert pi_native_hook_runtime(guard_home=tmp_path, platform_name="posix") is None
-    rendered = render("active", "omp", DUMMY_VALUES)
-    assert "\nconst GUARD_NATIVE_HOOK_RUNTIME: string | null = null;\n" in rendered
-    assert advertised_runtime == []
-
-
-def test_a_runtime_without_the_pi_bridge_is_not_used(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(PI_HOOK_BRIDGE_SWITCH, raising=False)
-    monkeypatch.setattr(native_hook_bridge, "native_hook_bridge_executable", lambda *_args, **_kwargs: None)
-
-    assert pi_native_hook_runtime(guard_home=tmp_path, platform_name="posix") is None
+    stamp_native_runtime(monkeypatch, runtime, (PI_HOOK_BRIDGE_FEATURE,))
+    return runtime
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Generated Pi sources only name the native runtime on POSIX")
-@pytest.mark.usefixtures("advertised_runtime")
+def test_extension_spawns_the_runtime_that_advertises_the_pi_bridge(tmp_path: Path, advertised_runtime: Path) -> None:
+    assert f"\nconst GUARD_NATIVE_HOOK_RUNTIME: string | null = {json.dumps(str(advertised_runtime))};\n" in _source(
+        tmp_path
+    )
+
+
+def test_the_fetch_switch_keeps_the_daemon_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, advertised_runtime: Path
+) -> None:
+    del advertised_runtime
+    monkeypatch.setenv(PI_HOOK_BRIDGE_SWITCH, "fetch")
+    assert "\nconst GUARD_NATIVE_HOOK_RUNTIME: string | null = null;\n" in _source(tmp_path)
+    rendered = render("active", "omp", DUMMY_VALUES)
+    assert "\nconst GUARD_NATIVE_HOOK_RUNTIME: string | null = null;\n" in rendered
+
+
+def test_a_runtime_without_the_pi_bridge_is_not_used(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"native runtime")
+    monkeypatch.delenv(PI_HOOK_BRIDGE_SWITCH, raising=False)
+    stamp_native_runtime(monkeypatch, runtime, ("codex-hook-bridge-v1",))
+
+    assert "\nconst GUARD_NATIVE_HOOK_RUNTIME: string | null = null;\n" in _source(tmp_path)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Generated Pi sources only name the native runtime on POSIX")
 @pytest.mark.parametrize("harness", ["pi", "omp"])
-def test_generated_extension_asks_the_bridge_for_its_own_harness(tmp_path: Path, harness: str) -> None:
+def test_generated_extension_asks_the_bridge_for_its_own_harness(
+    tmp_path: Path, harness: str, advertised_runtime: Path
+) -> None:
     source = managed_extension_source(
         guard_home=tmp_path / "guard-home",
         home_dir=tmp_path,
@@ -81,7 +81,7 @@ def test_generated_extension_asks_the_bridge_for_its_own_harness(tmp_path: Path,
         display_name="Oh My Pi" if harness == "omp" else "Pi",
     )
 
-    assert f"const GUARD_NATIVE_HOOK_RUNTIME: string | null = {json.dumps(str(RUNTIME))};" in source
+    assert f"const GUARD_NATIVE_HOOK_RUNTIME: string | null = {json.dumps(str(advertised_runtime))};" in source
     assert f"const GUARD_NATIVE_HOOK_HARNESS = {json.dumps(harness)};" in source
     assert "spawn(runtime, ['pi-hook-bridge', config]" in source
     decision_path = source.split("async function runGuard(", 1)[1]

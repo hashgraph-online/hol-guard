@@ -10,6 +10,13 @@ import {
   versionReasonCopy,
   type HarnessVersionCompatibility,
 } from "../harness-version-compatibility";
+import {
+  eventReasonCopy,
+  eventProtectionName,
+  protectionStateLabel,
+  protectionStateTone,
+  type ProtectionTone,
+} from "../harness-protection-state";
 import { HarnessVersionLabel } from "../harness-version-label";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -56,6 +63,55 @@ function EvidenceSummary({ compatibility }: { compatibility: HarnessVersionCompa
   );
 }
 
+const TONE_CLASSES: Record<ProtectionTone, string> = {
+  success: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+  warning: "bg-amber-50 text-amber-900 ring-amber-200",
+  neutral: "bg-slate-50 text-slate-700 ring-slate-200",
+  danger: "bg-rose-50 text-rose-800 ring-rose-200",
+};
+
+function ProtectionProof({ compatibility }: { compatibility: HarnessVersionCompatibility }) {
+  const overall = compatibility.protectionState;
+  return (
+    <div className="mt-4" data-testid="protection-proof">
+      <p className="text-sm text-brand-dark">
+        Protection proof:{" "}
+        <span
+          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${TONE_CLASSES[protectionStateTone(overall)]}`}
+        >
+          {protectionStateLabel(overall)}
+        </span>
+      </p>
+      {compatibility.eventStates.length > 0 ? (
+        <ul className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-100 text-sm">
+          {compatibility.eventStates.map((item) => {
+            const why = eventReasonCopy(item.reason);
+            const base = eventProtectionName(item);
+            const repeated = compatibility.eventStates.filter((other) => eventProtectionName(other) === base).length > 1;
+            const name = repeated && item.transport ? `${base} (${item.transport})` : base;
+            return (
+              <li
+                key={`${base}:${item.surface ?? ""}:${item.transport ?? ""}`}
+                className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2"
+              >
+                <span className="font-mono text-xs text-brand-dark">{name}</span>
+                <span className="flex min-w-0 flex-col items-end text-right">
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${TONE_CLASSES[protectionStateTone(item.state)]}`}
+                  >
+                    {protectionStateLabel(item.state)}
+                  </span>
+                  {why ? <span className="mt-0.5 text-xs text-slate-500">{why}</span> : null}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export function AppVersionCompatibilityCard({ initial }: { initial: HarnessVersionCompatibility | null }) {
   const [compatibility, setCompatibility] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -85,7 +141,18 @@ export function AppVersionCompatibilityCard({ initial }: { initial: HarnessVersi
     }
   }, []);
 
-  if (!compatibility || versionCheckUnsupported(compatibility)) return null;
+  if (!compatibility) return null;
+  if (versionCheckUnsupported(compatibility)) {
+    // Version discovery covers few apps, but every app has a protection answer.
+    return (
+      <section className="rounded-xl border border-slate-100 p-4 sm:p-5" aria-labelledby="app-protection-heading">
+        <SectionLabel>
+          <span id="app-protection-heading">Protection</span>
+        </SectionLabel>
+        <ProtectionProof compatibility={compatibility} />
+      </section>
+    );
+  }
   const harness = compatibility.harness;
   const reason = versionReasonCopy(compatibility);
   const ack = compatibility.acknowledgement;
@@ -151,6 +218,7 @@ export function AppVersionCompatibilityCard({ initial }: { initial: HarnessVersi
         </p>
       ) : null}
 
+      <ProtectionProof compatibility={compatibility} />
       <EvidenceSummary compatibility={compatibility} />
 
       <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">

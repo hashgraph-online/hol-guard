@@ -6,15 +6,14 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import guard_cli_attestation
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.hook_python import attest_guard_hook_python
-from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import install_commands as install_commands_module
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from tests.opencode_test_support import (
     config_uses_guard_proxy,
     global_plugin_path,
@@ -543,7 +542,7 @@ def test_opencode_install_includes_pretool_plugin_paths(tmp_path: Path) -> None:
     config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
     config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text('{"mcp": {}}', encoding="utf-8")
-    result = OpenCodeHarnessAdapter().install(ctx)
+    result = get_adapter("opencode").install(ctx)
     assert Path(result["managed_plugin_path"]).is_file()
     assert Path(result["global_plugin_path"]).is_file()
 
@@ -735,10 +734,10 @@ def test_refresh_opencode_pretool_plugin_handles_runtime_error(
     store = GuardStore(ctx.guard_home)
     store.set_managed_install("opencode", True, None, {}, "2026-06-04T00:00:00+00:00")
 
-    def _raise_runtime_error(_context: HarnessContext) -> dict[str, object]:
+    def _raise_runtime_error(*_args: object, **_fields: object) -> dict[str, object]:
         raise RuntimeError("no guard python")
 
-    monkeypatch.setattr(update_commands, "plugin_render_args", _raise_runtime_error)
+    monkeypatch.setattr(update_commands, "ask", _raise_runtime_error)
 
     note = update_commands._refresh_opencode_pretool_plugin(context=ctx, store=store)
 
@@ -791,23 +790,21 @@ def _hook_ctx(tmp_path: Path) -> HarnessContext:
 
 
 def test_pretool_plugin_source_uses_parent_attested_import_roots(tmp_path: Path) -> None:
-    context = _hook_ctx(tmp_path)
-    attestation = attest_guard_hook_python(context)
+    import codex_plugin_scanner
 
-    source = pretool_plugin_source(context)
+    source = pretool_plugin_source(_hook_ctx(tmp_path))
 
-    assert str(attestation.package_root) in source
-    assert str(attestation.cryptography_distribution_root) in source
-    assert str(attestation.identity.target_path) in source
-    assert attestation.identity.target_sha256 in source
+    # The native runtime attests this interpreter and the package it imports.
+    assert str(Path(codex_plugin_scanner.__file__).resolve().parents[1]) in source
+    assert str(Path(sys.executable).resolve()) in source
 
 
 def test_frozen_opencode_hook_runs_signed_executable_directly(tmp_path: Path, monkeypatch) -> None:
     executable = tmp_path / "HOL Guard"
     executable.write_bytes(b"signed-frozen-core")
     executable.chmod(0o755)
-    monkeypatch.setattr(guard_cli_attestation.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(guard_cli_attestation.sys, "executable", str(executable))
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(executable))
 
     source = pretool_plugin_source(_hook_ctx(tmp_path))
 

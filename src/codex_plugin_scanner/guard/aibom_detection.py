@@ -153,7 +153,20 @@ def native_adapter_detection_with_warnings(
 ) -> tuple[tuple[GuardArtifact, ...], tuple[str, ...], tuple[str, ...]]:
     """Run a native adapter-detection kind and return artifacts, found paths and warnings."""
 
-    payload = _native(kind, request)
+    return detection_from_payload(_native(kind, request))
+
+
+def native_adapter_detection_payload(kind: str, request: Mapping[str, Any]) -> dict[str, Any]:
+    """The raw answer of a native adapter-detection kind, for a caller that may be asked again."""
+
+    return _native(kind, request)
+
+
+def detection_from_payload(
+    payload: Mapping[str, Any],
+) -> tuple[tuple[GuardArtifact, ...], tuple[str, ...], tuple[str, ...]]:
+    """Artifacts, found paths and warnings from a native adapter-detection answer."""
+
     found_paths = payload.get("found_paths")
     if not isinstance(found_paths, list) or not all(isinstance(path, str) for path in found_paths):
         raise NativeAibomError("native_runner_authority_result_invalid")
@@ -230,20 +243,29 @@ def _portable_skill_artifacts(
     return [_artifact_wire(artifact) for artifact in artifacts]
 
 
+def portable_workspace_skills(harness: str, workspace_dir: Path | None) -> list[dict[str, object]] | None:
+    """The workspace skills a Windows walk finds, or None when the native walk answers."""
+    if workspace_dir is None or harness not in _WORKSPACE_CODEX_SKILL_HARNESSES or not _needs_portable_walk():
+        return None
+    try:
+        resolved = workspace_dir.resolve()
+    except OSError:
+        return None
+    if not resolved.is_dir():
+        return None
+    return _portable_skill_artifacts(
+        harness,
+        scope_dir=resolved,
+        skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
+        scope="project",
+    )
+
+
 def _workspace_request(harness: str, workspace_dir: Path) -> dict[str, object]:
     request: dict[str, object] = {"harness": harness, "workspace_dir": anchor_to_process_directory(workspace_dir)}
-    if harness in _WORKSPACE_CODEX_SKILL_HARNESSES and _needs_portable_walk():
-        try:
-            resolved = workspace_dir.resolve()
-        except OSError:
-            return request
-        if resolved.is_dir():
-            request["skills"] = _portable_skill_artifacts(
-                harness,
-                scope_dir=resolved,
-                skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
-                scope="project",
-            )
+    skills = portable_workspace_skills(harness, workspace_dir)
+    if skills is not None:
+        request["skills"] = skills
     return request
 
 

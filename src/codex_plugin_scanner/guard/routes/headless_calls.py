@@ -15,14 +15,14 @@ from pathlib import Path
 from typing import Any
 
 from ...version import __version__
-from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..cli.install_commands import (
     apply_managed_install,
     build_harness_verification,
     uninstall_confirmation_token,
 )
+from ..harness.base import HarnessContext
+from ..harness.registry import get_adapter
 from ..harness_disconnect_gate import require_harness_disconnect_gate
 from ..headless_receipts import record_headless_receipt
 from ..native_hook_evidence_writer import unreachable_writer_stats
