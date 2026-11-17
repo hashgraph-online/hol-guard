@@ -58,6 +58,9 @@ enum Request {
         // numbers, which an internally tagged enum cannot read as a float.
         timeout_millis: u64,
         output_limit: Option<usize>,
+        /// Also answer the exact bytes each stream wrote, as hex.
+        #[serde(default)]
+        raw_output: bool,
         #[serde(default)]
         parent_liveness: bool,
         #[serde(default)]
@@ -158,6 +161,7 @@ fn answer(request: Request, stop: Arc<AtomicBool>) -> Value {
             environment,
             timeout_millis,
             output_limit,
+            raw_output,
             parent_liveness,
             allow_breakaway,
             kill_on_close,
@@ -187,10 +191,20 @@ fn answer(request: Request, stop: Arc<AtomicBool>) -> Value {
             // one-shot process exits, so settle it inside the same answer.
             let quarantine_settled =
                 !result.containment_failed || settle_quarantine(QUARANTINE_SETTLE_WINDOW);
+            let hex = |bytes: &[u8]| {
+                raw_output.then(|| {
+                    bytes
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>()
+                })
+            };
             json!({
                 "returncode": result.returncode,
                 "stdout": result.stdout,
                 "stderr": result.stderr,
+                "stdout_hex": hex(&outcome.stdout_raw),
+                "stderr_hex": hex(&outcome.stderr_raw),
                 "output_limit_exceeded": result.output_limit_exceeded,
                 "timed_out": result.timed_out,
                 "containment_failed": result.containment_failed,

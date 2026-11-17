@@ -52,6 +52,8 @@ class BoundedHookProcessResult:
     containment_failed: bool = False
     stderr: str = ""
     capture_incomplete: bool = False
+    stdout_bytes: bytes = b""
+    stderr_bytes: bytes = b""
 
 
 def hook_processes_contained(*, deadline_monotonic: float | None = None) -> bool:
@@ -85,19 +87,15 @@ def _launcher_environment() -> dict[str, str]:
     return _isolated_environment()
 
 
-def native_launcher_call(
-    request: Mapping[str, object],
-    *,
-    launcher: str | os.PathLike[str] | None = None,
-) -> dict[str, object] | None:
-    """Run one short launcher op and return its answer object, or ``None``."""
-    path = native_launcher_path(launcher)
+def native_launcher_call(operation: Mapping[str, object]) -> dict[str, object] | None:
+    """Run one short launcher op on the validated native runtime and return its answer object, or ``None``."""
+    path = native_launcher_path()
     if path is None:
         return None
     try:
         completed = subprocess.run(
             [path, *LAUNCHER_ARGS],
-            input=json.dumps(request).encode("utf-8") + b"\n",
+            input=json.dumps(operation).encode("utf-8") + b"\n",
             capture_output=True,
             timeout=_SHORT_OP_TIMEOUT_SECONDS,
             env=_launcher_environment(),
@@ -119,8 +117,8 @@ def _decode_answer(payload: bytes) -> dict[str, object] | None:
     return answer if isinstance(answer, dict) else None
 
 
-def _command_answer(request: Mapping[str, object]) -> tuple[str, ...]:
-    answer = native_launcher_call(request)
+def _command_answer(operation: Mapping[str, object]) -> tuple[str, ...]:
+    answer = native_launcher_call(operation)
     command = None if answer is None else answer.get("command")
     if not isinstance(command, list) or not all(isinstance(part, str) for part in command):
         raise RuntimeError("the native runtime is unavailable to build the isolated command")
@@ -249,6 +247,14 @@ def _reap_launcher(process: subprocess.Popen[bytes], *, graceful_seconds: float)
             process.stdout.close()
 
 
+def _raw_bytes(text: object) -> bytes:
+    """The exact bytes of a hex stream a ``raw_output`` launch carries."""
+    try:
+        return bytes.fromhex(text) if isinstance(text, str) else b""
+    except ValueError:
+        return b""
+
+
 def _result_from_answer(answer: Mapping[str, object] | None) -> tuple[BoundedHookProcessResult, bool]:
     """The launch result and whether the launcher settled its quarantine."""
     failed = BoundedHookProcessResult(None, "", False, False)
@@ -257,6 +263,7 @@ def _result_from_answer(answer: Mapping[str, object] | None) -> tuple[BoundedHoo
     returncode = answer.get("returncode")
     stdout = answer.get("stdout")
     stderr = answer.get("stderr")
+    raw = [_raw_bytes(answer.get(name)) for name in ("stdout_hex", "stderr_hex")]
     flags = [answer.get(name) for name in ("output_limit_exceeded", "timed_out", "containment_failed")]
     if (
         (returncode is not None and (not isinstance(returncode, int) or isinstance(returncode, bool)))
@@ -274,6 +281,8 @@ def _result_from_answer(answer: Mapping[str, object] | None) -> tuple[BoundedHoo
             containment_failed=bool(flags[2]),
             stderr=stderr,
             capture_incomplete=answer.get("capture_incomplete") is True,
+            stdout_bytes=raw[0],
+            stderr_bytes=raw[1],
         ),
         answer.get("quarantine_settled") is not False,
     )
@@ -281,7 +290,7 @@ def _result_from_answer(answer: Mapping[str, object] | None) -> tuple[BoundedHoo
 
 def _exchange(
     launcher: str,
-    request: Mapping[str, object],
+    launch: Mapping[str, object],
     *,
     cwd: Path,
     environment: Mapping[str, str],
@@ -316,7 +325,7 @@ def _exchange(
     reader = threading.Thread(target=read_answer, daemon=True)
     reader.start()
     try:
-        body = dict(request)
+        body = dict(launch)
         body["timeout_millis"] = max(0, math.ceil((deadline - time.monotonic()) * 1000))
         if process.stdin is None:
             raise OSError("hook launcher stdin is unavailable")
@@ -353,6 +362,7 @@ def run_isolated_hook_process(
     environment: Mapping[str, str],
     timeout_seconds: float | None = None,
     output_limit: int = _HOOK_SUBPROCESS_OUTPUT_LIMIT,
+    raw_output: bool = False,
     allow_windows_breakaway: bool = False,
     windows_kill_on_job_close: bool = True,
     windows_job_memory_limit_bytes: int | None = None,
@@ -371,7 +381,8 @@ def run_isolated_hook_process(
 
     When ``deadline_monotonic`` is supplied it is authoritative: startup and
     stream cleanup consume the caller's existing budget instead of receiving a
-    new minimum timeout. ``launcher`` names the native runtime when the caller
+    new minimum timeout. ``raw_output`` also returns the exact bytes each stream
+    wrote. ``launcher`` names the native runtime when the caller
     already holds its validated path; otherwise the current runtime serves.
     """
     if stop_event is None:
@@ -400,6 +411,7 @@ def run_isolated_hook_process(
             "cwd": str(cwd),
             "environment": dict(environment),
             "output_limit": output_limit,
+            "raw_output": raw_output,
             "parent_liveness": parent_liveness,
             "allow_breakaway": allow_windows_breakaway,
             "kill_on_close": windows_kill_on_job_close,

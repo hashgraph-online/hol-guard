@@ -284,3 +284,17 @@ fn a_closed_stdin_stops_the_child_tree() {
     assert_eq!(parsed["timed_out"], false);
     assert_eq!(parsed["containment_failed"], false);
 }
+
+#[cfg(unix)]
+#[test]
+fn raw_output_carries_the_exact_bytes_each_stream_wrote() {
+    let command = ["/bin/sh", "-c", "printf 'a\\377b'; printf 'e\\200' >&2"];
+    let raw = launch(&command, "", 5000, r#"{"raw_output": true}"#);
+    assert_eq!(raw["stdout_hex"], "61ff62");
+    assert_eq!(raw["stderr_hex"], "6580");
+    // The decoded text is the lossy form of the same bytes.
+    assert_eq!(raw["stdout"], "a\u{fffd}b");
+    let plain = launch(&command, "", 5000, "");
+    assert_eq!(plain["stdout_hex"], Value::Null);
+    assert_eq!(plain["stderr_hex"], Value::Null);
+}
