@@ -276,12 +276,12 @@ fn dispatched_arguments(payload: &Value) -> Option<&Value> {
         .iter()
         .any(|input| ARGUMENT_KEYS.iter().any(|key| input.contains_key(*key)))
     {
-        // Mixed direct and nested argument copies must not let a denied
-        // direct batch be hidden behind another envelope's argument list.
-        if inputs
-            .iter()
-            .any(|input| ARGUMENT_KEYS.iter().all(|key| !input.contains_key(*key)))
-        {
+        // Never ignore a direct batch beside nested arguments, whether
+        // they appear in separate envelopes or in the same input record.
+        if inputs.iter().any(|input| {
+            input.contains_key("tools")
+                || ARGUMENT_KEYS.iter().all(|key| !input.contains_key(*key))
+        }) {
             return None;
         }
         return one_value(inputs);
@@ -517,6 +517,28 @@ mod tests {
             denied_provider_execution(&choices, "grok", &prepared_tool, &conflicting),
             Some("native_composio_opaque_execution_with_deny")
         );
+
+        // A *single* prepared input can also hide its direct batch behind
+        // a conflicting nested copy. Neither ordering may bypass the deny.
+        for (direct, nested) in [
+            ("SLACK_SEND_MESSAGE", "SLACK_SEARCH_MESSAGES"),
+            ("SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE"),
+        ] {
+            let mixed = json!({
+                "toolName": "MCPTool",
+                "mcp_server": "composio",
+                "mcp_tool": "COMPOSIO_MULTI_EXECUTE_TOOL",
+                "tool_input": {
+                    "tools": [{"tool_slug": direct, "arguments": {}}],
+                    "arguments": {"tools": [{"tool_slug": nested, "arguments": {}}]}
+                }
+            });
+            assert_eq!(
+                denied_provider_execution(&choices, "grok", &prepared_tool, &mixed),
+                Some("native_composio_opaque_execution_with_deny"),
+                "direct={direct}; nested={nested}"
+            );
+        }
 
         // A direct batch and a nested arguments copy can disagree about
         // which member runs. Both orders must remain opaque, never allowed.
