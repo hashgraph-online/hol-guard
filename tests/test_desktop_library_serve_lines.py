@@ -129,3 +129,11 @@ def test_the_read_loop_waits_once_the_queue_is_full(monkeypatch, tmp_path: Path)
     assert not serving.is_alive()
     assert held <= 4
     assert read == len(lines)
+
+
+def test_a_deeply_nested_call_line_is_answered_as_invalid(tmp_path: Path) -> None:
+    request = b"[" * 100_000 + b"]" * 100_000 + b"\n"
+
+    answer = json.loads(desktop_library_call.answer_line(tmp_path, request))
+
+    assert answer == {"error": {"type": "LibraryCallError", "message": "invalid_request", "kind": "library_call"}}

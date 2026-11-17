@@ -59,6 +59,7 @@ class BurstResult:
     health_failures: int = 0
     health_max_seconds: float = 0.0
     after_burst: str = ""
+    after_burst_seconds: float = 0.0
     failures: list[str] = field(default_factory=list)
 
 
@@ -157,7 +158,8 @@ def run_burst(hooks: int, *, max_hook_seconds: float, max_health_seconds: float)
                 stop.set()
                 prober.join()
             result.wall_seconds = round(time.monotonic() - started, 2)
-            result.after_burst, _ = _send_hook(execution.endpoint, execution.auth_token, client_timeout)
+            result.after_burst, after_elapsed = _send_hook(execution.endpoint, execution.auth_token, client_timeout)
+            result.after_burst_seconds = round(after_elapsed, 2)
         finally:
             with contextlib.suppress(OSError):
                 stress._cleanup_stress_runtime(guard_home)
@@ -182,6 +184,10 @@ def run_burst(hooks: int, *, max_hook_seconds: float, max_health_seconds: float)
         result.failures.append(f"slowest health check took {result.health_max_seconds}s, limit {max_health_seconds}s")
     if result.after_burst != "reviewed":
         result.failures.append(f"the hook after the burst was answered {result.after_burst!r}, not reviewed")
+    if result.after_burst_seconds > max_hook_seconds:
+        result.failures.append(
+            f"the hook after the burst took {result.after_burst_seconds}s, limit {max_hook_seconds}s",
+        )
     return result
 
 

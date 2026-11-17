@@ -67,7 +67,7 @@ def answer_line(guard_home: Path, request: bytes) -> bytes:
     result = run(guard_home, request)
     try:
         call_id = json.loads(request.decode("utf-8")).get("id")
-    except (UnicodeDecodeError, ValueError, AttributeError):
+    except (UnicodeDecodeError, ValueError, AttributeError, RecursionError):
         call_id = None
     if isinstance(call_id, int) and not isinstance(call_id, bool):
         result = {"id": call_id, **result}
