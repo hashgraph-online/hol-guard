@@ -74,7 +74,7 @@ impl Slots {
     }
 }
 
-const OVERLOAD_RESPONSE: &[u8] = b"HTTP/1.0 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\nRetry-After: 1\r\n\r\n";
+const OVERLOAD_RESPONSE: &[u8] = b"HTTP/1.0 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: 16\r\nConnection: close\r\nRetry-After: 1\r\n\r\ndaemon overload\n";
 
 /// The Guard package version the launcher named, which outbound requests
 /// identify themselves with; the runtime's own version until it is set.

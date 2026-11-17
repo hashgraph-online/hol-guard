@@ -1,5 +1,7 @@
 use super::*;
 
+static PERMIT_TESTS: Mutex<()> = Mutex::new(());
+
 fn request(root: &Path, query: &str) -> Request {
     Request {
         root: root.to_path_buf(),
@@ -18,6 +20,9 @@ fn warming_now(key: &Key) -> bool {
 
 #[test]
 fn prompt_threads_have_a_process_wide_cap() {
+    let _serial = PERMIT_TESTS
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
     let permits: Vec<_> = (0..MAX_PROMPT_THREADS)
         .map(|_| try_prompt_thread().expect("prompt thread permit"))
         .collect();
@@ -28,6 +33,9 @@ fn prompt_threads_have_a_process_wide_cap() {
 
 #[test]
 fn a_prompt_that_finds_cigar_starting_leaves_one_warm_up_for_the_next() {
+    let _serial = PERMIT_TESTS
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
     let home = tempfile::tempdir().unwrap();
     let project = tempfile::tempdir().unwrap();
     let key = (project.path().to_path_buf(), "claude-code".to_owned());

@@ -136,22 +136,28 @@ pub(super) fn lookup(
     if let Some(flight) = flight {
         return rendered(&flight);
     }
+    // Reserve advisory capacity before waiting for CIGAR's lane. When the
+    // global budget is full, return immediately so a hook never spends its
+    // response budget waiting for work that cannot start.
+    let Some(permit) = try_prompt_thread() else {
+        return Err(Miss::Pending);
+    };
     let lane = match service.prompt_lane(guard_home, cutoff) {
         Ok(lane) => lane,
         Err(LaneMiss::Starting) => {
-            warm_when_ready(service.lane_watch(), key, request);
+            warm_when_ready(service.lane_watch(), key, request, permit);
             return Err(Miss::Starting);
         }
         Err(LaneMiss::Off) => return Ok(None),
     };
-    let flight = launch(key, prompt, lane, request, None).ok_or(Miss::Pending)?;
+    let flight = launch(key, prompt, lane, request, permit).ok_or(Miss::Pending)?;
     rendered(&flight)
 }
 
 /// Waits on its own thread for a worker that is still starting, then runs
 /// the prompt's lookup so the project is loaded before the next prompt. Its
 /// answer reaches no one; only a repeat of the same prompt may join it.
-fn warm_when_ready(watch: LaneWatch, key: Key, request: Request) {
+fn warm_when_ready(watch: LaneWatch, key: Key, request: Request, permit: PromptThreadPermit) {
     let Ok(mut waiting) = warming().lock() else {
         return;
     };
@@ -159,17 +165,13 @@ fn warm_when_ready(watch: LaneWatch, key: Key, request: Request) {
         return;
     }
     drop(waiting);
-    let Some(permit) = try_prompt_thread() else {
-        done_warming(&key);
-        return;
-    };
     let warm_key = key.clone();
     let spawned = std::thread::Builder::new()
         .name("guard-cigar-warm".into())
         .spawn(move || {
             if let Ok(lane) = watch.wait(Instant::now() + WARM_WAIT) {
                 let prompt = hashed(&request.query);
-                let _ = launch(warm_key.clone(), prompt, lane, request, Some(permit));
+                let _ = launch(warm_key.clone(), prompt, lane, request, permit);
             }
             done_warming(&warm_key);
         });
@@ -191,9 +193,8 @@ fn launch(
     prompt: u64,
     lane: PromptLane,
     request: Request,
-    permit: Option<PromptThreadPermit>,
+    permit: PromptThreadPermit,
 ) -> Option<Arc<Flight>> {
-    let permit = permit.or_else(try_prompt_thread)?;
     let flight = Arc::new(Flight {
         prompt,
         lane,
