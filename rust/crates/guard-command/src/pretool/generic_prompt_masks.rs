@@ -4,10 +4,11 @@
 use regex::{Captures, Regex};
 use std::sync::OnceLock;
 
-/// A storage word, numbered device names (`disk0`, `disk2s1`, `nvme0n1`)
-/// and any `/dev` path (`/dev/sda1`, `/dev/vg0/lv0`) included. The streams
+/// A storage word, numbered device names (`disk0`, `disk2s1`, `nvme0n1`),
+/// filesystems and mount points, and any `/dev`, `/mnt`, `/media` or
+/// `/Volumes` path (`/dev/sda1`, `/mnt/archive`) included. The streams
 /// and terminals in [`PSEUDO_DEVICE`] are taken out of the text first.
-const STORAGE_NOUN: &str = r"(?:\b(?:disks?|disk\d+(?:s\d+)?|drives?|volumes?|partitions?|usb|ssd|hdd|nvme\w*|sd\s*cards?|media)\b|/dev/\w)";
+const STORAGE_NOUN: &str = r"(?:\b(?:disks?|disk\d+(?:s\d+)?|drives?|volumes?|partitions?|usb|ssd|hdd|nvme\w*|sd\s*cards?|media|file\s*systems?|mount\s*points?|mounted)\b|/(?:dev|mnt|media|volumes)/\w)";
 
 /// `/dev` paths that are where output goes or comes from, not storage, such
 /// as `/dev/null` or `/dev/stderr`. Any other `/dev` path may be a disk.
@@ -70,10 +71,11 @@ pub(super) fn mask_format_options(value: &str) -> String {
 /// `format` is masked only when it reads as a noun: a word such as `the`,
 /// `JSON` or `response` comes right before it, its line is a Markdown heading,
 /// or a word such as `of`, `is` or `described` comes right after it. A
-/// sentence that names storage (a disk word, a `/dev` path that is not a
-/// stream, a drive letter such as `C:`) keeps every `format`, and so does
-/// `the format command`. A `format` after `a`, `quick` or `run` names the
-/// operation, so a following `of` does not mask it. Every other `format` stays a request. A sentence ends
+/// sentence that names storage (a disk word, a filesystem or mount point, a
+/// `/dev` path that is not a stream, a `/mnt` path, a drive letter such as
+/// `C:`) keeps every `format`, and so does `the format command`. A `format`
+/// after an action such as `run the`, `a` or `quick` names the operation and
+/// is never masked. Every other `format` stays a request. A sentence ends
 /// at `!`, `?`, `;`, a line break, or a dot before a space or the end of the
 /// text, and each sentence is scanned for storage once.
 fn mask_layout_nouns(value: &str) -> String {
@@ -95,11 +97,11 @@ fn mask_layout_nouns(value: &str) -> String {
             .expect("bounded format lead")
     });
     let tail = TAIL.get_or_init(|| {
-        Regex::new(r"(?i)^[\s*_`]*(?:(of|is|are|was|were|described|below|above|:)|(command|tool|utility|operation))(?:[^a-z0-9]|$)")
+        Regex::new(r"(?i)^[\s*_`]*(?:(of|is|are|was|were|described|below|above)|(command|tool|utility|operation))(?:[^a-z0-9]|$)")
             .expect("bounded format tail")
     });
     let act = ACT.get_or_init(|| {
-        Regex::new(r"(?i)(?:^|[^a-z0-9-])(?:a|an|quick|full|low-level|secure|clean|fresh|run|do|perform|start|execute|trigger)[\s*_`]*$")
+        Regex::new(r"(?i)(?:^|[^a-z0-9-])(?:a|an|quick|full|low-level|secure|clean|fresh|run|do|perform|start|execute|trigger|launch|begin|redo|finish|complete|schedule)(?:\s+(?:the|a|an|this|that|quick|full|low-level|secure|clean|fresh))*[\s*_`]*$")
             .expect("bounded format action lead")
     });
     let pseudo = PSEUDO.get_or_init(|| Regex::new(PSEUDO_DEVICE).expect("bounded pseudo device"));
@@ -136,10 +138,10 @@ fn mask_layout_nouns(value: &str) -> String {
             let follows = tail.captures(after);
             let tool = follows.as_ref().is_some_and(|found| found.get(2).is_some());
             let lead_text = &before[window..];
-            let noun = heading
-                || lead.is_match(lead_text)
-                || (follows.is_some_and(|found| found.get(1).is_some())
-                    && !act.is_match(lead_text));
+            let noun = !act.is_match(lead_text)
+                && (heading
+                    || lead.is_match(lead_text)
+                    || follows.is_some_and(|found| found.get(1).is_some()));
             if noun && !tool {
                 "layout".to_owned()
             } else {
