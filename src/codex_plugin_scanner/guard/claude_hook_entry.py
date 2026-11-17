@@ -41,9 +41,7 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
 
 def claude_facts(guard_home: Path) -> str:
     """What only this process knows about the daemon the hooks reach."""
-    return json.dumps(
-        {"daemon_url": load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home)}
-    )
+    return json.dumps({"daemon_url": load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home)})
 
 
 def _claude_adapter() -> NativeHarnessAdapter:

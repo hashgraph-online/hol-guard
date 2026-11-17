@@ -61,7 +61,6 @@ use std::time::{Duration, Instant};
 use serde_json::{Map, Value};
 
 use crate::claude_hook_bridge::home_directory;
-use crate::claude_hook_bridge_render::py_strip;
 use crate::claude_session_start_contract::{contract, settings_current, DaemonHookTemplate};
 use crate::claude_session_start_live::{stopped_daemon_url, verified_daemon_url};
 use crate::hook_bridge_daemon_start::{start_daemon, TRANSPORT_FAILURE};
@@ -81,13 +80,6 @@ const CHECK_BUDGET: Duration = Duration::from_secs(2);
 /// fallback four seconds of the hook timeout.
 const START_BUDGET: Duration = Duration::from_secs(6);
 const MAX_SETTINGS_BYTES: u64 = 4 * 1024 * 1024;
-const CURSOR_ENV_MARKERS: [&str; 5] = [
-    "CURSOR_VERSION",
-    "CURSOR_PROJECT_DIR",
-    "CURSOR_TRACE_ID",
-    "CURSOR_SESSION_ID",
-    "CURSOR_TRANSCRIPT_PATH",
-];
 const INVALID_CONFIG: &str = "claude session start configuration is invalid";
 /// The resident's state base under the Guard home, as the Python client
 /// derives it (`native_resident_client._client_pool_for`).
@@ -170,19 +162,12 @@ pub(crate) fn runtime_build() -> String {
 pub(crate) struct SessionEnvironment {
     /// The session's `Path.home()`.
     pub(crate) home: Option<PathBuf>,
-    /// `cursor_runtime_detected()`: the Python refresh adds Cursor
-    /// attribution to the hook query, which this lane does not reproduce.
-    pub(crate) cursor: bool,
 }
 
 impl SessionEnvironment {
     fn current() -> Self {
         Self {
             home: home_directory(),
-            cursor: CURSOR_ENV_MARKERS.iter().any(|key| {
-                std::env::var_os(key)
-                    .is_some_and(|value| !py_strip(&value.to_string_lossy()).is_empty())
-            }),
         }
     }
 }
@@ -244,9 +229,6 @@ pub(crate) fn session_output(
     let config = parse_config(config_text).ok_or(INVALID_CONFIG)?;
     if config.runtime_build != runtime_build() {
         return Err("hook entries were described by another runtime build".to_owned());
-    }
-    if environment.cursor {
-        return Err("Cursor attribution needs the Python refresh".to_owned());
     }
     if !home_matches(&config, environment.home.as_deref()) {
         return Err("session home differs from the installed home".to_owned());

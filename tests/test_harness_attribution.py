@@ -27,6 +27,11 @@ def test_resolve_runtime_hook_harness_maps_claude_to_cursor_in_cursor() -> None:
     assert resolve_runtime_hook_harness("opencode", env=env) == "opencode"
 
 
+def test_resolve_runtime_hook_harness_keeps_claude_started_from_a_cursor_terminal() -> None:
+    env = {"CURSOR_TRACE_ID": "trace", "CLAUDECODE": "1"}
+    assert resolve_runtime_hook_harness("claude-code", env=env) == "claude-code"
+
+
 def test_resolve_environment_harness_matches_each_runtime_family() -> None:
     assert resolve_environment_harness({"ZCODE_ENV": "production"}) == "zcode"
     assert resolve_environment_harness({"ZCODE_APP_VERSION": "3.10.2"}) == "zcode"
@@ -76,6 +81,10 @@ def test_guard_hook_records_cursor_harness_for_cursor_env(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    # Claude Code's own markers would keep the hook Claude's; a run from inside
+    # a Claude session must not inherit them.
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
     monkeypatch.setenv("CURSOR_VERSION", "2.0.0")
     monkeypatch.setenv("CURSOR_PROJECT_DIR", str(workspace_dir))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
