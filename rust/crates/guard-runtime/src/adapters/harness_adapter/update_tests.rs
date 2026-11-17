@@ -388,11 +388,14 @@ fn opencode_update_without_a_native_runtime_says_it_could_not_inspect_the_plugin
 #[test]
 fn opencode_update_says_when_it_cannot_write_the_plugin() {
     let home = Home::new();
+    use std::os::unix::fs::PermissionsExt;
+
     let paths = plugin_paths(&home);
-    // A file where the plugin's directory belongs.
-    let blocked = paths[0].parent().unwrap().to_path_buf();
-    write(&blocked, "not a directory");
+    // A stale plugin the update can read but not overwrite.
+    write(&paths[0], "// stale plugin\n");
+    fs::set_permissions(&paths[0], fs::Permissions::from_mode(0o444)).unwrap();
     let answer = opencode_refresh(&home);
+    fs::set_permissions(&paths[0], fs::Permissions::from_mode(0o644)).unwrap();
     let note = answer["note"].as_str().unwrap();
     assert!(
         note.starts_with("Could not refresh OpenCode pretool plugin during update: ["),
