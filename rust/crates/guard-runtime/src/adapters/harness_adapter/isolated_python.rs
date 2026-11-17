@@ -50,11 +50,16 @@ pub(super) fn dispatch(fields: &Map<String, Value>) -> Step<Value> {
 /// The probed interpreter for this process's own `SYSTEMROOT`, for an
 /// adapter that recognises the isolated hook client older releases wrote.
 pub(super) fn probed() -> Option<String> {
-    let system_root = std::env::var("SYSTEMROOT").ok();
+    for_root(std::env::var("SYSTEMROOT").ok().as_deref())
+}
+
+/// The probed interpreter for the caller's `SYSTEMROOT`
+/// (`isolated_cursor_hook_python`).
+pub(super) fn for_root(system_root: Option<&str>) -> Option<String> {
     CANDIDATES
         .iter()
         .map(Path::new)
-        .find(|path| usable(path, system_root.as_deref()))
+        .find(|path| usable(path, system_root))
         .map(path_text)
 }
 

@@ -7,9 +7,10 @@ from pathlib import Path
 import pytest
 import tomlkit
 
-from codex_plugin_scanner.guard.adapters.base import _shell_command
 from codex_plugin_scanner.guard.cli.grok_hook_validation import is_missing_grok_hook_command
+from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
 from tests.grok_test_support import prepare_user_config_text
+from tests.native_bounded_runtime import hook_config_argv, use_bounded_runtime
 
 
 def command(home: Path, *, workspace: Path | None = None) -> str:
@@ -95,22 +96,17 @@ def test_workspace_fallback_changes_do_not_retain_missing_global_client(tmp_path
 def test_repair_replaces_an_orphaned_client_with_the_native_hook(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, frozen: bool
 ) -> None:
-    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-
     stale = command(tmp_path / "old")
-    monkeypatch.setattr(bridge.sys, "frozen", frozen, raising=False)
-    monkeypatch.setattr(bridge, "prune_safe_cli_executable", lambda value: value)
-    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args, **kwargs: None)
-    monkeypatch.setattr(bridge, "native_bridge_executable", lambda *_args, **_kwargs: tmp_path / "hol-guard-runtime")
+    monkeypatch.setattr("sys.frozen", frozen, raising=False)
+    use_bounded_runtime(monkeypatch, tmp_path / "hol-guard-runtime")
     new_home = tmp_path / "new"
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=new_home)
     replacement = _shell_command(
-        bridge.bounded_cli_hook_command(
-            python_executable=str(tmp_path / "hol-guard"),
-            package_root=tmp_path / "package",
-            guard_home=new_home,
-            cli_args=["guard", "hook", "--guard-home", str(new_home), "--harness", "grok", "--json"],
-            harness="grok",
-            timeout_seconds=85,
+        hook_config_argv(
+            context,
+            "grok",
+            ["guard", "hook", "--guard-home", str(new_home), "--harness", "grok", "--json"],
+            85,
         )
     )
     original, _ = prepare_user_config_text("", stale, previous_state={})

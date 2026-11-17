@@ -18,10 +18,11 @@
 //!   "detection", "warnings"}` answers `{"setup_status": "active" | "broken" |
 //!   "partial" | "not_found"}`.
 //! - `{"op": "uses_guard", "artifacts"}` answers `{"uses_guard": bool}`.
-//! - `{"op": "launcher_shim", "paths"}` answers `{"launcher_shim": index}`,
-//!   the position of the first absolute path that is a Guard launcher shim:
-//!   a UTF-8 file whose text runs `codex_plugin_scanner.cli guard run`. It
-//!   answers `null` when none is.
+//! - `{"op": "readiness", "setup_status", "runtime_probe"}` answers the
+//!   doctor's runtime readiness; `harness_diagnostics_readiness` has it.
+//! - `{"op": "launcher_artifact", ...}` answers the artifact for the Guard
+//!   launcher shim a harness installed; `harness_launcher_artifact` has the
+//!   request and answer.
 //!
 //! A detection is `{"config_paths", "command_available", "artifacts"}` and an
 //! artifact is `{"artifact_type", "command", "args", "harness"}`. The native
@@ -100,21 +101,10 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
             let listed = artifacts(fields.get("artifacts"))?;
             Ok(json!({ "uses_guard": listed.iter().any(Artifact::uses_guard) }))
         }
-        "launcher_shim" => {
-            expect_keys(fields, &["op", "paths"])?;
-            let paths = fields
-                .get("paths")
-                .and_then(Value::as_array)
-                .ok_or(ERR_INVALID)?
-                .iter()
-                .map(|path| {
-                    path.as_str()
-                        .map(Path::new)
-                        .filter(|path| path.is_absolute())
-                        .ok_or(ERR_INVALID)
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(json!({ "launcher_shim": paths.iter().position(|path| launcher_shim(path)) }))
+        "launcher_artifact" => crate::harness_launcher_artifact::answer(fields),
+        "readiness" => {
+            expect_keys(fields, &["op", "setup_status", "runtime_probe"])?;
+            crate::harness_diagnostics_readiness::answer(fields)
         }
         _ => Err(ERR_INVALID),
     }
@@ -122,7 +112,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
 
 /// Whether `path` is a launcher shim Guard wrote: a readable UTF-8 file that
 /// names its CLI module and the `guard run` command.
-fn launcher_shim(path: &Path) -> bool {
+pub(crate) fn is_launcher_shim(path: &Path) -> bool {
     path.is_file()
         && std::fs::read_to_string(path).is_ok_and(|text| {
             ["codex_plugin_scanner.cli", "guard", "run"]

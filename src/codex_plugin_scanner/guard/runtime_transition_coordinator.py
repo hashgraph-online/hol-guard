@@ -13,9 +13,9 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Protocol
 
-from .adapters.codex_lifecycle_lock import codex_publication_locks
 from .approval_gate import ApprovalGateGrant
 from .codex_install_transaction import codex_install_transaction
+from .codex_lifecycle_lock import codex_publication_locks
 from .runtime_transition import (
     RuntimeTransition,
     TransitionError,

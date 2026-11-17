@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import bounded_hook_script_path
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
 from codex_plugin_scanner.guard.cli.update_bounded_hook_refresh import refresh_bounded_hook_clients
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge import bounded_hook_script_path
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_bounded_runtime import use_bounded_runtime
 
 NOW = "2026-10-08T00:00:00+00:00"
 
@@ -36,7 +36,7 @@ def _seed_client(context: HarnessContext, harness: str, body: str) -> Path:
 @pytest.fixture(autouse=True)
 def runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "hol-guard-runtime"
-    monkeypatch.setattr(bounded_cli_hook_bridge, "native_bridge_executable", lambda *_args, **_kwargs: path)
+    use_bounded_runtime(monkeypatch, path)
     return path
 
 

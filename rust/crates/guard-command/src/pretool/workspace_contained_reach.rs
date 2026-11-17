@@ -422,8 +422,9 @@ fn outside_from(value: &str, name: &str, workspace: &Path, below: usize) -> bool
         // Only a path whose top directory exists names the file system; a
         // pattern such as `/api/v1` does not.
         let top = path.components().nth(1);
-        let names_file_system =
-            top.is_some_and(|top| Path::new("/").join(top.as_os_str()).exists());
+        let names_file_system = top
+            .is_some_and(|top| Path::new("/").join(top.as_os_str()).exists())
+            || home_paths::names_a_home_file(path);
         return names_file_system
             && !inside_workspace(path, workspace)
             && !through_root_link(path, workspace)
@@ -494,6 +495,9 @@ pub(super) fn through_root_link(path: &Path, workspace: &Path) -> bool {
 
 #[path = "workspace_contained_name_patterns.rs"]
 mod name_patterns;
+
+#[path = "workspace_contained_home_paths.rs"]
+mod home_paths;
 
 #[cfg(test)]
 #[path = "workspace_contained_reach_prefix_tests.rs"]

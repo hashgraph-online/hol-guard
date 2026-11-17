@@ -223,7 +223,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
     #[cfg(unix)]
     let _ = nix::unistd::setsid();
     let Some((arg_home, arg_port)) = parse_args(args) else {
-        eprintln!("usage: guard-runtime daemon-serve --guard-home H --port P < launch.json");
+        crate::runtime_output::stderr_line(format_args!(
+            "usage: guard-runtime daemon-serve --guard-home H --port P < launch.json"
+        ));
         return EXIT_USAGE;
     };
     let mut line = Vec::new();
@@ -236,11 +238,15 @@ pub(crate) fn run(args: &[String]) -> i32 {
         return EXIT_USAGE;
     }
     let Some(config) = LaunchConfig::parse(line.trim_ascii()) else {
-        eprintln!("daemon-serve: the launch configuration is invalid");
+        crate::runtime_output::stderr_line(format_args!(
+            "daemon-serve: the launch configuration is invalid"
+        ));
         return EXIT_USAGE;
     };
     if config.guard_home != arg_home || config.port != arg_port {
-        eprintln!("daemon-serve: the launch configuration names another daemon");
+        crate::runtime_output::stderr_line(format_args!(
+            "daemon-serve: the launch configuration names another daemon"
+        ));
         return EXIT_USAGE;
     }
     // Pin the dashboard before reporting ready: the launcher that unpacked it
@@ -258,10 +264,13 @@ pub(crate) fn run(args: &[String]) -> i32 {
     let listener = match TcpListener::bind(SocketAddr::new(host, config.port)) {
         Ok(listener) => listener,
         Err(error) => {
-            eprintln!("daemon-serve: cannot listen: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "daemon-serve: cannot listen: {error}"
+            ));
             return EXIT_LISTENER;
         }
     };
+    super::widen_backlog(&listener);
     let Ok(port) = listener.local_addr().map(|address| address.port()) else {
         return EXIT_LISTENER;
     };
@@ -273,7 +282,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
     let secret = match publish(&home, &config, port, pid) {
         Ok(secret) => secret,
         Err(error) => {
-            eprintln!("daemon-serve: cannot publish daemon state: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "daemon-serve: cannot publish daemon state: {error}"
+            ));
             return EXIT_STATE;
         }
     };
@@ -320,7 +331,7 @@ pub(crate) fn run(args: &[String]) -> i32 {
     if config.workers {
         resident_prewarm::prewarm_resident(&home);
     }
-    println!("{}", json!({"port": port, "pid": pid}));
+    crate::runtime_output::stdout_line(format_args!("{}", json!({"port": port, "pid": pid})));
     let _ = io::stdout().flush();
     super::lifecycle::record(&home, "ready", None, Some(&session_id), Some(port));
     match serve(
@@ -331,7 +342,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
     ) {
         Ok(()) => 0,
         Err(error) => {
-            eprintln!("daemon-serve: listener failed: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "daemon-serve: listener failed: {error}"
+            ));
             EXIT_LISTENER
         }
     }

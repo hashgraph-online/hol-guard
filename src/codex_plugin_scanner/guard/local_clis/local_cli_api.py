@@ -11,7 +11,15 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from ..adapters.harness_mcp_discovery import (
+from ..approval_gate import (
+    ApprovalGateError,
+    consume_local_cli_trust_grant,
+    input_from_mapping,
+    require_local_cli_trust,
+)
+from ..local_cli_errors import LocalCliCatalogLimitError
+from ..local_cli_trust import utc_now
+from ..mcp_discovery_client import (
     DiscoveredHarnessMcpServer,
     DiscoveredRemoteMcpServer,
     apply_source_labels,
@@ -24,14 +32,6 @@ from ..adapters.harness_mcp_discovery import (
     persist_discovered_harness_mcp_servers,
     remote_scan_harnesses,
 )
-from ..approval_gate import (
-    ApprovalGateError,
-    consume_local_cli_trust_grant,
-    input_from_mapping,
-    require_local_cli_trust,
-)
-from ..local_cli_errors import LocalCliCatalogLimitError
-from ..local_cli_trust import utc_now
 from ..native_skill_workflow_preflight import (
     NativeSkillWorkflowPreflightError,
     native_skill_preflight,
@@ -1104,6 +1104,7 @@ class LocalCliApiService:
                 workspace_dir=workspace_dir,
                 detections=detections,
             )
+            configured_names = configured_mcp_server_names(detections)
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as error:
             # A failed read leaves no remote snapshot to reconcile against.
             self._remote_discovery_cache = None
@@ -1121,7 +1122,7 @@ class LocalCliApiService:
                 raise DiscoveryStageError("configured_host_scan_failed") from None
             return ()
         self._discovery_cache = (now, servers)
-        self._configured_names = configured_mcp_server_names(detections)
+        self._configured_names = configured_names
         try:
             remote = discover_remote_mcp_servers(
                 home_dir=home_dir,

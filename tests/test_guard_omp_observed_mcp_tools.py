@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
+from codex_plugin_scanner.guard.mcp_discovery_client import (
     configured_mcp_server_names,
     discover_harness_mcp_servers,
 )
@@ -81,7 +81,7 @@ def test_configured_server_names_cover_stdio_and_remote_servers_per_harness() ->
 
 
 def test_omp_flattened_name_shares_a_connector_with_its_configured_remote_server(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.harness_mcp_remote import _remote_servers
+    from codex_plugin_scanner.guard.mcp_remote_client import _remote_servers
 
     (remote,) = _remote_servers(
         [

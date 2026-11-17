@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
+from codex_plugin_scanner.guard.harness.contracts import HARNESS_CONTRACTS
 
 SUPPORTED_HARNESS_VALUES = tuple(contract.harness for contract in HARNESS_CONTRACTS)
 

@@ -10,7 +10,6 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import (
     approval_center_hint,
     attach_primary_approval_link,
@@ -21,6 +20,7 @@ from codex_plugin_scanner.guard.approvals import (
 )
 from codex_plugin_scanner.guard.cli import approval_commands as approval_commands_module
 from codex_plugin_scanner.guard.cli.commands_support_interaction import _preferred_approval_review_url
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 

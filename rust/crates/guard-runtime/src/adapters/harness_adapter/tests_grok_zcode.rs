@@ -184,3 +184,84 @@ fn grok_protection_names_the_hook_files_and_their_timeouts() {
     let hook: Value = serde_json::from_str(observe["hook"].as_str().unwrap()).unwrap();
     assert_eq!(hook["hooks"]["SessionStart"][0]["hooks"][0]["timeout"], 15);
 }
+
+/// Install adds empty `mcp` and `plugins` objects the Desktop app needs;
+/// uninstall takes back the ones it added and keeps any the user had.
+#[test]
+fn zcode_uninstall_returns_the_desktop_config_the_user_had() {
+    for (seed, kept) in [
+        ("{\n  \"theme\": \"dark\"\n}\n", json!({"theme": "dark"})),
+        (
+            "{\n  \"theme\": \"dark\",\n  \"mcp\": {}\n}\n",
+            json!({"theme": "dark", "mcp": {}}),
+        ),
+    ] {
+        let home = Home::new();
+        let config = home.home().join(".zcode/cli/config.json");
+        fs::create_dir_all(config.parent().unwrap()).unwrap();
+        fs::write(&config, seed).unwrap();
+        let install = json!({"shim": shim(), "hook_argv": ["/py", "hook"]});
+        for _ in 0..2 {
+            // A reinstall must not forget what the first install added.
+            let answer = home.ask("zcode", "prepare_install", install.clone());
+            apply(answer["files"].as_array().unwrap());
+        }
+        let installed: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+        assert_eq!(installed["plugins"], json!({}));
+        let uninstall = home.ask("zcode", "prepare_uninstall", json!({}));
+        let restored: Value = serde_json::from_str(&after_text(&uninstall["writes"][0])).unwrap();
+        assert_eq!(restored, kept, "{seed}");
+    }
+}
+
+/// An object install added and the user filled in since stays.
+#[test]
+fn zcode_uninstall_keeps_an_added_object_the_user_filled() {
+    let home = Home::new();
+    let config = home.home().join(".zcode/cli/config.json");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "{}\n").unwrap();
+    let answer = home.ask(
+        "zcode",
+        "prepare_install",
+        json!({"shim": shim(), "hook_argv": ["/py", "hook"]}),
+    );
+    apply(answer["files"].as_array().unwrap());
+    let mut installed: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    installed["mcp"] = json!({"synthetic": {"command": "synthetic-server"}});
+    fs::write(&config, installed.to_string()).unwrap();
+    let uninstall = home.ask("zcode", "prepare_uninstall", json!({}));
+    let restored: Value = serde_json::from_str(&after_text(&uninstall["writes"][0])).unwrap();
+    assert_eq!(
+        restored,
+        json!({"mcp": {"synthetic": {"command": "synthetic-server"}}})
+    );
+}
+
+/// The objects install added come out even when the user already removed
+/// Guard's hooks, so the hooks need no change of their own.
+#[test]
+fn zcode_uninstall_drops_added_objects_when_the_hooks_are_already_gone() {
+    let home = Home::new();
+    let config = home.home().join(".zcode/cli/config.json");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "{\n  \"theme\": \"dark\"\n}\n").unwrap();
+    let answer = home.ask(
+        "zcode",
+        "prepare_install",
+        json!({"shim": shim(), "hook_argv": ["/py", "hook"]}),
+    );
+    apply(answer["files"].as_array().unwrap());
+    let mut installed: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    installed.as_object_mut().unwrap().remove("hooks");
+    fs::write(&config, installed.to_string()).unwrap();
+    let uninstall = home.ask("zcode", "prepare_uninstall", json!({}));
+    let write = uninstall["writes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|write| write["path"].as_str().unwrap().ends_with("cli/config.json"))
+        .expect("uninstall left the added objects");
+    let restored: Value = serde_json::from_str(&after_text(write)).unwrap();
+    assert_eq!(restored, json!({"theme": "dark"}));
+}

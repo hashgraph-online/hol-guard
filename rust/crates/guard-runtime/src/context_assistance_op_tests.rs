@@ -139,6 +139,39 @@ fn a_session_start_warm_leaves_project_context_off_when_nobody_chose_it() {
 }
 
 #[test]
+fn a_warm_for_a_compacted_session_forgets_the_code_it_was_shown() {
+    let fixture = Fixture::new();
+    let session = "warm-restarted-session";
+    crate::context_assistance_prompt::seen::shown_for_test("claude-code", session);
+    assert!(crate::context_assistance_prompt::seen::holds_for_test(
+        "claude-code",
+        session
+    ));
+    for bad in [
+        json!({"restarted_session": ""}),
+        json!({"restarted_session": "a b"}),
+        json!({"restarted_session": session, "harness": "codex"}),
+    ] {
+        assert_eq!(
+            fixture.ask_input("warm", bad)["code"],
+            "native_context_assistance_control_input_invalid"
+        );
+    }
+    assert!(crate::context_assistance_prompt::seen::holds_for_test(
+        "claude-code",
+        session
+    ));
+    let warm = fixture.ask_input("warm", json!({"restarted_session": session}));
+    assert_eq!(warm["status"], "ok");
+    // Forgotten even before the resident has a policy binding.
+    assert_eq!(warm["payload"]["warm"], "waiting");
+    assert!(!crate::context_assistance_prompt::seen::holds_for_test(
+        "claude-code",
+        session
+    ));
+}
+
+#[test]
 fn foreign_home_and_caller_supplied_runtime_authority_are_refused() {
     let fixture = Fixture::new();
     let request: Request = serde_json::from_value(

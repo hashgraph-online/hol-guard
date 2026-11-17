@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from ..adapters.base import HarnessContext
+from ..harness.base import HarnessContext
 
 
 def managed_install_context(

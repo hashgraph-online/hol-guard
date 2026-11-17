@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
@@ -588,7 +588,7 @@ def test_gr087_opencode_managed_mcp_uses_native_ask_runtime_overlay(tmp_path: Pa
         encoding="utf-8",
     )
 
-    manifest = OpenCodeHarnessAdapter().install(context)
+    manifest = get_adapter("opencode").install(context)
     runtime_config = json.loads(Path(str(manifest["runtime_config_path"])).read_text(encoding="utf-8"))
 
     assert runtime_config["permission"]["team-tools_*"] == "ask"

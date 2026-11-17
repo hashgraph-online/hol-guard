@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_setup_plan
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from tests.paseo_test_support import paseo_providers, receipt_path
 from tests.test_paseo_adapter import configure, statuses
 from tests.test_paseo_adapter import context as context

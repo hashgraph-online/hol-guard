@@ -35,19 +35,16 @@ class StoreCloudEventsMixin:
     def _set_managed_install_owned(
         self, harness: str, active: bool, workspace: str | None, manifest: dict[str, object], now: str
     ) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into managed_installs (harness, active, workspace, manifest_json, updated_at)
-                values (?, ?, ?, ?, ?)
-                on conflict(harness) do update set
-                  active = excluded.active,
-                  workspace = excluded.workspace,
-                  manifest_json = excluded.manifest_json,
-                  updated_at = excluded.updated_at
-                """,
-                (harness, 1 if active else 0, workspace, json.dumps(manifest), now),
-            )
+        self._native_store_call(
+            "set_managed_install",
+            {
+                "harness": harness,
+                "active": active,
+                "workspace": workspace,
+                "manifest_json": json.dumps(manifest),
+                "now": now,
+            },
+        )
 
     def compare_and_set_managed_installs(
         self,
@@ -116,40 +113,11 @@ class StoreCloudEventsMixin:
             bump_managed_install_revision()
 
     def get_managed_install(self, harness: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                "select harness, active, workspace, manifest_json, updated_at from managed_installs where harness = ?",
-                (harness,),
-            ).fetchone()
-        if row is None:
-            return None
-        return {
-            "harness": str(row["harness"]),
-            "active": bool(row["active"]),
-            "workspace": row["workspace"],
-            "manifest": json.loads(str(row["manifest_json"])),
-            "updated_at": str(row["updated_at"]),
-        }
+        row = self._native_store_call("get_managed_install", {"harness": harness})
+        return None if row is None else _managed_install_row(row)
 
     def list_managed_installs(self) -> list[dict[str, object]]:
-        with self._connect() as connection:
-            rows = connection.execute(
-                """
-                select harness, active, workspace, manifest_json, updated_at
-                from managed_installs
-                order by harness asc
-                """
-            ).fetchall()
-        return [
-            {
-                "harness": str(row["harness"]),
-                "active": bool(row["active"]),
-                "workspace": row["workspace"],
-                "manifest": json.loads(str(row["manifest_json"])),
-                "updated_at": str(row["updated_at"]),
-            }
-            for row in rows
-        ]
+        return [_managed_install_row(row) for row in self._native_store_call("list_managed_installs", {})]
 
     def cache_supply_chain_bundle(
         self,
@@ -379,3 +347,14 @@ class StoreCloudEventsMixin:
             "add_event",
             {"event_name": event_name, "payload_json": json.dumps(payload), "occurred_at": now},
         )
+
+
+def _managed_install_row(row: dict[str, object]) -> dict[str, object]:
+    """The native row with its manifest decoded as the SQLite read did."""
+    return {
+        "harness": str(row["harness"]),
+        "active": bool(row["active"]),
+        "workspace": row["workspace"],
+        "manifest": json.loads(str(row["manifest_json"])),
+        "updated_at": str(row["updated_at"]),
+    }

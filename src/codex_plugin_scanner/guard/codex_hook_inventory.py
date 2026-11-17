@@ -169,7 +169,11 @@ def _unidentified_source_issue(
 
 
 def _list_of(answer: Mapping[str, object], key: str) -> list[Mapping[str, object]]:
-    """The answer's list of objects under ``key``; anything else is no answer."""
+    """The answer's list of objects under ``key``; anything else is no answer.
+
+    The native runtime types every field of a record and an issue, and holds
+    those types in its own tests. A record that is missing a field is no answer.
+    """
 
     items = answer.get(key)
     if not isinstance(items, list) or not all(isinstance(item, Mapping) for item in items):
@@ -177,21 +181,8 @@ def _list_of(answer: Mapping[str, object], key: str) -> list[Mapping[str, object
     return items
 
 
-def _field(item: Mapping[str, object], key: str, kind: type | tuple[type, ...]) -> object:
-    value = item.get(key)
-    if not isinstance(value, kind) or (isinstance(value, bool) and bool not in _kinds(kind)):
-        raise CodexHookIdentityUnavailableError
-    return value
-
-
-def _kinds(kind: type | tuple[type, ...]) -> tuple[type, ...]:
-    return kind if isinstance(kind, tuple) else (kind,)
-
-
-def _strings(value: object) -> tuple[str, ...]:
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise CodexHookIdentityUnavailableError
-    return tuple(value)
+def _argv(value: object) -> tuple[str, ...] | None:
+    return None if value is None else tuple(cast("Sequence[str]", value))
 
 
 def _record(
@@ -201,46 +192,44 @@ def _record(
     source_format: HookSourceFormat,
     source_hooks_enabled: bool,
 ) -> CodexHookInventoryRecord:
-    """One record the resident answered, checked field by field."""
+    """One record the native runtime answered."""
 
-    ownership = _field(item, "ownership", str)
-    identity = _field(item, "canonical_identity", str)
-    if ownership not in _OWNERSHIPS or not identity:
-        raise CodexHookIdentityUnavailableError
-    argv = item.get("command_argv")
-    return CodexHookInventoryRecord(
-        source_path=source_path,
-        source_scope=source_scope,
-        source_format=source_format,
-        source_hooks_enabled=source_hooks_enabled,
-        event_name=cast("str", _field(item, "event_name", str)),
-        group_index=cast("int", _field(item, "group_index", int)),
-        matcher=_field(item, "matcher", (str, type(None))),
-        handler_index=cast("int", _field(item, "handler_index", int)),
-        handler_type=cast("str | None", _field(item, "handler_type", (str, type(None)))),
-        command=cast("str | None", _field(item, "command", (str, type(None)))),
-        command_argv=None if argv is None else _strings(argv),
-        timeout=cast("int | float | None", _field(item, "timeout", (int, float, type(None)))),
-        environment_keys=_strings(item.get("environment_keys")),
-        active=cast("bool", _field(item, "active", bool)),
-        executable=cast("bool", _field(item, "executable", bool)),
-        ownership=cast("HookOwnership", ownership),
-        canonical_identity=cast("str", identity),
-    )
+    try:
+        return CodexHookInventoryRecord(
+            source_path=source_path,
+            source_scope=source_scope,
+            source_format=source_format,
+            source_hooks_enabled=source_hooks_enabled,
+            event_name=cast("str", item["event_name"]),
+            group_index=cast("int", item["group_index"]),
+            matcher=item["matcher"],
+            handler_index=cast("int", item["handler_index"]),
+            handler_type=cast("str | None", item["handler_type"]),
+            command=cast("str | None", item["command"]),
+            command_argv=_argv(item["command_argv"]),
+            timeout=cast("int | float | None", item["timeout"]),
+            environment_keys=tuple(cast("Sequence[str]", item["environment_keys"])),
+            active=cast("bool", item["active"]),
+            executable=cast("bool", item["executable"]),
+            ownership=cast("HookOwnership", item["ownership"]),
+            canonical_identity=cast("str", item["canonical_identity"]),
+        )
+    except (KeyError, TypeError):
+        raise CodexHookIdentityUnavailableError from None
 
 
 def _issue(item: Mapping[str, object], source_path: str) -> CodexHookInventoryIssue:
-    return CodexHookInventoryIssue(
-        cast("str", _field(item, "reason_code", str)),
-        cast("str", _field(item, "message", str)),
-        source_path,
-        cast("str | None", _field(item, "event_name", (str, type(None)))),
-        cast("int | None", _field(item, "group_index", (int, type(None)))),
-        cast("int | None", _field(item, "handler_index", (int, type(None)))),
-    )
-
-
-_OWNERSHIPS = frozenset(("authenticated_manifest", "exact_legacy_adoption", "self_install_binding", "unmanaged"))
+    try:
+        return CodexHookInventoryIssue(
+            cast("str", item["reason_code"]),
+            cast("str", item["message"]),
+            source_path,
+            cast("str | None", item["event_name"]),
+            cast("int | None", item["group_index"]),
+            cast("int | None", item["handler_index"]),
+        )
+    except KeyError:
+        raise CodexHookIdentityUnavailableError from None
 
 
 __all__ = [

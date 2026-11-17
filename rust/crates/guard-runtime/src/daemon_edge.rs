@@ -32,8 +32,14 @@ pub(crate) mod standalone;
 use reads::{NativeReads, Outcome};
 
 /// Connections served at once; further connections wait in the listen
-/// backlog until one closes.
-const MAX_ACTIVE_CONNECTIONS: usize = 256;
+/// backlog until one closes. Sized for a burst of thousands of hooks: each
+/// connection is bounded by its hook's deadline and the review scheduler
+/// sheds what it cannot admit at once, so the slots turn over quickly and a
+/// health check or approval is not left behind a full house in the backlog.
+const MAX_ACTIVE_CONNECTIONS: usize = 1024;
+/// The listen backlog asked for; the system may cap it lower.
+#[cfg(unix)]
+const LISTEN_BACKLOG: i32 = 1024;
 // A connection thread may answer from the store, whose page projections need
 // a deep stack.
 const CONNECTION_THREAD_STACK: usize = 2 * 1024 * 1024;
@@ -137,6 +143,20 @@ fn serve(
         }
     }
 }
+
+/// Asks for a deeper listen backlog than the standard library's 128, so a
+/// burst of connects waits to be accepted instead of timing out. Calling
+/// `listen` again on a listening socket only changes its backlog.
+#[cfg(unix)]
+fn widen_backlog(listener: &TcpListener) {
+    use nix::sys::socket::{listen, Backlog};
+    if let Ok(backlog) = Backlog::new(LISTEN_BACKLOG) {
+        let _ = listen(listener, backlog);
+    }
+}
+
+#[cfg(not(unix))]
+fn widen_backlog(_listener: &TcpListener) {}
 
 fn accept_error_is_transient(error: &io::Error) -> bool {
     matches!(

@@ -10,7 +10,7 @@ use serde_json::{json, Map, Value};
 use super::codex::{compact, registered, strings};
 use super::codex_merge::{get, payload, pop, py_eq, render, set, Entries};
 use super::codex_migration::{owners_op, without_legacy};
-use super::{Failure, Step};
+use super::{Ctx, Failure, Step};
 use crate::cursor_editor_plan::is_guard_proxy;
 use crate::pyjson::{self, PyVal};
 
@@ -147,13 +147,14 @@ pub(super) fn alternate_cleanup(fields: &Map<String, Value>) -> Step<Value> {
     }))
 }
 
-/// `render_codex_managed_mcp`: refresh each Guard proxy's launch, then write
-/// or drop the managed servers Python rendered (`null` drops one).
+/// `render_codex_managed_mcp`: refresh each Guard proxy's launch the way the
+/// caller would write it, then write or drop the managed servers Python
+/// rendered (`null` drops one).
 ///
 /// With a workspace (`workspace_payload` present), a workspace entry of the
 /// same name shadows a managed server that was not itself read from the project, so
 /// that server is dropped rather than written over it.
-pub(super) fn managed_mcp(fields: &Map<String, Value>) -> Step<Value> {
+pub(super) fn managed_mcp(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let mut rendered = payload(fields, "payload")?;
     let mut servers: Entries = get(&rendered, "mcp_servers")
         .and_then(PyVal::as_dict)
@@ -165,31 +166,19 @@ pub(super) fn managed_mcp(fields: &Map<String, Value>) -> Step<Value> {
         .collect();
     let mut migrated = Vec::new();
     if !proxies.is_empty() {
-        let Some(relaunch) = fields.get("relaunch").and_then(Value::as_object) else {
-            let ask: Map<String, Value> = proxies
-                .iter()
-                .map(|name| {
-                    let args: Vec<String> = get(&servers, name)
-                        .and_then(|server| server.get("args"))
-                        .and_then(PyVal::as_list)
-                        .unwrap_or_default()
-                        .iter()
-                        .filter_map(|arg| arg.as_str().map(str::to_owned))
-                        .collect();
-                    (name.clone(), json!(args))
-                })
-                .collect();
-            return Err(Failure::Reply(json!({ "relaunch": ask })));
-        };
+        let python = super::caller::hook_python(ctx)?;
         for name in &proxies {
-            let launch = relaunch
-                .get(name)
-                .and_then(Value::as_array)
-                .ok_or(Failure::Invalid)?;
-            let [Value::String(launcher), launch_args] = launch.as_slice() else {
-                return Err(Failure::Invalid);
-            };
-            let launch_args = strings(Some(launch_args))?;
+            let proxy_args: Vec<String> = get(&servers, name)
+                .and_then(|server| server.get("args"))
+                .and_then(PyVal::as_list)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|arg| arg.as_str().map(str::to_owned))
+                .collect();
+            let (_, python_args) = super::proxy_launch::python_launch(None, &proxy_args);
+            let (launcher, launch_args) =
+                super::proxy_launch::relay_launch(ctx, python, &python_args)?;
+            let launcher = &launcher;
             let Some(PyVal::Dict(server)) = servers
                 .iter_mut()
                 .find_map(|(key, value)| (key == name).then_some(value))

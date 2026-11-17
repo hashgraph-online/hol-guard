@@ -1,11 +1,10 @@
 //! Adds the project code a typed prompt is about to the hook's answer, when
-//! someone turned on CIGAR project context for their AI apps.
-//!
-//! The prompt hook answers in time whatever happens here: the walk and the
-//! lookup share what is left of the hook's budget, the lookup runs on its own
-//! thread, a repeat of the same prompt joins the lookup already running, a
-//! prompt CIGAR cannot answer yet gets the matched files, and anything failed
-//! or off adds nothing. Only an allowed prompt gets context, and only for harnesses that show
+//! someone turned on CIGAR project context for their AI apps. The prompt hook
+//! answers in time whatever happens here: the walk and the lookup share what
+//! is left of the hook's budget, the lookup runs on its own thread, a repeat
+//! of the same prompt joins the lookup already running, a prompt CIGAR cannot
+//! answer yet gets the matched files, and anything failed or off adds nothing.
+//! Only an allowed prompt gets context, and only for harnesses that show
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
 use crate::context_assistance_engine::{project_context_on, quick_excerpts};
@@ -42,7 +41,7 @@ mod names;
 #[path = "context_assistance_prompt_sections.rs"]
 mod sections;
 #[path = "context_assistance_prompt_seen.rs"]
-mod seen;
+pub(crate) mod seen;
 
 const MAX_WAIT: Duration = Duration::from_millis(2_500);
 const DEFAULT_WAIT: Duration = Duration::from_millis(2_000);
@@ -158,11 +157,12 @@ fn prompt_cwd(envelope: &GuardHookEnvelopeV2) -> Option<&str> {
         .or_else(|| raw.pointer("/workspaceRoots/0").and_then(Value::as_str))
 }
 
-/// The prompt's text: top-level `prompt`, or Cline's `userPromptSubmit.prompt`.
+/// A typed prompt's text (`prompt` or Cline's `userPromptSubmit.prompt`); none if the app wrote it.
 fn prompt_text(raw: &Value) -> Option<&str> {
     (raw.get("prompt"))
         .or_else(|| raw.pointer("/userPromptSubmit/prompt"))
         .and_then(Value::as_str)
+        .filter(|prompt| !crate::context_assistance_prompt_generated::by_app(prompt))
 }
 
 /// Watch answers some apps' prompts without a context slot; one is opened

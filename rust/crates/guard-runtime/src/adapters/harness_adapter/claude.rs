@@ -4,8 +4,8 @@
 //!
 //! Python answers `{"reply": {"facts": null}}` with what only the Guard
 //! process knows (see `claude_argv`), merges it into the request and asks
-//! again. It keeps the shim, the daemon start the SessionStart hook runs, the
-//! `claude --help` probe and the file publication.
+//! again. The SessionStart refresh writes the settings here; Python keeps
+//! the daemon start the SessionStart hook runs.
 
 use std::path::PathBuf;
 
@@ -146,11 +146,11 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
             Some(Ok(object)) => object,
         },
     };
-    let facts = argv::facts(fields)?;
+    let facts = argv::facts(ctx, fields)?;
     let mut hooks = hooks_of(&payload).unwrap_or_default();
     synced(ctx, &facts, &contract, &mut hooks)?;
     payload.set("hooks", hooks.value());
-    let after = payload.render()?.into_bytes();
+    let after = payload.render_document("")?.into_bytes();
     let mode = match before {
         Some(_) => files::mode(ctx, &path).ok_or_else(|| Failure::Os(path_text(&path)))?,
         None => 0o644,
@@ -185,10 +185,14 @@ fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
     if let Some(mut hooks) = hooks_of(&payload) {
         settings::prune_events(&contract, &mut hooks, &UNINSTALL_EVENTS)?;
         settings::remove_unsupported(&contract, &mut hooks)?;
-        payload.set("hooks", hooks.value());
+        if hooks.0.is_empty() {
+            payload.entries.retain(|(key, _)| key != "hooks");
+        } else {
+            payload.set("hooks", hooks.value());
+        }
         writes.push(json!({
             "path": path_text(&path),
-            "text": payload.render()?,
+            "text": payload.render_document("")?,
             "parents": true,
         }));
     }
@@ -200,7 +204,8 @@ fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
 }
 
 /// `refresh_runtime_hook_urls`: rewrite Guard's entries with this build's
-/// argv. `text` is `null` when the settings hold no hooks object.
+/// argv and write the settings back. `text` is `null`, and nothing is
+/// written, when the settings hold no hooks object.
 fn refresh(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let contract = hook_contract()?;
     let path = settings_path(ctx);
@@ -209,10 +214,16 @@ fn refresh(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let Some(mut hooks) = hooks_of(&payload) else {
         return Ok(json!({ "path": path_text(&path), "text": null }));
     };
-    let facts = argv::facts(fields)?;
+    let facts = argv::facts(ctx, fields)?;
     synced(ctx, &facts, &contract, &mut hooks)?;
     payload.set("hooks", hooks.value());
-    Ok(json!({ "path": path_text(&path), "text": payload.render()? }))
+    let text = payload.render_document("")?;
+    let target = ctx.absolute(&path);
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| Failure::Os(error.to_string()))?;
+    }
+    std::fs::write(&target, text.as_bytes()).map_err(|error| Failure::Os(error.to_string()))?;
+    Ok(json!({ "path": path_text(&path), "text": text }))
 }
 
 /// One of the hook argv vectors, for the callers that still build it alone.
@@ -222,7 +233,7 @@ fn hook_argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         .and_then(Value::as_str)
         .ok_or(Failure::Invalid)?;
     let contract = hook_contract()?;
-    let facts = argv::facts(fields)?;
+    let facts = argv::facts(ctx, fields)?;
     let argv = match which {
         "hook" => argv::hook_argv(ctx, &facts)?,
         "daemon" => argv::daemon_argv(ctx, &facts, &contract)?,

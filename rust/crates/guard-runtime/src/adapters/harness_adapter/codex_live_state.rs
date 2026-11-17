@@ -4,8 +4,8 @@
 //! decides the state launch, doctor and install readback report.
 //!
 //! The caller sends only what its own process knows: the installation it
-//! expects (`spec`), its package roots, and the long form of any 8.3 short
-//! name a handler command carries.
+//! expects (`spec`) and its package roots. An 8.3 short name a handler command
+//! carries is expanded by this host.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -17,8 +17,8 @@ use guard_contracts::{
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
-use super::codex::{config_path, hooks_path, EVENTS};
-use super::codex_hook_state::{decide, with_syntax};
+use super::codex::{config_path, flag, hooks_path, EVENTS};
+use super::codex_hook_state::decide;
 use super::codex_live_read::{live_hooks, LiveHooks};
 use super::{path_text, Ctx, Failure, Step};
 use crate::codex_hook_manifest_auth as manifest_auth;
@@ -57,53 +57,7 @@ pub(super) fn live_hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
         tokens,
     } = LiveHooks::read(ctx);
     let live = live_hooks(&toml_hooks, &json_hooks);
-    // A caller whose hook budget is already spent gets the unverified state
-    // the resident verifier gave it before, without touching the manifest.
-    let (manifest, failure) = if fields.get("budget_spent").and_then(Value::as_bool) == Some(true) {
-        (None, Some(owned(UNAVAILABLE)))
-    } else {
-        authenticated(ctx, spec, &config)?
-    };
-    let commands = manifest.as_ref().map(handler_commands).unwrap_or_default();
-    let mut missing = expansions(with_syntax(fields, |syntax| {
-        for command in &commands {
-            syntax.split_hook(command);
-        }
-        Ok(())
-    }))?;
-    let request = CodexHookManifestVerifyRequestV1 {
-        schema: CODEX_HOOK_MANIFEST_VERIFY_REQUEST_SCHEMA.to_owned(),
-        request_id: String::new(),
-        posix: cfg!(unix),
-        current_uid: current_uid(),
-        failure: failure.map(|(reason, message)| CodexHookManifestFailureV1 { reason, message }),
-        expected: match &manifest {
-            Some(_) => Some(expected(ctx, spec, &config)?),
-            None => None,
-        },
-        canonical_paths: manifest
-            .as_ref()
-            .map(|manifest| canonical_paths(ctx, manifest))
-            .unwrap_or_default(),
-        installed_python_package_files: manifest
-            .as_ref()
-            .map(|manifest| installed(ctx, manifest, fields))
-            .transpose()?
-            .unwrap_or_default(),
-        manifest,
-        hooks: hooks_wire(live, &tokens),
-        windows: fields.get("windows").and_then(Value::as_bool) == Some(true),
-        long_paths: super::codex_owners::long_paths(fields)?,
-        private_groups: Vec::new(),
-    };
-    let verified = evaluate_request(&request);
-    let mut state = verified
-        .get("state")
-        .and_then(Value::as_object)
-        .cloned()
-        .ok_or(Failure::Invalid)?;
-    let manifest_path = manifest_path(ctx, Path::new(spec_text(spec, "guard_home")?), &config);
-    state.insert("manifest_path".into(), json!(path_text(&manifest_path)));
+    let state = verified_state(ctx, spec, fields, &config, live, &tokens)?;
     let integrity = match pyjson::parse(&Value::Object(state).to_string()) {
         Ok(PyVal::Dict(entries)) => entries,
         _ => return Err(Failure::Invalid),
@@ -116,38 +70,61 @@ pub(super) fn live_hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
     let mut base = fields.clone();
     base.insert("config_path".into(), json!(path_text(&config)));
     base.insert("hooks_path".into(), json!(path_text(&hooks_file)));
-    let answer = decide(ctx, &base, read, integrity, Some(&tokens));
-    // The caller expands short names once, so every name both steps met is
-    // asked for together.
-    match answer {
-        Err(failure) => {
-            missing.extend(expansions(Err(failure))?);
-            Err(expand(&missing))
-        }
-        Ok(_) if !missing.is_empty() => Err(expand(&missing)),
-        Ok(state) => Ok(state),
-    }
+    decide(ctx, &base, read, integrity, Some(&tokens))
 }
 
-fn expand(names: &BTreeSet<String>) -> Failure {
-    Failure::Reply(json!({ "expand": names }))
-}
-
-/// The short names an answer asked to have expanded; any other failure
-/// stands.
-fn expansions(answer: Step<()>) -> Step<BTreeSet<String>> {
-    match answer {
-        Ok(()) => Ok(BTreeSet::new()),
-        Err(Failure::Reply(reply)) => match reply.get("expand").and_then(Value::as_array) {
-            Some(names) => Ok(names
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_owned)
-                .collect()),
-            None => Err(Failure::Reply(reply)),
+/// The resident verifier's integrity state for the live `hooks` (with the
+/// TOML `tokens` they carry), and the manifest path it checked. Request
+/// fields are `live_hook_state`'s.
+pub(super) fn verified_state(
+    ctx: &Ctx,
+    spec: &Map<String, Value>,
+    fields: &Map<String, Value>,
+    config: &Path,
+    live: &PyVal,
+    tokens: &Map<String, Value>,
+) -> Step<Map<String, Value>> {
+    // A caller whose hook budget is already spent gets the unverified state
+    // the resident verifier gave it before, without touching the manifest.
+    let (manifest, failure) = if fields.get("budget_spent").and_then(Value::as_bool) == Some(true) {
+        (None, Some(owned(UNAVAILABLE)))
+    } else {
+        authenticated(ctx, spec, config)?
+    };
+    let request = CodexHookManifestVerifyRequestV1 {
+        schema: CODEX_HOOK_MANIFEST_VERIFY_REQUEST_SCHEMA.to_owned(),
+        request_id: String::new(),
+        posix: cfg!(unix),
+        current_uid: current_uid(),
+        failure: failure.map(|(reason, message)| CodexHookManifestFailureV1 { reason, message }),
+        expected: match &manifest {
+            Some(_) => Some(expected(ctx, spec, config)?),
+            None => None,
         },
-        Err(failure) => Err(failure),
-    }
+        canonical_paths: manifest
+            .as_ref()
+            .map(|manifest| canonical_paths(ctx, manifest))
+            .unwrap_or_default(),
+        installed_python_package_files: manifest
+            .as_ref()
+            .map(|manifest| installed(ctx, manifest, fields))
+            .transpose()?
+            .unwrap_or_default(),
+        manifest,
+        hooks: hooks_wire(live, tokens),
+        windows: flag(fields, "windows")?,
+        long_paths: super::codex_owners::long_paths(fields)?,
+        private_groups: Vec::new(),
+    };
+    let verified = evaluate_request(&request);
+    let mut state = verified
+        .get("state")
+        .and_then(Value::as_object)
+        .cloned()
+        .ok_or(Failure::Invalid)?;
+    let manifest_path = manifest_path(ctx, Path::new(spec_text(spec, "guard_home")?), config);
+    state.insert("manifest_path".into(), json!(path_text(&manifest_path)));
+    Ok(state)
 }
 
 fn spec_text<'a>(spec: &'a Map<String, Value>, key: &str) -> Step<&'a str> {
@@ -355,20 +332,6 @@ fn installed(ctx: &Ctx, manifest: &Value, fields: &Map<String, Value>) -> Step<V
                 .any(|root| resolved.starts_with(root) && resolved != *root)
         })
         .collect())
-}
-
-fn handler_commands(manifest: &Value) -> Vec<String> {
-    manifest
-        .get("events")
-        .and_then(Value::as_array)
-        .map(|events| {
-            events
-                .iter()
-                .filter_map(|binding| binding.get("handler")?.get("command")?.as_str())
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 /// The live hooks as the verifier reads them: each managed event's group

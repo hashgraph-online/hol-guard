@@ -9,11 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
 from tests.cursor_test_support import HOOK_SCRIPT_NAME
@@ -34,7 +31,7 @@ def test_copilot_uninstall_ignores_tampered_lifecycle_paths(tmp_path: Path) -> N
         guard_home=tmp_path / "guard-home",
     )
     global_context = HarnessContext(home_dir=context.home_dir, workspace_dir=None, guard_home=context.guard_home)
-    adapter = CopilotHarnessAdapter()
+    adapter = get_adapter("copilot")
     install_payload = adapter.install(context)
     state_paths = install_payload["state_paths"]
     assert isinstance(state_paths, list)
@@ -65,7 +62,7 @@ def test_copilot_uninstall_does_not_follow_managed_config_symlink(tmp_path: Path
         workspace_dir=workspace_dir,
         guard_home=tmp_path / "guard-home",
     )
-    adapter = CopilotHarnessAdapter()
+    adapter = get_adapter("copilot")
     install_payload = adapter.install(context)
     state_paths = install_payload["state_paths"]
     assert isinstance(state_paths, list)
@@ -106,7 +103,7 @@ def test_copilot_unsigned_legacy_state_cannot_authorize_other_workspace(tmp_path
         },
     )
 
-    CopilotHarnessAdapter().uninstall(context)
+    get_adapter("copilot").uninstall(context)
 
     assert external_target.read_text(encoding="utf-8") == '{"owned":"user"}'
     assert backup_path.exists() is True
@@ -127,7 +124,7 @@ def test_hermes_uninstall_authenticates_external_recorded_config_path(
     config_path.parent.mkdir(parents=True)
     config_path.write_text("mcp_servers:\n  github:\n    command: npx\n", encoding="utf-8")
     monkeypatch.setenv("HERMES_HOME", str(custom_home))
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     adapter.install(context)
 
     monkeypatch.delenv("HERMES_HOME")
@@ -140,7 +137,7 @@ def test_hermes_uninstall_authenticates_external_recorded_config_path(
 
 def test_hermes_uninstall_ignores_tampered_manifest_paths_outside_home(tmp_path: Path) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     manifest = adapter.install(context)
     manifest_path = Path(str(manifest["managed_manifest_path"]))
     outside_root = tmp_path / "outside"
@@ -179,7 +176,7 @@ def test_hermes_uninstall_ignores_tampered_auxiliary_cleanup_state(tmp_path: Pat
         "mcp_servers:\n  github:\n    command: npx\nguard:\n  enabled: false\n",
         encoding="utf-8",
     )
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     adapter.install(context)
     managed_root = context.guard_home / "hermes"
     _write_json(managed_root / "managed-servers.json", {"servers": ["github"]})
@@ -197,7 +194,7 @@ def test_hermes_uninstall_preserves_current_guard_section_when_state_key_is_miss
     config_path = context.home_dir / ".hermes" / "config.yaml"
     config_path.parent.mkdir(parents=True)
     config_path.write_text("mcp_servers: {}\nguard:\n  enabled: false\n", encoding="utf-8")
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     adapter.install(context)
     (context.guard_home / "managed" / "adapter-state.key").unlink()
     installed_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
@@ -210,7 +207,7 @@ def test_hermes_uninstall_preserves_current_guard_section_when_state_key_is_miss
 
 def test_hermes_launch_environment_rejects_tampered_managed_paths(tmp_path: Path) -> None:
     context = HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = HermesHarnessAdapter()
+    adapter = get_adapter("hermes")
     manifest = adapter.install(context)
     manifest_path = Path(str(manifest["managed_manifest_path"]))
     tampered = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -232,7 +229,7 @@ def test_cursor_uninstall_does_not_unlink_managed_copy_symlink(tmp_path: Path) -
     managed_script.symlink_to(outside_script)
 
     with pytest.raises(ValueError, match="Cursor managed hook script"):
-        CursorHarnessAdapter().uninstall(context)
+        get_adapter("cursor").uninstall(context)
 
     assert outside_script.read_text(encoding="utf-8") == "# user-owned\n"
     assert managed_script.is_symlink()

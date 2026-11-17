@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.install_commands import (
     apply_managed_install,
     build_harness_setup_plan,
     build_harness_verification,
     cursor_local_action_payload,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
 

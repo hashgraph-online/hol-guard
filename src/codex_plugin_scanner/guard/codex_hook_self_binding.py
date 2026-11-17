@@ -30,11 +30,10 @@ stamped as owned.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Collection, Mapping
 from pathlib import Path
 from typing import Any
 
-from . import codex_hook_command_line as _command_line
 from .codex_config import _Wire
 from .codex_hook_command_line import hook_commands_use_windows_syntax
 from .native_runner_authority import native_runner_authority
@@ -63,40 +62,17 @@ def _cwd() -> str | None:
 def ask_hook_owners(op: str, *, windows: bool | None = None, **fields: object) -> dict[str, Any]:
     """One answer of the native ``codex_hook_owners`` kind.
 
-    A Windows command naming an 8.3 short path is answered with the names it
-    needs expanded; this host resolves them and asks again.
+    A Windows command naming an 8.3 short path is expanded by the native runtime.
     """
 
     request: dict[str, object] = {"op": op, **short_path_fields(windows), **fields}
-    return settle_short_paths(
-        lambda: native_runner_authority(_KIND, request, timeout_seconds=_TIMEOUT_SECONDS), request, _KIND
-    )
+    return dict(native_runner_authority(_KIND, request, timeout_seconds=_TIMEOUT_SECONDS))
 
 
 def short_path_fields(windows: bool | None = None) -> dict[str, object]:
-    """The command syntax a native owner check splits with, before any name is expanded."""
+    """The command syntax a native owner check splits with."""
 
     return {"windows": hook_commands_use_windows_syntax(windows), "long_paths": {}}
-
-
-def settle_short_paths(ask: Callable[[], Mapping[str, Any]], request: dict[str, object], kind: str) -> dict[str, Any]:
-    """Ask once, and again with each 8.3 short name the answer needs expanded."""
-
-    for _ in range(2):
-        answer = dict(ask())
-        reply = answer.get("reply")
-        if not isinstance(reply, Mapping):
-            return answer
-        request["long_paths"] = expanded_short_paths(reply)
-    raise RuntimeError(f"{kind} did not settle its short paths")
-
-
-def expanded_short_paths(reply: Mapping[str, Any]) -> dict[str, str]:
-    """Each 8.3 short name a ``reply`` asks for, with the long path it names here."""
-
-    expand = reply.get("expand")
-    names = [str(name) for name in expand] if isinstance(expand, list) else []
-    return {name: _command_line._long_path(name) or "" for name in names}
 
 
 def answer_text(answer: Mapping[str, object], key: str) -> str:
@@ -187,6 +163,5 @@ __all__ = [
     "install_fields",
     "install_package_root",
     "self_bound_hook_bindings",
-    "settle_short_paths",
     "short_path_fields",
 ]

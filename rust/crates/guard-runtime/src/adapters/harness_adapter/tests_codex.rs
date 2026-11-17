@@ -15,6 +15,8 @@ mod config_hooks;
 mod main_plan;
 #[path = "tests_codex_migration.rs"]
 mod migration;
+#[path = "tests_codex_spec.rs"]
+mod spec;
 #[path = "tests_codex_uninstall.rs"]
 mod uninstall;
 #[path = "tests_codex_uninstall_config.rs"]
@@ -47,10 +49,7 @@ fn argv_fields(home: &Home, frozen: bool) -> Value {
         "home_is_current": false,
         "runtime_guard_home": home.guard(),
         "workspace_explicit": false,
-        "python": "/py",
-        "frozen": frozen,
-        "package_root": "/opt/guard/site",
-        "native_bridge": "/g/hol-guard-runtime",
+        "caller": if frozen { super::frozen_with_runtime(home).0 } else { super::caller(false) },
         "manifest_path": "/g/manifest.json",
         "long_timeout": 85,
     })
@@ -99,7 +98,7 @@ fn argv_without_a_native_runtime_asks_for_repair() {
     let home = Home::new();
     for frozen in [false, true] {
         let mut fields = argv_fields(&home, frozen);
-        fields.as_object_mut().unwrap().remove("native_bridge");
+        fields["caller"]["native_runtime"] = Value::Null;
         let answer = ask(&home, "argv", fields);
         assert_eq!(
             answer["runtime_error"],
@@ -112,11 +111,11 @@ fn argv_without_a_native_runtime_asks_for_repair() {
 fn a_frozen_guard_is_its_own_interpreter_for_every_launch() {
     let home = Home::new();
     let answer = ask(&home, "argv", argv_fields(&home, true));
+    let (_, copy) = super::frozen_with_runtime(&home);
     let argv = answer["argv"].as_array().unwrap();
-    assert_eq!(
-        argv[..2],
-        [json!("/g/hol-guard-runtime"), json!("codex-hook-bridge")]
-    );
+    // A frozen Guard's bundled runtime vanishes with its process, so the
+    // hook names the durable copy under the Guard home.
+    assert_eq!(argv[..2], [json!(copy), json!("codex-hook-bridge")]);
     assert_eq!(argv.len(), 3);
     let fallback = answer["fallback"].as_array().unwrap();
     assert_eq!(
@@ -143,7 +142,7 @@ fn groups_register_every_event_with_one_bound_handler() {
     let answer = ask(
         &home,
         "groups",
-        json!({"argv": ["/py", "-I"], "env": "{}", "long_timeout": 85}),
+        json!({"argv": ["/py", "-I"], "long_timeout": 85}),
     );
     let groups: Value = serde_json::from_str(answer["groups"].as_str().unwrap()).unwrap();
     let mut events: Vec<&String> = groups.as_object().unwrap().keys().collect();
@@ -168,11 +167,37 @@ fn groups_register_every_event_with_one_bound_handler() {
     assert_eq!(bindings[0]["handler"]["command"], "/py -I");
 }
 
+#[test]
+fn each_handler_pins_the_callers_package_and_codex_home() {
+    let home = Home::new();
+    let codex_home = home.home().join(".codex");
+    let env_for = |frozen: bool| {
+        let fields = json!({"argv": ["/py"], "long_timeout": 85, "caller": super::caller(frozen)});
+        let answer = home.ask_env(
+            "codex",
+            "groups",
+            fields,
+            json!({"PATH": "", "HOL_GUARD_NATIVE": "1", "HOL_GUARD_TEST_MODE": ""}),
+        );
+        let groups: Value = serde_json::from_str(answer["groups"].as_str().unwrap()).unwrap();
+        groups["PreToolUse"]["hooks"][0]["env"].clone()
+    };
+    assert_eq!(
+        env_for(false),
+        json!({"PYTHONPATH": "/opt/guard/site", "HOL_GUARD_NATIVE": "1", "CODEX_HOME": codex_home})
+    );
+    // A frozen build imports from its own archive, so it pins no package.
+    assert_eq!(
+        env_for(true),
+        json!({"HOL_GUARD_NATIVE": "1", "CODEX_HOME": codex_home})
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn a_posix_groups_command_is_shlex_joined() {
     let home = Home::new();
-    let fields = json!({"argv": ["/a b/py", "-I"], "env": "{}", "long_timeout": 85});
+    let fields = json!({"argv": ["/a b/py", "-I"], "long_timeout": 85});
     let answer = ask(&home, "groups", fields);
     let groups: Value = serde_json::from_str(answer["groups"].as_str().unwrap()).unwrap();
     assert_eq!(groups["PreToolUse"]["hooks"][0]["command"], "'/a b/py' -I");
@@ -180,15 +205,9 @@ fn a_posix_groups_command_is_shlex_joined() {
 
 #[cfg(windows)]
 #[test]
-fn a_windows_groups_command_asks_the_host_to_shorten_spaced_paths() {
+fn a_windows_groups_command_uses_the_short_names_it_is_given() {
     let home = Home::new();
-    let fields =
-        json!({"argv": ["C:\\Program Files\\py.exe", "-I"], "env": "{}", "long_timeout": 85});
-    assert_eq!(
-        ask(&home, "groups", fields.clone())["reply"],
-        json!({"shorten": ["C:\\Program Files\\py.exe"]})
-    );
-    let mut fields = fields;
+    let mut fields = json!({"argv": ["C:\\Program Files\\py.exe", "-I"], "long_timeout": 85});
     fields["short_names"] =
         json!({"C:\\Program Files\\py.exe": ["C:\\PROGRA~1\\py.exe", "C:\\Program Files\\py.exe"]});
     let answer = ask(&home, "groups", fields);
@@ -320,21 +339,18 @@ fn alternate_cleanup_drops_guard_entries_and_the_idle_hook_feature() {
 }
 
 #[test]
-fn managed_mcp_asks_for_each_proxy_launch_then_rewrites_it() {
+fn managed_mcp_rewrites_each_proxy_to_the_callers_launch() {
     let home = Home::new();
     let payload =
         json!({"mcp_servers": {"p": {"command": "/old/python", "args": PROXY_ARGS}}}).to_string();
     let fields =
         json!({"payload": payload, "servers": [{"name": "new", "entry": "{\"command\":\"x\"}"}]});
-    let reply = ask(&home, "managed_mcp", fields.clone());
-    assert_eq!(reply["reply"]["relaunch"]["p"], json!(PROXY_ARGS));
-
-    let mut answered = fields;
-    answered["relaunch"] = json!({"p": ["/new/python", PROXY_ARGS]});
-    let answer = ask(&home, "managed_mcp", answered);
+    let answer = ask(&home, "managed_mcp", fields);
     assert_eq!(answer["migrated"], json!(["p"]));
     let rendered: Value = serde_json::from_str(answer["rendered"].as_str().unwrap()).unwrap();
-    assert_eq!(rendered["mcp_servers"]["p"]["command"], "/new/python");
+    // The stamp's runtime cannot relay, so the proxy keeps its Python launch.
+    assert_eq!(rendered["mcp_servers"]["p"]["command"], "/py");
+    assert_eq!(rendered["mcp_servers"]["p"]["args"], json!(PROXY_ARGS));
     assert_eq!(rendered["mcp_servers"]["new"], json!({"command": "x"}));
 }
 

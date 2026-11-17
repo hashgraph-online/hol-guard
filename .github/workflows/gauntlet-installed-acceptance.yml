@@ -96,6 +96,12 @@ jobs:
           compiler: ${{ env.COMPILER }}
 
       - name: Lane tests
+        # The ownership fixture invokes the native runner-authority endpoint. Its
+        # executable was just built above, but these tests run before wheel
+        # installation and must not fall back to the absent packaged runtime.
+        env:
+          HOL_GUARD_NATIVE_REGRESSION: '1'
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/${{ env.TARGET }}/release/hol-guard-runtime
         run: uv run --no-sync python -m pytest tests/test_gauntlet_installed_lane.py tests/test_gauntlet_installed_replay_verdict.py tests/test_gauntlet_installed_startup.py tests/test_gauntlet_installed_windows_argv.py -q
 
       - name: Check out the matching historical client
@@ -178,6 +184,7 @@ jobs:
             --runtime "$RUNNER_TEMP/wheel-venv/bin/hol-guard" \
             --harness claude-code codex muse omp zcode \
             --repeat "$REPEAT" \
+            --uninstall-restore \
             $REPORT_ONLY \
             --output "$RUNNER_TEMP/evidence/wheel"
 
@@ -217,6 +224,7 @@ jobs:
             --runtime "$ONEDIR/hol-guard" \
             --harness claude-code codex muse omp zcode \
             --repeat "$REPEAT" \
+            --uninstall-restore \
             --require-frozen \
             $REPORT_ONLY \
             --output "$RUNNER_TEMP/evidence/frozen"
@@ -346,6 +354,7 @@ jobs:
             --runtime "$bin/hol-guard$EXE" \
             --harness claude-code codex muse omp zcode \
             --repeat "$REPEAT" \
+            --uninstall-restore \
             $REPORT_ONLY \
             --output "$RUNNER_TEMP/evidence/wheel-${{ matrix.os }}"
 

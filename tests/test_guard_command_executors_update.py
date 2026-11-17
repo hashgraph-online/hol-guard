@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.runtime.audit_workspace import audit_workspace_is_bound_to_context
 from codex_plugin_scanner.guard.runtime.command_executors import (
     APP_OPERATIONS,

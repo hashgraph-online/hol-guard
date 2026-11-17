@@ -17,6 +17,7 @@ use super::cursor_files::{ensure_secret, restore, unlink_file};
 use super::cursor_hooks_plan::{self as plan, backup_document, no_follow, Prepared};
 use super::cursor_hooks_uninstall;
 use super::files::{self, within_root, Change, Doc};
+use super::managed_servers;
 use super::{path_text, Failure, Spec, Step};
 use crate::pyjson::{self, PyVal};
 
@@ -26,50 +27,45 @@ const UNINSTALL_NOTES: [&str; 2] = [
 ];
 
 /// A managed server: name, source scope, config path and Guard's proxy entry.
-type Managed = (String, String, String, PyVal);
+type Managed = managed_servers::Managed;
 
-/// The servers Python derived from a detection.
+/// Cursor's MCP proxy command.
+const PROXY: &str = "cursor-mcp-proxy";
+
+/// The servers of a detection: the ones Guard manages, the ones it cannot
+/// and the ones discovery observes.
 struct Servers {
     managed: Vec<Managed>,
     skipped: PyVal,
     observed: Vec<[String; 3]>,
 }
 
+/// `_servers`: each managed server's proxy entry declares the stdio
+/// transport just before its environment, as Cursor's config reads it.
 fn servers(ask: &Ask, detected: &Value) -> Step<Servers> {
-    ask.servers(detected)?;
-    let raw = ask
-        .fields
-        .get("servers")
-        .and_then(Value::as_str)
-        .ok_or(Failure::Invalid)?;
-    let parsed = cursor::parse_object(raw).ok_or(Failure::Invalid)?;
-    let list = |key: &str| {
-        get(&parsed, key)
-            .and_then(PyVal::as_list)
-            .ok_or(Failure::Invalid)
-    };
-    let managed = list("managed")?
-        .iter()
-        .map(|row| match row.as_list() {
-            Some(
-                [PyVal::Str(name), PyVal::Str(scope), PyVal::Str(path), entry @ PyVal::Dict(_)],
-            ) => Ok((name.clone(), scope.clone(), path.clone(), entry.clone())),
-            _ => Err(Failure::Invalid),
-        })
-        .collect::<Step<_>>()?;
-    let observed = list("observed")?
-        .iter()
-        .map(|row| match row.as_list() {
-            Some([PyVal::Str(name), PyVal::Str(scope), PyVal::Str(path)]) => {
-                Ok([name.clone(), scope.clone(), path.clone()])
-            }
-            _ => Err(Failure::Invalid),
+    let artifacts = managed_servers::detected(ask.ctx, HARNESS, detected)?;
+    let managed = managed_servers::managed(ask.ctx, &artifacts, PROXY)?
+        .into_iter()
+        .map(|(name, scope, path, entry)| {
+            let PyVal::Dict(entry) = entry else {
+                return Err(Failure::Invalid);
+            };
+            let (env, mut fields): (Vec<_>, Vec<_>) =
+                entry.into_iter().partition(|(key, _)| key == "env");
+            fields.push(("type".to_owned(), files::text("stdio")));
+            fields.extend(env);
+            Ok((name, scope, path, PyVal::Dict(fields)))
         })
         .collect::<Step<_>>()?;
     Ok(Servers {
         managed,
-        skipped: PyVal::List(list("skipped")?.to_vec()),
-        observed,
+        skipped: PyVal::List(
+            managed_servers::skipped(&artifacts)?
+                .into_iter()
+                .map(files::text)
+                .collect(),
+        ),
+        observed: managed_servers::observed(&artifacts)?,
     })
 }
 

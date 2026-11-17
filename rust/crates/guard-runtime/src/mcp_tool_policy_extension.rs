@@ -23,7 +23,9 @@ type Code = &'static str;
 /// Name why a decision went unanswered. Only static codes are written, so the
 /// resident's stderr never carries request content.
 fn unanswered(stage: &str, code: Code) {
-    eprintln!("mcp_extension_unanswered stage={stage} code={code}");
+    crate::runtime_output::stderr_line(format_args!(
+        "mcp_extension_unanswered stage={stage} code={code}"
+    ));
 }
 
 fn store_code(error: local_store_read::StoreReadError) -> Code {

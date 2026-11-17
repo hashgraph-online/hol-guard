@@ -82,6 +82,7 @@ pub(super) fn dispatch(op: &str, map: &Map<String, Value>) -> KindResult {
         "proxy_env" => proxy_args::proxy_env(map),
         "remote" => remote::remote(map),
         "remote_rank" => remote::remote_rank(map),
+        "remote_scan" => scan::remote_scan(map),
         _ => Err(ERR_INVALID),
     }
 }
@@ -358,6 +359,8 @@ fn borrowed(values: &[String]) -> Vec<&str> {
 mod proxy_args;
 #[path = "harness_mcp_remote.rs"]
 mod remote;
+#[path = "harness_mcp_scan.rs"]
+mod scan;
 
 #[cfg(test)]
 #[path = "harness_mcp_select_tests.rs"]

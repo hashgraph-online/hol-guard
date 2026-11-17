@@ -7,14 +7,11 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from ..adapters import get_adapter, list_adapters
-from ..adapters.base import HarnessAdapter, HarnessContext
-from ..adapters.cline_runtime import ClineHarnessAdapter
-from ..adapters.contracts import contract_for
-from ..adapters.cursor import CursorHarnessAdapter
-from ..agent_safety_guidance import install_agent_safety_guidance, uninstall_agent_safety_guidance
 from ..codex_install_transaction import codex_install_transaction
-from ..managed_install_proof import bind_managed_install_proof, verify_managed_install_proof
+from ..harness.base import HarnessAdapter, HarnessContext
+from ..harness.contracts import contract_for
+from ..harness.registry import get_adapter, list_adapters
+from ..managed_install_proof import verify_managed_install_proof
 from ..native_mcp_tool_evidence import NativeMcpToolEvidenceError, native_skill_firewall_metadata_patch
 from ..native_runner_authority import NativeRunnerAuthorityError
 from ..runtime.fleet_posture_common import DIAGNOSTICS_STATE_KEY, parse_timestamp
@@ -30,6 +27,7 @@ from .cursor_actions import (
 )
 from .install_targets import _resolve_targets
 from .managed_install_payload import managed_install_payload as _managed_install_payload
+from .managed_install_record import _native_install_ask, _record_managed_install
 from .native_install_checks import _grok_event_has_command_hook as _grok_event_has_command_hook
 from .native_install_checks import _grok_hook_command_is_guard as _grok_hook_command_is_guard
 from .native_install_checks import _grok_managed_config_is_active as _grok_managed_config_is_active
@@ -64,7 +62,7 @@ def _apply_adapter_management(
     """Apply one adapter mutation while honoring declared surface capabilities."""
 
     if surface is None:
-        if isinstance(adapter, CursorHarnessAdapter):
+        if adapter.harness == "cursor":
             selected_surface = cursor_install_surface(None)
             return (
                 adapter.install(context, surface=selected_surface)
@@ -76,14 +74,14 @@ def _apply_adapter_management(
     setup_contract = adapter.setup_contract()
     if surface not in setup_contract.surface_capabilities:
         raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
-    if isinstance(adapter, CursorHarnessAdapter):
+    if adapter.harness == "cursor":
         selected_surface = cursor_install_surface(surface)
         return (
             adapter.install(context, surface=selected_surface)
             if active
             else adapter.uninstall(context, surface=selected_surface)
         )
-    if isinstance(adapter, ClineHarnessAdapter):
+    if adapter.harness == "cline":
         return adapter.install(context, surface=surface) if active else adapter.uninstall(context, surface=surface)
     raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
 
@@ -124,27 +122,23 @@ def _apply_managed_install_owned(
     managed_installs: list[dict[str, object]] = []
     for harness in targets:
         adapter = get_adapter(harness)
-        canonical_harness = adapter.harness
         manifest = _apply_adapter_management(
             adapter,
             context,
             active=active,
             surface=surface,
         )
-        if active:
-            manifest = bind_managed_install_proof(manifest, context)
-        store.set_managed_install(canonical_harness, active, workspace, manifest, now)
-        managed_install = store.get_managed_install(canonical_harness)
-        if managed_install is not None:
-            managed_installs.append(_managed_install_payload(managed_install))
+        row = _record_managed_install(command, adapter.harness, manifest, context, store, workspace, now)
+        if row is not None:
+            managed_installs.append(_managed_install_payload(row))
     payload: dict[str, object] = {
         "managed_installs": managed_installs,
         "auto_detected": requested_harness is None or install_all,
     }
-    if active and managed_installs:
-        payload["agent_safety_guidance"] = install_agent_safety_guidance(context.home_dir)
-    elif managed_installs and not any(bool(item.get("active")) for item in store.list_managed_installs()):
-        payload["agent_safety_guidance"] = uninstall_agent_safety_guidance(context.home_dir)
+    if managed_installs:
+        guidance = _native_install_ask("managed_install_guidance", context, command=command, source=store.guard_source)
+        if guidance.get("guidance") is not None:
+            payload["agent_safety_guidance"] = guidance["guidance"]
     if len(managed_installs) == 1:
         payload["managed_install"] = managed_installs[0]
     if active and context.workspace_dir is not None:
@@ -272,7 +266,7 @@ def build_harness_verification(
         verification.update(_opencode_protection_checks(context, store))
     if adapter.harness == "grok":
         verification.update(_grok_protection_checks(context))
-    if isinstance(adapter, ClineHarnessAdapter):
+    if adapter.harness == "cline":
         runtime_probe = adapter.runtime_probe(context)
         verification["runtime"] = runtime_probe or {}
         verification["warnings"] = adapter.diagnostic_warnings(adapter.detect(context), runtime_probe)

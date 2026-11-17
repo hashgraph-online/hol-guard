@@ -27,11 +27,12 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from ... import version as package_version
-from ..adapters.base import HarnessContext
-from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
-from ..adapters.cursor import cursor_native_hook_state
-from ..adapters.native_extension import extension_is_current, legacy_omp_extension_is_verified
+from ..codex_harness_client import codex_native_hook_state
+from ..codex_harness_lifecycle import CodexHarnessAdapter
 from ..config import load_guard_config, resolve_guard_home
+from ..harness.base import HarnessContext
+from ..harness.cursor_client import cursor_native_hook_state
+from ..harness.native_extension import extension_is_current, legacy_omp_extension_is_verified
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
@@ -193,7 +194,7 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.shims import package_shim_status, repair_package_shims
 
 
@@ -299,7 +300,7 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.cli.update_commands import _repair_supported_harnesses_in_process
 from codex_plugin_scanner.guard.store import GuardStore
 

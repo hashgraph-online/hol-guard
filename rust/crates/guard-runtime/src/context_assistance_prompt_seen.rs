@@ -5,7 +5,9 @@
 //! edited since it was shown is sent again.
 //!
 //! Only this process remembers, for a bounded number of sessions; a
-//! restart, or a session it no longer holds, gets every excerpt again.
+//! restart, or a session it no longer holds, gets every excerpt again. So
+//! does a session the app compacted or cleared: its agent no longer holds
+//! what earlier prompts were shown.
 use std::collections::VecDeque;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
@@ -124,6 +126,39 @@ pub(super) fn forget(session: &Session, gone: impl Fn(&Span) -> bool) {
     if let Some((_, spans)) = sessions.iter_mut().find(|(known, _)| known == session) {
         spans.retain(|span| !gone(span));
     }
+}
+
+/// Forgets what `app`'s session `id` was shown, in every project. Claude Code
+/// starts a session again after compacting or clearing it, and the agent then
+/// holds only a summary: code shown before has to be sent again.
+pub(crate) fn restarted(app: &str, id: &str) {
+    let Ok(mut sessions) = sessions().lock() else {
+        return;
+    };
+    sessions.retain(|(known, _)| known.app != app || known.id != id);
+}
+
+/// Records one shown span for `app`'s session `id`, for tests outside this
+/// module.
+#[cfg(test)]
+pub(crate) fn shown_for_test(app: &str, id: &str) {
+    let session = Session {
+        root: PathBuf::from("/seen-lifecycle-tests"),
+        app: app.into(),
+        id: id.into(),
+    };
+    remember(&session, &[Span::new("src/a.py", 1, 9, "text")]);
+}
+
+/// Whether `app`'s session `id` still holds what [`shown_for_test`] recorded.
+#[cfg(test)]
+pub(crate) fn holds_for_test(app: &str, id: &str) -> bool {
+    let session = Session {
+        root: PathBuf::from("/seen-lifecycle-tests"),
+        app: app.into(),
+        id: id.into(),
+    };
+    !earlier(&session).is_empty()
 }
 
 #[cfg(test)]

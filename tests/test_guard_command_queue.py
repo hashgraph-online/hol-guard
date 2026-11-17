@@ -14,12 +14,12 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import native_daemon_client as daemon_client_module
 from codex_plugin_scanner.guard import store as guard_store_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.cloud_control.command_queue_worker import (
     CommandQueueWorker,
     start_command_queue_worker,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.review_contracts import (
     GuardReviewContractError,
     build_local_review_request_claim,

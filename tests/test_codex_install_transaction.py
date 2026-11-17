@@ -11,12 +11,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import codex_native_hook_state
+from codex_plugin_scanner.guard import native_caller
+from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction, require_codex_install_owner
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 from tests import codex_hook_publication_helpers as publication_helpers
 
 
@@ -233,8 +234,9 @@ def test_missing_manifest_is_rejected_before_key_access(tmp_path: Path, monkeypa
 INSTALLER = r"""
 import sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.adapters import codex
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard import codex_harness_client as codex
+from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
+from codex_plugin_scanner.guard.harness.base import HarnessContext
 root = Path(sys.argv[1])
 actor = sys.argv[2]
 context = HarnessContext(home_dir=root / "home", workspace_dir=None, guard_home=root / "home/.hol-guard")
@@ -247,9 +249,9 @@ if actor == "A":
                 raise TimeoutError("fixture synchronization expired")
             time.sleep(0.01)
         raise OSError("injected publication failure")
-    codex._ask_install_plan = fail_publish
+    codex_lifecycle._ask_install_plan = fail_publish
 try:
-    codex.CodexHarnessAdapter().install(context)
+    codex_lifecycle.CodexHarnessAdapter().install(context)
 except RuntimeError as error:
     if actor != "B" or "codex_lifecycle_busy" not in str(error):
         raise
@@ -370,8 +372,9 @@ except TimeoutError:
 def test_mutation_journal_contains_identities_and_no_private_contents(tmp_path: Path) -> None:
     import json
 
-    from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_text, restore_private_file
+    from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_text
     from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+    from tests.codex_hook_integrity_fixtures import restore_private_file
 
     home = tmp_path / "guard-home"
     config = tmp_path / "home/.codex/config.toml"
@@ -395,14 +398,15 @@ def test_cached_launch_retains_exact_previous_artifact_identity(
 ) -> None:
     import json
 
+    from codex_plugin_scanner.guard import codex_harness_client as codex
+    from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
     from codex_plugin_scanner.guard import codex_hook_runtime_trust as runtime_trust
-    from codex_plugin_scanner.guard.adapters import codex
 
     context = HarnessContext(
         home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home", home_override_explicit=True
     )
-    source_root = Path(codex.__file__).resolve().parents[3]
-    files = [path for role, path in codex._hook_packaged_file_paths(Path(sys.executable)) if role != "bridge"]
+    source_root = Path(codex.__file__).resolve().parents[2]
+    files = [path for role, path in codex._hook_manifest_spec(context).packaged_file_paths if role != "bridge"]
     # Two immutable package layouts with identical reviewed code, so this
     # models a path/format migration without authenticating altered code.
     for generation in ("old", "new"):
@@ -412,12 +416,15 @@ def test_cached_launch_retains_exact_previous_artifact_identity(
             destination.write_bytes(source.read_bytes())
             destination.chmod(0o644)
     adapter_path = Path(codex.__file__).relative_to(source_root)
+    caller_path = "codex_plugin_scanner/guard/native_caller.py"
     monkeypatch.setattr(codex, "__file__", str(tmp_path / "old" / adapter_path))
-    codex.CodexHarnessAdapter().install(context)
+    monkeypatch.setattr(native_caller, "__file__", str(tmp_path / "old" / caller_path))
+    codex_lifecycle.CodexHarnessAdapter().install(context)
     old_argv = codex._hook_command_parts(context)
     config = json.loads(old_argv[2])
     monkeypatch.setattr(codex, "__file__", str(tmp_path / "new" / adapter_path))
-    codex.CodexHarnessAdapter().install(context)
+    monkeypatch.setattr(native_caller, "__file__", str(tmp_path / "new" / caller_path))
+    codex_lifecycle.CodexHarnessAdapter().install(context)
     monkeypatch.setattr(
         runtime_trust, "__file__", str(tmp_path / "old" / "codex_plugin_scanner/guard/codex_hook_runtime_trust.py")
     )
@@ -449,16 +456,17 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
 ) -> None:
     import json
 
+    from codex_plugin_scanner.guard import codex_harness_client as codex
+    from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
     from codex_plugin_scanner.guard import codex_hook_runtime_trust as runtime_trust
-    from codex_plugin_scanner.guard.adapters import codex
     from codex_plugin_scanner.guard.codex_hook_integrity import load_authenticated_hook_manifest
 
     context = HarnessContext(
         home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home", home_override_explicit=True
     )
-    source_root = Path(codex.__file__).resolve().parents[3]
+    source_root = Path(codex.__file__).resolve().parents[2]
     adapter_path = Path(codex.__file__).relative_to(source_root)
-    files = [path for role, path in codex._hook_packaged_file_paths(Path(sys.executable)) if role != "bridge"]
+    files = [path for role, path in codex._hook_manifest_spec(context).packaged_file_paths if role != "bridge"]
     commands = []
     for number in range(10):
         root = tmp_path / f"generation-{number}"
@@ -468,7 +476,8 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
             destination.write_bytes(source.read_bytes())
             destination.chmod(0o644)
         monkeypatch.setattr(codex, "__file__", str(root / adapter_path))
-        codex.CodexHarnessAdapter().install(context)
+        monkeypatch.setattr(native_caller, "__file__", str(root / "codex_plugin_scanner/guard/native_caller.py"))
+        codex_lifecycle.CodexHarnessAdapter().install(context)
         commands.append(codex._hook_command_parts(context))
     manifest = load_authenticated_hook_manifest(context.guard_home, context.home_dir / ".codex/config.toml")
     assert len(manifest["retained_bridge_generations"]) == 8
@@ -502,7 +511,7 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
 
 
 def test_uninstall_preserves_key_needed_by_other_authenticated_target(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters import codex
+    from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
     from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
     from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 
@@ -513,7 +522,7 @@ def test_uninstall_preserves_key_needed_by_other_authenticated_target(tmp_path: 
     second = HarnessContext(
         home_dir=tmp_path / "second", workspace_dir=None, guard_home=guard_home, home_override_explicit=True
     )
-    adapter = codex.CodexHarnessAdapter()
+    adapter = codex_lifecycle.CodexHarnessAdapter()
     adapter.install(first)
     # Qualify cleanup against two authenticated targets without weakening the
     # public install gate for an absent manifest beside an existing key.

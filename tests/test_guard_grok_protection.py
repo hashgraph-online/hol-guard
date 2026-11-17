@@ -6,9 +6,6 @@ import json
 import sqlite3
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext, PreparedHarnessInstall
-from codex_plugin_scanner.guard.adapters.contracts import setup_contract_for
 from codex_plugin_scanner.guard.cli.install_commands import (
     _grok_protection_checks,
     build_harness_setup_plan,
@@ -16,6 +13,9 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     grok_hooks_protection_ready,
     uninstall_confirmation_token,
 )
+from codex_plugin_scanner.guard.harness.base import HarnessContext, PreparedHarnessInstall
+from codex_plugin_scanner.guard.harness.contracts import setup_contract_for
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from tests.native_approval_writes import (

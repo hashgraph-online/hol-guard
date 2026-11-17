@@ -3,17 +3,17 @@
 //! frozen or source-checkout form.
 //!
 //! Python answers a `{"reply": {"facts": null}}` with what only the Guard
-//! process knows: the native runtimes that carry each hook feature, whether it
-//! is a frozen build and its stable launcher, its interpreter and package
-//! root, the daemon URL, the query extras the attributed harness adds, and the
-//! launcher a frozen build recovers its daemon through.
+//! process knows: the daemon URL and the query extras the attributed harness
+//! adds. The caller's frozen state, launchers, interpreter, package root and
+//! the native runtimes that carry each hook feature come from the request's
+//! `caller` stamp.
 
 use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
 use super::cursor::get;
-use super::{path_text, Ctx, Failure, Step};
+use super::{path_text, proxy_launch, Ctx, Failure, Step};
 use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 use crate::claude_hook_plan::py_repr_str;
 use crate::claude_session_start_contract::{
@@ -27,10 +27,12 @@ pub(super) const NATIVE_COMMAND: &str = "claude-hook-bridge";
 /// The refusal an install without a native runtime answers.
 pub(super) const RUNTIME_MISSING: &str =
     "HOL Guard's native runtime is missing, so Guard cannot review hooks. Run `hol-guard repair`.";
+const HOOK_FEATURE: &str = "claude-hook-bridge-v1";
+const SESSION_START_FEATURE: &str = "claude-session-start-v1";
 const SESSION_START_MODE: &str = "session-start";
 const FROZEN_COMMAND: &str = "__guard-claude-hook";
 
-/// What the Guard process answered for `facts`.
+/// The caller's stamp and what the Guard process answered for `facts`.
 pub(super) struct Facts {
     /// The runtime that carries `claude-hook-bridge-v1`.
     bridge: Option<String>,
@@ -43,7 +45,6 @@ pub(super) struct Facts {
     python: String,
     package_root: String,
     daemon_url: String,
-    query_extras: Vec<(String, String)>,
     /// `resolve_frozen_guard_cli()`: the program a frozen build recovers
     /// its daemon through.
     recovery_launcher: Option<String>,
@@ -61,17 +62,8 @@ fn required_text(value: Option<&PyVal>) -> Step<String> {
     optional_text(value)?.ok_or(Failure::Invalid)
 }
 
-fn strings(value: &PyVal) -> Step<Vec<String>> {
-    value
-        .as_list()
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|item| item.as_str().map(str::to_owned).ok_or(Failure::Invalid))
-        .collect()
-}
-
 /// The facts merged into this request, or the reply that asks for them.
-pub(super) fn facts(fields: &Map<String, Value>) -> Step<Facts> {
+pub(super) fn facts(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Facts> {
     let Some(raw) = fields.get("facts") else {
         return Err(Failure::Reply(json!({ "facts": null })));
     };
@@ -79,26 +71,31 @@ pub(super) fn facts(fields: &Map<String, Value>) -> Step<Facts> {
     let Ok(PyVal::Dict(facts)) = pyjson::parse(raw) else {
         return Err(Failure::Invalid);
     };
-    let query_extras = get(&facts, "query_extras")
-        .and_then(PyVal::as_list)
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|pair| match strings(pair)?.as_slice() {
-            [key, value] => Ok((key.clone(), value.clone())),
-            _ => Err(Failure::Invalid),
-        })
-        .collect::<Step<Vec<_>>>()?;
+    let frozen = super::caller::frozen(ctx)?;
+    let guard_home = Some(ctx.guard_home.as_path());
+    let bridge = proxy_launch::bridge(ctx, HOOK_FEATURE, guard_home)?;
+    let session_runtime = proxy_launch::bridge(ctx, SESSION_START_FEATURE, guard_home)?;
+    // One runtime carries both hooks, so its build is the running binary's.
+    let runtime_build = (bridge.is_some() && bridge == session_runtime)
+        .then(crate::claude_session_start::runtime_build);
     Ok(Facts {
-        bridge: optional_text(get(&facts, "bridge"))?,
-        session_runtime: optional_text(get(&facts, "session_runtime"))?,
-        runtime_build: optional_text(get(&facts, "runtime_build"))?,
-        frozen: matches!(get(&facts, "frozen"), Some(PyVal::Bool(true))),
-        launcher: optional_text(get(&facts, "launcher"))?,
-        python: required_text(get(&facts, "python"))?,
-        package_root: required_text(get(&facts, "package_root"))?,
+        bridge,
+        session_runtime,
+        runtime_build,
+        frozen,
+        launcher: if frozen {
+            Some(super::caller::launcher(ctx)?.to_owned())
+        } else {
+            None
+        },
+        python: super::caller::executable(ctx)?.to_owned(),
+        package_root: super::caller::package_root(ctx)?.to_owned(),
         daemon_url: required_text(get(&facts, "daemon_url"))?,
-        query_extras,
-        recovery_launcher: optional_text(get(&facts, "recovery_launcher"))?,
+        recovery_launcher: if frozen {
+            Some(super::caller::frozen_launcher(ctx)?.to_owned())
+        } else {
+            None
+        },
     })
 }
 
@@ -147,19 +144,19 @@ pub(super) fn hook_argv(ctx: &Ctx, facts: &Facts) -> Step<Vec<String>> {
 }
 
 /// `urlencode(_hook_query(context, extras))`; an extra replaces a key in place.
-fn query(ctx: &Ctx, extras: &[(String, String)]) -> String {
+/// The hook query names only where Guard keeps its state. These hooks live
+/// in the user's Claude settings and run in every Claude session, so the
+/// installer's own environment says nothing about which app a later hook
+/// runs in. A harness or workspace taken from it, such as the Cursor markers
+/// of a repair that ran inside Cursor, was written into every hook and filed
+/// all Claude sessions under that app and that one project.
+fn query(ctx: &Ctx) -> String {
     let mut pairs = vec![("guard-home".to_owned(), path_text(&ctx.guard_home))];
     if !ctx.default_home() {
         pairs.push(("home".to_owned(), path_text(&ctx.home)));
     }
     if let Some(workspace) = workspace(ctx) {
         pairs.push(("workspace".to_owned(), workspace));
-    }
-    for (key, value) in extras {
-        match pairs.iter_mut().find(|(name, _)| name == key) {
-            Some(pair) => pair.1 = value.clone(),
-            None => pairs.push((key.clone(), value.clone())),
-        }
     }
     crate::runner_sync_url::urlencode(&pairs)
 }
@@ -256,7 +253,7 @@ pub(super) fn daemon_argv(
     let Some(bridge) = &facts.bridge else {
         return Err(Failure::Runtime(RUNTIME_MISSING.to_owned()));
     };
-    let template = template(ctx, facts, query(ctx, &facts.query_extras))?;
+    let template = template(ctx, facts, query(ctx))?;
     let config = template.text(contract, &facts.daemon_url)?;
     Ok(vec![
         bridge.clone(),
@@ -292,7 +289,7 @@ fn native_session_start_argv(
         return Ok(None);
     }
     let marker = &contract.daemon_hook_marker;
-    let template = template(ctx, facts, query(ctx, &[]))?;
+    let template = template(ctx, facts, query(ctx))?;
     let config = format!(
         "{{\"fallback_command\":{},\"home\":{},\"home_dir\":{},\"runtime_build\":{},\
          \"daemon_hook_command\":{},\"bridge_config\":{}}}",

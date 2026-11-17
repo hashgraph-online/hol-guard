@@ -7,10 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import list_adapters
-from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
 from codex_plugin_scanner.guard.codex_install_transaction import require_codex_install_owner
+from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
+from codex_plugin_scanner.guard.harness.registry import list_adapters
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests.native_bounded_runtime import use_bounded_runtime
 
 
 class WritingAdapter(HarnessAdapter):
@@ -37,9 +38,8 @@ def test_direct_adapter_cannot_write_during_pending_transition(tmp_path: Path):
 
 @pytest.mark.parametrize("operation", ["create_key", "write_manifest", "remove_manifest", "remove_key"])
 def test_direct_codex_authority_writer_cannot_mutate_pending_inverse(tmp_path: Path, operation: str):
-    from codex_plugin_scanner.guard.codex_hook_integrity import (
-        hook_manifest_path,
-        hook_secret_path,
+    from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path, hook_secret_path
+    from tests.codex_hook_integrity_fixtures import (
         load_or_create_hook_secret,
         remove_hook_manifest,
         remove_hook_secret_if_unused,
@@ -129,28 +129,28 @@ def test_install_preparation_is_complete_or_explicitly_unavailable(tmp_path: Pat
 @pytest.mark.parametrize("harness,expected", [("kimi", 3), ("zcode", 5), ("devin", 5), ("grok", 10)])
 def test_frozen_preparation_hands_the_hook_to_the_runtime(tmp_path, monkeypatch, harness, expected):
     """A frozen Guard writes no helper script; its runtime's durable copy answers the hook."""
-    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.harness import bounded_cli_hook_bridge as bridge
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     ctx = context(tmp_path)
     monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bridge, "native_bridge_executable", lambda *_args, **_kwargs: tmp_path / "hol-guard-runtime")
-    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
+    use_bounded_runtime(monkeypatch, tmp_path / "hol-guard-runtime")
     prepared = get_adapter(harness).prepare_install(ctx)
     assert len(prepared.files) == expected
     assert not any(change.path.suffix == ".py" for change in prepared.files)
-    assert not ctx.guard_home.exists()
+    # The runtime's durable copy is published; no helper script is.
+    assert not (ctx.guard_home / "bin").exists()
 
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_opencode_prepared_generation_matches_normal_install(tmp_path, previous_exists):
-    from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     ctx = context(tmp_path)
     config = ctx.home_dir / ".config/opencode/opencode.json"
     config.parent.mkdir(parents=True)
     config.write_text('{"user_setting": true, "mcp": {"user": {"type": "local", "command": ["node", "user.js"]}}}')
-    adapter = OpenCodeHarnessAdapter()
+    adapter = get_adapter("opencode")
     if previous_exists:
         adapter.install(ctx)
     prepared = adapter.prepare_install(ctx)
@@ -171,8 +171,8 @@ def test_frozen_copilot_preparation_plans_no_helper_and_publishes_nothing(
     native_adapter_state_integrity_runtime,
 ):
     del native_adapter_state_integrity_runtime
-    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-    from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
+    from codex_plugin_scanner.guard.harness import bounded_cli_hook_bridge as bridge
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
     from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
 
     ctx = HarnessContext(
@@ -189,9 +189,8 @@ def test_frozen_copilot_preparation_plans_no_helper_and_publishes_nothing(
         guard_home=ctx.guard_home,
     )
     monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bridge, "native_bridge_executable", lambda *_args, **_kwargs: tmp_path / "hol-guard-runtime")
-    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
-    prepared = CopilotHarnessAdapter().prepare_install(ctx)
+    use_bounded_runtime(monkeypatch, tmp_path / "hol-guard-runtime")
+    prepared = get_adapter("copilot").prepare_install(ctx)
     assert len(prepared.files) == (12 if workspace_enabled else 7)
     assert not any(change.path.suffix == ".py" for change in prepared.files)
     assert not (ctx.guard_home / "bin").exists()
@@ -205,7 +204,7 @@ def test_copilot_prepared_generation_matches_normal_install(
     native_adapter_state_integrity_runtime,
 ):
     del native_adapter_state_integrity_runtime
-    from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
     from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
 
     ctx = HarnessContext(
@@ -221,7 +220,7 @@ def test_copilot_prepared_generation_matches_normal_install(
         create_key=True,
         guard_home=ctx.guard_home,
     )
-    adapter = CopilotHarnessAdapter()
+    adapter = get_adapter("copilot")
     prepared = adapter.prepare_install(ctx)
     assert adapter.install(ctx) == prepared.manifest
     for change in prepared.files:
@@ -230,7 +229,7 @@ def test_copilot_prepared_generation_matches_normal_install(
 
 
 def test_copilot_preparation_preserves_and_distinguishes_invalid_authority(tmp_path):
-    from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     ctx = context(tmp_path)
     authority = ctx.guard_home / "managed/adapter-state.key"
@@ -239,7 +238,7 @@ def test_copilot_preparation_preserves_and_distinguishes_invalid_authority(tmp_p
     authority.chmod(0o600)
     before = authority.stat()
     with pytest.raises(TransitionError, match="adapter_preparation_authority_invalid"):
-        CopilotHarnessAdapter().prepare_install(ctx)
+        get_adapter("copilot").prepare_install(ctx)
     assert authority.read_bytes() == b"invalid fixture authority"
     assert authority.stat().st_ino == before.st_ino
     assert authority.stat().st_mtime_ns == before.st_mtime_ns
@@ -249,7 +248,7 @@ def test_copilot_preparation_preserves_and_distinguishes_invalid_authority(tmp_p
 
 @pytest.mark.parametrize("workspace_enabled", [False, True])
 def test_cursor_editor_prepared_generation_matches_normal_install(tmp_path, workspace_enabled):
-    from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
     from tests.cursor_test_support import enroll_cursor_hook_key
 
     ctx = HarnessContext(
@@ -258,7 +257,7 @@ def test_cursor_editor_prepared_generation_matches_normal_install(tmp_path, work
         workspace_dir=tmp_path / "workspace" if workspace_enabled else None,
     )
     enroll_cursor_hook_key(ctx.guard_home)
-    adapter = CursorHarnessAdapter()
+    adapter = get_adapter("cursor")
     prepared = adapter.prepare_install(ctx)
     assert len(prepared.files) == (14 if workspace_enabled else 9)
     assert not (ctx.guard_home / "runtime/python-probe").exists()
@@ -272,7 +271,7 @@ def test_cursor_editor_prepared_generation_matches_normal_install(tmp_path, work
 
 
 def test_cursor_preparation_rejects_invalid_authority_without_replacing_it(tmp_path):
-    from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
     from tests.cursor_test_support import cursor_hook_attestation_secret_path
 
     ctx = context(tmp_path)
@@ -282,7 +281,7 @@ def test_cursor_preparation_rejects_invalid_authority_without_replacing_it(tmp_p
     authority.chmod(0o600)
     before = authority.stat()
     with pytest.raises(TransitionError, match="adapter_preparation_authority_invalid"):
-        CursorHarnessAdapter().prepare_install(ctx)
+        get_adapter("cursor").prepare_install(ctx)
     assert authority.read_bytes() == b"invalid fixture authority"
     assert authority.stat().st_ino == before.st_ino
     assert authority.stat().st_mtime_ns == before.st_mtime_ns
@@ -292,7 +291,7 @@ def test_cursor_preparation_rejects_invalid_authority_without_replacing_it(tmp_p
 @pytest.mark.parametrize("surface", ["cli", "all"])
 def test_cursor_cli_and_all_preparation_matches_normal_install(tmp_path, monkeypatch, surface):
     from codex_plugin_scanner.guard import shims
-    from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
+    from codex_plugin_scanner.guard.harness.registry import get_adapter
     from tests.cursor_test_support import enroll_cursor_hook_key
 
     ctx = context(tmp_path)
@@ -300,7 +299,7 @@ def test_cursor_cli_and_all_preparation_matches_normal_install(tmp_path, monkeyp
         enroll_cursor_hook_key(ctx.guard_home)
     monkeypatch.setattr(shims, "_is_transient_path", lambda path: False)
     monkeypatch.setenv("SHELL", "/bin/zsh")
-    adapter = CursorHarnessAdapter()
+    adapter = get_adapter("cursor")
     prepared = adapter.prepare_install(ctx, surface=surface)
     assert not (ctx.guard_home / "bin").exists()
     assert not (ctx.home_dir / ".zshrc").exists()

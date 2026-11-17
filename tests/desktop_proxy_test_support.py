@@ -6,7 +6,6 @@ helpers let Python tests drive the launch it answers.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -22,7 +21,7 @@ def launch_script() -> tuple[str, str]:
 
 
 def sign_every_path(monkeypatch: pytest.MonkeyPatch, team: str | None = "TEAMID") -> list[dict[str, Any]]:
-    """Answer as the kind would if every proxy, Core and bundle verified with ``team``.
+    """Answer a stored launch's ``verify`` as the kind would if every path verified with ``team``.
 
     Returns the requests the shim sent.
     """
@@ -44,14 +43,8 @@ def sign_every_path(monkeypatch: pytest.MonkeyPatch, team: str | None = "TEAMID"
             ):
                 return {"config": None, "core": None}
             return {"config": args[7], "core": args[8]}
-        if team is None or request["desktop"] != "1" or not request["proxy"]:
-            return {"argv": None}
-        proxy, core = Path(request["proxy"]).resolve(), Path(request["core"]).resolve()
-        bundle = next(parent for parent in proxy.parents if parent.suffix == ".app")
-        flag = "1" if request["require_proxy"] else "0"
-        return {
-            "argv": ["/bin/sh", "-c", script, name, str(proxy), team, str(bundle), request["config"], str(core), flag]
-        }
+        # Only a stored launch is verified from Python; the native kind renders its own.
+        raise AssertionError(f"unexpected desktop_hook_proxy op {request['op']!r}")
 
     monkeypatch.setattr(authority, "native_runner_authority", answer)
     return requests

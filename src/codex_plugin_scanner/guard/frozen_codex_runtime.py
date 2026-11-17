@@ -62,34 +62,23 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
     if not force and not is_frozen_guard_runtime():
         return False
 
+    from . import codex_harness_client as codex
     from . import codex_hook_runtime_trust as runtime_trust
-    from .adapters import codex
+    from . import native_caller
 
     if bool(getattr(codex, "_HOL_GUARD_FROZEN_CODEX_RUNTIME", False)):
         return True
 
-    source_packaged_paths = codex._hook_packaged_file_paths
-
-    def frozen_packaged_paths(native_bridge: Path) -> tuple[tuple[str, Path], ...]:
-        executable = Path(sys.executable).expanduser().resolve(strict=True)
-        # Preserve the existing role set but bind every role to the immutable
-        # frozen runtime bytes that actually implement those roles. The native
-        # runtime the hook runs is a verified copy of the one bundled here.
-        return tuple((role, executable) for role, _path in source_packaged_paths(native_bridge))
-
-    def frozen_interpreter() -> str:
-        # The authenticated roles and runtime validator identify these exact
-        # bytes. A mutable Desktop launcher can select a different generation
-        # between publication and execution and cannot satisfy that contract.
-        # Retention of this generation belongs to the artifact lifecycle.
-        return str(Path(sys.executable).expanduser().resolve(strict=True))
-
-    # With the flag set below, the native runtime derives the frozen fallback,
-    # daemon recovery and bridge commands from this interpreter.
-    codex._guard_python_executable = frozen_interpreter
-    codex._hook_packaged_file_paths = frozen_packaged_paths
+    # The native runtime derives the frozen interpreter, fallback, daemon
+    # recovery, bridge commands and every authenticated role's file from the
+    # caller stamp that `install_frozen_contract` below marks frozen: each is
+    # the resolved executable's immutable bytes. A mutable Desktop launcher can
+    # select a different generation between publication and execution and
+    # cannot satisfy that contract. Retention of this generation belongs to
+    # the artifact lifecycle.
     runtime_trust.validate_codex_hook_launch = _validate_frozen_codex_hook_launch
     codex.__dict__["_HOL_GUARD_FROZEN_CODEX_RUNTIME"] = True
+    native_caller.install_frozen_contract()
     return True
 
 

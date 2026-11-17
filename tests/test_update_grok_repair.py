@@ -7,12 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.native_install_checks import grok_protection
 from codex_plugin_scanner.guard.cli.update_grok_repair import repair_grok_install
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_bounded_runtime import use_bounded_runtime
 
 _PROMPT_FILE = "hol-guard-prompt.json"
 
@@ -21,11 +22,7 @@ _PROMPT_FILE = "hol-guard-prompt.json"
 def runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """The host's native runtime, as install and validation both find it."""
     path = tmp_path / "hol-guard-runtime"
-    for module in ("bounded_cli_hook_bridge", "bounded_cli_hook_native"):
-        monkeypatch.setattr(
-            f"codex_plugin_scanner.guard.adapters.{module}.native_bridge_executable",
-            lambda *_args, **_kwargs: path,
-        )
+    use_bounded_runtime(monkeypatch, path)
     return path
 
 
@@ -266,17 +263,13 @@ def test_grok_repair_rewrites_versioned_desktop_core_when_shim_exists(
     shim.write_text("#!/bin/sh\n", encoding="utf-8")
     shim.chmod(0o755)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.native_harness.sys.executable",
+        "codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge.sys.executable",
         str(versioned),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.sys.frozen",
+        "codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge.sys.frozen",
         True,
         raising=False,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command",
-        lambda *_args, **_kwargs: None,
     )
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)

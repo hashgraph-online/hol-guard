@@ -15,9 +15,10 @@ use sha2::{Digest, Sha256};
 
 use super::cline::{managed_root, paths, runtime, state_text, write_file};
 use super::cline_run;
-use super::{path_text, Ctx, Failure, Step};
+use super::{path_text, proxy_launch, Ctx, Failure, Step};
 use crate::hook_env_stamp::write_string;
 
+const HOOK_WORKER_FEATURE: &str = "cline-hook-worker-v1";
 pub(super) const MARKER: &str = "HOL_GUARD_MANAGED_CLINE_HOOK_V1";
 const SCHEMA: u64 = 1;
 const EVENTS: [&str; 6] = [
@@ -247,15 +248,6 @@ pub(super) fn uninstall(ctx: &Ctx) -> Step<Value> {
     paths(ctx, "uninstall", Map::new())
 }
 
-fn string_list(value: Option<&Value>) -> Step<Vec<String>> {
-    value
-        .and_then(Value::as_array)
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|part| part.as_str().map(str::to_owned).ok_or(Failure::Invalid))
-        .collect()
-}
-
 /// Cline's slot for one event, refusing to replace a user hook.
 fn claim(root: &Path, slot: &str, event: &str) -> Step<PathBuf> {
     if matches!(slot, "" | "." | "..") || slot.contains(['/', '\\']) {
@@ -286,12 +278,14 @@ pub(super) fn install(ctx: &Ctx, facts: &Map<String, Value>) -> Step<Value> {
             "Cline native hooks require a standalone Python Guard runtime.",
         ));
     }
-    let Some(bridge) = facts.get("runtime").and_then(Value::as_str) else {
+    // A frozen Guard has no standalone runtime for hooks (no guard home is
+    // passed, so `bridge` answers None); it uses the plugin instead.
+    let Some(bridge) = proxy_launch::bridge(ctx, HOOK_WORKER_FEATURE, None)? else {
         return Err(runtime(
             "Cline native hooks require the HOL Guard native runtime.",
         ));
     };
-    let guard_cli = string_list(facts.get("hook_argv"))?;
+    let guard_cli = super::cline::hook_argv(ctx)?;
     let roots = paths(ctx, "roots", Map::new())?;
     let root = roots
         .get("hook_roots")
