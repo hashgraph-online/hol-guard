@@ -744,7 +744,6 @@
           "src/codex_plugin_scanner/guard/codex_hook_authority_record.py",
           "src/codex_plugin_scanner/guard/codex_hook_bridge_runtime.py",
           "src/codex_plugin_scanner/guard/codex_hook_command_line.py",
-          "src/codex_plugin_scanner/guard/codex_hook_compatibility.py",
           "src/codex_plugin_scanner/guard/codex_hook_events.py",
           "src/codex_plugin_scanner/guard/codex_hook_file_integrity.py",
           "src/codex_plugin_scanner/guard/codex_hook_integrity.py",

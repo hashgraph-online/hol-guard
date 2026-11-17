@@ -160,7 +160,6 @@ def signed_native_bridge_argv(runtime: Path, guard_home: Path, registered: dict[
     """
     from datetime import datetime, timezone
 
-    from codex_plugin_scanner.guard.codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND
     from codex_plugin_scanner.guard.codex_hook_file_integrity import (
         canonical_path,
         describe_executable_file,
@@ -180,7 +179,7 @@ def signed_native_bridge_argv(runtime: Path, guard_home: Path, registered: dict[
     config = dict(registered)
     config["manifest_path"] = str(manifest_path)
     config_argument = json.dumps(config, separators=(",", ":"))
-    argv = (str(runtime), NATIVE_CODEX_HOOK_COMMAND, config_argument)
+    argv = (str(runtime), "codex-hook-bridge", config_argument)
     secret = load_or_create_hook_secret(guard_home)
     interpreter = describe_executable_file(Path(sys.executable), role="interpreter")
     unsigned: dict[str, object] = {

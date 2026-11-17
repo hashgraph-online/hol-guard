@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use guard_policy_snapshot::local_authority_integrity::verify_local_authority_payload;
 use serde_json::{json, Map, Value};
 
-use super::{bridge_argv_sha256, build, compatible_hashes, retained_generations, Signer};
+use super::{
+    bridge_argv, bridge_argv_sha256, build, compatible_hashes, retained_generations, Signer,
+};
 use crate::codex_hook_bridge_trust_files::{verify_executable, verify_regular};
 
 const KEY: [u8; 32] = [7; 32];
@@ -143,6 +145,28 @@ fn the_bridge_argv_digest_matches_the_python_encoding() {
     assert_eq!(
         bridge_argv_sha256(wrapped.as_array().expect("argv")).as_deref(),
         Some("9e6245fd44c31d50db0635e9fc82965a8c03a42348fb60ea437e1e82573e03f2")
+    );
+}
+
+#[test]
+fn only_a_legacy_native_prefix_is_stripped() {
+    let unchanged = [
+        json!([]),
+        json!(["/opt/runtime", "codex-hook-bridge"]),
+        json!(["/opt/runtime", "codex-hook-bridge", "{}"]),
+        json!(["", "codex-hook-bridge", "python3", "bridge.py"]),
+        json!([null, "codex-hook-bridge", "python3", "bridge.py"]),
+        json!(["/opt/runtime", "claude-hook-bridge", "python3", "bridge.py"]),
+        json!(["python3", "-I", "bridge.py", "{}"]),
+    ];
+    for argv in &unchanged {
+        let items = argv.as_array().expect("argv");
+        assert_eq!(bridge_argv(items), items.as_slice(), "{argv}");
+    }
+    let wrapped = json!(["/opt/runtime", "codex-hook-bridge", "python3", "bridge.py"]);
+    assert_eq!(
+        bridge_argv(wrapped.as_array().expect("argv")),
+        [json!("python3"), json!("bridge.py")]
     );
 }
 

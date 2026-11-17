@@ -11,7 +11,6 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_hook_self_binding
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
-from codex_plugin_scanner.guard.codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND
 from codex_plugin_scanner.guard.codex_hook_self_binding import (
     codex_hook_binds_guard_home,
     codex_hook_guard_home,
@@ -21,6 +20,8 @@ from codex_plugin_scanner.guard.harness.base import HarnessContext
 from tests.codex_toml_support import dump_toml, read_toml_payload
 
 from .test_codex_migration_preparation import migration_kept_hooks
+
+NATIVE_CODEX_HOOK_COMMAND = "codex-hook-bridge"
 
 
 @pytest.fixture
