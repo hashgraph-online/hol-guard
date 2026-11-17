@@ -27,14 +27,17 @@ pub(super) fn daemon_stderr(home: &Path) -> Stdio {
 /// The log is opened through its directory's descriptor, without following
 /// a link and without waiting on a FIFO, and kept only if it is a regular,
 /// owner-only file; anything else falls back to the null device.
+///
+/// The current log is opened, and so made owner-only, before it is rotated,
+/// so the kept copy is never left readable by others.
 fn open_stderr_log(home: &Path) -> Option<File> {
     let directory = LogDirectory::open(home, LOG_DIRECTORY)?;
-    if directory
-        .file_len(STDERR_LOG)
-        .is_some_and(|length| length >= MAX_STDERR_BYTES)
-    {
-        directory.rename(STDERR_LOG, ROTATED_STDERR_LOG)?;
+    let current = directory.open_file(STDERR_LOG, true)?;
+    if current.metadata().ok()?.len() < MAX_STDERR_BYTES {
+        return Some(current);
     }
+    drop(current);
+    directory.rename(STDERR_LOG, ROTATED_STDERR_LOG)?;
     directory.open_file(STDERR_LOG, true)
 }
 
@@ -64,6 +67,25 @@ mod tests {
         let rotated = home.path().join(LOG_DIRECTORY).join(ROTATED_STDERR_LOG);
         assert_eq!(fs::metadata(&rotated).unwrap().len(), MAX_STDERR_BYTES);
         assert_eq!(fs::metadata(&path).unwrap().len(), 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_widened_log_is_made_private_before_it_is_rotated() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = tempfile::tempdir().unwrap();
+        let directory = home.path().join(LOG_DIRECTORY);
+        fs::create_dir(&directory).unwrap();
+        let path = directory.join(STDERR_LOG);
+        fs::write(&path, vec![b'x'; MAX_STDERR_BYTES as usize]).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        drop(open_stderr_log(home.path()).expect("stderr log"));
+        let rotated = directory.join(ROTATED_STDERR_LOG);
+        assert_eq!(fs::metadata(&rotated).unwrap().len(), MAX_STDERR_BYTES);
+        assert_eq!(
+            fs::metadata(&rotated).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
     }
 
     #[test]

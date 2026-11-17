@@ -1037,7 +1037,12 @@ fn handoff_binds(
 
 /// `_terminate_spawned_guard_daemon`. The child is this process's own, so
 /// its handle is its identity; the end of its launch is journaled first.
+/// A child that already exited was not retired, so it gets no record and
+/// no signal: its own exit record says why it stopped.
 fn terminate(caller: &Caller, child: &mut Child) {
+    if child_exited(child) {
+        return;
+    }
     let pid = i64::from(child.id());
     retire::record_retirement(caller, pid, Some("launch_abandoned"), None);
     let wait = |child: &mut Child| {
@@ -1065,6 +1070,80 @@ fn terminate(caller: &Caller, child: &mut Child) {
 #[cfg(test)]
 mod tests {
     use super::source_is_desktop_core;
+
+    #[cfg(unix)]
+    mod abandoned_launch {
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::Path;
+        use std::process::Command;
+        use std::time::Duration;
+
+        use super::super::{child_exited, terminate, Caller};
+
+        fn caller(home: &Path) -> Caller {
+            Caller {
+                guard_home: home.to_path_buf(),
+                implicit_home: "/nonexistent-implicit-home/.hol-guard".into(),
+                own_pid: i64::from(std::process::id()),
+                parent_pid: i64::from(std::os::unix::process::parent_id()),
+                frozen_runtime: false,
+                frozen_parent_trusted: false,
+                executable_name: None,
+            }
+        }
+
+        fn retirements(home: &Path, pid: u32) -> usize {
+            std::fs::read_dir(home.join("daemon-lifecycle"))
+                .map(|entries| {
+                    entries
+                        .filter_map(Result::ok)
+                        .filter_map(|entry| std::fs::read(entry.path()).ok())
+                        .filter_map(|bytes| {
+                            serde_json::from_slice::<serde_json::Value>(&bytes).ok()
+                        })
+                        .filter(|event| {
+                            event["event"] == "retirement_requested" && event["pid"] == pid
+                        })
+                        .count()
+                })
+                .unwrap_or(0)
+        }
+
+        fn private_home() -> tempfile::TempDir {
+            let home = tempfile::tempdir().unwrap();
+            let mode = std::fs::Permissions::from_mode(0o700);
+            std::fs::set_permissions(home.path(), mode).unwrap();
+            home
+        }
+
+        #[test]
+        fn a_child_that_already_exited_is_not_recorded_as_retired() {
+            let home = private_home();
+            let mut child = Command::new("/bin/sh")
+                .args(["-c", "exit 3"])
+                .spawn()
+                .unwrap();
+            let pid = child.id();
+            // Let it exit without reaping it, as a launch that died does.
+            std::thread::sleep(Duration::from_millis(300));
+            terminate(&caller(home.path()), &mut child);
+            assert_eq!(retirements(home.path(), pid), 0);
+            assert!(child_exited(&mut child));
+        }
+
+        #[test]
+        fn a_running_child_is_recorded_and_stopped() {
+            let home = private_home();
+            let mut child = Command::new("/bin/sh")
+                .args(["-c", "sleep 30"])
+                .spawn()
+                .unwrap();
+            let pid = child.id();
+            terminate(&caller(home.path()), &mut child);
+            assert_eq!(retirements(home.path(), pid), 1);
+            assert!(child_exited(&mut child));
+        }
+    }
 
     #[test]
     fn desktop_core_shapes_match_only_desktop_layouts() {
