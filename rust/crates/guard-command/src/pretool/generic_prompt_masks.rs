@@ -74,8 +74,9 @@ pub(super) fn mask_format_options(value: &str) -> String {
 /// sentence that names storage (a disk word, a filesystem or mount point, a
 /// `/dev` path that is not a stream, a `/mnt` path, a drive letter such as
 /// `C:`) keeps every `format`, and so does `the format command`. A `format`
-/// up to three words after `run`, `perform` or a like verb, or after `a` or
-/// `quick`, names the operation and is never masked. Every other `format` stays a request. A sentence ends
+/// after `run the`, `a` or `quick`, or up to three words after `run` or a
+/// like verb with no `in` or `as` between, names the operation and is never
+/// masked. Every other `format` stays a request. A sentence ends
 /// at `!`, `?`, `;`, a line break, or a dot before a space or the end of the
 /// text, and each sentence is scanned for storage once.
 fn mask_layout_nouns(value: &str) -> String {
@@ -101,7 +102,7 @@ fn mask_layout_nouns(value: &str) -> String {
             .expect("bounded format tail")
     });
     let act = ACT.get_or_init(|| {
-        Regex::new(r"(?i)(?:^|[^a-z0-9-])(?:(?:run|do|perform|execute|trigger|launch|redo|schedule)(?:\s+[a-z0-9-]+){0,3}|(?:a|an|quick|full|low-level|secure|clean|fresh|start|begin|finish|complete)(?:\s+(?:the|a|an|this|that|quick|full|low-level|secure|clean|fresh))*)[\s*_`]*$")
+        Regex::new(r"(?i)(?:^|[^a-z0-9-])(?:a|an|quick|full|low-level|secure|clean|fresh|run|do|perform|start|execute|trigger|launch|begin|redo|finish|complete|schedule)(?:\s+(?:the|a|an|this|that|quick|full|low-level|secure|clean|fresh))*[\s*_`]*$")
             .expect("bounded format action lead")
     });
     let pseudo = PSEUDO.get_or_init(|| Regex::new(PSEUDO_DEVICE).expect("bounded pseudo device"));
@@ -139,6 +140,7 @@ fn mask_layout_nouns(value: &str) -> String {
             let tool = follows.as_ref().is_some_and(|found| found.get(2).is_some());
             let lead_text = &before[window..];
             let noun = !act.is_match(lead_text)
+                && !verb_leads(lead_text)
                 && (heading
                     || lead.is_match(lead_text)
                     || follows.is_some_and(|found| found.get(1).is_some()));
@@ -152,6 +154,36 @@ fn mask_layout_nouns(value: &str) -> String {
         start = end;
     }
     output
+}
+
+/// A strong action verb up to three words before `format` names the
+/// operation, as in `run the same format on it`, unless a relation word such
+/// as `in` or `as` sits between them, as in `run tests in JSON format`.
+fn verb_leads(lead_text: &str) -> bool {
+    const VERBS: [&str; 8] = [
+        "run", "do", "perform", "execute", "trigger", "launch", "redo", "schedule",
+    ];
+    const RELATIONS: [&str; 14] = [
+        "in", "as", "with", "using", "into", "to", "for", "from", "via", "per", "by", "at", "on",
+        "of",
+    ];
+    let words = lead_text
+        .split_whitespace()
+        .map(|word| word.trim_matches(|c| matches!(c, '*' | '_' | '`')))
+        .filter(|word| !word.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect::<Vec<_>>();
+    (0..=3).any(|gap| {
+        let Some(at) = words.len().checked_sub(gap + 1) else {
+            return false;
+        };
+        let verb = words[at].trim_start_matches(|c: char| !c.is_ascii_alphanumeric());
+        VERBS.contains(&verb)
+            && words[at + 1..].iter().all(|word| {
+                word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+                    && !RELATIONS.contains(&word.as_str())
+            })
+    })
 }
 
 /// Replaces a credential word that only names a category of action or rule,

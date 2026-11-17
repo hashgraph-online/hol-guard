@@ -59,6 +59,8 @@ fn a_layout_named_format_is_not_disk_formatting() {
     assert_allowed("Write the output format to /dev/stdout.");
     assert_allowed("Return the answer in this format: a table, then a summary.");
     assert_allowed("The format of the log line is fixed.");
+    assert_allowed("Run tests in JSON format.");
+    assert_allowed("Run the report as CSV format.");
 }
 
 #[test]
