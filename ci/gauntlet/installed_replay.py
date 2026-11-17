@@ -71,6 +71,11 @@ NON_DECISION_REASONS = {
     "invalid_hook_payload_reference",
 }
 
+# Codex emits an authentication failure as a readable permission denial with no
+# reason_code. The installed hook may have failed closed, but no command-policy
+# decision was made. Do not score that denial as protection of synthetic keys.
+_CODEX_AUTHENTICATION_FAILURE_PREFIX = "HOL Guard could not authenticate the local daemon"
+
 #: Longer than any hook timeout Guard registers (Codex's PreToolUse is 125 s), so a
 #: hook that holds the call for an approval answers with its own deny before the lane
 #: gives up on it. A shorter cap scored Codex's bounded approval wait as a hang.
@@ -270,10 +275,12 @@ def replay_case(
         spelled = ", ".join(f"{value} x{count}" for value, count in sorted(signatures.items()))
         failures.append(f"{case['id']}: identical input produced disagreeing verdicts across {repeat} runs ({spelled})")
     allowed = [run["decision"] in ALLOW_DECISIONS for run in runs]
-    infrastructure = sorted({run["reason_code"] for run in runs if run.get("reason_code") in NON_DECISION_REASONS})
+    infrastructure = {run["reason_code"] for run in runs if run.get("reason_code") in NON_DECISION_REASONS}
+    if any(str(run.get("reason", "")).startswith(_CODEX_AUTHENTICATION_FAILURE_PREFIX) for run in runs):
+        infrastructure.add("codex_daemon_authentication_unavailable")
     if infrastructure:
         failures.append(
-            f"{case['id']}: hook infrastructure failed ({', '.join(infrastructure)}); "
+            f"{case['id']}: hook infrastructure failed ({', '.join(sorted(infrastructure))}); "
             "a fail-closed error is not a policy decision"
         )
     if case["expect"] == "allow" and not all(allowed):
