@@ -31,7 +31,10 @@ const PSEUDO_DEVICE: &str =
 /// space or the end of the text, not inside `2.5-inch` or `backup.img`, and
 /// a storage word right after such a dot (`backup.disk0`) still counts. An
 /// option such as `--format json` names how a command prints, whatever it
-/// lists, so only a storage word right after it does.
+/// lists, so only a storage word right after it does. So does a code
+/// formatter named before `format`, as in `ruff format --check .` or a
+/// `ruff-format` step: it rewrites source files, not storage, unless a
+/// storage word follows in the same sentence, as for the verb.
 pub(super) fn mask_format_options(value: &str) -> String {
     static OPTION: OnceLock<Regex> = OnceLock::new();
     static NEXT: OnceLock<Regex> = OnceLock::new();
@@ -48,13 +51,14 @@ pub(super) fn mask_format_options(value: &str) -> String {
     });
     let masked = OPTION
         .get_or_init(|| {
-            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report|values?|methods?|functions?|helpers?|calls?|spec(?:ifier)?s?|strings|fields?|names?|sizes?|templates?|placeholders?|widths?|headers?|errors?|exceptions?|tracebacks?|lines?|columns?|rows?|entries|entry|records?|items?|labels?)\b")
+            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\b(?P<tool>ruff|cargo|dart|deno|dotnet|terraform|tofu|biome|taplo|stylua|prettier|swift|zig|clang|(?:npm|pnpm|yarn|bun)(?:\s+run)?)[\s-]+format\b|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report|values?|methods?|functions?|helpers?|calls?|spec(?:ifier)?s?|strings|fields?|names?|sizes?|templates?|placeholders?|widths?|headers?|errors?|exceptions?|tracebacks?|lines?|columns?|rows?|entries|entry|records?|items?|labels?)\b")
                 .expect("bounded format option")
         })
         .replace_all(value, |captures: &Captures| {
             let whole = captures.get(0).expect("whole match present");
             let rest = pseudo.replace_all(&value[whole.end()..], "stream");
-            let verb = (whole.as_str().get(..6)).is_some_and(|w| w.eq_ignore_ascii_case("format"));
+            let verb = (whole.as_str().get(..6)).is_some_and(|w| w.eq_ignore_ascii_case("format"))
+                || captures.name("tool").is_some();
             if next.is_match(&rest) || (verb && sentence.is_match(&rest)) {
                 return whole.as_str().to_owned();
             }
