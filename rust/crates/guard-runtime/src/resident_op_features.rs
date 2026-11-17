@@ -279,6 +279,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-codex-mcp-setup-v1",
     "native-codex-app-server-target-v1",
     "native-hook-exit-code-v1",
+    "native-codex-hook-paths-v1",
     "native-store-quarantine-forensics-v1",
     "native-network-status-validation-v1",
     "native-hermes-file-inspect-v1",

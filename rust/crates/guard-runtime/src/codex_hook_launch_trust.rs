@@ -20,7 +20,6 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 
 use crate::codex_hook_bridge::{decode_config_argument, BRIDGE_COMMAND};
 use crate::codex_hook_bridge_trust_files::{canonical, verify_executable_in, verify_regular_in};
@@ -91,12 +90,7 @@ fn spelled(path: &Path) -> String {
 
 /// `hook_manifest_path`: the manifest a config target owns in a Guard home.
 fn manifest_for(home: &Path, target: &Path) -> PathBuf {
-    let digest = hex::encode(Sha256::digest(
-        canonical(target).as_os_str().as_encoded_bytes(),
-    ));
-    home.join("managed")
-        .join("codex")
-        .join(format!("hooks-{}.manifest.json", &digest[..24]))
+    crate::codex_hook_paths_op::manifest_path(home, target)
 }
 
 /// One launch request: its managed paths, this home's authenticated

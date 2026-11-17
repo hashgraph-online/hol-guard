@@ -16,7 +16,6 @@ from typing import Any
 
 from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard.codex_config import _Wire
-from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, hook_secret_path
 from codex_plugin_scanner.guard.codex_hook_manifest import (
     CodexHookManifestSpec,
     PreparedCodexHookPublication,
@@ -29,6 +28,7 @@ from codex_plugin_scanner.guard.codex_hook_self_binding import (
 )
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.native_owned import codex_install_transaction
+from tests.codex_hook_paths_support import canonical_manifest_bytes, hook_secret_path
 from tests.codex_toml_support import dump_toml
 
 

@@ -19,7 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from .codex_hook_integrity import hook_manifest_path
+from .codex_hook_file_integrity import CodexHookIntegrityError
+from .codex_hook_integrity import hook_manifest_file
 from .codex_hook_manifest import CodexHookManifestSpec
 from .config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
 from .harness.base import HarnessContext
@@ -162,7 +163,7 @@ def _launch_fields(context: HarnessContext, *, home_is_current: bool | None = No
         "home_is_current": current,
         "runtime_guard_home": str(guard_home),
         "workspace_explicit": context.workspace_override_explicit,
-        "manifest_path": str(hook_manifest_path(guard_home, codex_paths(context).config)),
+        "manifest_path": str(hook_manifest_file(guard_home, codex_paths(context).config)),
         "long_timeout": _post_tool_hook_timeout_seconds(context),
     }
 
@@ -278,7 +279,7 @@ def _ask_install_plan(
     ordinary writer, as the generation always has. The runtime names the
     failure the answer ends in; this only raises it."""
     from .codex_hook_file_integrity import check_hook_validation_deadline
-    from .codex_hook_integrity import _ordinary_hook_writer, hook_secret_path
+    from .codex_hook_integrity import _ordinary_hook_writer, hook_secret_file
     from .native_transition_files import _budget, _package_roots, _replay
 
     request["package_roots"] = _package_roots()
@@ -287,7 +288,7 @@ def _ask_install_plan(
     if enroll_home is None:
         answer = ask(op, context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
     else:
-        with _ordinary_hook_writer(enroll_home, hook_secret_path(enroll_home), actor="codex.authority-key"):
+        with _ordinary_hook_writer(enroll_home, hook_secret_file(enroll_home), actor="codex.authority-key"):
             answer = ask(op, context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
     if isinstance(answer.get("reply"), Mapping):
         raise RuntimeError(f"{op} did not settle its replies")
@@ -396,7 +397,12 @@ def verify_manifest_state(
     if not isinstance(state, dict):
         # A runtime that does not answer leaves the installation unverified,
         # never valid; status and doctor report it rather than fail.
-        return _unavailable_state(str(hook_manifest_path(spec.guard_home, spec.config_path)))
+        try:
+            manifest_text_path = str(hook_manifest_file(spec.guard_home, spec.config_path))
+        except CodexHookIntegrityError:
+            # The runtime that names the path did not answer either.
+            manifest_text_path = ""
+        return _unavailable_state(manifest_text_path)
     return dict(state)
 
 

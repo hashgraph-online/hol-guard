@@ -8,9 +8,10 @@ import time
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_repair_request as requests
-from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, load_hook_secret
+from codex_plugin_scanner.guard.codex_hook_integrity import load_hook_secret
 from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests.codex_hook_paths_support import canonical_manifest_bytes
 
 from .test_codex_hook_recovery import installed  # noqa: F401 -- shared fixture
 from .test_codex_hook_repair_authorization import prepared_repair  # noqa: F401 -- shared fixture

@@ -112,8 +112,9 @@ def test_inverse_request_cannot_be_loaded_as_missing_authority_repair(inverse, t
 
 @pytest.mark.parametrize("change", ["target", "predecessor", "expired", "purpose"])
 def test_mac_valid_request_cannot_change_live_inverse_or_replay_expired_review(inverse, tmp_path, change):  # noqa: F811
-    from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, load_hook_secret
+    from codex_plugin_scanner.guard.codex_hook_integrity import load_hook_secret
     from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
+    from tests.codex_hook_paths_support import canonical_manifest_bytes
 
     context, config, manifest, _, plan = inverse
     path, _ = capture(context, config, plan, tmp_path)

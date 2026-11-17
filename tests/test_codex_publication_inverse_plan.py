@@ -12,10 +12,10 @@ from codex_plugin_scanner.guard import codex_hook_file_integrity as integrity
 from codex_plugin_scanner.guard import native_runner_authority
 from codex_plugin_scanner.guard.codex_harness_client import _hook_manifest_spec
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 from codex_plugin_scanner.guard.codex_publication_inverse_plan import prepare_authenticated_hook_publication_inverse
 from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests.codex_hook_paths_support import hook_secret_path
 
 from .test_codex_hook_recovery import crash, installed  # noqa: F401 -- shared isolated fixture
 

@@ -14,11 +14,11 @@ import pytest
 from codex_plugin_scanner.guard import native_caller
 from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.native_owned import codex_install_transaction, require_codex_install_owner
 from tests import codex_hook_publication_helpers as publication_helpers
+from tests.codex_hook_paths_support import hook_manifest_path
 
 
 def test_copied_context_cannot_borrow_another_threads_publication_owner(tmp_path):
@@ -449,7 +449,7 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
     from codex_plugin_scanner.guard import codex_harness_client as codex
     from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
     from codex_plugin_scanner.guard import codex_hook_runtime_trust as runtime_trust
-    from codex_plugin_scanner.guard.codex_hook_integrity import load_authenticated_hook_manifest
+    from codex_plugin_scanner.guard.codex_hook_integrity import load_authenticated_hook_manifest_path
 
     context = HarnessContext(
         home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home", home_override_explicit=True
@@ -469,7 +469,9 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
         monkeypatch.setattr(native_caller, "__file__", str(root / "codex_plugin_scanner/guard/native_caller.py"))
         codex_lifecycle.CodexHarnessAdapter().install(context)
         commands.append(codex._hook_command_parts(context))
-    manifest = load_authenticated_hook_manifest(context.guard_home, context.home_dir / ".codex/config.toml")
+    manifest = load_authenticated_hook_manifest_path(
+        context.guard_home, hook_manifest_path(context.guard_home, context.home_dir / ".codex/config.toml")
+    )
     assert len(manifest["retained_bridge_generations"]) == 8
     assert len(manifest["compatible_bridge_argv_sha256"]) == 8
 
@@ -502,8 +504,8 @@ def test_retained_launch_cap_revokes_oldest_without_accepting_changed_argv(
 
 def test_uninstall_preserves_key_needed_by_other_authenticated_target(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
-    from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
     from codex_plugin_scanner.guard.native_owned import codex_install_transaction
+    from tests.codex_hook_paths_support import hook_secret_path
 
     guard_home = tmp_path / "guard-home"
     first = HarnessContext(

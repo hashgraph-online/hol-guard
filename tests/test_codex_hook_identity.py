@@ -8,10 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_adapter_lifecycle
 from codex_plugin_scanner.guard.codex_hook_identity import CodexHookGroupQuestion, canonical_codex_hook_group_identities
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 from codex_plugin_scanner.guard.codex_hook_inventory import enumerate_codex_hooks
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import (
@@ -23,6 +21,7 @@ from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from tests import codex_plan_segments as segments
 from tests import codex_publication_steps
+from tests.codex_hook_paths_support import hook_manifest_path, hook_secret_path
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.codex_toml_support import dump_toml, read_toml_payload
 from tests.transition_fault_support import interrupt_publication_at
@@ -372,7 +371,7 @@ def test_partial_unlink_failure_restores_every_legacy_source_and_keeps_toml_back
     assert workspace_hooks.read_text(encoding="utf-8") == original_workspace_hooks
     assert home_config.read_text(encoding="utf-8") == original_home_config
     assert workspace_config.read_text(encoding="utf-8") == original_workspace_config
-    assert not codex_adapter.hook_manifest_path(guard_home, home_config).exists()
+    assert not hook_manifest_path(guard_home, home_config).exists()
     assert not hook_secret_path(guard_home).exists()
     backup_payloads = [
         json.loads(path.read_text(encoding="utf-8"))

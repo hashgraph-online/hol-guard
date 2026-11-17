@@ -8,7 +8,6 @@ import pytest
 
 from codex_plugin_scanner.guard import runtime_transition_codex_observer as observer
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.native_process_stop_scope import native_process_stop_scope
@@ -18,6 +17,7 @@ from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
 )
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.codex_hook_paths_support import hook_manifest_path
 from tests.codex_legacy_roles import without_package_roles
 from tests.command_activity_correlation_key_support import write_correlation_key
 

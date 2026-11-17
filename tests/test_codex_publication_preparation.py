@@ -12,10 +12,10 @@ from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecy
 from codex_plugin_scanner.guard import codex_hook_manifest as manifests
 from codex_plugin_scanner.guard import native_transition_files as transition_files
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from tests import codex_hook_publication_helpers as publication_helpers
+from tests.codex_hook_paths_support import hook_secret_path
 
 
 def _context(tmp_path, monkeypatch):
@@ -111,7 +111,7 @@ def test_missing_manifest_rebind_cannot_enroll_with_existing_key(tmp_path, monke
     context = _context(tmp_path, monkeypatch)
     adapter_lifecycle.CodexHarnessAdapter().install(context)
     spec = adapter._hook_manifest_spec(context)
-    from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
+    from tests.codex_hook_paths_support import hook_manifest_path
 
     hook_manifest_path(context.guard_home, spec.config_path).unlink()
     before = _tree(tmp_path)

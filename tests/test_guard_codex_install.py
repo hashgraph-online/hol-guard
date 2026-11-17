@@ -25,7 +25,6 @@ from codex_plugin_scanner.guard.codex_hook_file_integrity import (
     describe_regular_file,
     validate_regular_file,
 )
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
@@ -35,6 +34,7 @@ from tests.codex_hook_integrity_fixtures import (
     sign_hook_manifest,
     write_hook_manifest,
 )
+from tests.codex_hook_paths_support import hook_manifest_path, hook_secret_path
 from tests.codex_toml_support import dump_toml
 from tests.native_runtime_stamp import stamp_native_runtime
 from tests.transition_fault_support import interrupt_publication_at
@@ -631,7 +631,7 @@ def test_guard_codex_first_install_failure_rolls_back_new_hook_secret(
     )
     adapter = CodexHarnessAdapter()
     config_path = CodexHarnessAdapter._hook_config_path(context)
-    manifest_path = codex_adapter.hook_manifest_path(context.guard_home, config_path)
+    manifest_path = hook_manifest_path(context.guard_home, config_path)
     secret_path = hook_secret_path(context.guard_home)
     interrupt_publication_at(monkeypatch, config_path, OSError("injected first-install config failure"))
 

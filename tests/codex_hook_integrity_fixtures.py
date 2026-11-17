@@ -18,13 +18,11 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
     _hook_key_answer,
     _ordinary_hook_writer,
     atomic_write_bytes,
-    canonical_manifest_bytes,
-    hook_manifest_path,
-    hook_secret_path,
 )
 from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
 from codex_plugin_scanner.guard.native_owned import record_codex_mutation
 from codex_plugin_scanner.guard.native_transition_files import publication
+from tests.codex_hook_paths_support import canonical_manifest_bytes, hook_manifest_path, hook_secret_path
 
 _HOOK_MANIFEST_INTEGRITY_PURPOSE = "codex-managed-hook-manifest"
 _PRIVATE_FILE_MODE = 0o600

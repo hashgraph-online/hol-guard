@@ -35,7 +35,7 @@ from .codex_harness_client import (
     _reply_text,
     codex_paths,
 )
-from .codex_hook_integrity import hook_authority_receipt_path, hook_manifest_path
+from .codex_hook_integrity import hook_paths
 from .codex_hook_manifest import (
     PreparedCodexHookPublication,
     load_hook_manifest_baseline,
@@ -378,12 +378,13 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         from .native_transition_files import _budget, _package_roots, _replay
 
         hook_config_path = self._hook_config_path(context)
+        identity_files = hook_paths(context.guard_home, hook_config_path)
         owned = _manifest_bindings(load_hook_manifest_baseline(_hook_manifest_spec(context)))
         request: dict[str, Any] = {
             "owned": json.dumps(list(owned), separators=(",", ":")),
             "authority_files": [
-                str(_located(hook_authority_receipt_path(context.guard_home, hook_config_path))),
-                str(_located(hook_manifest_path(context.guard_home, hook_config_path))),
+                str(_located(identity_files.receipt)),
+                str(_located(identity_files.manifest)),
             ],
             "home": os.path.abspath(context.guard_home),
             "launch": _launch_fields(context),

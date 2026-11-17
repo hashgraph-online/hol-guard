@@ -11,8 +11,6 @@ by status APIs.
 from __future__ import annotations
 
 import base64
-import hashlib
-import json
 import os
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
@@ -20,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from .codex_hook_file_integrity import CodexHookIntegrityError, canonical_path, check_hook_validation_deadline
+from .codex_hook_file_integrity import CodexHookIntegrityError, check_hook_validation_deadline
 from .local_authority_integrity import LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM
 
 HOOK_MANIFEST_SCHEMA_VERSION = 2
@@ -44,22 +42,65 @@ _KEY_MISSING_MESSAGE = (
 _KEY_UNAVAILABLE_REASONS = frozenset({"runtime_unavailable", "invalid"})
 
 
-def hook_manifest_path(guard_home: Path, config_path: Path) -> Path:
-    target_hash = hashlib.sha256(canonical_path(config_path).encode("utf-8")).hexdigest()[:24]
-    return guard_home / "managed" / "codex" / f"hooks-{target_hash}.manifest.json"
+_PATHS_FEATURE = "native-codex-hook-paths-v1"
+_PATHS_COMMAND = "codex-hook-paths"
+_PATHS_TIMEOUT_SECONDS = 10.0
 
 
-def hook_secret_path(guard_home: Path) -> Path:
-    return guard_home / "managed" / "codex" / "hook-manifest.key"
+@dataclass(frozen=True, slots=True)
+class HookPaths:
+    """The hook identity files one config target owns in a Guard home, as the runtime names them."""
+
+    manifest: Path
+    receipt: Path
+    key: Path
 
 
-def hook_authority_receipt_path(guard_home: Path, config_path: Path) -> Path:
-    manifest = hook_manifest_path(guard_home, config_path)
-    return manifest.with_name(manifest.name.replace(".manifest.json", ".authority-receipt.json"))
+def _paths_answer(guard_home: Path, config_path: Path | None) -> dict[str, object]:
+    """The runtime's ``codex-hook-paths`` answer; a runtime that does not answer is
+    a refused operation the caller repairs, never a guessed path."""
+
+    from .mdm.runtime_request import runtime_answer
+
+    request: dict[str, object] = {"guard_home": str(guard_home)}
+    if config_path is not None:
+        target = config_path.expanduser()
+        request["config_path"] = str(target if target.is_absolute() else Path(os.getcwd()) / target)
+    check_hook_validation_deadline()
+    answer = runtime_answer(
+        _PATHS_FEATURE,
+        _PATHS_COMMAND,
+        request,
+        output_limit=64 * 1024,
+        timeout_seconds=_PATHS_TIMEOUT_SECONDS,
+    )
+    check_hook_validation_deadline()
+    if answer is None:
+        raise hook_key_refusal("runtime_unavailable")
+    return answer
 
 
-def canonical_manifest_bytes(payload: Mapping[str, object]) -> bytes:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+def _named(answer: Mapping[str, object], key: str) -> Path:
+    value = answer.get(key)
+    if not isinstance(value, str) or not value:
+        raise hook_key_refusal("runtime_unavailable")
+    return Path(value)
+
+
+def hook_paths(guard_home: Path, config_path: Path) -> HookPaths:
+    """The manifest, receipt and key files ``config_path`` owns in ``guard_home``."""
+    answer = _paths_answer(guard_home, config_path)
+    return HookPaths(_named(answer, "manifest_path"), _named(answer, "receipt_path"), _named(answer, "key_path"))
+
+
+def hook_manifest_file(guard_home: Path, config_path: Path) -> Path:
+    """The manifest ``config_path`` owns in ``guard_home``, as the runtime names it."""
+    return hook_paths(guard_home, config_path).manifest
+
+
+def hook_secret_file(guard_home: Path) -> Path:
+    """The Guard home's hook key file, as the runtime names it."""
+    return _named(_paths_answer(guard_home, None), "key_path")
 
 
 @contextmanager
@@ -118,13 +159,6 @@ def _hook_key(op: _KeyOp, guard_home: Path) -> HookSecretMaterial:
         )
     installation_id, key_id, fingerprint = (str(value) for value in fields)
     return HookSecretMaterial(installation_id, key_id, fingerprint, guard_home)
-
-
-def load_authenticated_hook_manifest(
-    guard_home: Path,
-    config_path: Path,
-) -> dict[str, object]:
-    return load_authenticated_hook_manifest_path(guard_home, hook_manifest_path(guard_home, config_path))
 
 
 def load_authenticated_hook_manifest_path(
@@ -252,9 +286,7 @@ __all__ = [
     "CodexHookIntegrityError",
     "HookSecretMaterial",
     "atomic_write_text",
-    "canonical_path",
-    "hook_manifest_path",
-    "hook_secret_path",
-    "load_authenticated_hook_manifest",
+    "hook_manifest_file",
+    "hook_secret_file",
     "load_authenticated_hook_manifest_path",
 ]

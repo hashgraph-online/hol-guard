@@ -10,6 +10,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.harness.base import HarnessContext
+from tests.codex_hook_paths_support import hook_manifest_path
 from tests.codex_toml_support import dump_toml
 
 _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
@@ -47,7 +48,7 @@ def test_guard_codex_install_rejects_ambiguous_foreign_direct_hook(tmp_path: Pat
     with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
         CodexHarnessAdapter().install(context)
     assert config_path.read_bytes() == original_config
-    assert not codex_adapter.hook_manifest_path(context.guard_home, config_path).exists()
+    assert not hook_manifest_path(context.guard_home, config_path).exists()
 
 
 def test_guard_install_and_repair_codex_reject_ambiguous_legacy_post_tool_hooks(
@@ -172,4 +173,4 @@ def test_guard_install_and_repair_codex_reject_ambiguous_legacy_post_tool_hooks(
         assert rc != 0
         assert "codex_hook_owner_conflict" in captured.out + captured.err
         assert config_path.read_bytes() == original_config
-        assert not codex_adapter.hook_manifest_path(guard_home, config_path).exists()
+        assert not hook_manifest_path(guard_home, config_path).exists()

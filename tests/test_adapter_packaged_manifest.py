@@ -9,11 +9,9 @@ import pytest
 from codex_plugin_scanner.guard import codex_harness_client as codex
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 from codex_plugin_scanner.guard.codex_hook_file_integrity import _native
-from codex_plugin_scanner.guard.codex_hook_integrity import (
-    hook_manifest_path,
-    load_authenticated_hook_manifest_path,
-)
+from codex_plugin_scanner.guard.codex_hook_integrity import load_authenticated_hook_manifest_path
 from codex_plugin_scanner.guard.harness.base import HarnessContext
+from tests.codex_hook_paths_support import hook_manifest_path
 from tests.native_runtime_stamp import stamp_native_runtime
 
 

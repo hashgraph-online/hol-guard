@@ -10,11 +10,12 @@ from codex_plugin_scanner.guard import codex_harness_client as adapter_module
 from codex_plugin_scanner.guard import codex_hook_rollback as rollback
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_text, hook_manifest_path, hook_secret_path
+from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_text
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 from tests import codex_hook_publication_helpers as publication_helpers
 from tests import codex_publication_steps as publication_steps
+from tests.codex_hook_paths_support import hook_manifest_path, hook_secret_path
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.transition_fault_support import interrupt_publication_at
 

@@ -221,6 +221,7 @@ mod codex_hook_manifest_build;
 mod codex_hook_manifest_iso_time;
 mod codex_hook_manifest_refusal;
 mod codex_hook_manifest_verify_op;
+mod codex_hook_paths_op;
 #[cfg(unix)]
 mod codex_hook_private_group;
 mod codex_hook_response;

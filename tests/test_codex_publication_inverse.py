@@ -322,9 +322,10 @@ def test_resumption_requires_fresh_plan_and_owner_grant(inverse):  # noqa: F811
 def test_signed_but_invalid_prior_inverse_never_authorizes_resumption(inverse, mutation):  # noqa: F811
     import hashlib
 
-    from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, load_hook_secret
+    from codex_plugin_scanner.guard.codex_hook_integrity import load_hook_secret
     from codex_plugin_scanner.guard.codex_hook_recovery import _PURPOSE
     from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
+    from tests.codex_hook_paths_support import canonical_manifest_bytes
 
     context, config, manifest, _unbound, plan = inverse
     with codex_install_transaction(context.guard_home, config, actor=PUBLICATION_INVERSE_ACTION) as owner:

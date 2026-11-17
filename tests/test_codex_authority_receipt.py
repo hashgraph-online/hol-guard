@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard import codex_hook_manifest as manifests
 from codex_plugin_scanner.guard import codex_hook_recovery as recovery
 from codex_plugin_scanner.guard import native_caller
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline
+from tests.codex_hook_paths_support import hook_authority_receipt_path, hook_manifest_path
 
 from .test_codex_hook_recovery import installed  # noqa: F401 -- shared isolated fixture
 from .test_codex_publication_preparation import _tree
@@ -26,7 +27,7 @@ def test_read_missing_manifest_receipt_is_exact_and_read_only(installed):  # noq
     context, config, manifest = installed
     expected = manifest.read_bytes()
     manifest.unlink()
-    receipt_path = integrity.hook_authority_receipt_path(context.guard_home, config)
+    receipt_path = hook_authority_receipt_path(context.guard_home, config)
     before = receipt_path.read_bytes(), config.read_bytes()
     result = recovery.load_hook_authority_receipt(context.guard_home, config)
     assert result.manifest_bytes == expected
@@ -42,7 +43,7 @@ def test_receipt_refuses_changed_authority_or_config_without_mutation(
     failure,
 ):
     context, config, manifest = installed
-    receipt = integrity.hook_authority_receipt_path(context.guard_home, config)
+    receipt = hook_authority_receipt_path(context.guard_home, config)
     if failure == "tamper":
         payload = json.loads(receipt.read_bytes())
         payload["config_sha256"] = "0" * 64
@@ -101,8 +102,9 @@ def test_signed_receipt_does_not_authenticate_inconsistent_manifest(
     installed,
     failure,
 ):
-    from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, load_hook_secret
+    from codex_plugin_scanner.guard.codex_hook_integrity import load_hook_secret
     from tests.codex_hook_integrity_fixtures import sign_hook_manifest
+    from tests.codex_hook_paths_support import canonical_manifest_bytes
 
     context, config, manifest = installed
     original = manifest.read_bytes()
@@ -118,7 +120,7 @@ def test_signed_receipt_does_not_authenticate_inconsistent_manifest(
         config_bytes=config.read_bytes(),
         manifest_bytes=encoded_manifest,
     )
-    receipt = integrity.hook_authority_receipt_path(context.guard_home, config)
+    receipt = hook_authority_receipt_path(context.guard_home, config)
     receipt.write_bytes(encoded)
     with pytest.raises(CodexHookIntegrityError):
         recovery.load_hook_authority_receipt(context.guard_home, config)
@@ -130,8 +132,8 @@ def test_replaced_key_refuses_the_receipt_and_preserves_it(
     installed,
     tmp_path,
 ):
-    from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
     from tests.codex_hook_integrity_fixtures import load_or_create_hook_secret
+    from tests.codex_hook_paths_support import hook_secret_path
 
     context, config, manifest = installed
     other_home = tmp_path / "other-generated-installation"
@@ -164,7 +166,7 @@ def test_missing_manifest_repair_preparation_pins_authority_without_publication(
     assert prepared.manifest_change.after == expected
     dependencies = {change.path: change for change in prepared.files if change.expected_digest is not None}
     assert config.resolve() in dependencies
-    assert integrity.hook_authority_receipt_path(context.guard_home, config).resolve() in dependencies
+    assert hook_authority_receipt_path(context.guard_home, config).resolve() in dependencies
     assert all(change.before is None and change.after is None for change in dependencies.values())
     assert not manifest.exists()
     assert adapter.codex_native_hook_state(context)["protection_active"] is False
@@ -214,7 +216,7 @@ def test_signed_repair_file_inverse_restores_missing_manifest_state(
 
     context, config, manifest = installed
     expected = manifest.read_bytes()
-    receipt = integrity.hook_authority_receipt_path(context.guard_home, config)
+    receipt = hook_authority_receipt_path(context.guard_home, config)
     before = config.read_bytes(), receipt.read_bytes()
     manifest.unlink()
     prepared = manifests.prepare_authenticated_hook_manifest_repair(adapter._hook_manifest_spec(context))
@@ -263,7 +265,7 @@ def retained_installation(tmp_path, monkeypatch):
 def test_repair_plan_pins_all_eight_retained_artifact_generations(retained_installation):
     context, bridges = retained_installation
     config = context.home_dir / ".codex/config.toml"
-    manifest = integrity.hook_manifest_path(context.guard_home, config)
+    manifest = hook_manifest_path(context.guard_home, config)
     manifest.unlink()
     prepared = manifests.prepare_authenticated_hook_manifest_repair(adapter._hook_manifest_spec(context))
     dependencies = {change.path for change in prepared.files if change.expected_digest is not None}
@@ -277,7 +279,7 @@ def test_retained_artifact_loss_refuses_repair_without_publishing(retained_insta
 
     context, bridges = retained_installation
     config = context.home_dir / ".codex/config.toml"
-    manifest = integrity.hook_manifest_path(context.guard_home, config)
+    manifest = hook_manifest_path(context.guard_home, config)
     manifest.unlink()
     if boundary == "before_preparation":
         bridges[0].unlink()
@@ -310,7 +312,7 @@ def test_frozen_retained_repair_pins_both_physical_executables(tmp_path, monkeyp
         adapter_lifecycle.CodexHarnessAdapter().install(context)
         executables.append(executable)
     config = context.home_dir / ".codex/config.toml"
-    manifest = integrity.hook_manifest_path(context.guard_home, config)
+    manifest = hook_manifest_path(context.guard_home, config)
     manifest.unlink()
     prepared = manifests.prepare_authenticated_hook_manifest_repair(adapter._hook_manifest_spec(context))
     for executable in executables:
@@ -324,12 +326,13 @@ def test_frozen_retained_repair_pins_both_physical_executables(tmp_path, monkeyp
 
 
 def _replace_generated_receipt(context, config, payload):
-    from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, load_hook_secret
+    from codex_plugin_scanner.guard.codex_hook_integrity import load_hook_secret
     from tests.codex_hook_integrity_fixtures import sign_hook_manifest
+    from tests.codex_hook_paths_support import canonical_manifest_bytes
 
     payload.pop("authentication")
     signed = sign_hook_manifest(payload, load_hook_secret(context.guard_home))
-    receipt = integrity.hook_authority_receipt_path(context.guard_home, config)
+    receipt = hook_authority_receipt_path(context.guard_home, config)
     receipt.write_bytes(
         recovery.build_hook_authority_receipt(
             context.guard_home,
@@ -344,7 +347,7 @@ def _replace_generated_receipt(context, config, payload):
 def test_signed_inconsistent_retained_generation_is_not_repaired(retained_installation, failure):
     context, _bridges = retained_installation
     config = context.home_dir / ".codex/config.toml"
-    manifest = integrity.hook_manifest_path(context.guard_home, config)
+    manifest = hook_manifest_path(context.guard_home, config)
     payload = json.loads(manifest.read_bytes())
     old = payload["retained_bridge_generations"][0]
     if failure == "argv":
@@ -368,7 +371,7 @@ def test_signed_inconsistent_retained_generation_is_not_repaired(retained_instal
 def test_legacy_hash_only_receipt_does_not_infer_old_artifact_paths(retained_installation):
     context, bridges = retained_installation
     config = context.home_dir / ".codex/config.toml"
-    manifest = integrity.hook_manifest_path(context.guard_home, config)
+    manifest = hook_manifest_path(context.guard_home, config)
     payload = json.loads(manifest.read_bytes())
     payload.pop("retained_bridge_generations")
     _replace_generated_receipt(context, config, payload)
