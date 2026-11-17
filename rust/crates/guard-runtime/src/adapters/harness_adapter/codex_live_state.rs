@@ -308,7 +308,7 @@ fn installed(ctx: &Ctx, manifest: &Value, fields: &Map<String, Value>) -> Step<V
 
 /// The live hooks as the verifier reads them: each managed event's group
 /// list, with a group JSON cannot carry sent as `null`.
-fn hooks_wire(hooks: &PyVal, tokens: &Map<String, Value>) -> Option<Value> {
+pub(super) fn hooks_wire(hooks: &PyVal, tokens: &Map<String, Value>) -> Option<Value> {
     if !matches!(hooks, PyVal::Dict(_)) {
         return None;
     }

@@ -99,6 +99,13 @@ fn untrusted(cause: Option<&str>) -> Value {
 /// or `{"untrusted"}` with the integrity refusal Python raises for a baseline
 /// that is missing, invalid or owned by another installation. Request: `spec`.
 pub(super) fn load(call: &mut Call<'_>) -> Step<Value> {
+    call.budget.hook()?;
+    let answer = settled(call)?;
+    call.budget.hook()?;
+    Ok(answer)
+}
+
+fn settled(call: &mut Call<'_>) -> Step<Value> {
     let home = call.home()?;
     let config = installation_path(call, &["config", "config_path"])?;
     let config_target = call.canonical(&config)?;

@@ -266,6 +266,7 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_target" => super::publication_target::target(call),
         "publication_abort" => super::publication_abort::abort(call),
         "publication_repair_plan" => super::publication_repair_plan::plan(call),
+        "publication_repair_prepare" => super::publication_repair_prepare::prepare(call),
         "publication_merge_dependency" => super::merge_dependency::merge(call),
         "publication_observer_binding" => super::publication_observer::binding(call),
         "publication_repair_files" => super::publication_repair_files::files(call),

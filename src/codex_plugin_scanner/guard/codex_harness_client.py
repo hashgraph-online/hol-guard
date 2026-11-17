@@ -372,21 +372,50 @@ def verify_manifest_state(
             if isinstance(hooks.get(event), list)
         }
     timeout, spent = _live_budget()
-    answer = ask(
-        "verify_manifest",
-        context,
-        harness="codex",
-        timeout_seconds=timeout,
-        spec=spec.payload(),
-        hooks=wire_hooks,
-        manifest_text=captured_text,
-        package_roots=[str(root) for root in _python_package_roots()],
-        budget_spent=spent,
-    )
+    try:
+        answer = ask(
+            "verify_manifest",
+            context,
+            harness="codex",
+            timeout_seconds=timeout,
+            spec=spec.payload(),
+            hooks=wire_hooks,
+            manifest_text=captured_text,
+            package_roots=[str(root) for root in _python_package_roots()],
+            budget_spent=spent,
+        )
+    except (TypeError, ValueError, OSError, RuntimeError):
+        answer = {}
     state = answer.get("state")
     if not isinstance(state, dict):
-        raise ValueError("Harness adapter answer is malformed")
+        # A runtime that does not answer leaves the installation unverified,
+        # never valid; status and doctor report it rather than fail.
+        return _unavailable_state(str(hook_manifest_path(spec.guard_home, spec.config_path)))
     return dict(state)
+
+
+_UNAVAILABLE_REASON = "codex_hook_manifest_verification_unavailable"
+_UNAVAILABLE_MESSAGE = "Guard could not verify the Codex hook installation; run repair and retry."
+
+
+def _unavailable_state(manifest_path: str) -> dict[str, object]:
+    """The integrity state of an installation the runtime could not verify."""
+    from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
+
+    return {
+        "event_matches": dict.fromkeys(MANAGED_CODEX_HOOK_EVENTS, False),
+        "foreign_hook_entries_present": False,
+        "foreign_hook_group_count": 0,
+        "integrity_message": _UNAVAILABLE_MESSAGE,
+        "integrity_reason": _UNAVAILABLE_REASON,
+        "integrity_status": "tampered",
+        "manifest_schema_version": None,
+        "manifest_package_version": None,
+        "manifest_generated_at": None,
+        "bridge_sha256": None,
+        "interpreter_sha256": None,
+        "manifest_path": manifest_path,
+    }
 
 
 def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:

@@ -7,7 +7,6 @@ construction at the harness boundary and prevents a circular dependency.
 
 from __future__ import annotations
 
-import hashlib
 import os
 import uuid
 from collections.abc import Mapping
@@ -17,7 +16,6 @@ from typing import TYPE_CHECKING, cast
 
 from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_file_integrity import CodexHookIntegrityError, check_hook_validation_deadline
-from .codex_hook_integrity import hook_manifest_path
 
 if TYPE_CHECKING:
     from .native_runtime import NativeRuntimeIdentity
@@ -89,9 +87,7 @@ def load_hook_manifest_baseline(spec: CodexHookManifestSpec) -> dict[str, object
     """The runtime loads a prior authenticated baseline or proves a clean install."""
     from .native_transition_files import publication
 
-    check_hook_validation_deadline()
     answer = publication("baseline", spec.guard_home, spec=spec.payload())
-    check_hook_validation_deadline()
     malformed = CodexHookIntegrityError("native_transition_invalid", "Guard could not read the managed-hook baseline.")
     if not isinstance(answer, dict) or set(answer) not in ({"manifest"}, {"untrusted"}):
         raise malformed
@@ -174,51 +170,40 @@ def transition_file(item: Mapping[str, object]) -> TransitionFile:
 def prepare_authenticated_hook_manifest_repair(spec: CodexHookManifestSpec) -> PreparedCodexHookRepair:
     """Prepare only restoration of a missing manifest from retained authority.
 
-    The runtime pins the key, receipt, config and every captured launch
-    artifact; this keeps the receipt checks and the manifest change.
+    The runtime does the whole preparation: it refuses a present manifest,
+    loads the receipt under its own key, parses the retained config, verifies
+    the retained manifest, pins the key, receipt, config and every captured
+    launch artifact, compares them and checks the plan. This sends the facts
+    of this process and settles the answer.
     """
-    from .codex_hook_recovery import _snapshot, load_hook_authority_receipt
-    from .codex_hook_sources import parse_toml_object
+    from .harness.base import HarnessContext
+    from .harness.native_harness import wire_context
     from .native_transition_files import publication
-    from .runtime_transition import RuntimeTransition, TransitionError, TransitionFile
+    from .runtime_transition import TransitionError
 
-    check_hook_validation_deadline()
-    config = spec.config_path.parent.resolve(strict=False) / spec.config_path.name
-    manifest_path = hook_manifest_path(spec.guard_home, config)
-    if _snapshot(manifest_path) is not None:
-        raise TransitionError("authority_repair_manifest_present")
-    receipt = load_hook_authority_receipt(spec.guard_home, config)
-    payload = parse_toml_object(receipt.config_bytes, path=config, label="Codex config file")
-    check_hook_validation_deadline()
-    features = payload.get("features")
-    if isinstance(features, Mapping) and features.get("hooks") is False:
-        raise TransitionError("authority_repair_hooks_disabled")
-    state = _verify_hook_manifest(
-        spec,
-        hooks=payload.get("hooks"),
-        captured_text=receipt.manifest_bytes.decode("utf-8"),
-    )
-    if state.get("integrity_status") != "valid":
-        raise CodexHookIntegrityError(str(state["integrity_reason"]), str(state["integrity_message"]))
-    check_hook_validation_deadline()
+    context = HarnessContext(home_dir=spec.home_dir, workspace_dir=spec.workspace_dir, guard_home=spec.guard_home)
+    operation_id = str(uuid.uuid4())
     answer = publication(
-        "repair_files",
+        "repair_prepare",
         spec.guard_home,
-        config=str(config),
-        manifest_text=receipt.manifest_bytes.decode("utf-8"),
-        receipt_sha256=hashlib.sha256(receipt.receipt_bytes).hexdigest(),
-        config_sha256=hashlib.sha256(receipt.config_bytes).hexdigest(),
+        config=os.path.abspath(spec.config_path),
+        operation_id=operation_id,
+        spec=spec.payload(),
+        context=wire_context(context),
     )
-    pinned = answer.get("files") if isinstance(answer, dict) else None
-    if not isinstance(pinned, list) or not all(isinstance(item, dict) for item in pinned):
+    prepared: dict[str, object] = answer if isinstance(answer, dict) else {}
+    change, pinned = prepared.get("change"), prepared.get("files")
+    guard_home, config = prepared.get("guard_home"), prepared.get("config")
+    if (
+        not isinstance(change, dict)
+        or not isinstance(pinned, list)
+        or not all(isinstance(item, dict) for item in pinned)
+        or not isinstance(guard_home, str)
+        or not isinstance(config, str)
+    ):
         raise TransitionError("native_transition_invalid")
-    change = TransitionFile(manifest_path, None, receipt.manifest_bytes, no_follow=True)
-    files = (change, *(transition_file(item) for item in pinned))
-    RuntimeTransition._compare({"files": [item.payload() for item in files]}, "before")
-    check_hook_validation_deadline()
-    prepared = PreparedCodexHookRepair(change, files, spec.guard_home.resolve(strict=False), config, str(uuid.uuid4()))
-    prepared.payload()
-    return prepared
+    files = tuple(transition_file(item) for item in pinned)
+    return PreparedCodexHookRepair(transition_file(change), files, Path(guard_home), Path(config), operation_id)
 
 
 def manifest_bindings(manifest: object) -> list[dict[str, object]]:

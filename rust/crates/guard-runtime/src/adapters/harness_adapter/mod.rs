@@ -66,6 +66,7 @@ mod codex_publish;
 mod codex_python_hook;
 mod codex_python_imports;
 mod codex_python_values;
+mod codex_repair_verify;
 mod codex_servers;
 mod codex_sources;
 mod codex_spec;
@@ -137,6 +138,8 @@ mod update_bounded;
 mod update_support;
 mod which;
 mod zcode;
+
+pub(crate) use codex_repair_verify::{verify_captured, Verdict};
 
 #[cfg(test)]
 #[path = "tests.rs"]

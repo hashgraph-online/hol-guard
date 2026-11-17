@@ -38,6 +38,7 @@ mod publication_observer;
 mod publication_receipt;
 mod publication_repair_files;
 mod publication_repair_plan;
+mod publication_repair_prepare;
 mod publication_request;
 mod publication_target;
 mod repair_claims;
@@ -81,6 +82,8 @@ pub(crate) enum Fault {
     Refused(String, Option<String>),
     /// `OSError`, with its errno when the platform reported one.
     Os(std::io::Error),
+    /// `RuntimeError(message)`, as a retained config's TOML parse raises it.
+    Runtime(String),
 }
 
 impl From<std::io::Error> for Fault {
@@ -99,6 +102,7 @@ impl Fault {
             }
             Self::Integrity(code, message) => json!({ "integrity": code, "message": message }),
             Self::Os(error) => json!({ "os": error.to_string(), "errno": error.raw_os_error() }),
+            Self::Runtime(message) => json!({ "runtime": message }),
             // Asked once a write has started, the question can no longer be
             // answered before the plan is published, so it refuses the file.
         }

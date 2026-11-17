@@ -171,18 +171,16 @@ def test_missing_manifest_repair_preparation_pins_authority_without_publication(
     assert adapter.codex_native_hook_state(context)["protection_active"] is False
 
 
-@pytest.mark.parametrize("failure", ["present", "version", "argv", "receipt", "config"])
+@pytest.mark.parametrize("failure", ["present", "version", "argv"])
 def test_repair_plan_refuses_changed_or_incompatible_generation(
     installed,
-    tmp_path,
-    monkeypatch,
     failure,
 ):
     from dataclasses import replace
 
     from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
-    context, config, manifest = installed
+    context, _config, manifest = installed
     spec = adapter._hook_manifest_spec(context)
     if failure != "present":
         manifest.unlink()
@@ -190,23 +188,9 @@ def test_repair_plan_refuses_changed_or_incompatible_generation(
         spec = replace(spec, package_version="unmatched-package-generation")
     elif failure == "argv":
         spec = replace(spec, fallback_argv=(*spec.fallback_argv, "unregistered-argument"))
-    elif failure in {"receipt", "config"}:
-        original_verify = manifests._verify_hook_manifest
-
-        def changed_after_verification(*args, **kwargs):
-            result = original_verify(*args, **kwargs)
-            receipt = integrity.hook_authority_receipt_path(context.guard_home, config)
-            target = config if failure == "config" else receipt
-            target.write_bytes(target.read_bytes() + b"\n# intervening generation\n")
-            return result
-
-        monkeypatch.setattr(manifests, "_verify_hook_manifest", changed_after_verification)
     with pytest.raises((CodexHookIntegrityError, TransitionError)):
         manifests.prepare_authenticated_hook_manifest_repair(spec)
     assert manifest.exists() is (failure == "present")
-    if failure in {"config", "receipt"}:
-        target = config if failure == "config" else integrity.hook_authority_receipt_path(context.guard_home, config)
-        assert target.read_bytes().endswith(b"# intervening generation\n")
 
 
 def test_prepared_repair_cannot_be_used_after_manifest_replacement(

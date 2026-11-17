@@ -55,6 +55,9 @@ def _exception(fault: object) -> BaseException:
         return TransitionError(_INVALID)
     transition, integrity = fault.get("transition"), fault.get("integrity")
     message, os_message = fault.get("message"), fault.get("os")
+    runtime = fault.get("runtime")
+    if isinstance(runtime, str):
+        return RuntimeError(runtime)
     if isinstance(transition, str):
         detail = fault.get("detail")
         return TransitionError(transition, detail) if isinstance(detail, str) else TransitionError(transition)
