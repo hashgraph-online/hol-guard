@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from io import StringIO
 from pathlib import Path
 
@@ -40,8 +40,14 @@ def _stub_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, events: list
         yield
         events.append("release")
 
-    def retire(_guard_home: Path, *, hold_install_lock: bool = False) -> bool:
-        events.append("retire under install lock" if hold_install_lock else "retire")
+    def retire(
+        _guard_home: Path,
+        *,
+        hold_install_lock: bool = False,
+        attempt_barrier: Callable[[], AbstractContextManager[object]] | None = None,
+    ) -> bool:
+        with attempt_barrier() if attempt_barrier is not None else nullcontext():
+            events.append("retire under install lock" if hold_install_lock else "retire")
         return True
 
     monkeypatch.setattr(uninstall_commands, "hold_native_resident_update_lock", hold)
@@ -212,7 +218,7 @@ def test_removing_the_last_harness_never_asks_the_resident_for_a_lease_under_the
         _resident_request(context.guard_home)
         return {"ok": True, "lease": "lease-1"} if request.get("op") == "lease_acquire" else {"ok": True}
 
-    def retire(_guard_home: Path, *, hold_install_lock: bool = False) -> bool:
+    def retire(_guard_home: Path, *, hold_install_lock: bool = False, **_kwargs: object) -> bool:
         events.append("retire under install lock" if hold_install_lock else "retire")
         return True
 
@@ -243,7 +249,7 @@ def test_a_native_refusal_while_stopping_reports_the_resident_as_still_running(
     monkeypatch.setattr(uninstall_commands, "_active_managed_installs", lambda _store: ([], None))
 
     assert uninstall_commands.retire_native_resident_after_last_harness(context, store) is False
-    assert events == ["acquire"]
+    assert events == []
 
 
 def test_terminal_output_names_a_resident_that_did_not_stop() -> None:
