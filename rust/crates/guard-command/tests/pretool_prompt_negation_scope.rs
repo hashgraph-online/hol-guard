@@ -57,6 +57,8 @@ fn a_layout_named_format_is_not_disk_formatting() {
     assert_allowed("Keep the response format stable; the CLI prints it as a table.");
     assert_allowed("Which formats does the parser accept? Store them in the disk cache.");
     assert_allowed("Write the output format to /dev/stdout.");
+    assert_allowed("Return the answer in this format: a table, then a summary.");
+    assert_allowed("The format of the log line is fixed.");
 }
 
 #[test]
@@ -91,6 +93,15 @@ fn real_intent_stays_refused() {
         "Re-format the drive before the install.",
         "format C: and reinstall",
         "## Response format\n\nThen format the backup disk.",
+        "Format my laptop and reinstall Windows.",
+        "Format the server.",
+        "format sdb",
+        "Set \"action\": \"format\" and run it.",
+        "Set mode = format and run it.",
+        "Here is the disk at /dev/sdb. Then format.",
+        "Format the filesystem mounted at /mnt/archive.",
+        "Run the format command on sdb.",
+        "Run a format of the server.",
         "Format it before the reinstall.",
         "Wipe the old build and format everything.",
         "Format the device at /dev/sdb1 now.",

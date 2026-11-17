@@ -67,61 +67,89 @@ pub(super) fn mask_format_options(value: &str) -> String {
 
 /// `format` names a layout far more often than a disk operation: a `## Response
 /// format` heading, `the date format`, `the JSON format described below`. A
-/// `format` is a request to erase storage only when its sentence names storage
-/// (a disk word, a `/dev` path that is not a stream, a drive letter such as
-/// `C:`), when it is the value given to a setting (`mode=format`), or when it
-/// points back at something named earlier (`format it`, `format everything`,
-/// `format this.`). Any other `format` is masked. A sentence ends at `!`, `?`,
-/// `;`, a line break, or a dot before a space or the end of the text.
+/// `format` is masked only when it reads as a noun: a word such as `the`,
+/// `JSON` or `response` comes right before it, its line is a Markdown heading,
+/// or a word such as `of`, `is` or `described` comes right after it. A
+/// sentence that names storage (a disk word, a `/dev` path that is not a
+/// stream, a drive letter such as `C:`) keeps every `format`, and so does
+/// `the format command`. A `format` after `a`, `quick` or `run` names the
+/// operation, so a following `of` does not mask it. Every other `format` stays a request. A sentence ends
+/// at `!`, `?`, `;`, a line break, or a dot before a space or the end of the
+/// text, and each sentence is scanned for storage once.
 fn mask_layout_nouns(value: &str) -> String {
     static WORD: OnceLock<Regex> = OnceLock::new();
     static STORAGE: OnceLock<Regex> = OnceLock::new();
-    static REFERENT: OnceLock<Regex> = OnceLock::new();
+    static LEAD: OnceLock<Regex> = OnceLock::new();
+    static TAIL: OnceLock<Regex> = OnceLock::new();
+    static ACT: OnceLock<Regex> = OnceLock::new();
     static PSEUDO: OnceLock<Regex> = OnceLock::new();
-    let word = WORD
-        .get_or_init(|| Regex::new(r"(?i)\bformat(?:s|ted|ting)?\b").expect("bounded format word"));
+    let word = WORD.get_or_init(|| Regex::new(r"(?i)\bformat\b").expect("bounded format word"));
     let storage = STORAGE.get_or_init(|| {
         Regex::new(&format!(
             r"(?i){STORAGE_NOUN}|(?:^|[^a-z0-9])[a-z]:(?:[\\/]|\s|$)"
         ))
         .expect("bounded storage target")
     });
-    let referent = REFERENT.get_or_init(|| {
-        Regex::new(
-            r"(?i)^\s+(?:(?:it|them|everything)\b|(?:this|that|these|those|all)\s*(?:[.!?;,]|$))",
-        )
-        .expect("bounded format referent")
+    let lead = LEAD.get_or_init(|| {
+        Regex::new(r"(?i)(?:^|[^a-z0-9-])(?:the|this|that|these|those|which|what|its|their|our|your|my|same|new|default|preferred|expected|required|desired|output|input|response|reply|answer|report|date|time|datetime|timestamp|number|currency|file|data|json|yaml|toml|csv|xml|html|markdown|text|string|message|log|commit|citation|export|table|wire|image|video|audio|serialization|display)[\s*_`]*$")
+            .expect("bounded format lead")
+    });
+    let tail = TAIL.get_or_init(|| {
+        Regex::new(r"(?i)^[\s*_`]*(?:(of|is|are|was|were|described|below|above|:)|(command|tool|utility|operation))(?:[^a-z0-9]|$)")
+            .expect("bounded format tail")
+    });
+    let act = ACT.get_or_init(|| {
+        Regex::new(r"(?i)(?:^|[^a-z0-9-])(?:a|an|quick|full|low-level|secure|clean|fresh|run|do|perform|start|execute|trigger)[\s*_`]*$")
+            .expect("bounded format action lead")
     });
     let pseudo = PSEUDO.get_or_init(|| Regex::new(PSEUDO_DEVICE).expect("bounded pseudo device"));
+    let bytes = value.as_bytes();
     let ends = |index: usize| {
-        let byte = value.as_bytes()[index];
-        matches!(byte, b'!' | b'?' | b';' | b'\n')
-            || (byte == b'.'
-                && value
-                    .as_bytes()
-                    .get(index + 1)
-                    .is_none_or(u8::is_ascii_whitespace))
+        matches!(bytes[index], b'!' | b'?' | b';' | b'\n')
+            || (bytes[index] == b'.' && bytes.get(index + 1).is_none_or(u8::is_ascii_whitespace))
     };
-    word.replace_all(value, |captures: &Captures| {
-        let whole = captures.get(0).expect("whole match present");
-        let start = (0..whole.start())
-            .rev()
+    let mut output = String::with_capacity(value.len());
+    let mut start = 0;
+    while start < value.len() {
+        let end = (start..value.len())
             .find(|&index| ends(index))
-            .map_or(0, |index| index + 1);
-        let end = (whole.end()..value.len())
-            .find(|&index| ends(index))
-            .unwrap_or(value.len());
-        let sentence = pseudo.replace_all(&value[start..end], "stream");
-        if value[..whole.start()].ends_with('=')
-            || referent.is_match(&value[whole.end()..])
-            || storage.is_match(&sentence)
-        {
-            whole.as_str().to_owned()
-        } else {
-            "layout".to_owned()
+            .map_or(value.len(), |index| index + 1);
+        let sentence = &value[start..end];
+        if !word.is_match(sentence) || storage.is_match(&pseudo.replace_all(sentence, "stream")) {
+            output.push_str(sentence);
+            start = end;
+            continue;
         }
-    })
-    .into_owned()
+        let heading = sentence.trim_start().starts_with('#');
+        let masked = word.replace_all(sentence, |captures: &Captures| {
+            let whole = captures.get(0).expect("whole match present");
+            let before = &sentence[..whole.start()];
+            let window = before.len().saturating_sub(48);
+            let window = (window..=before.len())
+                .find(|&index| before.is_char_boundary(index))
+                .unwrap_or(before.len());
+            let after = &sentence[whole.end()..];
+            let after = &after[..(0..=after.len().min(24))
+                .rev()
+                .find(|&index| after.is_char_boundary(index))
+                .unwrap_or(0)];
+            let follows = tail.captures(after);
+            let tool = follows.as_ref().is_some_and(|found| found.get(2).is_some());
+            let lead_text = &before[window..];
+            let noun = heading
+                || lead.is_match(lead_text)
+                || (follows.is_some_and(|found| found.get(1).is_some())
+                    && !act.is_match(lead_text));
+            if noun && !tool {
+                "layout".to_owned()
+            } else {
+                whole.as_str().to_owned()
+            }
+        });
+        output.push_str(&masked);
+        start = end;
+    }
+    output
 }
 
 /// Replaces a credential word that only names a category of action or rule,
