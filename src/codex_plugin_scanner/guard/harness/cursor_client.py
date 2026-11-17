@@ -85,14 +85,6 @@ def cursor_runtime_hooks_verified(context: HarnessContext) -> bool | None:
     return verified if isinstance(verified, bool) else None
 
 
-def cursor_cli_detected(context: HarnessContext) -> bool:
-    return _cursor_ask("cli_detected", context)["value"] is True
-
-
-def cursor_cli_shim_installed(context: HarnessContext) -> bool:
-    return _cursor_ask("cli_shim_installed", context)["value"] is True
-
-
 def run_frozen_cursor_hook(argv: Sequence[str]) -> int:
     """Execute the installed Cursor hook script from a frozen Guard binary."""
     import runpy
@@ -120,8 +112,6 @@ def run_frozen_cursor_hook(argv: Sequence[str]) -> int:
 
 
 __all__ = [
-    "cursor_cli_detected",
-    "cursor_cli_shim_installed",
     "cursor_native_hook_state",
     "cursor_runtime_hooks_verified",
     "install_cursor_hooks",

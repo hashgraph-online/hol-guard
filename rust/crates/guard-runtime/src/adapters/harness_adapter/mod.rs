@@ -91,6 +91,7 @@ mod cursor_hooks_plan;
 mod cursor_hooks_uninstall;
 mod cursor_rebind;
 mod cursor_state;
+mod cursor_surfaces;
 mod describe;
 mod describe_env;
 mod desktop_core;

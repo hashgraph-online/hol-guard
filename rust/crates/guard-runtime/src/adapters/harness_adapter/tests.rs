@@ -23,6 +23,8 @@ mod codex_family;
 mod copilot_family;
 #[path = "tests_cursor.rs"]
 mod cursor_family;
+#[path = "tests_cursor_surfaces.rs"]
+mod cursor_surfaces_family;
 #[path = "tests_grok_zcode.rs"]
 mod grok_zcode;
 #[path = "tests_hermes.rs"]

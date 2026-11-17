@@ -60,7 +60,7 @@ def _apply_adapter_management(
 
     if surface is None:
         if adapter.harness == "cursor":
-            selected_surface = cursor_install_surface(None)
+            selected_surface = cursor_install_surface(None, context)
             return (
                 adapter.install(context, surface=selected_surface)
                 if active
@@ -72,7 +72,7 @@ def _apply_adapter_management(
     if surface not in setup_contract.surface_capabilities:
         raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
     if adapter.harness == "cursor":
-        selected_surface = cursor_install_surface(surface)
+        selected_surface = cursor_install_surface(surface, context)
         return (
             adapter.install(context, surface=selected_surface)
             if active
@@ -147,7 +147,7 @@ def _apply_managed_install_owned(
             action=command,
             surface=surface,
             context=context,
-            protected_surfaces=cursor_protected_surfaces(managed_installs) if active else (),
+            protected_surfaces=cursor_protected_surfaces(managed_installs, context) if active else (),
         )
     return payload
 
@@ -293,6 +293,7 @@ def build_harness_verification(
                 adapter.harness,
                 store,
                 detection,
+                context,
             ),
         )
     return payload
