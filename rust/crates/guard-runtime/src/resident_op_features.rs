@@ -300,6 +300,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-system-proxies-v1",
     "native-proxy-credentials-v1",
     "native-install-verdict-v1",
+    "native-background-loop-gate-v1",
     "native-policy-verifier-key-provision-v1",
     "native-business-source-codec-v1",
     "native-business-source-anchor-codec-v1",

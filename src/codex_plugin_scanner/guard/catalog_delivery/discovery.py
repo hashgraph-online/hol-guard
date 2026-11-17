@@ -19,6 +19,7 @@ from typing import Any
 from ..file_identity import full_stat_identity
 from ..native_resident_client import native_resident_client_request
 from ..native_runtime import _isolated_environment, native_runtime_status
+from ..runtime_health import background_loop_gate
 from ..runtime_health.background_diagnostics import failure_detail, record_background_event, record_background_notice
 from ..strict_json_pairs import unique_json_object
 from . import lifecycle
@@ -300,6 +301,12 @@ def _refresh(home, store):
     global _handle, _refresh_worker, _failures, _noted_engine_mismatch
     refresh_error = None
     try:
+        # The library process that runs this worker can be replaced every few
+        # minutes, and each replacement used to refetch and relog a failure
+        # nothing had changed. The runtime's ledger outlives the process, so a
+        # failing refresh waits longer each time; a healthy one never waits.
+        if not background_loop_gate.may_attempt(home, background_loop_gate.CATALOG_REFRESH):
+            return
         from .current_refresh import refresh, restore
 
         if store is None:
@@ -322,22 +329,44 @@ def _refresh(home, store):
                     _failures = 0
                     if refresh_error is None:
                         _noted_engine_mismatch = None
+        if refresh_error is None and handle is not None:
+            background_loop_gate.report_success(home, background_loop_gate.CATALOG_REFRESH)
     except Exception as error:
         # Complete previous view and active protection remain independent, so
         # this stays non-fatal; it is recorded because a publication that never
         # refreshes is otherwise indistinguishable from one that never ran.
         if refresh_error is None:
-            record_background_event("catalog_publication_refresh_failed", failure_detail(error))
+            background_loop_gate.report_failure(
+                home,
+                background_loop_gate.CATALOG_REFRESH,
+                "refresh_failed",
+                (("catalog_publication_refresh_failed", failure_detail(error)),),
+            )
         elif (mismatch := _engine_mismatch_with_nothing_kept(refresh_error, error)) is not None:
             # Expected on a released core once `main` publishes with another
             # compiler, and nothing older was kept: the installed catalog keeps
             # serving. It is a state to note, not a failure every five minutes.
-            _note_engine_mismatch(mismatch)
+            # It still counts as a failed refresh, so a restart does not refetch
+            # it, and a new publication is still noted when it is first seen.
+            due, _ = background_loop_gate.failure_is_due(
+                home, background_loop_gate.CATALOG_REFRESH, f"engine_pending:{mismatch.publication_id}"
+            )
+            if due:
+                _note_engine_mismatch(mismatch)
         else:
             # A failed fallback only says no complete view was kept. The
-            # refresh failure is what says why the catalog cannot update.
-            record_background_event("catalog_publication_refresh_failed", failure_detail(refresh_error))
-            record_background_event("catalog_publication_restore_failed", failure_detail(error))
+            # refresh failure is what says why the catalog cannot update. The
+            # failure is keyed by its shape, not its text: a transport error
+            # that alternates between two messages is still one failure.
+            background_loop_gate.report_failure(
+                home,
+                background_loop_gate.CATALOG_REFRESH,
+                "refresh_and_restore_failed",
+                (
+                    ("catalog_publication_refresh_failed", failure_detail(refresh_error)),
+                    ("catalog_publication_restore_failed", failure_detail(error)),
+                ),
+            )
     finally:
         with _ready_lock:
             _refresh_worker = None
