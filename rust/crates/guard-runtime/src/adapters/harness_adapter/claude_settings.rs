@@ -199,7 +199,9 @@ pub(super) fn remove_unsupported(contract: &HookGroupsContract, hooks: &mut Doc)
     Ok(())
 }
 
-/// `prune_guard_hook_events`: every named event is written, pruned.
+/// `prune_guard_hook_events`: every named event is pruned. An event left
+/// with no groups is removed, so uninstall does not leave behind an empty
+/// list the user never had.
 pub(super) fn prune_events(
     contract: &HookGroupsContract,
     hooks: &mut Doc,
@@ -210,7 +212,11 @@ pub(super) fn prune_events(
         results.push(pruned(contract, &entry_list(hooks, event))?);
     }
     for (event, entries) in events.iter().zip(results) {
-        hooks.set(event, PyVal::List(entries));
+        if entries.is_empty() {
+            hooks.0.retain(|(key, _)| key != event);
+        } else {
+            hooks.set(event, PyVal::List(entries));
+        }
     }
     Ok(())
 }

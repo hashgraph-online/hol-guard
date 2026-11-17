@@ -265,7 +265,7 @@ fn uninstall_prunes_guard_entries_only() {
     let answer = ask(&home, "prepare_uninstall", &Map::new());
     let text = answer["writes"][0]["text"].as_str().unwrap();
     let cleaned: Value = serde_json::from_str(text).unwrap();
-    assert_eq!(cleaned["hooks"]["PreToolUse"], json!([]));
+    assert_eq!(cleaned["hooks"].get("PreToolUse"), None);
     assert_eq!(cleaned["hooks"]["Stop"][0]["hooks"][0]["command"], "notify");
     assert_eq!(
         answer["finish"]["notes"][0],

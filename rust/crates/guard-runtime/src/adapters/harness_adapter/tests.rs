@@ -39,6 +39,8 @@ mod opencode_family;
 mod pi_family;
 #[path = "tests_probe_run.rs"]
 mod probe_run_family;
+#[path = "tests_round_trip.rs"]
+mod round_trip;
 #[path = "tests_shims.rs"]
 mod shim_family;
 #[path = "tests_shims_apply.rs"]
