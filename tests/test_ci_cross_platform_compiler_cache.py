@@ -29,8 +29,8 @@ def test_runtime_cache_preserves_the_optimized_profile_and_cold_build_allowance(
     assert "CARGO_PROFILE_RELEASE_OPT_LEVEL" not in workflow["env"]
     # Cold crate-graph builds on this stack measure ~19 min on macOS (PRs read
     # the compiler cache read-only until main seeds new crates), so the macOS
-    # allowance is 25 while Windows still fits 15.
-    allowances = {"macos-native-runtime": 25, "windows-native-runtime": 15}
+    # allowance is 25 on macOS and 30 on Windows for cold native builds.
+    allowances = {"macos-native-runtime": 25, "windows-native-runtime": 30}
     for name, allowance in allowances.items():
         job = workflow["jobs"][name]
         assert job["timeout-minutes"] == allowance
