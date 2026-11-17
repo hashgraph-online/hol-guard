@@ -82,15 +82,8 @@ pub(super) fn facts(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Facts> {
         return Err(Failure::Invalid);
     };
     let frozen = super::caller::frozen(ctx)?;
-    let query_extras = get(&facts, "query_extras")
-        .and_then(PyVal::as_list)
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|pair| match strings(pair)?.as_slice() {
-            [key, value] => Ok((key.clone(), value.clone())),
-            _ => Err(Failure::Invalid),
-        })
-        .collect::<Step<Vec<_>>>()?;
+    // Claude hooks that run inside Cursor tell the daemon so.
+    let query_extras = crate::harness_attribution::cursor_query_extras(&ctx.env);
     let guard_home = Some(ctx.guard_home.as_path());
     let bridge = proxy_launch::bridge(ctx, HOOK_FEATURE, guard_home)?;
     let session_runtime = proxy_launch::bridge(ctx, SESSION_START_FEATURE, guard_home)?;

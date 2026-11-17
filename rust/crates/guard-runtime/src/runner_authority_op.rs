@@ -243,6 +243,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "antigravity_detect" => antigravity_detect::detect(args),
         "devin_detect" => devin_detect::detect(args),
         "devin_jsonc" => devin_jsonc::document(args),
+        "harness_attribution" => crate::harness_attribution::dispatch(args),
         "harness_hook_settings" => harness_hook_settings::dispatch(args),
         "harness_settings_file" => harness_settings_file::dispatch(args),
         "harness_contract_registry" => crate::harness_contract_registry::dispatch(args),

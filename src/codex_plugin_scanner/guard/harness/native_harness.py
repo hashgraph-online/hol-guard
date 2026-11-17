@@ -84,7 +84,7 @@ def _description(harness: str) -> dict[str, Any]:
     raise ValueError(f"Unsupported harness: {harness}")
 
 
-def _environment() -> dict[str, str]:
+def request_environment() -> dict[str, str]:
     """The variables the runtime reads, and nothing else from this process."""
     description = describe()
     names = set(description.get("env_names", ()))
@@ -108,7 +108,7 @@ def wire_context(context: HarnessContext) -> dict[str, object]:
         "home_override_explicit": bool(getattr(context, "home_override_explicit", False)),
         "cwd": cwd,
         "user_home": str(Path.home()),
-        "env": _environment(),
+        "env": request_environment(),
         "executable_overrides": dict(getattr(context, "executable_overrides", {}) or {}),
         "caller": caller_identity(),
         "probes": command_probes_enabled(),

@@ -688,6 +688,8 @@ mod guard_store_write_cache;
 mod hardening;
 #[path = "adapters/harness_adapter/mod.rs"]
 mod harness_adapter;
+#[path = "adapters/harness_attribution.rs"]
+mod harness_attribution;
 #[path = "adapters/harness_backup_restore.rs"]
 mod harness_backup_restore;
 #[cfg(test)]

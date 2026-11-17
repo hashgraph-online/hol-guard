@@ -105,12 +105,6 @@ class TestMuseAdapterIdentity:
         events = {row.event for row in contract.capability_events}
         assert {"PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse", "SessionStart", "Stop"} <= events
 
-    def test_environment_attribution(self) -> None:
-        from codex_plugin_scanner.guard.runtime.harness_attribution import resolve_environment_harness
-
-        assert resolve_environment_harness({"MUSE_SESSION_ID": "session-1"}) == "muse"
-        assert resolve_environment_harness({"MUSE_THREAD_ID": "thread-1"}) == "muse"
-
 
 class TestMuseDetect:
     def test_detects_settings_hooks_and_mcp(self, tmp_path: Path) -> None:
