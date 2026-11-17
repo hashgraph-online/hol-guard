@@ -788,6 +788,7 @@ mod mcp_config_discovery_tests;
 mod muse_detect;
 mod pack_lifecycle;
 mod pack_preparation;
+mod runtime_output;
 mod swarm_op;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
@@ -1337,9 +1338,12 @@ fn read_stdin_bounded() -> Result<Vec<u8>, String> {
 }
 
 fn write_json<T: serde::Serialize>(value: &T) -> Result<(), String> {
-    serde_json::to_writer(io::stdout().lock(), value)
+    let mut stdout = io::stdout().lock();
+    serde_json::to_writer(&mut stdout, value)
         .map_err(|_| "native_response_encode_failed".to_owned())?;
-    println!();
+    stdout
+        .write_all(b"\n")
+        .map_err(|error| hardening::write_error(&error, "native_response_write_failed"))?;
     Ok(())
 }
 
@@ -1370,9 +1374,11 @@ pub fn launch() {
     if guard_command::source_cli::is_command(&arguments) {
         std::process::exit(guard_command::source_cli::main(arguments));
     }
-    std::panic::set_hook(Box::new(|_| eprintln!("native_runtime_panicked")));
+    // Neither the hook nor the error path may panic on a closed stderr: a
+    // panic inside the panic hook aborts the process and loses the code.
+    std::panic::set_hook(Box::new(runtime_output::panic_hook));
     if let Err(code) = run() {
-        eprintln!("{code}");
+        runtime_output::report_launch_failure(&code);
         std::process::exit(2);
     }
 }
