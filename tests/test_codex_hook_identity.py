@@ -10,7 +10,6 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_adapter_lifecycle
-from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
 from codex_plugin_scanner.guard.codex_hook_identity import CodexHookGroupQuestion, canonical_codex_hook_group_identities
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 from codex_plugin_scanner.guard.codex_hook_inventory import enumerate_codex_hooks
@@ -25,6 +24,7 @@ from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from tests import codex_plan_segments as segments
 from tests import codex_publication_steps
 from tests.codex_publication_steps import use_stepwise_publication
+from tests.codex_toml_support import dump_toml, read_toml_payload
 from tests.transition_fault_support import interrupt_publication_at
 
 

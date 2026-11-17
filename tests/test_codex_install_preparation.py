@@ -9,8 +9,8 @@ import pytest
 from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
 from codex_plugin_scanner.guard.codex_hook_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests.codex_toml_support import parse_toml_object
 
 from .test_codex_publication_preparation import _context, _tree
 from .test_frozen_codex_runtime import frozen_codex_contract  # noqa: F401 -- shared pytest fixture
