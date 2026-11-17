@@ -5,7 +5,7 @@ fn request(text: &str) -> Request {
 }
 
 #[cfg(unix)]
-fn launch(command: &[&str], input: &str, timeout: f64, extra: &str) -> Value {
+fn launch(command: &[&str], input: &str, timeout_millis: u64, extra: &str) -> Value {
     let dir = std::env::temp_dir();
     let body = json!({
         "op": "launch",
@@ -13,7 +13,7 @@ fn launch(command: &[&str], input: &str, timeout: f64, extra: &str) -> Value {
         "input_text": input,
         "cwd": dir.to_string_lossy(),
         "environment": { "PATH": std::env::var("PATH").unwrap_or_default() },
-        "timeout_seconds": timeout,
+        "timeout_millis": timeout_millis,
     });
     let mut body = body;
     if !extra.is_empty() {
@@ -118,7 +118,7 @@ fn a_private_runtime_directory_error_is_an_answer() {
 #[cfg(unix)]
 #[test]
 fn a_launch_answers_the_child_output_and_exit() {
-    let answer = launch(&["/bin/cat"], "ping", 5.0, "");
+    let answer = launch(&["/bin/cat"], "ping", 5000, "");
     assert_eq!(answer["returncode"], 0);
     assert_eq!(answer["stdout"], "ping");
     assert_eq!(answer["timed_out"], false);
@@ -149,7 +149,7 @@ fn the_spawn_kernel_keeps_the_raw_bytes_the_decoded_text_replaced() {
 #[test]
 fn a_launch_past_its_deadline_is_killed_and_reported() {
     let started = std::time::Instant::now();
-    let answer = launch(&["/bin/sleep", "10"], "", 0.4, "");
+    let answer = launch(&["/bin/sleep", "10"], "", 400, "");
     assert_eq!(answer["timed_out"], true);
     assert_eq!(answer["returncode"], Value::Null);
     assert!(started.elapsed() < std::time::Duration::from_secs(5));
@@ -163,7 +163,7 @@ fn a_set_stop_flag_launches_nothing() {
         "command": ["/bin/echo", "x"],
         "cwd": "/",
         "environment": {},
-        "timeout_seconds": 5.0,
+        "timeout_millis": 5000,
     });
     let stop = Arc::new(AtomicBool::new(true));
     let answer = answer(request(&body.to_string()), stop);
@@ -179,7 +179,7 @@ fn a_stop_signal_ends_a_running_child() {
         "command": ["/bin/sleep", "10"],
         "cwd": "/",
         "environment": {},
-        "timeout_seconds": 30.0,
+        "timeout_millis": 30000,
     });
     let stop = Arc::new(AtomicBool::new(false));
     let flag = stop.clone();
@@ -237,7 +237,7 @@ fn holding_a_job_is_unavailable_off_windows() {
 #[cfg(unix)]
 #[test]
 fn a_launch_answer_reports_the_quarantine_as_settled() {
-    let answered = launch(&["/bin/echo", "ok"], "", 5.0, "");
+    let answered = launch(&["/bin/echo", "ok"], "", 5000, "");
     assert_eq!(answered["quarantine_settled"], true);
     assert_eq!(answered["containment_failed"], false);
 }
@@ -258,7 +258,7 @@ fn the_hook_environment_op_keeps_only_allowlisted_names() {
 #[cfg(unix)]
 #[test]
 fn a_failing_child_reports_its_exit_code_and_is_contained() {
-    let answered = launch(&["/bin/sh", "-c", "echo bad >&2; exit 7"], "", 5.0, "");
+    let answered = launch(&["/bin/sh", "-c", "echo bad >&2; exit 7"], "", 5000, "");
     assert_eq!(answered["returncode"], 7);
     assert_eq!(answered["stderr"], "bad\n");
     assert_eq!(answered["containment_failed"], false);
@@ -274,7 +274,7 @@ fn a_closed_stdin_stops_the_child_tree() {
         "command": ["/bin/sh", "-c", "sleep 30 & wait"],
         "cwd": std::env::temp_dir().to_string_lossy(),
         "environment": { "PATH": std::env::var("PATH").unwrap_or_default() },
-        "timeout_seconds": 20.0,
+        "timeout_millis": 20000,
     });
     let started = std::time::Instant::now();
     let answer =

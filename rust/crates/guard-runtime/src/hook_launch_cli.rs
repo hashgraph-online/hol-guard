@@ -54,7 +54,9 @@ enum Request {
         input_text: String,
         cwd: String,
         environment: BTreeMap<String, String>,
-        timeout_seconds: f64,
+        // Whole milliseconds: the workspace parses JSON with arbitrary-precision
+        // numbers, which an internally tagged enum cannot read as a float.
+        timeout_millis: u64,
         output_limit: Option<usize>,
         #[serde(default)]
         parent_liveness: bool,
@@ -154,7 +156,7 @@ fn answer(request: Request, stop: Arc<AtomicBool>) -> Value {
             input_text,
             cwd,
             environment,
-            timeout_seconds,
+            timeout_millis,
             output_limit,
             parent_liveness,
             allow_breakaway,
@@ -174,7 +176,7 @@ fn answer(request: Request, stop: Arc<AtomicBool>) -> Value {
                 &input_text,
                 Path::new(&cwd),
                 &environment,
-                Some(timeout_seconds),
+                Some(Duration::from_millis(timeout_millis).as_secs_f64()),
                 output_limit,
                 Some(stop),
                 None,

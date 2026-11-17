@@ -688,3 +688,28 @@ def native_route_policy_with_hooks_off(monkeypatch: pytest.MonkeyPatch) -> Path:
         pinned_provision,
     )
     return runtime
+
+
+_BUILT_RUNTIME = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+
+
+@pytest.fixture(autouse=True)
+def _hook_launcher_is_the_built_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serve ``hook-launch`` from the compiled runtime, whatever binary a test names.
+
+    The native launcher is the runtime itself, so a test that stands up a fake
+    runtime (a shell script, or a bare interpreter) has no ``hook-launch`` to
+    answer. The compiled runtime the suite was given at start serves the launch
+    while the command it runs is still the test's own binary.
+    """
+
+    if not _BUILT_RUNTIME or not Path(_BUILT_RUNTIME).is_file():
+        return
+    from codex_plugin_scanner.guard import codex_hook_launch_runtime, codex_hook_windows_job
+
+    def built_runtime(launcher: str | os.PathLike[str] | None = None) -> str | None:
+        del launcher
+        return _BUILT_RUNTIME
+
+    monkeypatch.setattr(codex_hook_launch_runtime, "native_launcher_path", built_runtime)
+    monkeypatch.setattr(codex_hook_windows_job, "native_launcher_path", built_runtime)

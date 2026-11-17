@@ -467,6 +467,7 @@ impl WaitTimeout for Child {
 
 /// What one launch asks for beyond the plain bounded run.
 #[derive(Clone, Copy, Debug)]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub struct LaunchExtras {
     /// Pass the child a pipe that stays open until it ends
     /// (`HOL_GUARD_PARENT_LIVENESS_FD`); unix only.

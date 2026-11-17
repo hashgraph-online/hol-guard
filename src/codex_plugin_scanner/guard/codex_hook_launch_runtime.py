@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import functools
 import json
+import math
 import os
 import subprocess
 import threading
@@ -316,7 +317,7 @@ def _exchange(
     reader.start()
     try:
         body = dict(request)
-        body["timeout_seconds"] = max(0.0, deadline - time.monotonic())
+        body["timeout_millis"] = max(0, math.ceil((deadline - time.monotonic()) * 1000))
         if process.stdin is None:
             raise OSError("hook launcher stdin is unavailable")
         process.stdin.write(json.dumps(body).encode("utf-8") + b"\n")
