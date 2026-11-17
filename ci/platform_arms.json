@@ -1411,6 +1411,14 @@
    "body": "e1db85fb6831"
   },
   {
+   "verdict": "posix-primitive",
+   "note": "Re-calling `listen` to deepen a bound socket's backlog is the POSIX route; Windows keeps the standard library's backlog. The arm changes only how many connects can wait to be accepted, never a decision: the daemon still serves 1024 connections at once there, and a connect that cannot wait fails rather than being answered.",
+   "file": "rust/crates/guard-runtime/src/daemon_edge.rs",
+   "item": "fn widen_backlog(_listener: &TcpListener)",
+   "cfg": "not(unix)",
+   "body": "8bbfd9931b65"
+  },
+  {
    "verdict": "windows-permissive",
    "note": "The lifecycle journal is private on Unix by file mode; on Windows the files inherit the Guard home's ACL, as the Python journal's files did. Nothing reads the mode back, so the record and its readers behave the same.",
    "file": "rust/crates/guard-runtime/src/daemon_edge_lifecycle.rs",
