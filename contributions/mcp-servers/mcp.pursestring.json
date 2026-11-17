@@ -66,7 +66,7 @@
     "https://github.com/suseendar1414/pursestring/blob/main/docs/policies.md"
   ],
   "saferAlternatives": [
-    "For isolated tests, use a mock-only policies.yaml with no live rail keys (LITHIC_API_KEY, PRIVACY_API_KEY, AIRWALLEX_*, PAYPAL_*) and leave paypal_tools disabled. PURSESTRING_ADAPTER=mock sets only the default rail, so it is not a substitute for mock-only routes and state.",
+    "For isolated tests, use a mock-only policies.yaml, set no live rail keys (LITHIC_API_KEY, PRIVACY_API_KEY, AIRWALLEX_*, PAYPAL_*), and keep paypal_tools off. PURSESTRING_ADAPTER=mock sets only the default rail, not every route.",
     "check_policy_compliance is a dry run: it evaluates a purchase against the policy and issues nothing. submit_purchase_intent only records the request; nothing is spent until a card or payout is issued for an approved intent.",
     "request_ephemeral_card hands the agent a single-use card capped at the approved amount with a short expiry, so it stays on review. send_payment pays only the payee fixed in policies.yaml and never pays an intent twice.",
     "With paypal_tools enabled, PayPal's own MCP tools are re-exposed through PurseString; money-moving ones such as create_refund also pass PurseString's policy, and the rest stay on review here.",
