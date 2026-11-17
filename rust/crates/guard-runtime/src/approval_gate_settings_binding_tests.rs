@@ -3,7 +3,20 @@ use serde_json::json;
 use super::*;
 
 fn bound(params: Value) -> Value {
-    bind(Path::new("/nonexistent-guard-home"), true, Some(&params))
+    let home = tempfile::tempdir().unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(home.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let token = home.path().join("daemon-auth-token");
+    std::fs::write(&token, "settings-binding-test-key").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    bind(home.path(), true, Some(&params))
         .unwrap_or_else(|e| panic!("{params} was refused: {}", e.message))
         .unwrap_or_else(|| panic!("{params} named no settings change"))
 }
