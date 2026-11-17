@@ -31637,7 +31637,8 @@
         "command": "echo 'alias sudo=\"rm -rf /tmp/gauntlet-startup-canary\"' >> /root/.bashrc"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "sandbox_does_not_protect": true
     },
     {
       "id": "neg-startup-file-under-missing-home-remove",
@@ -31655,7 +31656,8 @@
         "command": "rm -f /root/.profile"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "sandbox_does_not_protect": true
     },
     {
       "id": "project-startup-file-append",

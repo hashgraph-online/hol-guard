@@ -45,25 +45,6 @@ const DEVICES: &[&str] = &[
     "/dev/tty",
 ];
 
-/// Files a login or interactive shell runs on its own. An absolute path to one
-/// names a home directory on some host even when its top directory is missing
-/// here, as `/root` is on macOS, so it is never read as a URL-like pattern.
-const SHELL_STARTUP_FILES: &[&str] = &[
-    ".bashrc",
-    ".bash_profile",
-    ".bash_login",
-    ".bash_logout",
-    ".profile",
-    ".zshrc",
-    ".zprofile",
-    ".zlogin",
-    ".zlogout",
-    ".zshenv",
-    ".kshrc",
-    ".cshrc",
-    ".tcshrc",
-];
-
 /// `temp_fixed` says nothing in the command rebinds `TMPDIR`, so each
 /// `$TMPDIR` the shell expands is the one the sandbox launcher sets.
 /// `home_fixed` says nothing in the command rebinds `HOME`, so `~` is the
@@ -443,9 +424,7 @@ fn outside_from(value: &str, name: &str, workspace: &Path, below: usize) -> bool
         let top = path.components().nth(1);
         let names_file_system = top
             .is_some_and(|top| Path::new("/").join(top.as_os_str()).exists())
-            || path
-                .file_name()
-                .is_some_and(|file| SHELL_STARTUP_FILES.iter().any(|name| file == *name));
+            || home_paths::names_a_home_file(path);
         return names_file_system
             && !inside_workspace(path, workspace)
             && !through_root_link(path, workspace)
@@ -516,6 +495,9 @@ pub(super) fn through_root_link(path: &Path, workspace: &Path) -> bool {
 
 #[path = "workspace_contained_name_patterns.rs"]
 mod name_patterns;
+
+#[path = "workspace_contained_home_paths.rs"]
+mod home_paths;
 
 #[cfg(test)]
 #[path = "workspace_contained_reach_prefix_tests.rs"]
