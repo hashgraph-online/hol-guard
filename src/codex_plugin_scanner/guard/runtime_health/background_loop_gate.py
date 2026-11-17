@@ -133,7 +133,10 @@ def report_success(guard_home: Path, loop: str) -> None:
             # No sink took it, so the ledger offers it again on the next
             # success; this process must ask again rather than settle.
             return
-        _ = _ask(guard_home, "logged", loop)
+        if _ask(guard_home, "logged", loop) is None:
+            # The ledger still holds the recovery as unsaid; settling now
+            # would skip the next success that could confirm it.
+            return
     if cached:
         with _settled_lock:
             _settled.add(key)

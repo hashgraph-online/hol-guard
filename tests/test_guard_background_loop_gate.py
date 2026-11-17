@@ -334,6 +334,33 @@ def test_a_recovery_no_sink_took_is_said_by_a_later_success(tmp_path, monkeypatc
     ]
 
 
+def test_a_recovery_the_ledger_did_not_confirm_is_said_again_before_settling(tmp_path, monkeypatch, ledger) -> None:
+    loop = background_loop_gate.AUTHORITY_ENROLLMENT
+    notices: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        background_loop_gate,
+        "record_background_notice",
+        lambda event, detail: notices.append((event, detail)) or True,
+    )
+    unconfirmed = [True]
+
+    def ask(home: Path, op: str, loop_name: str | None = None, failure_key: str | None = None):
+        if op == "logged" and failure_key is None and unconfirmed[0]:
+            unconfirmed[0] = False
+            return None
+        return ledger.ask(home, op, loop_name, failure_key)
+
+    monkeypatch.setattr(background_loop_gate, "_ask", ask)
+
+    background_loop_gate.failure_is_due(tmp_path, loop, "tampered")
+    for _ in range(3):
+        background_loop_gate.report_success(tmp_path, loop)
+
+    assert notices == [(f"{loop}_recovered", "failures=1")] * 2
+    assert ledger.loops[loop]["recovery"] == 0
+    assert ledger.calls.count(("outcome", loop)) == 3
+
+
 def test_an_http_error_names_its_status_and_not_its_url() -> None:
     error = HTTPError("https://example.invalid/private/path?id=abc", 404, "Not Found", {}, None)  # type: ignore[arg-type]
 
