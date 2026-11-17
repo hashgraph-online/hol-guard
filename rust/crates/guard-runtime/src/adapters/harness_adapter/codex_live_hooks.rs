@@ -91,7 +91,7 @@ pub(super) fn run(op: &str, fields: &Map<String, Value>, syntax: &mut Syntax) ->
             Ok(json!({ "matches": matches, "intercept": intercept(&hooks, syntax) }))
         }
         "install" => install(fields, syntax),
-        "overlay" => overlay(fields, syntax),
+        "overlay" => codex_hook_state::overlay(fields, syntax),
         "doctor" => doctor(fields),
         _ => Err(Failure::Invalid),
     }
@@ -410,25 +410,6 @@ fn install(fields: &Map<String, Value>, syntax: &mut Syntax) -> Step<Value> {
         set(&mut hooks, &event, PyVal::List(existing));
     }
     Ok(json!({ "hooks": compact(&PyVal::Dict(hooks), false) }))
-}
-
-/// `overlay_live_owned_event_matches`: keep stale-CLI ownership, but never
-/// treat a missing or tampered manifest as installed.
-fn overlay(fields: &Map<String, Value>, syntax: &mut Syntax) -> Step<Value> {
-    let integrity = fields
-        .get("integrity")
-        .and_then(Value::as_object)
-        .ok_or(Failure::Invalid)?;
-    let field = |key: &str| integrity.get(key).and_then(Value::as_str);
-    let recorded = integrity.get("event_matches").and_then(Value::as_object);
-    let held = |event: &str| recorded.and_then(|m| m.get(event)) == Some(&Value::Bool(true));
-    let hooks = match pyjson::parse(text(fields, "hooks")?) {
-        Ok(PyVal::Dict(hooks)) => Some(hooks),
-        _ => None,
-    };
-    let (status, reason) = (field("integrity_status"), field("integrity_reason"));
-    let matches = codex_hook_state::owned_matches(status, reason, held, hooks.as_ref(), syntax);
-    Ok(json!({ "matches": matches }))
 }
 
 fn state_flag(state: &Map<String, Value>, key: &str) -> bool {
