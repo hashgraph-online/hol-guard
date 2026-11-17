@@ -437,8 +437,13 @@ impl Spec {
                 "cursor" => "surfaces",
                 _ => "plan",
             },
-            // Copilot names its own launch argv and previews only that one.
-            "launch_op": if self.harness == "copilot" { "launch_command" } else { "" },
+            // Copilot and Cursor name their own launch argv and preview only
+            // that one; Cursor picks `cursor-agent` or `cursor agent`.
+            "launch_op": if matches!(self.harness, "copilot" | "cursor") {
+                "launch_command"
+            } else {
+                ""
+            },
             // Copilot's hook ops refuse to touch a file the runtime did not plan.
             "hook_ownership": if self.harness == "copilot" {
                 json!({"message": super::copilot::UNANSWERED, "ops": COPILOT_HOOK_OPS})

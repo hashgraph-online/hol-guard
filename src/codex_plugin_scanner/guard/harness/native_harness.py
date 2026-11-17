@@ -10,7 +10,6 @@ argv, the transition journal that publishes a plan, the probe subprocess and the
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 from collections.abc import Mapping
@@ -23,7 +22,7 @@ from ..harness.diagnostic_probes import command_probes_enabled
 from ..models import HarnessDetection
 from ..native_caller import caller_identity
 from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall
-from .native_harness_steps import detection_from
+from .native_harness_steps import detection_from, planned_files
 
 _KIND = "harness_adapter"
 # Room for every CLI probe one harness runs, each bounded at five seconds.
@@ -162,10 +161,6 @@ def _text(answer: dict[str, Any], key: str) -> str:
     if not isinstance(value, str):
         raise ValueError("Harness adapter answer is malformed")
     return value
-
-
-def _decoded(value: object) -> bytes | None:
-    return None if value is None else base64.b64decode(str(value))
 
 
 def _native_context(context: HarnessContext) -> HarnessContext:
@@ -477,26 +472,6 @@ class NativeHarnessAdapter(HarnessAdapter):
         from .native_harness_steps import install_delegated
 
         return install_delegated(self, context)
-
-
-def planned_files(answer: dict[str, Any]) -> list[Any]:
-    """The transition files a ``prepare_install`` answer plans."""
-    from ..runtime_transition import TransitionFile
-
-    files = [
-        TransitionFile(
-            Path(change["path"]),
-            _decoded(change["before"]),
-            _decoded(change["after"]),
-            before_mode=change["before_mode"],
-            after_mode=change["after_mode"],
-            no_follow=change["no_follow"],
-        )
-        for change in answer["files"]
-    ]
-    for planned in files:
-        planned.payload()
-    return files
 
 
 __all__ = [
