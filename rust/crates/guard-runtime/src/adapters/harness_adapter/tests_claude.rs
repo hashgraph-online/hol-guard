@@ -13,7 +13,7 @@ mod round_trip;
 fn facts() -> String {
     json!({
         "daemon_url": "http://127.0.0.1:4781",
-        "query_extras": [["harness", "claude-code"]],
+        "query_extras": [["runtime-harness", "cursor"], ["workspace", "/cursor/project"]],
     })
     .to_string()
 }
@@ -162,10 +162,11 @@ fn install_writes_session_start_and_every_runtime_group() {
         .as_str()
         .unwrap()
         .contains("schedule_guard_daemon_recovery"));
-    assert!(config["query"]
-        .as_str()
-        .unwrap()
-        .ends_with("&harness=claude-code"));
+    // Cursor markers in the installer's environment stay out of the hook.
+    let query = config["query"].as_str().unwrap();
+    assert!(query.starts_with("guard-home="), "{query}");
+    assert!(!query.contains("runtime-harness"), "{query}");
+    assert!(!query.contains("cursor"), "{query}");
 }
 
 #[test]

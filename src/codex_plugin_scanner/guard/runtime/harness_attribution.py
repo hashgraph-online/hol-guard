@@ -222,22 +222,8 @@ def resolve_runtime_hook_harness(
     return requested_harness
 
 
-def cursor_hook_query_extras(env: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Query parameters for the Claude daemon hook bridge when invoked from Cursor."""
-
-    source = os.environ if env is None else env
-    if not cursor_runtime_detected(source):
-        return {}
-    extras: dict[str, str] = {"runtime-harness": "cursor"}
-    project_dir = source.get("CURSOR_PROJECT_DIR")
-    if isinstance(project_dir, str) and project_dir.strip():
-        extras["workspace"] = project_dir.strip()
-    return extras
-
-
 __all__ = [
     "ORIGIN_HARNESS_ENV",
-    "cursor_hook_query_extras",
     "cursor_runtime_detected",
     "origin_harness_env",
     "resolve_environment_harness",

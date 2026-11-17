@@ -41,13 +41,8 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
 
 def claude_facts(guard_home: Path) -> str:
     """What only this process knows about the daemon the hooks reach."""
-    from .runtime.harness_attribution import cursor_hook_query_extras
-
     return json.dumps(
-        {
-            "daemon_url": load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home),
-            "query_extras": [[str(key), str(value)] for key, value in cursor_hook_query_extras().items()],
-        }
+        {"daemon_url": load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home)}
     )
 
 
