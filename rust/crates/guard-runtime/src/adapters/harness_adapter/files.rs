@@ -287,6 +287,8 @@ pub(crate) fn render(value: &PyVal) -> Step<String> {
 pub(crate) struct Object {
     pub(crate) entries: Vec<(String, PyVal)>,
     mapped: bool,
+    /// The text the object was read from, whose formatting a rewrite keeps.
+    source: Option<String>,
 }
 
 impl Object {
@@ -302,6 +304,7 @@ impl Object {
             PyVal::Dict(entries) => Ok(Self {
                 entries,
                 mapped: parsed.mapped,
+                source: Some(text.to_owned()),
             }),
             _ => Err(()),
         })
@@ -327,6 +330,20 @@ impl Object {
         } else {
             render(&value)
         }
+    }
+
+    /// The file text to write: [`Self::render`] laid over the formatting of
+    /// the text the object was read from, so members Guard did not touch keep
+    /// the user's bytes. A new file, or one holding a lone surrogate escape,
+    /// is the plain render followed by `default_end`.
+    pub(crate) fn render_document(&self, default_end: &str) -> Step<String> {
+        let rendered = self.render()?;
+        let original = self.source.as_deref().filter(|_| !self.mapped);
+        Ok(crate::json_splice::document(
+            original,
+            &rendered,
+            default_end,
+        ))
     }
 }
 
