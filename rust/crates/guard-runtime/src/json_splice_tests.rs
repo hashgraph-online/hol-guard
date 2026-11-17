@@ -167,3 +167,36 @@ fn array_elements_removed_from_the_middle_take_their_lead() {
     let spliced = preserve(original, &render(&changed)).expect("splices");
     assert_eq!(spliced, "[\n  1,\n  3\n]");
 }
+
+#[test]
+fn whitespace_inside_an_empty_object_survives_install_and_uninstall() {
+    for seed in ["{ }\n", "{\t}", "[ ]"] {
+        let restored = round_trip(
+            seed,
+            |payload| match payload {
+                PyVal::Dict(entries) => entries.push((
+                    "hooks".to_owned(),
+                    value(r#"{"PreToolUse": [{"hooks": [{"command": "g"}]}]}"#),
+                )),
+                PyVal::List(items) => items.push(guard_handler()),
+                _ => panic!("container"),
+            },
+            |payload| match payload {
+                PyVal::Dict(entries) => entries.clear(),
+                PyVal::List(items) => items.clear(),
+                _ => panic!("container"),
+            },
+        );
+        assert_eq!(restored, seed);
+    }
+}
+
+#[test]
+fn an_empty_object_without_inner_whitespace_takes_the_render_when_filled() {
+    let restored = round_trip(
+        "{}\n",
+        |payload| entries(payload).push(("hooks".to_owned(), value("{}"))),
+        |payload| entries(payload).clear(),
+    );
+    assert_eq!(restored, "{}\n");
+}
