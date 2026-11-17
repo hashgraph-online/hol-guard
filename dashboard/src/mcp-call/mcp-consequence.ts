@@ -11,7 +11,7 @@ export function consequenceFor(effect: McpEffectKind, where: string): McpConsequ
     case "in-app":
       return {
         tone: "calm",
-        text: `By its name, this only changes what ${where} shows you. It does not reach your files, accounts or other apps.`,
+        text: `By its name, this only changes what ${where} shows you. Guard has not checked what it does.`,
       };
     case "read":
       return { tone: "calm", text: `By its name, this looks something up in ${where}.` };

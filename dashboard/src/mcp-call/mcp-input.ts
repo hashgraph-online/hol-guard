@@ -202,6 +202,15 @@ export function scalarFacts(
   return { facts, hidden };
 }
 
+/** Code keeps its lines, which a query needs to be read; other values become one line. Both stay within the row limit. */
+function fieldText(value: unknown, kind: McpFact["kind"]): string | null {
+  if (kind !== "code" || typeof value !== "string") return scalarText(value);
+  const code = codeOf(value);
+  if (code === null) return null;
+  const chars = Array.from(code);
+  return chars.length > VALUE_CHARS ? `${chars.slice(0, VALUE_CHARS - 1).join("")}…` : code;
+}
+
 function promotedFacts(input: Record<string, unknown>, skip: Set<string>, tool: string | undefined, max: number): McpFact[] {
   const fields = tool !== undefined ? previewFieldsFor(tool) : null;
   if (fields === null) return [];
@@ -212,7 +221,7 @@ function promotedFacts(input: Record<string, unknown>, skip: Set<string>, tool: 
     for (const candidate of field.keys) {
       const key = keysByLowerCase.get(candidate);
       if (key === undefined || skip.has(key) || facts.some((fact) => fact.key === key)) continue;
-      const text = KEY_PATTERN.test(key) ? scalarText(input[key]) : null;
+      const text = KEY_PATTERN.test(key) ? fieldText(input[key], field.kind) : null;
       if (text === null || text.length === 0) continue;
       facts.push({ label: field.label, value: text, kind: field.kind ?? valueKindOf(text), key });
       break;

@@ -89,10 +89,31 @@ const CLAUDE_TOOLS = new Map<string, CatalogEntry>([
   ["ccd_session/start_session", { title: "Start another Claude session", phrase: "start another Claude session", effect: "write", facts: sessionFacts }],
 ]);
 
-/** The built-in tool behind `server`/`tool`, or null for any tool the user added. */
-export function hostAppTool(server: string, tool: string): HostAppTool | null {
+/**
+ * What says the call came from the Claude app. A server name alone does not:
+ * anyone can name a server `ccd_turn`. The hook route (`claude-code`) or the
+ * environment Guard's own hook stamped (the Claude desktop app sets
+ * `CLAUDE_CODE_DESKTOP_APP_VERSION`) does, and neither is the agent's to write.
+ */
+export type HostEvidence = { harness: string | null | undefined; raw?: Record<string, unknown> | null };
+
+const CLAUDE_HARNESS = "claude-code";
+const CLAUDE_DESKTOP_ENVIRONMENT = "CLAUDE_CODE_DESKTOP_APP_VERSION";
+
+function fromClaudeApp(evidence: HostEvidence): boolean {
+  if ((evidence.harness ?? "").trim().toLowerCase().replace(/_/g, "-") === CLAUDE_HARNESS) return true;
+  const stamp = recordOf(evidence.raw?.guard_execution_environment);
+  const names: unknown = stamp?.environment_names;
+  return Array.isArray(names) && names.includes(CLAUDE_DESKTOP_ENVIRONMENT);
+}
+
+/**
+ * The built-in tool behind `server`/`tool`, or null for any tool the user
+ * added, or when nothing but the server name says the call came from Claude.
+ */
+export function hostAppTool(server: string, tool: string, evidence: HostEvidence): HostAppTool | null {
   const key = server.toLowerCase();
-  if (!key.startsWith(CLAUDE_SERVER_PREFIX)) return null;
+  if (!key.startsWith(CLAUDE_SERVER_PREFIX) || !fromClaudeApp(evidence)) return null;
   const entry = CLAUDE_TOOLS.get(`${key}/${tool.toLowerCase()}`);
   if (entry !== undefined) return { ...entry, app: CLAUDE_APP, requester: CLAUDE };
   // Another Claude app tool: still Claude's, and its effect is read from its name like any tool.

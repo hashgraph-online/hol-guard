@@ -156,6 +156,8 @@ const claudeSummary: GuardApprovalRequest = {
     raw_payload_redacted: {
       tool_name: WRAP_UP,
       tool_input: { recap: "The tests pass and the change is pushed.", ask: "Merge it?", actions: [{ label: "Merge" }, { label: "Not now" }] },
+      // What Guard's own hook stamps when the Claude desktop app runs it, whatever the harness label says.
+      guard_execution_environment: { environment_names: ["CLAUDECODE", "CLAUDE_CODE_DESKTOP_APP_VERSION"] },
     },
   },
 };

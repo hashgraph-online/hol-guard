@@ -8,9 +8,11 @@ import { unique } from "./mcp-input";
 
 /**
  * Where the call acts: the one app its actions name when there is just one
- * (Gmail through Composio), else the connector it goes through.
+ * (Gmail through Composio), else the connector it goes through. Actions
+ * left out of the card may name other apps, so then it is the connector.
  */
 function actingApp(explanation: McpCallExplanation): string {
+  if ((explanation.hiddenSteps ?? 0) > 0) return explanation.connector;
   const apps = unique(explanation.steps.map((step) => step.app).filter((app): app is string => app !== null));
   return apps.length === 1 ? apps[0] : explanation.connector;
 }

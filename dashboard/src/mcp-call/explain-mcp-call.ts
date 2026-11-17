@@ -44,8 +44,8 @@ export function explainMcpCall(item: GuardApprovalRequest): McpCallExplanation |
   const selected = selectToolInput(raw);
   const input = selected.record;
   const shortTool = shortToolName(ref.server, ref.tool);
-  const host = hostAppTool(ref.server, shortTool);
-  // A built-in tool exists only inside its own app, so that app is the one asking, whatever the hook was labelled.
+  const host = hostAppTool(ref.server, shortTool, { harness: item.harness, raw });
+  // A built-in tool exists only inside its own app, so once the call is shown to come from that app, it is the one asking.
   const harness = host?.requester ?? harnessDisplayName(item.harness);
   const connector = host?.app ?? (ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER);
   const body =

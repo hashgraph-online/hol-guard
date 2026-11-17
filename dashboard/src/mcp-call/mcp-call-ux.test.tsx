@@ -7,6 +7,7 @@ import { PrimaryActionCard } from "../review-states";
 import { decisionButtonLabels } from "../review-decision-labels";
 import { ReviewDecisionControls } from "../review-decision-controls";
 import { explainMcpCall } from "./explain-mcp-call";
+import { McpCallCard } from "./mcp-call-card";
 import { consequenceFor } from "./mcp-consequence";
 import { simpleMcpChoiceApplies } from "./mcp-decision-choice";
 import { listedMcpPreview, queueRequesterName } from "./mcp-queue-name";
@@ -258,18 +259,29 @@ function request(env: GuardActionEnvelope | null, toolName: string, extra: Parti
   assert(whyPaused(secret) === "This file may contain passwords or keys. Guard stops this by default.", "T-UX-58: a specific reason is never hidden by the generic one");
 }
 
-// A tool built into the Claude app reads as Claude's own, in plain words, whatever the hook called the harness.
+// What Guard's own hook stamped when the Claude desktop app ran it.
+function fromClaudeDesktop(env: GuardActionEnvelope): GuardActionEnvelope {
+  return {
+    ...env,
+    raw_payload_redacted: {
+      ...(env.raw_payload_redacted as Record<string, unknown>),
+      guard_execution_environment: { environment_names: ["CLAUDECODE", "CLAUDE_CODE_DESKTOP_APP_VERSION", "HOME"] },
+    },
+  };
+}
+
+// A tool built into the Claude app reads as Claude's own, in plain words, once the call is shown to come from that app.
 {
   const input = {
     recap: "The card now names the app that asked.",
     ask: "Merge it?",
     actions: [{ label: "Yes, merge" }, { label: "Not now" }],
   };
-  const call = request(envelope("mcp__ccd_turn__wrap_up", input), "mcp__ccd_turn__wrap_up", { harness: "cursor" });
+  const call = request(fromClaudeDesktop(envelope("mcp__ccd_turn__wrap_up", input)), "mcp__ccd_turn__wrap_up", { harness: "cursor" });
   const explained = explainMcpCall(call);
   assert(explained !== null, "T-UX-59: a built-in tool is still explained");
   assert(explained?.headline === "Claude wants to show you a summary and next-step buttons", "T-UX-60: the headline says what the tool does");
-  assert(explained?.requester === "Claude", "T-UX-61: the requester is Claude, not the hook's harness label");
+  assert(explained?.requester === "Claude", "T-UX-61: Guard's stamp of the Claude desktop app outweighs the hook's harness label");
   assert(explained?.effect === "in-app", "T-UX-62: a summary card only changes the app");
   assert(explained?.builtIn === true, "T-UX-63: the card knows the tool is built in");
   const labels = (explained?.facts ?? []).map((item) => `${item.label}=${item.value}`);
@@ -279,35 +291,74 @@ function request(env: GuardActionEnvelope | null, toolName: string, extra: Parti
   const shown = [explained?.headline, explained?.title, explained?.queueTitle, explained?.connector, explained?.requester].join(" ");
   assert(!/ccd|wrap_up|Wrap up|Cursor/i.test(shown), "T-UX-67: no server id, raw tool name or wrong app reaches the headline");
   assert(queueItemPreview(call) === "Claude · Show a summary and next steps", "T-UX-68: the queue row names Claude and the job");
+  assert(!(explained?.consequence?.text ?? "").includes("does not reach"), "T-UX-76: the in-app note promises nothing Guard has not checked");
 }
 
-// The task list tool shows each task with its state.
+// A server merely named like the Claude app's gets no Claude treatment: the real harness asks, and its names stay.
 {
+  const call = request(envelope("mcp__ccd_turn__wrap_up", { recap: "x" }), "mcp__ccd_turn__wrap_up", { harness: "codex" });
+  const explained = explainMcpCall(call);
+  assert(explained?.builtIn !== true, "T-UX-77: a look-alike server is not called built in");
+  assert(explained?.requester === "Codex", "T-UX-78: the look-alike call keeps the real harness as requester");
+  assert(explained?.effect !== "in-app", "T-UX-79: the look-alike call is not called in-app");
+}
+
+// The task list tool shows each task with its state. The claude-code hook route is evidence on its own.
+{
+  const claude = { harness: "claude-code" };
   const call = request(
     envelope("mcp__ccd_turn__update_plan", { items: [{ content: "Write tests", status: "completed" }, { content: "Build", status: "in_progress" }, { content: "Push", status: "pending" }] }),
     "mcp__ccd_turn__update_plan",
+    claude,
   );
   const facts = explainMcpCall(call)?.facts ?? [];
   assert(facts[0]?.value === "Done: Write tests · Now: Build · Next: Push", "T-UX-69: tasks read Done / Now / Next");
-  const advance = request(envelope("mcp__ccd_turn__update_plan", { advance: true }), "mcp__ccd_turn__update_plan");
+  const advance = request(envelope("mcp__ccd_turn__update_plan", { advance: true }), "mcp__ccd_turn__update_plan", claude);
   assert((explainMcpCall(advance)?.facts[0]?.label ?? "") === "Change", "T-UX-70: an advance says what changes");
 }
 
 // An unlisted Claude app tool is still Claude's, and its effect still comes from its name.
 {
-  const call = request(envelope("mcp__ccd_session__delete_session", { id: "s1" }), "mcp__ccd_session__delete_session");
+  const call = request(envelope("mcp__ccd_session__delete_session", { id: "s1" }), "mcp__ccd_session__delete_session", { harness: "claude-code" });
   const explained = explainMcpCall(call);
   assert(explained?.requester === "Claude", "T-UX-71: an unlisted built-in tool is Claude's");
   assert(explained?.effect === "delete", "T-UX-72: an unlisted built-in delete is not called in-app");
 }
 
-// A list row without its envelope still names Claude for a built-in tool.
+// A list row without its envelope names Claude only when the hook route says Claude.
 {
-  const row = request(null, "mcp__ccd_turn__wrap_up", { harness: "cursor" });
+  const row = request(null, "mcp__ccd_turn__wrap_up", { harness: "claude-code" });
   assert(listedMcpPreview(row) === "Claude · Show a summary and next steps", "T-UX-73: a listed built-in row is named for Claude");
   assert(queueRequesterName(row) === "Claude", "T-UX-74: a listed built-in row's requester is Claude");
   const other = request(null, "mcp__github__create_issue", { harness: "cursor" });
   assert(queueRequesterName(other) === "Cursor", "T-UX-75: any other tool keeps the hook's harness");
+  const lookalike = request(null, "mcp__ccd_turn__wrap_up", { harness: "cursor" });
+  assert(queueRequesterName(lookalike) === "Cursor", "T-UX-80: a listed look-alike row keeps the hook's harness");
+  assert(whyPaused(lookalike) === "Guard asks before a tool it has not reviewed runs.", "T-UX-81: a listed MCP row without an envelope gets the MCP reason");
+}
+
+// A query keeps its lines, with control characters gone, inside the row limit.
+{
+  const sql = "SELECT id\nFROM users\u0007\nWHERE active = 1";
+  const call = request(envelope("mcp__postgres__run_query", { sql }), "mcp__postgres__run_query");
+  const query = (explainMcpCall(call)?.facts ?? []).find((item) => item.label === "Query");
+  assert(query?.value === "SELECT id\nFROM users \nWHERE active = 1", "T-UX-82: a query keeps its line breaks and drops controls");
+  const long = request(envelope("mcp__postgres__run_query", { sql: "SELECT 1;\n".repeat(60) }), "mcp__postgres__run_query");
+  const cut = (explainMcpCall(long)?.facts ?? []).find((item) => item.label === "Query");
+  assert(Array.from(cut?.value ?? "").length <= 240 && (cut?.value ?? "").endsWith("…"), "T-UX-83: a long query stays within the row limit");
+}
+
+// A card whose extra actions are left out names the connector, not the one app it showed.
+{
+  const tools = [
+    ...Array.from({ length: 10 }, (_, index) => ({ tool_slug: "GMAIL_SEND_EMAIL", arguments: { recipient_email: `p${index}@example.com` } })),
+    { tool_slug: "SLACK_SEND_MESSAGE", arguments: { channel: "general" } },
+  ];
+  const call = request(envelope("mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", { tools }), "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL");
+  const explained = explainMcpCall(call);
+  assert((explained?.hiddenSteps ?? 0) > 0, "T-UX-84: the eleventh action is left out of the rows");
+  const html = renderToStaticMarkup(<McpCallCard item={call} explanation={explained!} />);
+  assert(html.includes("Tool from Composio") && !html.includes("Gmail, through Composio"), "T-UX-85: the subtitle names the connector when actions are hidden");
 }
 
 console.log("mcp-call ux tests passed");

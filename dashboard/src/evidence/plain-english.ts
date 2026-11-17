@@ -6,6 +6,7 @@ import type {
 import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, resolveActionEnvelopeDetailText } from "../approval-center-utils";
 import { explainMcpCall } from "../mcp-call/explain-mcp-call";
+import { listedMcpRef } from "../mcp-call/mcp-queue-name";
 import { detectCategory, type ReceiptCategory } from "./categories";
 import { approvalLeftActionStopped } from "./approval-outcome";
 import {
@@ -418,7 +419,8 @@ export function plainEnglishRequestTitle(request: GuardApprovalRequest): string 
 export const UNREVIEWED_MCP_TOOL ="Guard asks before a tool it has not reviewed runs.";
 
 export function whyPaused(request: GuardApprovalRequest): string {
-  const mcpCall = explainMcpCall(request) !== null;
+  // A list row arrives without its envelope but still names the tool.
+  const mcpCall = explainMcpCall(request) !== null || listedMcpRef(request) !== null;
   const category = detectCategory({
     ...request,
     timestamp: request.created_at,

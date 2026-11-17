@@ -14111,6 +14111,13 @@ function scalarFacts(input, options = {}) {
   }
   return { facts, hidden };
 }
+function fieldText(value, kind) {
+  if (kind !== "code" || typeof value !== "string") return scalarText(value);
+  const code = codeOf(value);
+  if (code === null) return null;
+  const chars = Array.from(code);
+  return chars.length > VALUE_CHARS ? `${chars.slice(0, VALUE_CHARS - 1).join("")}…` : code;
+}
 function promotedFacts(input, skip, tool, max) {
   const fields2 = tool !== void 0 ? previewFieldsFor(tool) : null;
   if (fields2 === null) return [];
@@ -14121,7 +14128,7 @@ function promotedFacts(input, skip, tool, max) {
     for (const candidate of field.keys) {
       const key = keysByLowerCase.get(candidate);
       if (key === void 0 || skip.has(key) || facts.some((fact2) => fact2.key === key)) continue;
-      const text2 = KEY_PATTERN.test(key) ? scalarText(input[key]) : null;
+      const text2 = KEY_PATTERN.test(key) ? fieldText(input[key], field.kind) : null;
       if (text2 === null || text2.length === 0) continue;
       facts.push({ label: field.label, value: text2, kind: field.kind ?? valueKindOf(text2), key });
       break;
@@ -14363,9 +14370,17 @@ const CLAUDE_TOOLS = /* @__PURE__ */ new Map([
   ["ccd_session/dismiss_task", { title: "Withdraw a suggested task", phrase: "withdraw a task it suggested", effect: "in-app", facts: noFacts }],
   ["ccd_session/start_session", { title: "Start another Claude session", phrase: "start another Claude session", effect: "write", facts: sessionFacts }]
 ]);
-function hostAppTool(server, tool) {
+const CLAUDE_HARNESS = "claude-code";
+const CLAUDE_DESKTOP_ENVIRONMENT = "CLAUDE_CODE_DESKTOP_APP_VERSION";
+function fromClaudeApp(evidence) {
+  if ((evidence.harness ?? "").trim().toLowerCase().replace(/_/g, "-") === CLAUDE_HARNESS) return true;
+  const stamp = recordOf(evidence.raw?.guard_execution_environment);
+  const names = stamp?.environment_names;
+  return Array.isArray(names) && names.includes(CLAUDE_DESKTOP_ENVIRONMENT);
+}
+function hostAppTool(server, tool, evidence) {
   const key = server.toLowerCase();
-  if (!key.startsWith(CLAUDE_SERVER_PREFIX)) return null;
+  if (!key.startsWith(CLAUDE_SERVER_PREFIX) || !fromClaudeApp(evidence)) return null;
   const entry = CLAUDE_TOOLS.get(`${key}/${tool.toLowerCase()}`);
   if (entry !== void 0) return { ...entry, app: CLAUDE_APP, requester: CLAUDE };
   const title = sentenceCase(tool);
@@ -14399,7 +14414,7 @@ function consequenceFor(effect, where) {
     case "in-app":
       return {
         tone: "calm",
-        text: `By its name, this only changes what ${where} shows you. It does not reach your files, accounts or other apps.`
+        text: `By its name, this only changes what ${where} shows you. Guard has not checked what it does.`
       };
     case "read":
       return { tone: "calm", text: `By its name, this looks something up in ${where}.` };
@@ -14432,7 +14447,7 @@ function explainMcpCall(item) {
   const selected = selectToolInput(raw);
   const input = selected.record;
   const shortTool = shortToolName(ref.server, ref.tool);
-  const host = hostAppTool(ref.server, shortTool);
+  const host = hostAppTool(ref.server, shortTool, { harness: item.harness, raw });
   const harness = host?.requester ?? harnessDisplayName(item.harness);
   const connector = host?.app ?? (ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER);
   const body = (host !== null ? explainHostAppTool(host, input) : null) ?? (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ?? explainGenericTool({ harness, connector, shortTool, input });
@@ -14555,14 +14570,14 @@ function queueRequesterName(item) {
   const fromCall = explainMcpCall(item)?.requester;
   if (fromCall !== void 0) return fromCall;
   const ref = listedMcpRef(item);
-  const host = ref !== null ? hostAppTool(ref.server, shortToolName(ref.server, ref.tool)) : null;
+  const host = ref !== null ? hostAppTool(ref.server, shortToolName(ref.server, ref.tool), { harness: item.harness }) : null;
   return host?.requester ?? harnessDisplayName(item.harness);
 }
 function listedMcpPreview(item) {
   const ref = listedMcpRef(item);
   if (ref === null) return null;
   const short = shortToolName(ref.server, ref.tool);
-  const host = hostAppTool(ref.server, short);
+  const host = hostAppTool(ref.server, short, { harness: item.harness });
   if (host !== null) return `${host.requester} · ${host.title}`;
   const title = ref.server.toLowerCase() === "composio" ? composioToolTitle(short) ?? sentenceCase(short) : sentenceCase(short);
   return `${serviceDisplayName(ref.server)} · ${title}`;
@@ -15940,7 +15955,7 @@ function plainEnglishRequestTitle(request2) {
 }
 const UNREVIEWED_MCP_TOOL = "Guard asks before a tool it has not reviewed runs.";
 function whyPaused(request2) {
-  const mcpCall = explainMcpCall(request2) !== null;
+  const mcpCall = explainMcpCall(request2) !== null || listedMcpRef(request2) !== null;
   const category = detectCategory({
     ...request2,
     timestamp: request2.created_at,
@@ -33932,6 +33947,7 @@ function LongText({ value }) {
   ] });
 }
 function actingApp(explanation) {
+  if ((explanation.hiddenSteps ?? 0) > 0) return explanation.connector;
   const apps = unique(explanation.steps.map((step) => step.app).filter((app) => app !== null));
   return apps.length === 1 ? apps[0] : explanation.connector;
 }
