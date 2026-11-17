@@ -31,6 +31,7 @@ mod publication_generation;
 mod publication_inverse_plan;
 mod publication_inverse_publish;
 mod publication_io;
+mod publication_lean;
 mod publication_observer;
 mod publication_receipt;
 mod publication_repair_files;

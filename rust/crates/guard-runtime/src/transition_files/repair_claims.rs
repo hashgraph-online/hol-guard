@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use super::publication::Call;
 use super::{Fault, Step};

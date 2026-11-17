@@ -258,6 +258,7 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_write" => publication_files::write(call),
         "publication_restore" => publication_files::restore(call),
         "publication_remove_manifest" => publication_files::remove_manifest(call),
+        "publication_lean_sessions" => super::publication_lean::lean_sessions(call),
         "publication_baseline" => publication_baseline::load(call),
         "publication_receipt_load" => publication_receipt::load(call),
         "publication_receipt_build" => publication_receipt::build(call),
