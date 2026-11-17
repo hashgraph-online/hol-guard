@@ -6,6 +6,7 @@ worded by the runtime, and a rebind planned from what the runtime detected.
 
 from __future__ import annotations
 
+import base64
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,7 +50,6 @@ def prepared_from_detection(
     from ..runtime_transition import RuntimeTransition, TransitionError, TransitionFile
     from ..shims import prepare_guard_shim
     from .base import PreparedHarnessInstall
-    from .native_harness import planned_files
 
     found = adapter._ask("install_detection", context, create_key=create_key)
     if set(found) == {"transition_error"}:
@@ -82,7 +82,6 @@ def prepared_surfaces(
     from ..runtime_transition import RuntimeTransition, TransitionError, TransitionFile
     from ..shims import shell_profile_facts, shim_interpreter
     from .base import PreparedHarnessInstall
-    from .native_harness import planned_files
 
     answer = adapter._ask(
         "prepare_surfaces",
@@ -123,7 +122,7 @@ def detection_from(harness: str, context: HarnessContext, answer: dict[str, Any]
     )
 
 
-__all__ = ["HookOwnershipError", "detection_from", "owned_ask", "prepared_from_detection"]
+__all__ = ["HookOwnershipError", "detection_from", "owned_ask", "planned_files", "prepared_from_detection"]
 
 
 def native_warnings(
@@ -207,3 +206,27 @@ def install_delegated(adapter: NativeHarnessAdapter, context: HarnessContext) ->
         **delegates,
     )
     return json.loads(_text(answer, "manifest"))
+
+
+def _decoded(value: object) -> bytes | None:
+    return None if value is None else base64.b64decode(str(value))
+
+
+def planned_files(answer: dict[str, Any]) -> list[Any]:
+    """The transition files a ``prepare_install`` answer plans."""
+    from ..runtime_transition import TransitionFile
+
+    files = [
+        TransitionFile(
+            Path(change["path"]),
+            _decoded(change["before"]),
+            _decoded(change["after"]),
+            before_mode=change["before_mode"],
+            after_mode=change["after_mode"],
+            no_follow=change["no_follow"],
+        )
+        for change in answer["files"]
+    ]
+    for planned in files:
+        planned.payload()
+    return files
