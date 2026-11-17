@@ -185,7 +185,11 @@ fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
     if let Some(mut hooks) = hooks_of(&payload) {
         settings::prune_events(&contract, &mut hooks, &UNINSTALL_EVENTS)?;
         settings::remove_unsupported(&contract, &mut hooks)?;
-        payload.set("hooks", hooks.value());
+        if hooks.0.is_empty() {
+            payload.entries.retain(|(key, _)| key != "hooks");
+        } else {
+            payload.set("hooks", hooks.value());
+        }
         writes.push(json!({
             "path": path_text(&path),
             "text": payload.render()?,

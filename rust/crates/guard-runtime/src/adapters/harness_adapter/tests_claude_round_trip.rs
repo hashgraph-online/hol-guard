@@ -7,14 +7,6 @@ use serde_json::{json, Map, Value};
 use super::super::{after, dispatch, shim, Home};
 use super::{ask, facts, run, settings, RUNTIME};
 
-/// Drop the empty hook lists uninstall leaves behind; they hold no user data.
-fn without_empty_hook_lists(mut payload: Value) -> Value {
-    if let Some(hooks) = payload.get_mut("hooks").and_then(Value::as_object_mut) {
-        hooks.retain(|_, groups| groups.as_array().is_none_or(|list| !list.is_empty()));
-    }
-    payload
-}
-
 #[test]
 fn install_then_uninstall_returns_every_unrelated_user_setting() {
     let home = Home::new();
@@ -53,7 +45,7 @@ fn install_then_uninstall_returns_every_unrelated_user_setting() {
     let answer = ask(&home, "prepare_uninstall", &Map::new());
     let cleaned: Value =
         serde_json::from_str(answer["writes"][0]["text"].as_str().unwrap()).unwrap();
-    assert_eq!(without_empty_hook_lists(cleaned), original);
+    assert_eq!(cleaned, original);
 }
 
 /// Hooks always install into the user file; a workspace's own Claude files

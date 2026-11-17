@@ -29,6 +29,8 @@ mod hermes_family;
 mod opencode_family;
 #[path = "tests_pi.rs"]
 mod pi_family;
+#[path = "tests_round_trip.rs"]
+mod round_trip;
 #[path = "tests_shims.rs"]
 mod shim_family;
 
