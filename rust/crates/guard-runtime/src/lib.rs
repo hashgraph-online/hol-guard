@@ -301,6 +301,7 @@ mod context_assistance_notifications;
 mod context_assistance_op;
 mod context_assistance_prompt;
 mod context_assistance_prompt_files;
+mod context_assistance_prompt_generated;
 mod context_assistance_prompt_ignore;
 mod context_assistance_prompt_words;
 mod context_assistance_savings;
