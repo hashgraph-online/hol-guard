@@ -45,6 +45,25 @@ const DEVICES: &[&str] = &[
     "/dev/tty",
 ];
 
+/// Files a login or interactive shell runs on its own. An absolute path to one
+/// names a home directory on some host even when its top directory is missing
+/// here, as `/root` is on macOS, so it is never read as a URL-like pattern.
+const SHELL_STARTUP_FILES: &[&str] = &[
+    ".bashrc",
+    ".bash_profile",
+    ".bash_login",
+    ".bash_logout",
+    ".profile",
+    ".zshrc",
+    ".zprofile",
+    ".zlogin",
+    ".zlogout",
+    ".zshenv",
+    ".kshrc",
+    ".cshrc",
+    ".tcshrc",
+];
+
 /// `temp_fixed` says nothing in the command rebinds `TMPDIR`, so each
 /// `$TMPDIR` the shell expands is the one the sandbox launcher sets.
 /// `home_fixed` says nothing in the command rebinds `HOME`, so `~` is the
@@ -422,8 +441,11 @@ fn outside_from(value: &str, name: &str, workspace: &Path, below: usize) -> bool
         // Only a path whose top directory exists names the file system; a
         // pattern such as `/api/v1` does not.
         let top = path.components().nth(1);
-        let names_file_system =
-            top.is_some_and(|top| Path::new("/").join(top.as_os_str()).exists());
+        let names_file_system = top
+            .is_some_and(|top| Path::new("/").join(top.as_os_str()).exists())
+            || path
+                .file_name()
+                .is_some_and(|file| SHELL_STARTUP_FILES.iter().any(|name| file == *name));
         return names_file_system
             && !inside_workspace(path, workspace)
             && !through_root_link(path, workspace)
