@@ -31,11 +31,12 @@
 //! drift at the next session start, which hands off and rewrites the URL.
 //!
 //! Any other failure, including a parse error, a pid that still runs but
-//! does not answer, or a start that fails, replaces this process with the
-//! installer's Python SessionStart command (same argv, same environment,
-//! same stdin), so the Python transaction runs exactly as before inside the
-//! same hook timeout. Windows has no `exec`, so there it runs that command
-//! as a child on the same stdio and exits with its status. This lane never writes settings, never reads or
+//! does not answer, or a start that fails, hands off to the installer's
+//! Python SessionStart command (same argv, same environment, and the event
+//! this lane read from stdin written to its stdin), so the Python transaction
+//! runs exactly as before inside the same hook timeout. It runs as a child
+//! that this lane exits with; with no event read, Unix replaces this process
+//! and Windows runs the child on the same stdio. This lane never writes settings, never reads or
 //! writes the installation journal, and never mints the auth token.
 //!
 //! The config pins the runtime build (`PACKAGE_VERSION+BUILD_SHA`) that
@@ -289,9 +290,38 @@ pub(crate) fn fallback_process(argv: &[String]) -> Command {
     command
 }
 
+/// Hand off to the Python SessionStart command. This lane read the event
+/// from stdin, so the command gets those same bytes on its own stdin; with
+/// nothing read, it takes this process's stdin as before.
+fn hand_off(argv: &[String], event: &[u8]) -> i32 {
+    if event.is_empty() {
+        return replace(argv);
+    }
+    let mut command = fallback_process(argv);
+    command.stdin(Stdio::piped());
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            let _ = writeln!(
+                io::stderr(),
+                "claude session start fallback could not start: {error}"
+            );
+            return 1;
+        }
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(event);
+    }
+    child
+        .wait()
+        .ok()
+        .and_then(|status| status.code())
+        .unwrap_or(1)
+}
+
 /// Replace this process with the Python SessionStart command.
 #[cfg(unix)]
-fn hand_off(argv: &[String]) -> i32 {
+fn replace(argv: &[String]) -> i32 {
     use std::os::unix::process::CommandExt;
 
     let error = fallback_process(argv).exec();
@@ -305,7 +335,7 @@ fn hand_off(argv: &[String]) -> i32 {
 /// Windows has no `exec`: run the Python SessionStart command with this
 /// process's stdin, stdout and stderr, and exit with its status.
 #[cfg(not(unix))]
-fn hand_off(argv: &[String]) -> i32 {
+fn replace(argv: &[String]) -> i32 {
     match fallback_process(argv).status() {
         Ok(status) => status.code().unwrap_or(1),
         Err(error) => {
@@ -422,9 +452,9 @@ pub(crate) fn run(config_text: &str) -> i32 {
         return 2;
     };
     // Before the checks, so a session that hands off to Python warms too.
-    // The Python hook never reads the event, so reading it here takes
-    // nothing from the hand-off.
-    prewarm_resident(config_text, restarted_session(&read_event()).as_deref());
+    // The hand-off passes the event on to the Python command.
+    let event = read_event();
+    prewarm_resident(config_text, restarted_session(&event).as_deref());
     let home = guard_home(config_text);
     let start = |command: &[String]| {
         start_daemon(
@@ -449,7 +479,7 @@ pub(crate) fn run(config_text: &str) -> i32 {
             if let Some(home) = &home {
                 hook_bridge_fallback::note(home, "claude-code", Fallback::ContractDrift);
             }
-            hand_off(&fallback)
+            hand_off(&fallback, &event)
         }
     }
 }
