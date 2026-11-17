@@ -74,8 +74,8 @@ pub(super) fn mask_format_options(value: &str) -> String {
 /// sentence that names storage (a disk word, a filesystem or mount point, a
 /// `/dev` path that is not a stream, a `/mnt` path, a drive letter such as
 /// `C:`) keeps every `format`, and so does `the format command`. A `format`
-/// after an action such as `run the`, `a` or `quick` names the operation and
-/// is never masked. Every other `format` stays a request. A sentence ends
+/// up to three words after `run`, `perform` or a like verb, or after `a` or
+/// `quick`, names the operation and is never masked. Every other `format` stays a request. A sentence ends
 /// at `!`, `?`, `;`, a line break, or a dot before a space or the end of the
 /// text, and each sentence is scanned for storage once.
 fn mask_layout_nouns(value: &str) -> String {
@@ -101,7 +101,7 @@ fn mask_layout_nouns(value: &str) -> String {
             .expect("bounded format tail")
     });
     let act = ACT.get_or_init(|| {
-        Regex::new(r"(?i)(?:^|[^a-z0-9-])(?:a|an|quick|full|low-level|secure|clean|fresh|run|do|perform|start|execute|trigger|launch|begin|redo|finish|complete|schedule)(?:\s+(?:the|a|an|this|that|quick|full|low-level|secure|clean|fresh))*[\s*_`]*$")
+        Regex::new(r"(?i)(?:^|[^a-z0-9-])(?:(?:run|do|perform|execute|trigger|launch|redo|schedule)(?:\s+[a-z0-9-]+){0,3}|(?:a|an|quick|full|low-level|secure|clean|fresh|start|begin|finish|complete)(?:\s+(?:the|a|an|this|that|quick|full|low-level|secure|clean|fresh))*)[\s*_`]*$")
             .expect("bounded format action lead")
     });
     let pseudo = PSEUDO.get_or_init(|| Regex::new(PSEUDO_DEVICE).expect("bounded pseudo device"));
