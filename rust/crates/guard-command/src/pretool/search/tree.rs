@@ -295,13 +295,19 @@ pub(in crate::pretool) fn glob_matches_nothing(value: &str, context: ReadContext
 /// directory with more files than it lists, is proven by walking the literal
 /// directory it expands below, provided no link sits there: the search then
 /// reads no more than a recursive search of that directory, which the same
-/// walk admits.
+/// walk admits. A pattern only in the last component proves just the
+/// entries it names: `tests/*.py` never opens `tests/fixtures/.env`.
 pub(in crate::pretool) fn safe_glob_search_operand(value: &str, context: ReadContext<'_>) -> bool {
     let searched =
         |path: PathBuf| !inside_agent_state(&path, context) && walk(path, &[], &[], false, false);
     match glob_expand::expand_glob_search(value, context) {
         GlobSearch::Matches(matches) => !matches.is_empty() && matches.into_iter().all(searched),
         GlobSearch::Capped(directory) => searched(directory),
+        // Each named entry meets the screen the directory walk gives it.
+        GlobSearch::Entries(directory, entries) => entries.into_iter().all(|entry| {
+            let file = std::fs::symlink_metadata(&entry).is_ok_and(|kind| kind.is_file());
+            descendant_allowed(&entry, &directory, file) && searched(entry)
+        }),
         GlobSearch::Refused => false,
     }
 }

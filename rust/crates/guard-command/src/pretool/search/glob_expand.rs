@@ -76,6 +76,11 @@ pub(super) enum GlobSearch {
     /// directory it expands below holds every match and no link, so a walk
     /// of that directory proves what the shell could hand the search.
     Capped(PathBuf),
+    /// As [`GlobSearch::Capped`], where only the last component is a
+    /// pattern: the shell can hand the search nothing but entries of the
+    /// directory that the pattern names, all of which are listed here. The
+    /// rest of the directory is never opened, so it needs no proof.
+    Entries(PathBuf, Vec<PathBuf>),
     /// The glob reached something unsafe or ambiguous.
     Refused,
 }
@@ -87,14 +92,43 @@ pub(super) fn expand_glob_search(value: &str, context: ReadContext<'_>) -> GlobS
     let mut capped = false;
     match expand_bounded(value, context, Mode::SHELL, Screen::Contents, &mut capped) {
         Some(matches) => GlobSearch::Matches(matches),
-        None if capped => {
-            search_glob_directory(value, context).map_or(GlobSearch::Refused, GlobSearch::Capped)
-        }
+        None if capped => match search_glob_directory(value, context) {
+            Some((directory, Some(last))) => match named_entries(&directory, &last) {
+                Some(entries) => GlobSearch::Entries(directory, entries),
+                None => GlobSearch::Capped(directory),
+            },
+            Some((directory, None)) => GlobSearch::Capped(directory),
+            None => GlobSearch::Refused,
+        },
         None => GlobSearch::Refused,
     }
 }
 
-/// The literal directory a content-search glob expands below. Every match of
+/// Every entry of `directory` that the last component `pattern` can name
+/// under any shell option: a hidden name as under `dotglob`, and either case
+/// as under `nocaseglob`. `None` when a name is not ASCII, where `?` means a
+/// byte or a character depending on the locale, when the directory holds
+/// more entries than an expansion lists, or when nothing matches.
+fn named_entries(directory: &Path, pattern: &str) -> Option<Vec<PathBuf>> {
+    let folded = pattern.to_ascii_lowercase();
+    let mut entries = Vec::new();
+    for (inspected, entry) in std::fs::read_dir(directory).ok()?.enumerate() {
+        if inspected >= MAX_GLOB_ENTRIES {
+            return None;
+        }
+        let name = entry.ok()?.file_name();
+        let name = name.to_str().filter(|name| name.is_ascii())?;
+        if glob_matches(pattern.as_bytes(), name.as_bytes())
+            || glob_matches(folded.as_bytes(), name.to_ascii_lowercase().as_bytes())
+        {
+            entries.push(directory.join(name));
+        }
+    }
+    (!entries.is_empty()).then_some(entries)
+}
+
+/// The literal directory a content-search glob expands below, with the
+/// pattern when it is the last component and the only one. Every match of
 /// `dir/*.ts` or `dir/**/*.ts` lies inside `dir`, whichever shell options
 /// pick them, unless a component steps out of it.
 ///
@@ -105,7 +139,10 @@ pub(super) fn expand_glob_search(value: &str, context: ReadContext<'_>) -> GlobS
 /// anywhere below the directory refuses as well: the walk that proves a
 /// recursive search skips links, but the shell hands a matching link to the
 /// search as an operand, and the search follows it.
-fn search_glob_directory(value: &str, context: ReadContext<'_>) -> Option<PathBuf> {
+fn search_glob_directory(
+    value: &str,
+    context: ReadContext<'_>,
+) -> Option<(PathBuf, Option<String>)> {
     let scope = glob_scope::glob_base(value, context)?;
     if scope.siblings {
         return None;
@@ -134,7 +171,11 @@ fn search_glob_directory(value: &str, context: ReadContext<'_>) -> Option<PathBu
         return None;
     }
     no_links_below(&directory)?;
-    Some(directory)
+    // `**` alone reaches every depth under `globstar`, which only the walk of
+    // the whole directory answers for.
+    let last = (literal + 1 == components.len() && !components[literal].contains("**"))
+        .then(|| components[literal].to_owned());
+    Some((directory, last))
 }
 
 /// `Some` when nothing below `directory`, hidden names included, is a link,
