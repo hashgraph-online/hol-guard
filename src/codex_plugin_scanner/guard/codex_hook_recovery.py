@@ -15,7 +15,7 @@ import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .codex_hook_file_integrity import CodexHookIntegrityError, check_hook_validation_deadline
 from .native_owned import require_codex_install_owner
@@ -74,7 +74,7 @@ def _record_path(home: Path) -> Path:
     return home / "managed" / "codex" / "pending-hook-publication.json"
 
 
-def _publication(op: str, home: Path, **fields: object) -> object:
+def _publication(op: str, home: Path, **fields: Any) -> object:
     from .native_transition_files import publication
 
     return publication(op, home, **fields)

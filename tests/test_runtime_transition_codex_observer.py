@@ -34,6 +34,10 @@ def installed_context(tmp_path):
     return context, workspace, store
 
 
+def _identity(tmp_path):
+    return NativeRuntimeIdentity(tmp_path / "fixture-native", 1, 1, "d" * 64)
+
+
 def observe(context, workspace, identity, deadline, receipt_store=None):
     config = context.home_dir / ".codex" / "config.toml"
     with codex_install_transaction(context.guard_home, config, actor="transition-probe", deadline=deadline):
@@ -108,7 +112,7 @@ def test_invalid_configuration_never_launches_a_child(tmp_path, fault):
         observer.observe_configured_codex_hook(
             operation_id=str(uuid.uuid4()),
             artifact_generation="candidate",
-            expected_runtime=None,
+            expected_runtime=_identity(tmp_path),
             guard_home=context.guard_home,
             config_path=config,
             workspace=workspace,
@@ -123,15 +127,17 @@ def test_a_set_stop_scope_refuses_before_the_native_observation_starts(tmp_path,
     monkeypatch.setattr(observer, "publication", lambda *args, **kwargs: calls.append(args))
     stop = threading.Event()
     stop.set()
+    # The transaction is taken first: its own native call would be refused by a
+    # set stop scope, and what is under test is the observation's refusal.
     with (
-        native_process_stop_scope(stop),
         codex_install_transaction(context.guard_home, config, actor="transition-probe"),
+        native_process_stop_scope(stop),
         pytest.raises(TransitionError) as refused,
     ):
         observer.observe_configured_codex_hook(
             operation_id=str(uuid.uuid4()),
             artifact_generation="candidate",
-            expected_runtime=None,
+            expected_runtime=_identity(tmp_path),
             guard_home=context.guard_home,
             config_path=config,
             workspace=workspace,

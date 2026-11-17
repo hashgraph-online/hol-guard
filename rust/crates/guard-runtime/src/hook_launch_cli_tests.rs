@@ -204,7 +204,7 @@ fn a_parent_liveness_pipe_reaches_the_child_and_closes_with_it() {
             "printf %s \"$HOL_GUARD_PARENT_LIVENESS_FD\"",
         ],
         "",
-        5.0,
+        5000,
         r#"{"parent_liveness":true}"#,
     );
     assert_eq!(answer["returncode"], 0);

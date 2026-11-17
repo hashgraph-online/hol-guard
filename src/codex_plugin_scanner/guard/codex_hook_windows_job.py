@@ -40,7 +40,7 @@ def assign_current_process_to_windows_hook_job(
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         env=_isolated_environment(),
-        **launcher_popen_options(),  # type: ignore[arg-type]
+        **launcher_popen_options(),
     )
     watchdog = threading.Timer(_HOLD_ACK_TIMEOUT_SECONDS, holder.kill)
     watchdog.start()

@@ -274,7 +274,10 @@ fn a_hook_is_bound_to_its_owner() {
             false,
         ),
     );
-    let own = owner(&rig.guard(), &rig.home(), Some(&rig.workspace()));
+    let guard_dir = rig.guard();
+    let home_dir = rig.home();
+    let workspace_dir = rig.workspace();
+    let own = owner(&guard_dir, &home_dir, Some(&workspace_dir));
     assert!(recognizes(&ctx, &command, Some(&own)));
     let other = rig.root.join("other");
     let other_guard = rig.root.join("other-guard");
@@ -290,7 +293,9 @@ fn paired_path_redirects_cannot_authorize_another_context() {
     let rig = Rig::new();
     let redirected = rig.root.join("redirected");
     let own_workspace = rig.workspace();
-    let own = owner(&rig.guard(), &rig.home(), Some(&own_workspace));
+    let guard_dir = rig.guard();
+    let home_dir = rig.home();
+    let own = owner(&guard_dir, &home_dir, Some(&own_workspace));
     for frozen in [false, true] {
         let (ctx, runtime, executable) = if frozen {
             let (ctx, copy) = rig.frozen();
@@ -340,8 +345,10 @@ fn a_workspace_pinned_hook_is_not_machine_wide_and_the_reverse() {
             false,
         );
         let command = bridge(RUNTIME, &hook);
-        let same = owner(&rig.guard(), &rig.home(), pinned.then_some(&workspace));
-        let flipped = owner(&rig.guard(), &rig.home(), (!pinned).then_some(&workspace));
+        let guard_dir = rig.guard();
+        let home_dir = rig.home();
+        let same = owner(&guard_dir, &home_dir, pinned.then_some(&workspace));
+        let flipped = owner(&guard_dir, &home_dir, (!pinned).then_some(&workspace));
         assert!(recognizes(&ctx, &command, Some(&same)));
         assert!(!recognizes(&ctx, &command, Some(&flipped)));
     }
@@ -444,7 +451,9 @@ fn the_desktop_proxy_needs_every_signature_and_its_require_flag() {
         true,
     );
     let argv = desktop.argv(&hook);
-    let own = owner(&rig.guard(), &rig.home(), None);
+    let guard_dir = rig.guard();
+    let home_dir = rig.home();
+    let own = owner(&guard_dir, &home_dir, None);
     assert!(desktop_recognizes(
         &ctx,
         &argv,
@@ -492,7 +501,9 @@ fn a_desktop_proxy_redirect_cannot_authorize_another_context() {
     let desktop = Desktop::new(&rig);
     let redirected = rig.root.join("redirected");
     let own_workspace = rig.workspace();
-    let own = owner(&rig.guard(), &rig.home(), Some(&own_workspace));
+    let guard_dir = rig.guard();
+    let home_dir = rig.home();
+    let own = owner(&guard_dir, &home_dir, Some(&own_workspace));
     for option in ["--guard-home", "--home", "--workspace"] {
         let mut hook = config(
             &rig.guard(),

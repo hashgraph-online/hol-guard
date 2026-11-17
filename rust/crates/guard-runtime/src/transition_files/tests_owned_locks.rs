@@ -1,5 +1,6 @@
 //! The lifecycle locks of Codex configuration directories.
 
+#[cfg(unix)]
 use std::fs;
 use std::path::Path;
 

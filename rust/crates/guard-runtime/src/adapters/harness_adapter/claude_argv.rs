@@ -63,15 +63,6 @@ fn required_text(value: Option<&PyVal>) -> Step<String> {
     optional_text(value)?.ok_or(Failure::Invalid)
 }
 
-fn strings(value: &PyVal) -> Step<Vec<String>> {
-    value
-        .as_list()
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|item| item.as_str().map(str::to_owned).ok_or(Failure::Invalid))
-        .collect()
-}
-
 /// The facts merged into this request, or the reply that asks for them.
 pub(super) fn facts(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Facts> {
     let Some(raw) = fields.get("facts") else {

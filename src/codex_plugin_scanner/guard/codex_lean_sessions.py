@@ -18,7 +18,7 @@ import math
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 KEY = "model_auto_compact_token_limit"
 BILL_NOTE = (
@@ -101,7 +101,7 @@ def _wire_limit(limit: object) -> object:
     return str(limit)
 
 
-def _home_fields(home_dir: Path, environ: Mapping[str, str] | None) -> dict[str, object]:
+def _home_fields(home_dir: Path, environ: Mapping[str, str] | None) -> dict[str, Any]:
     codex_home = (environ or {}).get("CODEX_HOME")
     if codex_home and codex_home.strip() and not codex_home.strip().startswith("~"):
         # Codex resolves a relative CODEX_HOME from the directory it runs in;
@@ -115,7 +115,7 @@ def _ask(
     home_dir: Path,
     guard_home: Path,
     environ: Mapping[str, str] | None,
-    **fields: object,
+    **fields: Any,
 ) -> dict[str, object]:
     from .native_transition_files import publication
 

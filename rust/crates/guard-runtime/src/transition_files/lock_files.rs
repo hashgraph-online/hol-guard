@@ -254,6 +254,7 @@ fn lifecycle_lock_in(base: &Path, directory: &Path) -> Result<(fs::File, PathBuf
         "{}.lock",
         sha256_hex(configuration_identity(directory).as_bytes())
     ));
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
     {

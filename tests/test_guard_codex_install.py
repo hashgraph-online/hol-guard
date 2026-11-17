@@ -550,7 +550,7 @@ def test_guard_codex_native_hook_state_binds_interpreter_invocation_symlink_targ
     replacement = tmp_path / "replacement-python"
     replacement.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
     replacement.chmod(0o755)
-    monkeypatch.setattr(codex_adapter.sys, "executable", str(interpreter_link))
+    monkeypatch.setattr(sys, "executable", str(interpreter_link))
 
     CodexHarnessAdapter().install(context)
     valid_state = codex_adapter.codex_native_hook_state(context)

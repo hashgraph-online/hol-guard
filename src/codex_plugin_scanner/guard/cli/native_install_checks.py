@@ -23,7 +23,7 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
 _GROK_HOOK_CHECK_TIMEOUT_SECONDS = 60.0
 
 
-def _grok_hook_check(op: str, context: HarnessContext | None, **fields: object) -> dict[str, Any]:
+def _grok_hook_check(op: str, context: HarnessContext | None, **fields: Any) -> dict[str, Any]:
     """Ask the native runtime a Grok hook question, owned by ``context`` or by no one."""
     from ..config import resolve_guard_home
     from ..harness.native_harness import ask

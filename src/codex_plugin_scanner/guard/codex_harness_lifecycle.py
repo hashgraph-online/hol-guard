@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import codex_harness_client
+from . import codex_harness_client, codex_hook_self_binding
 from .aibom_detection import (
     detection_from_payload,
     extend_codex_runtime_inventory,
@@ -44,7 +44,6 @@ from .codex_hook_manifest import (
     manifest_bindings as _manifest_bindings,
 )
 from .codex_hook_registration import codex_doctor_result
-from .codex_hook_self_binding import install_package_root
 from .codex_remote_client import (
     guarded_codex_launch_command,
     guarded_codex_launch_command_candidates,
@@ -272,7 +271,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                 "create_key": enroll,
             },
             "interpreter": shim_interpreter(),
-            "package_root": str(install_package_root()),
+            "package_root": str(codex_hook_self_binding.install_package_root()),
         }
         return request, detection
 
@@ -390,7 +389,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             "launch": _launch_fields(context),
             "package_roots": _package_roots(),
             "budget": _budget(),
-            "package_root": str(install_package_root()),
+            "package_root": str(codex_hook_self_binding.install_package_root()),
         }
         answer = _codex("uninstall", context, **request)
         _replay(answer.get("events"), None, None)

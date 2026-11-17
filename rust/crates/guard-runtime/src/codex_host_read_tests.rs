@@ -452,7 +452,8 @@ fn more_tools_than_the_limit_are_refused() {
 #[test]
 fn app_read_reply_whose_apps_is_not_a_list_is_refused() {
     for apps in [Value::Null, json!(3), json!(true), json!("apps")] {
-        let host = with_app_read(move |result| result["apps"] = apps.clone());
+        let reply = apps.clone();
+        let host = with_app_read(move |result| result["apps"] = reply.clone());
         assert!(matches!(host.read_error(), Some(Stop::Code(_))), "{apps:?}");
     }
 }

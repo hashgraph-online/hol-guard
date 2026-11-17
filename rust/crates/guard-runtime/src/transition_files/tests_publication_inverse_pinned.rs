@@ -1,4 +1,5 @@
 use std::fs;
+#[cfg(unix)]
 use std::path::PathBuf;
 
 use serde_json::{json, Value};

@@ -18,7 +18,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from .codex_hook_file_integrity import CodexHookIntegrityError, canonical_path, check_hook_validation_deadline
 from .local_authority_integrity import LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM
@@ -240,7 +240,7 @@ def _encode(payload: bytes | None) -> str | None:
     return None if payload is None else base64.b64encode(payload).decode("ascii")
 
 
-def _native(op: str, home: Path, **fields: object) -> object:
+def _native(op: str, home: Path, **fields: Any) -> object:
     from .native_transition_files import publication
 
     return publication(op, home, **fields)

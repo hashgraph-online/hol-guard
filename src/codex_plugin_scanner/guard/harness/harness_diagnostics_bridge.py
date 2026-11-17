@@ -21,7 +21,7 @@ def _chunks(items: Sequence[_T]) -> list[list[_T]]:
 
 
 def _shown(artifact: GuardArtifact) -> dict[str, object]:
-    serialized = artifact.to_dict()
+    serialized: dict[str, Any] = artifact.to_dict()
     serialized["args"] = _chunks(serialized.get("args") or [])
     return serialized
 

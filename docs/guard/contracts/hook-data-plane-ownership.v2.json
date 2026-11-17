@@ -272,7 +272,6 @@
    "paths": [
     "src/codex_plugin_scanner/guard/harness/*bridge*.py",
     "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
-    "src/codex_plugin_scanner/guard/codex_hook_process_runtime.py",
     "src/codex_plugin_scanner/guard/codex_hook_windows_job.py"
    ],
    "current": "bounded stdin, daemon authentication, HTTP transport, and mechanical response projection",

@@ -24,6 +24,7 @@ from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict
 
 from .native_process_stop_scope import scoped_native_stop_event
 
@@ -71,10 +72,17 @@ def native_launcher_path(launcher: str | os.PathLike[str] | None = None) -> str 
     status = native_runtime_status()
     if not status.available or not status.compatible or status.identity is None:
         return None
-    return status.identity.path
+    return os.fspath(status.identity.path)
 
 
-def launcher_popen_options() -> dict[str, object]:
+class PopenOptions(TypedDict, total=False):
+    """The process-creation options a launcher takes."""
+
+    creationflags: int
+    start_new_session: bool
+
+
+def launcher_popen_options() -> PopenOptions:
     """Process-creation options of a launcher: detached from our console and session."""
     if os.name == "nt":
         return {"creationflags": _CREATE_NO_WINDOW}
@@ -100,7 +108,7 @@ def native_launcher_call(operation: Mapping[str, object]) -> dict[str, object] |
             timeout=_SHORT_OP_TIMEOUT_SECONDS,
             env=_launcher_environment(),
             check=False,
-            **launcher_popen_options(),  # type: ignore[arg-type]
+            **launcher_popen_options(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -306,7 +314,7 @@ def _exchange(
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            **launcher_popen_options(),  # type: ignore[arg-type]
+            **launcher_popen_options(),
         )
     except OSError:
         return None

@@ -247,7 +247,7 @@ def test_runtime_rejects_interpreter_symlink_swap(
     replacement = tmp_path / "replacement-python"
     replacement.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
     replacement.chmod(0o755)
-    monkeypatch.setattr(codex_adapter.sys, "executable", str(interpreter_link))
+    monkeypatch.setattr(sys, "executable", str(interpreter_link))
     _context, bridge_command, config = _installed_launch(tmp_path)
     interpreter_link.unlink()
     interpreter_link.symlink_to(replacement)

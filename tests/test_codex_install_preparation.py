@@ -1,6 +1,7 @@
 """Composed enrolled Codex plans restore every prepared file generation."""
 
 import json
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -124,7 +125,7 @@ def test_frozen_preparation_pins_shared_executable_once_with_invocation(tmp_path
     executable = tmp_path / "frozen-core"
     executable.write_bytes(b"isolated frozen executable identity")
     executable.chmod(0o700)
-    monkeypatch.setattr(adapter.sys, "executable", str(executable))
+    monkeypatch.setattr(sys, "executable", str(executable))
     context = _context(tmp_path, monkeypatch)
     harness = adapter_lifecycle.CodexHarnessAdapter()
     harness.install(context)

@@ -1,6 +1,7 @@
 """A retained receipt supplies exact authenticated bytes, never a repair grant."""
 
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -305,7 +306,7 @@ def test_frozen_retained_repair_pins_both_physical_executables(tmp_path, monkeyp
         executable = tmp_path / f"immutable-core-{number}"
         executable.write_bytes(b"generated frozen executable identity")
         executable.chmod(0o700)
-        monkeypatch.setattr(adapter.sys, "executable", str(executable))
+        monkeypatch.setattr(sys, "executable", str(executable))
         adapter_lifecycle.CodexHarnessAdapter().install(context)
         executables.append(executable)
     config = context.home_dir / ".codex/config.toml"
