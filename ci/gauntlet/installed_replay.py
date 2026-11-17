@@ -190,6 +190,37 @@ def envelope_shape(response: dict[str, Any]) -> list[str]:
     return shape
 
 
+def _native_bridge_failure(stderr: str) -> str | None:
+    """Read the native Codex bridge's typed stderr refusal, never a policy verdict.
+
+    A fail-closed bridge emits this versioned diagnostic separately from the
+    harness-facing denial. Keep only its bounded reason code in benchmark
+    evidence, never arbitrary stderr content or caller-controlled payloads.
+    """
+
+    letters = "abcdefghijklmnopqrstuvwxyz"
+    allowed = letters + "0123456789_"
+    for line in stderr.splitlines():
+        if not line.lstrip().startswith("{"):
+            continue
+        try:
+            message = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(message, dict) or message.get("schema") != "hol-guard.codex-bridge-failure.v1":
+            continue
+        causes = message.get("causes")
+        if not isinstance(causes, list):
+            continue
+        for cause in causes:
+            if not isinstance(cause, dict):
+                continue
+            code = cause.get("reason_code")
+            if isinstance(code, str) and 1 <= len(code) <= 128 and code[0] in letters and all(c in allowed for c in code):
+                return code
+    return None
+
+
 def verdict(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
     """One run's verdict, in a shape two runs can be compared on."""
 
@@ -221,6 +252,9 @@ def verdict(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
             # event-only envelope, so a hook that names its event and then fails is no allow.
             decision, reason = "unknown", (completed.stderr or "").strip()[-200:]
     result = {"decision": decision, "reason": reason, "exit_code": completed.returncode}
+    bridge_failure = _native_bridge_failure(completed.stderr or "")
+    if bridge_failure is not None:
+        result["bridge_failure_reason_code"] = bridge_failure
     if response is not None and isinstance(response.get("reason_code"), str):
         result["reason_code"] = response["reason_code"]
     if response is not None and decision not in ALLOW_DECISIONS | _DENY_DECISIONS:
@@ -276,6 +310,7 @@ def replay_case(
         failures.append(f"{case['id']}: identical input produced disagreeing verdicts across {repeat} runs ({spelled})")
     allowed = [run["decision"] in ALLOW_DECISIONS for run in runs]
     infrastructure = {run["reason_code"] for run in runs if run.get("reason_code") in NON_DECISION_REASONS}
+    infrastructure.update(run["bridge_failure_reason_code"] for run in runs if "bridge_failure_reason_code" in run)
     if any(str(run.get("reason", "")).startswith(_CODEX_AUTHENTICATION_FAILURE_PREFIX) for run in runs):
         infrastructure.add("codex_daemon_authentication_unavailable")
     if infrastructure:
