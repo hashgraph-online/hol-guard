@@ -127,8 +127,9 @@ fn control_socket(home: &str) -> String {
 /// executable prefix (a refusal when the candidates do not share exactly one,
 /// or it is not canonical), the control socket under `home_dir`, the Codex
 /// home the launch runs with, the ordinary command, the remote command when
-/// the arguments allow the remote TUI, and every command preparation may
-/// select, remote first.
+/// the arguments allow the remote TUI, whether the client should run
+/// `prepare` at all (it should exactly when there is a remote command), and
+/// every command preparation may select, remote first.
 fn launch(map: &Map<String, Value>) -> KindResult {
     let mut chosen: Vec<Vec<&str>> = Vec::new();
     for prefix in map
@@ -163,6 +164,7 @@ fn launch(map: &Map<String, Value>) -> KindResult {
         .collect();
     let remote = (candidates.len() >= 2).then(|| candidates[0].clone());
     Ok(json!({
+        "prepare": remote.is_some(),
         "socket": socket,
         "prefix": prefix,
         "env": { "CODEX_HOME": codex_home(home).to_string_lossy() },

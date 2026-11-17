@@ -268,6 +268,7 @@ def test_a_trusted_live_socket_is_ready() -> None:
 
 def test_launch_preparation_selects_only_among_previewed_argv(tmp_path: Path, monkeypatch) -> None:
     remote = {
+        "prepare": True,
         "prefix": ["codex"],
         "socket": "/x.sock",
         "plain": ["codex", "fix"],

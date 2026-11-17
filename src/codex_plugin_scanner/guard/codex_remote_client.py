@@ -55,10 +55,9 @@ def guarded_codex_launch_command_from_prefixes(
     """
 
     plan = _launch_plan(executable_prefixes, home_dir, passthrough_args)
-    if not _argv(plan.get("remote")) or not _argv(plan.get("prefix")):
-        return _plain(plan, executable_prefixes, passthrough_args)
-    environment = dict(os.environ if environ is None else environ)
-    if _prepare_remote(plan, home_dir, environment):
+    if plan.get("prepare") is True and _prepare_remote(
+        plan, home_dir, dict(os.environ if environ is None else environ)
+    ):
         return list(plan["remote"])
     return _plain(plan, executable_prefixes, passthrough_args)
 

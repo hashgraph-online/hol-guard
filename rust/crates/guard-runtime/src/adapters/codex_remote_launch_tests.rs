@@ -291,6 +291,7 @@ fn a_launch_names_its_socket_environment_and_every_command() {
     assert_eq!(answer["socket"], json!(SOCKET));
     assert_eq!(answer["env"], json!({ "CODEX_HOME": "/home/user/.codex" }));
     assert_eq!(answer["prefix"], json!(["/usr/bin/codex"]));
+    assert_eq!(answer["prepare"], json!(true));
     assert_eq!(answer["plain"], json!(["/usr/bin/codex", "Fix it."]));
     assert_eq!(
         answer["remote"],
@@ -311,6 +312,7 @@ fn a_launch_names_its_socket_environment_and_every_command() {
 fn a_launch_that_cannot_use_the_remote_tui_has_only_the_ordinary_command() {
     let answer = launch(json!([["/usr/bin/codex"]]), json!(["exec", "Fix it."]));
     assert_eq!(answer["remote"], Value::Null);
+    assert_eq!(answer["prepare"], json!(false));
     assert_eq!(answer["candidates"], json!([answer["plain"]]));
 }
 
