@@ -4,6 +4,9 @@
 
 use super::{CONTROL_WORDS, MAX_BODY_BYTES};
 
+#[path = "for_loop_unroll_binding.rs"]
+mod binding;
+
 /// A parsed command list: its items with the separator that follows each, the
 /// keyword that closed the list, and the text after that keyword.
 pub(crate) type CommandList<'a> = (Vec<(String, &'static str)>, &'static str, &'a str);
@@ -317,85 +320,24 @@ pub(crate) fn rebinds(item: &str, name: &str) -> bool {
     // Quoting is how a rebinding hides: the shell builds one word out of
     // `o''pt=secret`, while the written text holds no run that spells the
     // name. Scanning both forms covers a name split across quotes and one
-    // that quoting would instead join to its neighbour.
-    may_rebind(item, name) || may_rebind(&unquoted(item), name)
+    // that quoting would instead join to its neighbour. A binding builtin is
+    // read from the words the shell builds, so `select` inside a quoted jq
+    // filter is text handed to jq, while `'re'ad n` is still `read`. Whether
+    // the shell rewrites the text is read from it as written for both forms.
+    let found = (
+        binding::holds_a_binding_word(item),
+        binding::rewritten(item),
+    );
+    may_rebind(item, name, found) || may_rebind(&unquoted(item), name, found)
 }
 
 /// A bare `NAME` only binds where something in the same item can bind a name:
 /// the word is an assignment, a builtin that takes a name is there, or the
 /// item opens an arithmetic command, which assigns without an `=` sign. A
 /// name the item merely talks about, as in `echo "pkg: $pkg"`, binds nothing.
-fn may_rebind(text: &str, name: &str) -> bool {
-    names_a_target(text, name)
-        && (assigns(text, name) || holds_a_binding_word(text) || text.contains("(("))
-}
-
-/// `NAME=`, `NAME+=` and `NAME[index]=` at the start of a word.
-fn assigns(text: &str, name: &str) -> bool {
-    words(text).any(|word| {
-        word.strip_prefix(name).is_some_and(|rest| {
-            rest.starts_with('=') || rest.starts_with("+=") || rest.starts_with('[')
-        })
-    })
-}
-
-/// The builtins and keywords that bind the name written beside them.
-/// `command` and `builtin` are here because they run the builtins that do,
-/// and `set` because ksh spells an array assignment `set -A name`. The list
-/// is a shell's, not one shell's: zsh stores output in a name with
-/// `print -v`, reads a line with `getln`, and parses options with
-/// `zparseopts`, `zstyle -s` and `zformat -a`, and bash 5.3 fills an array
-/// with `compgen -V`.
-const BINDING_WORDS: &[&str] = &[
-    ".",
-    "builtin",
-    "command",
-    "compgen",
-    "coproc",
-    "declare",
-    "eval",
-    "exec",
-    "export",
-    "float",
-    "for",
-    "getln",
-    "getopts",
-    "integer",
-    "let",
-    "local",
-    "mapfile",
-    "nameref",
-    "print",
-    "printf",
-    "read",
-    "readarray",
-    "readonly",
-    "select",
-    "set",
-    "source",
-    "typeset",
-    "unset",
-    "vared",
-    "wait",
-    "zformat",
-    "zparseopts",
-    "zstyle",
-];
-
-fn holds_a_binding_word(text: &str) -> bool {
-    words(text).any(|word| {
-        let bare: String = word
-            .chars()
-            .filter(|c| !matches!(c, '\'' | '"' | '\\'))
-            .collect();
-        BINDING_WORDS.contains(&bare.as_str())
-    })
-}
-
-/// The item's words, split where the shell starts a new one.
-fn words(text: &str) -> impl Iterator<Item = &str> {
-    text.split(|c: char| c.is_whitespace() || matches!(c, ';' | '&' | '|' | '(' | ')' | '<' | '>'))
-        .filter(|word| !word.is_empty())
+fn may_rebind(text: &str, name: &str, (binding_word, rewritten): (bool, bool)) -> bool {
+    let assigns = || binding::assigns(text, name, rewritten);
+    names_a_target(text, name) && (assigns() || binding_word || text.contains("(("))
 }
 
 /// The word the shell builds once it removes the quoting, which is the text
@@ -615,7 +557,7 @@ fn word_boundary(character: Option<char>) -> bool {
 #[path = "for_loop_unroll_pipeline.rs"]
 mod pipeline;
 
-use pipeline::pipeline_stages;
+pub(in crate::pretool) use pipeline::pipeline_stages;
 
 /// Whether a backslash makes the character at `at` a literal. The shell reads
 /// `\ ` as a space stuck to the word beside it, so `cat \ $f` is one glued

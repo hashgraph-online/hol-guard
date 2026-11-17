@@ -141,7 +141,7 @@
           "sha256": "e1eba0e3712d752bec771fd9246cf4f1221170338266453a73cd86f691813c5f"
         },
         {
-          "path": "src/codex_plugin_scanner/guard/daemon/hook_evidence_dispatch.py",
+          "path": "src/codex_plugin_scanner/guard/evidence_drains/hook_evidence_dispatch.py",
           "git_blob_sha1": "c106af0dcd8ea586c168815d187d6558877f21c1",
           "sha256": "6860c02caa38507f2b7e5c0be232eb8eefb9f3f68a12791f7ff6c052a011fb41"
         },

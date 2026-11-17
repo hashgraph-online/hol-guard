@@ -19,8 +19,8 @@ import pytest
 
 from codex_plugin_scanner.guard import native_catalog_read as native
 from codex_plugin_scanner.guard.catalog_delivery import current_refresh, discovery, installed_bundle
-from codex_plugin_scanner.guard.daemon import background_diagnostics
-from codex_plugin_scanner.guard.daemon.diagnostics import DaemonDiagnostics
+from codex_plugin_scanner.guard.runtime_health import background_diagnostics
+from codex_plugin_scanner.guard.runtime_health.diagnostics import DaemonDiagnostics
 
 
 @pytest.fixture
@@ -142,7 +142,7 @@ def test_recorded_detail_is_bounded(prepared, recorded, monkeypatch) -> None:
 def test_a_failure_reaches_the_daemon_log(prepared, tmp_path, sink, monkeypatch) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
-    diagnostics = DaemonDiagnostics(guard_home, start_worker=False, rotate=False)
+    diagnostics = DaemonDiagnostics(guard_home)
     sink(diagnostics.record_background)
     fail_preparation(monkeypatch, ValueError("source compiler manifest size does not match the executable"))
 

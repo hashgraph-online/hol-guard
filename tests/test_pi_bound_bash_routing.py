@@ -12,8 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import previous_managed_extension_source
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+from tests.pi_extension_support import managed_extension_source, previous_managed_extension_source
 from tests.pi_extension_template import (
     BOUND_BASH_HOST_STAMP_MARKER,
     BOUND_BASH_INTENT_SOURCE,

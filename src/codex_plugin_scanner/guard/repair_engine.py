@@ -62,49 +62,34 @@ def owns_system_scope(guard_home: Path) -> bool:
         return False
 
 
-def _step(name: str, status: str, summary: str, **detail: object) -> dict[str, object]:
-    return {"step": name, "title": STEP_TITLES[name], "status": status, "summary": summary, **detail}
+_REPORT_FEATURE = "native-guard-repair-report-v1"
+_REPORT_SCHEMA = "guard-repair-report.v1"
+_REPORT_OUTPUT_LIMIT = 512 * 1024
+_REPORT_TIMEOUT_SECONDS = 10.0
 
 
-def _error_step(name: str, error: BaseException) -> dict[str, object]:
-    text = f"{type(error).__name__}: {str(error)[:_MAX_ERROR_CHARS]}".strip()
-    return _step(name, "error", f"Could not complete: {text}", error=text)
+def _raised(name: str, error: BaseException, **result: object) -> dict[str, object]:
+    return {"step": name, "error_type": type(error).__name__, "error_message": str(error), **result}
 
 
-def repair_daemon(guard_home: Path, *, home_dir: Path, dry_run: bool) -> dict[str, object]:
+def _daemon_result(guard_home: Path, *, home_dir: Path, dry_run: bool) -> dict[str, object]:
     if not (guard_home / "daemon-state.json").exists() and not owns_system_scope(guard_home):
-        return _step("daemon", "ok", "No daemon is recorded for this Guard home.")
+        return {"step": "daemon", "probe": "unrecorded"}
     try:
         if dry_run:
-            from .daemon.live_identity import verified_live_guard_daemon_identity
+            from .native_daemon_peer import verified_live_guard_daemon_identity
 
             healthy = verified_live_guard_daemon_identity(guard_home) is not None
-            if healthy:
-                return _step("daemon", "ok", "Daemon is healthy.")
-            return _step("daemon", "planned", "Daemon is not responding; it would be restarted.")
-        from .daemon.runtime_repair import repair_guard_daemon_runtime
+            return {"step": "daemon", "probe": "healthy" if healthy else "unhealthy"}
+        from .runtime_health.runtime_repair import repair_guard_daemon_runtime
 
         result = repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
-        runtime_status = str(result.get("runtime_status", "unknown"))
-        if runtime_status == "restarted":
-            return _step(
-                "daemon", "changed", "Daemon was not healthy and was restarted.", runtime_status=runtime_status
-            )
-        return _step("daemon", "ok", "Daemon is healthy.", runtime_status=runtime_status)
+        return {"step": "daemon", "runtime_status": str(result.get("runtime_status", "unknown"))}
     except Exception as error:
-        return _error_step("daemon", error)
+        return _raised("daemon", error)
 
 
-def repair_native_runtime(guard_home: Path, *, dry_run: bool) -> dict[str, object]:
-    step = _prune_native_runtime(guard_home, dry_run=dry_run)
-    if dry_run:
-        return step
-    from .durable_runtime_collapse import with_durable_runtime_collapse
-
-    return with_durable_runtime_collapse(step, guard_home)
-
-
-def _prune_native_runtime(guard_home: Path, *, dry_run: bool) -> dict[str, object]:
+def _native_runtime_result(guard_home: Path, *, dry_run: bool) -> dict[str, object]:
     try:
         from .resident_state_prune import prune_native_runtime, prune_runtime_offered
 
@@ -113,35 +98,29 @@ def _prune_native_runtime(guard_home: Path, *, dry_run: bool) -> dict[str, objec
             dry_run=dry_run,
             include_system_sockets=owns_system_scope(guard_home),
         )
-        offered = detail is None and prune_runtime_offered()
+        result: dict[str, object] = {
+            "step": "native_runtime",
+            "detail": detail,
+            "offered": detail is None and prune_runtime_offered(),
+        }
     except Exception as error:
-        return _error_step("native_runtime", error)
-    if offered:
-        # The runtime offers the prune but gave no usable report; it may
-        # already have removed entries, so this is not "unavailable".
-        return _step(
-            "native_runtime",
-            "error",
-            "Could not complete: the runtime gave no usable report.",
-            outcome="failed",
-        )
-    if detail is None:
-        return _step("native_runtime", "skipped", "Not checked (runtime unavailable).", outcome="unavailable")
-    dirs, sockets = detail["stale_dirs"], detail["dead_sockets"]
-    if detail["outcome"] in {"unsupported", "unavailable"}:
-        return _step("native_runtime", "skipped", f"Not checked ({detail['outcome']}).", **detail)
-    if not dirs and not sockets:
-        return _step("native_runtime", "ok", "No stale native runtime state.", **detail)
-    verb = "Would remove" if dry_run else "Removed"
-    return _step(
-        "native_runtime",
-        "planned" if dry_run else "changed",
-        f"{verb} {dirs} stale runtime folder(s) and {sockets} dead socket(s).",
-        **detail,
-    )
+        result = _raised("native_runtime", error)
+    if dry_run:
+        return result
+    from .durable_runtime_collapse import collapse_durable_runtimes
+
+    try:
+        # A failed or skipped collapse never changes the step: the copies it
+        # would have shared stay as they are and still launch.
+        collapse = collapse_durable_runtimes(guard_home)
+    except Exception:
+        collapse = None
+    if collapse is not None:
+        result["durable_runtimes"] = collapse
+    return result
 
 
-def repair_native_install(*, dry_run: bool) -> dict[str, object]:
+def _native_install_result(*, dry_run: bool) -> dict[str, object]:
     """Put back the execute bit Guard's own runtime copy lost; report what needs a reinstall.
 
     A runtime missing that bit cannot be launched, so it cannot restore the bit
@@ -156,28 +135,11 @@ def repair_native_install(*, dry_run: bool) -> dict[str, object]:
 
         report = repair_native_runtime_install(dry_run=dry_run)
     except Exception as error:
-        return _error_step("native_install", error)
-    outcome = report["outcome"]
-    detail: dict[str, object] = {"outcome": outcome, "candidates": report["candidates"]}
-    if report["action"] is not None:
-        detail["action"] = report["action"]
-    if outcome in ("needs_reinstall", "refused"):
-        # Nothing here failed, and nothing here can fix either of them: a
-        # reinstall is the user's to run, and an execute bit this account was
-        # refused will be refused the same way next time. Both end the run
-        # saying so, rather than reporting a healthy install or sending the
-        # user back to a repair that cannot change the answer.
-        return _step("native_install", "skipped", report["summary"], needs_attention=["native runtime"], **detail)
-    status = {
-        "healthy": "ok",
-        "absent": "skipped",
-        "planned": "planned",
-        "restored": "changed",
-    }[outcome]
-    return _step("native_install", status, report["summary"], **detail)
+        return _raised("native_install", error)
+    return {"step": "native_install", "report": dict(report)}
 
 
-def repair_onefile_leaks(
+def _onefile_leaks_result(
     *,
     dry_run: bool,
     guard_home: Path | None = None,
@@ -185,7 +147,7 @@ def repair_onefile_leaks(
     now: datetime | None = None,
 ) -> dict[str, object]:
     if temp_root is None and guard_home is not None and not owns_system_scope(guard_home):
-        return _step("onefile_leaks", "skipped", "Shared temp folders are only reclaimed for the default Guard home.")
+        return {"step": "onefile_leaks", "not_owner": True}
     try:
         from .onefile_extraction import reclaim_orphaned_extraction_dirs
 
@@ -199,35 +161,20 @@ def repair_onefile_leaks(
             dry_run=dry_run,
         )
     except Exception as error:
-        return _error_step("onefile_leaks", error)
-    detail: dict[str, object] = {
-        "reclaimed_count": result.reclaimed_count,
-        "reclaimed_bytes": result.reclaimed_bytes,
-        # Reclaimed (or, in a dry run, would-be reclaimed) dirs are never
-        # counted in ``unmarked_count``, so it already is the remainder.
-        "unmarked_remaining": result.unmarked_count,
-        "unmarked_scan": result.unmarked_scan,
-        "budget_exhausted": result.unmarked_budget_exhausted,
-        "error_count": len(result.errors),
+        return _raised("onefile_leaks", error)
+    return {
+        "step": "onefile_leaks",
+        "result": {
+            "reclaimed_count": result.reclaimed_count,
+            "reclaimed_bytes": result.reclaimed_bytes,
+            # Reclaimed (or, in a dry run, would-be reclaimed) dirs are never
+            # counted in ``unmarked_count``, so it already is the remainder.
+            "unmarked_count": result.unmarked_count,
+            "unmarked_scan": result.unmarked_scan,
+            "budget_exhausted": result.unmarked_budget_exhausted,
+            "error_count": len(result.errors),
+        },
     }
-    if result.unmarked_scan == "unavailable":
-        return _step(
-            "onefile_leaks",
-            "skipped",
-            "Could not prove unmarked folders unused (open-files scan unavailable); left in place.",
-            **detail,
-        )
-    if not result.reclaimed_count:
-        return _step("onefile_leaks", "ok", "No leaked extraction folders found.", **detail)
-    megabytes = result.reclaimed_bytes // (1024 * 1024)
-    verb = "Would reclaim" if dry_run else "Reclaimed"
-    suffix = " Run repair again to continue." if result.unmarked_budget_exhausted else ""
-    return _step(
-        "onefile_leaks",
-        "planned" if dry_run else "changed",
-        f"{verb} {result.reclaimed_count} leaked folder(s), about {megabytes} MB.{suffix}",
-        **detail,
-    )
 
 
 def broken_hook_harnesses(context: HarnessContext, store: GuardStore) -> list[dict[str, object]]:
@@ -254,61 +201,37 @@ def broken_hook_harnesses(context: HarnessContext, store: GuardStore) -> list[di
     return broken
 
 
-def repair_hooks(
+def _hooks_result(
     context: HarnessContext, store: GuardStore, *, dry_run: bool, harness: str | None = None
 ) -> dict[str, object]:
     try:
         broken = broken_hook_harnesses(context, store)
     except Exception as error:
-        return _error_step("hooks", error)
+        return _raised("hooks", error)
     if harness is not None:
         broken = [item for item in broken if item.get("harness") == harness]
-    if not broken:
-        return _step("hooks", "ok", "Managed harness hooks look intact.", repaired=[], failed=[])
-    names = [str(item["harness"]) for item in broken]
-    if dry_run:
-        return _step(
-            "hooks", "planned", f"Would reinstall hooks for: {', '.join(names)}.", repaired=[], failed=[], broken=broken
-        )
+    if dry_run or not broken:
+        return {"step": "hooks", "broken": broken}
     from .cli.install_commands import apply_managed_install
 
     workspace = str(context.workspace_dir) if context.workspace_dir is not None else None
     repaired: list[str] = []
     failed: list[dict[str, str]] = []
-    for harness in names:
+    for name in (str(item["harness"]) for item in broken):
         try:
             apply_managed_install(
-                "install", harness, False, context, store, workspace, datetime.now(timezone.utc).isoformat()
+                "install", name, False, context, store, workspace, datetime.now(timezone.utc).isoformat()
             )
-            repaired.append(harness)
+            repaired.append(name)
         except Exception as error:
-            failed.append({"harness": harness, "error": f"{type(error).__name__}: {str(error)[:_MAX_ERROR_CHARS]}"})
-    still_broken = _still_broken_after_reinstall(context, store, repaired)
-    repaired = [name for name in repaired if name not in still_broken]
-    if failed:
-        failed_names = ", ".join(item["harness"] for item in failed)
-        return _step(
-            "hooks",
-            "error",
-            f"Reinstalled {len(repaired)} app(s); {len(failed)} failed: {failed_names}.",
-            repaired=repaired,
-            failed=failed,
-            needs_attention=still_broken,
-        )
-    if still_broken and not repaired:
-        return _step(
-            "hooks",
-            "skipped",
-            f"Reinstalling hooks did not clear the problem for: {', '.join(still_broken)}. "
-            "Check that the app is installed and its hooks are trusted, then run `hol-guard doctor --json`.",
-            repaired=[],
-            failed=[],
-            needs_attention=still_broken,
-        )
-    summary = f"Reinstalled hooks for: {', '.join(repaired)}."
-    if still_broken:
-        summary += f" Still needs attention: {', '.join(still_broken)}."
-    return _step("hooks", "changed", summary, repaired=repaired, failed=[], needs_attention=still_broken)
+            failed.append({"harness": name, "error_type": type(error).__name__, "error_message": str(error)})
+    return {
+        "step": "hooks",
+        "broken": broken,
+        "repaired": repaired,
+        "failed": failed,
+        "still_broken": _still_broken_after_reinstall(context, store, repaired),
+    }
 
 
 def _still_broken_after_reinstall(context: HarnessContext, store: GuardStore, reinstalled: list[str]) -> list[str]:
@@ -328,13 +251,13 @@ def _still_broken_after_reinstall(context: HarnessContext, store: GuardStore, re
     return [name for name in reinstalled if name in remaining]
 
 
-def repair_package_shims(context: HarnessContext, *, dry_run: bool) -> dict[str, object]:
+def _package_shims_result(context: HarnessContext, *, dry_run: bool) -> dict[str, object]:
     package_shims = context.guard_home / "package-shims"
     # An empty home has nothing to regenerate. Asking the resident first would
     # fail a repair that only had stale runtime state when the runtime dir is
     # not yet owner-private.
     if not (package_shims / "manifest.json").exists() and not (package_shims / "bin").exists():
-        return _step("package_shims", "ok", "No package-manager shims installed.")
+        return {"step": "package_shims", "managers": []}
     try:
         from .shims import activate_package_shims, package_shim_dashboard_status
 
@@ -345,35 +268,124 @@ def repair_package_shims(context: HarnessContext, *, dry_run: bool) -> dict[str,
             if isinstance(installed, list)
             else ()
         )
-        if not managers:
-            return _step("package_shims", "ok", "No package-manager shims installed.")
-        if dry_run:
-            return _step("package_shims", "planned", f"Would regenerate shims for: {', '.join(managers)}.")
+        if not managers or dry_run:
+            return {"step": "package_shims", "managers": list(managers)}
         payload = activate_package_shims(context, managers=managers, repair=True)
-        return _step(
-            "package_shims",
-            "changed",
-            f"Regenerated shims for: {', '.join(managers)}.",
-            restart_shell_required=bool(payload.get("restart_shell_required")),
-        )
+        return {
+            "step": "package_shims",
+            "managers": list(managers),
+            "restart_shell_required": bool(payload.get("restart_shell_required")),
+        }
     except Exception as error:
-        return _error_step("package_shims", error)
+        return _raised("package_shims", error)
 
 
-def repair_command_queue(store: GuardStore, *, dry_run: bool) -> dict[str, object]:
+def _command_queue_result(store: GuardStore, *, dry_run: bool) -> dict[str, object]:
     if dry_run:
-        return _step("command_queue", "skipped", "Not checked in a dry run.")
+        return {"step": "command_queue"}
     try:
         from .runtime.command_queue import repair_command_queue_state
 
         result = repair_command_queue_state(store)
     except Exception as error:
-        return _error_step("command_queue", error)
+        return _raised("command_queue", error)
     raw_count = result.get("repaired_count")
-    count = raw_count if isinstance(raw_count, int) else 0
-    if count:
-        return _step("command_queue", "changed", f"Cleared {count} stuck queue item(s).")
-    return _step("command_queue", "ok", "Command queue is healthy.")
+    return {"step": "command_queue", "repaired_count": raw_count if isinstance(raw_count, int) else 0}
+
+
+def build_report(results: list[dict[str, object]], *, dry_run: bool) -> dict[str, object]:
+    """The runtime's report for what each step returned.
+
+    Python runs the repairs; the runtime decides each step's status and the
+    text ``hol-guard repair`` prints. When it does not answer, the report says
+    which steps ran and that their outcome is unknown, rather than calling
+    them healthy.
+    """
+
+    from .mdm.runtime_request import runtime_answer
+
+    answer = runtime_answer(
+        _REPORT_FEATURE,
+        "guard-repair-report",
+        {"schema": _REPORT_SCHEMA, "op": "report", "dry_run": dry_run, "results": results},
+        output_limit=_REPORT_OUTPUT_LIMIT,
+        timeout_seconds=_REPORT_TIMEOUT_SECONDS,
+    )
+    if answer is not None and answer.get("schema") == SCHEMA and isinstance(answer.get("steps"), list):
+        return answer
+    return _unreported(results, dry_run=dry_run)
+
+
+def _unreported(results: list[dict[str, object]], *, dry_run: bool) -> dict[str, object]:
+    steps: list[dict[str, object]] = []
+    for result in results:
+        name = str(result["step"])
+        if "error_type" in result:
+            text = f"{result['error_type']}: {str(result.get('error_message', ''))[:_MAX_ERROR_CHARS]}".strip()
+            steps.append(
+                {"step": name, "title": STEP_TITLES[name], "status": "error", "summary": f"Could not complete: {text}"}
+            )
+            continue
+        steps.append(
+            {
+                "step": name,
+                "title": STEP_TITLES[name],
+                "status": "skipped",
+                "summary": "Ran, but the native runtime did not answer to report the outcome.",
+            }
+        )
+    lines = ["Guard repair (dry run, nothing changed)" if dry_run else "Guard repair"]
+    lines.extend(
+        f"  [{'FAILED' if item['status'] == 'error' else 'skipped'}] {item['title']}: {item['summary']}"
+        for item in steps
+    )
+    lines.append("The native runtime did not answer. Run `hol-guard doctor --json` to see why.")
+    return {"schema": SCHEMA, "dry_run": dry_run, "status": "partial", "steps": steps, "summary": "\n".join(lines)}
+
+
+def _step(result: dict[str, object], *, dry_run: bool) -> dict[str, object]:
+    steps = build_report([result], dry_run=dry_run)["steps"]
+    assert isinstance(steps, list)
+    step = steps[0]
+    assert isinstance(step, dict)
+    return step
+
+
+def repair_daemon(guard_home: Path, *, home_dir: Path, dry_run: bool) -> dict[str, object]:
+    return _step(_daemon_result(guard_home, home_dir=home_dir, dry_run=dry_run), dry_run=dry_run)
+
+
+def repair_native_runtime(guard_home: Path, *, dry_run: bool) -> dict[str, object]:
+    return _step(_native_runtime_result(guard_home, dry_run=dry_run), dry_run=dry_run)
+
+
+def repair_native_install(*, dry_run: bool) -> dict[str, object]:
+    return _step(_native_install_result(dry_run=dry_run), dry_run=dry_run)
+
+
+def repair_onefile_leaks(
+    *,
+    dry_run: bool,
+    guard_home: Path | None = None,
+    temp_root: Path | None = None,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    result = _onefile_leaks_result(dry_run=dry_run, guard_home=guard_home, temp_root=temp_root, now=now)
+    return _step(result, dry_run=dry_run)
+
+
+def repair_hooks(
+    context: HarnessContext, store: GuardStore, *, dry_run: bool, harness: str | None = None
+) -> dict[str, object]:
+    return _step(_hooks_result(context, store, dry_run=dry_run, harness=harness), dry_run=dry_run)
+
+
+def repair_package_shims(context: HarnessContext, *, dry_run: bool) -> dict[str, object]:
+    return _step(_package_shims_result(context, dry_run=dry_run), dry_run=dry_run)
+
+
+def repair_command_queue(store: GuardStore, *, dry_run: bool) -> dict[str, object]:
+    return _step(_command_queue_result(store, dry_run=dry_run), dry_run=dry_run)
 
 
 def run_repair(
@@ -395,90 +407,24 @@ def run_repair(
     """
 
     plan: list[tuple[str, Callable[[], dict[str, object]]]] = [
-        ("daemon", lambda: repair_daemon(guard_home, home_dir=context.home_dir, dry_run=dry_run)),
-        ("native_runtime", lambda: repair_native_runtime(guard_home, dry_run=dry_run)),
-        ("native_install", lambda: repair_native_install(dry_run=dry_run)),
-        ("onefile_leaks", lambda: repair_onefile_leaks(dry_run=dry_run, guard_home=guard_home)),
-        ("hooks", lambda: repair_hooks(context, store, dry_run=dry_run, harness=harness)),
-        ("package_shims", lambda: repair_package_shims(context, dry_run=dry_run)),
-        ("command_queue", lambda: repair_command_queue(store, dry_run=dry_run)),
+        ("daemon", lambda: _daemon_result(guard_home, home_dir=context.home_dir, dry_run=dry_run)),
+        ("native_runtime", lambda: _native_runtime_result(guard_home, dry_run=dry_run)),
+        ("native_install", lambda: _native_install_result(dry_run=dry_run)),
+        ("onefile_leaks", lambda: _onefile_leaks_result(dry_run=dry_run, guard_home=guard_home)),
+        ("hooks", lambda: _hooks_result(context, store, dry_run=dry_run, harness=harness)),
+        ("package_shims", lambda: _package_shims_result(context, dry_run=dry_run)),
+        ("command_queue", lambda: _command_queue_result(store, dry_run=dry_run)),
     ]
     if harness is not None:
         skip_steps = skip_steps | frozenset(name for name, _run in plan if name != "hooks")
-    steps = [run() for name, run in plan if name not in skip_steps and (include_daemon or name != "daemon")]
-    return build_report(steps, dry_run=dry_run)
-
-
-def _step_needs_attention(step: dict[str, object]) -> bool:
-    attention = step.get("needs_attention")
-    return isinstance(attention, list) and bool(attention)
-
-
-def _step_ran_out_of_budget(step: dict[str, object]) -> bool:
-    """A step that stopped at its own budget with work left for the next run."""
-
-    return step.get("budget_exhausted") is True
-
-
-def build_report(steps: list[dict[str, object]], *, dry_run: bool) -> dict[str, object]:
-    statuses = [str(item["status"]) for item in steps]
-    if "error" in statuses or any(_step_needs_attention(item) for item in steps):
-        status = "partial"
-    elif "planned" in statuses:
-        status = "needs_repair"
-    elif "changed" in statuses:
-        status = "repaired"
-    else:
-        status = "healthy"
-    return {
-        "schema": SCHEMA,
-        "dry_run": dry_run,
-        "status": status,
-        "steps": steps,
-        "summary": format_repair_summary(steps, status=status, dry_run=dry_run),
-    }
-
-
-_MARKS = {"ok": "ok", "changed": "fixed", "planned": "would fix", "skipped": "skipped", "error": "FAILED"}
-
-
-def format_repair_summary(steps: list[dict[str, object]], *, status: str, dry_run: bool) -> str:
-    lines = ["Guard repair (dry run, nothing changed)" if dry_run else "Guard repair"]
-    for item in steps:
-        mark = _MARKS.get(str(item["status"]), str(item["status"]))
-        lines.append(f"  [{mark}] {item['title']}: {item['summary']}")
-    attention = [item for item in steps if _step_needs_attention(item)]
-    if status == "partial" and any(str(item["status"]) == "error" for item in steps):
-        lines.append("Some steps failed. Re-run `hol-guard repair`; if it persists, run `hol-guard doctor --json`.")
-    elif status == "partial" and any(_step_ran_out_of_budget(item) for item in steps):
-        # Nothing failed, but a step stopped at its own budget with work left.
-        # Another run picks that work up, even though it cannot settle what the
-        # steps below are waiting on.
-        lines.append("No step failed. Run `hol-guard repair` again to continue the cleanup it could not finish.")
-    elif status == "partial":
-        # Nothing here failed: the steps ran and found something only the user
-        # can settle. Sending them back through repair would meet the same
-        # answer, so say so rather than asking for a run that cannot help.
-        lines.append("No step failed, and another `hol-guard repair` run reaches the same answer.")
-    elif status == "needs_repair":
-        lines.append("Run `hol-guard repair` to apply these fixes.")
-    elif status == "repaired":
-        lines.append("Guard was repaired. Restart any open coding-agent sessions that were blocked.")
-    else:
-        lines.append("Nothing needed repair.")
-    if attention:
-        # Name the steps rather than one of them: hooks was the only step that
-        # reported this when the line was written, and it is no longer.
-        titles = ", ".join(str(item["title"]) for item in attention)
-        lines.append(f"These still need attention: {titles}. Each step above says what it is waiting on.")
-    return "\n".join(lines)
+    results = [run() for name, run in plan if name not in skip_steps and (include_daemon or name != "daemon")]
+    return build_report(results, dry_run=dry_run)
 
 
 __all__ = [
     "STEP_TITLES",
     "broken_hook_harnesses",
     "build_report",
-    "format_repair_summary",
     "owns_system_scope",
     "repair_command_queue",
     "repair_daemon",

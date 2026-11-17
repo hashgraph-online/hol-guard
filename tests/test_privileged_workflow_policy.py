@@ -126,6 +126,56 @@ jobs:
     assert validate_privileged_workflows(tmp_path) == ()
 
 
+def test_pull_request_target_rejects_pull_request_head_checkout(tmp_path: Path) -> None:
+    for ref in (
+        "${{ github.event.pull_request.merge_commit_sha }}",
+        "${{ github.event.pull_request['head']['sha'] }}",
+        "${{ env.PR_SHA }}",
+    ):
+        _write_workflow(
+            tmp_path,
+            f"""
+on:
+  pull_request_target:
+permissions: {{}}
+jobs:
+  inspect:
+    permissions:
+      contents: read
+    steps:
+      - uses: {PINNED_ACTION}
+        with:
+          ref: {ref}
+""",
+        )
+
+        violations = validate_privileged_workflows(tmp_path)
+
+        assert [violation.code for violation in violations] == ["pull-request-target-untrusted-checkout"]
+        assert violations[0].job == "inspect"
+
+
+def test_pull_request_target_accepts_trusted_base_checkout(tmp_path: Path) -> None:
+    _write_workflow(
+        tmp_path,
+        f"""
+on:
+  pull_request_target:
+permissions: {{}}
+jobs:
+  inspect:
+    permissions:
+      contents: read
+    steps:
+      - uses: {PINNED_ACTION}
+        with:
+          ref: ${{{{ github.sha }}}}
+""",
+    )
+
+    assert validate_privileged_workflows(tmp_path) == ()
+
+
 def test_dependabot_action_pins_are_individually_reviewable() -> None:
     config = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
     action_updates = next(update for update in config["updates"] if update.get("package-ecosystem") == "github-actions")

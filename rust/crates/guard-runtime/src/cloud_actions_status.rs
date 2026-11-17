@@ -3,7 +3,7 @@
 //! `GET /v1/cloud-actions/status` shows the pairing, what the last connect
 //! said about Cloud actions and the last saved check of Guard Cloud, labelled
 //! with its age. This module reads and writes that saved check and composes
-//! the projection. Ported from `daemon/cloud_actions_status.py`
+//! the projection. Ported from the retired Python `cloud_actions_status.py`
 //! (`_read_cache`, `_write_cache`, `_check_dict`, `_site_host`, `_connection`
 //! and `cloud_actions_local_status`).
 //!

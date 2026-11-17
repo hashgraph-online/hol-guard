@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_worker, hook_worker_structured
+from codex_plugin_scanner.guard.hook_review import hook_worker, hook_worker_structured
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.structured_output_mediation_support import _config
 

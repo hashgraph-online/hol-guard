@@ -11,27 +11,8 @@ from queue import Queue
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server as daemon_server
-from codex_plugin_scanner.guard.native_process_stop_scope import native_process_stop_scope, scoped_native_stop_event
+from codex_plugin_scanner.guard.native_process_stop_scope import native_process_stop_scope
 from codex_plugin_scanner.guard.native_resident_stream import _PersistentNativeClient, _StreamFailure
-
-
-def test_command_activity_maintenance_runs_inside_the_shutdown_stop_scope() -> None:
-    service = object.__new__(daemon_server.GuardDaemonServer)
-    shutdown = threading.Event()
-    service._shutdown_started = shutdown
-    scoped: list[threading.Event | None] = []
-
-    def maintain() -> None:
-        scoped.append(scoped_native_stop_event())
-        shutdown.set()
-
-    service._maintain_command_activity_best_effort = maintain
-    service._maintain_storage_best_effort = lambda: True
-    service._command_activity_maintenance_loop()
-
-    assert scoped == [shutdown]
-    assert scoped_native_stop_event() is None
 
 
 def test_resident_response_wait_ends_once_the_scoped_stop_event_is_set(

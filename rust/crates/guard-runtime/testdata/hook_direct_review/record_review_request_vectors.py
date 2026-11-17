@@ -28,9 +28,9 @@ from types import SimpleNamespace
 from unittest import mock
 
 from codex_plugin_scanner.guard import native_hook_adapter
-from codex_plugin_scanner.guard.daemon import hook_native_review_approval as review
-from codex_plugin_scanner.guard.daemon import native_review_allow_hint as hint
-from codex_plugin_scanner.guard.daemon.hook_request_parsing import pre_tool_command
+from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
+from codex_plugin_scanner.guard.hook_review import native_review_allow_hint as hint
+from codex_plugin_scanner.guard.hook_review.hook_request_parsing import pre_tool_command
 
 OUT = Path(__file__).with_name("review_request_vectors.json")
 REQUEST_ID = "0123456789abcdef0123456789abcdef"

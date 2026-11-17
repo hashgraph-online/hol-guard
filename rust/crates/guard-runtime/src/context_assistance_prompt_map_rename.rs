@@ -3,9 +3,15 @@
 //! the agent need not search or open them again before editing. For a stubbed-out
 //! function, the other lines naming it, with their text: the module state,
 //! imports and platform versions its body has to use.
-use super::{Asked, File, Kind, Pick, Sought, Span, CHECK_EVERY};
+use super::{file, Asked, File, Kind, Pick, Sought, Span, CHECK_EVERY};
 use crate::context_assistance_prompt_words::term_form;
 use std::time::Instant;
+
+#[path = "context_assistance_prompt_map_check.rs"]
+pub(super) mod check;
+#[path = "context_assistance_prompt_map_rewrite.rs"]
+mod rewrite;
+use rewrite::Rewrite;
 
 /// Names listed for one prompt: the old name, and at most one more.
 const MAX_NAMES: usize = 2;
@@ -22,7 +28,7 @@ const MAX_STUB_CHARS: usize = 2_200;
 const MAX_LINE_CHARS: usize = 160;
 const MAX_INDENT_CHARS: usize = 48;
 /// What a body left to be written holds.
-const STUB_MARKS: [&str; 4] = [
+pub(in super::super) const STUB_MARKS: [&str; 4] = [
     "NotImplementedError",
     "todo!(",
     "unimplemented!(",
@@ -30,18 +36,23 @@ const STUB_MARKS: [&str; 4] = [
 ];
 
 /// For a rename, a block per name the prompt writes as code that a file
-/// read holds: its title, and per file the lines naming it. Empty for any
+/// read holds: its title, and per file the lines naming it, with the one
+/// command making the rename when a single name is renamed. Empty for any
 /// other prompt, or once `until` passes.
 pub(super) fn blocks(
     files: &[File],
     sought: &[Sought],
     asked: &Asked,
     until: Instant,
-) -> Vec<(String, Vec<String>)> {
+) -> (Blocks, Option<Rewrite>) {
     if !asked.everywhere {
-        return Vec::new();
+        return (Vec::new(), None);
     }
-    (sought.iter())
+    // A file Guard keeps out still holds lines the rename has to change.
+    let kept: Vec<File> = (asked.kept_out.iter())
+        .map(|(path, text)| file(path, text))
+        .collect();
+    let found: Vec<_> = (sought.iter())
         .filter(|item| item.name && !item.phrase && !owner_only(&asked.spellings, &item.text))
         .filter_map(|item| {
             // `_batched` is renamed, not `batched` beside it: the lines
@@ -49,14 +60,26 @@ pub(super) fn blocks(
             let spelled = (asked.spellings.iter()).find(|word| term_form(word) == item.text);
             let found = spelled.and_then(|word| {
                 let new = renamed_to(&asked.renames, word);
-                every_line(files, item, Some(word.as_str()), new, until)
+                let counted = (asked.exact.iter()).find(|(held, _)| held == word);
+                let word = (Some(word.as_str()), new, counted.map(|(_, count)| *count));
+                every_line(files, &kept, item, word, until)
             });
-            found.or_else(|| every_line(files, item, None, None, until))
+            found.or_else(|| every_line(files, &kept, item, (None, None, None), until))
         })
         .take(MAX_NAMES)
-        .flatten()
-        .collect()
+        .collect();
+    let rewrite = match &found[..] {
+        [(_, rewrite)] if asked.renames.len() == 1 => rewrite.clone(),
+        _ => None,
+    };
+    (
+        found.into_iter().flat_map(|(blocks, _)| blocks).collect(),
+        rewrite,
+    )
 }
+
+/// Titled blocks of lines.
+type Blocks = Vec<(String, Vec<String>)>;
 
 /// The name the prompt renames `old` to: "rename `a` to `b`".
 fn renamed_to<'a>(renames: &'a [(String, String)], old: &str) -> Option<&'a str> {
@@ -111,6 +134,16 @@ fn naming(file: &File, term: &str, exact: Option<&str>, until: Instant) -> Optio
             continue;
         }
         found.held = true;
+        // `.. _cache algorithm:` is a link label, not the name `_cache`; for
+        // `cache` its `_` joins, as the walk's count reads it.
+        let unlabeled;
+        let line = match line.trim_start().strip_prefix(".. _") {
+            Some(rest) if exact.is_some_and(|exact| exact.starts_with('_')) => {
+                unlabeled = format!(".. {rest}");
+                unlabeled.as_str()
+            }
+            _ => line,
+        };
         let words = line
             .split(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '-')))
             .filter(|word| !word.is_empty());
@@ -174,14 +207,15 @@ fn builds_on(line: &str, name: &str) -> bool {
 /// can be written without opening them; then the lines naming a longer name
 /// holding it, which a search for it finds too. The list says it is
 /// complete only when the walk read every project file, found no file
-/// holding it beyond these, and every line fits.
+/// holding it beyond these, and every line fits. `counted`, the files the
+/// walk found holding `exact` as a word, is the count to match when given.
 fn every_line(
     files: &[File],
+    kept: &[File],
     item: &Sought,
-    exact: Option<&str>,
-    new: Option<&str>,
+    (exact, new, counted): (Option<&str>, Option<&str>, Option<usize>),
     until: Instant,
-) -> Option<Vec<(String, Vec<String>)>> {
+) -> Option<(Blocks, Option<Rewrite>)> {
     let mut written = None;
     let mut holding = 0;
     let mut entries = Vec::new();
@@ -199,15 +233,24 @@ fn every_line(
     let mut others = Vec::new();
     let mut building = Vec::new();
     let mut extended: Vec<String> = Vec::new();
+    let mut holders: Vec<&File> = Vec::new();
     for file in files {
         let found = naming(file, &item.text, exact, until)?;
         written = written.or(found.written);
         holding += usize::from(found.held);
+        if !found.lines.is_empty() {
+            holders.push(file);
+        }
         for number in found.lines {
             let count = entries.len();
             whole &= fits(line_entry(file, number), &mut entries, count);
         }
-        others.extend(found.longer.into_iter().map(|number| (file, number)));
+        others.extend(
+            found
+                .longer
+                .into_iter()
+                .map(|number| line_entry(file, number)),
+        );
         building.extend(
             found
                 .building
@@ -220,17 +263,55 @@ fn every_line(
             }
         }
     }
-    for (file, number) in others {
+    // A kept-out file's lines go by number alone, never with their text.
+    for file in kept {
+        let found = naming(file, &item.text, exact, until)?;
+        written = written.or(found.written);
+        holding += usize::from(found.held);
+        if !found.lines.is_empty() {
+            holders.push(file);
+            let count = entries.len();
+            whole &= fits(kept_entry(file, &found.lines), &mut entries, count);
+        }
+        if !found.longer.is_empty() {
+            others.push(kept_entry(file, &found.longer));
+        }
+        // Cut to a list's length: any one already turns the rename command
+        // off, and these skip the note's length limit.
+        if !found.building.is_empty() {
+            let cut = &found.building[..found.building.len().min(MAX_RENAME_LINES)];
+            let mut entry = kept_entry(file, cut);
+            if cut.len() < found.building.len() {
+                entry.push_str(" (and more lines)");
+            }
+            building.push(entry);
+        }
+    }
+    let mut longer_fit = true;
+    for entry in others {
         let count = entries.len() + longer.len();
-        whole &= fits(line_entry(file, number), &mut longer, count);
+        longer_fit &= fits(entry, &mut longer, count);
     }
     let name = written?;
-    whole &= item.spelled == Some(holding);
+    // `spelled` also counts the files holding a longer name, as `lru_cache`
+    // holds `cache`, which no list of `_cache` reads all of.
+    whole &= match counted {
+        Some(count) => count == holders.len(),
+        None => longer_fit && item.spelled == Some(holding),
+    };
     let title = if whole {
         format!("Every line naming `{name}`; no other project file holds it:")
     } else {
         format!("Lines naming `{name}` in the files read; other files may hold it too:")
     };
+    // Only for a list that is whole and builds no longer name, which one
+    // replacement would break.
+    let rewrite = if whole && building.is_empty() {
+        exact.zip(new)
+    } else {
+        None
+    };
+    let rewrite = rewrite.and_then(|(old, new)| Rewrite::new(old, new, &holders));
     let mut blocks = vec![(title, entries)];
     // `f"_get_default_module{choose_async('_async')}"` also calls
     // `_get_default_module_async`, which renaming only the first breaks.
@@ -270,7 +351,7 @@ fn every_line(
             longer,
         ));
     }
-    Some(blocks)
+    Some((blocks, rewrite))
 }
 
 /// For a rename of a definition no test names, the source definitions
@@ -322,6 +403,20 @@ fn line_entry(file: &File, number: usize) -> String {
         .collect();
     let text: String = text.chars().take(MAX_LINE_CHARS).collect();
     format!("{}:{number}:{indent}{text}", file.path)
+}
+
+/// The lines of a file Guard keeps out, by number: the agent opens them.
+fn kept_entry(file: &File, numbers: &[usize]) -> String {
+    // All of them: the note's length limit, not a cut here, says whether
+    // the list is whole.
+    let numbers = (numbers.iter())
+        .map(usize::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "{}:{numbers}: Guard keeps this file's text out of this note; edit these lines too",
+        file.path
+    )
 }
 
 /// Whether section `at` of `file` is a body left to be written.

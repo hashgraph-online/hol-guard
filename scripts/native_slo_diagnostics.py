@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 import sys
-import threading
-from collections import Counter
 from pathlib import Path
 
 
@@ -26,37 +23,6 @@ def capture_inflight_failure(_kind, error, _traceback, *, destination: Path) -> 
     with destination.open("x") as out:
         json.dump({"schema": "guard-native-slo-inflight-failure.v1", "threads": threads}, out, indent=2)
     return False  # ExitStack must preserve the original benchmark exception.
-
-
-def capture_transport_refusals(server) -> None:
-    """Diagnostic observer only; call the original close/discard unchanged."""
-    counts, lock = Counter(), threading.Lock()
-    server._cigar_probe_transport_counts = counts
-    server._cigar_probe_transport_lock = lock
-    allowed = {
-        "_submit_transport_request",
-        "_advance_pending_classifications",
-        "_watch_unclassified_connections",
-        "_evict_oldest_unclassified_connection",
-        "_advance_saturation_probes",
-        "_park_saturation_probe",
-    }
-
-    def wrap(name):
-        original = getattr(server, name)
-
-        def observe(request):
-            frame = inspect.currentframe()
-            caller = frame.f_back.f_code.co_name if frame is not None and frame.f_back is not None else "other"
-            del frame
-            with lock:
-                counts[name.removeprefix("_") + ":" + (caller if caller in allowed else "other")] += 1
-            return original(request)
-
-        setattr(server, name, observe)
-
-    wrap("_discard_request")
-    wrap("_close_unclassified_socket")
 
 
 def preserve_session_diagnostics(session, destination: Path | None) -> None:

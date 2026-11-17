@@ -6,6 +6,8 @@ mod active_pack_security;
 #[path = "adapters/adapter_inventory.rs"]
 mod adapter_inventory;
 mod adapter_state_integrity_op;
+#[path = "adapters/adapter_state_key.rs"]
+mod adapter_state_key;
 #[cfg(all(test, unix))]
 #[path = "adapters/adapter_vectors_tests.rs"]
 mod adapter_vectors_tests;
@@ -95,6 +97,7 @@ mod business_document_compile;
 mod business_review_page;
 mod business_source_codec;
 mod catalog_provenance;
+mod cigar_apps;
 mod cisco_containment;
 mod cisco_evidence;
 mod cisco_plan;
@@ -126,6 +129,7 @@ mod claude_hook_bridge_auth_windows;
 mod claude_hook_bridge_fixture;
 mod claude_hook_bridge_http;
 mod claude_hook_bridge_http_text;
+mod claude_hook_bridge_recovery;
 mod claude_hook_bridge_render;
 mod claude_hook_bridge_transport;
 mod claude_hook_bridge_url;
@@ -189,14 +193,23 @@ mod codex_app_server_socket;
 #[path = "adapters/detection/codex_detect.rs"]
 mod codex_detect;
 mod codex_hook_artifacts;
+mod codex_hook_authority_record;
 mod codex_hook_bridge;
 mod codex_hook_bridge_direct;
 mod codex_hook_bridge_direct_resident;
 mod codex_hook_bridge_transport;
+mod codex_hook_bridge_trust_files;
 mod codex_hook_file_identity_op;
+mod codex_hook_file_integrity_op;
 mod codex_hook_identity;
+mod codex_hook_key;
+mod codex_hook_launch_trust;
+mod codex_hook_manifest_auth;
+mod codex_hook_manifest_build;
 mod codex_hook_manifest_iso_time;
 mod codex_hook_manifest_verify_op;
+#[cfg(unix)]
+mod codex_hook_private_group;
 mod codex_hook_response;
 mod codex_hook_trust;
 mod codex_hooks;
@@ -204,17 +217,23 @@ mod codex_hooks;
 mod codex_hooks_parity_tests;
 mod codex_host_inventory;
 mod codex_identity;
+#[path = "adapters/codex_install_plan.rs"]
+mod codex_install_plan;
 mod codex_live_operation;
 mod codex_live_wait_build;
 mod codex_proxy;
 #[path = "adapters/codex_remote_launch.rs"]
 mod codex_remote_launch;
+#[path = "adapters/codex_remote_prepare.rs"]
+mod codex_remote_prepare;
 mod codex_request_resume_busy;
 mod codex_request_resume_op;
 mod codex_request_resume_store;
 mod codex_sandbox_check;
 mod codex_sources;
 mod codex_thread_continue_op;
+mod codex_toml_read;
+mod codex_toml_render;
 mod codex_value;
 #[cfg(all(test, unix))]
 mod codex_vectors_tests;
@@ -225,6 +244,9 @@ mod command_envelope_op;
 mod command_expression_validate_op;
 mod command_policy_decide_op;
 mod command_policy_repair;
+#[path = "adapters/command_probe.rs"]
+mod command_probe;
+mod command_risk_groups;
 mod composio_role_op;
 mod compound_git_args;
 mod compound_git_chain;
@@ -279,8 +301,10 @@ mod context_assistance_notifications;
 mod context_assistance_op;
 mod context_assistance_prompt;
 mod context_assistance_prompt_files;
+mod context_assistance_prompt_generated;
 mod context_assistance_prompt_ignore;
 mod context_assistance_prompt_words;
+mod context_assistance_savings;
 mod context_assistance_service;
 mod context_digest;
 mod context_digest_json;
@@ -333,6 +357,11 @@ mod cursor_hook_config;
 #[cfg(test)]
 #[path = "adapters/cursor_hook_config_tests.rs"]
 mod cursor_hook_config_tests;
+#[path = "adapters/cursor_hook_rebind.rs"]
+mod cursor_hook_rebind;
+#[cfg(test)]
+#[path = "adapters/cursor_hook_rebind_tests.rs"]
+mod cursor_hook_rebind_tests;
 #[path = "adapters/cursor_hook_script.rs"]
 mod cursor_hook_script;
 #[path = "adapters/cursor_hook_state.rs"]
@@ -343,7 +372,7 @@ mod cursor_hook_state_tests;
 mod cursor_observer_proof_op;
 mod custom_extension_continuity;
 mod custom_extension_suggestion;
-#[cfg(unix)]
+mod daemon_client;
 mod daemon_edge;
 mod daemon_handler_digits;
 mod daemon_handler_fields;
@@ -364,7 +393,11 @@ mod daemon_lifecycle_text;
 mod daemon_lifecycle_unit_tests;
 #[cfg(test)]
 mod daemon_lifecycle_vectors_tests;
+mod daemon_manage;
 mod daemon_policy_authority;
+mod daemon_recovery;
+mod daemon_recovery_contract;
+mod daemon_recovery_store;
 mod daemon_route_op;
 mod daemon_route_paths;
 mod daemon_route_resolve;
@@ -378,6 +411,8 @@ mod delivery_object;
 mod desktop_core_onedir;
 mod desktop_foreign_installs;
 mod desktop_foreign_remove;
+#[path = "adapters/desktop_hook_proxy.rs"]
+mod desktop_hook_proxy;
 mod desktop_notification;
 mod desktop_review_link;
 mod developer_inspection_authority_op;
@@ -398,6 +433,7 @@ mod directory_trust;
 mod discovery_placement_op;
 mod durable_runtime_collapse;
 mod edge;
+mod edge_command_pattern_allow;
 mod edge_exact_command_allow;
 mod edge_exact_command_review;
 mod edge_exact_command_spelling;
@@ -474,6 +510,7 @@ mod guard_config_update_value;
 mod guard_home_resolve;
 mod guard_paths;
 mod guard_product_copy;
+mod guard_repair_report;
 mod guard_shim_profile;
 mod guard_store_advisory_cache;
 #[cfg(test)]
@@ -561,6 +598,7 @@ mod guard_store_local_cli_vectors_tests;
 mod guard_store_local_mcp_declarations;
 mod guard_store_local_mcp_observation;
 mod guard_store_local_once_mint;
+mod guard_store_mcp_policy_requests;
 mod guard_store_mcp_provider_reads;
 #[cfg(test)]
 mod guard_store_mcp_reads_tests;
@@ -584,6 +622,8 @@ mod guard_store_outbox_reads;
 mod guard_store_outbox_reads_tests;
 mod guard_store_outbox_recover;
 mod guard_store_outbox_requeue;
+mod guard_store_policy_clear;
+mod guard_store_policy_import;
 mod guard_store_policy_source_context;
 #[cfg(test)]
 mod guard_store_policy_source_context_vectors_tests;
@@ -614,6 +654,7 @@ mod guard_store_state_ops_vectors_tests;
 mod guard_store_storage_maintenance;
 #[cfg(test)]
 mod guard_store_storage_maintenance_vectors_tests;
+mod guard_store_sync_state;
 mod guard_store_temporary_mcp;
 mod guard_store_tool_call_evidence;
 #[cfg(test)]
@@ -637,6 +678,13 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod guard_store_write_cache;
 mod hardening;
+#[path = "adapters/harness_adapter/mod.rs"]
+mod harness_adapter;
+#[path = "adapters/harness_backup_restore.rs"]
+mod harness_backup_restore;
+#[cfg(test)]
+#[path = "adapters/harness_backup_restore_tests.rs"]
+mod harness_backup_restore_tests;
 mod harness_coverage;
 mod harness_coverage_command;
 mod harness_diagnostics;
@@ -650,8 +698,11 @@ mod harness_mcp_discovery;
 #[cfg(test)]
 #[path = "adapters/harness_mcp_discovery_tests.rs"]
 mod harness_mcp_discovery_tests;
+mod harness_protection_contract;
 #[path = "adapters/harness_settings_file.rs"]
 mod harness_settings_file;
+#[path = "adapters/harness_shim_refresh.rs"]
+mod harness_shim_refresh;
 mod harness_version_compat;
 mod health_lease_contract;
 mod health_lease_state;
@@ -665,6 +716,8 @@ mod hermes_hook_config;
 #[path = "adapters/hermes_hook_config_tests.rs"]
 mod hermes_hook_config_tests;
 mod hermes_inspect;
+#[path = "adapters/hermes_install_plan.rs"]
+mod hermes_install_plan;
 mod hermes_printable;
 mod hermes_skills;
 mod hermes_text;
@@ -724,6 +777,8 @@ mod hook_direct_counters;
 mod hook_direct_evidence;
 mod hook_env_stamp;
 mod hook_launch_scan;
+#[path = "adapters/hook_python_identity.rs"]
+mod hook_python_identity;
 mod hook_removal_prune;
 mod hook_removal_sweep;
 mod html_unescape;
@@ -733,6 +788,7 @@ mod mcp_config_discovery_tests;
 mod muse_detect;
 mod pack_lifecycle;
 mod pack_preparation;
+mod swarm_op;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
 mod codex_hook_identity_op;
@@ -873,6 +929,7 @@ mod mdm_integrity_snapshot;
 mod memory_decision_event;
 mod memory_decision_receipt;
 mod memory_pattern;
+mod native_admitted_call;
 #[cfg(target_os = "macos")]
 mod native_bash_client;
 mod native_bash_reply_validation;
@@ -882,6 +939,7 @@ mod native_decision_receipt;
 mod native_exact_action_op;
 mod native_hook_receipt;
 mod native_install_verdict;
+mod native_readiness;
 mod native_review_link;
 mod native_runtime_admission;
 mod native_runtime_resilience;
@@ -1003,6 +1061,7 @@ mod policy_lookup_reuse;
 mod policy_runtime_saved;
 mod policy_runtime_saved_reuse;
 mod policy_snapshot_build;
+mod policy_snapshot_publish;
 mod policy_store;
 mod policy_verifier_key_provision;
 mod posix_processes;
@@ -1017,6 +1076,7 @@ mod protect_guidance;
 mod protect_request_op;
 mod protection_health_report_op;
 mod proxy_credentials;
+mod supply_chain_bundle_cache_op;
 use guard_runtime_pyjson as pyjson;
 mod receipt_embedded_scripts;
 mod registry_trust;
@@ -1085,6 +1145,7 @@ mod runtime_identity_probe_layout;
 mod runtime_identity_range;
 mod runtime_known_vulnerable;
 mod runtime_known_vulnerable_source;
+mod runtime_transition_record;
 mod secrets_cli;
 mod sensitive_request_op;
 #[cfg(all(test, unix))]
@@ -1133,6 +1194,7 @@ mod system_proxies;
 mod temporary_mcp_grant;
 mod tool_action_identity_op;
 mod totp;
+mod transition_files;
 mod trust_attestation_key;
 mod trust_attestation_shape;
 mod trust_attestation_verify_op;

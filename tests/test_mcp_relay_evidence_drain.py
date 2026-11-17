@@ -9,8 +9,8 @@ import pytest
 
 from codex_plugin_scanner.guard import mcp_tool_calls, native_mcp_tool_call_identity
 from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
-from codex_plugin_scanner.guard.daemon import hook_direct_evidence_drain
-from codex_plugin_scanner.guard.daemon.mcp_relay_evidence_drain import (
+from codex_plugin_scanner.guard.evidence_drains import hook_direct_evidence_drain
+from codex_plugin_scanner.guard.evidence_drains.mcp_relay_evidence_drain import (
     is_mcp_relay_evidence,
     record_mcp_relay_evidence,
 )

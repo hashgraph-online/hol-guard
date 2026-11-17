@@ -135,7 +135,7 @@ fn strip_comments_dyn(
     let mut escaped = false;
     let mut index = 0usize;
     while index < chars.len() {
-        if index % 4096 == 0 {
+        if index.is_multiple_of(4096) {
             if let Some(check) = deadline_check {
                 check()?;
             }
@@ -181,7 +181,7 @@ fn strip_comments_dyn(
         output[index + 1] = ' ';
         index += 2;
         while index + 1 < chars.len() && !(chars[index] == '*' && chars[index + 1] == '/') {
-            if index % 4096 == 0 {
+            if index.is_multiple_of(4096) {
                 if let Some(check) = deadline_check {
                     check()?;
                 }

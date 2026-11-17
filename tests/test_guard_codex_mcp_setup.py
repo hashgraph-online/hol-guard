@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.mcp_registry_undo import RegistrySetupUndo
+from codex_plugin_scanner.guard.local_clis.mcp_registry_undo import RegistrySetupUndo
 from codex_plugin_scanner.guard.runtime import codex_mcp_setup
 from codex_plugin_scanner.guard.store import GuardStore
 

@@ -37,16 +37,33 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard import native_daemon_client
 from codex_plugin_scanner.guard.cli import extension_catalog_reads as reads
-from codex_plugin_scanner.guard.daemon import catalog_v2_client
-from codex_plugin_scanner.guard.daemon.catalog_v2_client import CatalogV2Client, extension_route
-from codex_plugin_scanner.guard.daemon.client import GuardSurfaceDaemonClient
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.cli.extension_catalog_reads import extension_route
+from codex_plugin_scanner.guard.native_daemon_client import ConditionalResponse, GuardSurfaceDaemonClient
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.store import GuardStore
 
 PROTO = Path(__file__).with_name("catalog_delivery_bench.proto")
+_CATALOG_V2_PATH = "/v2/extension-controls/catalog/"
+_MAX_PAGE_BYTES = 262_144
+
+
+def _conditional(
+    client: GuardSurfaceDaemonClient, route: str, query: str, *, etag: str | None = None, timeout: float = 5.0
+) -> ConditionalResponse:
+    return client.conditional_get(
+        f"{_CATALOG_V2_PATH}{route}?{query}", if_none_match=etag, timeout=timeout, max_bytes=_MAX_PAGE_BYTES
+    )
+
+
+def _page(client: GuardSurfaceDaemonClient, route: str, query: str, *, timeout: float = 5.0) -> dict[str, Any]:
+    payload = _conditional(client, route, query, timeout=timeout).payload
+    if payload is None:
+        raise RuntimeError("Guard daemon answered 304 to an unconditional catalog read")
+    return payload
 
 
 def _summary(samples: list[float]) -> dict[str, float]:
@@ -70,31 +87,32 @@ def _timed(fn: Callable[[], object], iterations: int) -> tuple[list[float], obje
 
 
 class _Meter:
-    """Counts requests and response bytes through ``CatalogV2Client``."""
+    """Counts native catalog client exchanges and their answered bytes."""
 
     def __init__(self) -> None:
         self.requests = 0
         self.bytes = 0
         self.not_modified = 0
-        self._original = CatalogV2Client._request
+        self._original = native_daemon_client._exchange
 
     @contextmanager
     def measuring(self) -> Iterator[_Meter]:
         meter = self
         original = self._original
 
-        def wrapped(client: CatalogV2Client, route: str, query: str, *, if_none_match: str | None):
-            response = original(client, route, query, if_none_match=if_none_match)
-            meter.requests += 1
-            meter.bytes += response.size
-            meter.not_modified += response.status == 304
-            return response
+        def wrapped(daemon_url: str, auth: str, op: str, timeout: float, **fields: object) -> dict[str, object]:
+            reply = original(daemon_url, auth, op, timeout, **fields)
+            if op.startswith("catalog_") or str(fields.get("path", "")).startswith(_CATALOG_V2_PATH):
+                meter.requests += 1
+                meter.bytes += len(json.dumps(reply.get("ok", {}), separators=(",", ":")).encode())
+                meter.not_modified += reply.get("not_modified") is True
+            return reply
 
-        CatalogV2Client._request = wrapped  # type: ignore[method-assign]
+        native_daemon_client._exchange = wrapped  # type: ignore[assignment]
         try:
             yield self
         finally:
-            CatalogV2Client._request = original  # type: ignore[method-assign]
+            native_daemon_client._exchange = original  # type: ignore[assignment]
 
 
 def _require_v2(meter: _Meter, row: str) -> None:
@@ -124,7 +142,7 @@ def _process_rss() -> list[dict[str, object]]:
 def workflows(client: GuardSurfaceDaemonClient, iterations: int) -> dict[str, Any]:
     results: dict[str, Any] = {}
     started = time.perf_counter()
-    cold = CatalogV2Client(client, timeout=30.0).get("index", "limit=50")
+    cold = _page(client, "index", "limit=50", timeout=30.0)
     results["cold_first_index_page_ms"] = round((time.perf_counter() - started) * 1000, 3)
     assert isinstance(cold.get("items"), list)
 
@@ -132,14 +150,13 @@ def workflows(client: GuardSurfaceDaemonClient, iterations: int) -> dict[str, An
     v1_bytes = len(json.dumps(v1, separators=(",", ":")).encode())
     results["v1_full_catalog"] = {"approx_bytes": v1_bytes, **_summary(samples)}
 
-    reader = CatalogV2Client(client)
-    samples, _ = _timed(lambda: CatalogV2Client(client).get("index", "limit=50"), iterations)
+    samples, _ = _timed(lambda: _page(client, "index", "limit=50"), iterations)
     with _Meter().measuring() as meter:
-        reader.get("index", "limit=50")
+        etag = _conditional(client, "index", "limit=50").etag
     results["v2_first_index_page"] = {"bytes": meter.bytes, **_summary(samples)}
-    samples, _ = _timed(lambda: reader.get("index", "limit=50"), iterations)
+    samples, _ = _timed(lambda: _conditional(client, "index", "limit=50", etag=etag), iterations)
     with _Meter().measuring() as meter:
-        reader.get("index", "limit=50")
+        _conditional(client, "index", "limit=50", etag=etag)
     results["v2_revalidate_unchanged"] = {"bytes": meter.bytes, "status_304": meter.not_modified, **_summary(samples)}
 
     samples, listing = _timed(lambda: reads.catalog_list(client), iterations)
@@ -173,8 +190,7 @@ def workflows(client: GuardSurfaceDaemonClient, iterations: int) -> dict[str, An
     results["cli_patterns_query_git_push_v2"] = {"requests": meter.requests, "bytes": meter.bytes, **_summary(samples)}
 
     def export() -> list[dict[str, object]]:
-        export_reader = CatalogV2Client(client)
-        return [catalog_v2_client.v1_extension_from_v2(export_reader, item["extension_id"]) for item in extensions]
+        return [client.catalog_extension(item["extension_id"]) for item in extensions]
 
     samples, exported = _timed(export, max(3, iterations // 4))
     with _Meter().measuring() as meter:
@@ -192,8 +208,7 @@ def workflows(client: GuardSurfaceDaemonClient, iterations: int) -> dict[str, An
     lock = threading.Lock()
 
     def worker() -> None:
-        local = CatalogV2Client(client)
-        timings, _ = _timed(lambda: local._request("index", "limit=50", if_none_match=None), per_thread)
+        timings, _ = _timed(lambda: _conditional(client, "index", "limit=50"), per_thread)
         with lock:
             concurrent.extend(timings)
 
@@ -216,12 +231,11 @@ def workflows(client: GuardSurfaceDaemonClient, iterations: int) -> dict[str, An
 def collect_pages(client: GuardSurfaceDaemonClient) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """The exact v2 index and permission pages the daemon served."""
 
-    reader = CatalogV2Client(client)
     index_pages: list[dict[str, Any]] = []
     cursor: str | None = None
     while True:
         query = "limit=100" + (f"&cursor={cursor}" if cursor else "")
-        page = reader.get("index", query)
+        page = _page(client, "index", query)
         index_pages.append(page)
         cursor = page.get("next_cursor")  # type: ignore[assignment]
         if cursor is None:
@@ -232,7 +246,7 @@ def collect_pages(client: GuardSurfaceDaemonClient) -> tuple[list[dict[str, Any]
             cursor = None
             while True:
                 query = "limit=100" + (f"&cursor={cursor}" if cursor else "")
-                body = reader.get(extension_route(item["extension_id"], "permissions"), query)
+                body = _page(client, extension_route(item["extension_id"], "permissions"), query)
                 permission_pages.append(body)
                 cursor = body.get("next_cursor")  # type: ignore[assignment]
                 if cursor is None:
@@ -373,7 +387,9 @@ def _page_from_pb(message: Any, *, permissions: bool) -> dict[str, Any]:
 
 
 def _validate(page: dict[str, Any]) -> None:
-    catalog_v2_client._page_fields(page)
+    fields = ("snapshot_id", "native_catalog_digest", "total_count", "items")
+    if not all(field in page for field in fields) or not isinstance(page["items"], list):
+        raise RuntimeError("Guard daemon catalog page schema is invalid")
 
 
 def _codec_row(

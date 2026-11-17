@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from tests.daemon_control_patching import patch_daemon_global
+from tests.durable_fixture_root import durable_tmp_path  # noqa: F401
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
 from tests.home_isolation import isolate_user_home
 from tests.outbound_network_guard import outbound_network_attempts
@@ -162,37 +163,13 @@ def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _python_codex_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Install Codex hooks with the Python bridge argv unless a test opts in.
+def _python_cursor_hook_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install Cursor hooks with the Python bridge argv.
 
-    Most Codex install and trust tests pin the Python bridge contract. Tests
-    marked ``native_codex_hook_bridge`` keep the native runtime selection.
+    Subprocess installers copy os.environ and do not see a monkeypatched
+    function, so the launcher reads this value as the Python bridge pin.
     """
 
-    if request.node.get_closest_marker("native_codex_hook_bridge") is not None:
-        return
-    from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-
-    # Subprocess installers copy os.environ and do not see this monkeypatch.
-    # The adapter treats this value as the Python bridge pin.
-    monkeypatch.setenv("HOL_GUARD_CODEX_HOOK_BRIDGE", "python")
-    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda *_args, **_kwargs: None)
-
-
-@pytest.fixture(autouse=True)
-def _python_bounded_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Install bounded CLI hooks with the Python bridge argv unless a test opts in.
-
-    Copilot, Kimi, Devin, ZCode, OpenClaw and Cursor install tests pin the
-    Python bridge contract. Tests marked ``native_bounded_hook_bridge`` keep the
-    native runtime selection.
-    """
-
-    if request.node.get_closest_marker("native_bounded_hook_bridge") is not None:
-        return
-    # Subprocess installers copy os.environ and do not see a monkeypatched
-    # function. The launcher treats this value as the Python bridge pin.
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", "python")
     monkeypatch.setenv("HOL_GUARD_CURSOR_HOOK_BRIDGE", "python")
 
 
@@ -226,7 +203,7 @@ def _python_mcp_proxy_launcher(request: pytest.FixtureRequest, monkeypatch: pyte
     monkeypatch.setattr(mcp_relay_native, "native_mcp_relay", lambda guard_home=None: None)
 
 
-_session_daemon_runtime_fingerprint: list[tuple[str, str]] = []
+_session_daemon_runtime_fingerprint: list[str] = []
 _daemon_runtime_fingerprint_attempts: list[None] = []
 
 
@@ -242,19 +219,18 @@ def _pinned_daemon_runtime_fingerprint(monkeypatch: pytest.MonkeyPatch) -> None:
     the daemon code to fill. Tests of the measurement reset the memo
     themselves.
     """
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard import native_daemon_manage as manager
 
     if not _session_daemon_runtime_fingerprint:
         if len(_daemon_runtime_fingerprint_attempts) >= 3:
             return
         _daemon_runtime_fingerprint_attempts.append(None)
-        # Measured without the cache file, which lives under the real home.
-        source_root = Path(manager._current_guard_daemon_source_root())
+        monkeypatch.setattr(manager, "_runtime_fingerprint_cache", None)
         try:
-            _tree_sig, fingerprint, _reused = manager._measure_runtime_fingerprint(source_root, None)
-        except RuntimeError:
+            fingerprint = manager._current_guard_daemon_runtime_fingerprint()
+        except (OSError, RuntimeError, ValueError):
             return
-        _session_daemon_runtime_fingerprint.append(("session", fingerprint))
+        _session_daemon_runtime_fingerprint.append(fingerprint)
     monkeypatch.setattr(manager, "_runtime_fingerprint_cache", _session_daemon_runtime_fingerprint[0])
 
 
@@ -427,11 +403,11 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
     if not isinstance(test_tmp_path, Path):
         return
 
-    from codex_plugin_scanner.guard.daemon.manager import (
+    from codex_plugin_scanner.guard.native_daemon_lifecycle import NativeDaemonLifecycleError
+    from codex_plugin_scanner.guard.native_daemon_manage import (
         guard_daemon_retirement_is_complete,
         retire_all_guard_daemons_for_home,
     )
-    from codex_plugin_scanner.guard.native_daemon_lifecycle import NativeDaemonLifecycleError
 
     # The per-test native mode is already undone here; the lifecycle decisions
     # that identify the daemons to retire need the same compiled authority.
@@ -577,22 +553,11 @@ def _isolate_trust_attestation_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_daemon_background_refresh_workers(
+def _isolate_daemon_headless_queue(
     request: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Start daemon refresh workers only in tests that exercise them."""
-    from codex_plugin_scanner.guard.daemon import server as daemon_server
-
-    worker_markers = {
-        "daemon_aibom_refresh": "_start_aibom_inventory_refresh",
-        "daemon_bundle_refresh": "_start_supply_chain_bundle_refresh",
-        "daemon_headless_refresh": "_start_headless_cloud_sync",
-        "daemon_plugin_telemetry": "_start_plugin_telemetry",
-    }
-    for marker, method_name in worker_markers.items():
-        if request.node.get_closest_marker(marker) is None:
-            monkeypatch.setattr(daemon_server.GuardDaemonServer, method_name, lambda _self: None)
+    """Queue headless Cloud sync only in tests that exercise it."""
     if request.node.get_closest_marker("daemon_headless_queue") is None:
         patch_daemon_global(
             monkeypatch,
@@ -601,13 +566,6 @@ def _isolate_daemon_background_refresh_workers(
                 "status": "not_configured",
                 "message": "Cloud sync is isolated for this test.",
             },
-        )
-    if request.node.get_closest_marker("daemon_service_workers") is None:
-        monkeypatch.setattr(daemon_server, "start_command_queue_worker", lambda _store, existing: existing)
-        monkeypatch.setattr(
-            daemon_server,
-            "start_cloud_sync_sync_worker",
-            lambda _store, existing, *, on_authority_changed=None: existing,
         )
 
 

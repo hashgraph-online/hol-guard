@@ -88,12 +88,22 @@ impl Prober<'_> {
 
     /// Like [`Prober::run`], but keeps stderr as well (bounded the same way).
     pub(crate) fn run_capturing_stderr(&self, arguments: &[&str]) -> Option<ProbeOutput> {
-        self.execute(arguments, None, true, false)
+        self.execute(arguments, None, true, false, None)
     }
 
     /// Like [`Prober::run`], with Git's fetches off (see [`OFFLINE_ENVIRONMENT`]).
     pub(crate) fn run_offline(&self, arguments: &[&str]) -> Option<ProbeOutput> {
-        self.execute(arguments, None, false, true)
+        self.execute(arguments, None, false, true, None)
+    }
+
+    /// Like [`Prober::run_offline`], but stopped at `until` when that comes
+    /// before the probe's own timeout.
+    pub(crate) fn run_offline_until(
+        &self,
+        arguments: &[&str],
+        until: Instant,
+    ) -> Option<ProbeOutput> {
+        self.execute(arguments, None, false, true, Some(until))
     }
 
     pub(crate) fn run_with_input(
@@ -101,7 +111,7 @@ impl Prober<'_> {
         arguments: &[&str],
         input: Option<Vec<u8>>,
     ) -> Option<ProbeOutput> {
-        self.execute(arguments, input, false, false)
+        self.execute(arguments, input, false, false, None)
     }
 
     fn execute(
@@ -110,6 +120,7 @@ impl Prober<'_> {
         input: Option<Vec<u8>>,
         capture_stderr: bool,
         offline: bool,
+        until: Option<Instant>,
     ) -> Option<ProbeOutput> {
         let mut command = Command::new(self.git);
         command
@@ -136,6 +147,7 @@ impl Prober<'_> {
             command.envs(OFFLINE_ENVIRONMENT.iter().copied());
         }
         let deadline = Instant::now() + PROBE_TIMEOUT;
+        let deadline = until.map_or(deadline, |until| until.min(deadline));
         let mut child = command.spawn().ok()?;
         let writer = input.and_then(|bytes| {
             let mut stdin = child.stdin.take()?;

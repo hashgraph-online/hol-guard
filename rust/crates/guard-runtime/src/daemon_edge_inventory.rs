@@ -83,6 +83,6 @@ pub(super) fn list(config: &ReadConfig, reads: &NativeReads) -> Option<(u16, Val
     Some((200, json!({"items": enriched, "available": available})))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_inventory_tests.rs"]
 mod tests;

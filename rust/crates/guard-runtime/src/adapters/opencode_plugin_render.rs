@@ -184,23 +184,22 @@ fn identity(value: &Value) -> Result<PyVal, &'static str> {
     ]))
 }
 
-/// `_native_bridge_payload`: the bounded native hook argv the plugin starts
-/// first, or `None` to keep the Python launcher.
+/// The bounded native hook argv `[runtime, "bounded-hook-bridge", config]`
+/// the plugin starts, or `None` when Guard has no native bridge to name.
 fn native_bridge(value: &Value) -> Result<PyVal, &'static str> {
     if value.is_null() {
         return Ok(PyVal::Null);
     }
     let argv = texts(value)?;
-    if argv.len() != 7 || argv[1] != BRIDGE_COMMAND {
+    if argv.len() != 3 || argv[1] != BRIDGE_COMMAND {
         return Ok(PyVal::Null);
     }
-    let config = parse_marking_lone_surrogates(&argv[6]).map_err(|_| ERR_INVALID)?;
+    let config = parse_marking_lone_surrogates(&argv[2]).map_err(|_| ERR_INVALID)?;
     if carries_mark(&config) {
         return Err(ERR_INVALID);
     }
     Ok(PyVal::Dict(vec![
         ("runtimePath".to_owned(), str_val(&argv[0])),
-        ("bootstrap".to_owned(), str_val(&argv[5])),
         ("config".to_owned(), config),
     ]))
 }

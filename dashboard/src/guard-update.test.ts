@@ -41,6 +41,7 @@ assert(normalized.update_available === true, "update_available should normalize"
 assert(normalized.version_check.update_available === true, "version_check should normalize");
 assert(normalized.update_in_progress === true, "update_in_progress should normalize");
 assert(normalized.release_channel === "stable", "missing update channel should default to stable");
+assert(normalized.update_mode === "automatic", "missing update mode should default to automatic");
 
 const alphaReadyStatus = normalizeGuardUpdateStatus({
   current_version: "1.2.3",
@@ -77,6 +78,14 @@ const alphaUpdateMarkup = renderToStaticMarkup(
 );
 assert(alphaUpdateMarkup.includes('aria-label="Update Guard to the latest version"') && alphaUpdateMarkup.includes(">Update</span></button>"), "update-ready state pairs the version line with a compact inline Update action");
 assert(alphaUpdateMarkup.includes("[overflow-wrap:anywhere]") && !alphaUpdateMarkup.includes("min-w-0 truncate"), "the ready-version label wraps long release strings instead of clipping them");
+
+const updateModeMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: normalizeGuardUpdateStatus({ ...alphaReadyStatus, update_mode: "ask" }),
+    onSetUpdateMode: () => undefined,
+  }),
+);
+assert(updateModeMarkup.includes("Ask before installing"), "the update panel should expose the saved Core update mode");
 
 const longVersion = "3.0.111a1.dev456+g1a2b3c4d5e6";
 const longVersionMarkup = renderToStaticMarkup(

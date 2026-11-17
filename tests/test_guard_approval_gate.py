@@ -17,6 +17,8 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from rich.console import Console
 
+from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard import approval_hook_copy as approval_hook_copy_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import (
@@ -40,7 +42,6 @@ from codex_plugin_scanner.guard.cli.commands import run_guard_command
 from codex_plugin_scanner.guard.cli.commands_support_permission_store import _write_claude_native_permission_plan
 from codex_plugin_scanner.guard.config import editable_guard_settings, load_guard_config, reset_guard_settings
 from codex_plugin_scanner.guard.consumer.service import record_policy
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.mcp_tool_calls import allow_tool_call
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
@@ -2110,6 +2111,7 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
     opened_urls: list[str] = []
     monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:5474")
     monkeypatch.setattr(runtime_mcp_module, "load_guard_daemon_auth_token", lambda _guard_home: "secret-token")
+    monkeypatch.setattr(approval_hook_copy_module, "load_guard_daemon_auth_token", lambda _guard_home: "secret-token")
     monkeypatch.setattr(runtime_mcp_module, "open_browser_url", lambda url: opened_urls.append(url) or True)
 
     response, event = proxy._allow_and_forward(
@@ -2129,8 +2131,13 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
 
     assert event["decision"] == "queue-approval"
     assert response["error"]["message"].startswith("HOL Guard stopped tool call dangerous-tool")
-    assert response["error"]["data"]["reviewUrl"].startswith("http://127.0.0.1:5474/requests/")
-    assert response["error"]["data"]["reviewUrl"] in response["error"]["message"]
+    review_url = response["error"]["data"]["reviewUrl"]
+    assert review_url.startswith("http://127.0.0.1:5474/requests/")
+    assert review_url in response["error"]["message"]
+    # The agent relays this link, so it must open signed in: a bare
+    # /requests/<id> page has no session and cannot show the request.
+    request_id = store.list_approval_requests(limit=10)[0]["request_id"]
+    assert review_url.startswith(f"http://127.0.0.1:5474/requests/{request_id}/"), review_url
     assert opened_urls == []
     assert len(store.list_approval_requests(limit=10)) == 1
     assert store.list_policy_decisions("codex") == []

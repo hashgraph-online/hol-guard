@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.logbear",
+  "version": "1.0.0",
+  "name": "logbear MCP",
+  "description": "Recognizes logbear's local stdio server, which reads captured dev-server output: read-only SQL over the log database, waiting for new entries, and diffing two runs against git history. Every tool keeps Guard's usual handling. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.teralabx",
+    "displayName": "teralabx",
+    "url": "https://github.com/teralabx/logbear"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#1C1917"
+  },
+  "homepage": "https://logbear.sh",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "logbear-mcp"
+  },
+  "riskClasses": [
+    "local-data-access",
+    "local-source-read",
+    "local-sqlite-write"
+  ],
+  "tools": [
+    {
+      "name": "logbear_schema",
+      "state": "inherit"
+    },
+    {
+      "name": "logbear_query",
+      "state": "inherit"
+    },
+    {
+      "name": "logbear_wait",
+      "state": "inherit"
+    },
+    {
+      "name": "logbear_diff",
+      "state": "inherit"
+    },
+    {
+      "name": "logbear_ack",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/teralabx/logbear",
+    "https://github.com/teralabx/logbear#the-mcp-surface"
+  ],
+  "saferAlternatives": [
+    "logbear_query runs a single SELECT on a read-only connection: writes, ATTACH, PRAGMA and extension loading are refused, statements stop after 5 seconds, and results are capped at 2000 rows.",
+    "Captured output holds whatever a dev server prints, secrets included; keep credentials out of server logs, or run servers whose output an agent should not read without logbear.",
+    "logbear_diff runs only read-only git commands (rev-parse, log, diff, ls-files) to list commits and changed files between two recorded SHAs; it never checks out, fetches or writes to the repository.",
+    "logbear_ack only marks this session's errors as seen in logbear's own database; it never deletes log entries."
+  ]
+}

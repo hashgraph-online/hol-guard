@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateInput,
     begin_totp_enrollment,
@@ -20,7 +21,6 @@ from codex_plugin_scanner.guard.approval_gate import (
 )
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.approvals import bulk_allow_read_only_once
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.native_approval_bulk_eligibility import (
     _MAX_REQUEST_BYTES,

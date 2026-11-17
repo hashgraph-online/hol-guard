@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+from codex_plugin_scanner.guard.hook_review import hook_native_review_approval
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     identify_unlisted_cli,

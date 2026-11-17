@@ -54,7 +54,9 @@ fn a_refused_file_leaves_the_others_diff_shown() {
             })
             .collect()
     };
-    let text = changes(&repo.found(), Since::Start(&base), false, later(), screen).unwrap();
+    let text = changes(&repo.found(), Since::Start(&base), false, later(), screen)
+        .unwrap()
+        .text;
     let short = &base[..7];
     assert!(
         text.contains(&format!(

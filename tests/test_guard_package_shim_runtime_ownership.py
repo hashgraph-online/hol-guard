@@ -81,9 +81,11 @@ def test_harness_shim_does_not_persist_appimage_mount_runtime(
 
 def test_appimage_harness_shim_executes_durable_official_cli(
     tmp_path: Path,
+    durable_tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    home_dir = tmp_path / "home"
+    # The official CLI is only chosen outside a temporary root.
+    home_dir = durable_tmp_path / "home"
     guard_home = home_dir / ".hol-guard"
     workspace_dir = tmp_path / "workspace"
     capture_path = tmp_path / "args.txt"

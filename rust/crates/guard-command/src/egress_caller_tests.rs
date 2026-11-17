@@ -391,12 +391,24 @@ fn a_bespoke_header_stops_at_the_origin_it_was_addressed_to() {
 
 #[test]
 fn the_per_read_bound_is_never_widened() {
-    assert_eq!(per_read_seconds(0.1), 0.1);
-    assert_eq!(per_read_seconds(5.0), 5.0);
-    assert_eq!(per_read_seconds(600.0), MAX_EXCHANGE_SECONDS);
-    assert_eq!(per_read_seconds(0.0), MAX_EXCHANGE_SECONDS);
-    assert_eq!(per_read_seconds(-1.0), MAX_EXCHANGE_SECONDS);
-    assert_eq!(per_read_seconds(f64::NAN), MAX_EXCHANGE_SECONDS);
+    assert_eq!(per_read_seconds(0.1, MAX_EXCHANGE_SECONDS), 0.1);
+    assert_eq!(per_read_seconds(5.0, MAX_EXCHANGE_SECONDS), 5.0);
+    assert_eq!(
+        per_read_seconds(600.0, MAX_EXCHANGE_SECONDS),
+        MAX_EXCHANGE_SECONDS
+    );
+    assert_eq!(
+        per_read_seconds(0.0, MAX_EXCHANGE_SECONDS),
+        MAX_EXCHANGE_SECONDS
+    );
+    assert_eq!(
+        per_read_seconds(-1.0, MAX_EXCHANGE_SECONDS),
+        MAX_EXCHANGE_SECONDS
+    );
+    assert_eq!(
+        per_read_seconds(f64::NAN, MAX_EXCHANGE_SECONDS),
+        MAX_EXCHANGE_SECONDS
+    );
 }
 
 #[test]

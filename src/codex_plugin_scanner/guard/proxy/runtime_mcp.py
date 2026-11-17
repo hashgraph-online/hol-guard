@@ -18,13 +18,12 @@ from uuid import uuid4
 
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
+from ..approval_hook_copy import live_approval_review_url
 from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..approvals import approval_prompt_flow, build_approval_browser_url, first_approval_url, queue_blocked_approvals
 from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 from ..browser_opener import open_browser_url
 from ..config import GuardConfig
-from ..daemon import ensure_guard_daemon
-from ..daemon.manager import load_guard_daemon_auth_token
 from ..harness_posture import config_for_harness
 from ..local_supply_chain import (
     _cleanup_external_archive_downloads,
@@ -49,6 +48,7 @@ from ..native_approval_proof import (
     claimed_approval_authorizes_postclaim_review,
     fresh_claim_allows_reapproval,
 )
+from ..native_daemon_manage import ensure_guard_daemon, load_guard_daemon_auth_token
 from ..native_decisions import NativeDecisionAuthorityError, NativeDecisionUnavailableError
 from ..native_execution import (
     mcp_stdio_session_close_native,
@@ -2158,11 +2158,13 @@ class RuntimeMcpGuardProxy:
             review_url=review_url,
             open_key=request_id,
         )
+        # The agent relays this link to the user, so it opens signed in.
+        agent_review_url = live_approval_review_url(review_url, guard_home=self.context.guard_home)
         response_data = {
             "approvalCenterUrl": approval_center_url,
             "approvalRequests": queued,
             "guardPolicyAction": policy_action,
-            "reviewUrl": review_url,
+            "reviewUrl": agent_review_url,
             "supplyChainEvaluation": package_evaluation.to_dict(),
         }
         return _blocked_tool_response(
@@ -2170,7 +2172,7 @@ class RuntimeMcpGuardProxy:
             tool_name,
             (
                 f"HOL Guard stopped package install request {tool_name} from {self.server_name}. "
-                f"Approve request {request_id} at {review_url}, then retry the same action."
+                f"Approve request {request_id} at {agent_review_url}, then retry the same action."
             ),
             response_data,
         ), {
@@ -3154,11 +3156,13 @@ class RuntimeMcpGuardProxy:
             review_url=review_url,
             open_key=request_id,
         )
+        # The agent relays this link to the user, so it opens signed in.
+        agent_review_url = live_approval_review_url(review_url, guard_home=self.context.guard_home)
         response_data = {
             "approvalCenterUrl": approval_center_url,
             "approvalRequests": queued,
             "guardPolicyAction": policy_action,
-            "reviewUrl": review_url,
+            "reviewUrl": agent_review_url,
             **connector_code,
         }
         response = _blocked_tool_response(
@@ -3166,10 +3170,10 @@ class RuntimeMcpGuardProxy:
             tool_name,
             (
                 f"HOL Guard stopped tool call {tool_name} from {self.server_name}. "
-                f"Approve request {request_id} at {review_url}, then retry the same action."
+                f"Approve request {request_id} at {agent_review_url}, then retry the same action."
             )
             if connector_setup is None
-            else f"{connector_agent_text(connector_setup, ask=True)} Review it at {review_url}.",
+            else f"{connector_agent_text(connector_setup, ask=True)} Review it at {agent_review_url}.",
             response_data,
         )
         queued_event: dict[str, Any] = {

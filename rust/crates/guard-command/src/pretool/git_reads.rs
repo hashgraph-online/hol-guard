@@ -135,17 +135,19 @@ pub(super) fn safe_git_arguments(
         }
     }
     // Git magic pathspec semantics are not proven by this classifier; retain review.
-    // A names-only log's glob pathspecs were checked by `log_names` instead.
+    // A names-only log's or `ls-files` glob pathspecs were checked by
+    // `log_names` instead.
     // `-S`, `-G` and `--grep` values are search text too.
     let listed = log_names::pathspec_start(arguments, context);
     let search_text = super::git_search_text::pattern_positions(arguments);
     // A replacement listing's pattern is matched against the refs under
     // `refs/replace/`, not expanded over the files that are there.
     let replacement = super::git_side_record_reads::listing_pattern_position(arguments, context);
+    let index_objects = super::git_listing_reads::index_stage_object_positions(arguments, context);
     if arguments.iter().enumerate().any(|(index, value)| {
         !search_text.contains(&index)
             && replacement != Some(index)
-            && (value.starts_with(':')
+            && ((value.starts_with(':') && !index_objects.contains(&index))
                 || (super::sensitive_read_path_argument(value)
                     && listed.is_none_or(|start| index < start)))
     }) {

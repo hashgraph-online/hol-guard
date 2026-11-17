@@ -32,7 +32,14 @@ _TIMEOUT_SECONDS: Final = 10.0
 def _contracts() -> dict[str, list[dict[str, object]]]:
     return {
         contract.harness: [
-            {"event": row.event, "transport": row.transport, "declared_actions": list(row.declared_actions)}
+            {
+                "event": row.event,
+                **({"tools": list(row.tools)} if row.tools else {}),
+                **({"surface": row.surface} if row.surface else {}),
+                "transport": row.transport,
+                "declared_actions": list(row.declared_actions),
+                "mode": row.mode,
+            }
             for row in contract.capability_events
         ]
         for contract in HARNESS_CONTRACTS

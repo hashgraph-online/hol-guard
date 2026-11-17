@@ -16,7 +16,8 @@
   "src/codex_plugin_scanner/guard/adapters/_modules/*/*hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
-  "src/codex_plugin_scanner/guard/daemon/hook_*.py",
+  "src/codex_plugin_scanner/guard/hook_review/hook_*.py",
+  "src/codex_plugin_scanner/guard/evidence_drains/hook_*.py",
   "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
   "src/codex_plugin_scanner/guard/native_hook_edge.py",
   "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py",
@@ -37,7 +38,8 @@
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_*.py",
     "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
-    "src/codex_plugin_scanner/guard/daemon/hook_*.py",
+    "src/codex_plugin_scanner/guard/hook_review/hook_*.py",
+    "src/codex_plugin_scanner/guard/evidence_drains/hook_*.py",
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
     "src/codex_plugin_scanner/guard/native_hook_edge.py",
     "src/codex_plugin_scanner/guard/native_response_decoder.py",
@@ -54,7 +56,7 @@
     "src/codex_plugin_scanner/guard/native_mode.py"
    ],
    "exclude_patterns": [
-    "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
+    "src/codex_plugin_scanner/guard/hook_review/hook_metrics.py",
     "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py"
    ],
    "production_role": "authentication, transport, adapter projection, supervision, and non-authoritative evidence plumbing",
@@ -64,7 +66,7 @@
    "id": "hook_evidence_persistence",
    "class": "required_control_plane",
    "patterns": [
-    "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
+    "src/codex_plugin_scanner/guard/hook_review/hook_metrics.py",
     "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py"
    ],
    "production_role": "non-blocking receipts, metrics, and enrichment only; no decision authority",
@@ -1938,6 +1940,50 @@
    "native_replacements": [
     "rust/crates/guard-runtime/src/guard_store_cmd_privacy.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
+   "module": "codex_plugin_scanner.guard.adapters.claude_daemon_hook_bridge",
+   "source_sha256": "16e0ba714c2f2989e8b0b25711e61d77ae922991545dead5e69deeb32a9bf60a",
+   "forbidden_symbols": [
+    "_build_loopback_opener",
+    "_LoopbackOnlyRedirectHandler",
+    "_post_to_loopback_daemon",
+    "_blocking_post_to_loopback_daemon",
+    "_read_bounded_response",
+    "_run_local_fallback",
+    "_daemon_failure_is_recoverable",
+    "_daemon_failure_is_authenticated_overload",
+    "_daemon_failure_kind",
+    "_recover_retry_or_fallback",
+    "_run_recovery_command"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/claude_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/claude_hook_bridge_http.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",
+   "module": "codex_plugin_scanner.guard.adapters.codex_daemon_hook_bridge",
+   "source_sha256": "9f9c3aab117cce72e7cce4e7a062985ae77e22e4204d3ad843f02017b376a512",
+   "forbidden_symbols": [
+    "_FAIL_CLOSED_REASON",
+    "_LAUNCH_INTEGRITY_REASON",
+    "_write_transition_observation",
+    "_unavailable_response",
+    "_write_failure_causes",
+    "_launcher_integrity_response",
+    "_installed_hook_home",
+    "_bridge_output"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
+   ]
   }
  ],
  "retired_test_paths": [
@@ -1977,39 +2023,39 @@
   "tests/test_guard_shell_static_path_boundaries.py"
  ],
  "retired_bodies": [
- {
-  "path": "src/codex_plugin_scanner/guard/runtime/effect_contract.py",
-  "source_sha256": "9038e0b37af50bedc19d635fb3be92bfe0ec9cfc91771fcfbbf376271e71e8d3",
-  "forbidden_symbols": [
-   "UNCERTAINTY_FLOOR"
-  ],
-  "native_replacements": [
-   "rust/crates/guard-command/src/effect_decision.rs"
-  ]
- },
- {
-  "path": "src/codex_plugin_scanner/guard/runtime/command_model.py",
-  "source_sha256": "11ab5a21f22eefd813957346a81606209bb78b85e0941f84a35c42af5ce5ee6a",
-  "forbidden_symbols": [
-   "MAX_COMMAND_SEGMENTS",
-   "MAX_COMMAND_TOKENS"
-  ],
-  "native_replacements": [
-   "rust/crates/guard-command/src/command_model.rs",
-   "rust/crates/guard-command/src/command_parse_surface.rs"
-  ]
- },
- {
-  "path": "src/codex_plugin_scanner/guard/runtime/approval_reuse.py",
-  "source_sha256": "d0b0a011a9f33c5de6390ecad17cbfb3fc492ad3c8fd2e00b8b0d5d47f0e1d55",
-  "forbidden_symbols": [
-   "APPROVAL_REUSE_REAPPROVAL_REQUIRED",
-   "APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM"
-  ],
-  "native_replacements": [
-   "rust/crates/guard-command/src/approval_reuse.rs"
-  ]
- },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/effect_contract.py",
+   "source_sha256": "9038e0b37af50bedc19d635fb3be92bfe0ec9cfc91771fcfbbf376271e71e8d3",
+   "forbidden_symbols": [
+    "UNCERTAINTY_FLOOR"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/effect_decision.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_model.py",
+   "source_sha256": "11ab5a21f22eefd813957346a81606209bb78b85e0941f84a35c42af5ce5ee6a",
+   "forbidden_symbols": [
+    "MAX_COMMAND_SEGMENTS",
+    "MAX_COMMAND_TOKENS"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/command_model.rs",
+    "rust/crates/guard-command/src/command_parse_surface.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/approval_reuse.py",
+   "source_sha256": "d0b0a011a9f33c5de6390ecad17cbfb3fc492ad3c8fd2e00b8b0d5d47f0e1d55",
+   "forbidden_symbols": [
+    "APPROVAL_REUSE_REAPPROVAL_REQUIRED",
+    "APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/approval_reuse.rs"
+   ]
+  },
   {
    "path": "src/codex_plugin_scanner/guard/policy_document.py",
    "source_sha256": "c20051517d9e4c1a4ead1dea82e80bbc348adbc3082d8ae6baf7cc430157c3d3",
@@ -2149,53 +2195,7 @@
    ]
   },
   {
-   "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",
-   "source_sha256": "9f9c3aab117cce72e7cce4e7a062985ae77e22e4204d3ad843f02017b376a512",
-   "forbidden_symbols": [
-    "_FAIL_CLOSED_REASON",
-    "_LAUNCH_INTEGRITY_REASON",
-    "_write_transition_observation",
-    "_unavailable_response",
-    "_write_failure_causes",
-    "_launcher_integrity_response",
-    "_installed_hook_home",
-    "_bridge_output"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-runtime/src/codex_hook_bridge.rs",
-    "rust/crates/guard-runtime/src/codex_hook_bridge_transport.rs",
-    "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
-    "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
-   "source_sha256": "16e0ba714c2f2989e8b0b25711e61d77ae922991545dead5e69deeb32a9bf60a",
-   "forbidden_symbols": [
-    "_build_loopback_opener",
-    "_assert_loopback_http_url",
-    "_LoopbackOnlyRedirectHandler",
-    "_remaining_seconds",
-    "_post_to_loopback_daemon",
-    "_blocking_post_to_loopback_daemon",
-    "_read_bounded_response",
-    "_daemon_url",
-    "_run_local_fallback",
-    "_daemon_failure_reason",
-    "_daemon_failure_is_recoverable",
-    "_daemon_failure_is_authenticated_overload",
-    "_daemon_failure_kind",
-    "_recover_retry_or_fallback",
-    "_run_recovery_command"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-runtime/src/claude_hook_bridge.rs",
-    "rust/crates/guard-runtime/src/claude_hook_bridge_transport.rs",
-    "rust/crates/guard-runtime/src/claude_hook_bridge_http.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
    "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
    "forbidden_symbols": [
     "verified_npm_version",
@@ -2237,7 +2237,7 @@
    ]
   },
   {
-   "path": "src/codex_plugin_scanner/guard/daemon/approval_extension_recommendation.py",
+   "path": "src/codex_plugin_scanner/guard/hook_review/approval_extension_recommendation.py",
    "source_sha256": "3eca7867e90f6a70a18078b299443f253f65dae7cacc4fcceb7d71b6f3febd71",
    "forbidden_symbols": [
     "CAUTION_RISK_CLASSES",
@@ -2252,7 +2252,7 @@
    ]
   },
   {
-   "path": "src/codex_plugin_scanner/guard/daemon/extension_control_api.py",
+   "path": "src/codex_plugin_scanner/guard/extension_controls/extension_control_api.py",
    "source_sha256": "8fa482660f01babb2cad8f8f25ec88dc53675b6e9604062511d5f1a17fc2e688",
    "forbidden_symbols": [
     "_canonicalize_extension_ids",
@@ -2267,7 +2267,7 @@
    ]
   },
   {
-   "path": "src/codex_plugin_scanner/guard/daemon/extension_control_prepared.py",
+   "path": "src/codex_plugin_scanner/guard/extension_controls/extension_control_prepared.py",
    "source_sha256": "565ccd1483c36d6f6ff4e4cb6b065576ce02853135c617f851d7ba0e8b7e0f24",
    "forbidden_symbols": [
     "_REQUEST_FIELDS",

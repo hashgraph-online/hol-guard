@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -396,22 +396,21 @@ def test_source_change_after_inventory_stops_before_activation_write(
     original_payload = {"hooks": {"FutureAgentEvent": [{**_command_group("python3 first.py"), "enabled": False}]}}
     changed_payload = {"hooks": {"FutureAgentEvent": [{**_command_group("python3 changed.py"), "enabled": False}]}}
     _write(hooks_path, json.dumps(original_payload, indent=2) + "\n")
-    original_verify = codex_adapter._require_hook_inventory_sources_unchanged
+    original_ask = codex_adapter.ask
 
-    def mutate_then_verify(
-        *,
-        config_payloads: Mapping[Path, dict[str, object]],
-        hook_payloads: Mapping[Path, dict[str, object]],
-    ) -> None:
-        _write(hooks_path, json.dumps(changed_payload, indent=2) + "\n")
-        original_verify(config_payloads=config_payloads, hook_payloads=hook_payloads)
+    def mutate_then_plan(op: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        # The hooks source was captured by inventory; it changes before the
+        # native plan compares its captures against disk.
+        if op in {"install_plan", "install"}:
+            _write(hooks_path, json.dumps(changed_payload, indent=2) + "\n")
+        return original_ask(op, *args, **kwargs)
 
-    monkeypatch.setattr(codex_adapter, "_require_hook_inventory_sources_unchanged", mutate_then_verify)
+    monkeypatch.setattr(codex_adapter, "ask", mutate_then_plan)
 
     rc = main(_install_args(home_dir, workspace_dir))
     captured = capsys.readouterr()
 
     assert rc == 1
-    assert "codex_hook_inventory_source_changed" in captured.err
+    assert "adapter_preparation_generation_conflict" in captured.err
     assert (home_dir / ".codex" / "config.toml").exists() is False
     assert json.loads(hooks_path.read_text(encoding="utf-8")) == changed_payload

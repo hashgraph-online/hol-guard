@@ -34,6 +34,8 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
     write_hook_manifest,
 )
 from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from tests import codex_hook_publication_helpers as publication_helpers
+from tests.transition_fault_support import interrupt_publication_at
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -133,6 +135,13 @@ env = { API_BASE = "https://hol.org", FEATURE_FLAG = "1" }
     )
 
 
+def _registered_hook_command(context: HarnessContext) -> str:
+    """The command line the native runtime renders into every registered handler."""
+
+    groups = json.loads(codex_adapter._hook_registration(context).groups)
+    return str(groups["PreToolUse"]["hooks"][0]["command"])
+
+
 def test_guard_codex_hook_command_does_not_pin_custom_guard_home_in_real_global_config(
     tmp_path,
     monkeypatch,
@@ -142,7 +151,7 @@ def test_guard_codex_hook_command_does_not_pin_custom_guard_home_in_real_global_
     stale_guard_home = tmp_path / "pytest-stale-guard-home"
     monkeypatch.setattr(codex_adapter.Path, "home", lambda: home_dir)
 
-    command = codex_adapter._hook_command(
+    command = _registered_hook_command(
         HarnessContext(
             home_dir=home_dir,
             workspace_dir=workspace_dir,
@@ -159,7 +168,7 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
     workspace_dir = tmp_path / "workspace"
     guard_home = tmp_path / "guard-home"
 
-    command = codex_adapter._hook_command(
+    command = _registered_hook_command(
         HarnessContext(
             home_dir=home_dir,
             workspace_dir=workspace_dir,
@@ -167,10 +176,10 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
         )
     )
     tokens = shlex.split(command)
-    bridge_config = json.loads(tokens[3])
+    bridge_config = json.loads(tokens[2])
 
-    assert tokens[1] == "-I"
-    assert Path(tokens[2]).name == "codex_daemon_hook_bridge.py"
+    assert len(tokens) == 3
+    assert tokens[1] == "codex-hook-bridge"
     assert bridge_config["state_path"] == str(guard_home / "daemon-state.json")
     assert bridge_config["manifest_path"].startswith(str(guard_home / "managed" / "codex"))
     assert bridge_config["query"].startswith("guard-home=")
@@ -189,10 +198,10 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
 def test_guard_codex_native_hook_state_requires_authenticated_manifest(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir / ".hol-guard")
-    direct_argv = list(codex_adapter._local_hook_command_parts(context))
+    direct_argv = list(codex_adapter._current_launch(context)["fallback"])
     bridge_config = json.dumps({"fallback_command": direct_argv}, separators=(",", ":"))
     forged_commands = [
-        codex_adapter._hook_command(context),
+        _registered_hook_command(context),
         shlex.join([str(tmp_path / "hol-guard-codex-hook.sh"), "--forged"]),
         shlex.join(
             [
@@ -455,23 +464,13 @@ def test_guard_codex_native_hook_state_detects_bridge_content_mode_and_symlink_c
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    bridge_path = tmp_path / "package" / "codex_daemon_hook_bridge.py"
+    # The hook runs the native runtime named here; its bytes are the
+    # authenticated "bridge" role.
+    bridge_path = tmp_path / "package" / "hol-guard-runtime"
     bridge_path.parent.mkdir(parents=True)
-    bridge_path.write_bytes(Path(codex_adapter.__file__).with_name("codex_daemon_hook_bridge.py").read_bytes())
+    bridge_path.write_bytes(b"#!/bin/sh\nexit 0\n")
     bridge_path.chmod(0o644)
-    original_command_parts = codex_adapter._hook_command_parts
-    original_packaged_paths = codex_adapter._hook_packaged_file_paths
-
-    def relocated_command_parts(hook_context: HarnessContext) -> tuple[str, ...]:
-        parts = list(original_command_parts(hook_context))
-        parts[1] = str(bridge_path)
-        return tuple(parts)
-
-    def relocated_packaged_paths() -> tuple[tuple[str, Path], ...]:
-        return tuple((role, bridge_path if role == "bridge" else path) for role, path in original_packaged_paths())
-
-    monkeypatch.setattr(codex_adapter, "_hook_command_parts", relocated_command_parts)
-    monkeypatch.setattr(codex_adapter, "_hook_packaged_file_paths", relocated_packaged_paths)
+    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda _guard_home: bridge_path)
     adapter = CodexHarnessAdapter()
     adapter.install(context)
 
@@ -504,23 +503,13 @@ def test_guard_codex_repair_refuses_to_authenticate_changed_same_version_bridge(
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    bridge_path = tmp_path / "package" / "codex_daemon_hook_bridge.py"
+    # The hook runs the native runtime named here; its bytes are the
+    # authenticated "bridge" role.
+    bridge_path = tmp_path / "package" / "hol-guard-runtime"
     bridge_path.parent.mkdir(parents=True)
-    bridge_path.write_bytes(Path(codex_adapter.__file__).with_name("codex_daemon_hook_bridge.py").read_bytes())
+    bridge_path.write_bytes(b"#!/bin/sh\nexit 0\n")
     bridge_path.chmod(0o644)
-    original_command_parts = codex_adapter._hook_command_parts
-    original_packaged_paths = codex_adapter._hook_packaged_file_paths
-
-    def relocated_command_parts(hook_context: HarnessContext) -> tuple[str, ...]:
-        parts = list(original_command_parts(hook_context))
-        parts[1] = str(bridge_path)
-        return tuple(parts)
-
-    def relocated_packaged_paths() -> tuple[tuple[str, Path], ...]:
-        return tuple((role, bridge_path if role == "bridge" else path) for role, path in original_packaged_paths())
-
-    monkeypatch.setattr(codex_adapter, "_hook_command_parts", relocated_command_parts)
-    monkeypatch.setattr(codex_adapter, "_hook_packaged_file_paths", relocated_packaged_paths)
+    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda _guard_home: bridge_path)
     adapter = CodexHarnessAdapter()
     adapter.install(context)
     valid_state = codex_adapter.codex_native_hook_state(context)
@@ -610,17 +599,7 @@ def test_guard_codex_authenticated_hook_transaction_rolls_back_after_partial_con
     manifest_path = Path(str(state["manifest_path"]))
     original_config = config_path.read_bytes()
     original_manifest = manifest_path.read_bytes()
-    original_atomic_write = codex_adapter.atomic_write_text
-    failed_once = False
-
-    def fail_first_config_write(path: Path, text: str, *, mode: int = 0o600, on_publish=None) -> None:
-        nonlocal failed_once
-        if path == config_path and not failed_once:
-            failed_once = True
-            raise OSError("injected config write failure")
-        original_atomic_write(path, text, mode=mode, on_publish=on_publish)
-
-    monkeypatch.setattr(codex_adapter, "atomic_write_text", fail_first_config_write)
+    interrupt_publication_at(monkeypatch, config_path, OSError("injected config write failure"))
 
     try:
         adapter.install(context)
@@ -650,17 +629,7 @@ def test_guard_codex_first_install_failure_rolls_back_new_hook_secret(
     config_path = CodexHarnessAdapter._hook_config_path(context)
     manifest_path = codex_adapter.hook_manifest_path(context.guard_home, config_path)
     secret_path = hook_secret_path(context.guard_home)
-    original_atomic_write = codex_adapter.atomic_write_text
-    failed_once = False
-
-    def fail_first_config_write(path: Path, text: str, *, mode: int = 0o600, on_publish=None) -> None:
-        nonlocal failed_once
-        if path == config_path and not failed_once:
-            failed_once = True
-            raise OSError("injected first-install config failure")
-        original_atomic_write(path, text, mode=mode, on_publish=on_publish)
-
-    monkeypatch.setattr(codex_adapter, "atomic_write_text", fail_first_config_write)
+    interrupt_publication_at(monkeypatch, config_path, OSError("injected first-install config failure"))
 
     with pytest.raises(OSError, match="injected first-install config failure"):
         adapter.install(context)
@@ -687,7 +656,7 @@ def test_guard_codex_launch_uses_remote_control_for_dashboard_continuation(tmp_p
         guard_home=tmp_path / "guard-home",
     )
     hook_config: dict[str, object] = {"features": {"hooks": True}}
-    CodexHarnessAdapter._install_config_hooks(hook_config, context, config_path=home_dir / ".codex" / "config.toml")
+    publication_helpers.install_config_hooks(hook_config, context, config_path=home_dir / ".codex" / "config.toml")
     _write_text(home_dir / ".codex" / "config.toml", dump_toml(hook_config))
     captured: dict[str, object] = {}
 
@@ -762,7 +731,7 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert 'API_BASE = "https://hol.org"' in config_text
     assert 'FEATURE_FLAG = "1"' in config_text
     assert hooks_payload["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
-    assert hooks_payload["PermissionRequest"][0]["matcher"] == codex_adapter._CODEX_GUARD_PERMISSION_MATCHER
+    assert hooks_payload["PermissionRequest"][0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
     assert "UserPromptSubmit" in hooks_payload
     assert "matcher" not in hooks_payload["UserPromptSubmit"][0]
     prompt_handler = hooks_payload["UserPromptSubmit"][0]["hooks"][0]
@@ -1718,7 +1687,7 @@ def test_guard_install_codex_workspace_refuses_to_rebind_global_managed_hook(tmp
     assert len(home_config["hooks"]["PermissionRequest"]) == 1
     assert len(home_config["hooks"]["UserPromptSubmit"]) == 1
     assert len(home_config["hooks"]["PostToolUse"]) == 1
-    assert home_config["hooks"]["PostToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_POST_TOOL_MATCHER
+    assert home_config["hooks"]["PostToolUse"][0]["matcher"] == "Bash|Read|mcp__.*"
     managed_group = home_config["hooks"]["PreToolUse"][0]
     assert managed_group["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
     assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]

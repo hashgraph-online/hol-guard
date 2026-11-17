@@ -7,13 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from tests.pi_continuation_support import (
+    WATCH_POSTURE_STUB,
     _decode_json_object,
     _handler_fragment,
     _node_executable,
     _run_child,
 )
+from tests.pi_extension_support import managed_extension_source
 
 
 @pytest.mark.parametrize("harness", ("pi", "omp"))
@@ -36,7 +37,7 @@ def test_generated_tool_call_awaits_exact_approval_without_replanning(
     assert "handlerAbortSignal(ctx)" in source
     assert "approvalContinuationFailureReason" in source
     assert "scheduleApprovalResume(response, ctx, { kind: 'tool_call'" not in source
-    handler = _handler_fragment(source)
+    handler = WATCH_POSTURE_STUB + _handler_fragment(source)
     script = f"""
 const harness = {json.dumps(harness)};
 const GUARD_CONFIG_PATH = '/fixture/settings.json';
@@ -334,6 +335,7 @@ async function runScenario(changeContext) {{
     sessionManager: {{ getCwd: () => cwd, getSessionId: () => sessionId }},
     ui: {{ notify: () => {{}} }},
   }};
+{WATCH_POSTURE_STUB}
 {input_source}
   const result = await handlers.get('input')({{ source: 'interactive', text: 'read file' }}, ctx);
   if (result?.handled !== true) throw new Error('input was not handled');
@@ -359,6 +361,7 @@ async function runSameSessionReplacement() {{
     sessionManager: {{ getCwd: () => cwd, getSessionId: () => sessionId }},
     ui: {{ notify: () => {{}} }},
   }};
+{WATCH_POSTURE_STUB}
 {input_source}
   const first = handlers.get('input')({{ source: 'interactive', text: 'prompt-A' }}, ctx);
   while (activeScenario.pollCalls < 1) await delay(1);

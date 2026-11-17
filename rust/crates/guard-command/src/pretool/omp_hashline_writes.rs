@@ -133,6 +133,14 @@ pub(super) fn header_paths(input: &str) -> Option<Vec<&str>> {
 
 fn header_path(line: &str) -> Option<(&str, bool)> {
     let body = line.strip_prefix('[')?.strip_suffix(']')?;
+    // Oh My Pi trims the whole header body with JavaScript's `trim` before it
+    // cuts the `#TAG`, so `[ notes.md#FB48 ]` names `notes.md`. Without
+    // control characters or a byte order mark, that trims exactly what
+    // `str::trim` does; with one, the header stays unproven.
+    if body.chars().any(|c| c.is_control() || c == '\u{feff}') {
+        return None;
+    }
+    let body = body.trim();
     let (path, tagged) = match body.rsplit_once('#') {
         Some((path, tag))
             if tag.len() == TAG_LENGTH && tag.chars().all(|c| c.is_ascii_hexdigit()) =>
@@ -142,12 +150,8 @@ fn header_path(line: &str) -> Option<(&str, bool)> {
         Some(_) => return None,
         None => (body, false),
     };
-    // Oh My Pi trims the path with JavaScript's `trim`. Without control
-    // characters or a byte order mark, that trims exactly what `str::trim`
-    // does, so a padded path names the same file once trimmed.
-    if path.chars().any(|c| c.is_control() || c == '\u{feff}') {
-        return None;
-    }
+    // A space written before `#` stays in Oh My Pi's copy of the path; the
+    // file it opens is the trimmed name.
     let path = path.trim();
     // Oh My Pi rewrites quoted, starred and `Update File:`-prefixed paths
     // before opening them, and a scheme names another location, so only a
@@ -213,6 +217,43 @@ pub(super) fn evaluate_hashline_edit(
     Some(match missing {
         Some(path) => HashlineEdit::MissingTarget(path.to_owned()),
         None => HashlineEdit::Routine,
+    })
+}
+
+/// The review reason for an edit with a line that opens with a bracket the
+/// way a header does but is not a plain `[PATH#TAG]` header, such as
+/// `[FILE: src/a.ts#0AC4]`. Guard cannot tell which file Oh My Pi would
+/// open, so the edit keeps its review and a person can still approve a path
+/// that really holds `#` or `:`; the reason shows the agent the header Guard
+/// can prove. A `REM` or `MV`, a stray row or anything else the proof does
+/// not read leaves this `None`, so those edits keep the usual reason.
+pub(super) fn unreadable_header_reason(input: &str) -> Option<String> {
+    let line = unreadable_header(input)?;
+    Some(format!(
+        "HOL Guard requires review for this edit because its file header `{line}` is not a plain `[PATH#TAG]` header, so Guard cannot tell which file it changes. To change the file without a review, write each header as just the path and the tag the read tool showed, for example `[src/app.py#1A2B]`, with nothing else inside the brackets."
+    ))
+}
+
+/// The first line that opens with a bracket but is not a plain header,
+/// shortened for a message.
+fn unreadable_header(input: &str) -> Option<String> {
+    const SHOWN_CHARS: usize = 120;
+    if input.len() > crate::MAX_COMMAND_BYTES || input.contains('\0') {
+        return None;
+    }
+    let line = input
+        .lines()
+        .map(|line| line.strip_suffix('\r').unwrap_or(line).trim_end())
+        .find(|line| line.starts_with('[') && header_path(line).is_none())?;
+    let shown: String = line
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(SHOWN_CHARS)
+        .collect();
+    Some(if line.chars().count() > SHOWN_CHARS {
+        format!("{shown}...")
+    } else {
+        shown
     })
 }
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from codex_plugin_scanner.guard.daemon import server as daemon_module
+from codex_plugin_scanner.guard.routes import request_handler as daemon_module
 
 
 def test_trust_state_reported_before_the_socket_is_bound_is_deferred(tmp_path, monkeypatch):

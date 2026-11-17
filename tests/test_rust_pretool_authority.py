@@ -11,7 +11,7 @@ import pytest
 from codex_plugin_scanner.guard import native_pretool as pretool
 from codex_plugin_scanner.guard import native_route_receipt as routes
 from codex_plugin_scanner.guard import native_runtime as runtime
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -122,11 +122,11 @@ def test_hook_worker_fails_closed_when_forced_native_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.native_runtime_status",
         lambda: runtime.NativeRuntimeStatus(
             mode="force",
             available=False,
@@ -151,11 +151,11 @@ def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.native_runtime_status",
         lambda: runtime.NativeRuntimeStatus(
             mode="auto",
             available=False,
@@ -180,7 +180,7 @@ def test_hook_worker_denies_unreviewed_non_command_pretool_without_native_result
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -200,7 +200,7 @@ def test_hook_worker_leaves_out_of_scope_events_to_existing_handling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -358,3 +358,50 @@ def test_a_caller_that_cannot_name_the_shell_sends_no_environment(
         _FEATURES,
     )
     assert "execution_environment" not in sent["request"]
+
+
+@pytest.mark.parametrize(
+    ("floor", "reason_code"),
+    [
+        ("require-reapproval", "native_git_execution_context_review"),
+        ("sandbox-required", "native_sandbox_required"),
+    ],
+)
+def test_a_command_review_keeps_a_reapproval_or_containment_floor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    floor: str,
+    reason_code: str,
+) -> None:
+    # `hol-guard command explain 'git status'` reported the runtime as
+    # unavailable because the resident's reapproval floor was dropped here.
+    answer = {
+        "authority": "rust",
+        "decision": "deny",
+        "minimum_action": floor,
+        "policy_action": floor,
+        "reason_code": reason_code,
+        "reason": "Guard reviews this command before it runs.",
+        "explicitly_benign": False,
+        "command_model": {"normalized_text": "git status"},
+    }
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_pretool.native_runtime_status",
+        lambda: _status(tmp_path, _FEATURES),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_pretool.native_resident_client_request",
+        lambda **_: json.dumps(answer).encode(),
+    )
+    routes.reset_native_hook_route()
+
+    reviewed = pretool.review_pre_tool_native(
+        "git status",
+        guard_home=tmp_path,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        record_health=False,
+        extension_evidence=True,
+    )
+
+    assert reviewed == answer

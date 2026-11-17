@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from tests.benign_fp_gate_fixture import BenignFixture
 from tests.test_guard_benign_false_positive_gate import (
     GateCase,

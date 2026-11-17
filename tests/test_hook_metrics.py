@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_metrics import HookMetricsRecorder
+from codex_plugin_scanner.guard.hook_review.hook_metrics import HookMetricsRecorder
 
 
 @pytest.fixture()

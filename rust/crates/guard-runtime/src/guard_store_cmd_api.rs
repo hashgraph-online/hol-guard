@@ -403,6 +403,58 @@ fn health_payload(connection: &Connection) -> StoreResult<Value> {
     }))
 }
 
+/// `get_command_activity_persistence_health()`: the persisted counters, the
+/// active error flags summed, and the last error, as the daemon's health
+/// details report them.
+pub(crate) fn persistence_health(connection: &Connection, _args: &Args) -> StoreResult<Value> {
+    let row = query_one(
+        connection,
+        "select * from command_activity_health where singleton = 1",
+        &[],
+    )?;
+    let active = query_one(
+        connection,
+        "select * from command_activity_health_active where singleton = 1",
+        &[],
+    )?;
+    let (Some(row), Some(active)) = (row, active) else {
+        return Err(StoreError::Invalid(
+            "command_activity_persistence_health_unavailable",
+        ));
+    };
+    let active_error_count: i64 = [
+        "command_error_active",
+        "shadow_error_active",
+        "maintenance_error_active",
+    ]
+    .iter()
+    .map(|column| int(&active, column))
+    .sum();
+    Ok(json!({
+        "dropped_event_count": int(&row, "dropped_event_count"),
+        "persistence_error_count": int(&row, "persistence_error_count"),
+        "active_error_count": active_error_count,
+        "last_error_code": as_text(row.get("last_error_code")),
+        "last_error_at": as_text(row.get("last_error_at")),
+        "schema_version": as_text(row.get("schema_version")),
+    }))
+}
+
+/// `list_table_names()`: every table in the store, sorted.
+pub(crate) fn table_names(connection: &Connection, _args: &Args) -> StoreResult<Value> {
+    let rows = query_all(
+        connection,
+        "select name from sqlite_master where type = 'table'",
+        &[],
+    )?;
+    let mut names: Vec<String> = rows
+        .iter()
+        .filter_map(|row| row.get("name").and_then(Value::as_str).map(str::to_owned))
+        .collect();
+    names.sort_unstable();
+    Ok(json!(names))
+}
+
 pub(crate) fn analytics(connection: &Connection, args: &Args) -> StoreResult<Value> {
     let (start, end) = (args.str("start")?, args.str("end")?);
     let top_limit = args.int("top_limit")?;

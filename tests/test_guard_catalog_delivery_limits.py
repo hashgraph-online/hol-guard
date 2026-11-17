@@ -12,13 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.client import (
-    GuardDaemonResponseSchemaError,
+from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard.managed_controls.feature_flags import GUARD_EXTENSION_CATALOG_SYNC_V1
+from codex_plugin_scanner.guard.native_daemon_client import (
     GuardSurfaceDaemonClient,
 )
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-from codex_plugin_scanner.guard.managed_controls.feature_flags import GUARD_EXTENSION_CATALOG_SYNC_V1
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime import extension_control_limits as limits_module
 from codex_plugin_scanner.guard.runtime import managed_controls_sync, runner
 from codex_plugin_scanner.guard.runtime.command_extensions import CommandSafetyExtensionRegistry
@@ -87,21 +86,6 @@ def _read(payload: bytes, max_bytes: int, *, read1: bool) -> bytes:
         deadline=time.monotonic() + 10,
         max_bytes=max_bytes,
     )
-
-
-@pytest.mark.parametrize("read1", (True, False))
-@pytest.mark.parametrize("cap", (MAX_DAEMON_GET_RESPONSE_BYTES, MAX_DAEMON_CATALOG_RESPONSE_BYTES))
-def test_client_body_cap_boundaries(cap: int, read1: bool) -> None:
-    assert len(_read(b"x" * (cap - 1), cap, read1=read1)) == cap - 1
-    assert len(_read(b"x" * cap, cap, read1=read1)) == cap
-    with pytest.raises(GuardDaemonResponseSchemaError, match="size limit"):
-        _read(b"x" * (cap + 1), cap, read1=read1)
-
-
-@pytest.mark.parametrize("max_bytes", (0, -1, MAX_DAEMON_CATALOG_RESPONSE_BYTES + 1, True, 1.5))
-def test_client_rejects_unbounded_read_limits(max_bytes: object) -> None:
-    with pytest.raises(ValueError, match="positive bounded integer"):
-        _read(b"{}", max_bytes, read1=True)  # pyright: ignore[reportArgumentType]
 
 
 # The negotiation verdicts (budgets, downgrades, upload URL) live in the resident; their

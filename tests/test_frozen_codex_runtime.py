@@ -15,32 +15,34 @@ import pytest
 
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard import codex_hook_runtime_trust, frozen_codex_runtime
-from codex_plugin_scanner.guard import daemon as daemon_api
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_api
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager
-from codex_plugin_scanner.guard.daemon.live_identity import DaemonArtifactBinding
 from codex_plugin_scanner.guard.frozen_runtime_commands import (
     frozen_daemon_recovery_command,
-    frozen_daemon_recovery_worker_command,
     frozen_daemon_serve_command,
     frozen_windows_extension_control_commands,
 )
+from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 
 
 @pytest.fixture
 def frozen_codex_contract(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     original_interpreter = codex_adapter._guard_python_executable
-    original_local = codex_adapter._local_hook_command_parts_for_home_mode
-    original_daemon = codex_adapter._daemon_start_command
-    original_hook = codex_adapter._hook_command_parts_for_home_mode
     original_paths = codex_adapter._hook_packaged_file_paths
     original_validator = codex_hook_runtime_trust.validate_codex_hook_launch
     had_marker = hasattr(codex_adapter, "_HOL_GUARD_FROZEN_CODEX_RUNTIME")
     marker_value = getattr(codex_adapter, "_HOL_GUARD_FROZEN_CODEX_RUNTIME", None)
     try:
         assert frozen_codex_runtime.install_frozen_codex_runtime(force=True) is True
+        # A frozen build runs hooks through the verified runtime copy it
+        # publishes under the Guard home; the install only names that path.
+        monkeypatch.setattr(
+            codex_adapter,
+            "_native_bridge_executable",
+            lambda home: home / "native-runtime" / ("a" * 64) / "hol-guard-runtime",
+        )
         yield
     finally:
         # Tests can patch functions installed by this fixture. Undo those
@@ -48,9 +50,6 @@ def frozen_codex_contract(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         # later monkeypatch teardown reinstates a temporary frozen function.
         monkeypatch.undo()
         codex_adapter._guard_python_executable = original_interpreter
-        codex_adapter._local_hook_command_parts_for_home_mode = original_local
-        codex_adapter._daemon_start_command = original_daemon
-        codex_adapter._hook_command_parts_for_home_mode = original_hook
         codex_adapter._hook_packaged_file_paths = original_paths
         codex_hook_runtime_trust.validate_codex_hook_launch = original_validator
         if had_marker:
@@ -159,41 +158,6 @@ def test_frozen_recovery_command_schedules_one_detached_worker(
     ]
 
 
-def test_frozen_recovery_worker_releases_its_reservation(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    home_dir = tmp_path / "home"
-    guard_home.mkdir()
-    home_dir.mkdir()
-    recovered: list[tuple[Path, Path, str]] = []
-    cleared: list[tuple[Path, str]] = []
-    monkeypatch.setattr(
-        daemon_manager,
-        "recover_guard_daemon_after_hook_failure",
-        lambda requested_guard_home, *, home_dir, failure_kind, **_kwargs: recovered.append(
-            (requested_guard_home, home_dir, failure_kind)
-        ),
-    )
-    monkeypatch.setattr(
-        daemon_manager,
-        "clear_guard_daemon_recovery_reservation",
-        lambda requested_guard_home, *, token: cleared.append((requested_guard_home, token)) or True,
-    )
-    command = frozen_daemon_recovery_worker_command(
-        guard_home,
-        home_dir,
-        "overload",
-        "recovery-token",
-        executable=sys.executable,
-    )
-
-    assert frozen_codex_runtime.run_frozen_internal_command(command) == 0
-    assert recovered == [(guard_home, home_dir, "overload")]
-    assert cleared == [(guard_home, "recovery-token")]
-
-
 @pytest.mark.parametrize("gate_input", [b"", b"0"])
 def test_frozen_daemon_serve_gate_fails_closed_before_cli_import(
     tmp_path: Path,
@@ -287,11 +251,11 @@ def test_frozen_codex_contract_binds_commands_and_roles_to_one_executable(
     bridge_config = json.loads(bridge_argv[2])
     fallback_argv = bridge_config["fallback_command"]
     daemon_argv = bridge_config["start_command"]
-    package_paths = codex_adapter._hook_packaged_file_paths()
+    package_paths = codex_adapter._hook_packaged_file_paths(Path(bridge_argv[0]))
     invocation = str(Path(sys.executable).expanduser().resolve(strict=True))
     executable_target = Path(sys.executable).expanduser().resolve(strict=True)
 
-    assert bridge_argv[:2] == (invocation, "--_hol-guard-codex-bridge")
+    assert bridge_argv[1] == "codex-hook-bridge"
     assert fallback_argv[:4] == [invocation, "hook", "--harness", "codex"]
     assert "guard" not in fallback_argv[:2]
     assert daemon_argv[:2] == [invocation, "--_hol-guard-codex-daemon-recover"]
@@ -348,9 +312,10 @@ def test_frozen_codex_install_and_runtime_trust_validate_without_source_files(
     bridge_config_json = bridge_argv[2]
     bridge_config = json.loads(bridge_config_json)
 
-    assert bridge_argv[0] == str(Path(sys.executable).resolve(strict=True))
-    assert bridge_config["fallback_command"][0] == bridge_argv[0]
-    assert bridge_config["start_command"][0] == bridge_argv[0]
+    invocation = str(Path(sys.executable).resolve(strict=True))
+    assert bridge_argv[1] == "codex-hook-bridge"
+    assert bridge_config["fallback_command"][0] == invocation
+    assert bridge_config["start_command"][0] == invocation
 
     trusted = codex_hook_runtime_trust.validate_codex_hook_launch(
         manifest_path=bridge_config["manifest_path"],
@@ -384,8 +349,9 @@ def test_frozen_codex_hook_runs_behind_the_durable_native_bridge(
     handler = codex_adapter._read_toml(codex_config)["hooks"]["PreToolUse"][-1]["hooks"][0]
     bridge_argv = shlex.split(handler["command"])
     invocation = str(Path(sys.executable).resolve(strict=True))
-    assert bridge_argv[:4] == [str(runtime), "codex-hook-bridge", invocation, "--_hol-guard-codex-bridge"]
-    bridge_config_json = bridge_argv[4]
+    assert bridge_argv[:2] == [str(runtime), "codex-hook-bridge"]
+    assert len(bridge_argv) == 3
+    bridge_config_json = bridge_argv[2]
     bridge_config = json.loads(bridge_config_json)
     assert bridge_config["start_command"][:2] == [invocation, "--_hol-guard-codex-daemon-recover"]
 
@@ -421,7 +387,9 @@ def test_retained_frozen_hook_can_be_validated_against_exact_transition_artifact
             role_patch.setattr(
                 codex_adapter,
                 "_hook_packaged_file_paths",
-                lambda: tuple((role, path) for role, path in roles() if role not in {"hook_probe", "native_receipt"}),
+                lambda native_bridge: tuple(
+                    (role, path) for role, path in roles(native_bridge) if role not in {"hook_probe", "native_receipt"}
+                ),
             )
         CodexHarnessAdapter().install(context)
     argv = codex_adapter._hook_command_parts(context)

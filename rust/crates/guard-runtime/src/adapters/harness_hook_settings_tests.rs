@@ -212,3 +212,18 @@ fn refusals_name_the_first_event_that_is_not_a_list() {
         json!({"error": "harness_hook_settings_hooks_not_object", "event": null})
     );
 }
+
+#[test]
+fn the_native_runtime_command_is_guard_managed() {
+    for harness in ["muse", "devin"] {
+        let command = format!(
+            r#"/opt/guard/hol-guard-runtime bounded-hook-bridge '{{"harness":"{harness}"}}'"#
+        );
+        let other = r#"/opt/guard/hol-guard-runtime bounded-hook-bridge '{"harness":"kimi"}'"#;
+        let request = json!({"harness": harness, "commands": [command, other]});
+        assert_eq!(
+            ask("managed", &request).expect("answer"),
+            json!({"managed": [true, false]})
+        );
+    }
+}

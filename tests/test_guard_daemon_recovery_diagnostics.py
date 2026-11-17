@@ -8,9 +8,10 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_recovery_store as diagnostics_module
 from codex_plugin_scanner.guard.cli import commands_daemon_recovery as cli
-from codex_plugin_scanner.guard.daemon import recovery_diagnostics as diagnostics_module
-from codex_plugin_scanner.guard.daemon.recovery_diagnostics import (
+from codex_plugin_scanner.guard.native_command_control_authority_io import write_private_state
+from codex_plugin_scanner.guard.native_recovery_store import (
     DIAGNOSTICS_ARCHIVE_SCHEMA,
     DIAGNOSTICS_STATE_NAME,
     MAX_DIAGNOSTICS_BYTES,
@@ -19,9 +20,9 @@ from codex_plugin_scanner.guard.daemon.recovery_diagnostics import (
     encode_recovery_diagnostics,
     load_recovery_diagnostics,
     persist_recovery_diagnostics,
+    persist_recovery_snapshot,
     recovery_diagnostics_for_operation,
 )
-from codex_plugin_scanner.guard.native_command_control_authority_io import write_private_state
 
 FIXTURE = Path(__file__).parent / "fixtures" / "daemon_recovery_v1" / "diagnostics_privacy_source.json"
 
@@ -442,37 +443,6 @@ def test_archive_loader_rejects_invalid_public_archive_shapes(tmp_path: Path, ar
     assert raised.value.args == ("recovery_diagnostics_state_invalid",)
 
 
-def test_stale_archive_read_remains_usable_when_optional_compaction_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    now = _freeze_retention_now(monkeypatch)
-    stale_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
-    stale_report = build_recovery_diagnostics(_source(), generated_at=now - timedelta(days=8))
-    stale_report["operationId"] = stale_id
-    stale_report["latest"] = {**stale_report["latest"], "operationId": stale_id}  # type: ignore[index]
-    stale_report["events"] = [{**stale_report["events"][0], "operationId": stale_id}]  # type: ignore[index]
-    write_private_state(
-        tmp_path,
-        DIAGNOSTICS_STATE_NAME,
-        json.dumps({"schema": DIAGNOSTICS_ARCHIVE_SCHEMA, "reports": [stale_report]}, separators=(",", ":")).encode(
-            "utf-8"
-        ),
-        MAX_DIAGNOSTICS_BYTES,
-    )
-
-    def unavailable_compaction(*_args: object, **_kwargs: object) -> None:
-        raise OSError("archive_compaction_unavailable")
-
-    monkeypatch.setattr(diagnostics_module, "write_private_state", unavailable_compaction)
-
-    assert load_recovery_diagnostics(tmp_path) is None
-    with pytest.raises(KeyError):
-        recovery_diagnostics_for_operation(tmp_path, stale_id)
-    persisted = (tmp_path / "native-runtime" / DIAGNOSTICS_STATE_NAME).read_text(encoding="utf-8")
-    assert stale_id in persisted
-    assert "archive_compaction_unavailable" not in persisted
-
-
 def test_diagnostics_reject_sensitive_unknown_report_fields() -> None:
     report = build_recovery_diagnostics(_source())
     report["password"] = "private-password-canary"
@@ -482,7 +452,7 @@ def test_diagnostics_reject_sensitive_unknown_report_fields() -> None:
 
 def test_cli_diagnostics_reads_private_report_without_running_recovery(tmp_path: Path) -> None:
     operation_id = str(_source()["operationId"])
-    cli._persist_snapshot(tmp_path, build_recovery_diagnostics(_source())["latest"])
+    persist_recovery_snapshot(tmp_path, build_recovery_diagnostics(_source())["latest"])
     output = __import__("io").StringIO()
     result = cli.dispatch_daemon_recovery(
         __import__("argparse").Namespace(daemon_recovery_command="diagnostics", operation_id=operation_id),

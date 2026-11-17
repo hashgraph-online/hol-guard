@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import shlex
@@ -11,13 +12,17 @@ import sys
 from pathlib import Path
 
 import pytest
+import tomllib
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
+from codex_plugin_scanner.guard.adapters import codex_install_plan as install_plan
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import codex_plan_segments as segments
+from tests.codex_publication_steps import use_stepwise_publication
 from tests.conftest import guard_commands_module
 
 
@@ -52,9 +57,9 @@ def _install_codex(home_dir: Path, workspace_dir: Path, capsys: pytest.CaptureFi
 def _managed_shell_block(body: str) -> str:
     return "\n".join(
         (
-            codex_adapter._SHELL_GUARD_BEGIN,
+            install_plan.SHELL_GUARD_BEGIN,
             body,
-            codex_adapter._SHELL_GUARD_END,
+            install_plan.SHELL_GUARD_END,
         )
     )
 
@@ -97,15 +102,21 @@ def test_install_migrates_legacy_shell_controls_without_changing_user_bytes(tmp_
     )
 
 
-def test_legacy_shell_cleanup_preserves_crlf_non_utf8_and_unmatched_markers() -> None:
-    begin = codex_adapter._SHELL_GUARD_BEGIN.encode("ascii")
-    end = codex_adapter._SHELL_GUARD_END.encode("ascii")
-    original = b"\xffKEEP\r\n\r\n" + begin + b"\r\nlegacy\r\n" + end + b"\r\nAFTER\xfe\r\n"
-
-    assert codex_adapter._remove_managed_shell_guard_blocks(original) == b"\xffKEEP\r\nAFTER\xfe\r\n"
-    assert codex_adapter._remove_managed_shell_guard_blocks(b"KEEP\n" + begin + b"\nunterminated\n") == (
-        b"KEEP\n" + begin + b"\nunterminated\n"
+def test_legacy_shell_cleanup_preserves_crlf_non_utf8_and_unmatched_markers(tmp_path) -> None:
+    begin = install_plan.SHELL_GUARD_BEGIN.encode("ascii")
+    end = install_plan.SHELL_GUARD_END.encode("ascii")
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+    context.home_dir.mkdir()
+    unterminated = b"KEEP\n" + begin + b"\nunterminated\n"
+    (context.home_dir / ".zshenv").write_bytes(
+        b"\xffKEEP\r\n\r\n" + begin + b"\r\nlegacy\r\n" + end + b"\r\nAFTER\xfe\r\n"
     )
+    (context.home_dir / ".bashrc").write_bytes(unterminated)
+
+    planned = {change.path.name: change.after for change in segments.prepare_codex_shell_cleanup(context)}
+
+    assert planned[".zshenv"] == b"\xffKEEP\r\nAFTER\xfe\r\n"
+    assert planned[".bashrc"] == unterminated
 
 
 def test_codex_launch_fails_closed_without_authoritative_native_hooks(tmp_path):
@@ -218,11 +229,26 @@ def test_codex_install_fails_closed_if_native_hook_reconciliation_is_unavailable
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
-    monkeypatch.setattr(
-        CodexHarnessAdapter,
-        "_install_config_hooks",
-        staticmethod(lambda _payload, _context, **_kwargs: None),
-    )
+    real_ask = codex_adapter.ask
+
+    def _strip_hooks(encoded):
+        payload = tomllib.loads(base64.b64decode(encoded).decode("utf-8"))
+        payload.pop("hooks", None)
+        return base64.b64encode(dump_toml(payload).encode("utf-8")).decode("ascii")
+
+    def _without_hooks(op, *args, **kwargs):
+        # The planned config loses its Guard hooks, as if the native plan
+        # could not reconcile them; publication must refuse it.
+        answer = real_ask(op, *args, **kwargs)
+        if op == "install_plan" and "files" in answer:
+            # The plan leads with authority, manifest, receipt and config.
+            config = answer["files"][3]
+            config["after"] = _strip_hooks(config["after"])
+        return answer
+
+    # Publish stepwise so the plan answer reaches the publication.
+    use_stepwise_publication(monkeypatch)
+    monkeypatch.setattr(codex_adapter, "ask", _without_hooks)
 
     result = main(
         [

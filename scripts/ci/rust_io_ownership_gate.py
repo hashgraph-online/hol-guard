@@ -85,7 +85,7 @@ class IoObservation:
 # `_branch_failures` asserts the shape of this one, so name it instead of reaching
 # for a position in ROOTS that a later entry point can quietly take over.
 HOOK_WORKER_ROOT: Final = RootSpec(
-    "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
+    "src/codex_plugin_scanner/guard/hook_review/hook_worker.py",
     "review_http_payload",
     "HookWorker",
 )

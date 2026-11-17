@@ -21,7 +21,10 @@ const MIRROR_STATE_KEYS: [&str; 3] = [
 pub(crate) fn handles(method: &str) -> bool {
     matches!(
         method,
-        "artifact_latest_diff" | "oauth_sources_list" | "managed_keyring_reconcile"
+        "artifact_latest_diff"
+            | "oauth_sources_list"
+            | "managed_keyring_reconcile"
+            | "upsert_runtime_state"
     )
 }
 
@@ -30,6 +33,7 @@ pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
         "artifact_latest_diff" => latest_diff(connection, args),
         "oauth_sources_list" => oauth_sources(connection),
         "managed_keyring_reconcile" => reconcile_keyring(connection, args),
+        "upsert_runtime_state" => upsert_runtime_state(connection, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }
@@ -95,6 +99,29 @@ fn oauth_sources(connection: &Connection) -> StoreResult<Value> {
         }));
     }
     Ok(Value::Array(sources))
+}
+
+/// Records the serving daemon's identity and its latest heartbeat in the one
+/// `guard_runtime_state` row.
+fn upsert_runtime_state(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    exec(
+        connection,
+        "insert into guard_runtime_state ( \
+           state_key, session_id, daemon_host, daemon_port, started_at, last_heartbeat_at) \
+         values ('runtime', ?, ?, ?, ?, ?) \
+         on conflict(state_key) do update set \
+           session_id = excluded.session_id, daemon_host = excluded.daemon_host, \
+           daemon_port = excluded.daemon_port, started_at = excluded.started_at, \
+           last_heartbeat_at = excluded.last_heartbeat_at",
+        &[
+            Value::from(args.str("session_id")?),
+            Value::from(args.str("daemon_host")?),
+            Value::from(args.int("daemon_port")?),
+            Value::from(args.str("started_at")?),
+            Value::from(args.str("last_heartbeat_at")?),
+        ],
+    )?;
+    Ok(Value::Null)
 }
 
 /// Writes the diagnostic mirror, the emptied local anchor slot and the

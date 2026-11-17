@@ -175,6 +175,6 @@ fn row(out: &mut String, cells: &[String]) {
     out.push_str("\r\n");
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_evidence_export_tests.rs"]
 mod tests;

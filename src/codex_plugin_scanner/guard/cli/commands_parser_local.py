@@ -339,6 +339,12 @@ def _configure_guard_local_parsers(
             help="Exact shell command to inspect; quote to preserve shell syntax",
         )
         inspect_parser.add_argument("--json", action="store_true")
+        if command_name == "explain":
+            inspect_parser.add_argument(
+                "--cloud", action="store_true", help="Explain a cloud action call; the argument is the action ID"
+            )
+            inspect_parser.add_argument("--arguments", help="Example call arguments as a JSON object (--cloud)")
+            inspect_parser.add_argument("--pack", help="Cloud action pack file; default: shipped packs (--cloud)")
     extensions_parser = command_subparsers.add_parser(
         "extensions",
         help="List or inspect the command safety extensions this device has, delivered ones included",

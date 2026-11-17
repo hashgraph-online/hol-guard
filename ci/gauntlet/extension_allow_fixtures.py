@@ -46,18 +46,19 @@ def extension_allow_checks(workspace: Path, scenario_id: str, executed_flag: str
     return checks
 
 
-def _declared_permissions(extension_id: str) -> list[str]:
-    """Every permission the installed catalog declares for one extension.
+def _declared_permissions(registry: object, extension_id: str) -> list[str]:
+    """Every permission the daemon's active catalog declares for one extension.
 
-    The ids come from the catalog, so a permission added to the extension is
-    enabled here without this file changing -- and a case that silently
-    stopped covering one of them would show up as a review instead.
+    The ids come from the live catalog, so a permission added to the extension
+    is enabled here without this file changing -- and a case that silently
+    stopped covering one of them would show up as a review instead. A
+    contributed extension is an optional pack: its permissions are absent from
+    the packaged built-in catalog and join the active one only once the
+    extension is enabled, which is why the lookup happens after that commit.
     """
-    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-
     permissions = [
         permission.permission_id
-        for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+        for extension in registry.extensions  # type: ignore[attr-defined]
         if extension.extension_id == extension_id
         for permission in extension.permissions
     ]
@@ -70,7 +71,7 @@ def configure_extension_allow_controls(
     daemon: object, guard_home: Path, scenario_id: str | None = None
 ) -> dict[str, object]:
     """Sign the contributed extension and every permission it declares as enabled."""
-    from .extension_adapters import configure_each_extension_controls
+    from .extension_adapters import configure_each_extension_with_declared_permissions
 
     extension_ids = [EXTENSION_ALLOW_ID]
     if scenario_id == EXTENSION_ALLOW_WORKTREE_CASE:
@@ -81,10 +82,11 @@ def configure_extension_allow_controls(
         from .git_allow_fixtures import GIT_EXTENSION_ID
 
         extension_ids.insert(0, GIT_EXTENSION_ID)
-    permissions = {extension_id: _declared_permissions(extension_id) for extension_id in extension_ids}
     # One authorization for the whole case: enrolling the control authority a
     # second time is refused once a layer is committed.
-    revisions = configure_each_extension_controls(daemon, guard_home, permissions)
+    permissions, revisions = configure_each_extension_with_declared_permissions(
+        daemon, guard_home, extension_ids, _declared_permissions
+    )
     subject = extension_ids[-1]
     # The contributed extension is the subject, so its own record stays the
     # shape every reader already expects; the list names whatever else the

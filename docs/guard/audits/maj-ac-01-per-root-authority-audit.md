@@ -116,7 +116,7 @@ useful part.
 
 ### `_script_free_watch`
 
-`src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py` settles a
+`src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py` settles a
 package review in Python in one case the resident did not settle.
 
 Its main path is clean: the resident plans the review (`package_review_plan`),

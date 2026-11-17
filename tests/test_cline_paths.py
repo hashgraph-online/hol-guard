@@ -3,10 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_hooks import cline_hook_roots
-from codex_plugin_scanner.guard.adapters.cline_mcp import cline_mcp_settings_candidates
-from codex_plugin_scanner.guard.adapters.cline_paths import cline_data_dir
-from codex_plugin_scanner.guard.adapters.cline_plugin import cline_plugin_root
+from codex_plugin_scanner.guard.adapters.native_harness import ask
+
+_SETTINGS = '{"mcpServers": {"local": {"command": "node", "args": []}}}'
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -18,17 +17,36 @@ def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=guard_home)
 
 
+def _hook_root(context: HarnessContext, tmp_path: Path) -> Path:
+    runtime = tmp_path / "native-runtime"
+    runtime.write_bytes(b"")
+    facts = {"python": True, "runtime": str(runtime), "hook_argv": ["guard", "hook"], "identity": None}
+    answer = ask("install_transport", context, harness="cline", transport="hooks", frozen=False, facts=facts)
+    return Path(answer["manifest"]["managed_hooks_root"])
+
+
+def _plugin_root(context: HarnessContext) -> Path:
+    facts = {"guard_cli": ["guard"], "hook_argv": None, "identity": None}
+    answer = ask("install_transport", context, harness="cline", transport="plugin", frozen=False, facts=facts)
+    return Path(answer["manifest"]["managed_plugin_path"]).parent
+
+
+def _scanned(context: HarnessContext, *settings: Path) -> set[Path]:
+    for path in settings:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_SETTINGS, encoding="utf-8")
+    return {Path(found["path"]) for found in ask("mcp_scan", context, harness="cline")["candidates"]}
+
+
 def test_default_cline_paths_cover_ui_and_cli_roots(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("CLINE_DATA_DIR", raising=False)
     monkeypatch.delenv("CLINE_DIR", raising=False)
     context = _context(tmp_path)
 
-    assert cline_data_dir(context) == context.home_dir / ".cline"
-    assert cline_hook_roots(context) == (
-        context.home_dir / "Documents" / "Cline" / "Hooks",
-        context.home_dir / ".cline" / "hooks",
-    )
-    assert cline_plugin_root(context) == context.home_dir / ".cline" / "plugins" / "hol-guard"
+    assert _hook_root(context, tmp_path) == context.home_dir / "Documents" / "Cline" / "Hooks"
+    assert _plugin_root(context) == context.home_dir / ".cline" / "plugins" / "hol-guard"
+    settings = context.home_dir / ".cline" / "data" / "settings" / "cline_mcp_settings.json"
+    assert _scanned(context, settings) == {settings}
 
 
 def test_current_cline_data_dir_override_takes_precedence(tmp_path: Path, monkeypatch) -> None:
@@ -38,13 +56,12 @@ def test_current_cline_data_dir_override_takes_precedence(tmp_path: Path, monkey
     monkeypatch.setenv("CLINE_DATA_DIR", str(current))
     monkeypatch.setenv("CLINE_DIR", str(legacy))
 
-    assert cline_data_dir(context) == current
-    assert cline_hook_roots(context)[0] == current / "hooks"
-    assert cline_plugin_root(context) == current / "plugins" / "hol-guard"
-    candidates = cline_mcp_settings_candidates(context)
-    assert current / "data" / "settings" / "cline_mcp_settings.json" in candidates
-    assert current / "settings" / "cline_mcp_settings.json" in candidates
-    assert all(not str(path).startswith(str(legacy)) for path in candidates)
+    assert _hook_root(context, tmp_path) == current / "hooks"
+    assert _plugin_root(context) == current / "plugins" / "hol-guard"
+    data = current / "data" / "settings" / "cline_mcp_settings.json"
+    flat = current / "settings" / "cline_mcp_settings.json"
+    ignored = legacy / "data" / "settings" / "cline_mcp_settings.json"
+    assert _scanned(context, data, flat, ignored) == {data, flat}
 
 
 def test_legacy_cline_dir_override_remains_compatible(tmp_path: Path, monkeypatch) -> None:
@@ -53,6 +70,5 @@ def test_legacy_cline_dir_override_remains_compatible(tmp_path: Path, monkeypatc
     monkeypatch.delenv("CLINE_DATA_DIR", raising=False)
     monkeypatch.setenv("CLINE_DIR", str(legacy))
 
-    assert cline_data_dir(context) == legacy
-    assert cline_hook_roots(context)[0] == legacy / "hooks"
-    assert cline_plugin_root(context) == legacy / "plugins" / "hol-guard"
+    assert _hook_root(context, tmp_path) == legacy / "hooks"
+    assert _plugin_root(context) == legacy / "plugins" / "hol-guard"

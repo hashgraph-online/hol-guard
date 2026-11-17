@@ -13,9 +13,7 @@ import json
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.hook_input_reader import read_stdin_text
-from codex_plugin_scanner.guard.cli.commands_support_hook_payload_loader import load_hook_payload
-from codex_plugin_scanner.guard.codex_hook_bridge_runtime import bounded_hook_input
+from codex_plugin_scanner.guard.cli.commands_support_hook_payload_loader import load_hook_payload, read_stdin_text
 
 _PAYLOAD = {"hook_event_name": "PreToolUse", "tool_input": {"file_path": "C:/Users/zoë/café.txt"}}
 
@@ -45,17 +43,6 @@ def test_read_stdin_text_accepts_text_only_streams(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr("sys.stdin", io.StringIO("é" * 3))
 
     assert read_stdin_text(5) == ("ééé", True)
-
-
-def test_codex_bounded_hook_input_decodes_utf8(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("sys.stdin", _cp1252_stdin(json.dumps(_PAYLOAD, ensure_ascii=False)))
-
-    data = bounded_hook_input(4096)
-
-    assert data is not None
-    assert json.loads(data) == _PAYLOAD
-    monkeypatch.setattr("sys.stdin", _cp1252_stdin("é" * 3))
-    assert bounded_hook_input(5) is None
 
 
 def test_fallback_hook_payload_loader_decodes_utf8(monkeypatch: pytest.MonkeyPatch) -> None:

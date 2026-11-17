@@ -3,16 +3,15 @@
 //! approval-gate checks and timeline events as the daemon's
 //! `_apply_settings_payload` and `_handle_settings_reset`.
 //!
-//! A change the edge cannot finish goes to the daemon before any gate check
-//! runs: approval-gate settings, context-assistance settings, and turning
-//! cloud sync on, which needs the daemon's plan entitlement. Once the
-//! resident may have checked the gate the edge never hands the request over,
-//! so the check never runs twice.
+//! Turning cloud sync on reads the plan entitlement from the store the way the
+//! package authority resolves it. Once the resident may have checked the gate
+//! the edge never hands the request over, so the check never runs twice.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use guard_contracts::ApprovalGateMethodV1;
 use serde_json::{json, Map, Value};
 
 use super::super::settings::{response, Loaded};
@@ -51,13 +50,11 @@ pub(super) fn apply(
     let Some(PyVal::Dict(settings)) = lookup(payload, "settings") else {
         return Some((400, json!({"error": missing_error})));
     };
-    if settings.iter().any(|(key, value)| {
-        key == "approval_gate"
-            || key == "context_assistance"
-            || (key == "sync" && *value == PyVal::Bool(true))
-    }) {
-        return None;
-    }
+    let hand_off = hands_off_to_context_assistance(settings);
+    let gate_payload = json_payload
+        .get("settings")
+        .and_then(|settings| settings.get("approval_gate"))
+        .filter(|gate| gate.is_object());
     // The answer reads the gate under the daemon's session; without one the
     // daemon answers before anything is written.
     config.session_signals.as_ref()?;
@@ -73,27 +70,103 @@ pub(super) fn apply(
         let offered = ["approval_password", "approval_totp_code"]
             .iter()
             .any(|key| json_payload.get(*key).is_some_and(truthy));
-        let input = if offered {
-            json_payload.clone()
-        } else {
-            Map::new()
+        let input = match gate_payload {
+            _ if offered => json_payload.clone(),
+            Some(gate) => Map::from_iter([("approval_gate".to_owned(), gate.clone())]),
+            None => Map::new(),
         };
-        if let Some(refused) = settings_gate(&input, config)? {
-            return Some(refused);
+        let grant = match gate::require_high_risk("settings_write", &input, config)? {
+            Gate::Refused(status, body) => return Some((status, Value::Object(body))),
+            Gate::Passed(grant) => grant,
+        };
+        // The resident has run, so from here on nothing goes to the daemon.
+        if let Some(gate_payload) = gate_payload {
+            let method = ApprovalGateMethodV1::ValidateSettingsUpdate;
+            if let Gate::Refused(status, body) =
+                gate::settings_method(method, gate_payload, grant.as_deref(), config)
+            {
+                return Some((status, Value::Object(body)));
+            }
         }
+        if let Some(Gate::Refused(status, body)) =
+            gate::require_settings_write(grant.clone(), config)
+        {
+            return Some((status, Value::Object(body)));
+        }
+        let config_settings = settings_without_gate(settings);
+        let written = match write_settings(config, config_settings) {
+            Ok(written) => written,
+            Err(answer) => return Some(answer),
+        };
+        if let Some(gate_payload) = gate_payload {
+            let method = ApprovalGateMethodV1::UpdateSettings;
+            if let Gate::Refused(status, body) =
+                gate::settings_method(method, gate_payload, grant.as_deref(), config)
+            {
+                return Some((status, Value::Object(body)));
+            }
+        }
+        return Some(after_write(
+            config,
+            reads,
+            &previous,
+            Some(&written),
+            hand_off,
+        ));
     }
-    let value = PyVal::Dict(settings.clone());
-    let written = match update(guard_home, "settings", &value) {
-        Ok(previous) => previous,
-        Err(Some(message)) => {
-            return Some((
-                400,
-                json!({"error": "invalid_settings", "message": message}),
-            ))
-        }
-        Err(None) => return Some((DROPPED, Value::Null)),
+    let written = match write_settings(config, settings.clone()) {
+        Ok(written) => written,
+        Err(answer) => return Some(answer),
     };
-    Some(after_write(config, reads, &previous, Some(&written), false))
+    Some(after_write(
+        config,
+        reads,
+        &previous,
+        Some(&written),
+        hand_off,
+    ))
+}
+
+fn settings_without_gate(settings: &[(String, PyVal)]) -> Vec<(String, PyVal)> {
+    settings
+        .iter()
+        .filter(|(key, _)| key != "approval_gate")
+        .cloned()
+        .collect()
+}
+
+/// `update_guard_settings`: the previous values, or the answer to send.
+fn write_settings(
+    config: &ReadConfig,
+    settings: Vec<(String, PyVal)>,
+) -> Result<Value, (u16, Value)> {
+    let entitled = settings
+        .iter()
+        .any(|(key, value)| key == "sync" && *value == PyVal::Bool(true))
+        && cloud_sync_entitled(config);
+    let value = PyVal::Dict(settings);
+    match update(Path::new(&config.guard_home), "settings", &value, entitled) {
+        Ok(previous) => Ok(previous),
+        Err(Some(message)) => Err((
+            400,
+            json!({"error": "invalid_settings", "message": message}),
+        )),
+        Err(None) => Err((DROPPED, Value::Null)),
+    }
+}
+
+/// `package_firewall_entitlement_or_denied(store)["allowed"]`, resolved from
+/// the store the way the package authority resolves it. Only a write turning
+/// sync on reads it.
+fn cloud_sync_entitled(config: &ReadConfig) -> bool {
+    let store = crate::package_authority_op::ResidentSupplyChainStore::new(
+        Path::new(&config.store_path),
+        Path::new(&config.guard_home),
+    );
+    guard_command::local_supply_chain::resolve_package_firewall_entitlement(&store)
+        .get("allowed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 /// `_handle_settings_reset`.
@@ -116,7 +189,7 @@ pub(super) fn reset(
     if let Some(refused) = settings_gate(json_payload, config)? {
         return Some(refused);
     }
-    if update(guard_home, "reset", &PyVal::Null).is_err() {
+    if update(guard_home, "reset", &PyVal::Null, false).is_err() {
         return Some((DROPPED, Value::Null));
     }
     Some(after_write(config, reads, &previous, None, true))
@@ -175,7 +248,12 @@ fn after_write(
 
 /// One `guard-config-update` write in process. `Err(Some(message))` is the
 /// `ValueError` the daemon answers with 400; `Err(None)` a write it raises on.
-fn update(guard_home: &Path, kind: &str, value: &PyVal) -> Result<Value, Option<String>> {
+fn update(
+    guard_home: &Path,
+    kind: &str,
+    value: &PyVal,
+    cloud_sync_entitled: bool,
+) -> Result<Value, Option<String>> {
     let state = load_managed_policy(&ManagedPolicySource::native());
     let managed = effective_managed_policy(&state).map(|policy| {
         json!({
@@ -189,7 +267,7 @@ fn update(guard_home: &Path, kind: &str, value: &PyVal) -> Result<Value, Option<
         "kind": kind,
         "value_text": dumps(value).ok_or(None)?,
         "managed": managed,
-        "cloud_sync_entitled": false,
+        "cloud_sync_entitled": cloud_sync_entitled,
     });
     let encoded = serde_json::to_vec(&request).map_err(|_| None)?;
     let output = crate::guard_config_update::run_command(encoded.as_slice()).map_err(|_| None)?;
@@ -321,10 +399,24 @@ fn requeue_privacy_projection(config: &ReadConfig, reads: &NativeReads, level: &
     Some(())
 }
 
+/// Whether a settings write changes CIGAR's settings, so prompt hooks must
+/// be handed them now rather than on the next context call.
+fn hands_off_to_context_assistance(settings: &[(String, PyVal)]) -> bool {
+    settings.iter().any(|(key, _)| key == "context_assistance")
+}
+
+#[cfg(test)]
+thread_local! {
+    static HANDOFFS: std::cell::RefCell<Vec<std::path::PathBuf>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
 /// `_hand_settings_to_cigar`: ask the resident for the context-assistance
 /// status so it reads the saved settings now. Failures are ignored, as the
 /// daemon suppresses them.
 fn hand_settings_to_context_assistance(guard_home: &Path) {
+    #[cfg(test)]
+    HANDOFFS.with(|handoffs| handoffs.borrow_mut().push(guard_home.to_path_buf()));
     let Ok(home) = std::fs::canonicalize(guard_home) else {
         return;
     };
@@ -381,6 +473,6 @@ fn now_seconds() -> Option<String> {
     )
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_settings_write_tests.rs"]
 mod tests;

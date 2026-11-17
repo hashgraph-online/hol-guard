@@ -8,6 +8,7 @@ import {
   readHarnessActionUserMessage,
   readPackageFirewallActionFailure,
   resolveApprovalGateSyncFailure,
+  setupActionErrorMessage,
 } from "./harness-action-errors";
 
 function assert(condition: boolean, message: string): void {
@@ -206,4 +207,25 @@ assert(
 assert(
   !isPackageFirewallOperationInProgressError(makeHarnessError(409, { error: "folder_picker_busy" })),
   "other conflicts are not mistaken for a running sync",
+);
+
+const ownerConflict =
+  "A Codex Guard handler at PreToolUse/group[0]/handler[0] in ~/.codex/config.toml runs a program that no "
+  + "longer exists. Delete that handler, then run `hol-guard install codex`; existing hooks have been preserved.";
+assert(
+  setupActionErrorMessage(
+    makeHarnessError(409, { error: "codex_hook_owner_conflict", harness: "codex", message: ownerConflict }),
+  ) === ownerConflict,
+  "a repair refusal shows Guard's explanation, not its reason code",
+);
+assert(
+  setupActionErrorMessage(makeHarnessError(503, { error: "native_handler_policy_unavailable" }))
+    === "native_handler_policy_unavailable",
+  "a refusal without an explanation still names its reason code",
+);
+assert(
+  setupActionErrorMessage(
+    makeHarnessError(400, { error: "confirmation_required", message: "server text" }),
+  ) === "Disconnect requires confirmation so accidental clicks cannot remove local protection.",
+  "disconnect confirmation keeps its own copy",
 );

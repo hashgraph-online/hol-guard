@@ -1,7 +1,8 @@
 import { useCallback } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { SectionLabel } from "./approval-center-primitives";
-import type { ApprovalScopeChoice } from "./approval-scopes";
+import { scopeChoiceWithDuration, type ApprovalScopeChoice } from "./approval-scopes";
+import { retryWindowText } from "./approval-retry-guidance";
 import type { DecisionScope } from "./guard-types";
 
 type ReviewScopeControlsProps = {
@@ -40,7 +41,7 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
         {props.commonScopeOptions.map((choice) => (
           <ScopeChoiceButton
             key={choice.value}
-            choice={choice}
+            choice={scopeChoiceWithDuration(choice, props.rememberExactAction && props.exactActionPersistenceEligible)}
             checked={props.allowScope === choice.value}
             onScopeChange={props.onAllowScopeChange}
           />
@@ -152,7 +153,7 @@ function ExactActionPersistenceChoice(props: {
             {props.versionBoundScript ? "Run once" : "This time"}
           </span>
           <span className="mt-0.5 block text-xs text-muted-foreground">
-            {`Retry within ${props.retryWindowMinutes} minutes.`}
+            {`Retry within ${retryWindowText(props.retryWindowMinutes)}.`}
           </span>
         </label>}
         <label className={exactActionChoiceClassName(props.checked)}>

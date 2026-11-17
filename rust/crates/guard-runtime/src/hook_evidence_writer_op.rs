@@ -507,6 +507,50 @@ fn stats_payload(resident: &ResidentWriter) -> Value {
     })
 }
 
+/// The writer's counters for the daemon's health details, without taking
+/// the signals its client reads: a health read must not swallow a policy
+/// mutation or a fatal store error.
+pub(crate) fn health_stats(guard_home: &Path) -> Value {
+    // Never waits on a slot that is starting or draining a writer.
+    let slot = slot(&canonical_home(guard_home));
+    let held = match slot.writer.try_lock() {
+        Ok(held) => Some(held),
+        Err(TryLockError::Poisoned(poisoned)) => Some(poisoned.into_inner()),
+        Err(TryLockError::WouldBlock) => None,
+    };
+    let mut payload = held
+        .as_ref()
+        .and_then(|held| held.as_ref())
+        .map(|resident| {
+            let stats = resident.writer.stats();
+            json!({
+                "queued": stats.queued,
+                "queued_bytes": stats.queued_bytes,
+                "accepted": stats.accepted,
+                "processed": stats.processed,
+                "dropped": stats.dropped,
+                "failures": stats.failures,
+                "recovered": stats.recovered,
+                "durable_pending": stats.durable_pending,
+                "degraded": stats.degraded,
+                "running": stats.running,
+                "receipt_accepted": stats.receipt_accepted,
+                "receipt_processed": stats.receipt_processed,
+                "receipt_deduped": stats.receipt_deduped,
+                "receipt_dropped": stats.receipt_dropped,
+                "receipt_failures": stats.receipt_failures,
+                "receipt_durable_pending": stats.receipt_durable_pending,
+                "started": true,
+            })
+        })
+        .unwrap_or_else(idle_stats);
+    if let Some(fields) = payload.as_object_mut() {
+        fields.remove("policy_mutations");
+        fields.remove("store_fatal");
+    }
+    payload
+}
+
 /// A writer that was never started has nothing queued and is not running.
 fn idle_stats() -> Value {
     json!({

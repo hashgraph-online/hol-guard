@@ -46,7 +46,7 @@ def _resign(plan, path, payload, *, purpose="codex-authority-repair-request"):
     secret = load_hook_secret(plan.guard_home)
     payload["authentication"] = sign_local_authority_payload(
         payload,
-        key=secret.key,
+        key_home=str(secret.guard_home),
         key_id=secret.key_id,
         purpose=purpose,
         signed_at=plan.operation_id,
@@ -105,16 +105,8 @@ def test_exact_roundtrip_is_read_only_except_private_request(captured, tmp_path,
     del before[parent]
     # A live resident refreshes its own client-lease file's mtime during the
     # round trip; that liveness marker is not a request mutation.
-    after = {
-        rel: entry
-        for rel, entry in after.items()
-        if "resident-client-leases.v1" not in rel
-    }
-    before = {
-        rel: entry
-        for rel, entry in before.items()
-        if "resident-client-leases.v1" not in rel
-    }
+    after = {rel: entry for rel, entry in after.items() if "resident-client-leases.v1" not in rel}
+    before = {rel: entry for rel, entry in before.items() if "resident-client-leases.v1" not in rel}
     assert after == before
     raw = path.read_text()
     assert "grant_id" not in raw and "session_nonce" not in raw and "approval_gate_input" not in raw
@@ -147,7 +139,10 @@ def test_private_request_or_digest_change_refuses_loading(captured, mutation, mo
     elif mutation == "digest":
         digest = "0" * 64
     else:
-        monkeypatch.setattr(requests, "_MAX_REQUEST", path.stat().st_size - 1)
+        # The digest matches, so only the read cap can refuse these bytes.
+        oversized = path.read_bytes().ljust(8 * 1024 * 1024 + 1, b" ")
+        path.write_bytes(oversized)
+        digest = hashlib.sha256(oversized).hexdigest()
     with pytest.raises(TransitionError):
         _load(plan, path, digest)
     assert not manifest.exists()

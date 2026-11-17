@@ -76,7 +76,7 @@ The dashboard has a larger validation and presentation surface, but policy meani
 - `rust/crates/guard-runtime/src/extension_control_op.rs`
 - `src/codex_plugin_scanner/guard/native_extension_control.py`
 - `src/codex_plugin_scanner/guard/runtime/extension_control_authority.py`
-- `src/codex_plugin_scanner/guard/daemon/extension_control_api.py`
+- `src/codex_plugin_scanner/guard/extension_controls/extension_control_api.py`
 - `dashboard/src/extension-controls-normalize.ts`
 - `dashboard/src/extension-control-center-model.ts`
 - `dashboard/src/extensions-workspace.tsx`

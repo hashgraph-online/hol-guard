@@ -16,14 +16,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.update_commands import build_guard_update_status_payload
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import dashboard_update as dashboard_update_module
-from codex_plugin_scanner.guard.daemon.dashboard_update import (
+from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.updates import dashboard_update as dashboard_update_module
+from codex_plugin_scanner.guard.updates.dashboard_update import (
     build_dashboard_update_runner_command,
     build_dashboard_update_runner_popen_kwargs,
     dashboard_update_runner_script,
@@ -32,7 +33,6 @@ from codex_plugin_scanner.guard.daemon.dashboard_update import (
     schedule_guard_dashboard_update,
     write_dashboard_update_outcome,
 )
-from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_control_patching import patch_daemon_global
 from tests.update_context_test_support import build_legacy_status_distribution
 
@@ -42,10 +42,6 @@ def _use_legacy_status_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_commands._status_installed_distribution",
         build_legacy_status_distribution,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.manager._guard_daemon_process_inventory_for_guard_home",
-        lambda _guard_home: [],
     )
 
 
@@ -417,7 +413,7 @@ def test_desktop_update_request_concurrent_writes_stay_valid(tmp_path: Path) -> 
     def write(version: str) -> None:
         try:
             dashboard_update_module.write_desktop_update_request(guard_home, latest_version=version)
-        except BaseException as error:  # noqa: BLE001 - collected and asserted below
+        except BaseException as error:
             errors.append(error)
 
     threads = [threading.Thread(target=write, args=(f"3.53.0a{index}",)) for index in range(8)]
@@ -640,7 +636,7 @@ def test_schedule_guard_dashboard_update_spawns_runner(
             self.pid = 4243
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.dashboard_update.subprocess.Popen",
+        "codex_plugin_scanner.guard.updates.dashboard_update.subprocess.Popen",
         FakeProcess,
     )
     monkeypatch.setattr(
@@ -890,7 +886,7 @@ def test_runner_command_avoids_module_shadowing_from_cwd(tmp_path: Path) -> None
         update_token="a" * 64,
     )
     assert "-m" not in command
-    assert "codex_plugin_scanner.guard.daemon.dashboard_update_runner" not in command
+    assert "codex_plugin_scanner.guard.updates.dashboard_update_runner" not in command
     runner_script = dashboard_update_runner_script()
     assert str(runner_script) in command
     assert runner_script.is_file()
@@ -976,7 +972,7 @@ def test_runner_bootstrap_ignores_project_import_hooks_and_uses_guard_owned_cwd(
 ) -> None:
     trusted_root = tmp_path / "trusted-root"
     trusted_package = trusted_root / "codex_plugin_scanner"
-    runner_script = trusted_package / "guard" / "daemon" / "dashboard_update_runner.py"
+    runner_script = trusted_package / "guard" / "updates" / "dashboard_update_runner.py"
     runner_script.parent.mkdir(parents=True)
     (trusted_package / "__init__.py").write_text("SOURCE = 'trusted'\n", encoding="utf-8")
     observed_path = tmp_path / "runner-observed.json"
@@ -1101,15 +1097,15 @@ def test_merge_dashboard_update_progress_includes_lock_metadata(
             self.pid = 5151
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.dashboard_update.subprocess.Popen",
+        "codex_plugin_scanner.guard.updates.dashboard_update.subprocess.Popen",
         FakeProcess,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.dashboard_update._pid_is_running",
+        "codex_plugin_scanner.guard.updates.dashboard_update._pid_is_running",
         lambda pid: pid == 5151,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.dashboard_update.build_guard_update_status_payload",
+        "codex_plugin_scanner.guard.updates.dashboard_update.build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "2.0.508",
             "latest_version": "2.0.509",
@@ -1160,7 +1156,7 @@ def test_dashboard_update_runner_preserves_state_for_trusted_successful_restart(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1246,7 +1242,7 @@ def test_dashboard_update_runner_accepts_verified_retained_newer_runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1299,7 +1295,7 @@ def test_dashboard_update_runner_blocks_install_when_daemon_retirement_is_unprov
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1346,7 +1342,7 @@ def test_dashboard_update_runner_exit_zero_requires_embedded_daemon_restart(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1397,7 +1393,7 @@ def test_dashboard_update_runner_missing_embedded_restart_uses_legacy_only_after
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1461,7 +1457,7 @@ def test_dashboard_update_runner_failure_stderr_never_renders_payload_details(
     capsys: pytest.CaptureFixture[str],
     failure_detail: dict[str, object],
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1512,7 +1508,7 @@ def test_dashboard_update_runner_failure_uses_availability_fallback_only_after_i
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+    from codex_plugin_scanner.guard.updates import dashboard_update_runner as runner_module
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()

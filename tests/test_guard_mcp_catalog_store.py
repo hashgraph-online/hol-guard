@@ -546,8 +546,8 @@ def test_v10_migration_rebuilds_tool_hashes_without_changing_grants(tmp_path: Pa
 
 
 def test_a_save_names_its_catalog_revision_as_a_plain_count() -> None:
-    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
-    from codex_plugin_scanner.guard.daemon.local_cli_api_contract import LocalCliApiError
+    from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
+    from codex_plugin_scanner.guard.local_clis.local_cli_api_contract import LocalCliApiError
 
     service = object.__new__(LocalCliApiService)
     assert service._optional_revision({}, "mcp_catalog_revision") is None

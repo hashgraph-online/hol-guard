@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_direct_evidence_drain import (
+from codex_plugin_scanner.guard.evidence_drains.hook_direct_evidence_drain import (
     DirectHookEvidenceDrain,
     record_direct_hook_evidence,
 )
@@ -195,7 +195,7 @@ def test_a_malformed_record_is_not_recorded(tmp_path: Path, record: object) -> N
 def test_an_unmanaged_harness_is_passed_through_without_recording(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import hook_managed_install_state
+    from codex_plugin_scanner.guard.hook_review import hook_managed_install_state
 
     harnesses: list[str] = []
 

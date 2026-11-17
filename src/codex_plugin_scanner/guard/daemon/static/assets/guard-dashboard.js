@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-Dan7_c2E.js","assets/chunks/home-protection-module-DIttScQc.js","assets/chunks/supply-chain-protection-stats-Ba1xsVTU.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-BSRlTmJa.js","assets/chunks/harness-version-label-CX70iimu.js","assets/chunks/connect-guard-cloud-button-BJqRCi0R.js","assets/chunks/settings-save-proof-modal-5oF57AlU.js","assets/chunks/settings-workspace-BZwiFWD9.js","assets/chunks/confirm-dialog-CFbrhi6J.js","assets/chunks/extensions-workspace-CRj85C7n.js","assets/chunks/app-detail-workspace-raaFYZV-.js","assets/chunks/policy-workspace-page-BlNqkYe-.js","assets/chunks/about-workspace-DOeU384A.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-CcNVkqUm.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-BQ6EUpFF.js","assets/chunks/home-protection-module-D_Yhjn0E.js","assets/chunks/supply-chain-protection-stats-CPD_X4uy.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-opR5EnGM.js","assets/chunks/harness-version-label-CUjIRfNl.js","assets/chunks/settings-save-proof-modal-D5T3JAnf.js","assets/chunks/connect-guard-cloud-button-ClD8c_aU.js","assets/chunks/guard-repair-control-BRIdS8_6.js","assets/chunks/settings-workspace-BwqIbMpW.js","assets/chunks/confirm-dialog-CUSyIm1u.js","assets/chunks/extensions-workspace-DAAmp_gK.js","assets/chunks/app-detail-workspace-DzaiFTPz.js","assets/chunks/harness-action-errors-7RhsXctt.js","assets/chunks/supply-chain-hub-workspace-C53RwWkC.js","assets/chunks/policy-workspace-page-Bbj6-Y22.js","assets/chunks/about-workspace-D-wgjjDL.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -12825,6 +12825,9 @@ function HiMiniPencilSquare(props) {
 function HiMiniPauseCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 10a8 8 0 1 1 16 0 8 8 0 0 1-16 0Zm5-2.25A.75.75 0 0 1 7.75 7h.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-.5a.75.75 0 0 1-.75-.75v-4.5Zm4 0a.75.75 0 0 1 .75-.75h.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-.5a.75.75 0 0 1-.75-.75v-4.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniPaperAirplane(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M3.105 2.288a.75.75 0 0 0-.826.95l1.414 4.926A1.5 1.5 0 0 0 5.135 9.25h6.115a.75.75 0 0 1 0 1.5H5.135a1.5 1.5 0 0 0-1.442 1.086l-1.414 4.926a.75.75 0 0 0 .826.95 28.897 28.897 0 0 0 15.293-7.155.75.75 0 0 0 0-1.114A28.897 28.897 0 0 0 3.105 2.288Z" }, "child": [] }] })(props);
+}
 function HiMiniNoSymbol(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "m5.965 4.904 9.131 9.131a6.5 6.5 0 0 0-9.131-9.131Zm8.07 10.192L4.904 5.965a6.5 6.5 0 0 0 9.131 9.131ZM4.343 4.343a8 8 0 1 1 11.314 11.314A8 8 0 0 1 4.343 4.343Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -12839,6 +12842,9 @@ function HiMiniMagnifyingGlass(props) {
 }
 function HiMiniLockClosed(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniListBullet(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniLink(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M12.232 4.232a2.5 2.5 0 0 1 3.536 3.536l-1.225 1.224a.75.75 0 0 0 1.061 1.06l1.224-1.224a4 4 0 0 0-5.656-5.656l-3 3a4 4 0 0 0 .225 5.865.75.75 0 0 0 .977-1.138 2.5 2.5 0 0 1-.142-3.667l3-3Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M11.603 7.963a.75.75 0 0 0-.977 1.138 2.5 2.5 0 0 1 .142 3.667l-3 3a2.5 2.5 0 0 1-3.536-3.536l1.225-1.224a.75.75 0 0 0-1.061-1.06l-1.224 1.224a4 4 0 1 0 5.656 5.656l3-3a4 4 0 0 0-.225-5.865Z" }, "child": [] }] })(props);
@@ -13001,6 +13007,9 @@ function HiMiniArrowUp(props) {
 }
 function HiMiniArrowUpTray(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" }, "child": [] }] })(props);
+}
+function HiMiniArrowUpRight(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.22 14.78a.75.75 0 0 0 1.06 0l7.22-7.22v5.69a.75.75 0 0 0 1.5 0v-7.5a.75.75 0 0 0-.75-.75h-7.5a.75.75 0 0 0 0 1.5h5.69l-7.22 7.22a.75.75 0 0 0 0 1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniArrowUpCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-.75-4.75a.75.75 0 0 0 1.5 0V8.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0L6.2 9.74a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -13229,6 +13238,16 @@ function groupByCategory(receipts) {
   }
   return map;
 }
+function scopeChoiceWithDuration(choice, persistExactAction) {
+  if (choice.value !== "artifact" || !persistExactAction) {
+    return choice;
+  }
+  return {
+    ...choice,
+    label: "Always allow this exact action",
+    description: "Guard skips review for this exact action until you remove it or the command changes."
+  };
+}
 function approvalDecisionSubjectKey(item) {
   return JSON.stringify([
     item.request_id,
@@ -13284,22 +13303,22 @@ const BLOCK_SCOPE_CHOICES = [
   {
     value: "workspace",
     label: "Block in project",
-    description: "Block matching actions in the current project."
+    description: "Block matching actions in the current project. Saved until you remove it."
   },
   {
     value: "publisher",
     label: "Block this source",
-    description: "Block matching actions from this source."
+    description: "Block matching actions from this source. Saved until you remove it."
   },
   {
     value: "harness",
     label: "Block in this app",
-    description: "Block matching actions from this AI app."
+    description: "Block matching actions from this AI app. Saved until you remove it."
   },
   {
     value: "global",
     label: "Block everywhere",
-    description: "Block matching actions across every project and AI app on this machine."
+    description: "Block matching actions across every project and AI app on this machine. Saved until you remove it."
   }
 ];
 function hasScopeContractMetadata(item) {
@@ -14368,7 +14387,10 @@ function retryCannotReuseApproval(item) {
   return item.once_only_reason === "script_execution_binding_unavailable" || item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
 }
 function oneTimeRetryWindowMinutes(item) {
-  return item.artifact_id.includes(":native-pretool:") ? 5 : 15;
+  return item.artifact_id.includes(":native-pretool:") ? 60 : 15;
+}
+function retryWindowText(minutes) {
+  return minutes === 60 ? "an hour" : `${minutes} minutes`;
 }
 function allowPermissionLabels(item) {
   const recommendation = item.extension_recommendation;
@@ -14422,6 +14444,804 @@ function countRetryBlockedActions(groups, items) {
 function bulkApproveConsequenceCopyForSelection(actionCount, retryBlockedActionCount, defaultCopy) {
   if (retryBlockedActionCount <= 0) return defaultCopy(actionCount);
   return `Run once is unavailable for ${retryBlockedActionCount} of these ${actionCount} actions. Open those requests to inspect their execution limitations before approving the remaining actions.`;
+}
+const MCP_EFFECT_COPY = {
+  read: { label: "Looks things up", meaning: "The name suggests it reads or searches and does not change anything." },
+  write: { label: "Makes changes", meaning: "The name suggests it creates or changes something." },
+  send: { label: "Sends something", meaning: "The name suggests it sends or posts something to other people or services." },
+  delete: { label: "Deletes things", meaning: "The name suggests it removes or deletes something." },
+  "run-code": { label: "Runs code", meaning: "The name suggests it runs code or a command." },
+  connect: { label: "Changes connections", meaning: "The name suggests it connects or changes a linked account." },
+  unknown: { label: "Effect unclear", meaning: "The name does not say what it does." }
+};
+const DELETE_WORDS = /* @__PURE__ */ new Set([
+  "delete",
+  "remove",
+  "destroy",
+  "drop",
+  "purge",
+  "erase",
+  "revoke",
+  "uninstall",
+  "trash",
+  "clear",
+  "wipe",
+  "truncate",
+  "disconnect"
+]);
+const SEND_WORDS = /* @__PURE__ */ new Set([
+  "send",
+  "post",
+  "publish",
+  "reply",
+  "forward",
+  "share",
+  "invite",
+  "tweet",
+  "broadcast",
+  "notify",
+  "dm",
+  "submit"
+]);
+const RUN_WORDS = /* @__PURE__ */ new Set([
+  "run",
+  "execute",
+  "exec",
+  "bash",
+  "shell",
+  "workbench",
+  "eval",
+  "script",
+  "invoke",
+  "spawn"
+]);
+const CONNECT_WORDS = /* @__PURE__ */ new Set(["connect", "connection", "connections", "authorize", "authenticate", "login", "oauth", "unlink"]);
+const WRITE_WORDS = /* @__PURE__ */ new Set([
+  "create",
+  "update",
+  "edit",
+  "write",
+  "add",
+  "insert",
+  "set",
+  "modify",
+  "patch",
+  "upload",
+  "move",
+  "rename",
+  "archive",
+  "mark",
+  "import",
+  "append",
+  "save",
+  "put",
+  "merge",
+  "commit",
+  "push",
+  "pay",
+  "transfer",
+  "purchase",
+  "approve",
+  "enable",
+  "disable",
+  "install",
+  "deploy",
+  "assign",
+  "close",
+  "reopen",
+  "restore",
+  "sync",
+  "copy",
+  "duplicate",
+  "unarchive",
+  "unstar",
+  "follow",
+  "unfollow",
+  "subscribe",
+  "unsubscribe",
+  "reset",
+  "refresh",
+  "start",
+  "stop",
+  "cancel",
+  "unpin",
+  "untag",
+  "upsert",
+  "attach",
+  "detach",
+  "register",
+  "change",
+  "replace",
+  "make",
+  "generate"
+]);
+const READ_WORDS = /* @__PURE__ */ new Set([
+  "get",
+  "list",
+  "search",
+  "find",
+  "fetch",
+  "read",
+  "query",
+  "lookup",
+  "view",
+  "show",
+  "check",
+  "describe",
+  "count",
+  "retrieve",
+  "browse",
+  "download",
+  "inspect",
+  "preview",
+  "explore",
+  "discover",
+  "resolve",
+  "summarize",
+  "analyze",
+  "export",
+  "scan",
+  "stat",
+  "status",
+  "info",
+  "schema",
+  "schemas",
+  "catalog",
+  "load",
+  "poll"
+]);
+const NOUN_OR_VERB = /* @__PURE__ */ new Map([
+  ["comment", "send"],
+  ["label", "write"],
+  ["tag", "write"],
+  ["star", "write"],
+  ["pin", "write"],
+  ["order", "write"],
+  ["schedule", "write"],
+  ["book", "write"],
+  ["link", "connect"],
+  ["react", "send"],
+  ["build", "write"],
+  ["fork", "write"],
+  ["new", "write"],
+  ["watch", "write"]
+]);
+function nameWords(identifier2) {
+  return identifier2.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 0);
+}
+function classifyMcpEffect(identifier2) {
+  const words = nameWords(identifier2);
+  const firstRead = words.findIndex((word) => READ_WORDS.has(word));
+  const ambiguous = [];
+  words.forEach((word, index) => {
+    const kind = NOUN_OR_VERB.get(word);
+    if (kind !== void 0 && (firstRead === -1 || index < firstRead)) ambiguous.push(kind);
+  });
+  const has = (kind, set) => ambiguous.includes(kind) || words.some((word) => set.has(word));
+  if (has("delete", DELETE_WORDS)) return "delete";
+  if (has("run-code", RUN_WORDS)) return "run-code";
+  if (has("send", SEND_WORDS)) return "send";
+  if (has("connect", CONNECT_WORDS)) return "connect";
+  if (has("write", WRITE_WORDS)) return "write";
+  if (firstRead !== -1) return "read";
+  return "unknown";
+}
+const SEVERITY = {
+  read: 1,
+  unknown: 2,
+  connect: 3,
+  write: 4,
+  send: 5,
+  "run-code": 6,
+  delete: 7
+};
+function worstMcpEffect(effects) {
+  let worst = "read";
+  if (effects.length === 0) return "unknown";
+  for (const effect of effects) {
+    if (SEVERITY[effect] > SEVERITY[worst]) worst = effect;
+  }
+  return worst;
+}
+function firstActionWordIndex(words) {
+  return words.findIndex(
+    (word) => DELETE_WORDS.has(word) || SEND_WORDS.has(word) || RUN_WORDS.has(word) || CONNECT_WORDS.has(word) || WRITE_WORDS.has(word) || READ_WORDS.has(word) || NOUN_OR_VERB.has(word)
+  );
+}
+const INTENT_FIELDS = ["description", "justification"];
+const MAX_INTENT_CHARS = 300;
+const SHELL_TOOL_NAMES = /* @__PURE__ */ new Set([
+  "bash",
+  "shell",
+  "sh",
+  "zsh",
+  "terminal",
+  "run_command",
+  "run_terminal_command",
+  "run_shell_command",
+  "exec_command"
+]);
+const CODEX_TOOL_NAMESPACE = "functions.";
+const TOOL_INPUT_KEYS$1 = ["tool_input", "toolInput", "toolArgs", "arguments"];
+const UNSAFE_CHARACTERS = new RegExp(
+  "[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
+  "g"
+);
+function cleanAgentText(value, maxChars) {
+  const text2 = value.replace(UNSAFE_CHARACTERS, " ").replace(/\s+/g, " ").trim();
+  return text2.length > maxChars ? `${text2.slice(0, maxChars)}…` : text2;
+}
+function resolveAgentStatedIntent(item) {
+  const envelope = item.action_envelope_json;
+  if (!envelope) {
+    return null;
+  }
+  if (envelope.action_type !== "shell_command" && envelope.action_type !== "package_script") {
+    return null;
+  }
+  if (envelope.mcp_server) {
+    return null;
+  }
+  const raw = recordValue(envelope.raw_payload_redacted);
+  const toolName = envelope.tool_name ?? (typeof raw?.tool_name === "string" ? raw.tool_name : null);
+  if (toolName === null || !SHELL_TOOL_NAMES.has(shellToolName(toolName))) {
+    return null;
+  }
+  const toolInput = firstToolInput(raw);
+  if (toolInput === null) {
+    return null;
+  }
+  for (const field of INTENT_FIELDS) {
+    const value = toolInput[field];
+    if (typeof value !== "string") {
+      continue;
+    }
+    const text2 = value.replace(UNSAFE_CHARACTERS, " ").replace(/\s+/g, " ").trim();
+    if (text2.length === 0) {
+      continue;
+    }
+    return {
+      text: text2.length > MAX_INTENT_CHARS ? `${text2.slice(0, MAX_INTENT_CHARS)}…` : text2,
+      field
+    };
+  }
+  return null;
+}
+function firstToolInput(raw) {
+  if (raw === null) {
+    return null;
+  }
+  for (const key of TOOL_INPUT_KEYS$1) {
+    const value = raw[key];
+    const input = recordValue(value);
+    if (input !== null) {
+      return input;
+    }
+    if (typeof value !== "string" || value.trim().length === 0) {
+      continue;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+    if (recordValue(parsed) !== null) {
+      return null;
+    }
+  }
+  return null;
+}
+function shellToolName(toolName) {
+  const name = toolName.trim().toLowerCase();
+  return name.startsWith(CODEX_TOOL_NAMESPACE) ? name.slice(CODEX_TOOL_NAMESPACE.length) : name;
+}
+function recordValue(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+}
+const SERVICE_NAMES = /* @__PURE__ */ new Map([
+  ["composio", "Composio"],
+  ["gmail", "Gmail"],
+  ["googlecalendar", "Google Calendar"],
+  ["googledrive", "Google Drive"],
+  ["googledocs", "Google Docs"],
+  ["googlesheets", "Google Sheets"],
+  ["googleslides", "Google Slides"],
+  ["googlemeet", "Google Meet"],
+  ["googletasks", "Google Tasks"],
+  ["github", "GitHub"],
+  ["gitlab", "GitLab"],
+  ["slack", "Slack"],
+  ["discord", "Discord"],
+  ["notion", "Notion"],
+  ["linear", "Linear"],
+  ["jira", "Jira"],
+  ["asana", "Asana"],
+  ["trello", "Trello"],
+  ["airtable", "Airtable"],
+  ["hubspot", "HubSpot"],
+  ["salesforce", "Salesforce"],
+  ["stripe", "Stripe"],
+  ["shopify", "Shopify"],
+  ["youtube", "YouTube"],
+  ["linkedin", "LinkedIn"],
+  ["twitter", "X (Twitter)"],
+  ["reddit", "Reddit"],
+  ["facebook", "Facebook"],
+  ["instagram", "Instagram"],
+  ["dropbox", "Dropbox"],
+  ["outlook", "Outlook"],
+  ["zoom", "Zoom"],
+  ["figma", "Figma"],
+  ["sentry", "Sentry"],
+  ["posthog", "PostHog"],
+  ["supabase", "Supabase"],
+  ["vercel", "Vercel"],
+  ["cloudflare", "Cloudflare"],
+  ["openai", "OpenAI"],
+  ["perplexity", "Perplexity"],
+  ["firecrawl", "Firecrawl"],
+  ["context7", "Context7"],
+  ["playwright", "Playwright"],
+  ["filesystem", "Filesystem"],
+  ["postgres", "Postgres"],
+  ["sqlite", "SQLite"],
+  ["brave", "Brave Search"],
+  ["exa", "Exa"],
+  ["tavily", "Tavily"]
+]);
+function serviceDisplayName(key) {
+  const known = SERVICE_NAMES.get(key.trim().toLowerCase().replace(/[\s_-]+/g, ""));
+  if (known !== void 0) return known;
+  const words = nameWords(key);
+  if (words.length === 0) return key.trim();
+  return words.map(capitalize).join(" ");
+}
+function capitalize(word) {
+  return word.length === 0 ? word : `${word[0].toUpperCase()}${word.slice(1)}`;
+}
+function sentenceCase(identifier2) {
+  const words = nameWords(identifier2);
+  if (words.length === 0) return identifier2.trim();
+  return capitalize(words.join(" "));
+}
+function splitToolSlug(slug) {
+  const words = nameWords(slug);
+  const split = firstActionWordIndex(words);
+  if (split <= 0) {
+    return { app: null, action: sentenceCase(slug) };
+  }
+  return {
+    app: serviceDisplayName(words.slice(0, split).join("_")),
+    action: capitalize(words.slice(split).join(" "))
+  };
+}
+const NAME_PART = /^[a-zA-Z0-9_.:-]{1,120}$/;
+function parseNamespacedMcpName(raw) {
+  if (!raw || raw.length > 256 || !raw.startsWith("mcp__")) return null;
+  const parts = raw.slice(5).split("__");
+  if (parts.length < 2 || parts.some((part) => !NAME_PART.test(part))) return null;
+  const codexApp = parts[0] === "codex_apps" && parts.length > 2;
+  return { server: codexApp ? parts[1] : parts[0], tool: parts.slice(codexApp ? 2 : 1).join("__") };
+}
+function isPlainNamePart(value) {
+  return typeof value === "string" && NAME_PART.test(value);
+}
+function shortToolName(server, tool) {
+  const prefix = `${server.toLowerCase()}_`;
+  return tool.toLowerCase().startsWith(prefix) && tool.length > prefix.length ? tool.slice(prefix.length) : tool;
+}
+const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"];
+const TOOL_NAME_KEYS = ["tool_name", "toolName", "name", "tool"];
+const CORE_STRING_LIMIT = 240;
+const BIDI_CONTROLS = new RegExp("[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]", "g");
+const KEY_PATTERN = /^[A-Za-z0-9_.-]{1,60}$/;
+const VALUE_CHARS = 160;
+const MAX_FACTS = 8;
+const MAX_LIST_ITEMS = 6;
+const UNSAFE_CODE_CHARACTERS = new RegExp(
+  "[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
+  "g"
+);
+function recordOf(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+}
+function textOf(value, maxChars = VALUE_CHARS) {
+  if (typeof value !== "string") return null;
+  const text2 = cleanAgentText(value, maxChars);
+  return text2.length > 0 ? text2 : null;
+}
+function recordList(value, max = 20) {
+  if (!Array.isArray(value)) return [];
+  return value.map(recordOf).filter((item) => item !== null).slice(0, max);
+}
+function textList(value, max = 20) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => textOf(item, 80)).filter((item) => item !== null).slice(0, max);
+}
+function unique(values) {
+  const seen2 = /* @__PURE__ */ new Set();
+  return values.filter((value) => {
+    const key = value.toLowerCase();
+    if (seen2.has(key)) return false;
+    seen2.add(key);
+    return true;
+  });
+}
+function joinList(values, limit = 3) {
+  const shown = values.slice(0, limit);
+  const rest = values.length - shown.length;
+  const list = shown.length <= 2 ? shown.join(" and ") : `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
+  return rest > 0 ? `${shown.join(", ")} and ${rest} more` : list;
+}
+function codeOf(value) {
+  if (typeof value !== "string") return null;
+  const text2 = value.replace(UNSAFE_CODE_CHARACTERS, " ").trim();
+  return text2.length > 0 ? text2 : null;
+}
+const NO_INPUT = { record: null, text: null };
+function selectToolInput(raw) {
+  if (raw === null) return NO_INPUT;
+  const keyed = inputFromKeys(raw);
+  const hasKeyedInput = keyed !== null && (keyed.record === null || Object.keys(keyed.record).length > 0);
+  if (hasKeyedInput) return keyed;
+  return inputFromToolCalls(raw) ?? keyed ?? NO_INPUT;
+}
+function inputFromKeys(raw) {
+  for (const key of TOOL_INPUT_KEYS) {
+    const value = raw[key];
+    const record2 = recordOf(value);
+    if (record2 !== null) return inputFromRecord(record2);
+    if (typeof value !== "string" || value.trim().length === 0) continue;
+    if (coreSkipsString(value)) continue;
+    return { record: null, text: escapeBidi(value) };
+  }
+  return null;
+}
+function inputFromToolCalls(raw) {
+  const calls = raw.toolCalls;
+  if (!Array.isArray(calls)) return null;
+  const expected = TOOL_NAME_KEYS.map((key) => raw[key]).find(
+    (value) => typeof value === "string" && value.trim().length > 0
+  );
+  let chosen;
+  for (const item of calls) {
+    const call = recordOf(item);
+    const name = call?.name;
+    if (call === null || typeof name !== "string" || name.trim().length === 0) continue;
+    const args = recordOf(call.args);
+    if (chosen === void 0) chosen = args;
+    if (expected === void 0 || expected.trim() === name.trim()) {
+      chosen = args;
+      break;
+    }
+  }
+  return chosen === void 0 || chosen === null ? null : inputFromRecord(chosen);
+}
+function inputFromRecord(record2) {
+  try {
+    return { record: record2, text: escapeBidi(JSON.stringify(record2, null, 2)) };
+  } catch {
+    return { record: record2, text: null };
+  }
+}
+function coreSkipsString(text2) {
+  try {
+    return recordOf(JSON.parse(text2)) === null;
+  } catch {
+    return !looksLikeCutObject(text2);
+  }
+}
+function looksLikeCutObject(text2) {
+  return text2.endsWith("…") && text2.trimStart().startsWith("{") && Array.from(text2).length === CORE_STRING_LIMIT;
+}
+function escapeBidi(text2) {
+  return text2.replace(BIDI_CONTROLS, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+function scalarText(value) {
+  if (typeof value === "string") return textOf(value);
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value) && value.length > 0) {
+    if (value.every((item) => typeof item === "string" || typeof item === "number")) {
+      const shown = value.slice(0, MAX_LIST_ITEMS).map((item) => textOf(String(item), 60) ?? "");
+      const rest = value.length - shown.length;
+      return cleanAgentText(`${shown.filter(Boolean).join(", ")}${rest > 0 ? ` and ${rest} more` : ""}`, VALUE_CHARS);
+    }
+    return `${value.length} items`;
+  }
+  return null;
+}
+function scalarFacts(input, options = {}) {
+  if (input === null) return { facts: [], hidden: 0 };
+  const skip = new Set(options.skip ?? []);
+  const max = options.max ?? MAX_FACTS;
+  const facts = [];
+  let hidden = 0;
+  for (const [key, value] of Object.entries(input)) {
+    if (skip.has(key)) continue;
+    const text2 = KEY_PATTERN.test(key) ? scalarText(value) : null;
+    if (text2 === null || text2.length === 0 || facts.length >= max) {
+      hidden += value === null || value === "" ? 0 : 1;
+      continue;
+    }
+    facts.push({ label: sentenceCase(key), value: text2 });
+  }
+  return { facts, hidden };
+}
+const NAME_BASIS = "Read from the tool's name. Guard has not checked what it does.";
+const STEP_BASIS = "Read from the action names. Guard has not checked what they do.";
+const SEPARATE_CALL = "Running a tool is a separate call, and Guard reviews that call too.";
+const THOUGHT_CAPTION = "What the agent said it is doing";
+function explainComposioTool(shortTool, context) {
+  switch (shortTool.toLowerCase()) {
+    case "search_tools":
+      return searchTools(context);
+    case "get_tool_schemas":
+      return toolSchemas(context);
+    case "manage_connections":
+      return manageConnections(context);
+    case "multi_execute_tool":
+      return multiExecute(context);
+    case "remote_workbench":
+      return remoteCode(context, "Run code in Composio's workspace", "code_to_execute", "Code");
+    case "remote_bash_tool":
+      return remoteCode(context, "Run a command in Composio's workspace", "command", "Command");
+    default:
+      return null;
+  }
+}
+function searchTools({ harness, input }) {
+  const queries = input?.queries;
+  const entries = Array.isArray(queries) ? queries : [];
+  const records = recordList(queries);
+  const useCases = [
+    ...records.map((query) => textOf(query.use_case, 200)),
+    ...entries.map((query) => typeof query === "string" ? textOf(query, 200) : null)
+  ].filter((text2) => text2 !== null);
+  const apps = unique(records.flatMap((query) => appsFromKnownFields(query.known_fields)));
+  const count2 = Math.max(entries.length, 1);
+  return {
+    headline: `${harness} wants to search for tools in Composio`,
+    title: "Search for tools",
+    summary: `Composio connects the agent to other apps. This call asks it which tools could do the job. ${SEPARATE_CALL}`,
+    effect: "read",
+    effectBasis: NAME_BASIS,
+    facts: [
+      ...apps.length > 0 ? [{ label: "Apps in the search", value: apps.join(", ") }] : [],
+      ...count2 > 1 ? [{ label: "Searches", value: String(count2) }] : []
+    ],
+    steps: [],
+    quotes: useCases.length > 0 ? { caption: "What the agent said it is looking for", items: useCases.slice(0, 4) } : null,
+    code: null,
+    queueTitle: "Composio · Search for tools",
+    queueDetail: apps.length > 0 ? joinList(apps) : null
+  };
+}
+function appsFromKnownFields(value) {
+  const text2 = textOf(value, 400);
+  if (text2 === null) return [];
+  const apps = [];
+  for (const part of text2.split(/[,;]/)) {
+    const match = /^\s*(?:app|apps|toolkit|toolkits)\s*[:=]\s*(.{1,60})$/i.exec(part);
+    if (match) apps.push(serviceDisplayName(match[1].trim()));
+  }
+  return apps;
+}
+function toolSchemas({ harness, input }) {
+  const slugs = textList(input?.tool_slugs ?? input?.tools);
+  const named = slugs.map(slugLabel);
+  return {
+    headline: `${harness} wants to look up how Composio tools work`,
+    title: "Look up how tools work",
+    summary: `This call fetches the instructions for specific tools so the agent can call them correctly. ${SEPARATE_CALL}`,
+    effect: "read",
+    effectBasis: NAME_BASIS,
+    facts: named.length > 0 ? [{ label: "Tools", value: joinList(named, 6) }] : [],
+    steps: [],
+    quotes: null,
+    code: null,
+    queueTitle: "Composio · Look up how tools work",
+    queueDetail: named.length > 0 ? joinList(named) : null
+  };
+}
+function manageConnections({ harness, input }) {
+  const accounts = unique(textList(input?.toolkits ?? input?.apps).map(serviceDisplayName));
+  return {
+    headline: `${harness} wants to manage your connected accounts in Composio`,
+    title: "Manage connected accounts",
+    summary: "This call checks which of your accounts are linked to Composio and can ask to link another one.",
+    effect: "connect",
+    effectBasis: NAME_BASIS,
+    facts: accounts.length > 0 ? [{ label: "Accounts", value: accounts.join(", ") }] : [],
+    steps: [],
+    quotes: null,
+    code: null,
+    queueTitle: "Composio · Manage connected accounts",
+    queueDetail: accounts.length > 0 ? joinList(accounts) : null
+  };
+}
+const STEP_ROW_LIMIT = 10;
+function multiExecute({ harness, input }) {
+  const toolsValue = input?.tools;
+  const entries = Array.isArray(toolsValue) ? toolsValue : [];
+  const all = entries.map((entry, index) => toStep(recordOf(entry), index));
+  const steps = all.slice(0, STEP_ROW_LIMIT);
+  const hiddenSteps = all.length - steps.length;
+  const apps = unique(all.map((step) => step.app).filter((app) => app !== null));
+  const where = apps.length > 0 ? joinList(apps) : "Composio";
+  const count2 = all.length;
+  const thought = textOf(input?.thought, 300);
+  const first = all[0];
+  return {
+    headline: `${harness} wants to run ${actionCountPhrase(count2)} in ${where}`,
+    title: batchTitle(first, count2, apps),
+    summary: `Composio will carry out ${count2 === 1 ? "this action" : "these actions"} in your connected ${accountPhrase(apps)}, using the inputs below.`,
+    effect: worstMcpEffect(all.map((step) => step.effect)),
+    effectBasis: STEP_BASIS,
+    facts: [],
+    steps,
+    hiddenSteps,
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    code: null,
+    queueTitle: `Composio · ${first?.action ?? "Run actions"}${count2 > 1 ? ` and ${count2 - 1} more` : ""}`,
+    queueDetail: apps.length > 0 ? joinList(apps) : null
+  };
+}
+function actionCountPhrase(count2) {
+  if (count2 === 1) return "an action";
+  if (count2 === 0) return "some actions";
+  return `${count2} actions`;
+}
+function accountPhrase(apps) {
+  if (apps.length === 1) return `${apps[0]} account`;
+  return "accounts";
+}
+function batchTitle(first, count2, apps) {
+  if (count2 === 1 && first !== void 0) {
+    return first.app !== null ? `${first.action} in ${first.app}` : first.action;
+  }
+  const where = apps.length > 0 ? ` in ${joinList(apps)}` : "";
+  return `Run ${count2 === 0 ? "some" : count2} actions${where}`;
+}
+function toStep(tool, index) {
+  const slug = textOf(tool?.tool_slug, 120) ?? "";
+  const { app, action } = slug.length > 0 ? splitToolSlug(slug) : { app: null, action: "Unnamed action" };
+  const { facts, hidden } = scalarFacts(recordOf(tool?.arguments), { max: 5 });
+  return {
+    id: `${index}-${slug}`,
+    app,
+    action,
+    effect: slug.length > 0 ? classifyMcpEffect(slug) : "unknown",
+    details: facts,
+    hiddenDetails: hidden
+  };
+}
+function remoteCode(context, title, field, label) {
+  const code = codeOf(context.input?.[field]);
+  const thought = textOf(context.input?.thought, 300);
+  return {
+    headline: `${context.harness} wants to ${title.charAt(0).toLowerCase()}${title.slice(1)}`,
+    title,
+    summary: "Composio will run this in its remote workspace. Code can do anything its tools allow, so read it before you approve.",
+    effect: "run-code",
+    effectBasis: NAME_BASIS,
+    facts: [],
+    steps: [],
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    code: code !== null ? { label, text: code } : null,
+    queueTitle: `Composio · ${title}`,
+    queueDetail: null
+  };
+}
+function slugLabel(slug) {
+  const { app, action } = splitToolSlug(slug);
+  return app !== null ? `${app} · ${action}` : action;
+}
+const UNKNOWN_SERVER = "a connected server";
+const CODEX_APPS_SERVER = "codex_apps";
+const AGENT_TEXT_KEYS = ["thought", "use_case"];
+function explainMcpCall(item) {
+  const envelope = item.action_envelope_json;
+  if (!envelope) return null;
+  const ref = resolveMcpRef(envelope);
+  if (ref === null) return null;
+  const harness = harnessDisplayName(item.harness);
+  const raw = recordOf(envelope.raw_payload_redacted);
+  const selected = selectToolInput(raw);
+  const input = selected.record;
+  const connector = ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER;
+  const shortTool = shortToolName(ref.server, ref.tool);
+  const body = (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ?? explainGenericTool({ harness, connector, shortTool, input });
+  return {
+    ...body,
+    connector,
+    rawInput: selected.text,
+    truncated: wasTruncated(item, selected),
+    toolId: ref.server.length > 0 ? `${ref.server} / ${ref.tool}` : ref.tool,
+    whyAsked: `Guard has not reviewed ${ref.server.length > 0 ? `${connector}'s` : "this"} tool yet, and your policy asks before any unreviewed tool runs.`
+  };
+}
+function plainMcpReason(item, text2) {
+  if (text2 === null || !text2.includes("unreviewed MCP tool")) {
+    return text2;
+  }
+  return explainMcpCall(item)?.whyAsked ?? text2;
+}
+function resolveMcpRef(envelope) {
+  const fromToolName = parseNamespacedMcpName(envelope.tool_name);
+  const fromMcpTool = parseNamespacedMcpName(envelope.mcp_tool);
+  const isMcp = envelope.action_type === "mcp_tool" || fromToolName !== null || fromMcpTool !== null || isPlainNamePart(envelope.mcp_server);
+  if (!isMcp) return null;
+  const tool = recordedTool(envelope, fromToolName, fromMcpTool);
+  if (tool === null) return null;
+  return unwrapCodexApps({ server: recordedServer(envelope, fromToolName, fromMcpTool), tool });
+}
+function recordedTool(envelope, fromToolName, fromMcpTool) {
+  if (fromMcpTool !== null) return fromMcpTool.tool;
+  if (isPlainNamePart(envelope.mcp_tool)) return envelope.mcp_tool;
+  return fromToolName?.tool ?? null;
+}
+function recordedServer(envelope, fromToolName, fromMcpTool) {
+  if (envelope.mcp_server === CODEX_APPS_SERVER && fromMcpTool !== null) return fromMcpTool.server;
+  if (isPlainNamePart(envelope.mcp_server)) return envelope.mcp_server;
+  return fromMcpTool?.server ?? fromToolName?.server ?? "";
+}
+function unwrapCodexApps(ref) {
+  if (ref.server !== CODEX_APPS_SERVER) return ref;
+  const separator = ref.tool.indexOf("__");
+  if (separator <= 0 || separator + 2 >= ref.tool.length) return ref;
+  return { server: ref.tool.slice(0, separator), tool: ref.tool.slice(separator + 2) };
+}
+function explainGenericTool(context) {
+  const { harness, connector, shortTool, input } = context;
+  const effect = classifyMcpEffect(shortTool);
+  const title = sentenceCase(shortTool);
+  const { facts } = scalarFacts(input, { skip: AGENT_TEXT_KEYS });
+  const thought = textOf(input?.thought, 300);
+  const firstValue = facts[0]?.value ?? null;
+  return {
+    headline: `${harness} wants to ${effectPhrase(effect, connector)}`,
+    title,
+    summary: `${harness} is calling ${connector}'s “${title}” tool. ${MCP_EFFECT_COPY[effect].meaning}`,
+    effect,
+    effectBasis: effect === "unknown" ? "Guard cannot tell what this does from its name. Read the inputs below." : "Read from the tool's name. Guard has not checked what it does.",
+    facts,
+    steps: [],
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    code: null,
+    queueTitle: `${connector} · ${title}`,
+    queueDetail: firstValue !== null && firstValue.length > 0 ? firstValue : null
+  };
+}
+function effectPhrase(effect, connector) {
+  switch (effect) {
+    case "read":
+      return `look something up in ${connector}`;
+    case "write":
+      return `make a change in ${connector}`;
+    case "send":
+      return `send something with ${connector}`;
+    case "delete":
+      return `delete something in ${connector}`;
+    case "run-code":
+      return `run code with ${connector}`;
+    case "connect":
+      return `change a connection in ${connector}`;
+    case "unknown":
+      return `use ${connector}`;
+  }
+}
+function wasTruncated(item, selected) {
+  if ((item.action_explanation?.redaction.truncated_fields.length ?? 0) > 0) return true;
+  if (selected.record === null) return selected.text !== null && selected.text.length >= CORE_STRING_LIMIT;
+  return JSON.stringify(selected.record).length >= CORE_STRING_LIMIT && containsLongString(selected.record);
+}
+function containsLongString(value) {
+  if (typeof value === "string") return value.length >= CORE_STRING_LIMIT;
+  if (Array.isArray(value)) return value.some(containsLongString);
+  const record2 = recordOf(value);
+  return record2 !== null && Object.values(record2).some(containsLongString);
 }
 const APPROVAL_RETRY_BLOCKED_OVERRIDE = "approval-approved-retry-blocked";
 const APPROVAL_LEFT_STOPPED_LABEL = "Approved, still stopped";
@@ -14808,6 +15628,10 @@ function plainEnglishRequestTitle(request2) {
   if (request2.artifact_type === "native_bash_request") {
     return "Run this script?";
   }
+  const mcpCall = explainMcpCall(request2);
+  if (mcpCall !== null) {
+    return mcpCall.headline;
+  }
   const category = detectCategory({
     ...request2,
     timestamp: request2.created_at,
@@ -15141,7 +15965,7 @@ function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false)
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
     if (retryCannotReuseApproval(item)) return retryBlockedApprovalCopy(item, harness);
-    return `Approved once. Return to ${harness} and retry within ${oneTimeRetryWindowMinutes(item)} minutes.`;
+    return `Approved once. Return to ${harness} and retry within ${retryWindowText(oneTimeRetryWindowMinutes(item))}.`;
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }
@@ -16548,16 +17372,16 @@ function reloadDocument(reload) {
   }
   return false;
 }
-function storageGet(storage, key) {
+function storageGet(storage2, key) {
   try {
-    return storage.getItem(key);
+    return storage2.getItem(key);
   } catch {
     return null;
   }
 }
-function storageSet(storage, key, value) {
+function storageSet(storage2, key, value) {
   try {
-    storage.setItem(key, value);
+    storage2.setItem(key, value);
     return true;
   } catch {
     return false;
@@ -16580,13 +17404,13 @@ async function loadWorkspaceModule(loader, options = {}) {
     if (!isChunkLoadError(error)) {
       throw error;
     }
-    const storage = options.storage;
+    const storage2 = options.storage;
     const failureMessage = error instanceof Error ? error.message : String(error);
     const failureFingerprint = `${options.moduleId ?? "anonymous-workspace-module"}:${failureMessage}`;
-    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
+    if (!storage2 || storageGet(storage2, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
       throw error;
     }
-    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
+    if (!storageSet(storage2, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
       throw error;
     }
     const wait = options.wait ?? defaultWait;
@@ -16626,23 +17450,23 @@ function responseDashboardBuild(response, pageOrigin) {
     return null;
   }
 }
-function claimStaleBuildReload(state, storage) {
-  if (!isDashboardBuildStale(state) || !storage || state.serverBuild === null) {
+function claimStaleBuildReload(state, storage2) {
+  if (!isDashboardBuildStale(state) || !storage2 || state.serverBuild === null) {
     return false;
   }
   try {
-    if (storage.getItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY) === state.serverBuild) {
+    if (storage2.getItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY) === state.serverBuild) {
       return false;
     }
-    storage.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, state.serverBuild);
+    storage2.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, state.serverBuild);
     return true;
   } catch {
     return false;
   }
 }
-function releaseStaleBuildClaim(storage) {
+function releaseStaleBuildClaim(storage2) {
   try {
-    storage?.removeItem?.(DASHBOARD_BUILD_RELOAD_STORAGE_KEY);
+    storage2?.removeItem?.(DASHBOARD_BUILD_RELOAD_STORAGE_KEY);
   } catch {
   }
 }
@@ -16733,12 +17557,12 @@ function releaseClaimIfLeaveIsCancelled(build) {
       if (!event.defaultPrevented) {
         return;
       }
-      const storage = browserSessionStorage();
-      releaseStaleBuildClaim(storage);
+      const storage2 = browserSessionStorage();
+      releaseStaleBuildClaim(storage2);
       const restore = () => {
         restoreClaimOnLeave = null;
         try {
-          storage?.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, build);
+          storage2?.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, build);
         } catch {
         }
       };
@@ -16750,8 +17574,8 @@ function releaseClaimIfLeaveIsCancelled(build) {
 }
 function loadCurrentDashboardBuild(href) {
   const state = currentBuildState();
-  const storage = browserSessionStorage();
-  if (typeof window === "undefined" || state.serverBuild === null || !claimStaleBuildReload(state, storage)) {
+  const storage2 = browserSessionStorage();
+  if (typeof window === "undefined" || state.serverBuild === null || !claimStaleBuildReload(state, storage2)) {
     return false;
   }
   releaseClaimIfLeaveIsCancelled(state.serverBuild);
@@ -16765,6 +17589,341 @@ function loadCurrentDashboardBuild(href) {
     window.location.assign(target2.href);
   }
   return true;
+}
+const PROTECTION_POSTURE_COPY = {
+  protected: {
+    label: "Protected",
+    help: "Stops theft, wipes, and Guard bypass. Asks once about new tools or first-time secret access, then remembers."
+  },
+  extra_careful: {
+    label: "Extra careful",
+    help: "Same as Protected, and also asks the first time this project talks to a new site or installs a new tool."
+  },
+  watch: {
+    label: "Watch",
+    help: "Records what Guard would have stopped, but does not stop anything. Use only while debugging."
+  }
+};
+const WATCH_BANNER_COPY = "Protection is off. Guard is only recording.";
+const POSTURE_OUTCOME_COLUMNS = {
+  protected: {
+    stops: "Credential theft, Guard bypass, encoded exfil, known-bad tools",
+    asks: "First secret read, new destructive command, first package script, new MCP or skill",
+    runs: "Remembered actions, routine browsing, verified-benign work"
+  },
+  extra_careful: {
+    stops: "The same automatic stops as Protected",
+    asks: "Everything Protected asks, plus first new site, first new tool, and cloud advisories",
+    runs: "Remembered actions and verified-benign work"
+  },
+  watch: {
+    stops: "Nothing. Guard only records.",
+    asks: "Nothing. Inbox shows what would have stopped.",
+    runs: "Every action, including known-bad work"
+  }
+};
+function isProtectionPosture(value) {
+  return value === "protected" || value === "extra_careful" || value === "watch";
+}
+function deriveProtectionPosture(mode, securityLevel) {
+  if (mode === "observe") return "watch";
+  if (securityLevel === "strict" || securityLevel === "paranoid") return "extra_careful";
+  return "protected";
+}
+const POSTURE_LABEL = {
+  protected: "Protected",
+  extra_careful: "Extra careful",
+  watch: "Watch"
+};
+function normalizeHarnessPostures(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  const result = {};
+  for (const [harness, posture] of Object.entries(value)) {
+    if (harness.length > 0 && typeof posture === "string" && isProtectionPosture(posture)) {
+      result[harness] = posture;
+    }
+  }
+  return result;
+}
+function globalPosture(settings) {
+  if (isProtectionPosture(settings.protection_posture)) return settings.protection_posture;
+  if (settings.mode === "observe") return "watch";
+  return "protected";
+}
+function protectedLevel(effective, baseline) {
+  if (effective !== "watch") return effective;
+  if (baseline !== "watch") return baseline;
+  return "protected";
+}
+function effectiveHarnessPosture(settings, harness) {
+  const override = settings.harness_postures?.[harness];
+  const baseline = globalPosture(settings);
+  if (override === void 0) return baseline;
+  if (override === "watch") return "watch";
+  return baseline === "extra_careful" ? baseline : override;
+}
+function harnessPostureRows(settings, capabilities) {
+  return capabilities.map((capability) => {
+    const effective = effectiveHarnessPosture(settings, capability.harness);
+    return {
+      harness: capability.harness,
+      displayName: capability.display_name,
+      effective,
+      hasOverride: settings.harness_postures?.[capability.harness] !== void 0,
+      selected: effective === "watch" ? "watch" : "on"
+    };
+  });
+}
+function harnessPostureOptions(settings, harness) {
+  const onLevel = protectedLevel(effectiveHarnessPosture(settings, harness), globalPosture(settings));
+  return [
+    { choice: "on", label: POSTURE_LABEL[onLevel] },
+    { choice: "watch", label: POSTURE_LABEL.watch }
+  ];
+}
+function selectHarnessPosture(settings, harness, choice) {
+  const baseline = globalPosture(settings);
+  if (choice === "on" && effectiveHarnessPosture(settings, harness) !== "watch") return settings;
+  const next = { ...settings.harness_postures ?? {} };
+  if (choice === "watch") {
+    if (baseline === "watch") delete next[harness];
+    else next[harness] = "watch";
+  } else if (baseline === "watch") {
+    next[harness] = "protected";
+  } else {
+    delete next[harness];
+  }
+  return { ...settings, harness_postures: next };
+}
+function canRestartHarnessWatch(settings, harness) {
+  return settings.harness_postures?.[harness] === "watch" && settings.harness_watch_entered_at?.[harness] !== void 0 && (settings.watch_auto_revert_hours ?? 24) > 0;
+}
+function restartHarnessWatch(settings, harness) {
+  if (!canRestartHarnessWatch(settings, harness)) return settings;
+  const restarts = new Set(settings.harness_watch_restart ?? []);
+  restarts.add(harness);
+  return { ...settings, harness_watch_restart: [...restarts].sort() };
+}
+function harnessPosturePatch(draft, saved) {
+  const before = saved?.harness_postures ?? {};
+  const after = draft.harness_postures ?? {};
+  const restarts = new Set(draft.harness_watch_restart ?? []);
+  const patch = {};
+  for (const harness of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const posture = after[harness] ?? null;
+    const restart = posture === "watch" && restarts.has(harness);
+    if (restart || posture !== (before[harness] ?? null)) patch[harness] = posture;
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+function clearHarnessWatchOverrides(settings) {
+  const next = Object.fromEntries(
+    Object.entries(settings.harness_postures ?? {}).filter(([, posture]) => posture !== "watch")
+  );
+  return { ...settings, harness_postures: next };
+}
+function settingsWatchBannerModel(settings, capabilities) {
+  const rows = harnessPostureRows(settings, capabilities);
+  return watchBannerModel({
+    protection_posture: globalPosture(settings),
+    harness_postures: settings.harness_postures,
+    harnesses_in_watch: rows.filter((row) => row.effective === "watch").map((row) => row.harness),
+    protection_capabilities: capabilities
+  });
+}
+function withHarnessPosturePatch(payload, draft, saved) {
+  const {
+    harness_postures: _postures,
+    harness_postures_effective: _effective,
+    harness_postures_locked: _locked,
+    harness_watch_entered_at: _enteredAt,
+    harness_watch_restart: _restart,
+    ...rest
+  } = payload;
+  const patch = harnessPosturePatch(draft, saved);
+  return patch === null ? rest : { ...rest, harness_postures: patch };
+}
+function harnessPostureSummary(rows) {
+  if (rows.length === 0) return "";
+  const watching = rows.filter((row) => row.effective === "watch");
+  if (watching.length === 0) return "Every app is protected.";
+  if (watching.length === rows.length) return "Every app is in Watch.";
+  return `${watching.length} of ${rows.length} apps in Watch: ${joinNames(watching.map((row) => row.displayName))}.`;
+}
+function harnessRowTone(row) {
+  return row.effective === "watch" ? "watch" : "protected";
+}
+function harnessRowStatus(row) {
+  if (row.effective === "watch") {
+    return row.hasOverride ? "Watch · recording only" : "Watch · follows the machine setting";
+  }
+  if (!row.hasOverride) return "Follows the machine setting";
+  return "Set for this app";
+}
+function sortHarnessRows(rows) {
+  const watching = rows.filter((row) => row.effective === "watch");
+  const rest = rows.filter((row) => row.effective !== "watch");
+  return [...watching, ...rest];
+}
+function overrideRows(rows) {
+  return rows.filter((row) => row.hasOverride);
+}
+function harnessWatchPrompt(rows, harness) {
+  const row = rows.find((candidate) => candidate.harness === harness);
+  const name = row?.displayName ?? harness;
+  const others = rows.filter((candidate) => candidate.harness !== harness);
+  const protectedOthers = others.filter((candidate) => candidate.effective !== "watch");
+  const lead = `Guard will only record in ${name}.`;
+  if (others.length === 0) return lead;
+  if (protectedOthers.length === 0) return `${lead} Every app will then be in Watch.`;
+  if (protectedOthers.length === others.length) return `${lead} Your other apps stay protected.`;
+  const verb = protectedOthers.length === 1 ? "stays" : "stay";
+  return `${lead} ${joinNames(protectedOthers.map((candidate) => candidate.displayName))} ${verb} protected.`;
+}
+function joinNames(names) {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+function displayNameFor(harness, capabilities) {
+  return capabilities?.find((capability) => capability.harness === harness)?.display_name ?? harness;
+}
+function watchBannerModel(snapshot) {
+  const globalWatch = snapshot.protection_posture === "watch";
+  const watchOverrides = Object.entries(snapshot.harness_postures ?? {}).filter(([, posture]) => posture === "watch").map(([harness]) => harness);
+  const inWatch = globalWatch ? [] : snapshot.harnesses_in_watch ?? watchOverrides;
+  if (!globalWatch && inWatch.length === 0) return null;
+  const appNames = inWatch.map((harness) => displayNameFor(harness, snapshot.protection_capabilities));
+  if (globalWatch) {
+    return {
+      globalWatch,
+      appNames: [],
+      message: WATCH_BANNER_COPY,
+      confirmMessage: "Guard will start stopping dangerous actions in every app."
+    };
+  }
+  const names = joinNames(appNames);
+  return {
+    globalWatch,
+    appNames,
+    message: `Guard is only recording in ${names}. Other apps are protected.`,
+    confirmMessage: `Guard will start stopping dangerous actions in ${names}.`
+  };
+}
+function turnProtectionOnUpdate(snapshot) {
+  const update = {};
+  if (snapshot.protection_posture === "watch") update.protection_posture = "protected";
+  const cleared = {};
+  for (const [harness, posture] of Object.entries(snapshot.harness_postures ?? {})) {
+    if (posture === "watch") cleared[harness] = null;
+  }
+  if (Object.keys(cleared).length > 0) update.harness_postures = cleared;
+  return update;
+}
+const CIGAR_APPS = /* @__PURE__ */ new Set(["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"]);
+function cigarReady(settings) {
+  const config2 = settings.context_assistance;
+  const requested = config2?.enabled === true && config2.features.agent_context && config2.sources.workspace_documents;
+  return requested && settings.context_assistance_effective_ready !== false;
+}
+function cigarLocked(settings) {
+  return settings.managed_locked_settings?.includes("harness_cigar") === true;
+}
+function cigarSupported(harness) {
+  return CIGAR_APPS.has(harness);
+}
+function cigarReachesApp(settings, harness) {
+  return cigarSupported(harness) && (settings.cigar_apps?.includes(harness) ?? true);
+}
+function cigarAvailable(settings, harness) {
+  return cigarReady(settings) && cigarReachesApp(settings, harness);
+}
+function appModes(settings, harness) {
+  return {
+    guard: effectiveHarnessPosture(settings, harness) !== "watch",
+    cigar: cigarAvailable(settings, harness) && settings.harness_cigar?.[harness] !== "off"
+  };
+}
+function watchIsUntimed(settings, harness) {
+  return settings.harness_postures?.[harness] === "watch" && settings.harness_watch_entered_at?.[harness] === void 0;
+}
+function appModesUpdate(settings, harness, next) {
+  const update = {};
+  const available = cigarAvailable(settings, harness);
+  const cigarOnly = !next.guard && next.cigar && available;
+  if (settings.harness_postures_locked === true) ;
+  else if (cigarOnly) {
+    if (!watchIsUntimed(settings, harness)) {
+      update.harness_postures = { [harness]: "watch" };
+      update.harness_watch_untimed = true;
+    }
+  } else if (next.guard) {
+    const patch = harnessPosturePatch(selectHarnessPosture(settings, harness, "on"), settings);
+    if (patch !== null) update.harness_postures = patch;
+  } else {
+    const draft = selectHarnessPosture(settings, harness, "watch");
+    const patch = harnessPosturePatch(draft, settings) ?? {};
+    if (watchIsUntimed(settings, harness) && globalPosture(settings) !== "watch") patch[harness] = "watch";
+    if (Object.keys(patch).length > 0) update.harness_postures = patch;
+  }
+  if (available) {
+    const off = settings.harness_cigar?.[harness] === "off";
+    if (next.cigar === off) update.harness_cigar = { [harness]: next.cigar ? null : "off" };
+  }
+  return Object.keys(update).length > 0 ? update : null;
+}
+function needsConfirm(current, next, locked = false) {
+  if (next.guard || locked) return false;
+  return current.guard || next.cigar && !current.cigar;
+}
+function cigarUnavailableReason(settings, harness, displayName) {
+  if (cigarAvailable(settings, harness)) {
+    return cigarLocked(settings) ? "Your organization manages CIGAR for each app." : void 0;
+  }
+  if (cigarSupported(harness) && !cigarReachesApp(settings, harness)) {
+    return `Guard is set up in ${displayName} through its plugin, which doesn't send Guard your prompts. Set up ${displayName} with its native hooks to use CIGAR.`;
+  }
+  if (cigarSupported(harness)) return "CIGAR is off on this machine. Set it up on the CIGAR page.";
+  return `${displayName} doesn't let Guard add context to its prompts yet.`;
+}
+function applyHarnessCigarPatch(current, patch) {
+  const next = { ...current ?? {} };
+  for (const [harness, choice] of Object.entries(patch)) {
+    if (choice === null) delete next[harness];
+    else next[harness] = choice;
+  }
+  return next;
+}
+function appModesNote(settings, harness) {
+  const modes = appModes(settings, harness);
+  const available = cigarAvailable(settings, harness);
+  if (modes.guard) return available && !modes.cigar ? "Guard only · CIGAR off for this app" : null;
+  if (modes.cigar) return "CIGAR only · Guard is not checking actions";
+  return globalPosture(settings) === "watch" && settings.harness_postures?.[harness] === void 0 ? "Watch · follows the machine setting" : "Watch · recording only";
+}
+function appModesStatusMessage(next, displayName) {
+  if (next.guard && next.cigar) return `Guard and CIGAR are on in ${displayName}.`;
+  if (next.guard) return `Guard is on in ${displayName}. CIGAR is off.`;
+  if (next.cigar) return `CIGAR is on in ${displayName}. Guard is not checking actions.`;
+  return `Guard is only recording in ${displayName}.`;
+}
+function guardOffPrompt(settings, harness, next, displayName) {
+  if (next.cigar && !appModes(settings, harness).guard) {
+    return `CIGAR will start adding project context in ${displayName}. Guard stays off and no longer turns back on by itself.`;
+  }
+  if (next.cigar) {
+    return `Guard will stop checking ${displayName}'s actions until you turn it back on. CIGAR keeps adding project context.`;
+  }
+  const ownWatch = appModesUpdate(settings, harness, next)?.harness_postures?.[harness] === "watch";
+  if (globalPosture(settings) === "watch" && !ownWatch) {
+    return `Guard will only record in ${displayName}, following this machine's Watch setting.`;
+  }
+  const revertHours = settings.watch_auto_revert_hours ?? 24;
+  if (revertHours > 0) {
+    const hours = revertHours === 1 ? "1 hour" : `${revertHours} hours`;
+    return `Guard will only record in ${displayName}. Protection comes back on its own after ${hours}.`;
+  }
+  return `Guard will only record in ${displayName} until you turn it back on.`;
 }
 function isRecord$5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -18534,13 +19693,14 @@ function applyHarnessPosturePatch(current, patch) {
 async function updateSettings(settings) {
   if (isGuardDemoMode()) {
     const current = await fetchSettings();
-    const { harness_postures: posturePatch, ...rest } = settings;
+    const { harness_postures: posturePatch, harness_cigar: cigarPatch, harness_watch_untimed: _untimed, ...rest } = settings;
     return {
       ...current,
       settings: {
         ...current.settings,
         ...rest,
-        ...posturePatch === void 0 ? {} : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) }
+        ...posturePatch === void 0 ? {} : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) },
+        ...cigarPatch === void 0 ? {} : { harness_cigar: applyHarnessCigarPatch(current.settings.harness_cigar, cigarPatch) }
       }
     };
   }
@@ -19313,7 +20473,8 @@ function normalizeGuardUpdateStatus(raw, fallbackReleaseChannel = null) {
     update_suppressed: value.update_suppressed === true ? true : void 0,
     retry_command: typeof value.retry_command === "string" ? value.retry_command : void 0,
     update_attempt_message: typeof value.update_attempt_message === "string" ? value.update_attempt_message : void 0,
-    release_channel: isGuardUpdateChannel(value.release_channel) ? value.release_channel : fallbackReleaseChannel ?? "stable"
+    release_channel: isGuardUpdateChannel(value.release_channel) ? value.release_channel : fallbackReleaseChannel ?? "stable",
+    update_mode: value.update_mode === "ask" || value.update_mode === "off" ? value.update_mode : "automatic"
   };
 }
 async function fetchGuardUpdateStatus() {
@@ -19393,6 +20554,25 @@ async function requestGuardDesktopHandoff() {
     handoff_requested: payload.handoff_requested === true,
     latest_version: stringValue$1(payload.latest_version)
   };
+}
+async function setGuardUpdateMode(mode, proof) {
+  if (isGuardDemoMode()) {
+    return normalizeGuardUpdateStatus({
+      ...await fetchGuardUpdateStatus(),
+      update_mode: mode
+    });
+  }
+  const response = await fetchWithGuardAuth("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings: { update_mode: mode }, ...proof })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const value = isRecord$4(payload) ? payload : {};
+    throw new Error(stringValue$1(value.message) ?? `Update preference failed with ${response.status}`);
+  }
+  return fetchGuardUpdateStatus();
 }
 async function setGuardUpdateChannel(channel, proof) {
   if (isGuardDemoMode()) {
@@ -21261,6 +22441,59 @@ function AlphaChannelDialog({
     ] })
   ] });
 }
+const MODE_COPY = {
+  automatic: "Guard checks periodically and installs Core updates in the background.",
+  ask: "Guard checks periodically and waits for you to start an available Core update.",
+  off: "Guard still shows available Core updates, but never installs them in the background."
+};
+function UpdateModeDialog({
+  mode,
+  draft,
+  pending,
+  error,
+  approvalGate,
+  approvalPassword,
+  approvalTotpCode,
+  onDraftChange,
+  onClose,
+  onConfirm,
+  onApprovalPasswordChange,
+  onApprovalTotpCodeChange
+}) {
+  const confirmDisabled = pending || draft === mode || approvalGate?.enabled === true && isApprovalProofSubmitDisabled(approvalGate, { approvalPassword, approvalTotpCode }, false);
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!confirmDisabled) onConfirm();
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { onSubmit: handleSubmit, className: "rounded-lg bg-white shadow-xl", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: "Core update preferences" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/70", children: "Choose whether Guard can install Core updates without asking." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, disabled: pending, "aria-label": "Close Core update preferences", className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-brand-dark/55 transition-colors hover:bg-slate-100 hover:text-brand-dark disabled:cursor-not-allowed disabled:opacity-50", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 px-5 py-4 text-sm leading-relaxed text-brand-dark/75", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-semibold text-brand-dark", htmlFor: "guard-update-mode", children: "Install behavior" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { id: "guard-update-mode", value: draft, onChange: onDraftChange, disabled: pending, className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "automatic", children: "Automatic" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ask", children: "Ask first" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "off", children: "Off" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: MODE_COPY[draft] }),
+      draft !== mode ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Changing this preference only saves the setting. It does not install an update immediately." }) : null,
+      approvalGate?.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-brand-blue/20 bg-brand-blue/[0.04] p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-3 text-sm font-semibold text-brand-dark", children: "Confirm this preference change" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalProofFieldInputs, { approvalGate, approvalPassword, approvalTotpCode, onApprovalPasswordChange, onApprovalTotpCodeChange })
+      ] }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-md bg-red-50 px-3 py-2 text-sm text-red-700", children: error }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, disabled: pending, className: "min-h-10 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50", children: "Cancel" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: confirmDisabled, className: "min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60", children: pending ? "Saving…" : "Save preference" })
+    ] })
+  ] });
+}
 let embeddedLatch = false;
 let memoForHref = null;
 let memoResult = false;
@@ -21586,137 +22819,6 @@ function GuardUpdateChannelSummary(props) {
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
 const RECONNECT_TIMEOUT_MS = 18e4;
-function GuardUpdatePanel(props) {
-  const version2 = props.guardVersion ?? props.updateStatus?.current_version ?? null;
-  const phase = props.updatePhase ?? "idle";
-  const embeddedInDesktop = dashboardEmbedsInDesktop();
-  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
-  const showUpdateButton = !embeddedInDesktop && props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
-  const showReinstallButton = !embeddedInDesktop && shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
-  const busy = phase === "updating" || phase === "reconnecting";
-  const useAlpha = props.updateStatus?.release_channel === "alpha" || props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha";
-  const [alphaModalOpen, setAlphaModalOpen] = reactExports.useState(false);
-  const [alphaSavePending, setAlphaSavePending] = reactExports.useState(false);
-  const [alphaSaveError, setAlphaSaveError] = reactExports.useState(null);
-  const [alphaApprovalPassword, setAlphaApprovalPassword] = reactExports.useState("");
-  const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = reactExports.useState("");
-  const targetChannel = useAlpha ? "stable" : "alpha";
-  const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
-  const handleOpenAlphaModal = reactExports.useCallback(() => {
-    setAlphaSaveError(null);
-    setAlphaApprovalPassword("");
-    setAlphaApprovalTotpCode("");
-    setAlphaModalOpen(true);
-  }, []);
-  const handleCloseAlphaModal = reactExports.useCallback(() => {
-    if (alphaSavePending) {
-      return;
-    }
-    setAlphaModalOpen(false);
-    setAlphaSaveError(null);
-    setAlphaApprovalPassword("");
-    setAlphaApprovalTotpCode("");
-  }, [alphaSavePending]);
-  const handleConfirmAlphaChannel = reactExports.useCallback(async () => {
-    if (!props.onSetUpdateChannel) {
-      return;
-    }
-    setAlphaSavePending(true);
-    setAlphaSaveError(null);
-    try {
-      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
-        approvalPassword: alphaApprovalPassword,
-        approvalTotpCode: alphaApprovalTotpCode
-      }) : void 0;
-      await props.onSetUpdateChannel(targetChannel, proof);
-      setAlphaModalOpen(false);
-    } catch (error) {
-      setAlphaSaveError(error instanceof Error ? error.message : "Guard could not change the update channel. Try again.");
-    } finally {
-      setAlphaSavePending(false);
-    }
-  }, [alphaApprovalPassword, alphaApprovalTotpCode, props.approvalGate, props.onSetUpdateChannel, targetChannel]);
-  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
-    setAlphaApprovalPassword(event.target.value);
-  }, []);
-  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
-    setAlphaApprovalTotpCode(event.target.value);
-  }, []);
-  let updateChannelSummary = null;
-  if (props.onSetUpdateChannel) {
-    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GuardUpdateChannelSummary,
-      {
-        version: version2,
-        useAlpha,
-        busy,
-        onManage: handleOpenAlphaModal
-      }
-    );
-  } else if (version2) {
-    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version2}`, children: [
-      "v",
-      version2
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: props.compact ? "space-y-1 border-t border-brand-blue/10 pt-1.5" : "space-y-1.5 border-t border-brand-blue/10 pt-2",
-      children: [
-        updateChannelSummary,
-        props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]", children: updateStatusLabel(props.updateStatus) }),
-          showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              type: "button",
-              onClick: props.onUpdateGuard,
-              "aria-label": "Update Guard to the latest version",
-              className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Update" })
-              ]
-            }
-          ) : null
-        ] }) : null,
-        helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] leading-4 text-brand-dark/70", children: helpCopy }) : null,
-        showReinstallButton && props.onReinstallGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            onClick: props.onReinstallGuard,
-            className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Reinstall from PyPI" })
-            ]
-          }
-        ) : null,
-        busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue", role: "status", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 animate-spin", "aria-hidden": "true" }),
-          phase === "updating" ? "Updating Guard…" : "Reconnecting…"
-        ] }),
-        alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          AlphaChannelDialog,
-          {
-            useAlpha,
-            pending: alphaSavePending,
-            error: alphaSaveError,
-            approvalGate: props.approvalGate ?? null,
-            approvalPassword: alphaApprovalPassword,
-            approvalTotpCode: alphaApprovalTotpCode,
-            onClose: handleCloseAlphaModal,
-            onConfirm: handleConfirmAlphaChannel,
-            onApprovalPasswordChange: handleApprovalPasswordChange,
-            onApprovalTotpCodeChange: handleApprovalTotpCodeChange
-          }
-        ) }) : null
-      ]
-    }
-  );
-}
 function useGuardUpdate(options) {
   const enabled = options?.enabled !== false;
   const [updateStatus, setUpdateStatus] = reactExports.useState(null);
@@ -21727,6 +22829,8 @@ function useGuardUpdate(options) {
   const updateStatusEpoch = reactExports.useRef(0);
   const channelMutationId = reactExports.useRef(0);
   const channelMutationPending = reactExports.useRef(false);
+  const modeMutationId = reactExports.useRef(0);
+  const modeMutationPending = reactExports.useRef(false);
   const isMounted = reactExports.useRef(false);
   reactExports.useEffect(() => {
     updatePhaseRef.current = updatePhase;
@@ -21738,14 +22842,14 @@ function useGuardUpdate(options) {
     };
   }, []);
   const refreshUpdateStatus = reactExports.useCallback(async () => {
-    if (!enabled || !isMounted.current || channelMutationPending.current) {
+    if (!enabled || !isMounted.current || channelMutationPending.current || modeMutationPending.current) {
       return;
     }
     const epoch = updateStatusEpoch.current;
     const mutationId = channelMutationId.current;
     try {
       const status = await fetchGuardUpdateStatus();
-      if (!isMounted.current || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current) {
+      if (!isMounted.current || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current || modeMutationPending.current) {
         return;
       }
       setUpdateStatus(status);
@@ -21767,7 +22871,7 @@ function useGuardUpdate(options) {
     const epoch = updateStatusEpoch.current;
     const mutationId = channelMutationId.current;
     void fetchGuardUpdateStatus().then((status) => {
-      if (cancelled || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current) {
+      if (cancelled || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current || modeMutationPending.current) {
         return;
       }
       setUpdateStatus(status);
@@ -21908,6 +23012,21 @@ function useGuardUpdate(options) {
       }
     }
   }, []);
+  const onSetUpdateMode = reactExports.useCallback(async (mode, proof) => {
+    const mutationId = ++modeMutationId.current;
+    updateStatusEpoch.current += 1;
+    modeMutationPending.current = true;
+    try {
+      const status = await setGuardUpdateMode(mode, proof);
+      if (mutationId === modeMutationId.current) {
+        updateStatusEpoch.current += 1;
+        setUpdateStatus(status);
+        if (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle") setUpdatePhase("idle");
+      }
+    } finally {
+      if (mutationId === modeMutationId.current) modeMutationPending.current = false;
+    }
+  }, []);
   return {
     guardVersion: updateStatus?.current_version ?? null,
     updateStatus,
@@ -21916,8 +23035,199 @@ function useGuardUpdate(options) {
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel,
+    onSetUpdateMode,
     refreshUpdateStatus
   };
+}
+function GuardUpdatePanel(props) {
+  const version2 = props.guardVersion ?? props.updateStatus?.current_version ?? null;
+  const phase = props.updatePhase ?? "idle";
+  const embeddedInDesktop = dashboardEmbedsInDesktop();
+  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
+  const showUpdateButton = !embeddedInDesktop && props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
+  const showReinstallButton = !embeddedInDesktop && shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
+  const busy = phase === "updating" || phase === "reconnecting";
+  const useAlpha = props.updateStatus?.release_channel === "alpha" || props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha";
+  const [alphaModalOpen, setAlphaModalOpen] = reactExports.useState(false);
+  const [alphaSavePending, setAlphaSavePending] = reactExports.useState(false);
+  const [alphaSaveError, setAlphaSaveError] = reactExports.useState(null);
+  const [alphaApprovalPassword, setAlphaApprovalPassword] = reactExports.useState("");
+  const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = reactExports.useState("");
+  const [updateModeModalOpen, setUpdateModeModalOpen] = reactExports.useState(false);
+  const [updateModeDraft, setUpdateModeDraft] = reactExports.useState(props.updateStatus?.update_mode ?? "automatic");
+  const [updateModeSavePending, setUpdateModeSavePending] = reactExports.useState(false);
+  const [updateModeSaveError, setUpdateModeSaveError] = reactExports.useState(null);
+  const [updateModeApprovalPassword, setUpdateModeApprovalPassword] = reactExports.useState("");
+  const [updateModeApprovalTotpCode, setUpdateModeApprovalTotpCode] = reactExports.useState("");
+  const targetChannel = useAlpha ? "stable" : "alpha";
+  const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
+  const handleOpenAlphaModal = reactExports.useCallback(() => {
+    setAlphaSaveError(null);
+    setAlphaApprovalPassword("");
+    setAlphaApprovalTotpCode("");
+    setAlphaModalOpen(true);
+  }, []);
+  const handleCloseAlphaModal = reactExports.useCallback(() => {
+    if (alphaSavePending) {
+      return;
+    }
+    setAlphaModalOpen(false);
+    setAlphaSaveError(null);
+    setAlphaApprovalPassword("");
+    setAlphaApprovalTotpCode("");
+  }, [alphaSavePending]);
+  const handleConfirmAlphaChannel = reactExports.useCallback(async () => {
+    if (!props.onSetUpdateChannel) {
+      return;
+    }
+    setAlphaSavePending(true);
+    setAlphaSaveError(null);
+    try {
+      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
+        approvalPassword: alphaApprovalPassword,
+        approvalTotpCode: alphaApprovalTotpCode
+      }) : void 0;
+      await props.onSetUpdateChannel(targetChannel, proof);
+      setAlphaModalOpen(false);
+    } catch (error) {
+      setAlphaSaveError(error instanceof Error ? error.message : "Guard could not change the update channel. Try again.");
+    } finally {
+      setAlphaSavePending(false);
+    }
+  }, [alphaApprovalPassword, alphaApprovalTotpCode, props.approvalGate, props.onSetUpdateChannel, targetChannel]);
+  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
+    setAlphaApprovalPassword(event.target.value);
+  }, []);
+  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
+    setAlphaApprovalTotpCode(event.target.value);
+  }, []);
+  const handleOpenUpdateModeModal = reactExports.useCallback(() => {
+    setUpdateModeDraft(props.updateStatus?.update_mode ?? "automatic");
+    setUpdateModeSaveError(null);
+    setUpdateModeApprovalPassword("");
+    setUpdateModeApprovalTotpCode("");
+    setUpdateModeModalOpen(true);
+  }, [props.updateStatus?.update_mode]);
+  const handleCloseUpdateModeModal = reactExports.useCallback(() => {
+    if (updateModeSavePending) return;
+    setUpdateModeModalOpen(false);
+    setUpdateModeSaveError(null);
+  }, [updateModeSavePending]);
+  const handleConfirmUpdateMode = reactExports.useCallback(async () => {
+    if (!props.onSetUpdateMode) return;
+    setUpdateModeSavePending(true);
+    setUpdateModeSaveError(null);
+    try {
+      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
+        approvalPassword: updateModeApprovalPassword,
+        approvalTotpCode: updateModeApprovalTotpCode
+      }) : void 0;
+      await props.onSetUpdateMode(updateModeDraft, proof);
+      setUpdateModeModalOpen(false);
+    } catch (error) {
+      setUpdateModeSaveError(error instanceof Error ? error.message : "Guard could not save the update preference. Try again.");
+    } finally {
+      setUpdateModeSavePending(false);
+    }
+  }, [props.approvalGate, props.onSetUpdateMode, updateModeApprovalPassword, updateModeApprovalTotpCode, updateModeDraft]);
+  let updateChannelSummary = null;
+  if (props.onSetUpdateChannel) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsx(
+      GuardUpdateChannelSummary,
+      {
+        version: version2,
+        useAlpha,
+        busy,
+        onManage: handleOpenAlphaModal
+      }
+    );
+  } else if (version2) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version2}`, children: [
+      "v",
+      version2
+    ] });
+  }
+  let updateModeLabel = "Automatic Core updates on";
+  if (props.updateStatus?.update_mode === "ask") {
+    updateModeLabel = "Ask before installing";
+  } else if (props.updateStatus?.update_mode === "off") {
+    updateModeLabel = "Automatic Core updates off";
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: props.compact ? "space-y-1 border-t border-brand-blue/10 pt-1.5" : "space-y-1.5 border-t border-brand-blue/10 pt-2",
+      children: [
+        updateChannelSummary,
+        props.onSetUpdateMode ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleOpenUpdateModeModal, disabled: busy, className: "text-[11px] font-medium text-brand-blue hover:underline", "aria-label": "Manage Core update preferences", children: updateModeLabel }) : null,
+        props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]", children: updateStatusLabel(props.updateStatus) }),
+          showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: props.onUpdateGuard,
+              "aria-label": "Update Guard to the latest version",
+              className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Update" })
+              ]
+            }
+          ) : null
+        ] }) : null,
+        helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] leading-4 text-brand-dark/70", children: helpCopy }) : null,
+        showReinstallButton && props.onReinstallGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: props.onReinstallGuard,
+            className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Reinstall from PyPI" })
+            ]
+          }
+        ) : null,
+        busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue", role: "status", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 animate-spin", "aria-hidden": "true" }),
+          phase === "updating" ? "Updating Guard…" : "Reconnecting…"
+        ] }),
+        alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          AlphaChannelDialog,
+          {
+            useAlpha,
+            pending: alphaSavePending,
+            error: alphaSaveError,
+            approvalGate: props.approvalGate ?? null,
+            approvalPassword: alphaApprovalPassword,
+            approvalTotpCode: alphaApprovalTotpCode,
+            onClose: handleCloseAlphaModal,
+            onConfirm: handleConfirmAlphaChannel,
+            onApprovalPasswordChange: handleApprovalPasswordChange,
+            onApprovalTotpCodeChange: handleApprovalTotpCodeChange
+          }
+        ) }) : null,
+        updateModeModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: "Core update preferences", onClose: handleCloseUpdateModeModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          UpdateModeDialog,
+          {
+            mode: props.updateStatus?.update_mode ?? "automatic",
+            draft: updateModeDraft,
+            pending: updateModeSavePending,
+            error: updateModeSaveError,
+            approvalGate: props.approvalGate ?? null,
+            approvalPassword: updateModeApprovalPassword,
+            approvalTotpCode: updateModeApprovalTotpCode,
+            onDraftChange: (event) => setUpdateModeDraft(event.target.value),
+            onClose: handleCloseUpdateModeModal,
+            onConfirm: handleConfirmUpdateMode,
+            onApprovalPasswordChange: (event) => setUpdateModeApprovalPassword(event.target.value),
+            onApprovalTotpCodeChange: (event) => setUpdateModeApprovalTotpCode(event.target.value)
+          }
+        ) }) : null
+      ]
+    }
+  );
 }
 const SHELL_NAV_ITEMS = [
   {
@@ -21946,6 +23256,16 @@ const SHELL_NAV_ITEMS = [
     view: "fleet",
     group: "primary",
     icon: HiMiniShieldCheck
+  },
+  {
+    href: "/swarm",
+    label: "Swarm",
+    shortLabel: "Swarm",
+    description: "Launch, follow, and direct local agents across projects",
+    view: "swarm",
+    group: "primary",
+    icon: HiMiniSquares2X2,
+    badge: "Alpha"
   },
   {
     href: "/cigar",
@@ -22316,6 +23636,7 @@ function NavigationDrawer(props) {
                       onUpdateGuard: props.onUpdateGuard,
                       onReinstallGuard: props.onReinstallGuard,
                       onSetUpdateChannel: props.onSetUpdateChannel,
+                      onSetUpdateMode: props.onSetUpdateMode,
                       approvalGate: props.approvalGate
                     }
                   )
@@ -22529,6 +23850,7 @@ function PersistentSidebar(props) {
                   onUpdateGuard: props.onUpdateGuard,
                   onReinstallGuard: props.onReinstallGuard,
                   onSetUpdateChannel: props.onSetUpdateChannel,
+                  onSetUpdateMode: props.onSetUpdateMode,
                   approvalGate: props.approvalGate
                 }
               )
@@ -23880,41 +25202,41 @@ function store() {
     return null;
   }
 }
-function rememberTurnOn(now2, storage = store()) {
+function rememberTurnOn(now2, storage2 = store()) {
   try {
-    storage?.setItem(KEY, String(now2));
+    storage2?.setItem(KEY, String(now2));
   } catch {
   }
 }
-function rememberTurnOnJob(jobId, storage = store()) {
+function rememberTurnOnJob(jobId, storage2 = store()) {
   try {
-    storage?.setItem(JOB_KEY, jobId);
+    storage2?.setItem(JOB_KEY, jobId);
   } catch {
   }
 }
-function forgetTurnOnClick(storage = store()) {
+function forgetTurnOnClick(storage2 = store()) {
   try {
-    storage?.removeItem(KEY);
+    storage2?.removeItem(KEY);
   } catch {
   }
 }
-function forgetTurnOn(storage = store()) {
+function forgetTurnOn(storage2 = store()) {
   try {
-    storage?.removeItem(KEY);
-    storage?.removeItem(JOB_KEY);
+    storage2?.removeItem(KEY);
+    storage2?.removeItem(JOB_KEY);
   } catch {
   }
 }
-function turnOnJob(storage = store()) {
+function turnOnJob(storage2 = store()) {
   try {
-    return storage?.getItem(JOB_KEY) || null;
+    return storage2?.getItem(JOB_KEY) || null;
   } catch {
     return null;
   }
 }
-function turnOnRequestedAt(storage = store()) {
+function turnOnRequestedAt(storage2 = store()) {
   try {
-    const value = Number(storage?.getItem(KEY) ?? NaN);
+    const value = Number(storage2?.getItem(KEY) ?? NaN);
     return Number.isFinite(value) ? value : null;
   } catch {
     return null;
@@ -23969,8 +25291,8 @@ const revision = (value) => typeof value === "string" && /^[1-9][0-9]{0,19}$/.te
 const version$1 = (value) => Array.isArray(value) && value.length === 3 && value.every((part) => Number.isSafeInteger(part) && part >= 0 && part <= 65535);
 function config(value) {
   if (!record$5(value) || value.schema_version !== 1 || typeof value.enabled !== "boolean" || !text$3(value.runtime_id, 128) || !["low_memory", "balanced", "custom"].includes(String(value.resource_profile)) || !record$5(value.features) || !record$5(value.sources) || !record$5(value.storage) || !record$5(value.limits)) return false;
-  const { features, sources, storage, limits } = value;
-  return ["review_briefs", "agent_context", "shared_agents"].every((key) => typeof features[key] === "boolean") && (features.execution_context === void 0 || typeof features.execution_context === "boolean") && ["native_policy_facts", "sanitized_receipt_facts", "workspace_documents"].every((key) => typeof sources[key] === "boolean") && text$3(sources.source_set_id, 128) && (storage.mode === "memory" || storage.mode === "sqlite") && Number.isSafeInteger(storage.retention_hours) && ["context_tokens", "reserve_tokens", "max_active_workspaces", "idle_shutdown_seconds"].every((key) => Number.isSafeInteger(limits[key]));
+  const { features, sources, storage: storage2, limits } = value;
+  return ["review_briefs", "agent_context", "shared_agents"].every((key) => typeof features[key] === "boolean") && (features.execution_context === void 0 || typeof features.execution_context === "boolean") && ["native_policy_facts", "sanitized_receipt_facts", "workspace_documents"].every((key) => typeof sources[key] === "boolean") && text$3(sources.source_set_id, 128) && (storage2.mode === "memory" || storage2.mode === "sqlite") && Number.isSafeInteger(storage2.retention_hours) && ["context_tokens", "reserve_tokens", "max_active_workspaces", "idle_shutdown_seconds"].every((key) => Number.isSafeInteger(limits[key]));
 }
 function runtime(value) {
   if (!record$5(value) || value.schema !== "guard-cigar-runtime-status.v1" || !record$5(value.interpreter)) return false;
@@ -24037,27 +25359,50 @@ class ContextAssistanceApiError extends Error {
   }
   code;
 }
+function waitForStatusRetry(signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, 1e3);
+    function onAbort() {
+      clearTimeout(timer);
+      reject(signal.reason);
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
 async function request$1(path, action, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context assistance setup requires a local Guard installation.");
   const timeout = AbortSignal.timeout(1e4);
-  const response = await fetchWithGuardAuth(path, {
-    cache: "no-store",
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    ...action ? {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}"
-    } : {}
-  });
-  if (!response.ok) {
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  for (let retry = 0; ; retry += 1) {
+    requestSignal.throwIfAborted();
+    const response = await fetchWithGuardAuth(path, {
+      cache: "no-store",
+      signal: requestSignal,
+      ...action ? {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      } : {}
+    });
+    if (response.ok) return parseContextAssistanceStatus(await response.json());
     const body = await response.json().catch(() => null);
     const code = body !== null && typeof body === "object" && "code" in body && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_assistance_unavailable";
+    if (!action && response.status === 409 && code === "native_context_assistance_busy" && retry < 8) {
+      await waitForStatusRetry(requestSignal);
+      continue;
+    }
     throw new ContextAssistanceApiError(
       code,
       response.status === 404 ? "This Guard installation needs a native core with context assistance support. Update Guard to continue." : "Context assistance is unavailable. Refresh its status before trying again."
     );
   }
-  return parseContextAssistanceStatus(await response.json());
 }
 const fetchContextAssistance = (signal) => request$1("/v1/context-assistance", void 0, signal);
 const fetchContextInstallations = (signal) => request$1("/v1/context-assistance/installations", void 0, signal);
@@ -24125,6 +25470,9 @@ function parseContextBrief(value) {
   return value;
 }
 function refusal(code, action, status) {
+  if (/runtime_(deadline_exceeded|not_verified|closed|crashed|cancelled|transport_failed)$/.test(code)) {
+    return "CIGAR stopped before it could finish. Restart CIGAR at the top of this page, then try again. Your saved project choices are kept.";
+  }
   if (code.endsWith("context_storage_repair_required")) return "CIGAR's saved notes need repair. Delete them in CIGAR → Privacy, then add the project again.";
   if (code.endsWith("context_storage_outcome_unknown")) return "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again.";
   if (code.endsWith("context_resource_limit") && action === "authorize_agent") {
@@ -31270,14 +32618,16 @@ function approvalProofModalTitle(locked, recentlySatisfied, needsPassword) {
 function ApprovalPasswordModal(props) {
   const passwordRef = reactExports.useRef(null);
   const [now2, setNow] = reactExports.useState(() => Date.now());
-  const recentlySatisfied = approvalProofRecentlySatisfied(props.gate);
+  const requireFreshTotp = props.requireFreshTotp === true;
+  const recentlySatisfied = !requireFreshTotp && approvalProofRecentlySatisfied(props.gate);
   const needsPassword = approvalProofRequiresPassword(props.gate);
   const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.gate, now2);
   const gateLocked = lockRemainingSeconds > 0;
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.gate,
     { approvalPassword: props.approvalPassword, approvalTotpCode: props.approvalTotpCode },
-    props.busy === true
+    props.busy === true,
+    requireFreshTotp
   );
   reactExports.useEffect(() => {
     if (!gateLocked) return void 0;
@@ -31343,6 +32693,7 @@ function ApprovalPasswordModal(props) {
               approvalPassword: props.approvalPassword,
               approvalTotpCode: props.approvalTotpCode,
               passwordRef,
+              requireFreshTotp,
               onApprovalPasswordChange: props.onApprovalPasswordChange,
               onApprovalTotpCodeChange: props.onApprovalTotpCodeChange
             }
@@ -31707,7 +33058,7 @@ function ScannerEvidenceSection(props) {
 }
 function buildTopAlertItems(item) {
   const items = [];
-  const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
+  const secondaryRiskSummary = plainMcpReason(item, resolveSecondaryRiskSummary(item));
   const watchOnly = isWatchOnlyObservation(item);
   const ruleLines = watchOnly ? [] : ruleMatchLines(item.extension_coverage);
   const pauseReason = watchOnly || ruleLines.length > 0 ? null : whyPaused(item);
@@ -31800,7 +33151,7 @@ function ReviewScopeControls(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Allow scope selection", children: props.commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       ScopeChoiceButton,
       {
-        choice,
+        choice: scopeChoiceWithDuration(choice, props.rememberExactAction && props.exactActionPersistenceEligible),
         checked: props.allowScope === choice.value,
         onScopeChange: props.onAllowScopeChange
       },
@@ -31880,7 +33231,7 @@ function ExactActionPersistenceChoice(props) {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: props.versionBoundScript ? "Run once" : "This time" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: `Retry within ${props.retryWindowMinutes} minutes.` })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: `Retry within ${retryWindowText(props.retryWindowMinutes)}.` })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(props.checked), children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -31945,92 +33296,142 @@ function blockButtonLabel(scope) {
   }
   return "Block matching actions";
 }
-const INTENT_FIELDS = ["description", "justification"];
-const MAX_INTENT_CHARS = 300;
-const SHELL_TOOL_NAMES = /* @__PURE__ */ new Set([
-  "bash",
-  "shell",
-  "sh",
-  "zsh",
-  "terminal",
-  "run_command",
-  "run_terminal_command",
-  "run_shell_command",
-  "exec_command"
-]);
-const CODEX_TOOL_NAMESPACE = "functions.";
-const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"];
-const UNSAFE_CHARACTERS = new RegExp(
-  "[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
-  "g"
-);
-function resolveAgentStatedIntent(item) {
-  const envelope = item.action_envelope_json;
-  if (!envelope) {
-    return null;
-  }
-  if (envelope.action_type !== "shell_command" && envelope.action_type !== "package_script") {
-    return null;
-  }
-  if (envelope.mcp_server) {
-    return null;
-  }
-  const raw = recordValue(envelope.raw_payload_redacted);
-  const toolName = envelope.tool_name ?? (typeof raw?.tool_name === "string" ? raw.tool_name : null);
-  if (toolName === null || !SHELL_TOOL_NAMES.has(shellToolName(toolName))) {
-    return null;
-  }
-  const toolInput = firstToolInput(raw);
-  if (toolInput === null) {
-    return null;
-  }
-  for (const field of INTENT_FIELDS) {
-    const value = toolInput[field];
-    if (typeof value !== "string") {
-      continue;
-    }
-    const text2 = value.replace(UNSAFE_CHARACTERS, " ").replace(/\s+/g, " ").trim();
-    if (text2.length === 0) {
-      continue;
-    }
-    return {
-      text: text2.length > MAX_INTENT_CHARS ? `${text2.slice(0, MAX_INTENT_CHARS)}…` : text2,
-      field
-    };
-  }
-  return null;
+const EFFECT_ICONS = {
+  read: HiMiniMagnifyingGlass,
+  write: HiMiniPencilSquare,
+  send: HiMiniPaperAirplane,
+  delete: HiMiniTrash,
+  "run-code": HiMiniCommandLine,
+  connect: HiMiniLink,
+  unknown: HiMiniQuestionMarkCircle
+};
+function McpCallCard({ item, explanation }) {
+  const watchOnly = isWatchOnlyObservation(item);
+  const workingDirectory = resolveRequestWorkingDirectory(item);
+  const reason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
+  const facts = [
+    ...explanation.facts,
+    ...workingDirectory !== null ? [{ label: "Working directory", value: workingDirectory, mono: true }] : []
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "What the agent is asking to do", className: "mt-5 rounded-2xl border border-slate-200 bg-white", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 p-4 sm:p-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectorMark, { name: explanation.connector }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-semibold leading-snug text-brand-dark", children: explanation.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-sm text-brand-dark/70", children: [
+          "Tool from ",
+          explanation.connector
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EffectPill, { effect: explanation.effect })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 pb-4 sm:px-5", children: [
+      watchOnly && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 text-sm font-medium text-brand-dark", children: "Watch let this call through. Guard would have stopped it." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-[68ch] text-sm leading-relaxed text-brand-dark", children: explanation.summary }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-[68ch] text-xs leading-snug text-muted-foreground", children: explanation.effectBasis }),
+      reason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-[68ch] text-sm leading-snug text-brand-dark/80", children: reason })
+    ] }),
+    explanation.steps.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "border-t border-slate-100", "aria-label": "Actions in this call", children: [
+      explanation.steps.map((step) => /* @__PURE__ */ jsxRuntimeExports.jsx(StepRow, { step }, step.id)),
+      (explanation.hiddenSteps ?? 0) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "border-t border-slate-100 px-4 py-3 text-xs text-muted-foreground sm:px-5", children: [
+        explanation.hiddenSteps,
+        " more ",
+        explanation.hiddenSteps === 1 ? "action" : "actions",
+        " in the exact input"
+      ] })
+    ] }),
+    facts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FactList, { facts }) }),
+    explanation.quotes !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("figure", { className: "mx-4 mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 sm:mx-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("figcaption", { className: "text-xs font-medium text-brand-dark/70", children: explanation.quotes.caption }),
+      explanation.quotes.items.map((text2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("blockquote", { className: "mt-1 break-words text-sm text-brand-dark", children: [
+        "“",
+        text2,
+        "”"
+      ] }, text2)),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[11px] leading-snug text-muted-foreground", children: "In the agent's own words. Guard has not checked this, so decide from what the call does." })
+    ] }),
+    explanation.code !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-4 mb-4 sm:mx-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      LoggedActionPanel,
+      {
+        label: explanation.code.label,
+        text: explanation.code.text,
+        copyAriaLabel: `Copy ${explanation.code.label.toLowerCase()} to clipboard`
+      },
+      `${item.request_id}-code`
+    ) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "See the exact input" }),
+      explanation.rawInput !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        LoggedActionPanel,
+        {
+          label: "Input",
+          text: explanation.rawInput,
+          copyAriaLabel: "Copy the exact input to clipboard",
+          expandAriaLabel: "Expand the exact input",
+          collapseAriaLabel: "Collapse the exact input"
+        },
+        `${item.request_id}-input`
+      ) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "This call sent no input." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 break-all text-xs text-muted-foreground", children: [
+        "Tool ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "font-mono text-brand-dark/80", children: explanation.toolId })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "border-t border-slate-100 px-4 py-3 text-xs leading-snug text-muted-foreground sm:px-5", children: [
+      "Allow once and Always allow both match these exact inputs. If the agent asks again with different inputs, Guard asks again.",
+      explanation.truncated ? " Long text is shown shortened here." : ""
+    ] })
+  ] });
 }
-function firstToolInput(raw) {
-  if (raw === null) {
-    return null;
-  }
-  for (const key of TOOL_INPUT_KEYS) {
-    const value = raw[key];
-    const input = recordValue(value);
-    if (input !== null) {
-      return input;
+function ConnectorMark({ name }) {
+  const letter = name.trim().charAt(0).toUpperCase() || "?";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "span",
+    {
+      "aria-hidden": "true",
+      className: "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-base font-semibold text-brand-dark",
+      children: letter
     }
-    if (typeof value !== "string" || value.trim().length === 0) {
-      continue;
-    }
-    let parsed;
-    try {
-      parsed = JSON.parse(value);
-    } catch {
-      return null;
-    }
-    if (recordValue(parsed) !== null) {
-      return null;
-    }
-  }
-  return null;
+  );
 }
-function shellToolName(toolName) {
-  const name = toolName.trim().toLowerCase();
-  return name.startsWith(CODEX_TOOL_NAMESPACE) ? name.slice(CODEX_TOOL_NAMESPACE.length) : name;
+function EffectPill({ effect }) {
+  const Icon = EFFECT_ICONS[effect];
+  const tone = effect === "read" ? "border-slate-200 bg-slate-50 text-brand-dark/80" : "border-brand-attention/30 bg-brand-attention/[0.08] text-brand-dark";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+    MCP_EFFECT_COPY[effect].label
+  ] });
 }
-function recordValue(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+function StepRow({ step }) {
+  const Icon = EFFECT_ICONS[step.effect];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-start gap-3 border-b border-slate-100 px-4 py-3 last:border-b-0 sm:px-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-dark/60", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "min-w-0 break-words text-sm font-medium text-brand-dark", children: [
+          step.action,
+          step.app !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-normal text-brand-dark/70", children: [
+            " in ",
+            step.app
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-xs text-brand-dark/60", children: MCP_EFFECT_COPY[step.effect].label })
+      ] }),
+      step.details.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FactList, { facts: step.details }) }),
+      step.hiddenDetails > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-muted-foreground", children: [
+        step.hiddenDetails,
+        " more ",
+        step.hiddenDetails === 1 ? "field" : "fields",
+        " in the exact input"
+      ] })
+    ] })
+  ] });
+}
+function FactList({ facts }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "grid grid-cols-[minmax(5.5rem,auto)_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm", children: facts.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "contents", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-brand-dark/60", children: fact.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: `min-w-0 break-words text-brand-dark ${fact.mono === true ? "font-mono text-xs" : ""}`, children: fact.value })
+  ] }, `${fact.label}-${fact.value}`)) });
 }
 const PROTECTION_APPEARANCE = {
   protected: {
@@ -32139,6 +33540,13 @@ function ReviewEmptyState({ runtime: runtime2, resolutionMessage, codexResume, o
   ] });
 }
 function PrimaryActionCard({ item }) {
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(McpCallCard, { item, explanation: mcpCall });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(LoggedActionCard, { item });
+}
+function LoggedActionCard({ item }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
   const agentIntent = resolveAgentStatedIntent(item);
@@ -32185,6 +33593,10 @@ function PrimaryActionCard({ item }) {
 function buildWhatWouldHappen(item) {
   if (isWatchOnlyObservation(item)) {
     return `Watch allowed this action to continue. ${watchProtectedOutcome(item)}`;
+  }
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return `Without Guard, ${harnessDisplayName(item.harness)} would call ${mcpCall.connector} right away. Guard paused it so you can see what it asks for first.`;
   }
   const type = item.artifact_type;
   if (type?.includes("file_write") || type?.includes("file_read")) {
@@ -33831,7 +35243,10 @@ function resolvedStateForItem(state, item) {
 function approvalGateRefreshNeeded(err) {
   if (!(err instanceof GuardRequestResolutionError)) return false;
   const code = err.payload?.["error"];
-  return err.status === 423 && code === "approval_gate_locked" || code === "approval_gate_totp_required";
+  return err.status === 423 && code === "approval_gate_locked" || approvalGateDemandedCode(err);
+}
+function approvalGateDemandedCode(err) {
+  return err instanceof GuardRequestResolutionError && err.payload?.["error"] === "approval_gate_totp_required";
 }
 function useShownRequestCheck(requestId) {
   const shown = reactExports.useRef(requestId);
@@ -33903,6 +35318,7 @@ function useReviewDecisionResolve(params) {
   const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
   const [preflighting, setPreflighting] = reactExports.useState(false);
   const [effectiveApprovalGate, setEffectiveApprovalGate] = reactExports.useState(params.approvalGate);
+  const [freshCodeRequired, setFreshCodeRequired] = reactExports.useState(false);
   const approvalGate = effectiveApprovalGate;
   const useCooldown = defaultUseApprovalCooldown(approvalGate) && !cooldownOptOut;
   const decisionBusy = submitting !== null || preflighting;
@@ -33921,6 +35337,7 @@ function useReviewDecisionResolve(params) {
     setCooldownOptOut(false);
     setPendingAction(null);
     setPendingContractKey(null);
+    setFreshCodeRequired(false);
   }, [decisionSubjectKey]);
   const handleResolve = reactExports.useCallback(
     async (action, gateOverride) => {
@@ -33948,12 +35365,12 @@ function useReviewDecisionResolve(params) {
           requestedScope,
           action === "allow" ? rememberExactAction : watchOnlyObservation
         );
-        const includeGateFields = gateRequired && gate?.configured === true && requiresApprovalPasswordPrompt(
+        const includeGateFields = gateRequired && gate?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
           gate.cooldown_active,
           gate.strict_all_decisions,
           requestedScope
-        );
-        const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }) : {};
+        ));
+        const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }, freshCodeRequired) : {};
         await onResolve({
           ...buildDecisionPayload({
             item,
@@ -33974,6 +35391,7 @@ function useReviewDecisionResolve(params) {
         setCooldownOptOut(false);
         setPendingAction(null);
         setPendingContractKey(null);
+        setFreshCodeRequired(false);
         if (gateRequired && (gate?.cooldown_seconds ?? 0) > 0) {
           void fetchResolvedApprovalGate().then((refreshed) => {
             if (isStillShown(requestId)) setEffectiveApprovalGate(refreshed);
@@ -33984,6 +35402,7 @@ function useReviewDecisionResolve(params) {
         if (!isStillShown(requestId)) return;
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
+        if (approvalGateDemandedCode(err)) setFreshCodeRequired(true);
         if (approvalGateRefreshNeeded(err)) {
           setSubmitting(null);
           try {
@@ -34009,6 +35428,7 @@ function useReviewDecisionResolve(params) {
       approvalPassword,
       approvalTotpCode,
       cooldownOptOut,
+      freshCodeRequired,
       resolutionBlockReason,
       canSubmitAllow,
       hasAllowScope
@@ -34061,17 +35481,17 @@ function useReviewDecisionResolve(params) {
             );
             return;
           }
-          const gateEnabled = approvalGateRequiredForResolution(current, action, requestedScope) && current?.configured === true && requiresApprovalPasswordPrompt(
+          const gateEnabled = approvalGateRequiredForResolution(current, action, requestedScope) && current?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
             current.cooldown_active,
             current.strict_all_decisions,
             requestedScope
-          );
+          ));
           if (!gateEnabled) {
             void handleResolve(action, current);
             return;
           }
           setErrorMessage(null);
-          if (!approvalProofRecentlySatisfied(current)) {
+          if (freshCodeRequired || !approvalProofRecentlySatisfied(current)) {
             setPendingAction(action);
             setPendingContractKey(decisionContractKey);
             return;
@@ -34096,6 +35516,7 @@ function useReviewDecisionResolve(params) {
       blockScopeOptions.length,
       decisionBusy,
       decisionContractKey,
+      freshCodeRequired,
       handleResolve,
       hasAllowScope,
       canSubmitAllow,
@@ -34183,6 +35604,7 @@ function useReviewDecisionResolve(params) {
     approvalPassword,
     approvalTotpCode,
     errorMessage,
+    freshCodeRequired,
     handleAllow,
     handleApprovalPasswordChange,
     handleApprovalTotpCodeChange,
@@ -34437,6 +35859,7 @@ function ReviewDecisionCard(props) {
     approvalPassword,
     approvalTotpCode,
     errorMessage,
+    freshCodeRequired,
     handleAllow,
     handleApprovalPasswordChange,
     handleApprovalTotpCodeChange,
@@ -34732,6 +36155,7 @@ function ReviewDecisionCard(props) {
         onUseCooldownChange: handleUseCooldownChange,
         onSubmit: handleModalSubmit,
         busy: submitting !== null,
+        requireFreshTotp: freshCodeRequired,
         onCancel: handleModalCancel,
         submitLabel: pendingAction === "allow" ? resolvedAllowButtonLabel : resolvedBlockButtonLabel
       }
@@ -35436,6 +36860,10 @@ function iconForQueueCategory(categoryId) {
 }
 function queueItemPreview(item) {
   const envelope = item.action_envelope_json;
+  const mcpCall = explainMcpCall(item);
+  if (mcpCall !== null) {
+    return mcpCall.queueDetail !== null ? `${mcpCall.queueTitle} — ${mcpCall.queueDetail}` : mcpCall.queueTitle;
+  }
   return envelope?.command ?? item.queue_preview ?? item.raw_command_text ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? resolveStoppedCommandText(item);
 }
 const QUEUE_PAGE_SIZE$1 = 10;
@@ -37488,6 +38916,9 @@ const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then re
 const QUEUE_SESSION_ERROR_HEADLINE = "This approval link needs a signed local session";
 const QUEUE_SESSION_ERROR_DETAIL = "Guard is still running on this device. This browser is not signed in to the local dashboard.";
 const QUEUE_SESSION_ERROR_INSTRUCTION = "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
+const QUEUE_DESKTOP_HANDOFF_HEADLINE = "Opened this request in HOL Guard Desktop";
+const QUEUE_DESKTOP_HANDOFF_DETAIL = "Approve it or keep it blocked in HOL Guard Desktop. This browser tab is not signed in to the local dashboard, so it cannot decide the request.";
+const QUEUE_DESKTOP_HANDOFF_INSTRUCTION = "If HOL Guard Desktop did not open, open the request again below.";
 const QUEUE_SESSION_COMMAND_INSTRUCTION = "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
 const REQUEST_ID = /^[0-9a-f]{32}$/;
 function desktopRequestUrl(requestId) {
@@ -37506,11 +38937,115 @@ function queueErrorIsUnauthorizedSession(message) {
   }
   return /request failed with 401(?:\D|$)/.test(lower);
 }
+const DESKTOP_REQUESTS_META = "guard-desktop-requests";
+const HANDOFF_KEY_PREFIX = "guard-desktop-handoff:";
+const EMBEDDED_KEY = "guard-desktop-embedded";
+const REQUEST_PATH = /^\/requests\/([0-9a-f]{32})\/?$/;
+function requestPageId(pathname) {
+  return REQUEST_PATH.exec(pathname)?.[1] ?? null;
+}
+function desktopHandoffTarget(page) {
+  if (!page.desktopOpensRequests || page.embedded) {
+    return null;
+  }
+  const requestId = requestPageId(page.pathname);
+  if (requestId === null || page.alreadyHandedOff(requestId)) {
+    return null;
+  }
+  return desktopRequestUrl(requestId);
+}
+function pageDesktopOpensRequests() {
+  try {
+    const meta = document.querySelector(`meta[name="${DESKTOP_REQUESTS_META}"]`);
+    return meta?.getAttribute("content") === "1";
+  } catch {
+    return false;
+  }
+}
+function storage() {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+function readTabFlag(store2, key) {
+  try {
+    return store2?.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeTabFlag(store2, key) {
+  if (store2 === null) {
+    return false;
+  }
+  try {
+    store2.setItem(key, "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+function clearTabFlag(store2, key) {
+  try {
+    store2?.removeItem(key);
+  } catch {
+  }
+}
+function tabIsEmbedded() {
+  const store2 = storage();
+  let embedded = false;
+  try {
+    embedded = dashboardEmbedsInDesktop();
+  } catch {
+    embedded = false;
+  }
+  if (embedded) {
+    writeTabFlag(store2, EMBEDDED_KEY);
+    return true;
+  }
+  return readTabFlag(store2, EMBEDDED_KEY);
+}
+function requestHandedOffToDesktop(requestId) {
+  if (!requestId) {
+    return false;
+  }
+  return readTabFlag(storage(), HANDOFF_KEY_PREFIX + requestId);
+}
+function handOffRequestPageToDesktop() {
+  let pathname;
+  try {
+    pathname = window.location.pathname;
+  } catch {
+    return;
+  }
+  const target2 = desktopHandoffTarget({
+    pathname,
+    desktopOpensRequests: pageDesktopOpensRequests(),
+    embedded: tabIsEmbedded(),
+    alreadyHandedOff: requestHandedOffToDesktop
+  });
+  const requestId = requestPageId(pathname);
+  const store2 = storage();
+  if (target2 === null || requestId === null) {
+    return;
+  }
+  if (!writeTabFlag(store2, HANDOFF_KEY_PREFIX + requestId)) {
+    return;
+  }
+  try {
+    window.location.assign(target2);
+  } catch {
+    clearTabFlag(store2, HANDOFF_KEY_PREFIX + requestId);
+  }
+}
 function QueueConnectionError(props) {
   const [repairing, setRepairing] = reactExports.useState(false);
   const sessionMissing = queueErrorIsUnauthorizedSession(props.message);
   const desktopUrl = sessionMissing ? desktopRequestUrl(props.requestId ?? null) : null;
   const openCommand = sessionMissing ? approvalsOpenCommand(props.requestId ?? null) : null;
+  const handedOff = desktopUrl !== null && (props.handedOffToDesktop ?? requestHandedOffToDesktop(props.requestId));
   const handleRepair = reactExports.useCallback(async () => {
     if (props.onRepair === void 0) {
       return;
@@ -37529,19 +39064,24 @@ function QueueConnectionError(props) {
       void handleRepair();
     }
   }, [handleRepair, props.approvalUrl]);
-  const headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
-  const detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
-  const instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  let headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
+  let detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
+  let instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  if (handedOff) {
+    headline = QUEUE_DESKTOP_HANDOFF_HEADLINE;
+    detail = QUEUE_DESKTOP_HANDOFF_DETAIL;
+    instruction = QUEUE_DESKTOP_HANDOFF_INSTRUCTION;
+  }
   let sessionRetryVariant;
   if (desktopUrl !== null) {
     sessionRetryVariant = "outline";
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: handedOff ? "default" : "danger", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", role: "alert", children: headline }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: detail }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple/70", children: instruction }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
-      desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: "Open in HOL Guard Desktop" }),
+      desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: handedOff ? "Open in HOL Guard Desktop again" : "Open in HOL Guard Desktop" }),
       sessionMissing ? props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRetry, variant: sessionRetryVariant, children: "Retry" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),
       sessionMissing ? null : props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, variant: "outline", children: repairing ? "Repairing..." : "Reconnect" }),
       sessionMissing ? null : /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: "hol-guard start" }),
@@ -37830,46 +39370,6 @@ function GuardUpdateBanner(props) {
     }
   );
 }
-const PROTECTION_POSTURE_COPY = {
-  protected: {
-    label: "Protected",
-    help: "Stops theft, wipes, and Guard bypass. Asks once about new tools or first-time secret access, then remembers."
-  },
-  extra_careful: {
-    label: "Extra careful",
-    help: "Same as Protected, and also asks the first time this project talks to a new site or installs a new tool."
-  },
-  watch: {
-    label: "Watch",
-    help: "Records what Guard would have stopped, but does not stop anything. Use only while debugging."
-  }
-};
-const WATCH_BANNER_COPY = "Protection is off. Guard is only recording.";
-const POSTURE_OUTCOME_COLUMNS = {
-  protected: {
-    stops: "Credential theft, Guard bypass, encoded exfil, known-bad tools",
-    asks: "First secret read, new destructive command, first package script, new MCP or skill",
-    runs: "Remembered actions, routine browsing, verified-benign work"
-  },
-  extra_careful: {
-    stops: "The same automatic stops as Protected",
-    asks: "Everything Protected asks, plus first new site, first new tool, and cloud advisories",
-    runs: "Remembered actions and verified-benign work"
-  },
-  watch: {
-    stops: "Nothing. Guard only records.",
-    asks: "Nothing. Inbox shows what would have stopped.",
-    runs: "Every action, including known-bad work"
-  }
-};
-function isProtectionPosture(value) {
-  return value === "protected" || value === "extra_careful" || value === "watch";
-}
-function deriveProtectionPosture(mode, securityLevel) {
-  if (mode === "observe") return "watch";
-  if (securityLevel === "strict" || securityLevel === "paranoid") return "extra_careful";
-  return "protected";
-}
 const DEFAULT_CONFIRM = "Guard will start stopping dangerous actions.";
 function WatchProtectionBanner(props) {
   const [confirming, setConfirming] = reactExports.useState(false);
@@ -37934,199 +39434,9 @@ function WatchProtectionBanner(props) {
     }
   );
 }
-const POSTURE_LABEL = {
-  protected: "Protected",
-  extra_careful: "Extra careful",
-  watch: "Watch"
-};
-function normalizeHarnessPostures(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
-  const result = {};
-  for (const [harness, posture] of Object.entries(value)) {
-    if (harness.length > 0 && typeof posture === "string" && isProtectionPosture(posture)) {
-      result[harness] = posture;
-    }
-  }
-  return result;
-}
-function globalPosture(settings) {
-  if (isProtectionPosture(settings.protection_posture)) return settings.protection_posture;
-  if (settings.mode === "observe") return "watch";
-  return "protected";
-}
-function protectedLevel(effective, baseline) {
-  if (effective !== "watch") return effective;
-  if (baseline !== "watch") return baseline;
-  return "protected";
-}
-function effectiveHarnessPosture(settings, harness) {
-  const override = settings.harness_postures?.[harness];
-  const baseline = globalPosture(settings);
-  if (override === void 0) return baseline;
-  if (override === "watch") return "watch";
-  return baseline === "extra_careful" ? baseline : override;
-}
-function harnessPostureRows(settings, capabilities) {
-  return capabilities.map((capability) => {
-    const effective = effectiveHarnessPosture(settings, capability.harness);
-    return {
-      harness: capability.harness,
-      displayName: capability.display_name,
-      effective,
-      hasOverride: settings.harness_postures?.[capability.harness] !== void 0,
-      selected: effective === "watch" ? "watch" : "on"
-    };
-  });
-}
-function harnessPostureOptions(settings, harness) {
-  const onLevel = protectedLevel(effectiveHarnessPosture(settings, harness), globalPosture(settings));
-  return [
-    { choice: "on", label: POSTURE_LABEL[onLevel] },
-    { choice: "watch", label: POSTURE_LABEL.watch }
-  ];
-}
-function selectHarnessPosture(settings, harness, choice) {
-  const baseline = globalPosture(settings);
-  if (choice === "on" && effectiveHarnessPosture(settings, harness) !== "watch") return settings;
-  const next = { ...settings.harness_postures ?? {} };
-  if (choice === "watch") {
-    if (baseline === "watch") delete next[harness];
-    else next[harness] = "watch";
-  } else if (baseline === "watch") {
-    next[harness] = "protected";
-  } else {
-    delete next[harness];
-  }
-  return { ...settings, harness_postures: next };
-}
-function canRestartHarnessWatch(settings, harness) {
-  return settings.harness_postures?.[harness] === "watch" && (settings.watch_auto_revert_hours ?? 24) > 0;
-}
-function restartHarnessWatch(settings, harness) {
-  if (!canRestartHarnessWatch(settings, harness)) return settings;
-  const restarts = new Set(settings.harness_watch_restart ?? []);
-  restarts.add(harness);
-  return { ...settings, harness_watch_restart: [...restarts].sort() };
-}
-function harnessPosturePatch(draft, saved) {
-  const before = saved?.harness_postures ?? {};
-  const after = draft.harness_postures ?? {};
-  const restarts = new Set(draft.harness_watch_restart ?? []);
-  const patch = {};
-  for (const harness of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
-    const posture = after[harness] ?? null;
-    const restart = posture === "watch" && restarts.has(harness);
-    if (restart || posture !== (before[harness] ?? null)) patch[harness] = posture;
-  }
-  return Object.keys(patch).length > 0 ? patch : null;
-}
-function clearHarnessWatchOverrides(settings) {
-  const next = Object.fromEntries(
-    Object.entries(settings.harness_postures ?? {}).filter(([, posture]) => posture !== "watch")
-  );
-  return { ...settings, harness_postures: next };
-}
-function settingsWatchBannerModel(settings, capabilities) {
-  const rows = harnessPostureRows(settings, capabilities);
-  return watchBannerModel({
-    protection_posture: globalPosture(settings),
-    harness_postures: settings.harness_postures,
-    harnesses_in_watch: rows.filter((row) => row.effective === "watch").map((row) => row.harness),
-    protection_capabilities: capabilities
-  });
-}
-function withHarnessPosturePatch(payload, draft, saved) {
-  const {
-    harness_postures: _postures,
-    harness_postures_effective: _effective,
-    harness_postures_locked: _locked,
-    harness_watch_entered_at: _enteredAt,
-    harness_watch_restart: _restart,
-    ...rest
-  } = payload;
-  const patch = harnessPosturePatch(draft, saved);
-  return patch === null ? rest : { ...rest, harness_postures: patch };
-}
-function harnessPostureSummary(rows) {
-  if (rows.length === 0) return "";
-  const watching = rows.filter((row) => row.effective === "watch");
-  if (watching.length === 0) return "Every app is protected.";
-  if (watching.length === rows.length) return "Every app is in Watch.";
-  return `${watching.length} of ${rows.length} apps in Watch: ${joinNames(watching.map((row) => row.displayName))}.`;
-}
-function harnessRowTone(row) {
-  return row.effective === "watch" ? "watch" : "protected";
-}
-function harnessRowStatus(row) {
-  if (row.effective === "watch") {
-    return row.hasOverride ? "Watch · recording only" : "Watch · follows the machine setting";
-  }
-  if (!row.hasOverride) return "Follows the machine setting";
-  return "Set for this app";
-}
-function sortHarnessRows(rows) {
-  const watching = rows.filter((row) => row.effective === "watch");
-  const rest = rows.filter((row) => row.effective !== "watch");
-  return [...watching, ...rest];
-}
-function overrideRows(rows) {
-  return rows.filter((row) => row.hasOverride);
-}
-function harnessWatchPrompt(rows, harness) {
-  const row = rows.find((candidate) => candidate.harness === harness);
-  const name = row?.displayName ?? harness;
-  const others = rows.filter((candidate) => candidate.harness !== harness);
-  const protectedOthers = others.filter((candidate) => candidate.effective !== "watch");
-  const lead = `Guard will only record in ${name}.`;
-  if (others.length === 0) return lead;
-  if (protectedOthers.length === 0) return `${lead} Every app will then be in Watch.`;
-  if (protectedOthers.length === others.length) return `${lead} Your other apps stay protected.`;
-  const verb = protectedOthers.length === 1 ? "stays" : "stay";
-  return `${lead} ${joinNames(protectedOthers.map((candidate) => candidate.displayName))} ${verb} protected.`;
-}
-function joinNames(names) {
-  if (names.length <= 1) return names[0] ?? "";
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
-}
-function displayNameFor(harness, capabilities) {
-  return capabilities?.find((capability) => capability.harness === harness)?.display_name ?? harness;
-}
-function watchBannerModel(snapshot) {
-  const globalWatch = snapshot.protection_posture === "watch";
-  const watchOverrides = Object.entries(snapshot.harness_postures ?? {}).filter(([, posture]) => posture === "watch").map(([harness]) => harness);
-  const inWatch = globalWatch ? [] : snapshot.harnesses_in_watch ?? watchOverrides;
-  if (!globalWatch && inWatch.length === 0) return null;
-  const appNames = inWatch.map((harness) => displayNameFor(harness, snapshot.protection_capabilities));
-  if (globalWatch) {
-    return {
-      globalWatch,
-      appNames: [],
-      message: WATCH_BANNER_COPY,
-      confirmMessage: "Guard will start stopping dangerous actions in every app."
-    };
-  }
-  const names = joinNames(appNames);
-  return {
-    globalWatch,
-    appNames,
-    message: `Guard is only recording in ${names}. Other apps are protected.`,
-    confirmMessage: `Guard will start stopping dangerous actions in ${names}.`
-  };
-}
-function turnProtectionOnUpdate(snapshot) {
-  const update = {};
-  if (snapshot.protection_posture === "watch") update.protection_posture = "protected";
-  const cleared = {};
-  for (const [harness, posture] of Object.entries(snapshot.harness_postures ?? {})) {
-    if (posture === "watch") cleared[harness] = null;
-  }
-  if (Object.keys(cleared).length > 0) update.harness_postures = cleared;
-  return update;
-}
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-D8rqbHkl.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-BdAnclkg.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -38206,6 +39516,7 @@ function renderInboxContent(props) {
   );
 }
 function renderViewContent(props) {
+  if (props.view === "swarm") return props.swarmContent ?? null;
   if (props.view === "home") {
     return props.homeContent;
   }
@@ -38287,7 +39598,8 @@ function ApprovalCenterLayout(props) {
     updateError,
     onUpdateGuard,
     onReinstallGuard,
-    onSetUpdateChannel
+    onSetUpdateChannel,
+    onSetUpdateMode
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = reactExports.useState(
     () => readDismissedDesktopUpdateVersion()
@@ -38316,6 +39628,7 @@ function ApprovalCenterLayout(props) {
         onUpdateGuard,
         onReinstallGuard,
         onSetUpdateChannel,
+        onSetUpdateMode,
         approvalGate: props.approvalGate ?? null,
         cloudUserProfile: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_user_profile : null,
         workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null,
@@ -38648,6 +39961,30 @@ function getRecoveryCapabilities(options) {
   }
   return { kind: "fallback", installMode: resolvedInstallMode, reason };
 }
+const DESKTOP_WINDOW_RECOVERY_MESSAGE = "The HOL Guard recovery screen is not reachable from this page. Use the HOL Guard icon instead.";
+function recoveryRunsInDesktopWindow(capability) {
+  if (capability.kind !== "fallback" || capability.reason !== "bridge_missing") return false;
+  if (capability.installMode !== "desktop-bundled" && capability.installMode !== "desktop-external") return false;
+  try {
+    return dashboardEmbedsInDesktop();
+  } catch {
+    return false;
+  }
+}
+function resolveDesktopWindowRecoveryInstructions() {
+  return {
+    installMode: "desktop-bundled",
+    title: "Restart Guard from the HOL Guard icon",
+    body: "Guard cannot be restarted from this page. The HOL Guard icon in the system tray or menu bar can restart it.",
+    steps: [
+      "Open the HOL Guard icon in the system tray or menu bar and choose Troubleshoot Guard.",
+      "Choose Restart Guard, then return here and choose Retry connection.",
+      "If the restart does not help, quit HOL Guard from the icon, then open it again from your applications menu.",
+      "If there is no HOL Guard icon, HOL Guard is not running. Open it from your applications menu."
+    ],
+    command: null
+  };
+}
 function resolveRecoveryInstructions(installMode) {
   switch (installMode) {
     case "cli":
@@ -38787,34 +40124,35 @@ function RuntimeGate(props) {
   );
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-Dan7_c2E.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BSRlTmJa.js"), true ? __vite__mapDeps([7,8,9,6,10]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-BZwiFWD9.js"), true ? __vite__mapDeps([11,10,6,12,9,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-CcNVkqUm.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-BQ6EUpFF.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-opR5EnGM.js"), true ? __vite__mapDeps([10,11,12,13,9,14]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-BwqIbMpW.js"), true ? __vite__mapDeps([15,14,9,16,12,13,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-CRj85C7n.js"), true ? __vite__mapDeps([13,12]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-DAAmp_gK.js"), true ? __vite__mapDeps([17,16]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-raaFYZV-.js"), true ? __vite__mapDeps([14,8]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-a48S1S1l.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-DzaiFTPz.js"), true ? __vite__mapDeps([18,19,11,12]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-CtJlE48x.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CQ_jp6kS.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-C53RwWkC.js").then((n) => n.d), true ? __vite__mapDeps([20,19]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-BlNqkYe-.js"), true ? __vite__mapDeps([15,9]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-Bbj6-Y22.js"), true ? __vite__mapDeps([21,13]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-DOeU384A.js"), true ? __vite__mapDeps([16,4,5,17]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-D-wgjjDL.js"), true ? __vite__mapDeps([22,7,8,23]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-C-0iTXNv.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-pJ4W0YHf.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-C4eB0mkW.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-BHs-MTQv.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -38845,6 +40183,7 @@ function parseRequestId(pathname) {
 const PROTECT_ROUTE = "/protect";
 const TODAY_EVIDENCE_ROUTE = "/evidence?time=today";
 function viewTitle(view) {
+  if (view === "swarm") return "Swarm";
   if (view === "home") return "Home";
   if (view === "inbox") return "Inbox";
   if (view === "fleet") return "Protect";
@@ -38874,6 +40213,7 @@ function parseAppDetail(pathname) {
   }
 }
 function resolveView(pathname) {
+  if (pathname === "/swarm") return "swarm";
   if (pathname === "/cigar") return "cigar";
   if (parseAppDetail(pathname) !== null) {
     return "app-detail";
@@ -39034,12 +40374,15 @@ function App() {
     let pollId;
     let refreshInFlight = false;
     let clearedQueue = false;
-    const needsFullQueue = view === "inbox" && requestId === null;
-    const needsQueuePage = view === "inbox" || requestId !== null;
+    const needsFullQueue = (view === "inbox" || view === "swarm") && requestId === null;
+    const needsQueuePage = view === "inbox" || view === "swarm" || requestId !== null;
     const needsHomePreview = view === "home" && requestId === null;
     const needsRuntimeReceipts = view === "home" || view === "fleet" || view === "app-detail" || view === "supply-chain" || view === "audit" || view === "feed-health";
     const loadApprovalQueue = () => {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
+        return;
+      }
+      if (needsFullQueue && view === "swarm" && document.hidden) {
         return;
       }
       refreshInFlight = true;
@@ -39623,6 +40966,7 @@ function App() {
         codexResume,
         approvalGate,
         onRetryResume: handleRetryResume,
+        swarmContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SwarmWorkspace, { onNavigate: navigate, onOpenRequest: handleOpenRequest, reviews: requests.kind === "ready" ? requests.items : null }) }),
         homeContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           HomeWorkspace,
           {
@@ -39742,406 +41086,422 @@ if (container === null) {
   throw new Error("Missing guard-dashboard-root");
 }
 installStaleBuildGuard();
+handOffRequestPageToDesktop();
 clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  OperatorHealthCard as $,
+  DESKTOP_WINDOW_RECOVERY_MESSAGE as $,
   ActionButton as A,
-  HomeInsightsMetrics as B,
-  EvidenceActivityHeatmapMini as C,
-  homeCommandActivityModel as D,
-  EvidenceInsightsShareButton as E,
-  createCommandActivityClient as F,
-  GuardStatMetric as G,
-  HiMiniChevronRight as H,
-  fetchCommandActivityApi as I,
-  getRecoveryCapabilities as J,
-  resolveRecoveryInstructions as K,
-  HiMiniShieldExclamation as L,
-  HiMiniClipboardDocument as M,
-  openRecoveryView as N,
-  useReceiptAnalytics as O,
-  updateSettings as P,
-  turnProtectionOnUpdate as Q,
-  useProtectionPresentationState as R,
+  HiMiniHandRaised as B,
+  HiMiniArrowUpTray as C,
+  HiMiniCube as D,
+  HiMiniPencilSquare as E,
+  HiMiniDocumentText as F,
+  HiMiniCheckCircle as G,
+  HiMiniPlus as H,
+  HiMiniArrowRight as I,
+  isConnectableAppHarness as J,
+  HiMiniLockClosed as K,
+  getHeatmapLevel as L,
+  EvidenceInsightsShareButton as M,
+  GuardStatMetric as N,
+  HomeInsightsMetrics as O,
+  EvidenceActivityHeatmapMini as P,
+  homeCommandActivityModel as Q,
+  createCommandActivityClient as R,
   SectionLabel as S,
   Tag as T,
-  protectionHealthFor as U,
-  unavailableProtectionHealth as V,
-  buildHomeRuntimeErrorCopy as W,
-  RuntimeErrorState as X,
-  watchBannerModel as Y,
-  WatchProtectionBanner as Z,
-  EvidenceInsightsShareModal as _,
-  contextStatusCopy as a,
-  ApprovalProofFieldInputs as a$,
-  HiMiniShieldCheck as a0,
-  DeviceProofCard as a1,
-  guardActionDisposition as a2,
-  approvalLeftActionStopped as a3,
-  guardActionActivityCopy as a4,
-  HiMiniSparkles as a5,
-  HiMiniXMark as a6,
-  EmptyState as a7,
-  resolveCloudIntelCopy as a8,
-  HiMiniCloud as a9,
-  fetchSettings as aA,
-  harnessPostureRows as aB,
-  selectHarnessPosture as aC,
-  harnessPosturePatch as aD,
-  harnessRowTone as aE,
-  PROTECTION_POSTURE_COPY as aF,
-  harnessPostureOptions as aG,
-  globalPosture as aH,
-  harnessRowStatus as aI,
-  HiMiniEye as aJ,
-  HiMiniXCircle as aK,
-  GuardHero as aL,
-  ProofStrip as aM,
-  HiMiniClipboardDocumentCheck as aN,
-  HiMiniClipboard as aO,
-  fetchResolvedApprovalGate as aP,
-  ApprovalProofModal as aQ,
-  POSTURE_OUTCOME_COLUMNS as aR,
-  getDefaultExportFromCjs as aS,
-  React as aT,
-  HiMiniSquares2X2 as aU,
-  HiMiniBellAlert as aV,
-  HiMiniAdjustmentsHorizontal as aW,
-  HiMiniCircleStack as aX,
-  TabBar as aY,
-  SelectMenu as aZ,
-  fetchCloudReviewSettings as a_,
-  HiMiniQuestionMarkCircle as aa,
-  useFocusTrap as ab,
-  approvalProofRequiresPassword as ac,
-  HiMiniExclamationTriangle as ad,
-  HiMiniBolt as ae,
-  Badge as af,
-  HiMiniMinusCircle as ag,
-  buildDaemonErrorCopy as ah,
-  isUnsupportedPlatformCheck as ai,
-  RECHECK_UNAVAILABLE_SIGNATURE as aj,
-  protectionReasonText as ak,
-  HiMiniExclamationCircle as al,
-  hasRepairableProtectionGap as am,
-  remainingProtectionRepairParts as an,
-  protectionGapSignature as ao,
-  repairOutcomeIsStalled as ap,
-  ProtectionRepairFlowError as aq,
-  nextProtectionRepairOutcome as ar,
-  waitForAuthorizeUrl as as,
-  startOrRecoverCloudConnect as at,
-  safeCloudConnectUrl as au,
-  openPackageFirewallAuthorizeFallback as av,
-  waitForCloudConnection as aw,
-  activeFailedHarnesses as ax,
-  resetRepairOutcomeTracker as ay,
-  HiMiniWrenchScrewdriver as az,
-  formatRelativeTime as b,
-  withHarnessPosturePatch as b$,
-  isApprovalProofSubmitDisabled as b0,
-  buildApprovalProofCredentials as b1,
-  changeCloudReviewSettings as b2,
-  fetchWithGuardAuth as b3,
-  isRecord$5 as b4,
-  HiMiniArrowTopRightOnSquare as b5,
-  shellHref as b6,
-  HiMiniPauseCircle as b7,
-  listContextAgentSessions as b8,
-  HiMiniLink as b9,
-  isCigarProducerVersion as bA,
-  isCigarCoreLabel as bB,
-  subscribeDashboardLocation as bC,
-  HiMiniChatBubbleLeftRight as bD,
-  HiMiniArrowUpCircle as bE,
-  parseContextAssistanceStatus as bF,
-  isCigarBuildIdentity as bG,
-  fetchContextInstallations as bH,
-  HiMiniCloudArrowDown as bI,
-  turnOnJob as bJ,
-  shouldResumeTurnOn as bK,
-  turnOnRequestedAt as bL,
-  forgetTurnOn as bM,
-  rememberTurnOn as bN,
-  forgetTurnOnClick as bO,
-  rememberTurnOnJob as bP,
-  commitDashboardLocation as bQ,
-  HiMiniArrowDownTray as bR,
-  downloadBlob as bS,
-  savedEvidenceCopy as bT,
-  guardAwareHref as bU,
-  fetchContextData as bV,
-  forgetContextHistory as bW,
-  forgetSavedEvidence as bX,
-  resolveProtectionLevelCopy as bY,
-  fetchRuntimeSnapshot as bZ,
-  clearHarnessWatchOverrides as b_,
-  revokeContextAgentSession as ba,
-  grantContextWorkspace as bb,
-  authorizeContextAgentSession as bc,
-  ContextAssistanceApiError as bd,
-  ask as be,
-  parseContextScope as bf,
-  validContextBrokerRevision as bg,
-  isGuardDemoMode as bh,
-  HiMiniArrowUturnLeft as bi,
-  HiMiniCodeBracketSquare as bj,
-  HiMiniFolder as bk,
-  HiMiniComputerDesktop as bl,
-  HiMiniHome as bm,
-  HiMiniFolderPlus as bn,
-  HiMiniClock as bo,
-  listContextWorkspaces as bp,
-  HiMiniFolderOpen as bq,
-  manageContextWorkspace as br,
-  compileWorkspaceContext as bs,
-  HiMiniChatBubbleLeftEllipsis as bt,
-  HiMiniDocumentMagnifyingGlass as bu,
-  HiMiniPower as bv,
-  HiMiniEyeSlash as bw,
-  HiMiniCpuChip as bx,
-  HiMiniAcademicCap as by,
-  HiMiniArrowLeft as bz,
-  controlContextAssistance as c,
-  connectorSetupReady as c$,
-  clearPolicy as c0,
-  clearReviewQueue as c1,
-  revokeApprovalGateCooldown as c2,
-  disableApprovalGateTotp as c3,
-  importSettings as c4,
-  resetSettings as c5,
-  enrollApprovalGateTotp as c6,
-  verifyApprovalGateTotp as c7,
-  clearEvidence as c8,
-  exportDiagnostics as c9,
-  fetchExtensionCatalogV2Api as cA,
-  localPermissionDraftState as cB,
-  setLocalPermissionDraftState as cC,
-  extensionPolicyAuthorityUnchanged as cD,
-  newExtensionPolicyDraftIdentity as cE,
-  extensionPolicyDraftIsDirty as cF,
-  setLocalPermissionDraftStates as cG,
-  buildExtensionPolicyDraftMutation as cH,
-  fetchEffectiveExtensionControls as cI,
-  previewExtensionMutation as cJ,
-  isCurrentExtensionPolicyDraft as cK,
-  applyExtensionMutation as cL,
-  fetchExtensionControlHistory as cM,
-  managedPermissionState as cN,
-  controlProvenance as cO,
-  treatmentLabel as cP,
-  useResolvedApprovalGate as cQ,
-  groupPermissionsByFamily as cR,
-  HiMiniInformationCircle as cS,
-  LocalCliApiError as cT,
-  hasSuggestedRules as cU,
-  approvalProofRecentlySatisfied as cV,
-  StyledSelect as cW,
-  bulkCommandState as cX,
-  fetchLocalCliApi as cY,
-  ExtensionBrandMark as cZ,
-  fetchMcpProviderActions as c_,
-  repairApprovalCenter as ca,
-  exportSettings as cb,
-  setupDesktopNotifications as cc,
-  settingsWatchBannerModel as cd,
-  WorkspacePageHeader as ce,
-  navigateFromAnchor as cf,
-  humanizeList as cg,
-  isProtectionPosture as ch,
-  deriveProtectionPosture as ci,
-  normalizeHarnessPostures as cj,
-  approvalGateCooldownLabel as ck,
-  overrideRows as cl,
-  harnessPostureSummary as cm,
-  joinNames as cn,
-  sortHarnessRows as co,
-  restartHarnessWatch as cp,
-  harnessWatchPrompt as cq,
-  canRestartHarnessWatch as cr,
-  HiMiniKey as cs,
-  fetchExtensionCatalog as ct,
-  ExtensionControlApiError as cu,
-  normalizeExtensionCatalogSummary as cv,
-  normalizeExtensionPermission as cw,
-  ExtensionControlProtocolError as cx,
-  normalizeExtensionCatalogItem as cy,
-  guardApiCacheScope as cz,
-  formatNumber as d,
-  addCustomExtensionPrefillHref as d$,
-  shortIdentity as d0,
-  customExtensionDisplayName as d1,
-  previewLocalCliMutation as d2,
-  applyLocalCliMutation as d3,
-  LOCAL_CLI_CAPABILITIES as d4,
-  loadLocalCliCommands as d5,
-  DiscoveryFailure as d6,
-  readJson as d7,
-  enrollablePackageScriptCommands as d8,
-  seenSuggestionMeta as d9,
-  fetchExtensionControlApi as dA,
-  permissionForRule as dB,
-  refreshEffectiveExtensionControls as dC,
-  fetchExtensionDiscoveryApi as dD,
-  startCancelableDiscoveryJob as dE,
-  waitForMcpDiscoveryJob as dF,
-  isLocalCliId as dG,
-  localCliHref as dH,
-  fetchPluginUpdatesApi as dI,
-  filterCodexHostApps as dJ,
-  connectorWorkspaceItems as dK,
-  customExtensionNeedsReview as dL,
-  profileSetupCommand as dM,
-  customExtensionBadge as dN,
-  extensionDisplayName as dO,
-  catalogRowSecondLine as dP,
-  extensionStateLabel as dQ,
-  HiMiniGlobeAlt as dR,
-  HiMiniFunnel as dS,
-  discoveryFailureMessage as dT,
-  refreshCodexHostInventory as dU,
-  CODEX_HOST_FALLBACK as dV,
-  CONFIGURED_CONNECTIONS_FALLBACK as dW,
-  loadCurrentDashboardBuild as dX,
-  canonicalExtensionId as dY,
-  extensionDetailHref as dZ,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as d_,
-  HiMiniPlus as da,
-  looksLikeProjectRelocatePaste as db,
-  packageScriptFilterNeedle as dc,
-  initialAddCommand as dd,
-  suggestedPackageScriptExtensions as de,
-  filterExtensionSuggestions as df,
-  suggestedHarnessExtensions as dg,
-  suggestedSeenExtensions as dh,
-  keepsPackageScriptCatalog as di,
-  prefillSuggestedStates as dj,
-  recognizeLocalCli as dk,
-  preferredPackageScriptExtension as dl,
-  looksLikePackageScriptPaste as dm,
-  enrollmentCommandStates as dn,
-  isBulkApproveGateReady as dp,
-  fetchLocalCliList as dq,
-  normalizeLocalCliList as dr,
-  unreviewedToolChangeCount as ds,
-  connectorSetupMatch as dt,
-  refreshMcpInventory as du,
-  connectorGroupOutcome as dv,
-  allowedEarlierVersion as dw,
-  startGuardCloudConnect as dx,
-  extensionEffectiveState as dy,
-  permissionEffectiveState as dz,
-  HiMiniChevronUp as e,
-  HiMiniIdentification as e$,
-  acknowledgeDegradedExtensionControlAuthority as e0,
-  recoverExtensionControlAuthority as e1,
-  connectorSetupLinkFromSearch as e2,
-  readExtensionDetailUrlState as e3,
-  parseProtectionRoute as e4,
-  addCustomExtensionHref as e5,
-  GuardModalLayer as e6,
-  runHarnessAction as e7,
-  GuardHarnessActionError as e8,
-  HiMiniRocketLaunch as e9,
-  ActivationSummary as eA,
-  ActionResultPanel as eB,
-  fetchSupplyChainBundle as eC,
-  closeOnEscape as eD,
-  ConnectFlowCard as eE,
-  ApprovalProofInline as eF,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eG,
-  fetchPackageFirewallStatus as eH,
-  runPackageAudit as eI,
-  resolveSupplyChainAuditFailure as eJ,
-  runPackageSync as eK,
-  GuardOperationTimeoutError as eL,
-  startPackageFirewallConnect as eM,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as eN,
-  repairSupplyChainProtection as eO,
-  runPackageFirewallAction as eP,
-  parseInterceptProofSnapshot as eQ,
-  activatePackageFirewallRuntime as eR,
-  EntitlementNotice as eS,
-  chooseSupplyChainAuditFolder as eT,
-  fetchReceipts as eU,
-  lazyWorkspace as eV,
-  __vitePreload as eW,
-  scopeLabel as eX,
-  HiMiniCloudArrowUp as eY,
-  HiMiniCodeBracket as eZ,
-  HiMiniUsers as e_,
-  HiMiniTrash as ea,
-  fetchGuardApi as eb,
-  formatHarnessCommand as ec,
-  fetchApprovalPage as ed,
-  fetchPolicy as ee,
-  appSetupTarget as ef,
-  guardActionPresentation as eg,
-  DEFAULT_FILTER_STATE as eh,
-  filterEvidence as ei,
-  sortEvidence as ej,
-  computeMetrics as ek,
-  CommandActivityWorkspace as el,
-  EvidenceFilterBar as em,
-  EvidenceInsightStrip as en,
-  EvidenceActionList as eo,
-  EvidenceActionDetail as ep,
-  policyIdentityKey as eq,
-  clearLabelForScope as er,
-  HiMiniChartBar as es,
-  HiMiniCheckBadge as et,
-  isSupplyChainAuditIncomplete as eu,
-  isSupplyChainAuditEvidence as ev,
-  readString$1 as ew,
-  IconActionButton as ex,
-  HiMiniBeaker as ey,
-  HiMiniBugAnt as ez,
-  fetchContextAssistance as f,
-  policyActionLabel as f0,
-  createCloudExceptionRequest as f1,
-  HiMiniPuzzlePiece as f2,
-  fetchCloudExceptions as f3,
-  fetchCloudExceptionRequests as f4,
-  PaginationControls as f5,
-  PolicyStatField as f6,
-  HiMiniInbox as f7,
-  HiMiniQueueList as f8,
-  Surface as f9,
-  HiMiniEllipsisHorizontal as fa,
-  HiMiniMinus as fb,
-  HiMiniWrench as fc,
-  HiMiniArrowLongRight as fd,
-  fetchReleaseFeedApi as fe,
-  fetchMcpPolicyRequest as ff,
-  resolveMcpPolicyRequest as fg,
-  HiMiniDocumentPlus as fh,
-  HiMiniChevronLeft as fi,
-  HiMiniArrowDown as fj,
-  HiMiniArrowUp as fk,
-  runAuditRemediation as fl,
-  isBlockedGuardAction as fm,
-  isSupplyChainScannerEvidence as fn,
-  HiMiniSignal as fo,
-  HiMiniChevronDown as g,
-  harnessDisplayName as h,
-  HiMiniArrowPath as i,
+  fetchCommandActivityApi as U,
+  getRecoveryCapabilities as V,
+  recoveryRunsInDesktopWindow as W,
+  resolveDesktopWindowRecoveryInstructions as X,
+  resolveRecoveryInstructions as Y,
+  HiMiniShieldExclamation as Z,
+  __vitePreload as _,
+  fetchContextAssistance as a,
+  harnessPostureRows as a$,
+  HiMiniClipboardDocument as a0,
+  openRecoveryView as a1,
+  useReceiptAnalytics as a2,
+  updateSettings as a3,
+  turnProtectionOnUpdate as a4,
+  useProtectionPresentationState as a5,
+  protectionHealthFor as a6,
+  unavailableProtectionHealth as a7,
+  buildHomeRuntimeErrorCopy as a8,
+  RuntimeErrorState as a9,
+  hasRepairableProtectionGap as aA,
+  remainingProtectionRepairParts as aB,
+  protectionGapSignature as aC,
+  repairOutcomeIsStalled as aD,
+  ProtectionRepairFlowError as aE,
+  nextProtectionRepairOutcome as aF,
+  waitForAuthorizeUrl as aG,
+  startOrRecoverCloudConnect as aH,
+  safeCloudConnectUrl as aI,
+  openPackageFirewallAuthorizeFallback as aJ,
+  waitForCloudConnection as aK,
+  activeFailedHarnesses as aL,
+  resetRepairOutcomeTracker as aM,
+  HiMiniWrenchScrewdriver as aN,
+  harnessRowTone as aO,
+  appModesNote as aP,
+  harnessRowStatus as aQ,
+  HiMiniEye as aR,
+  HiMiniXCircle as aS,
+  GuardHero as aT,
+  ProofStrip as aU,
+  HiMiniClipboardDocumentCheck as aV,
+  HiMiniClipboard as aW,
+  fetchResolvedApprovalGate as aX,
+  ApprovalProofModal as aY,
+  PROTECTION_POSTURE_COPY as aZ,
+  POSTURE_OUTCOME_COLUMNS as a_,
+  watchBannerModel as aa,
+  WatchProtectionBanner as ab,
+  EvidenceInsightsShareModal as ac,
+  OperatorHealthCard as ad,
+  HiMiniShieldCheck as ae,
+  DeviceProofCard as af,
+  guardActionDisposition as ag,
+  approvalLeftActionStopped as ah,
+  guardActionActivityCopy as ai,
+  HiMiniSparkles as aj,
+  HiMiniXMark as ak,
+  EmptyState as al,
+  resolveCloudIntelCopy as am,
+  HiMiniCloud as an,
+  HiMiniQuestionMarkCircle as ao,
+  useFocusTrap as ap,
+  approvalProofRequiresPassword as aq,
+  HiMiniExclamationTriangle as ar,
+  HiMiniBolt as as,
+  Badge as at,
+  HiMiniMinusCircle as au,
+  buildDaemonErrorCopy as av,
+  isUnsupportedPlatformCheck as aw,
+  RECHECK_UNAVAILABLE_SIGNATURE as ax,
+  protectionReasonText as ay,
+  HiMiniExclamationCircle as az,
+  HiMiniCommandLine as b,
+  forgetTurnOn as b$,
+  overrideRows as b0,
+  harnessPostureSummary as b1,
+  joinNames as b2,
+  sortHarnessRows as b3,
+  globalPosture as b4,
+  selectHarnessPosture as b5,
+  restartHarnessWatch as b6,
+  harnessWatchPrompt as b7,
+  harnessPostureOptions as b8,
+  canRestartHarnessWatch as b9,
+  HiMiniArrowUturnLeft as bA,
+  HiMiniCodeBracketSquare as bB,
+  HiMiniHome as bC,
+  HiMiniFolderPlus as bD,
+  HiMiniClock as bE,
+  HiMiniFolderOpen as bF,
+  manageContextWorkspace as bG,
+  compileWorkspaceContext as bH,
+  HiMiniChatBubbleLeftEllipsis as bI,
+  HiMiniDocumentMagnifyingGlass as bJ,
+  HiMiniPower as bK,
+  HiMiniEyeSlash as bL,
+  HiMiniCpuChip as bM,
+  HiMiniAcademicCap as bN,
+  HiMiniArrowLeft as bO,
+  isCigarProducerVersion as bP,
+  isCigarCoreLabel as bQ,
+  subscribeDashboardLocation as bR,
+  HiMiniChatBubbleLeftRight as bS,
+  HiMiniArrowUpCircle as bT,
+  parseContextAssistanceStatus as bU,
+  isCigarBuildIdentity as bV,
+  fetchContextInstallations as bW,
+  HiMiniCloudArrowDown as bX,
+  turnOnJob as bY,
+  shouldResumeTurnOn as bZ,
+  turnOnRequestedAt as b_,
+  getDefaultExportFromCjs as ba,
+  React as bb,
+  HiMiniBellAlert as bc,
+  HiMiniAdjustmentsHorizontal as bd,
+  TabBar as be,
+  SelectMenu as bf,
+  fetchCloudReviewSettings as bg,
+  ApprovalProofFieldInputs as bh,
+  isApprovalProofSubmitDisabled as bi,
+  buildApprovalProofCredentials as bj,
+  changeCloudReviewSettings as bk,
+  isRecord$5 as bl,
+  HiMiniArrowTopRightOnSquare as bm,
+  shellHref as bn,
+  HiMiniPauseCircle as bo,
+  listContextAgentSessions as bp,
+  HiMiniLink as bq,
+  revokeContextAgentSession as br,
+  grantContextWorkspace as bs,
+  authorizeContextAgentSession as bt,
+  ContextAssistanceApiError as bu,
+  ask as bv,
+  parseContextScope as bw,
+  validContextBrokerRevision as bx,
+  isGuardDemoMode as by,
+  commitDashboardLocation as bz,
+  HiMiniFolder as c,
+  hasSuggestedRules as c$,
+  rememberTurnOn as c0,
+  forgetTurnOnClick as c1,
+  rememberTurnOnJob as c2,
+  HiMiniArrowDownTray as c3,
+  downloadBlob as c4,
+  savedEvidenceCopy as c5,
+  guardAwareHref as c6,
+  fetchContextData as c7,
+  forgetContextHistory as c8,
+  forgetSavedEvidence as c9,
+  fetchExtensionCatalog as cA,
+  ExtensionControlApiError as cB,
+  normalizeExtensionCatalogSummary as cC,
+  normalizeExtensionPermission as cD,
+  ExtensionControlProtocolError as cE,
+  normalizeExtensionCatalogItem as cF,
+  guardApiCacheScope as cG,
+  fetchExtensionCatalogV2Api as cH,
+  localPermissionDraftState as cI,
+  setLocalPermissionDraftState as cJ,
+  extensionPolicyAuthorityUnchanged as cK,
+  newExtensionPolicyDraftIdentity as cL,
+  extensionPolicyDraftIsDirty as cM,
+  setLocalPermissionDraftStates as cN,
+  buildExtensionPolicyDraftMutation as cO,
+  fetchEffectiveExtensionControls as cP,
+  previewExtensionMutation as cQ,
+  isCurrentExtensionPolicyDraft as cR,
+  applyExtensionMutation as cS,
+  fetchExtensionControlHistory as cT,
+  managedPermissionState as cU,
+  controlProvenance as cV,
+  treatmentLabel as cW,
+  useResolvedApprovalGate as cX,
+  groupPermissionsByFamily as cY,
+  HiMiniInformationCircle as cZ,
+  LocalCliApiError as c_,
+  resolveProtectionLevelCopy as ca,
+  fetchSettings as cb,
+  fetchRuntimeSnapshot as cc,
+  clearHarnessWatchOverrides as cd,
+  withHarnessPosturePatch as ce,
+  clearPolicy as cf,
+  clearReviewQueue as cg,
+  revokeApprovalGateCooldown as ch,
+  disableApprovalGateTotp as ci,
+  importSettings as cj,
+  resetSettings as ck,
+  enrollApprovalGateTotp as cl,
+  verifyApprovalGateTotp as cm,
+  clearEvidence as cn,
+  exportDiagnostics as co,
+  repairApprovalCenter as cp,
+  exportSettings as cq,
+  setupDesktopNotifications as cr,
+  settingsWatchBannerModel as cs,
+  WorkspacePageHeader as ct,
+  navigateFromAnchor as cu,
+  humanizeList as cv,
+  isProtectionPosture as cw,
+  deriveProtectionPosture as cx,
+  normalizeHarnessPostures as cy,
+  approvalGateCooldownLabel as cz,
+  HiMiniCircleStack as d,
+  CODEX_HOST_FALLBACK as d$,
+  approvalProofRecentlySatisfied as d0,
+  StyledSelect as d1,
+  bulkCommandState as d2,
+  fetchLocalCliApi as d3,
+  ExtensionBrandMark as d4,
+  fetchMcpProviderActions as d5,
+  connectorSetupReady as d6,
+  shortIdentity as d7,
+  customExtensionDisplayName as d8,
+  previewLocalCliMutation as d9,
+  refreshMcpInventory as dA,
+  connectorGroupOutcome as dB,
+  allowedEarlierVersion as dC,
+  startGuardCloudConnect as dD,
+  extensionEffectiveState as dE,
+  permissionEffectiveState as dF,
+  fetchExtensionControlApi as dG,
+  permissionForRule as dH,
+  refreshEffectiveExtensionControls as dI,
+  fetchExtensionDiscoveryApi as dJ,
+  startCancelableDiscoveryJob as dK,
+  waitForMcpDiscoveryJob as dL,
+  isLocalCliId as dM,
+  localCliHref as dN,
+  fetchPluginUpdatesApi as dO,
+  filterCodexHostApps as dP,
+  connectorWorkspaceItems as dQ,
+  customExtensionNeedsReview as dR,
+  profileSetupCommand as dS,
+  customExtensionBadge as dT,
+  extensionDisplayName as dU,
+  catalogRowSecondLine as dV,
+  extensionStateLabel as dW,
+  HiMiniGlobeAlt as dX,
+  HiMiniFunnel as dY,
+  discoveryFailureMessage as dZ,
+  refreshCodexHostInventory as d_,
+  applyLocalCliMutation as da,
+  LOCAL_CLI_CAPABILITIES as db,
+  loadLocalCliCommands as dc,
+  DiscoveryFailure as dd,
+  readJson as de,
+  enrollablePackageScriptCommands as df,
+  seenSuggestionMeta as dg,
+  looksLikeProjectRelocatePaste as dh,
+  packageScriptFilterNeedle as di,
+  initialAddCommand as dj,
+  suggestedPackageScriptExtensions as dk,
+  filterExtensionSuggestions as dl,
+  suggestedHarnessExtensions as dm,
+  suggestedSeenExtensions as dn,
+  keepsPackageScriptCatalog as dp,
+  prefillSuggestedStates as dq,
+  recognizeLocalCli as dr,
+  preferredPackageScriptExtension as ds,
+  looksLikePackageScriptPaste as dt,
+  enrollmentCommandStates as du,
+  isBulkApproveGateReady as dv,
+  fetchLocalCliList as dw,
+  normalizeLocalCliList as dx,
+  unreviewedToolChangeCount as dy,
+  connectorSetupMatch as dz,
+  HiMiniSquares2X2 as e,
+  startPackageFirewallConnect as e$,
+  CONFIGURED_CONNECTIONS_FALLBACK as e0,
+  loadCurrentDashboardBuild as e1,
+  canonicalExtensionId as e2,
+  extensionDetailHref as e3,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as e4,
+  addCustomExtensionPrefillHref as e5,
+  acknowledgeDegradedExtensionControlAuthority as e6,
+  recoverExtensionControlAuthority as e7,
+  connectorSetupLinkFromSearch as e8,
+  readExtensionDetailUrlState as e9,
+  appModesUpdate as eA,
+  appModesStatusMessage as eB,
+  needsConfirm as eC,
+  cigarReady as eD,
+  cigarSupported as eE,
+  guardOffPrompt as eF,
+  cigarUnavailableReason as eG,
+  HiMiniCheckBadge as eH,
+  HiMiniKey as eI,
+  isSupplyChainAuditIncomplete as eJ,
+  isSupplyChainAuditEvidence as eK,
+  readString$1 as eL,
+  IconActionButton as eM,
+  HiMiniBeaker as eN,
+  HiMiniBugAnt as eO,
+  ActivationSummary as eP,
+  ActionResultPanel as eQ,
+  fetchSupplyChainBundle as eR,
+  closeOnEscape as eS,
+  ConnectFlowCard as eT,
+  ApprovalProofInline as eU,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eV,
+  fetchPackageFirewallStatus as eW,
+  runPackageAudit as eX,
+  resolveSupplyChainAuditFailure as eY,
+  runPackageSync as eZ,
+  GuardOperationTimeoutError as e_,
+  parseProtectionRoute as ea,
+  addCustomExtensionHref as eb,
+  GuardModalLayer as ec,
+  runHarnessAction as ed,
+  GuardHarnessActionError as ee,
+  HiMiniRocketLaunch as ef,
+  HiMiniTrash as eg,
+  fetchGuardApi as eh,
+  formatHarnessCommand as ei,
+  appModes as ej,
+  fetchApprovalPage as ek,
+  fetchPolicy as el,
+  appSetupTarget as em,
+  guardActionPresentation as en,
+  DEFAULT_FILTER_STATE as eo,
+  filterEvidence as ep,
+  sortEvidence as eq,
+  computeMetrics as er,
+  CommandActivityWorkspace as es,
+  EvidenceFilterBar as et,
+  EvidenceInsightStrip as eu,
+  EvidenceActionList as ev,
+  EvidenceActionDetail as ew,
+  policyIdentityKey as ex,
+  clearLabelForScope as ey,
+  HiMiniChartBar as ez,
+  fetchWithGuardAuth as f,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f0,
+  repairSupplyChainProtection as f1,
+  runPackageFirewallAction as f2,
+  parseInterceptProofSnapshot as f3,
+  activatePackageFirewallRuntime as f4,
+  EntitlementNotice as f5,
+  chooseSupplyChainAuditFolder as f6,
+  fetchReceipts as f7,
+  lazyWorkspace as f8,
+  scopeLabel as f9,
+  runAuditRemediation as fA,
+  isBlockedGuardAction as fB,
+  isSupplyChainScannerEvidence as fC,
+  HiMiniSignal as fD,
+  HiMiniCloudArrowUp as fa,
+  HiMiniCodeBracket as fb,
+  HiMiniUsers as fc,
+  HiMiniIdentification as fd,
+  policyActionLabel as fe,
+  createCloudExceptionRequest as ff,
+  HiMiniPuzzlePiece as fg,
+  fetchCloudExceptions as fh,
+  fetchCloudExceptionRequests as fi,
+  PaginationControls as fj,
+  PolicyStatField as fk,
+  HiMiniInbox as fl,
+  HiMiniQueueList as fm,
+  Surface as fn,
+  HiMiniEllipsisHorizontal as fo,
+  HiMiniMinus as fp,
+  HiMiniWrench as fq,
+  HiMiniArrowLongRight as fr,
+  fetchReleaseFeedApi as fs,
+  fetchMcpPolicyRequest as ft,
+  resolveMcpPolicyRequest as fu,
+  HiMiniDocumentPlus as fv,
+  HiMiniArrowUpRight as fw,
+  HiMiniArrowUp as fx,
+  HiMiniChevronLeft as fy,
+  HiMiniArrowDown as fz,
+  HiMiniComputerDesktop as g,
+  HiMiniMagnifyingGlass as h,
+  HiMiniListBullet as i,
   jsxRuntimeExports as j,
-  HiMiniCheck as k,
-  HiMiniNoSymbol as l,
-  HiMiniHandRaised as m,
-  normalizeHarnessSlug as n,
-  HiMiniArrowUpTray as o,
-  HiMiniCube as p,
-  HiMiniPencilSquare as q,
+  HiMiniArrowPath as k,
+  listContextWorkspaces as l,
+  loadWorkspaceModule as m,
+  browserSessionStorage as n,
+  controlContextAssistance as o,
+  contextStatusCopy as p,
+  HiMiniChevronRight as q,
   reactExports as r,
-  HiMiniCommandLine as s,
-  HiMiniMagnifyingGlass as t,
-  HiMiniDocumentText as u,
-  HiMiniCheckCircle as v,
-  HiMiniArrowRight as w,
-  isConnectableAppHarness as x,
-  HiMiniLockClosed as y,
-  getHeatmapLevel as z
+  formatRelativeTime as s,
+  harnessDisplayName as t,
+  formatNumber as u,
+  normalizeHarnessSlug as v,
+  HiMiniChevronUp as w,
+  HiMiniChevronDown as x,
+  HiMiniCheck as y,
+  HiMiniNoSymbol as z
 };

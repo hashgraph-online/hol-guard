@@ -162,7 +162,7 @@ def run_full_task(
                 environment.update(world.environment())
             environment.update(
                 GUARD_GAUNTLET_OBSERVER_LOG=str(guard_log),
-                GUARD_GAUNTLET_DAEMON_PORT=str(daemon._server.server_address[1]),
+                GUARD_GAUNTLET_DAEMON_PORT=str(daemon.port),
                 GUARD_GAUNTLET_HOST_OBSERVER_LOG=str(host_log),
             )
             host_log.touch(mode=0o600)

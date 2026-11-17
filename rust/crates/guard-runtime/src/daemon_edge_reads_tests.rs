@@ -3,12 +3,13 @@ use super::super::serve;
 use super::*;
 use std::io::Read;
 use std::net::{SocketAddr, TcpListener};
-use std::sync::mpsc;
+use std::os::unix::net::UnixStream;
 use std::thread;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use hmac::{Hmac, Mac};
+use serde_json::json;
 use sha2::Sha256;
 
 const TOKEN: &str = "edge-test-token";
@@ -44,7 +45,8 @@ fn gives_up_on_heads_it_would_not_read_as_the_daemon_does() {
         b"GET /v1/receipts HTTP/2\r\n\r\n",
         b"GET //v1/receipts HTTP/1.1\r\n\r\n",
         b"GET /v1/receipts/ HTTP/1.1\r\n\r\n",
-        b"GET /v1/receipts/a%2Fb HTTP/1.1\r\n\r\n",
+        b"GET /v1/receipts/a%2 HTTP/1.1\r\n\r\n",
+        b"GET /v1/receipts/a%zz HTTP/1.1\r\n\r\n",
         b"GET /v1/receipts;x HTTP/1.1\r\n\r\n",
         b"GET /v1/receipts#x HTTP/1.1\r\n\r\n",
         b"GET /v1/receipts HTTP/1.1\r\nX-A: 1\r\n folded\r\n\r\n",
@@ -58,6 +60,15 @@ fn gives_up_on_heads_it_would_not_read_as_the_daemon_does() {
             String::from_utf8_lossy(head)
         );
     }
+}
+
+#[test]
+fn reads_complete_escapes_raw_as_the_daemon_did() {
+    let head = b"GET /v1/artifacts/a%3Ab%2Fc:d/diff HTTP/1.1\r\n\r\n";
+    assert_eq!(
+        parse_get(head).unwrap().path,
+        "/v1/artifacts/a%3Ab%2Fc:d/diff"
+    );
 }
 
 #[test]
@@ -84,13 +95,27 @@ fn query_values_decode_as_parse_qs_does() {
         query_value("har%6Eess=a+b%21", "harness"),
         Ok(Some("a b!".into()))
     );
-    assert_eq!(query_value("harness=%zz", "harness"), Err(()));
-    assert_eq!(query_value("harness=%ff", "harness"), Err(()));
+    assert_eq!(
+        query_value("harness=%zz", "harness"),
+        Ok(Some("%zz".into()))
+    );
+    assert_eq!(
+        query_value("harness=%ff", "harness"),
+        Ok(Some("\u{fffd}".into()))
+    );
     assert_eq!(query_int("", "limit", 200), Ok(200));
     assert_eq!(query_int("limit=-3", "limit", 200), Ok(-3));
     assert_eq!(query_int("limit=007", "limit", 200), Ok(7));
-    for spelling in ["limit=%2B5", "limit=%205", "limit=5_0", "limit=five"] {
-        assert_eq!(query_int(spelling, "limit", 200), Err(()), "{spelling}");
+    for (spelling, value) in [
+        ("limit=%2B5", 5),
+        ("limit=%205", 5),
+        ("limit=5_0", 50),
+        ("limit=five", 200),
+        ("limit=5__0", 200),
+        ("limit=_5", 200),
+        ("limit=99999999999999999999999", i64::MAX),
+    ] {
+        assert_eq!(query_int(spelling, "limit", 200), Ok(value), "{spelling}");
     }
 }
 
@@ -127,33 +152,8 @@ fn responses_are_html_safe_json_with_the_daemon_headers() {
     assert_eq!(body, "{\"a\":\"\\u003c\\u0026\\u003e\"}");
 }
 
-/// A daemon that sends each connection's request bytes back on `requests`
-/// and answers `daemon`.
-fn spawn_recording_daemon() -> (SocketAddr, mpsc::Receiver<Vec<u8>>) {
-    let daemon = TcpListener::bind("127.0.0.1:0").unwrap();
-    let upstream = daemon.local_addr().unwrap();
-    let (sender, requests) = mpsc::channel();
-    thread::spawn(move || {
-        for connection in daemon.incoming() {
-            let mut connection = connection.unwrap();
-            let mut request = Vec::new();
-            let mut chunk = [0u8; 4096];
-            while super::super::http::head_end(&request).is_none() {
-                match connection.read(&mut chunk) {
-                    Ok(0) | Err(_) => break,
-                    Ok(read) => request.extend_from_slice(&chunk[..read]),
-                }
-            }
-            sender.send(request).unwrap();
-            let _ = connection.write_all(b"daemon");
-        }
-    });
-    (upstream, requests)
-}
-
 struct Edge {
     address: SocketAddr,
-    requests: mpsc::Receiver<Vec<u8>>,
     activity: UnixStream,
     _home: tempfile::TempDir,
 }
@@ -181,16 +181,15 @@ fn spawn_configured_edge() -> Edge {
         )
         .unwrap();
     drop(connection);
-    let (upstream, requests) = spawn_recording_daemon();
     let (activity, edge_end) = UnixStream::pair().unwrap();
     let reads = Arc::new(NativeReads::new(Some(edge_end)));
+    reads.mark_standalone();
     reads.accept_handshake(&handshake(&guard_home));
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
-    thread::spawn(move || serve(&listener, upstream, 8, Duration::from_secs(30), reads));
+    thread::spawn(move || serve(&listener, 8, Duration::from_secs(30), reads));
     Edge {
         address,
-        requests,
         activity,
         _home: home,
     }
@@ -219,7 +218,6 @@ fn answers_a_token_read_itself_and_reports_the_activity() {
         response.ends_with(r#"{"ids":["newer","older"]}"#),
         "{response}"
     );
-    assert!(edge.requests.try_recv().is_err());
     edge.activity
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
@@ -270,11 +268,10 @@ fn answers_a_dashboard_session_with_the_daemon_cors_headers() {
     assert!(head.contains("\r\nAccess-Control-Allow-Private-Network: true\r\n"));
     assert!(head.contains("\r\nVary: Origin\r\n"));
     assert_eq!(body, r#"{"ids":["newer","older"]}"#);
-    assert!(edge.requests.try_recv().is_err());
 }
 
 #[test]
-fn replays_everything_else_to_the_daemon_byte_for_byte() {
+fn refuses_or_answers_everything_else_itself() {
     let edge = spawn_configured_edge();
     for request in [
         "GET /v1/read-state HTTP/1.1\r\nX-Guard-Token: wrong\r\n\r\n".to_owned(),
@@ -284,20 +281,15 @@ fn replays_everything_else_to_the_daemon_byte_for_byte() {
         ),
         "GET /v1/read-state HTTP/1.1\r\nX-Guard-Dashboard-Session: gld1.e30.x\r\n\r\n".to_owned(),
         format!("GET /v1/requests HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
-        format!("GET /v1/receipts/analytics HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
         format!("POST /v1/read-state HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
-        // The store has no receipts table, so the read fails and the daemon
-        // answers it instead.
-        format!("GET /v1/receipts HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
     ] {
-        assert_eq!(exchange(edge.address, &request), "daemon", "{request}");
-        let relayed = edge.requests.recv_timeout(Duration::from_secs(20)).unwrap();
-        assert_eq!(relayed, request.as_bytes());
+        let response = exchange(edge.address, &request);
+        assert!(response.starts_with("HTTP/1.0 4"), "{request}: {response}");
     }
 }
 
 #[test]
-fn leaves_a_head_still_arriving_to_the_daemon() {
+fn waits_for_a_head_still_arriving() {
     let edge = spawn_configured_edge();
     let request = format!("GET /v1/read-state HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n");
     let (first, rest) = request.split_at(20);
@@ -310,9 +302,7 @@ fn leaves_a_head_still_arriving_to_the_daemon() {
     client.write_all(rest.as_bytes()).unwrap();
     let mut response = String::new();
     client.read_to_string(&mut response).unwrap();
-    assert_eq!(response, "daemon");
-    let relayed = edge.requests.recv_timeout(Duration::from_secs(20)).unwrap();
-    assert_eq!(relayed, request.as_bytes());
+    assert!(response.starts_with("HTTP/1.0 200 OK\r\n"), "{response}");
 }
 
 fn post(body: &str, extra_headers: &str) -> String {
@@ -371,30 +361,48 @@ fn updates_read_state_itself_as_the_daemon_does() {
             "{body}"
         );
     }
-    assert!(edge.requests.try_recv().is_err());
 }
 
 #[test]
-fn relays_every_post_it_does_not_read_as_the_daemon_does() {
+fn refuses_every_post_it_does_not_read() {
     let edge = spawn_configured_edge();
     let body = r#"{"request_id":"x"}"#;
     for request in [
         post(body, "").replace(TOKEN, "wrong"),
-        post(body, "").replace("application/json", "application/x-www-form-urlencoded"),
-        post(body, "Content-Type: application/json\r\n"),
-        post(body, "Transfer-Encoding: chunked\r\n"),
         post(body, "Origin: http://x\r\n"),
-        post(r#"{"request_id":NaN}"#, ""),
         post(body, "").replace("/v1/read-state", "/v1/policy/clear"),
-        format!("{}GET /v1/read-state HTTP/1.1\r\n\r\n", post(body, "")),
-        post(body, "").replace(
-            &format!("Content-Length: {}", body.len()),
-            &format!("Content-Length: {}", MAX_BODY_BYTES + 1),
-        ),
+        {
+            let large = format!(r#"{{"request_id":"{}"}}"#, "x".repeat(MAX_BODY_BYTES + 1));
+            post(&large, "").replace("/v1/read-state", "/v1/policy/clear")
+        },
     ] {
-        assert_eq!(exchange(edge.address, &request), "daemon", "{request}");
-        let relayed = edge.requests.recv_timeout(Duration::from_secs(20)).unwrap();
-        assert!(request.as_bytes().starts_with(&relayed), "{request}");
+        let response = exchange(edge.address, &request);
+        assert!(response.starts_with("HTTP/1.0 4"), "{request}: {response}");
+    }
+}
+
+#[test]
+fn reads_every_body_the_daemon_reads() {
+    let edge = spawn_configured_edge();
+    let body = r#"{"request_id":"x"}"#;
+    for (request, status) in [
+        (
+            post(body, "").replace("application/json", "application/x-www-form-urlencoded"),
+            "400",
+        ),
+        (post(body, "Transfer-Encoding: chunked\r\n"), "400"),
+        (
+            post("request_id=x", "").replace("application/json", "text/plain"),
+            "200",
+        ),
+        (post(body, "Content-Type: text/plain\r\n"), "200"),
+        (post("{", ""), "400"),
+    ] {
+        let response = exchange(edge.address, &request);
+        assert!(
+            response.starts_with(&format!("HTTP/1.0 {status}")),
+            "{request}: {response}"
+        );
     }
 }
 
@@ -435,23 +443,43 @@ fn clears_read_state_and_evidence_itself_as_the_daemon_does() {
     }
     let response = exchange(edge.address, &delete("/v1/evidence", ""));
     assert!(response.ends_with(r#"{"deleted":2}"#), "{response}");
-    assert!(edge.requests.try_recv().is_err());
 }
 
 #[test]
-fn relays_every_delete_it_does_not_read_as_the_daemon_does() {
+fn answers_every_delete_itself_as_the_daemon_did() {
     let edge = spawn_configured_edge();
-    for request in [
-        delete("/v1/read-state", "{}").replace(TOKEN, "wrong"),
-        delete("/v1/read-state", "NaN"),
-        delete("/v1/command-activity", "{}"),
-        format!("DELETE /v1/evidence HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nTransfer-Encoding: chunked\r\n\r\n"),
-        format!("POST /v1/evidence HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nContent-Length: 0\r\n\r\n"),
+    for (request, head, tail) in [
+        (
+            delete("/v1/read-state", "{}").replace(TOKEN, "wrong"),
+            "HTTP/1.0 401 ",
+            r#""unauthorized"}"#,
+        ),
+        (delete("/v1/read-state", "NaN"), "HTTP/1.0 200 ", r#"{"ok":true}"#),
+        (
+            delete("/v1/command-activity", "{}"),
+            "HTTP/1.0 400 ",
+            r#"{"confirm":"clear-command-activity","error":"confirmation_required"}"#,
+        ),
+        (
+            delete("/v1/command-activity", "[1]"),
+            "HTTP/1.0 400 ",
+            r#"{"error":"invalid_request"}"#,
+        ),
+        (
+            format!("DELETE /v1/evidence HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nTransfer-Encoding: chunked\r\n\r\n"),
+            "HTTP/1.0 200 ",
+            "}",
+        ),
+        (delete("/v1/unknown", ""), "HTTP/1.0 404 ", r#"{"error":"not_found"}"#),
     ] {
-        assert_eq!(exchange(edge.address, &request), "daemon", "{request}");
-        let relayed = edge.requests.recv_timeout(Duration::from_secs(20)).unwrap();
-        assert!(request.as_bytes().starts_with(&relayed), "{request}");
+        let response = exchange(edge.address, &request);
+        assert!(response.starts_with(head), "{request}: {response}");
+        assert!(response.ends_with(tail), "{request}: {response}");
     }
+    let request = format!(
+        "POST /v1/evidence HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nContent-Length: 0\r\n\r\n"
+    );
+    assert!(exchange(edge.address, &request).starts_with("HTTP/1.0 4"));
 }
 
 #[test]
@@ -493,5 +521,57 @@ fn records_command_activity_feedback_itself_as_the_daemon_does() {
     assert_eq!(answer["schema_version"], "guard.command-activity-api.v1");
     assert_eq!(answer["changed"], true);
     assert_eq!(answer["created_at"], answer["updated_at"]);
-    assert!(edge.requests.try_recv().is_err());
+}
+
+#[test]
+fn refuses_the_legacy_cloud_handoff_itself() {
+    let edge = spawn_configured_edge();
+    let request = post("{}", "").replace("/v1/read-state", "/v1/apps/codex/cloud/start");
+    let answer = exchange(edge.address, &request);
+    assert!(
+        answer.starts_with("HTTP/1.0 410") || answer.starts_with("HTTP/1.1 410"),
+        "{answer}"
+    );
+    assert!(answer.contains("legacy_cloud_handoff_disabled"), "{answer}");
+    let relayed = post("{}", "")
+        .replace("/v1/read-state", "/v1/apps/codex/cloud/start")
+        .replace(TOKEN, "wrong");
+    let refused = exchange(edge.address, &relayed);
+    assert!(refused.starts_with("HTTP/1.0 4"), "{refused}");
+    assert!(
+        !refused.contains("legacy_cloud_handoff_disabled"),
+        "{refused}"
+    );
+}
+
+#[test]
+fn prepares_a_dashboard_reconnect_itself_or_reports_it_unavailable() {
+    let edge = spawn_configured_edge();
+    let request = post("{}", "").replace("/v1/read-state", "/v1/update/reconnect/prepare");
+    let answer = exchange(edge.address, &request);
+    let ok = answer.starts_with("HTTP/1.0 200") || answer.starts_with("HTTP/1.1 200");
+    let unavailable = answer.starts_with("HTTP/1.0 503") || answer.starts_with("HTTP/1.1 503");
+    assert!(ok || unavailable, "{answer}");
+    assert!(answer.contains("no-store"), "{answer}");
+    if ok {
+        assert!(answer.contains("\"verifier\""), "{answer}");
+    } else {
+        assert!(
+            answer.contains("dashboard_reconnect_identity_unavailable"),
+            "{answer}"
+        );
+    }
+}
+
+#[test]
+fn update_status_forbids_revalidation() {
+    let stored = json_response(200, &json!({"a": 1}), None, None, true);
+    let patched = String::from_utf8(max_age_zero(stored)).unwrap();
+    assert!(
+        patched.contains("Cache-Control: no-store, max-age=0\r\n"),
+        "{patched}"
+    );
+    assert!(patched.ends_with("{\"a\":1}"), "{patched}");
+    let plain = json_response(200, &json!({}), None, None, false);
+    assert_eq!(max_age_zero(plain.clone()), plain);
 }

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import cursor_shell_route as route
+from codex_plugin_scanner.guard.hook_review import cursor_shell_route as route
 
 _SHELL = {"hook_event_name": "PreToolUse", "tool_name": "Shell", "tool_input": {"command": "pytest -q"}}
 _PROBE = {**_SHELL, "cursor_route_probe": True}
@@ -147,12 +147,12 @@ def test_before_shell_bounds_the_sink_check_by_the_hook_deadline(tmp_path: Path,
 
 @posix_only
 def test_a_sink_check_that_fails_is_reviewed_as_usual(tmp_path: Path, monkeypatch) -> None:
-    from codex_plugin_scanner.guard.adapters import zcode_contained_tests
+    from codex_plugin_scanner.guard import contained_sink_command
 
     def unavailable() -> tuple[str, ...]:
         raise RuntimeError("Guard CLI unavailable")
 
-    monkeypatch.setattr(zcode_contained_tests, "contained_sink_command_prefix", unavailable)
+    monkeypatch.setattr(contained_sink_command, "contained_sink_command_prefix", unavailable)
     payload = {**_BEFORE_SHELL, "tool_input": {"command": "guard execute-contained-test --harness cursor"}}
     assert _respond(payload, tmp_path) is None
 

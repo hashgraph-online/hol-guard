@@ -1,12 +1,12 @@
 //! Resident daemon policy-authority client (RTM-030).
 //!
 //! Rust port of
-//! `src/codex_plugin_scanner/guard/daemon/policy_authority_client.py`
-//! (:17-:57), `src/codex_plugin_scanner/guard/daemon/client.py`
+//! `src/codex_plugin_scanner/guard/hook_review/policy_authority_client.py`
+//! (:17-:57), `src/codex_plugin_scanner/guard/native_daemon_client.py`
 //! (`GuardSurfaceDaemonClient` :184-:343, `_post` :434-:455,
 //! `resolve_policy_decision` :337, `claim_policy_decision` :340,
 //! `load_running_guard_surface_daemon_client` :538-:551), and
-//! `src/codex_plugin_scanner/guard/daemon/manager.py::load_running_guard_daemon_identity`
+//! the retired Python daemon's `manager.py::load_running_guard_daemon_identity`
 //! (:1205-:1206 → `_live_guard_daemon_identity` :1228-:1260,
 //! `_load_authenticated_daemon_identity` :1263-:1281).
 //!
@@ -16,7 +16,7 @@
 //! `claimed=false`. The daemon state is authenticated by an HMAC over the
 //! state payload keyed by `daemon-discovery-key`, and the bearer token is
 //! pinned to `auth_token_id = sha256(token)` via `secrets.compare_digest`
-//! parity (manager.py:1275). Live checks require `state_id` non-empty,
+//! parity. Live checks require `state_id` non-empty,
 //! `compatibility_version == GUARD_DAEMON_COMPATIBILITY_VERSION` (2), a
 //! valid `port`, a live `pid`, a `GET /healthz` that is 200 and
 //! `_healthz_payload_is_current` (compat + REQUIRED_DAEMON_TABLES ⊆
@@ -52,12 +52,12 @@ use guard_command::local_supply_chain::{DaemonPolicyResolution, PolicyAuthorityA
 
 use crate::resident_transport::constant_time_eq;
 
-/// `GUARD_DAEMON_COMPATIBILITY_VERSION` (manager.py:74). The daemon state
+/// `GUARD_DAEMON_COMPATIBILITY_VERSION`. The daemon state
 /// and `/healthz` payloads must carry this exact value.
 const GUARD_DAEMON_COMPATIBILITY_VERSION: i64 = 2;
 /// `DAEMON_DISCOVERY_PROTOCOL_VERSION` (discovery.py:13).
 const DAEMON_DISCOVERY_PROTOCOL_VERSION: i64 = 1;
-/// `_GUARD_DAEMON_AUTH_TOKEN_MAX_BYTES` (manager.py:110).
+/// `_GUARD_DAEMON_AUTH_TOKEN_MAX_BYTES`.
 const DAEMON_AUTH_TOKEN_MAX_BYTES: u64 = 4096;
 /// `daemon-discovery-key` is a 32-byte hex key (discovery.py:18-:19,
 /// `_DISCOVERY_KEY_BYTES = 32`), so the file is a 64-char lowercase hex
@@ -68,7 +68,7 @@ const DAEMON_DISCOVERY_KEY_BYTES: usize = 32;
 const DAEMON_STATE_JSON_MAX_BYTES: u64 = 64 * 1024;
 const DAEMON_RESPONSE_MAX_BYTES: usize = 256 * 1024;
 /// `_GUARD_DAEMON_PROCESS_QUERY_MAX_BYTES` / `_TIMEOUT_SECONDS`
-/// (manager.py:111-:112).
+///.
 #[cfg(unix)]
 const PROCESS_QUERY_MAX_BYTES: usize = 1024 * 1024;
 #[cfg(unix)]
@@ -78,20 +78,20 @@ const PROCESS_QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(1);
 /// Policy request socket timeout (policy_authority_client.py:35).
 const POLICY_TIMEOUT: Duration = Duration::from_secs(2);
-/// Trusted `ps` locations (manager.py:112, :2556-:2562).
+/// Trusted `ps` locations.
 #[cfg(unix)]
 const POSIX_PS_PATHS: [&str; 2] = ["/bin/ps", "/usr/bin/ps"];
-/// Launcher basenames recognized in serve argv (manager.py:2885-:2894).
+/// Launcher basenames recognized in serve argv.
 const RECOGNIZED_LAUNCHERS: [&str; 4] = [
     "hol-guard",
     "hol-guard.exe",
     "plugin-guard",
     "plugin-guard.exe",
 ];
-/// `_HOOK_LAUNCHER_ARGS` (manager.py:81) — hook command lines are not
+/// `_HOOK_LAUNCHER_ARGS` — hook command lines are not
 /// daemon servers even when they carry guard flags.
 const HOOK_LAUNCHER_ARGS: [&str; 3] = ["--hook-mode", "--hook-transport", "--hook-event"];
-/// `REQUIRED_DAEMON_TABLES` (manager.py:73) — `healthz.tables` must cover
+/// `REQUIRED_DAEMON_TABLES` — `healthz.tables` must cover
 /// this set.
 const REQUIRED_DAEMON_TABLES: [&str; 1] = ["guard_connect_states"];
 /// `DAEMON_STATE_SIGNATURE_FIELD` (discovery.py:17).
@@ -101,7 +101,7 @@ const FROZEN_DAEMON_SERVE_ARG: &str = "--frozen-daemon-serve";
 
 /// Resident policy-authority client. Holds `guard_home` — the private
 /// root containing `daemon-state.json`, `daemon-auth-token`, and
-/// `daemon-discovery-key` (manager.py:1682, :1825-:1827, :1284-:1290).
+/// `daemon-discovery-key`.
 pub struct ResidentPolicyAuthority {
     guard_home: PathBuf,
 }
@@ -189,7 +189,7 @@ impl ResidentPolicyAuthority {
     }
 
     /// `load_running_guard_surface_daemon_client` (client.py:538-:551) →
-    /// `load_running_guard_daemon_identity` (manager.py:1205-:1206).
+    /// `load_running_guard_daemon_identity`.
     fn load_authority(&self) -> Option<DaemonAuthority> {
         let identity = load_running_guard_daemon_identity(&self.guard_home)?;
         Some(DaemonAuthority {
@@ -272,7 +272,7 @@ fn deserialize_authority(value: &Value) -> Option<DaemonAuthority> {
 // (discovery.py:97-:123; manager.py:1205-:1260)
 // ---------------------------------------------------------------------------
 
-/// `_live_guard_daemon_identity` (manager.py:1228-:1260).
+/// `_live_guard_daemon_identity`.
 fn load_running_guard_daemon_identity(guard_home: &Path) -> Option<DaemonIdentity> {
     let (payload, auth_token) = load_authenticated_daemon_identity(guard_home)?;
     if !daemon_state_matches_current_runtime(&payload) {
@@ -302,7 +302,7 @@ fn load_running_guard_daemon_identity(guard_home: &Path) -> Option<DaemonIdentit
         });
     }
     // Wrapped daemons may require authenticated detailed health for
-    // binding (manager.py:1257-:1259).
+    // binding.
     if daemon_healthz_details_match(&base_url, &auth_token, guard_home, &payload) {
         return Some(DaemonIdentity {
             port: u16::try_from(port).ok()?,
@@ -312,9 +312,11 @@ fn load_running_guard_daemon_identity(guard_home: &Path) -> Option<DaemonIdentit
     None
 }
 
-/// `_load_authenticated_daemon_identity` (manager.py:1263-:1281): the
+/// `_load_authenticated_daemon_identity`: the
 /// HMAC-verified state payload plus the `auth_token_id`-pinned token.
-fn load_authenticated_daemon_identity(guard_home: &Path) -> Option<(Map<String, Value>, String)> {
+pub(crate) fn load_authenticated_daemon_identity(
+    guard_home: &Path,
+) -> Option<(Map<String, Value>, String)> {
     let payload = load_authenticated_daemon_state(guard_home)?;
     let auth_token = load_guard_daemon_auth_token(guard_home)?;
     let expected_token_id = payload.get("auth_token_id")?.as_str()?;
@@ -359,7 +361,7 @@ pub(crate) fn load_daemon_discovery_key(guard_home: &Path) -> Option<String> {
     Some(encoded.to_lowercase())
 }
 
-/// `load_guard_daemon_auth_token` (manager.py:1284-:1290) —
+/// `load_guard_daemon_auth_token` —
 /// `daemon-auth-token`, private parent required.
 pub(crate) fn load_guard_daemon_auth_token(guard_home: &Path) -> Option<String> {
     let token = read_private_regular_text(
@@ -377,7 +379,7 @@ pub(crate) fn load_guard_daemon_auth_token(guard_home: &Path) -> Option<String> 
 /// `verify_daemon_state` (discovery.py:97-:107): the `state_signature`
 /// must equal `HMAC(key, canonical(unsigned))` and the embedded
 /// `discovery_key_id`/`discovery_protocol_version` must match.
-fn verify_daemon_state(payload: &Map<String, Value>, discovery_key: &str) -> bool {
+pub(crate) fn verify_daemon_state(payload: &Map<String, Value>, discovery_key: &str) -> bool {
     let signature = payload
         .get(DAEMON_STATE_SIGNATURE_FIELD)
         .and_then(Value::as_str);
@@ -524,8 +526,8 @@ fn daemon_state_matches_current_runtime(payload: &Map<String, Value>) -> bool {
         .is_some_and(|v| v == crate::PACKAGE_VERSION)
 }
 
-/// `_healthz_payload_is_current` (manager.py:3696-:3709).
-fn healthz_payload_is_current(payload: &Value) -> bool {
+/// `_healthz_payload_is_current`.
+pub(crate) fn healthz_payload_is_current(payload: &Value) -> bool {
     let map = payload.as_object();
     let Some(map) = map else {
         return false;
@@ -573,7 +575,7 @@ fn daemon_healthz_details_match(
 }
 
 /// Cross-check the details payload against the signed state — same
-/// `state_id` and `pid`/`port` when present (manager.py:1272-:1278).
+/// `state_id` and `pid`/`port` when present.
 fn healthz_details_match_state_identity(
     details: &Map<String, Value>,
     state: &Map<String, Value>,
@@ -589,8 +591,8 @@ fn healthz_details_match_state_identity(
     true
 }
 
-/// `_healthz_payload_matches_guard_home` (manager.py:3712-:3727).
-fn healthz_payload_matches_guard_home(payload: &Value, guard_home: &Path) -> bool {
+/// `_healthz_payload_matches_guard_home`.
+pub(crate) fn healthz_payload_matches_guard_home(payload: &Value, guard_home: &Path) -> bool {
     let reported = payload.get("guard_home").and_then(Value::as_str);
     let Some(reported) = reported else {
         return false;
@@ -732,7 +734,7 @@ fn read_private_regular_bytes(_p: &Path, _m: u64, _r: bool) -> Option<Vec<u8>> {
 
 // ---------------------------------------------------------------------------
 // Process liveness + command binding
-// (manager.py:3216-:3320, :2556-:2610, :2856-:3013)
+//
 // ---------------------------------------------------------------------------
 
 #[cfg(unix)]
@@ -757,8 +759,8 @@ fn daemon_pid_is_running(_pid: i64) -> bool {
     false
 }
 
-/// `_guard_daemon_pid_matches_command` (manager.py:3275-:3300).
-fn daemon_pid_matches_command(pid: i64, guard_home: &Path) -> bool {
+/// `_guard_daemon_pid_matches_command`.
+pub(crate) fn daemon_pid_matches_command(pid: i64, guard_home: &Path) -> bool {
     let Some(command) = daemon_command_for_pid(pid) else {
         return false;
     };
@@ -775,13 +777,13 @@ fn daemon_pid_matches_command(pid: i64, guard_home: &Path) -> bool {
     }
 }
 
-/// `_APPROVAL_CENTER_LOCATOR_FILE` (manager.py:97).
+/// `_APPROVAL_CENTER_LOCATOR_FILE`.
 const APPROVAL_CENTER_LOCATOR_FILE: &str = "approval-center-locator.json";
 /// The locator records six short fields; anything larger is not one.
 const APPROVAL_CENTER_LOCATOR_MAX_BYTES: u64 = 64 * 1024;
 
 /// `read_approval_center_locator(guard_home).daemon_url`
-/// (manager.py:1739-:1772), which Python writes without private
+///, which Python writes without private
 /// permissions, so this read does not require them either.
 ///
 /// The shape gates are `locator_shape`: a live, positive `pid` and the five
@@ -836,7 +838,7 @@ fn locator_state_binds(guard_home: &Path, pid: i64, daemon_url: &str) -> bool {
         .is_some_and(|port| daemon_url == format!("http://127.0.0.1:{port}"))
 }
 
-/// `ps -p <pid> -o command=` (manager.py:3305-:3320).
+/// `ps -p <pid> -o command=`.
 #[cfg(unix)]
 fn daemon_command_for_pid(pid: i64) -> Option<String> {
     let ps_path = trusted_posix_ps_path()?;
@@ -873,7 +875,7 @@ fn trusted_posix_ps_path() -> Option<PathBuf> {
     None
 }
 
-/// `_bounded_process_query_stdout` (manager.py:2661-:2731).
+/// `_bounded_process_query_stdout`.
 #[cfg(unix)]
 fn bounded_process_query_stdout(args: &[&str]) -> Option<String> {
     let mut child: Child = Command::new(args[0])
@@ -918,7 +920,7 @@ fn bounded_process_query_stdout(args: &[&str]) -> Option<String> {
     String::from_utf8(output).ok()
 }
 
-/// `_split_process_command` (manager.py:2785-:2790) — `shlex.split` POSIX
+/// `_split_process_command` — `shlex.split` POSIX
 /// parity for the bounded subset used here. Returns None on unbalanced
 /// quoting (malformed).
 fn split_process_command(command_line: &str) -> Option<Vec<String>> {
@@ -982,7 +984,7 @@ fn split_process_command(command_line: &str) -> Option<Vec<String>> {
     Some(parts)
 }
 
-/// `_guard_daemon_command_parts_match` (manager.py:2856-:2880).
+/// `_guard_daemon_command_parts_match`.
 fn guard_daemon_command_parts_match(parts: &[String]) -> bool {
     if parts
         .iter()
@@ -1019,7 +1021,7 @@ fn guard_daemon_command_parts_match(parts: &[String]) -> bool {
     false
 }
 
-/// `_guard_home_from_command_parts` (manager.py:2792-:2803).
+/// `_guard_home_from_command_parts`.
 fn command_guard_home(parts: &[String]) -> Option<PathBuf> {
     if let Some((guard_home, _home_dir, _port)) = frozen_daemon_serve_context(parts) {
         return Some(guard_home);
@@ -1041,7 +1043,7 @@ fn command_guard_home(parts: &[String]) -> Option<PathBuf> {
     None
 }
 
-/// `_frozen_daemon_serve_context` (manager.py:2883-:2900) +
+/// `_frozen_daemon_serve_context` +
 /// `decode_frozen_daemon_serve_payload` (frozen_runtime_commands.py:136-:163).
 fn frozen_daemon_serve_context(parts: &[String]) -> Option<(PathBuf, PathBuf, i64)> {
     if parts.len() != 3 || parts[1] != FROZEN_DAEMON_SERVE_ARG {
@@ -1070,7 +1072,7 @@ fn frozen_daemon_serve_context(parts: &[String]) -> Option<(PathBuf, PathBuf, i6
     Some((guard_home, home_dir, port))
 }
 
-/// `_implicit_daemon_guard_home` (manager.py:2806-:2810) →
+/// `_implicit_daemon_guard_home` →
 /// `resolve_guard_home` (config.py:463-:481). No override: CWD
 /// `.hol-guard`, then `$HOME/.hol-guard`, then the POSIX/Windows fallbacks.
 fn implicit_daemon_guard_home() -> Option<PathBuf> {
@@ -1125,10 +1127,39 @@ fn path_basename_lower(raw: &str) -> String {
 // never sent elsewhere. `Connection: close` lets us bound the body read.
 // ---------------------------------------------------------------------------
 
-fn http_get_json(url: &str, headers: &[(&str, &str)]) -> Option<Value> {
+pub(crate) fn http_get_json(url: &str, headers: &[(&str, &str)]) -> Option<Value> {
     let (host, port, path) = parse_loopback_url(url)?;
     let response = http_request("GET", &host, port, &path, headers, None, HEALTH_TIMEOUT)?;
     serde_json::from_slice(&response).ok()
+}
+
+/// One JSON request to a loopback daemon port within `timeout`; `None` on
+/// any transport failure, non-2xx status or non-object body.
+pub(crate) fn loopback_json(
+    method: &str,
+    port: u16,
+    path: &str,
+    headers: &[(&str, &str)],
+    body: Option<&Value>,
+    timeout: Duration,
+) -> Option<Map<String, Value>> {
+    if timeout.is_zero() {
+        return None;
+    }
+    let bytes = body.map(serde_json::to_vec).transpose().ok()?;
+    let response = http_request(
+        method,
+        "127.0.0.1",
+        port,
+        path,
+        headers,
+        bytes.as_deref(),
+        timeout,
+    )?;
+    match serde_json::from_slice(&response).ok()? {
+        Value::Object(map) => Some(map),
+        _ => None,
+    }
 }
 
 fn post_json(authority: &DaemonAuthority, path: &str, payload: &Value) -> Option<Value> {

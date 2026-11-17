@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from codex_plugin_scanner.guard import runtime_transition_admission as admission
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 from codex_plugin_scanner.guard.runtime_transition import TransitionError

@@ -130,6 +130,6 @@ fn plain_ascii(text: &str) -> bool {
 #[path = "daemon_edge_evidence_export.rs"]
 pub(super) mod export;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_evidence_tests.rs"]
 mod tests;

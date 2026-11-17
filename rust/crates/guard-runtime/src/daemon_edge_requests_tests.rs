@@ -3,6 +3,9 @@ use super::*;
 use crate::guard_store_approval_reads::tests::{expected, normalized, seed};
 use crate::guard_store_cmd_vectors_tests::temp_home;
 
+const LOCAL: Option<std::net::SocketAddr> = Some(std::net::SocketAddr::V4(
+    std::net::SocketAddrV4::new(std::net::Ipv4Addr::LOCALHOST, 5474),
+));
 const VECTORS: &str = include_str!("../testdata/guard_store/approval_page_read_vectors.json");
 
 struct Store {
@@ -67,9 +70,29 @@ fn rejects_options_as_the_native_handler_rejects_them() {
 }
 
 #[test]
-fn relays_every_cursor_to_the_daemon() {
+fn a_cursor_no_page_names_asks_for_a_refresh() {
     let store = store("page_empty");
-    assert_eq!(list("cursor=abc", true, &store.config, &store.reads), None);
+    for cursor in ["abc", "native-business-v1:x:0", "e30", "%%%"] {
+        let (status, body, no_store) = list(
+            &format!("cursor={cursor}"),
+            true,
+            &store.config,
+            &store.reads,
+        )
+        .unwrap();
+        assert_eq!((status, no_store), (400, false), "{cursor}");
+        assert_eq!(body["recovery"]["code"], "refresh_queue");
+    }
+}
+
+#[test]
+fn store_cursors_name_their_page_marker() {
+    // {"last_seen_at":"t","request_id":"r"}
+    let cursor = "eyJsYXN0X3NlZW5fYXQiOiJ0IiwicmVxdWVzdF9pZCI6InIifQ";
+    assert_eq!(page_marker(cursor), Some(json!(["t", "r"])));
+    assert_eq!(page_marker(&format!("{cursor}==")), Some(json!(["t", "r"])));
+    assert_eq!(page_marker("e30"), None);
+    assert_eq!(page_marker("a"), None);
 }
 
 #[test]
@@ -97,36 +120,6 @@ fn other_harnesses_skip_the_native_queue() {
     assert_eq!((status, no_store), (200, true));
     assert!(body.get("native_business_queue_checked").is_none());
     assert_eq!(body["items"], json!([]));
-}
-
-#[test]
-fn a_local_page_without_a_runtime_directory_goes_to_the_daemon() {
-    let store = store("page_empty");
-    assert_eq!(list("", false, &store.config, &store.reads), None);
-}
-
-#[test]
-fn reads_the_queue_answer_as_the_daemon_reader_does() {
-    let empty = json!({"schema": QUEUE_SCHEMA, "version": 1, "items": []});
-    assert_eq!(queue_answer_empty(&empty), Some(true));
-    for missing in [
-        json!({"error": "native_policy_snapshot_missing"}),
-        json!({"error": "native_policy_snapshot_unavailable", "retryable": true}),
-    ] {
-        assert_eq!(queue_answer_empty(&missing), Some(true), "{missing}");
-    }
-    for relayed in [
-        json!({"schema": QUEUE_SCHEMA, "version": 1, "items": [{"request_id": "a"}]}),
-        json!({"schema": QUEUE_SCHEMA, "version": true, "items": []}),
-        json!({"schema": QUEUE_SCHEMA, "version": 2, "items": []}),
-        json!({"schema": "other", "version": 1, "items": []}),
-        json!({"schema": QUEUE_SCHEMA, "version": 1, "items": [], "extra": 1}),
-        json!({"error": "native_policy_snapshot_missing", "retryable": "yes"}),
-        json!({"error": "native_store_failed"}),
-        json!([]),
-    ] {
-        assert_eq!(queue_answer_empty(&relayed), None, "{relayed}");
-    }
 }
 
 /// Store reads run on the edge connection worker, not the test runner's much
@@ -193,30 +186,58 @@ fn hosted_details_drop_the_private_queue_hint() {
     let store = store("page_mixed");
     let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
     let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
-    let (status, body) = detail(&request_id, "", true, &store.config, &store.reads).unwrap();
+    let (status, body, no_store) =
+        detail(&request_id, "", true, LOCAL, &store.config, &store.reads).unwrap();
     assert_eq!(status, 200);
+    assert!(!no_store);
     assert_eq!(body["request_id"], json!(request_id));
     assert!(body.get("extension_allow_hint").is_none());
 }
 
 #[test]
-fn local_waiting_and_unknown_details_go_to_the_daemon() {
+fn a_local_detail_without_a_resident_view_drops_the_hint_and_waits_go_to_the_daemon() {
     let store = store("page_mixed");
     let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
     let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
+    let (status, body, _) =
+        detail(&request_id, "", false, LOCAL, &store.config, &store.reads).unwrap();
+    assert_eq!(status, 200);
+    assert!(body.get("extension_allow_hint").is_none());
+    assert!(body.get("extension_recommendation").is_none());
     assert_eq!(
-        detail(&request_id, "", false, &store.config, &store.reads),
+        detail(
+            &request_id,
+            "wait_ms=10",
+            true,
+            LOCAL,
+            &store.config,
+            &store.reads
+        ),
         None
     );
+}
+
+#[test]
+fn a_hosted_unknown_id_gets_the_local_queue_link() {
+    let store = store("page_mixed");
+    let (status, body, no_store) =
+        detail("missing", "", true, LOCAL, &store.config, &store.reads).unwrap();
+    assert_eq!((status, no_store), (404, false));
+    assert_eq!(body["error"], "not_found");
+    assert_eq!(body["recovery"]["code"], "request_unknown");
     assert_eq!(
-        detail(&request_id, "wait_ms=10", true, &store.config, &store.reads),
-        None
+        body["recovery"]["queue_url"],
+        "http://127.0.0.1:5474/#/inbox"
     );
-    assert_eq!(
-        detail("missing", "", true, &store.config, &store.reads),
-        None
-    );
-    assert_eq!(detail("a%2Fb", "", true, &store.config, &store.reads), None);
+}
+
+#[test]
+fn a_local_id_no_snapshot_could_name_is_not_found() {
+    let store = store("page_mixed");
+    let (status, body, _) =
+        detail("bad id!", "", false, LOCAL, &store.config, &store.reads).unwrap();
+    assert_eq!(status, 404);
+    assert_eq!(body["recovery"]["code"], "request_unknown");
 }
 
 #[test]
@@ -231,4 +252,92 @@ fn rows_the_daemon_may_offer_a_grant_on_go_to_the_daemon() {
         json!({"browser_intent": "x", "scanner_evidence": {"source": "trusted_local_tool"}})
     ));
     assert!(!offer(json!({"scanner_evidence": [{"source": "other"}]})));
+}
+
+/// A standalone edge is the daemon, so a read it leaves unanswered ends on
+/// the replay `404`. The Codex hook bridge polls `?wait_ms=`, and a `404`
+/// there kept every approved command waiting until the hook timed out.
+#[test]
+fn a_standalone_edge_answers_held_reads_itself() {
+    let store = store("page_mixed");
+    let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
+    let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        detail(
+            &request_id,
+            "wait_ms=1000",
+            false,
+            LOCAL,
+            &store.config,
+            &store.reads
+        ),
+        None
+    );
+    store.reads.mark_standalone();
+    for hosted in [false, true] {
+        let (status, body, _) = detail(
+            &request_id,
+            "wait_ms=1000",
+            hosted,
+            LOCAL,
+            &store.config,
+            &store.reads,
+        )
+        .unwrap();
+        assert_eq!(status, 200, "hosted={hosted}");
+        assert_eq!(body["request_id"], json!(request_id));
+        assert!(body.get("status").is_some_and(Value::is_string));
+        assert!(body.get("extension_allow_hint").is_none());
+    }
+}
+
+#[test]
+fn a_standalone_edge_answers_rows_the_daemon_would_offer_a_grant_on() {
+    let store = store("page_mixed");
+    let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
+    let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
+    rusqlite::Connection::open(store.config.guard_home().join("guard.db"))
+        .unwrap()
+        .execute(
+            "UPDATE approval_requests SET browser_intent_json = ?1 WHERE request_id = ?2",
+            rusqlite::params![r#"{"kind":"open"}"#, request_id],
+        )
+        .unwrap();
+    assert_eq!(
+        detail(&request_id, "", false, LOCAL, &store.config, &store.reads),
+        None
+    );
+    store.reads.mark_standalone();
+    let (status, body, _) =
+        detail(&request_id, "", false, LOCAL, &store.config, &store.reads).unwrap();
+    assert_eq!(status, 200);
+    assert_eq!(body["request_id"], json!(request_id));
+}
+
+#[test]
+fn a_standalone_edge_answers_rows_with_a_connector_setup_hint() {
+    let store = store("page_mixed");
+    let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
+    let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
+    let hint = json!({"schema": "guard.connector-setup-hint.v1", "identity_hash": "a".repeat(64),
+                      "cli_id": "local-cli.gh@2", "surface": "cli", "display_name": "GitHub CLI",
+                      "deep_link": "/extensions/local-cli/local-cli.gh%402",
+                      "card_recommendation": {"state": "allowed", "capabilities": ["read-only"]}});
+    rusqlite::Connection::open(store.config.guard_home().join("guard.db"))
+        .unwrap()
+        .execute(
+            "UPDATE approval_requests SET extension_allow_hint_json = ?1 WHERE request_id = ?2",
+            rusqlite::params![hint.to_string(), request_id],
+        )
+        .unwrap();
+    assert_eq!(
+        detail(&request_id, "", false, LOCAL, &store.config, &store.reads),
+        None
+    );
+    store.reads.mark_standalone();
+    let (status, body, _) =
+        detail(&request_id, "", false, LOCAL, &store.config, &store.reads).unwrap();
+    assert_eq!(status, 200);
+    assert_eq!(body["request_id"], json!(request_id));
+    assert!(body.get("extension_allow_hint").is_none());
 }

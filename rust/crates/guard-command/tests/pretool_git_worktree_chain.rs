@@ -128,6 +128,7 @@ fn routed_reads_in_the_new_worktree_are_allowed() {
         "git worktree add -b flat ~/org/app-flat origin/main && git -C ~/org/app-flat status --short".to_owned(),
         format!("git worktree add -b flat {destination} origin/main && git --no-pager -C {destination} log --oneline -3 && git -C ../app-flat status"),
         "git worktree add -b flat ~/org/app-flat origin/main && mkdir -p ~/notes && git -C ~/org/app-flat status --short".to_owned(),
+        "git worktree add -b flat ~/org/app-flat origin/main && mkdir -p ~/notes ~/logs && git -C ~/org/app-flat status --short".to_owned(),
     ] {
         assert_allowed(&home, &repository, &command);
     }
@@ -135,8 +136,8 @@ fn routed_reads_in_the_new_worktree_are_allowed() {
 
 /// Reads routed anywhere but the new checkout, writes, a `;` that would run
 /// the read after a failed add, and anything else between the reads keep
-/// their review, as does a `mkdir` in or below the new checkout, which
-/// could follow a link the checkout brings.
+/// their review, as does a `mkdir` with any folder in or below the new
+/// checkout, which could follow a link the checkout brings.
 #[test]
 fn other_routed_work_after_a_worktree_add_stays_reviewed() {
     let (_cleanup, home, repository) = repository("chain-dash-c-reviewed");
@@ -166,6 +167,9 @@ fn other_routed_work_after_a_worktree_add_stays_reviewed() {
         "&& mkdir -p ~/org/app-flat/notes/keys && git -C ../app-flat status",
         "&& mkdir -p ~/pending/notes && git -C ../app-flat status",
         "&& mkdir -p ~/.ssh/keys && git -C ../app-flat status",
+        "&& mkdir -p ../app-flat/notes ~/notes && git -C ../app-flat status",
+        "&& mkdir -p ~/notes ../app-flat/notes && git -C ../app-flat status",
+        "&& mkdir -p ~/notes ~/pending/notes && git -C ../app-flat status",
     ] {
         assert_reviewed(&home, &repository, &format!("{add} {tail}"));
     }

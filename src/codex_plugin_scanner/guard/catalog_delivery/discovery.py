@@ -16,10 +16,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..daemon.background_diagnostics import failure_detail, record_background_event, record_background_notice
 from ..file_identity import full_stat_identity
 from ..native_resident_client import native_resident_client_request
 from ..native_runtime import _isolated_environment, native_runtime_status
+from ..runtime_health.background_diagnostics import failure_detail, record_background_event, record_background_notice
 from ..strict_json_pairs import unique_json_object
 from . import lifecycle
 from .authority import VerifiedDistribution

@@ -30,6 +30,13 @@ ALLOW_DECISIONS = {"allow", "allow_original", "approve", "quiet"}
 #: input as protection.
 NON_ANSWERS = {"timeout", "no-envelope", "unknown"}
 
+#: Guard actions that run the call without a word to the user when the envelope
+#: gives the harness no decision of its own.
+_QUIET_POLICY_ACTIONS = {"allow", "warn"}
+
+#: Decisions whose meaning is plain; any other envelope records its field names.
+_DENY_DECISIONS = {"deny", "block"}
+
 # Fail-closed transport and policy-publication failures are not evidence that
 # the attack was evaluated. Keep these independent of the product's decoder.
 NON_DECISION_REASONS = {
@@ -64,7 +71,10 @@ NON_DECISION_REASONS = {
     "invalid_hook_payload_reference",
 }
 
-_REPLAY_TIMEOUT = 120.0
+#: Longer than any hook timeout Guard registers (Codex's PreToolUse is 125 s), so a
+#: hook that holds the call for an approval answers with its own deny before the lane
+#: gives up on it. A shorter cap scored Codex's bounded approval wait as a hang.
+_REPLAY_TIMEOUT = 150.0
 
 
 def registered_argv(home: Path, expectation: dict[str, Any], config: dict[str, Any]) -> list[str] | None:
@@ -126,12 +136,53 @@ def _decision_from(response: dict[str, Any]) -> tuple[str, str]:
             if isinstance(value, str):
                 reason = hook_output.get("permissionDecisionReason") or hook_output.get("reason") or ""
                 return value.strip().lower(), str(reason)[:200]
+    found: tuple[str, str] | None = None
     for key in ("permission", "policy_action", "decision", "action"):
         value = response.get(key)
         if isinstance(value, str):
             reason = response.get("reason") or response.get("reason_code") or ""
-            return value.strip().lower(), str(reason)[:200]
-    return "unknown", ""
+            found = value.strip().lower(), str(reason)[:200]
+            break
+    if found is None and response.get("continue") is False:
+        # Codex stops the turn on `continue: false`; that is a refusal, not silence.
+        return "deny", str(response.get("stopReason") or "")[:200]
+    if _no_opinion(response, hook_output, found):
+        return "allow", ""
+    return found if found is not None else ("unknown", "")
+
+
+def _no_opinion(response: dict[str, Any], hook_output: Any, found: tuple[str, str] | None) -> bool:
+    """A hook-event envelope that carries no decision, which the harness runs as an allow.
+
+    Codex and zcode read ``hookSpecificOutput`` for a verdict and run the call when it
+    names only the event: Codex for a tool call and a prompt, zcode for a prompt. Guard's
+    own ``policy_action`` may ride beside it, and only a non-blocking one keeps this an
+    allow. A stop (``continue: false``), a top-level ``decision`` and any blocking action
+    stay what they say.
+    """
+
+    if not isinstance(hook_output, dict) or not isinstance(hook_output.get("hookEventName"), str):
+        return False
+    if response.get("continue") is False or "decision" in response:
+        return False
+    if found is None:
+        return True
+    return found[0] in _QUIET_POLICY_ACTIONS
+
+
+def envelope_shape(response: dict[str, Any]) -> list[str]:
+    """The field names of an envelope this lane could not read plainly, never their values.
+
+    An ``unknown`` or ``warn`` verdict does not say what the harness does with it. The names show
+    whether the hook answered in a shape the harness itself treats as a quiet allow or
+    printed something else, without copying reasons or paths into the evidence.
+    """
+
+    shape = sorted(str(key) for key in response)
+    hook_output = response.get("hookSpecificOutput")
+    if isinstance(hook_output, dict):
+        shape.extend(sorted(f"hookSpecificOutput.{key}" for key in hook_output))
+    return shape
 
 
 def verdict(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
@@ -156,9 +207,19 @@ def verdict(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
         reason = (completed.stderr or "").strip()[-200:]
     else:
         decision, reason = _decision_from(response)
+        if (
+            decision == "allow"
+            and completed.returncode
+            and _no_opinion(response, response.get("hookSpecificOutput"), None)
+        ):
+            # Harnesses read a non-zero exit (Codex and Claude Code block on 2) before an
+            # event-only envelope, so a hook that names its event and then fails is no allow.
+            decision, reason = "unknown", (completed.stderr or "").strip()[-200:]
     result = {"decision": decision, "reason": reason, "exit_code": completed.returncode}
     if response is not None and isinstance(response.get("reason_code"), str):
         result["reason_code"] = response["reason_code"]
+    if response is not None and decision not in ALLOW_DECISIONS | _DENY_DECISIONS:
+        result["envelope_shape"] = envelope_shape(response)
     return result
 
 

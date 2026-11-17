@@ -211,7 +211,7 @@ def test_sqlite_loss_recovery_retains_native_publication_floor(delivery, tmp_pat
 def test_db_loss_and_missing_release_cannot_fall_back_to_legacy_controls(protected, monkeypatch):
     import sqlite3
 
-    from codex_plugin_scanner.guard.daemon import extension_control_prepared as candidates
+    from codex_plugin_scanner.guard.extension_controls import extension_control_prepared as candidates
 
     protected._connect = lambda: sqlite3.connect(":memory:")
     monkeypatch.setattr(candidates, "load_installed_bundle", lambda: None)

@@ -311,7 +311,7 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
 
 
 def _dashboard_smoke() -> dict[str, object]:
-    import codex_plugin_scanner.guard.daemon.server as server
+    import codex_plugin_scanner.guard.routes.request_handler as server
 
     static_root = Path(server.__file__).resolve().with_name("static")
     index = static_root / "index.html"

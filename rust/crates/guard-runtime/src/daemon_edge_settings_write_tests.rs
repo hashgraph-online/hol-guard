@@ -124,21 +124,19 @@ fn a_payload_without_settings_names_the_route_error() {
 }
 
 #[test]
-fn changes_the_edge_cannot_finish_go_to_the_daemon_untouched() {
+fn an_unset_gate_without_a_resident_still_refuses_unentitled_sync() {
     let edge = edge("relay", "mode = \"prompt\"\n");
-    for settings in [
-        json!({"approval_gate": {"enabled": true}}),
-        json!({"context_assistance": {"enabled": false}}),
-        json!({"sync": true}),
-        // No resident answered the gate check for an unset home.
-        json!({"protection_posture": "watch"}),
-    ] {
-        assert_eq!(
-            post(&edge, json!({"settings": settings}), "invalid_settings"),
-            None,
-            "{settings}"
-        );
-    }
+    let answer = post(
+        &edge,
+        json!({"settings": {"sync": true}}),
+        "invalid_settings",
+    );
+    assert_eq!(
+        answer
+            .as_ref()
+            .map(|(status, body)| (*status, body["error"].clone())),
+        Some((400, json!("invalid_settings")))
+    );
     let kept = std::fs::read_to_string(edge.home.join("config.toml")).unwrap();
     assert_eq!(kept, "mode = \"prompt\"\n");
 }
@@ -221,4 +219,21 @@ fn truthiness_matches_python() {
     ] {
         assert!(truthy(&value), "{value}");
     }
+}
+
+#[test]
+fn only_a_cigar_change_or_a_reset_hands_settings_to_the_native_service() {
+    let edge = edge("cigar", "");
+    let cigar = entries(json!({"context_assistance": {"enabled": false}, "mode": "observe"}));
+    assert!(hands_off_to_context_assistance(&cigar));
+    assert!(!hands_off_to_context_assistance(&entries(
+        json!({"mode": "observe"})
+    )));
+    let previous = Loaded::read(&edge.home).unwrap();
+    HANDOFFS.with(|handoffs| handoffs.borrow_mut().clear());
+    after_write(&edge.config, &edge.reads, &previous, None, false);
+    assert!(HANDOFFS.with(|handoffs| handoffs.borrow().is_empty()));
+    after_write(&edge.config, &edge.reads, &previous, None, true);
+    let handed = HANDOFFS.with(|handoffs| handoffs.borrow().clone());
+    assert_eq!(handed, vec![edge.home.clone()]);
 }

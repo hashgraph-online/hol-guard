@@ -186,6 +186,45 @@ export function getRecoveryCapabilities(options?: {
   return { kind: "fallback", installMode: resolvedInstallMode, reason };
 }
 
+export const DESKTOP_WINDOW_RECOVERY_MESSAGE =
+  "The HOL Guard recovery screen is not reachable from this page. Use the HOL Guard icon instead.";
+
+/**
+ * The page carries the `desktop_embed` hint, so it is most likely the HOL
+ * Guard Desktop window, and Desktop did not inject its recovery bridge. The
+ * browser-tab steps ("Open HOL Guard Desktop") would point back to this same
+ * window, so these steps use the HOL Guard icon instead.
+ *
+ * The hint is only a URL parameter, and a browser tab can carry it too, so
+ * the copy holds in both places: the icon works from either, and the last
+ * step covers a Desktop that is not running. The hint changes copy only; it
+ * never grants a recovery bridge.
+ */
+export function recoveryRunsInDesktopWindow(capability: RecoveryCapabilityState): boolean {
+  if (capability.kind !== "fallback" || capability.reason !== "bridge_missing") return false;
+  if (capability.installMode !== "desktop-bundled" && capability.installMode !== "desktop-external") return false;
+  try {
+    return dashboardEmbedsInDesktop();
+  } catch {
+    return false;
+  }
+}
+
+export function resolveDesktopWindowRecoveryInstructions(): RecoveryInstructions {
+  return {
+    installMode: "desktop-bundled",
+    title: "Restart Guard from the HOL Guard icon",
+    body: "Guard cannot be restarted from this page. The HOL Guard icon in the system tray or menu bar can restart it.",
+    steps: [
+      "Open the HOL Guard icon in the system tray or menu bar and choose Troubleshoot Guard.",
+      "Choose Restart Guard, then return here and choose Retry connection.",
+      "If the restart does not help, quit HOL Guard from the icon, then open it again from your applications menu.",
+      "If there is no HOL Guard icon, HOL Guard is not running. Open it from your applications menu.",
+    ],
+    command: null,
+  };
+}
+
 export function resolveRecoveryInstructions(installMode: RecoveryInstallMode): RecoveryInstructions {
   switch (installMode) {
     case "cli":

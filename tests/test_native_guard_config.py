@@ -127,8 +127,11 @@ def test_concurrent_first_loads_share_one_native_process(tmp_path: Path, monkeyp
     real_spawn = native_guard_config._spawn
 
     def slow_spawn(request_text: str, *args: object) -> dict[str, object]:
-        calls.append(request_text)
-        time.sleep(0.2)
+        # A background thread left by an earlier test on this worker can load its
+        # own Guard home through the same patched spawn; count only this test's.
+        if json.loads(request_text)["guard_home"] == str(tmp_path):
+            calls.append(request_text)
+            time.sleep(0.2)
         return real_spawn(request_text, *args)
 
     monkeypatch.setattr(native_guard_config, "_spawn", slow_spawn)

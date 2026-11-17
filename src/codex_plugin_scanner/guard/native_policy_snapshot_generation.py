@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .native_command_control_binding import capture_native_command_control_binding
 from .native_policy_effective import effective_native_policy_v3
@@ -59,6 +59,90 @@ def _validate_snapshot_request_v3(
     return requested_issued_at_ms, requested_expires_at_ms
 
 
+def _snapshot_request_v3(
+    *,
+    config: GuardConfig | Mapping[str, object],
+    guard_home: Path,
+    runtime_identity: str,
+    rule_digest: str,
+    policy_integrity_key: bytes,
+    issued_at_ms: int | None,
+    expires_at_ms: int | None,
+    deadline_monotonic: float,
+    renew_after_generation: int | None,
+    command_extensions: Mapping[str, object] | None,
+    business_policy: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """Compose the materialize request; the caller holds the business deadline.
+
+    A non-business publication provisions the verifier key first. A business
+    declaration provisions it only once the runtime has accepted its content.
+    """
+
+    from . import native_policy_snapshot
+    from .native_policy_snapshot_business_bridge import capture_business_binding, require_native_snapshot_runtime
+
+    issued, expires = _validate_snapshot_request_v3(
+        runtime_identity,
+        rule_digest,
+        issued_at_ms,
+        expires_at_ms,
+        renew_after_generation,
+    )
+    if business_policy is not None:
+        business_policy = capture_business_binding(business_policy)
+    verifier_key = derive_native_policy_verifier_key(policy_integrity_key)
+    if business_policy is None:
+        provision_native_policy_verifier_key(guard_home, policy_integrity_key)
+    binding = capture_native_command_control_binding(command_extensions) if command_extensions is not None else None
+    # Refuse on the selected resident's availability before any composer
+    # spawn, so a missing consumer keeps its specific reason.
+    require_native_snapshot_runtime(business=business_policy is not None)
+    effective_policy = effective_native_policy_v3(config, deadline_monotonic=deadline_monotonic)
+    raw_mode = _config_value(config, "mode", "prompt")
+    if not isinstance(raw_mode, str) or raw_mode not in _VALID_INPUT_MODES:
+        raise NativePolicySnapshotError("native_policy_snapshot_mode_invalid")
+    mode = "observe" if raw_mode == "observe" or effective_policy["protection_posture"] == "watch" else "enforce"
+    native_policy_snapshot._private_guard_home(guard_home)
+    native_policy_snapshot._runtime_state_directory(guard_home)
+    request: dict[str, object] = {
+        "schema": "guard-native-policy-materialize.v1",
+        "version": 1,
+        "verifier_key": list(verifier_key),
+        "guard_home": str(guard_home),
+        "runtime_identity": runtime_identity,
+        "rule_digest": rule_digest,
+        "mode": mode,
+        "scope_contract": {
+            "schema": "guard-native-scope.v1",
+            "kind": "guard-home",
+            "scope_digest": _scope_digest_v3(guard_home),
+            "workspace_binding": "request-source",
+        },
+        "effective_policy": effective_policy,
+        "issued_at_ms": issued,
+        "expires_at_ms": expires,
+        "renew_after_generation": renew_after_generation,
+    }
+    if binding is not None:
+        request["command_extensions"] = binding
+    if business_policy is not None:
+        request["business_policy"] = business_policy
+    return request
+
+
+def _clear_request_key(request: dict[str, object]) -> None:
+    """Drop the request's verifier key on every success and failure path.
+
+    CPython's JSON and subprocess copies cannot be wiped; this drops the
+    owned reference only.
+    """
+
+    key = request.pop("verifier_key", None)
+    if isinstance(key, list):
+        key.clear()
+
+
 def native_policy_snapshot_v3(
     *,
     config: GuardConfig | Mapping[str, object],
@@ -79,13 +163,10 @@ def native_policy_snapshot_v3(
     allowing retries to reuse a previously materialized renewal candidate.
     """
 
-    from . import native_policy_snapshot
     from .native_policy_snapshot_business_bridge import (
         begin_business_deadline,
-        capture_business_binding,
         end_business_deadline,
         materialize_native_snapshot,
-        require_native_snapshot_runtime,
     )
 
     if deadline_monotonic is None:
@@ -94,55 +175,22 @@ def native_policy_snapshot_v3(
         # a fresh native budget per call.
         deadline_monotonic = time.monotonic() + 3 * BUSINESS_NATIVE_TIMEOUT_SECONDS
     deadline_token = begin_business_deadline(deadline_monotonic)
-    verifier_key: bytes | None = None
     request: dict[str, object] = {}
     try:
-        issued, expires = _validate_snapshot_request_v3(
-            runtime_identity,
-            rule_digest,
-            issued_at_ms,
-            expires_at_ms,
-            renew_after_generation,
+        request = _snapshot_request_v3(
+            config=config,
+            guard_home=guard_home,
+            runtime_identity=runtime_identity,
+            rule_digest=rule_digest,
+            policy_integrity_key=policy_integrity_key,
+            issued_at_ms=issued_at_ms,
+            expires_at_ms=expires_at_ms,
+            deadline_monotonic=deadline_monotonic,
+            renew_after_generation=renew_after_generation,
+            command_extensions=command_extensions,
+            business_policy=business_policy,
         )
-        if business_policy is not None:
-            business_policy = capture_business_binding(business_policy)
-        verifier_key = derive_native_policy_verifier_key(policy_integrity_key)
-        if business_policy is None:
-            provision_native_policy_verifier_key(guard_home, policy_integrity_key)
-        binding = capture_native_command_control_binding(command_extensions) if command_extensions is not None else None
-        # Refuse on the selected resident's availability before any composer
-        # spawn, so a missing consumer keeps its specific reason.
-        require_native_snapshot_runtime(business=business_policy is not None)
-        effective_policy = effective_native_policy_v3(config, deadline_monotonic=deadline_monotonic)
-        raw_mode = _config_value(config, "mode", "prompt")
-        if not isinstance(raw_mode, str) or raw_mode not in _VALID_INPUT_MODES:
-            raise NativePolicySnapshotError("native_policy_snapshot_mode_invalid")
-        mode = "observe" if raw_mode == "observe" or effective_policy["protection_posture"] == "watch" else "enforce"
-        native_policy_snapshot._private_guard_home(guard_home)
-        native_policy_snapshot._runtime_state_directory(guard_home)
-        request = {
-            "schema": "guard-native-policy-materialize.v1",
-            "version": 1,
-            "verifier_key": list(verifier_key),
-            "guard_home": str(guard_home),
-            "runtime_identity": runtime_identity,
-            "rule_digest": rule_digest,
-            "mode": mode,
-            "scope_contract": {
-                "schema": "guard-native-scope.v1",
-                "kind": "guard-home",
-                "scope_digest": _scope_digest_v3(guard_home),
-                "workspace_binding": "request-source",
-            },
-            "effective_policy": effective_policy,
-            "issued_at_ms": issued,
-            "expires_at_ms": expires,
-            "renew_after_generation": renew_after_generation,
-        }
-        if binding is not None:
-            request["command_extensions"] = binding
-        if business_policy is not None:
-            request["business_policy"] = business_policy
+        verifier_key = bytes(cast(list[int], request["verifier_key"]))
         snapshot = materialize_native_snapshot(request)
         if not snapshot_mac_matches_v3(snapshot, verifier_key):
             raise NativePolicySnapshotError("native_policy_snapshot_cache_integrity_invalid")
@@ -155,11 +203,47 @@ def native_policy_snapshot_v3(
         # The caller's master is an ephemeral input. Clear both local
         # references on every success and failure path; snapshots contain
         # only the purpose-specific verifier-derived key id and MAC.
-        # CPython's JSON/subprocess copies cannot be wiped; drop owned
-        # references only.
-        key = request.pop("verifier_key", None)
-        if isinstance(key, list):
-            key.clear()
+        _clear_request_key(request)
         verifier_key = None
+        policy_integrity_key = b""
+        end_business_deadline(deadline_token)
+
+
+def native_policy_snapshot_publish_request_v3(
+    *,
+    config: GuardConfig | Mapping[str, object],
+    guard_home: Path,
+    runtime_identity: str,
+    rule_digest: str,
+    policy_integrity_key: bytes,
+    issued_at_ms: int,
+    deadline_monotonic: float,
+    renew_after_generation: int | None,
+    command_extensions: Mapping[str, object] | None,
+    business_policy: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """Compose the request the native publisher materializes and pushes.
+
+    The caller clears the request's key once the runtime has read it.
+    """
+
+    from .native_policy_snapshot_business_bridge import begin_business_deadline, end_business_deadline
+
+    deadline_token = begin_business_deadline(deadline_monotonic)
+    try:
+        return _snapshot_request_v3(
+            config=config,
+            guard_home=guard_home,
+            runtime_identity=runtime_identity,
+            rule_digest=rule_digest,
+            policy_integrity_key=policy_integrity_key,
+            issued_at_ms=issued_at_ms,
+            expires_at_ms=None,
+            deadline_monotonic=deadline_monotonic,
+            renew_after_generation=renew_after_generation,
+            command_extensions=command_extensions,
+            business_policy=business_policy,
+        )
+    finally:
         policy_integrity_key = b""
         end_business_deadline(deadline_token)

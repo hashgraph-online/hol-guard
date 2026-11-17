@@ -167,7 +167,7 @@ def test_large_output_wire_encoding_is_lossless_and_keeps_the_callers_deadline(m
 
 
 def test_unexpected_binding_recheck_logs_only_exception_class(caplog):
-    from codex_plugin_scanner.guard.daemon import hook_worker_structured as structured
+    from codex_plugin_scanner.guard.hook_review import hook_worker_structured as structured
 
     def recheck():
         raise LookupError("private payload must never be logged")
@@ -180,7 +180,7 @@ def test_unexpected_binding_recheck_logs_only_exception_class(caplog):
 
 
 def test_harness_presentation_is_available_without_native_runtime(monkeypatch):
-    from codex_plugin_scanner.guard.daemon import hook_worker_structured as structured
+    from codex_plugin_scanner.guard.hook_review import hook_worker_structured as structured
 
     def unavailable(*args, **kwargs):
         raise client.NativeContentSensitivityError("offline")
@@ -191,7 +191,7 @@ def test_harness_presentation_is_available_without_native_runtime(monkeypatch):
 
 
 def test_expired_mediation_projects_transport_failure_without_opening_a_client(monkeypatch):
-    from codex_plugin_scanner.guard.daemon import hook_worker_structured as structured
+    from codex_plugin_scanner.guard.hook_review import hook_worker_structured as structured
 
     calls = _resident(monkeypatch)
     response = {"decision": "allow", "structured_content_mediation": {"action": "forward"}}

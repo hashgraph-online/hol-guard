@@ -204,8 +204,13 @@ impl ListFilters {
             "extension_id": self.extension_id,
             "rule_id": self.rule_id,
             "occurred_from": self.occurred_from.and_then(midnight),
-            "occurred_until": self.occurred_through.and_then(|day| midnight(day + 1)),
-            "until_inclusive": false,
+            "occurred_until": match self.occurred_through {
+                Some(day) if day == days_from_civil(9999, 12, 31) => {
+                    Some("9999-12-31T23:59:59.999999+00:00".to_owned())
+                }
+                through => through.and_then(|day| midnight(day + 1)),
+            },
+            "until_inclusive": self.occurred_through == Some(days_from_civil(9999, 12, 31)),
         })
     }
 }
@@ -229,10 +234,6 @@ fn list_query(query: &str, token: &[u8]) -> Parsed<(ListFilters, Option<(String,
         values.remove("occurred_through"),
         "invalid_occurred_through"
     ));
-    // `date.max` reads as an inclusive bound the edge does not reproduce.
-    if occurred_through == Some(days_from_civil(9999, 12, 31)) {
-        return None;
-    }
     let filters = ListFilters {
         limit,
         harness: values.remove("harness"),
@@ -330,17 +331,15 @@ fn single_values(
     Some(Ok(values))
 }
 
-/// `_bounded_int`: plain decimal text only; any other spelling goes to the
-/// daemon, whose `int()` reads more forms than the edge reproduces.
+/// `_bounded_int`: `int(value)` for ASCII text — surrounding whitespace, a
+/// sign, and single underscores between digits — or the daemon's
+/// `invalid_integer`. Other text goes to the daemon, whose `int()` also reads
+/// non-ASCII digits.
 fn bounded_int(value: Option<String>, default: i64) -> Parsed<i64> {
     let Some(value) = value else {
         return Some(Ok(default));
     };
-    let digits = value.strip_prefix('-').unwrap_or(&value);
-    if digits.is_empty() || digits.len() > 18 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
-    }
-    Some(Ok(value.parse().ok()?))
+    Some(crate::daemon_edge::http::python_int(&value).ok_or("invalid_integer"))
 }
 
 /// `_optional_date`: the canonical `YYYY-MM-DD` spelling of a real date, as
@@ -443,7 +442,9 @@ fn midnight(days: i64) -> Option<String> {
 
 #[path = "daemon_edge_activity_cursor.rs"]
 mod cursor;
+#[path = "daemon_edge_activity_extensions.rs"]
+pub(super) mod extensions;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_activity_tests.rs"]
 mod tests;

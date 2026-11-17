@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.vericto-proxy",
+  "version": "1.0.0",
+  "name": "Vericto Proxy MCP",
+  "description": "Database guardrails for AI agents. vericto-proxy mcp is a local stdio MCP server that gives an agent read-only PostgreSQL access without a database credential: each statement is checked against Vericto rules before it runs, then runs read-only in a transaction that always rolls back, with row, size and time caps. execute_sql and describe_schema return rows and schema to the agent; check_sql evaluates locally and whoami reports the setup. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "com.vericto",
+    "displayName": "Vericto",
+    "url": "https://vericto.com"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#090B17"
+  },
+  "homepage": "https://github.com/vericto/vericto-proxy/blob/main/docs/MCP.md",
+  "license": "AGPL-3.0-only",
+  "launch": {
+    "kind": "direct-command",
+    "command": "vericto-proxy"
+  },
+  "riskClasses": [
+    "external-database-read",
+    "external-shared-state-write"
+  ],
+  "tools": [
+    {
+      "name": "execute_sql",
+      "state": "review"
+    },
+    {
+      "name": "describe_schema",
+      "state": "review"
+    },
+    {
+      "name": "check_sql",
+      "state": "review"
+    },
+    {
+      "name": "whoami",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/vericto/vericto-proxy",
+    "https://github.com/vericto/vericto-proxy/blob/main/docs/MCP.md",
+    "https://github.com/vericto/vericto-proxy/blob/main/src/mcp/tools.rs",
+    "https://hub.docker.com/r/vericto/vericto-proxy",
+    "https://vericto.com/docs/mcp"
+  ],
+  "saferAlternatives": [
+    "Call check_sql before execute_sql: it evaluates the statement locally and returns findings and suggested fixes without running anything on the database.",
+    "Give the server a database role with read access only to the tables the agent needs; describe_schema then shows only what that role may read.",
+    "Keep every other database credential out of the agent's environment; whoami warns when one is visible, and what is checked is what runs only without it.",
+    "Link the server to a Vericto workspace for custom rules and sensitive-column masking; until its signed rules are in force execute_sql answers NOT_READY."
+  ]
+}

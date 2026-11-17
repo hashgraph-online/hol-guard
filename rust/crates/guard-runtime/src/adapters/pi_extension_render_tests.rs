@@ -142,3 +142,15 @@ fn a_null_native_hook_runtime_renders() {
     args["native_hook_runtime"] = Value::Null;
     assert!(source(&args).contains("const GUARD_NATIVE_HOOK_RUNTIME: string | null = null;"));
 }
+
+#[test]
+fn display_name_cannot_break_generated_javascript() {
+    let mut args = case_args("active_pi_posix");
+    args["display_name"] = json!("Pi'; throw new Error(\"injected\"); \" ` ${process.env.PWN}");
+    let rendered = source(&args);
+    assert!(!rendered.contains("Pi'; throw new Error"));
+    assert!(rendered.contains("Pi\\'"));
+    assert!(rendered.contains("\\\""));
+    assert!(rendered.contains("\\`"));
+    assert!(rendered.contains("\\${process.env.PWN}"));
+}

@@ -8,7 +8,7 @@ import pytest
 
 HEAVY_MODULES = (
     "codex_plugin_scanner.guard.adapters.claude_code",
-    "codex_plugin_scanner.guard.daemon.manager",
+    "codex_plugin_scanner.guard.native_daemon_manage",
     "codex_plugin_scanner.guard.native_runtime",
     "codex_plugin_scanner.guard.native_context",
     "codex_plugin_scanner.guard.config",
@@ -16,11 +16,7 @@ HEAVY_MODULES = (
 )
 
 
-BRIDGES = (
-    "claude_daemon_hook_bridge",
-    "codex_daemon_hook_bridge",
-    "bounded_cli_hook_bridge",
-)
+BRIDGES = ("bounded_cli_hook_bridge",)
 
 
 @pytest.mark.parametrize("bridge", BRIDGES)

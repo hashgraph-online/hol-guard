@@ -23,7 +23,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.append(str(_REPO_ROOT))
 
 import codex_plugin_scanner
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.native_resident_client import (
     close_native_residents,
     native_resident_client_failure_code,

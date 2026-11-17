@@ -12,6 +12,7 @@
           "prompt",
           "mcp_tool",
           "file_read",
+          "file_write",
           "tool_result"
         ],
         "native_approval": true,

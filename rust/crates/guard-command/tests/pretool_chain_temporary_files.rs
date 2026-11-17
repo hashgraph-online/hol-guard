@@ -125,7 +125,8 @@ fn temporary_files_keep_link_sink_and_destination_boundaries() {
         format!("echo hi > {scratch}/link.ts; cat src/a.ts"),
         format!("cat {scratch}/.env"),
         format!("wc -l {scratch}/id_rsa"),
-        format!("cat {scratch}/missing/notes.txt"),
+        format!("mkdir -p {scratch}/missing; cat {scratch}/missing/notes.txt"),
+        format!("ln -s {home}/.ssh/id_rsa {scratch}/missing; cat {scratch}/missing/notes.txt"),
         format!("printf x > {scratch}/./p.ts; cp {scratch}/./p.ts src/d.ts"),
         // A chain that could create a link or change directory first.
         format!("ln -s {home}/.ssh/id_rsa {scratch}/k.txt; cat {scratch}/k.txt"),
@@ -136,6 +137,17 @@ fn temporary_files_keep_link_sink_and_destination_boundaries() {
     ] {
         assert!(!permitted(&fixture, &command), "{command}");
     }
+}
+
+/// A read of an absolute path under a parent that is not there prints the
+/// error a workspace-relative name already prints, as long as no step of the
+/// command can create that parent or a link in its place first.
+#[test]
+fn a_read_under_a_missing_parent_reads_nothing() {
+    let fixture = fixture("missing-parent");
+    let scratch = fixture.scratch.display();
+    let command = format!("cat {scratch}/missing/notes.txt");
+    assert!(permitted(&fixture, &command), "{command}");
 }
 
 /// A readable file copied into a chain-local temporary file may be printed or

@@ -52,28 +52,6 @@ def collapse_durable_runtimes(guard_home: Path) -> dict[str, object] | None:
     return answer if answer is not None and _valid_report(answer) else None
 
 
-def with_durable_runtime_collapse(step: dict[str, object], guard_home: Path) -> dict[str, object]:
-    """``step`` with this pass's collapse report attached.
-
-    A failed or skipped collapse never changes the step's status: the copies
-    it would have shared stay as they are and still launch.
-    """
-
-    try:
-        report = collapse_durable_runtimes(guard_home)
-    except Exception:
-        report = None
-    if report is None:
-        return step
-    folded = {**step, "durable_runtimes": report}
-    collapsed = report["collapsed"]
-    if collapsed and step.get("status") in {"ok", "changed"}:
-        shared = f"Shared one file among {collapsed} older durable runtime cop{'y' if collapsed == 1 else 'ies'}."
-        folded["status"] = "changed"
-        folded["summary"] = shared if step["status"] == "ok" else f"{step['summary']} {shared}"
-    return folded
-
-
 def _valid_report(answer: dict[str, object]) -> bool:
     counts = (answer.get("collapsed"), answer.get("reclaimed_bytes"))
     errors = answer.get("errors")
@@ -89,4 +67,4 @@ def _valid_report(answer: dict[str, object]) -> bool:
     )
 
 
-__all__ = ["collapse_durable_runtimes", "with_durable_runtime_collapse"]
+__all__ = ["collapse_durable_runtimes"]

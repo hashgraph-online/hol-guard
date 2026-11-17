@@ -24,11 +24,13 @@ use crate::context_assistance_engine::screened_texts;
 use crate::git_execution_safety_binary::resolve_trusted_git;
 use crate::git_execution_safety_config::Environment;
 use crate::git_execution_safety_probe::Prober;
+use asked::{about_changes, about_others};
 use labels::{commits, render, uncommitted, Commit, Named, Since};
 use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
+pub(super) use used::Changed;
 
 /// The most this note adds to a prompt, commit diffs included.
 const BUDGET: usize = 2_000;
@@ -52,42 +54,6 @@ const DIFF: [&str; 7] = [
     "--dst-prefix=b/",
     "--ignore-submodules=all",
 ];
-const WORDS: &str =
-    "change changed changes pushed teammate review diff broke commit commits committed recently";
-/// Words for a prompt about a change the agent did not make, or one that
-/// broke something: then a commit's own diff is worth showing.
-const OTHERS: [&str; 5] = ["teammate", "pushed", "broke", "broken", "failing"];
-
-/// Words that, just before a change word, say there is none to look at.
-const NOT: [&str; 5] = ["no", "not", "without", "don", "dont"];
-
-/// Whether `prompt` asks about what changed.
-pub(super) fn about_changes(prompt: &str) -> bool {
-    let lower = prompt.to_lowercase();
-    let words: Vec<&str> = lower
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|word| !word.is_empty())
-        .collect();
-    // "no code changes" or "don't change anything" rules changes out.
-    let denied = |at: usize| {
-        words[at.saturating_sub(2)..at]
-            .iter()
-            .any(|word| NOT.contains(word))
-    };
-    (words.iter().enumerate()).any(|(at, word)| {
-        (WORDS.split(' ').any(|known| known == *word) || word.starts_with("regress")) && !denied(at)
-    }) || words.windows(2).any(|pair| pair == ["this", "session"])
-}
-
-/// Whether `prompt` is about someone else's change or a failure.
-pub(super) fn about_others(prompt: &str) -> bool {
-    prompt
-        .to_lowercase()
-        .split(|c: char| !c.is_alphanumeric())
-        .any(|word| {
-            OTHERS.contains(&word) || word.starts_with("fail") || word.starts_with("regress")
-        })
-}
 
 /// Records the commit `session` started at, on its first prompt, and for a
 /// prompt about changes returns what changed since then. A prompt about
@@ -102,7 +68,7 @@ pub(super) fn since_start(
     session: Option<&Session>,
     prompt: &str,
     until: Instant,
-) -> Option<String> {
+) -> Option<Changed> {
     let mut git = None;
     let mut base = session.and_then(recorded);
     if let (Some(session), None) = (session, &base) {
@@ -119,9 +85,10 @@ pub(super) fn since_start(
         (None, Some(base)) => Since::Start(base),
         (None, None) => Since::Nothing,
     };
-    changes(&git, since, about_others(prompt), until, |paths| {
+    let changed = changes(&git, since, about_others(prompt), until, |paths| {
         screened_texts(guard_home, root, app, paths, paths.len(), until)
-    })
+    })?;
+    Some(fix::led(changed, parent.is_some(), prompt, root, app))
 }
 
 /// A trusted Git, run in one project with a bare environment.
@@ -352,7 +319,7 @@ pub(super) fn changes(
     show_diffs: bool,
     until: Instant,
     screen: impl FnOnce(&[String]) -> Vec<(String, String)>,
-) -> Option<String> {
+) -> Option<Changed> {
     let allowed = allowed(git, until);
     if allowed == Allowed::Nothing {
         return None;
@@ -441,14 +408,16 @@ pub(super) fn changes(
     }
     let pending = pending.map(|names| Named::new(&names, &readable));
     let back = (!against.is_empty() && !back.is_empty()).then(|| Named::new(&back, &readable));
-    render(
+    let text = render(
         since,
         &changed,
         &texts,
         &listed,
         [pending.as_ref(), back.as_ref()],
         whole.as_ref(),
-    )
+    )?;
+    let names = used::names(&changed, &texts);
+    Some(Changed { text, names })
 }
 
 /// Whether every file `diff` changes is one Guard's read accepted. A file
@@ -480,10 +449,18 @@ fn clean(text: &str) -> bool {
     !scan.budget_exhausted && scan.bytes_scanned == text.len() && scan.matches.is_empty()
 }
 
+#[path = "context_assistance_prompt_changes_asked.rs"]
+mod asked;
 #[path = "context_assistance_prompt_changes_code.rs"]
 mod code;
+#[path = "context_assistance_prompt_changes_fix.rs"]
+mod fix;
 #[path = "context_assistance_prompt_changes_labels.rs"]
 mod labels;
+#[path = "context_assistance_prompt_changes_removed.rs"]
+pub(super) mod removed;
+#[path = "context_assistance_prompt_changes_used.rs"]
+pub(super) mod used;
 
 #[cfg(test)]
 #[path = "context_assistance_prompt_changes_tests.rs"]

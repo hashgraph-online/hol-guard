@@ -1,4 +1,4 @@
-use super::super::http::parse_get;
+use super::super::http::{parse_get, parse_request};
 use super::*;
 use serde_json::json;
 
@@ -163,4 +163,206 @@ fn leaves_every_other_session_to_the_daemon() {
         signed(scoped)
     );
     assert_eq!(allows(&repeated_nonce), None);
+}
+
+fn writes(head: &str) -> bool {
+    let head = format!("{head}\r\n\r\n");
+    let request = parse_request(head.as_bytes()).unwrap();
+    authorize_write(&request, TOKEN).is_some()
+}
+
+fn post_with(claims: &Value, path: &str) -> String {
+    let header = session(claims, TOKEN);
+    format!("POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Guard-Dashboard-Session: {header}")
+}
+
+#[test]
+fn takes_a_dashboard_session_for_the_writes_it_opens() {
+    let path = "/v1/requests/req-1/approve";
+    assert!(session_path("POST", path));
+    assert!(writes(&post_with(&dashboard_claims(), path)));
+    let mut approval_center = dashboard_claims();
+    approval_center["surface"] = json!("approval-center");
+    assert!(writes(&post_with(&approval_center, path)));
+    // A path no session may write stays with the key alone.
+    assert!(!session_path("POST", "/v1/daemon/stop"));
+    assert!(!writes(&post_with(&dashboard_claims(), "/v1/daemon/stop")));
+}
+
+#[test]
+fn writes_as_the_session_verdict_decides() {
+    let path = "/v1/requests/req-1/approve";
+    for (key, value, allowed) in [
+        ("surface", json!("protection-repair"), false),
+        ("surface", json!("package-firewall"), false),
+        ("aud", json!("someone-else"), false),
+        ("expires_at", json!("2000-01-01T00:00:00+00:00"), false),
+    ] {
+        let mut claims = dashboard_claims();
+        claims[key] = value;
+        assert_eq!(writes(&post_with(&claims, path)), allowed, "{key}");
+    }
+    // A session opened from an approval link decides its own request only.
+    for (bound, allowed) in [("req-1", true), ("req-2", false)] {
+        let mut claims = dashboard_claims();
+        claims["surface"] = json!("approval-center");
+        claims["request_id"] = json!(bound);
+        assert_eq!(writes(&post_with(&claims, path)), allowed, "{bound}");
+    }
+    let forged = session(&dashboard_claims(), b"another-daemon");
+    assert!(!writes(&format!(
+        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Guard-Dashboard-Session: {forged}"
+    )));
+    let mut null_bound = dashboard_claims();
+    null_bound["request_id"] = Value::Null;
+    assert!(writes(&post_with(&null_bound, path)));
+}
+
+fn initialize_request(head: &str) -> String {
+    format!("POST /v1/initialize HTTP/1.1\r\nHost: 127.0.0.1\r\n{head}\r\n\r\n")
+}
+
+#[test]
+fn initializes_for_any_allowed_origin_with_sessions_for_the_key_alone() {
+    let initializes = |head: &str| {
+        let head = initialize_request(head);
+        authorize_initialize(&parse_request(head.as_bytes()).unwrap(), TOKEN)
+            .map(|(_, holds_key)| holds_key)
+    };
+    let header = std::str::from_utf8(TOKEN).unwrap();
+    assert_eq!(
+        initializes(&format!("X-Guard-To{}: {header}", "ken")),
+        Some(true)
+    );
+    assert_eq!(initializes("Origin: http://127.0.0.1:5474"), Some(false));
+    // `initialize` is no session path, so a session shows no sessions.
+    assert_eq!(
+        initializes(&format!(
+            "X-Guard-Dashboard-Session: {}",
+            session(&dashboard_claims(), TOKEN)
+        )),
+        Some(false)
+    );
+    assert_eq!(initializes("Origin: https://evil.example"), None);
+}
+
+fn refreshed(claims: &Value, surface: &str) -> Option<Map<String, Value>> {
+    let head = initialize_request(&format!(
+        "X-Guard-Dashboard-Session: {}",
+        session(claims, TOKEN)
+    ));
+    let fresh = refreshed_session(&parse_request(head.as_bytes()).unwrap(), TOKEN, surface)?;
+    let claims = verified_payload(&fresh, TOKEN, now_micros()).expect("signed for the daemon");
+    let order: Vec<&str> = claims.keys().map(String::as_str).collect();
+    let mut expected = vec![
+        "aud",
+        "expires_at",
+        "session_started_at",
+        "surface",
+        "version",
+    ];
+    expected.sort_unstable();
+    let mut sorted = order.clone();
+    sorted.sort_unstable();
+    assert_eq!(sorted, expected);
+    Some(claims)
+}
+
+fn iso(micros: i128) -> String {
+    micros_to_utc_isoformat(i64::try_from(micros).unwrap(), "+00:00").unwrap()
+}
+
+#[test]
+fn refreshes_a_local_session_within_its_week() {
+    let now = now_micros();
+    let mut claims = dashboard_claims();
+    claims["session_started_at"] = json!(iso(now - 3_600_000_000));
+    // A session that expired an hour ago still refreshes.
+    claims["expires_at"] = json!(iso(now - 3_600_000_000));
+    let fresh = refreshed(&claims, "approval-center").expect("refreshed");
+    assert_eq!(fresh["surface"], json!("approval-center"));
+    assert_eq!(fresh["session_started_at"], claims["session_started_at"]);
+    let expires = aware_epoch_micros(fresh["expires_at"].as_str().unwrap()).unwrap();
+    assert!((expires - now - SESSION_TTL_MICROS).abs() < 60_000_000);
+    // A surface the dashboard does not name refreshes as the dashboard.
+    assert_eq!(
+        refreshed(&claims, "cli").unwrap()["surface"],
+        json!("dashboard")
+    );
+    // Repair stays repair, whatever surface initialize names.
+    let mut repair = claims.clone();
+    repair["surface"] = json!("protection-repair");
+    assert_eq!(
+        refreshed(&repair, "dashboard").unwrap()["surface"],
+        json!("protection-repair")
+    );
+    // Near the end of the week, the refreshed session ends with it.
+    let mut late = claims.clone();
+    late["session_started_at"] = json!(iso(now - SESSION_MAX_AGE_MICROS + 600_000_000));
+    let expires = aware_epoch_micros(
+        refreshed(&late, "dashboard").unwrap()["expires_at"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert!((expires - now - 600_000_000).abs() < 60_000_000);
+    // With no start claim, the start is twelve hours before its expiry.
+    let mut unstarted = claims.clone();
+    unstarted
+        .as_object_mut()
+        .unwrap()
+        .remove("session_started_at");
+    let fresh = refreshed(&unstarted, "dashboard").unwrap();
+    assert_eq!(
+        fresh["session_started_at"],
+        json!(iso(now - 3_600_000_000 - SESSION_TTL_MICROS))
+    );
+}
+
+#[test]
+fn refreshes_no_bound_scoped_or_spent_session() {
+    let now = now_micros();
+    let mut claims = dashboard_claims();
+    claims["session_started_at"] = json!(iso(now - 3_600_000_000));
+    let mut bound = claims.clone();
+    bound["request_id"] = json!("req-1");
+    assert!(refreshed(&bound, "dashboard").is_none());
+    let mut scoped = claims.clone();
+    scoped["surface"] = json!("package-firewall");
+    assert!(refreshed(&scoped, "dashboard").is_none());
+    let mut spent = claims.clone();
+    spent["session_started_at"] = json!(iso(now - SESSION_MAX_AGE_MICROS));
+    assert!(refreshed(&spent, "dashboard").is_none());
+    let mut stale = claims;
+    stale["expires_at"] = json!(iso(now - REFRESH_GRACE_MICROS - 60_000_000));
+    assert!(refreshed(&stale, "dashboard").is_none());
+}
+
+#[test]
+fn signs_a_session_as_the_daemon_writes_one() {
+    let fresh = signed_session(TOKEN, "dashboard", 0, "2026-01-01T00:00:00+00:00\u{e9}").unwrap();
+    let payload = fresh.split('.').nth(1).unwrap();
+    let decoded = String::from_utf8(URL_SAFE_NO_PAD.decode(payload).unwrap()).unwrap();
+    assert_eq!(
+        decoded,
+        "{\"aud\":\"guard-local-daemon\",\"version\":\"guard-local-daemon-session.v1\",\"surface\":\"dashboard\",\"expires_at\":\"1970-01-01T00:00:00+00:00\",\"session_started_at\":\"2026-01-01T00:00:00+00:00\\u00e9\"}"
+    );
+}
+
+#[test]
+fn takes_a_local_session_for_session_and_operation_writes() {
+    let writes = |claims: &Value, path: &str| {
+        let head = format!("{}\r\n\r\n", post_with(claims, path));
+        authorize_session_write(&parse_request(head.as_bytes()).unwrap(), TOKEN).is_some()
+    };
+    let mut approval_center = dashboard_claims();
+    approval_center["surface"] = json!("approval-center");
+    assert!(writes(&approval_center, "/v1/sessions/start"));
+    assert!(writes(&dashboard_claims(), "/v1/operations/op-1/status"));
+    let mut repair = dashboard_claims();
+    repair["surface"] = json!("protection-repair");
+    assert!(!writes(&repair, "/v1/sessions/start"));
+    let mut bound = approval_center.clone();
+    bound["request_id"] = json!("req-1");
+    assert!(!writes(&bound, "/v1/sessions/start"));
 }

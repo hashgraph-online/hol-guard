@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.native_local_cli_help_parse import SourceRead
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_source_evidence import script_may_serve_mcp
@@ -152,7 +152,7 @@ def test_a_compiled_program_keeps_the_launch(tmp_path: Path, monkeypatch) -> Non
 def _recognizer(tmp_path: Path, monkeypatch) -> tuple[Path, LocalCliApiService]:
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home", staticmethod(lambda: home))
     return home, LocalCliApiService(store=GuardStore(home))
 
 
@@ -168,7 +168,7 @@ def test_recognize_never_launches_a_script_without_evidence(tmp_path: Path, monk
 def test_a_stored_connection_exempts_only_its_own_launch(tmp_path: Path, monkeypatch) -> None:
     home, service = _recognizer(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers", lambda **_kwargs: []
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers", lambda **_kwargs: []
     )
     identity = UnlistedCliIdentity(
         cli_id="local-cli.mcp-stored",

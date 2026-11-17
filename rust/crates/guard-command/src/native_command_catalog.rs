@@ -374,6 +374,26 @@ impl CommandCatalog {
 /// Load the packaged catalog once, bound to the live native program's digests.
 /// Mismatched digests fail closed — the metadata layer is only valid for the
 /// compiled program it was generated with.
+/// The packaged catalog's extension records as the generated catalog writes
+/// them, after the catalog is bound to the live program. Read-only views
+/// that need the metadata verbatim (the daemon's extension listing) use it.
+pub fn packaged_catalog_records() -> Result<&'static [serde_json::Value], &'static str> {
+    static RECORDS: OnceLock<Result<Vec<serde_json::Value>, &'static str>> = OnceLock::new();
+    RECORDS
+        .get_or_init(|| {
+            packaged_command_catalog()?;
+            let envelope: serde_json::Value = serde_json::from_slice(embedded_catalog_bytes())
+                .map_err(|_| "command_catalog_invalid_json")?;
+            match envelope.get("catalog") {
+                Some(serde_json::Value::Array(records)) => Ok(records.clone()),
+                _ => Err("command_catalog_missing_catalog"),
+            }
+        })
+        .as_ref()
+        .map(Vec::as_slice)
+        .map_err(|error| *error)
+}
+
 pub fn packaged_command_catalog() -> Result<Arc<CommandCatalog>, &'static str> {
     static CATALOG: OnceLock<Result<Arc<CommandCatalog>, &'static str>> = OnceLock::new();
     CATALOG

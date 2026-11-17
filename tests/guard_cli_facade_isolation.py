@@ -22,7 +22,7 @@ def isolate_terminal_block_patches(monkeypatch: Any, unexpected: Callable[..., o
 def restore_cli_facade_approval_hooks() -> None:
     from codex_plugin_scanner.guard.approvals import queue_blocked_approvals, wait_for_approval_requests
     from codex_plugin_scanner.guard.cli.commands_support import _sync_namespace
-    from codex_plugin_scanner.guard.daemon.manager import ensure_guard_daemon
+    from codex_plugin_scanner.guard.native_daemon_manage import ensure_guard_daemon
 
     restored = {
         "ensure_guard_daemon": ensure_guard_daemon,

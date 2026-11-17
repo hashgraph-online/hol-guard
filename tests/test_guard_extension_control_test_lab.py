@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-import codex_plugin_scanner.guard.daemon.extension_control_test_api as test_api
-from codex_plugin_scanner.guard.daemon.extension_control_errors import ExtensionControlApiError
-from codex_plugin_scanner.guard.daemon.extension_control_test_api import (
+import codex_plugin_scanner.guard.extension_controls.extension_control_test_api as test_api
+from codex_plugin_scanner.guard.extension_controls.extension_control_errors import ExtensionControlApiError
+from codex_plugin_scanner.guard.extension_controls.extension_control_test_api import (
     evaluate_extension_control_test,
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import (

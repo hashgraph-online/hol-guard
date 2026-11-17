@@ -15,9 +15,9 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook, commands_hook_native_authority
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool, render_pre_tool_review
-from codex_plugin_scanner.guard.daemon.hook_native_exact_action import review_evidence_parts
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_fail_closed import render_pre_tool, render_pre_tool_review
+from codex_plugin_scanner.guard.hook_review.hook_native_exact_action import review_evidence_parts
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_signed_approval_fixtures import short_signed_link
@@ -151,7 +151,7 @@ def test_native_review_queues_approval_without_escaping_to_cli(
 ) -> None:
     edge = _edge("codex", "PreToolUse", "network")
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **kwargs: with_review_evidence(edge, **kwargs),
     )
     store = GuardStore(tmp_path / "guard-home")
@@ -175,7 +175,7 @@ def test_native_review_queues_approval_without_escaping_to_cli(
         return valid, f"native-review-v4:{'ab' * 32}:ask:review:review:r", token, reason
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.review_evidence_parts",
+        "codex_plugin_scanner.guard.hook_review.hook_native_review_approval.review_evidence_parts",
         evidence,
     )
     worker = HookWorker(store=store)

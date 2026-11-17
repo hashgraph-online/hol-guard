@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool_review
+from codex_plugin_scanner.guard.hook_review.hook_fail_closed import render_pre_tool_review
 
 
 @pytest.fixture

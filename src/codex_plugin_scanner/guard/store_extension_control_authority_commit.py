@@ -56,7 +56,7 @@ class ExtensionControlAuthorityCommitMixin:
             # verification raises instead. There is nothing to admit, but the
             # floor then stays absent and every later pack-lifecycle read
             # fails, so record the absence; a silent return left no trace.
-            from .daemon.background_diagnostics import record_background_event
+            from .runtime_health.background_diagnostics import record_background_event
 
             record_background_event("installed_authority_release_absent", "detail=installed bundle not advertised")
             return

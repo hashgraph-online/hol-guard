@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "mcp.fynk",
+  "tagline": "Official fynk hosted MCP coverage: review before an agent sends contracts for signature or changes who signs.",
+  "summary": "Opt-in HOL Guard coverage for the fynk MCP Server, published by fynk. After local-admin enablement, Guard asks before an agent starts signing (which emails signature invitations to outside signatories), creates a document that may start signing in the same call, moves a document back to review (cancelling signing and invalidating signatures) or straight to done, adds, changes or removes a signatory, deletes account-wide document types, metadata, tags, teams or template parts, replaces or publishes a template, or changes team membership. Reads, searches, drafting and ordinary document edits keep the host's usual handling.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed fynk MCP tools and the surrounding Guard policy; tools fynk adds later inherit host handling until this entry is updated.",
+    "Remote HTTP matching is bound to https://app.fynk.com/mcp when runtime configuration evidence is available; otherwise Guard uses the configured server name only for non-allowing review defaults.",
+    "fynk connectors added through a hosted connector directory may appear under a generated server name and then fall back to Guard's normal handling.",
+    "A publisher profile or badge is not a security certification or an endorsement by HOL."
+  ],
+  "documentationUrl": "https://fynk.com/en/integrations/mcp-server/",
+  "tags": ["mcp", "contracts", "e-signature", "approval"],
+  "contributors": [
+    { "githubId": "62106878", "githubLogin": "wintoniak", "roles": ["author"] }
+  ],
+  "originalContributions": [],
+  "upstream": { "name": "fynk MCP Server", "url": "https://github.com/fynk-com/fynk-mcp-server" }
+}

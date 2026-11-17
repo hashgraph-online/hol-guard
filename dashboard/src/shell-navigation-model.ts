@@ -14,7 +14,7 @@ import {
 } from "react-icons/hi2";
 
 import type { AppView } from "./approval-center-primitives";
-import type { GuardUpdateChannelProof } from "./guard-api";
+import type { GuardUpdateChannelProof, GuardUpdateMode } from "./guard-api";
 import type {
   GuardApprovalGatePublicConfig,
   GuardCloudUserProfile,
@@ -48,6 +48,7 @@ export type ShellNavigationProps = {
   onUpdateGuard?: () => void;
   onReinstallGuard?: () => void;
   onSetUpdateChannel?: (channel: "stable" | "alpha", proof?: GuardUpdateChannelProof) => void | Promise<void>;
+  onSetUpdateMode?: (mode: GuardUpdateMode, proof?: GuardUpdateChannelProof) => void | Promise<void>;
   updatePhase?: GuardUpdatePhase;
   updateError?: string | null;
   approvalGate?: GuardApprovalGatePublicConfig | null;
@@ -83,6 +84,16 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     view: "fleet",
     group: "primary",
     icon: HiMiniShieldCheck,
+  },
+  {
+    href: "/swarm",
+    label: "Swarm",
+    shortLabel: "Swarm",
+    description: "Launch, follow, and direct local agents across projects",
+    view: "swarm",
+    group: "primary",
+    icon: HiMiniSquares2X2,
+    badge: "Alpha",
   },
   {
     href: "/cigar",

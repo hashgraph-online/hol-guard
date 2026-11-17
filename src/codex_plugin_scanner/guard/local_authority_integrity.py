@@ -28,7 +28,8 @@ LOCAL_AUTHORITY_INTEGRITY_UNAVAILABLE = "local_authority_integrity_runtime_unava
 def sign_local_authority_payload(
     payload: Mapping[str, object],
     *,
-    key: bytes,
+    key: bytes | None = None,
+    key_home: str | None = None,
     key_id: str,
     purpose: str,
     signed_at: str,
@@ -36,8 +37,9 @@ def sign_local_authority_payload(
 ) -> dict[str, object]:
     """Sign a local authority payload with a purpose-specific derived key.
 
-    `deadline` (monotonic) bounds the runtime call along with any active hook
-    validation deadline.
+    `key_home` names a Guard home whose Codex hook key the runtime reads
+    itself, in place of `key`. `deadline` (monotonic) bounds the runtime call
+    along with any active hook validation deadline.
     """
 
     answer = _ask(
@@ -45,7 +47,7 @@ def sign_local_authority_payload(
             "op": "sign",
             "payload": _json_object(payload),
             "purpose": purpose,
-            "key_hex": key.hex(),
+            **_key_fields(key, key_home),
             "key_id": key_id,
             "signed_at": signed_at,
         },
@@ -60,7 +62,8 @@ def verify_local_authority_payload(
     payload: Mapping[str, object],
     integrity: Mapping[str, object],
     *,
-    key: bytes | None,
+    key: bytes | None = None,
+    key_home: str | None = None,
     key_id: str | None,
     purpose: str,
 ) -> PolicyIntegrityVerificationResult:
@@ -71,7 +74,7 @@ def verify_local_authority_payload(
             "op": "verify",
             "payload": _json_object(payload),
             "purpose": purpose,
-            "key_hex": None if key is None else key.hex(),
+            **_key_fields(key, key_home),
             "key_id": key_id,
             "integrity": _json_object(integrity),
         }
@@ -93,6 +96,12 @@ def verify_local_authority_payload(
         key_id=_text(answer.get("key_id")),
         message=_text(answer.get("message")),
     )
+
+
+def _key_fields(key: bytes | None, key_home: str | None) -> dict[str, object]:
+    if key_home is not None:
+        return {"key_hex": None, "key_home": key_home}
+    return {"key_hex": None if key is None else key.hex()}
 
 
 def _json_object(value: Mapping[str, object]) -> dict[str, object]:

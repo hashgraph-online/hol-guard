@@ -381,3 +381,63 @@ fn a_walk_that_leaves_a_file_unread_is_not_complete() {
     std::fs::write(root.join("src/data.py"), "old_name = 1\n".repeat(30_000)).unwrap();
     assert!(!read());
 }
+
+/// Tests reach a special method such as `__exit__` through its class, so a
+/// prompt naming the method finds the tests that use the class, and still
+/// finds a test that calls the method on an instance it gets from a fixture.
+#[test]
+fn a_named_special_method_finds_the_tests_of_its_class() {
+    let source = "class callback_iter:\n    def __init__(self, seq, callback):\n        \
+self.seq = seq\n        self.callback = callback\n\n    def __enter__(self):\n        \
+return iter(self.seq)\n\n    def __exit__(self, *args):\n        self.callback()\n        \
+return False\n";
+    let tests = "from pkg.more import callback_iter\n\n\ndef test_callback_runs_when_done():\n    \
+calls = []\n    with callback_iter([1], lambda: calls.append(1)) as items:\n        \
+list(items)\n    assert calls == [1]\n\n\ndef test_exit_on_instance(instance):\n    \
+assert instance.__exit__(None, None, None) is False\n\n\ndef test_other():\n    assert True\n";
+    let (home, _project, root) = super::project_tests::project(
+        super::project_tests::ON,
+        &[("pkg/more.py", source), ("tests/test_more.py", tests)],
+    );
+    let prompt = "Something in callback_iter.__exit__ broke recently, please fix it.";
+    let text = super::project_tests::prompt_map(home.path(), &root, prompt).unwrap();
+    assert!(text.contains("def __exit__"), "{text}");
+    assert!(
+        text.contains("Tests:\ntests/test_more.py")
+            && text.contains("test_callback_runs_when_done")
+            && text.contains("test_exit_on_instance"),
+        "{text}"
+    );
+    assert!(!text.contains("test_other"), "{text}");
+}
+
+/// Three apostrophes inside a one-line string are text, not a docstring, so
+/// the function the prompt names after them is still on the map. Read as a
+/// docstring that never closed, they hid every definition below them, and
+/// the note for "`parse_basic_str` seems busted" showed other code.
+#[test]
+fn a_docstring_mark_inside_a_string_does_not_hide_later_definitions() {
+    let parser = "def parse_multiline_str(src, literal):
+    if literal:
+        end = skip_until(src, \"'''\")
+    else:
+        end = parse_basic_str(src)
+    return end
+
+
+def parse_basic_str(src):
+    return src.strip('\"')
+";
+    let text = map(
+        &super::tests::files(&[("src/_parser.py", parser)]),
+        &super::tests::looking_for(&[("parsebasicstr", true, 1)]),
+        &Asked::default(),
+        super::tests::later(),
+    )
+    .map(|rendered| rendered.text)
+    .unwrap_or_default();
+    assert!(
+        text.contains("def parse_basic_str(src):\n    return src.strip('\"')"),
+        "{text}"
+    );
+}

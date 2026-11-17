@@ -101,10 +101,12 @@ fn takes_the_limit_and_filters_the_daemon_reads() {
 }
 
 #[test]
-fn leaves_what_it_cannot_read_the_same_way_to_the_daemon() {
+fn reads_queries_the_way_the_daemon_does() {
     // The daemon reads a limit it cannot parse as its default.
-    assert!(read(&store(Some(HOME)), "limit=ten").is_none());
-    assert!(read(&store(Some(HOME)), "harness=%zz").is_none());
+    let (_, body) = read(&store(Some(HOME)), "limit=ten").unwrap();
+    assert_eq!(body["total"], json!(3));
+    let (_, body) = read(&store(Some(HOME)), "harness=%zz").unwrap();
+    assert_eq!(body, json!({"items": [], "total": 0}));
     // Without the daemon's home the edge cannot shorten paths as it does.
     assert!(read(&store(None), "").is_none());
 }

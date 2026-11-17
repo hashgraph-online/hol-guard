@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli.commands_hook_native_authority import try_native_hook_authority
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -26,7 +26,7 @@ def test_hook_worker_fails_closed_when_forced_posttool_native_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -47,11 +47,11 @@ def test_hook_worker_fails_closed_when_available_native_posttool_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.native_runtime_status",
         lambda: NativeRuntimeStatus(
             mode="auto",
             available=True,
@@ -83,11 +83,11 @@ def test_hook_worker_fails_closed_when_auto_native_is_unavailable(
         return None
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         _missing_native,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.native_runtime_status",
         lambda: NativeRuntimeStatus(
             mode="auto",
             available=False,
@@ -133,7 +133,7 @@ def test_hook_worker_records_activity_when_auto_native_is_unavailable(
     monkeypatch.delenv("HOL_GUARD_PYTHON_ORACLE", raising=False)
     monkeypatch.delenv("HOL_GUARD_NATIVE_DIAGNOSTIC", raising=False)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     writer = _ActivityWriter()
@@ -157,7 +157,7 @@ def test_cli_auto_posttool_uses_native_worker_not_python_engine(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     result = try_native_hook_authority(

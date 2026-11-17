@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
 from tests.native_review_evidence_support import with_review_evidence
@@ -116,7 +116,7 @@ def _worker(
         return with_review_evidence(rendered, **kwargs)
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         review_raw_hook_native,
     )
     store = GuardStore(tmp_path / "guard-home")
@@ -500,7 +500,7 @@ def test_native_review_retry_is_bound_expiring_and_one_use(
     assert isinstance(request_id, str)
     approved_at = datetime.now(timezone.utc)
     if mutation == "expired":
-        approved_at -= timedelta(minutes=6)
+        approved_at -= timedelta(minutes=61)
     elif mutation == "future":
         approved_at += timedelta(minutes=1)
     assert store.resolve_harness_native_approval_request(

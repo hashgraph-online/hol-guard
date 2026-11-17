@@ -1,0 +1,549 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "intercom",
+    "name": "Intercom",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.intercom.io"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "api"
+    ]
+  },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "intercom"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "intercom.conversations.get",
+      "title": "Read a conversation",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "api.intercom.io",
+          "path": "/conversations/{conversation_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "query": [
+            {
+              "name": "display_as",
+              "value": {
+                "const": "plaintext"
+              }
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 24,
+          "pattern": "^[0-9]{1,24}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "thread"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "state",
+            "value": {
+              "from": "state"
+            }
+          },
+          {
+            "name": "title",
+            "value": {
+              "from": "title"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "updated_at",
+            "value": {
+              "from": "updated_at"
+            }
+          },
+          {
+            "name": "errors",
+            "value": {
+              "list": {
+                "from": "errors",
+                "maxItems": 20,
+                "fields": [
+                  {
+                    "name": "code",
+                    "value": {
+                      "from": "code"
+                    }
+                  },
+                  {
+                    "name": "message",
+                    "value": {
+                      "from": "message"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "api"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "reads one conversation",
+          "kind": "safe",
+          "arguments": {
+            "conversation_id": "147"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://api.intercom.io/conversations/147?display_as=plaintext"
+            },
+            "response": "{\"type\":\"conversation\",\"id\":\"147\",\"state\":\"open\",\"title\":\"Refund question\",\"updated_at\":1762000000}",
+            "projection": {
+              "id": "147",
+              "state": "open",
+              "title": "Refund question",
+              "updated_at": 1762000000
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a conversation id with a path",
+          "kind": "risky",
+          "arguments": {
+            "conversation_id": "147/parts"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "intercom.conversations.add_note",
+      "title": "Add an internal note to a conversation",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.intercom.io",
+          "path": "/conversations/{conversation_id}/reply",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "message_type",
+                "value": {
+                  "const": "note"
+                }
+              },
+              {
+                "name": "type",
+                "value": {
+                  "const": "admin"
+                }
+              },
+              {
+                "name": "admin_id",
+                "value": {
+                  "arg": "admin_id"
+                }
+              },
+              {
+                "name": "body",
+                "value": {
+                  "arg": "body"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 24,
+          "pattern": "^[0-9]{1,24}$"
+        },
+        "admin_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 24,
+          "pattern": "^[0-9]{1,24}$"
+        },
+        "body": {
+          "type": "string",
+          "required": true,
+          "maxLength": 8000
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "reversibility": {
+          "const": "permanent"
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "state",
+            "value": {
+              "from": "state"
+            }
+          },
+          {
+            "name": "errors",
+            "value": {
+              "list": {
+                "from": "errors",
+                "maxItems": 20,
+                "fields": [
+                  {
+                    "name": "code",
+                    "value": {
+                      "from": "code"
+                    }
+                  },
+                  {
+                    "name": "message",
+                    "value": {
+                      "from": "message"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "api"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "adds a note",
+          "kind": "safe",
+          "arguments": {
+            "conversation_id": "147",
+            "admin_id": "991",
+            "body": "Escalated to billing."
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"message_type\":\"note\",\"type\":\"admin\",\"admin_id\":\"991\",\"body\":\"Escalated to billing.\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.intercom.io/conversations/147/reply"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an admin id that is not a number",
+          "kind": "risky",
+          "arguments": {
+            "conversation_id": "147",
+            "admin_id": "me",
+            "body": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "intercom.conversations.close",
+      "title": "Close a conversation",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.intercom.io",
+          "path": "/conversations/{conversation_id}/parts",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "message_type",
+                "value": {
+                  "const": "close"
+                }
+              },
+              {
+                "name": "type",
+                "value": {
+                  "const": "admin"
+                }
+              },
+              {
+                "name": "admin_id",
+                "value": {
+                  "arg": "admin_id"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "conversation_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 24,
+          "pattern": "^[0-9]{1,24}$"
+        },
+        "admin_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 24,
+          "pattern": "^[0-9]{1,24}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "thread"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "reversibility": {
+          "const": "reversible"
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "state",
+            "value": {
+              "from": "state"
+            }
+          },
+          {
+            "name": "errors",
+            "value": {
+              "list": {
+                "from": "errors",
+                "maxItems": 20,
+                "fields": [
+                  {
+                    "name": "code",
+                    "value": {
+                      "from": "code"
+                    }
+                  },
+                  {
+                    "name": "message",
+                    "value": {
+                      "from": "message"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "api"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "closes a conversation",
+          "kind": "safe",
+          "arguments": {
+            "conversation_id": "147",
+            "admin_id": "991"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"message_type\":\"close\",\"type\":\"admin\",\"admin_id\":\"991\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.intercom.io/conversations/147/parts"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a missing admin",
+          "kind": "risky",
+          "arguments": {
+            "conversation_id": "147"
+          },
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

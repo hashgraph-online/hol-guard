@@ -1,4 +1,4 @@
-//! `daemon/runtime_hook_evidence_journal.py` — the journal's filesystem half.
+//! the retired Python `runtime_hook_evidence_journal.py` — the journal's filesystem half.
 //!
 //! The record types and their `serialized()` bytes live in the writer; this
 //! module owns the durable side: a cross-process lock, an `O_APPEND` write

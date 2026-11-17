@@ -145,7 +145,7 @@ jobs:
           uv run --no-sync python scripts/ci/rust_pretool_no_python_gate.py --root .
           uv run --no-sync python - <<'PY'
           from pathlib import Path
-          hook = Path('src/codex_plugin_scanner/guard/daemon/hook_worker.py').read_text()
+          hook = Path('src/codex_plugin_scanner/guard/hook_review/hook_worker.py').read_text()
           native = Path('src/codex_plugin_scanner/guard/native_runtime.py').read_text()
           if 'if response is None:\n                response = self.engine.review(request)' in hook:
               raise SystemExit('Python HookReviewEngine fallback remains')
@@ -258,54 +258,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  daemon-edge:
-    name: Daemon edge descriptor budget and admission soak
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
-        with:
-          version: "0.9.26"
-          enable-cache: true
-      - uses: ./.github/actions/stage-command-projections
-      - run: uv sync --frozen --no-dev --extra dev --python 3.12
-      - name: Install cached Rust toolchain
-        uses: ./.github/actions/setup-rust
-      - name: Build the version-matched native runtime (daemon lifecycle decisions are resident-owned)
-        env:
-          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
-        run: |
-          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
-          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
-          uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source
-          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
-          echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
-          echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
-      - name: Run with a constrained descriptor budget
-        run: |
-          ulimit -n 128
-          uv run --no-sync pytest -q tests/test_daemon_bounded_http.py --tb=short
-
-      - name: Replay the transport chaos gate at full volume
-        env:
-          HOL_GUARD_DAEMON_CHAOS: full
-        run: |
-          ulimit -n 256
-          uv run --no-sync pytest -q tests/test_guard_daemon_chaos_gate.py --tb=short
-
-      - name: Soak the daemon at full volume
-        env:
-          HOL_GUARD_DAEMON_SOAK: full
-        timeout-minutes: 40
-        run: uv run --no-sync pytest -q tests/test_guard_daemon_soak_gate.py --tb=short
-
   native-platform:
     name: Native workspace and hook client (${{ matrix.os }})
     strategy:
@@ -357,7 +309,7 @@ jobs:
           HOL_GUARD_NATIVE_BINARY: ${{ env.RUNTIME }}
           HOL_GUARD_NATIVE_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source${{ matrix.os == 'windows-2025' && '.exe' || '' }}
           HOL_GUARD_NATIVE_REGRESSION: "1"
-        run: uv run --no-sync pytest -q tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py tests/test_guard_store_storage_gate_windows.py --tb=short
+        run: uv run --no-sync pytest -q tests/test_rust_daemon_edge_hardening_contracts.py tests/test_guard_store_storage_gate_windows.py --tb=short
       - name: Validate real native client lifecycle
         if: ${{ !cancelled() }}
         env:

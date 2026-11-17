@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.project_folder_picker import (
     ProjectFolderPickerBusyError,
     ProjectFolderPickerUnavailableError,

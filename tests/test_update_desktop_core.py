@@ -13,11 +13,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands, update_desktop_core
 from codex_plugin_scanner.guard.cli.update_commands import build_guard_update_status_payload
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager
-from codex_plugin_scanner.guard.daemon.dashboard_update import (
+from codex_plugin_scanner.guard.updates.dashboard_update import (
     build_dashboard_update_runner_command,
     build_dashboard_update_runner_popen_kwargs,
 )
@@ -95,7 +95,6 @@ def test_apply_desktop_core_update_installs_verified_sidecar(
 ) -> None:
     monkeypatch.setattr(update_desktop_core, "platform_target", lambda: "aarch64-apple-darwin")
     monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
-    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
     monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
     binary = b"signed-core-bytes"
     manifest = _alpha_manifest(sha256=update_desktop_core._sha256_hex(binary), size=len(binary))
@@ -203,7 +202,6 @@ def test_install_rejects_symlink_version_dir(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(update_desktop_core, "platform_target", lambda: "aarch64-apple-darwin")
-    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
     monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
     core_root = tmp_path / "core"
     destination = tmp_path / "elsewhere"
@@ -252,7 +250,6 @@ def test_reinstalling_the_same_core_version_replaces_the_executable_file(
     # Core in place gets it killed on the next launch, so a reinstall must
     # land on a new file rather than overwrite the old one.
     monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
-    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
     monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
     binary = b"signed-core-bytes"
     staged = tmp_path / "staged"
@@ -274,7 +271,6 @@ def test_a_rejected_core_reinstall_leaves_the_installed_executable_untouched(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
-    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
     monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
     binary = b"signed-core-bytes"
     staged = tmp_path / "staged"
@@ -298,7 +294,6 @@ def test_a_hard_link_at_a_predictable_candidate_name_cannot_rewrite_the_installe
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
-    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
     monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
     binary = b"signed-core-bytes"
     staged = tmp_path / "staged"
@@ -538,34 +533,6 @@ def test_desktop_dashboard_update_parser_accepts_runner_args(tmp_path: Path) -> 
     assert args.alpha is True
 
 
-def test_wait_for_updated_core_binds_spawned_pid(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    seen: dict[str, object] = {}
-
-    def fake_live(
-        _guard_home: Path,
-        *,
-        require_current_runtime: bool = True,
-        expected_pid: int | None = None,
-    ) -> str:
-        seen["require_current_runtime"] = require_current_runtime
-        seen["expected_pid"] = expected_pid
-        return "http://127.0.0.1:5410"
-
-    monkeypatch.setattr(daemon_manager, "_live_guard_daemon_url", fake_live)
-    url = daemon_manager._wait_for_guard_daemon_url(
-        tmp_path,
-        timeout=1.0,
-        require_current_runtime=False,
-        expected_pid=4242,
-    )
-    assert url == "http://127.0.0.1:5410"
-    assert seen["require_current_runtime"] is False
-    assert seen["expected_pid"] == 4242
-
-
 def test_select_desktop_core_latest_stays_on_current_series() -> None:
     selected = update_desktop_core.select_desktop_core_latest(
         "3.0.0a239",
@@ -760,7 +727,7 @@ def test_dashboard_runner_and_daemon_env_preserve_desktop_version(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update as dashboard_update_module
+    from codex_plugin_scanner.guard.updates import dashboard_update as dashboard_update_module
 
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
     monkeypatch.setenv("HOL_GUARD_DESKTOP_VERSION", "0.2.0")
@@ -769,7 +736,7 @@ def test_dashboard_runner_and_daemon_env_preserve_desktop_version(
     popen_kwargs["log_handle"].close()
     assert runner_env["HOL_GUARD_DESKTOP_VERSION"] == "0.2.0"
     assert "HOL_GUARD_DESKTOP_VERSION" in dashboard_update_module._DASHBOARD_UPDATE_RUNNER_ENV_KEYS
-    assert "HOL_GUARD_DESKTOP_VERSION" in daemon_manager._GUARD_DAEMON_ENV_KEYS
+    assert "HOL_GUARD_DESKTOP_VERSION" in daemon_manager._DESKTOP_ENV_KEYS
 
 
 class _FakeClock:
@@ -885,7 +852,7 @@ def _patch_slow_core_start(
     package_version: str = "3.59.0a24",
 ) -> _FakeClock:
     from codex_plugin_scanner.guard.cli import update_desktop_core_start
-    from codex_plugin_scanner.guard.daemon.start_classification import GuardDaemonStillStartingError
+    from codex_plugin_scanner.guard.native_daemon_manage import GuardDaemonStillStartingError
 
     clock, _launched = _patch_daemon_refresh(monkeypatch, retirement_completes_after=0, desktop_respawn_after=None)
 

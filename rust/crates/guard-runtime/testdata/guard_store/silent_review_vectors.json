@@ -701,7 +701,7 @@
       "event_id": 1,
       "event_name": "approval.created",
       "occurred_at": "2026-03-01T12:00:00+00:00",
-      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"codex:tool:tool-action:bash\", \"artifact_name\": \"Bash\", \"artifact_type\": \"tool_action_request\", \"policy_action\": \"review\", \"recommended_scope\": \"workspace\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
+      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"codex:tool:tool-action:bash\", \"artifact_name\": \"Bash\", \"artifact_type\": \"tool_action_request\", \"policy_action\": \"review\", \"recommended_scope\": \"artifact\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
      }
     ],
     "guard_review_outbox_events": [
@@ -745,7 +745,7 @@
     "harness": "codex",
     "policy_action": "review",
     "publisher": null,
-    "recommended_scope": "workspace",
+    "recommended_scope": "artifact",
     "request_id": "r-new",
     "source_scope": "workspace",
     "workspace": "/work/space"
@@ -861,7 +861,7 @@
       "event_id": 1,
       "event_name": "approval.created",
       "occurred_at": "2026-03-01T12:00:00+00:00",
-      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"codex:tool:tool-action:bash\", \"artifact_name\": \"Bash\", \"artifact_type\": \"tool_action_request\", \"policy_action\": \"review\", \"recommended_scope\": \"workspace\", \"source_scope\": \"workspace\", \"workspace\": null, \"publisher\": null}"
+      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"codex:tool:tool-action:bash\", \"artifact_name\": \"Bash\", \"artifact_type\": \"tool_action_request\", \"policy_action\": \"review\", \"recommended_scope\": \"artifact\", \"source_scope\": \"workspace\", \"workspace\": null, \"publisher\": null}"
      }
     ],
     "guard_review_outbox_events": [
@@ -905,7 +905,7 @@
     "harness": "codex",
     "policy_action": "review",
     "publisher": null,
-    "recommended_scope": "workspace",
+    "recommended_scope": "artifact",
     "request_id": "r-new",
     "source_scope": "workspace",
     "workspace": null
@@ -1791,7 +1791,7 @@
       "event_id": 1,
       "event_name": "approval.created",
       "occurred_at": "2026-03-01T09:30:00+00:00",
-      "payload_json": "{\"request_id\": \"r-old\", \"harness\": \"codex\", \"artifact_id\": \"codex:tool:tool-action:bash\", \"artifact_name\": \"Bash\", \"artifact_type\": \"tool_action_request\", \"policy_action\": \"review\", \"recommended_scope\": \"workspace\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
+      "payload_json": "{\"request_id\": \"r-old\", \"harness\": \"codex\", \"artifact_id\": \"codex:tool:tool-action:bash\", \"artifact_name\": \"Bash\", \"artifact_type\": \"tool_action_request\", \"policy_action\": \"review\", \"recommended_scope\": \"artifact\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
      }
     ],
     "guard_review_outbox_events": [
@@ -1933,7 +1933,7 @@
     "harness": "codex",
     "policy_action": "review",
     "publisher": null,
-    "recommended_scope": "workspace",
+    "recommended_scope": "artifact",
     "request_id": "r-old",
     "source_scope": "workspace",
     "workspace": "/work/space"

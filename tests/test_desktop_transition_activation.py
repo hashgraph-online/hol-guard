@@ -296,7 +296,7 @@ def test_refusal_never_creates_authority_or_overwrites_prior_evidence(transition
     monkeypatch.setattr(runtime.authority, "_policy_integrity_secret_material", original_key)
     runtime.record_approval_refusal(plan, "approval_gate_invalid", deadline_monotonic=time.monotonic() + 10)
     before = runtime._refusal_path(plan.operation_id).read_bytes()
-    with pytest.raises(FileExistsError):
+    with pytest.raises(TransitionError, match="refusal_exists"):
         runtime.record_approval_refusal(plan, "another_reason", deadline_monotonic=time.monotonic() + 10)
     assert runtime._refusal_path(plan.operation_id).read_bytes() == before
     with pytest.raises(TransitionError, match="deadline_exceeded"):

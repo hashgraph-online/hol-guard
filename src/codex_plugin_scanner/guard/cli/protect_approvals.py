@@ -375,7 +375,7 @@ def _live_request_review_url(request_id: str, *, guard_home: Path) -> str | None
     guidance keeps the wait command alone.
     """
 
-    from ..daemon.manager import load_guard_daemon_url
+    from ..native_daemon_manage import load_guard_daemon_url
 
     try:
         daemon_url = load_guard_daemon_url(guard_home)

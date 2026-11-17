@@ -4,10 +4,10 @@ import json
 import urllib.request
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import MANAGED_CONTROLS_ACTIVE_STATE_KEY
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.managed_controls_activation_support import activate_managed_bundle, managed_bundle

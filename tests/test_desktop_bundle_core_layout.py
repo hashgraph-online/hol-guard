@@ -13,14 +13,14 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import pi_extension_pinned_core, pi_extension_source
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.adapters.pi import OmpHarnessAdapter, PiHarnessAdapter
 from codex_plugin_scanner.guard.stable_guard_cli import (
     argv0_is_ephemeral_desktop_cli,
     desktop_core_shim_for_executable,
     frozen_launcher_is_prune_safe,
 )
+from tests.pi_extension_support import managed_extension_source
 
 _RELEASE = "3.50.0a5-97b143fb3d2adf30a07b97d621d5d4eb0031db45822b3869c2e87442c94e2150"
 _NEWER = "3.50.0a6-1c0e7f2a9b4d3856e1f09a7c2d8b5e3f4a6c1d0b9e8f7a6b5c4d3e2f1a0b9c8d"
@@ -93,7 +93,7 @@ def test_a_generated_extension_bakes_the_stable_launcher_for_the_bundle_layout(
     launcher, shim = _core(tmp_path)
     monkeypatch.setenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", str(launcher))
 
-    source = pi_extension_source.managed_extension_source(
+    source = managed_extension_source(
         guard_home=tmp_path / "guard-home",
         home_dir=tmp_path / "home",
         settings_path=tmp_path / "settings.json",
@@ -119,63 +119,86 @@ def _extension(tmp_path: Path, command: str) -> Path:
     return extension
 
 
+def _pinned(home: Path, monkeypatch: pytest.MonkeyPatch) -> str | None:
+    """The replaced Core the Oh My Pi diagnostics name, or ``None``."""
+
+    monkeypatch.setattr(
+        HarnessAdapter, "diagnostics", lambda _self, _context: {"setup_status": "active", "warnings": []}
+    )
+    context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=home.parent / "guard-home")
+    report = get_adapter("omp").diagnostics(context)
+    if report["setup_status"] != "broken":
+        return None
+    return str(report["warnings"][0]).split("pinned Desktop core (", 1)[1].split(")", 1)[0]
+
+
 @_posix_only
-def test_an_extension_pinned_to_a_core_that_desktop_replaced_is_found(tmp_path: Path) -> None:
+def test_an_extension_pinned_to_a_core_that_desktop_replaced_is_found(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     launcher, _shim = _core(tmp_path)
     _select(launcher, _NEWER)
-    extension = _extension(tmp_path, str(launcher))
+    _extension(tmp_path, str(launcher))
 
-    assert pi_extension_pinned_core.pinned_versioned_core(extension) == str(launcher)
+    assert _pinned(tmp_path / "home", monkeypatch) == str(launcher)
 
 
 @_posix_only
-def test_an_extension_pinned_to_the_selected_core_is_healthy(tmp_path: Path) -> None:
+def test_an_extension_pinned_to_the_selected_core_is_healthy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Desktop's update binds each adapter to the candidate before it moves ``current.json``."""
 
     launcher, _shim = _core(tmp_path)
     _select(launcher, _RELEASE)
 
-    assert pi_extension_pinned_core.pinned_versioned_core(_extension(tmp_path, str(launcher))) is None
+    _extension(tmp_path, str(launcher))
+
+    assert _pinned(tmp_path / "home", monkeypatch) is None
 
 
 @_posix_only
-def test_a_pin_is_not_judged_without_a_readable_pointer(tmp_path: Path) -> None:
+def test_a_pin_is_not_judged_without_a_readable_pointer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     launcher, _shim = _core(tmp_path)
-    extension = _extension(tmp_path, str(launcher))
+    _extension(tmp_path, str(launcher))
 
-    assert pi_extension_pinned_core.pinned_versioned_core(extension) is None
+    assert _pinned(tmp_path / "home", monkeypatch) is None
     (launcher.parents[3] / "current.json").write_text("not json", encoding="utf-8")
-    assert pi_extension_pinned_core.pinned_versioned_core(extension) is None
+    assert _pinned(tmp_path / "home", monkeypatch) is None
 
 
 @_posix_only
-def test_a_pin_that_a_repair_could_not_replace_is_not_reported(tmp_path: Path) -> None:
+def test_a_pin_that_a_repair_could_not_replace_is_not_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     launcher, _shim = _core(tmp_path, stable=False)
     _select(launcher, _NEWER)
 
-    assert pi_extension_pinned_core.pinned_versioned_core(_extension(tmp_path, str(launcher))) is None
+    _extension(tmp_path, str(launcher))
+
+    assert _pinned(tmp_path / "home", monkeypatch) is None
 
 
 @_posix_only
-def test_an_extension_on_the_stable_launcher_or_another_cli_is_not_reported(tmp_path: Path) -> None:
+def test_an_extension_on_the_stable_launcher_or_another_cli_is_not_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _launcher, shim = _core(tmp_path)
 
-    assert pi_extension_pinned_core.pinned_versioned_core(_extension(tmp_path, str(shim))) is None
+    _extension(tmp_path, str(shim))
+    assert _pinned(tmp_path / "home", monkeypatch) is None
     other = tmp_path / "home" / ".local" / "bin" / "hol-guard"
-    assert pi_extension_pinned_core.pinned_versioned_core(_extension(tmp_path / "other", str(other))) is None
-    assert pi_extension_pinned_core.pinned_versioned_core(tmp_path / "missing.ts") is None
+    _extension(tmp_path / "other", str(other))
+    assert _pinned(tmp_path / "other" / "home", monkeypatch) is None
+    assert _pinned(tmp_path / "missing", monkeypatch) is None
 
 
 @_posix_only
-@pytest.mark.parametrize("adapter_type", [OmpHarnessAdapter, PiHarnessAdapter])
+@pytest.mark.parametrize("harness", ["omp", "pi"])
 def test_diagnostics_call_a_pinned_extension_broken_so_repair_regenerates_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, adapter_type: type[HarnessAdapter]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
 ) -> None:
-    adapter = adapter_type()
+    adapter = get_adapter(harness)
     launcher, _shim = _core(tmp_path)
     _select(launcher, _NEWER)
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    extension = adapter._managed_extension_path(context)  # type: ignore[attr-defined]
+    extension = tmp_path / "home" / f".{harness}" / "agent" / "extensions" / "hol-guard.ts"
     extension.parent.mkdir(parents=True)
     extension.write_text(f"const GUARD_CLI_WRAPPER_COMMAND = {json.dumps(str(launcher))};\n", encoding="utf-8")
     healthy = {"harness": adapter.harness, "setup_status": "active", "warnings": ["existing"]}

@@ -18,7 +18,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_daemon_route as route
 from codex_plugin_scanner.guard import native_resident_decision as shared
-from codex_plugin_scanner.guard.daemon import approval_extension_recommendation as client
+from codex_plugin_scanner.guard.hook_review import approval_extension_recommendation as client
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import EXTENSION_ALLOW_HINT_SCHEMA
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (

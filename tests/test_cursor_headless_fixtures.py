@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor_hooks import install_cursor_hooks
+from codex_plugin_scanner.guard.adapters.cursor import install_cursor_hooks
 from tests.conftest import guard_commands_module
 from tests.cursor_bridge_support import live_cursor_daemon, run_cursor_hook
 
@@ -101,7 +101,7 @@ def _cursor_hook_env(tmp_path: Path) -> Iterator[tuple[HarnessContext, Path]]:
     assert context.guard_home is not None
     # Cursor runs the client behind the native bridge, which answers from
     # the daemon; the client itself never reviews a hook.
-    with live_cursor_daemon(context.guard_home):
+    with live_cursor_daemon(context.guard_home, context.home_dir):
         yield context, hook_script
 
 

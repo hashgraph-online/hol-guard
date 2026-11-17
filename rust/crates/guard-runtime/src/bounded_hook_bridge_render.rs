@@ -20,13 +20,15 @@ use crate::pyjson::PyVal;
 
 /// The harnesses whose Python bridge the native bridge answers for. Grok
 /// runs its own generated client, which `bounded_hook_bridge_grok` answers.
-pub(crate) const NATIVE_HARNESSES: [&str; 8] = [
-    "copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline", "opencode",
+/// Pi and OMP reach it from their Windows extension route.
+pub(crate) const NATIVE_HARNESSES: [&str; 11] = [
+    "copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline", "opencode", "muse", "pi",
+    "omp",
 ];
 
 pub(crate) const FAILURE_REASON: &str =
     "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.";
-const PROMPT_UNAVAILABLE_REASON: &str = "HOL Guard could not complete native prompt review safely.";
+const PROMPT_UNAVAILABLE_REASON: &str = "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running or not responding, open HOL Guard and choose Troubleshoot Guard, then Restart Guard, or run hol-guard daemon recovery restart, then send the prompt again. For a custom Guard home, run hol-guard daemon recovery restart --guard-home <path>.";
 const PROMPT_UNAVAILABLE_REASON_CODE: &str = "native_prompt_unavailable";
 
 const EVENT_NAME_KEYS: [&str; 6] = [
@@ -294,7 +296,9 @@ pub(crate) fn failure_payload(harness: &str, event_name: &str, reason: &str) -> 
                 ("permissionDecisionReason", text(reason)),
             ]),
         )]),
-        2,
+        // Muse reads the JSON envelope on exit 0; exit 2 would discard it
+        // and show stderr instead, so its deny travels in the envelope.
+        if harness == "muse" { 0 } else { 2 },
     )
 }
 

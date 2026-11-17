@@ -21,11 +21,9 @@ against Muse 1.4.14 with ``muse plugins hook test`` and a live
   unless Guard's final answer is a block.
 
 Approval resume: when the daemon queues a ``review`` for a ``PreToolUse``
-call, the bounded bridge waits for the approval inside the hook (the
-Oh My Pi model: the user approves once and the work continues without a
-manual retry). An approval rewrites the answer to an allow for the
-identical call; a denial keeps it blocked. The one-time approval binding
-still rejects any call whose arguments changed while waiting.
+call, the native bounded bridge waits for the approval inside the hook
+(``bounded_hook_bridge_muse``), so the user approves once and the work
+continues without a manual retry.
 """
 
 from __future__ import annotations
@@ -33,13 +31,8 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from ..native_hook_render import native_muse_bridge
-from . import hook_approval_wait
-
-if TYPE_CHECKING:
-    from ..store import GuardStore
 
 # Only these events decide whether something runs. The rest report on work
 # that already happened or on the session itself, so a resident that cannot
@@ -80,37 +73,4 @@ def muse_bridge_response(
     return json.dumps(document, ensure_ascii=True, separators=(",", ":")), "", exit_code
 
 
-def apply_muse_pretool_approval_wait(
-    response: dict[str, object],
-    *,
-    event_name: str,
-    store: GuardStore,
-    timeout_seconds: int,
-) -> dict[str, object]:
-    """Wait for a queued Muse approval and rewrite the answer in place.
-
-    Mirrors ``apply_grok_pretool_approval_wait`` (``hook_approval_wait`` plans
-    and settles it): an approval lets the original ``PreToolUse`` call proceed
-    (approval resume); a denial keeps it blocked; a still-pending approval
-    returns the review unchanged so the saved approval answers the retry.
-    """
-
-    request_ids, seconds = hook_approval_wait.plan_wait(
-        "muse", event_name=event_name, response=response, timeout_seconds=timeout_seconds
-    )
-    if not request_ids:
-        return response
-    from ..approvals import wait_for_approval_requests
-
-    wait_result = wait_for_approval_requests(store=store, request_ids=request_ids, timeout_seconds=seconds)
-    response["approval_wait"] = wait_result
-    _, fields, edits = hook_approval_wait.settle_wait("muse", wait_result=wait_result, request_id=request_ids[0])
-    answer = hook_approval_wait.rewrite_answer(edits, response) or response
-    answer.update(fields)
-    return answer
-
-
-__all__ = [
-    "apply_muse_pretool_approval_wait",
-    "muse_bridge_response",
-]
+__all__ = ["muse_bridge_response"]

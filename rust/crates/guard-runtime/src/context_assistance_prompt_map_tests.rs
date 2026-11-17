@@ -125,13 +125,12 @@ fn tests_docs_and_the_newest_changelog_section_follow_the_source() {
 Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
     let asked = Asked {
         docs: true,
+        docstring: Default::default(),
         changelog: false,
         named: vec!["CHANGES.rst".into()],
         changes: false,
         everywhere: false,
-        earlier: Vec::new(),
-        spellings: Vec::new(),
-        renames: Vec::new(),
+        ..Asked::default()
     };
     let text = map(
         &files(&[
@@ -174,7 +173,7 @@ def test_other():\n    return 1\n";
 
 /// The few tests that use the request's rare word come before the many that
 /// only use the class it names, and are shown whole, once a session. A rename
-/// or a review asks where code is, so it gets their lines only.
+/// a review or a question asks where code is, so it gets their lines only.
 #[test]
 fn tests_using_a_rare_word_come_first() {
     let mut many = String::new();
@@ -216,7 +215,11 @@ tests/test_many.py: 6 related tests"
         changes: true,
         ..Asked::default()
     };
-    for asked in [again, rename, review] {
+    let question = Asked {
+        lookup: true,
+        ..Asked::default()
+    };
+    for asked in [again, rename, review, question] {
         let text = map(&list, &terms, &asked, later()).unwrap().text;
         assert!(
             text.contains("tests/test_rare.py: 2 related tests") && !text.contains("```"),
@@ -329,12 +332,13 @@ fn a_plain_word_defined_only_in_examples_names_nothing() {
     assert!(text.contains(NAMED_TITLE), "{text}");
 }
 
-/// A plain word only in comments and docstrings is prose about the code and
-/// places nothing; on a code line it does.
+/// A word only in comments and docstrings is prose about the code and
+/// places nothing; on a code line it does. (Written as code: one plain word
+/// alone places nothing anyway.)
 #[test]
 fn words_in_comments_and_docstrings_place_nothing() {
     let prose = "def run(value):\n    \"\"\"\n    Reticulate it.\n    Reticulate it again.\n    \"\"\"\n    # reticulate\n    return value\n";
-    let words = [("reticulate", false, 1)];
+    let words = [("reticulate", true, 1)];
     assert_eq!(mapped_text(&[("src/run.py", prose)], &words), None);
     let code = "def run(value):\n    reticulate = value\n    return reticulate\n";
     let text = mapped_text(&[("src/run.py", code)], &words).unwrap();
@@ -425,13 +429,12 @@ fn a_named_changelog_stays_on_the_map() {
     assert!(!unnamed.text.contains("CHANGES.rst"), "{}", unnamed.text);
     let asked = Asked {
         docs: false,
+        docstring: Default::default(),
         changelog: false,
         named: vec!["CHANGES.rst".into()],
         changes: false,
         everywhere: false,
-        earlier: Vec::new(),
-        spellings: Vec::new(),
-        renames: Vec::new(),
+        ..Asked::default()
     };
     let named = map(&list, &terms, &asked, later()).unwrap();
     assert!(

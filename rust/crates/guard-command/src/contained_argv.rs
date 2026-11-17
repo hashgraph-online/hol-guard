@@ -1098,6 +1098,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             | "node_tool_route"
             | "pytest_command"
             | "package_test_resolve"
+            | "planned_route_argv"
     ) {
         return None;
     }
@@ -1120,6 +1121,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         "contained_kind" => contained_kind(&command),
         "node_tool_route" => crate::contained_node_tool::route_request(input, &command),
         "pytest_command" => Ok(json!(crate::pytest_argv::command_targets_pytest(&command))),
+        "planned_route_argv" => Ok(json!(planned_route_argv(&command))),
         "package_test_resolve" => crate::contained_package_test::resolve(
             &command,
             input.get("scripts").and_then(Value::as_object),
@@ -1152,6 +1154,18 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         Ok(value) => json!({"value":value}),
         Err(error) => crate::restricted_command::error_reply(error),
     })
+}
+
+/// The argv a contained sink re-authorizes for a planned command. Only Unix
+/// plans contained runs; elsewhere a plan never rewrites the caller's argv.
+#[cfg(unix)]
+fn planned_route_argv(command: &[String]) -> Vec<String> {
+    crate::restricted_pytest::planned_route_argv(command)
+}
+
+#[cfg(not(unix))]
+fn planned_route_argv(command: &[String]) -> Vec<String> {
+    command.to_vec()
 }
 
 fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {

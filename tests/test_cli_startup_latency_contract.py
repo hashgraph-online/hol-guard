@@ -89,28 +89,18 @@ def test_daemon_serve_cli_treats_home_as_guard_home_override(
     explicit_home = tmp_path / "explicit-home"
     explicit_home.mkdir()
 
-    class FakeStore:
-        def __init__(self, guard_home: Path, **kwargs: object) -> None:
-            captured["guard_home"] = Path(guard_home)
-            captured["prime"] = kwargs.get("prime_policy_integrity")
+    def fake_exec(guard_home: Path, port: int, *, user_home: Path | None = None) -> None:
+        captured.update(guard_home=guard_home, port=port, user_home=user_home)
 
-    class FakeDaemon:
-        def __init__(self, store: object, **kwargs: object) -> None:
-            captured["home_dir"] = kwargs.get("home_dir")
-
-        def serve(self) -> None:
-            captured["served"] = True
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.store.GuardStore", FakeStore)
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.server.GuardDaemonServer", FakeDaemon)
+    monkeypatch.setattr("codex_plugin_scanner.guard.cli.daemon_serve.exec_native_daemon", fake_exec)
 
     code = daemon_serve.run_daemon_serve_cli(["daemon", "--serve", "--home", str(explicit_home)])
 
-    assert code == 0
-    assert captured["served"] is True
-    assert captured["prime"] is False
+    # Returning from the hand-off means no native runtime: there is no Python server to fall back to.
+    assert code == 1
     assert captured["guard_home"] == explicit_home.resolve()
-    assert captured["home_dir"] == explicit_home.resolve()
+    assert captured["port"] == 0
+    assert captured["user_home"] == explicit_home.resolve()
 
 
 def test_hol_guard_desktop_bootstrap_json_skips_command_surface(
@@ -224,13 +214,120 @@ def test_hol_guard_daemon_serve_skips_command_surface(
     assert _COMMANDS_SUPPORT not in sys.modules
 
 
+def test_daemon_workers_fast_path_argv_accepts_only_the_native_launch_shape() -> None:
+    from codex_plugin_scanner.guard.cli.desktop_daemon_workers import is_daemon_workers_fast_path_argv
+
+    assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers", "--guard-home", "/g"]) is True
+    assert is_daemon_workers_fast_path_argv(["guard", "desktop", "daemon-workers", "--guard-home", "/g"]) is True
+    assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers"]) is False
+    assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers", "--guard-home"]) is False
+    assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers", "--guard-home", "--help"]) is False
+    assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers", "--help"]) is False
+    assert is_daemon_workers_fast_path_argv(["desktop", "daemon-workers", "--guard-home", "/g", "--json"]) is False
+    assert is_daemon_workers_fast_path_argv(["desktop", "library-serve", "--guard-home", "/g"]) is True
+    assert is_daemon_workers_fast_path_argv(["desktop", "library-call", "--guard-home", "/g"]) is True
+    assert is_daemon_workers_fast_path_argv(["desktop", "library-serve", "--guard-home", "/g", "--x"]) is False
+    assert is_daemon_workers_fast_path_argv(["desktop", "converge", "--guard-home", "/g"]) is False
+    assert is_daemon_workers_fast_path_argv(["desktop", "bootstrap", "--guard-home", "/g"]) is False
+
+
+def test_hol_guard_daemon_workers_skips_command_surface(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard import native_context
+    from codex_plugin_scanner.guard.workers import host
+
+    calls: list[tuple[str, Path | None]] = []
+
+    def fake_bind(guard_home: Path | None, *, remember: bool = True) -> None:
+        del remember
+        calls.append(("bind", guard_home))
+
+    def fake_host(guard_home: Path) -> int:
+        calls.append(("host", guard_home))
+        return 0
+
+    monkeypatch.setattr(native_context, "bind_context_digest_home", fake_bind)
+    monkeypatch.setattr(host, "run_worker_host", fake_host)
+    monkeypatch.delitem(sys.modules, _COMMANDS_HUB, raising=False)
+    monkeypatch.delitem(sys.modules, _COMMANDS_PARSER, raising=False)
+    monkeypatch.delitem(sys.modules, _COMMANDS_SUPPORT, raising=False)
+    monkeypatch.delitem(sys.modules, _CLI_MODULE, raising=False)
+    monkeypatch.delattr(codex_plugin_scanner, "cli", raising=False)
+
+    guard_home = tmp_path / "guard"
+    code, _ = _run_as_hol_guard(["desktop", "daemon-workers", "--guard-home", str(guard_home)])
+
+    assert code == 0
+    # The digest home is bound before the host starts, as the command router does.
+    assert calls == [("bind", guard_home.resolve()), ("host", guard_home.resolve())]
+    assert _COMMANDS_HUB not in sys.modules
+    assert _COMMANDS_PARSER not in sys.modules
+    assert _COMMANDS_SUPPORT not in sys.modules
+
+
+@pytest.mark.parametrize(
+    ("command", "handler"),
+    [("library-serve", "serve_library_calls"), ("library-call", "run_library_call")],
+)
+def test_hol_guard_library_children_skip_command_surface(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    command: str,
+    handler: str,
+) -> None:
+    from codex_plugin_scanner.guard.cli import desktop_library_call
+
+    served: list[Path] = []
+
+    def fake_child(guard_home: Path) -> int:
+        served.append(guard_home)
+        return 0
+
+    monkeypatch.setattr(desktop_library_call, handler, fake_child)
+    monkeypatch.delitem(sys.modules, _COMMANDS_HUB, raising=False)
+    monkeypatch.delitem(sys.modules, _COMMANDS_PARSER, raising=False)
+    monkeypatch.delitem(sys.modules, _COMMANDS_SUPPORT, raising=False)
+    monkeypatch.delitem(sys.modules, _CLI_MODULE, raising=False)
+    monkeypatch.delattr(codex_plugin_scanner, "cli", raising=False)
+
+    guard_home = tmp_path / "guard"
+    code, _ = _run_as_hol_guard(["desktop", command, "--guard-home", str(guard_home)])
+
+    assert code == 0
+    assert served == [guard_home.resolve()]
+    assert _COMMANDS_HUB not in sys.modules
+    assert _COMMANDS_PARSER not in sys.modules
+    assert _COMMANDS_SUPPORT not in sys.modules
+
+
+def test_hol_guard_daemon_workers_fast_path_reports_a_host_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from codex_plugin_scanner.guard.workers import host
+
+    def failing_host(guard_home: Path) -> int:
+        del guard_home
+        raise RuntimeError("worker host could not start")
+
+    monkeypatch.setattr(host, "run_worker_host", failing_host)
+
+    code, _ = _run_as_hol_guard(["desktop", "daemon-workers", "--guard-home", str(tmp_path / "guard")])
+
+    assert code == 1
+    assert "worker host could not start" in capsys.readouterr().err
+
+
 _HELP_PATH_FORBIDDEN_MODULES = (
     _COMMANDS_HUB,
     _COMMANDS_SUPPORT,
     "codex_plugin_scanner.guard.cli._commands_shared",
     "codex_plugin_scanner.guard.store",
     "codex_plugin_scanner.guard.native_context",
-    "codex_plugin_scanner.guard.daemon",
+    "codex_plugin_scanner.guard.hook_review.hook_worker",
     "codex_plugin_scanner.guard.proxy",
     "codex_plugin_scanner.guard.runtime.command_extensions",
 )

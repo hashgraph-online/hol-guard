@@ -81,6 +81,8 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
             benign_command_segments(
                 &model,
                 PathContext {
+                    literal_words: &[],
+                    guard_home: None,
                     home_dir: Some("/tmp"),
                     cwd: Some("/tmp"),
                     cdpath_unset: false,
@@ -88,10 +90,12 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                     cargo_config_inert: false,
                     npm_config_inert: false,
                     pip_config_inert: false,
+                    python_environment_inert: false,
                     shell_home_matches: false,
                     ripgrep_config_absent: false,
                     gem_config_absent: false,
                     http_config_absent: false,
+                    openssl_config_absent: false,
                     psql_environment: Default::default(),
                     creates_nothing: false,
                 },
@@ -105,6 +109,8 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
         benign_command_segments(
             &model,
             PathContext {
+                literal_words: &[],
+                guard_home: None,
                 home_dir: Some("/tmp"),
                 cwd: Some("/tmp"),
                 cdpath_unset: false,
@@ -112,10 +118,12 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },
@@ -260,6 +268,8 @@ fn a_stderr_merge_does_not_invent_an_ls_target() {
         .unwrap();
     let root = root.to_str().unwrap();
     let context = PathContext {
+        literal_words: &[],
+        guard_home: None,
         home_dir: Some(root),
         cwd: Some(root),
         cdpath_unset: false,
@@ -267,10 +277,12 @@ fn a_stderr_merge_does_not_invent_an_ls_target() {
         cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
+        python_environment_inert: false,
         shell_home_matches: false,
         ripgrep_config_absent: false,
         gem_config_absent: false,
         http_config_absent: false,
+        openssl_config_absent: false,
         psql_environment: Default::default(),
         creates_nothing: false,
     };

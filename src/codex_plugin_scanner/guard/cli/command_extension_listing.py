@@ -26,7 +26,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TypeVar
 
-from ..daemon.client import (
+from ..native_daemon_client import (
     GuardDaemonRequestError,
     GuardDaemonResponseSchemaError,
     GuardDaemonTransportError,

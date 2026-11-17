@@ -12,11 +12,11 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import native_daemon_client as daemon_client_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-from codex_plugin_scanner.guard.daemon import client as daemon_client_module
-from codex_plugin_scanner.guard.daemon.command_queue_worker import (
+from codex_plugin_scanner.guard.cloud_control.command_queue_worker import (
     CommandQueueWorker,
     start_command_queue_worker,
 )
@@ -1593,9 +1593,9 @@ def test_start_worker_replaces_stopped_alive_worker(tmp_path: Path, monkeypatch)
         return thread
 
     monkeypatch.delenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, raising=False)
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.command_queue_worker.threading.Thread", fake_thread)
+    monkeypatch.setattr("codex_plugin_scanner.guard.cloud_control.command_queue_worker.threading.Thread", fake_thread)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.command_queue_worker.threading.Event",
+        "codex_plugin_scanner.guard.cloud_control.command_queue_worker.threading.Event",
         lambda: FakeEvent(False),
     )
     existing = CommandQueueWorker(thread=FakeThread(), stop_event=FakeEvent(True))  # type: ignore[arg-type]

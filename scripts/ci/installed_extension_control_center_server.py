@@ -17,11 +17,14 @@ import sys
 import threading
 from pathlib import Path
 
+# The daemon test harness lives under the checkout root's ci package.
+sys.path.insert(1, str(Path(__file__).resolve().parents[2]))
+
 from installed_extension_authority_fixture import describe_authority, read_authority
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner import __version__
 from codex_plugin_scanner.guard.approval_gate import public_config, update_settings
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth

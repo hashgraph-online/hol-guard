@@ -108,6 +108,8 @@ type ApprovalPasswordModalProps = {
   onCancel: () => void;
   submitLabel: string;
   busy?: boolean;
+  /** Guard refused a decision without a code, so a recent confirmation no longer counts. */
+  requireFreshTotp?: boolean;
 };
 
 function approvalProofModalTitle(locked: boolean, recentlySatisfied: boolean, needsPassword: boolean): string {
@@ -120,7 +122,8 @@ function approvalProofModalTitle(locked: boolean, recentlySatisfied: boolean, ne
 export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
   const passwordRef = useRef<HTMLInputElement>(null);
   const [now, setNow] = useState(() => Date.now());
-  const recentlySatisfied = approvalProofRecentlySatisfied(props.gate);
+  const requireFreshTotp = props.requireFreshTotp === true;
+  const recentlySatisfied = !requireFreshTotp && approvalProofRecentlySatisfied(props.gate);
   const needsPassword = approvalProofRequiresPassword(props.gate);
   const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.gate, now);
   const gateLocked = lockRemainingSeconds > 0;
@@ -128,6 +131,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
     props.gate,
     { approvalPassword: props.approvalPassword, approvalTotpCode: props.approvalTotpCode },
     props.busy === true,
+    requireFreshTotp,
   );
   useEffect(() => {
     if (!gateLocked) return undefined;
@@ -206,6 +210,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
                 approvalPassword={props.approvalPassword}
                 approvalTotpCode={props.approvalTotpCode}
                 passwordRef={passwordRef}
+                requireFreshTotp={requireFreshTotp}
                 onApprovalPasswordChange={props.onApprovalPasswordChange}
                 onApprovalTotpCodeChange={props.onApprovalTotpCodeChange}
               />

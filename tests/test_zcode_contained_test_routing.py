@@ -185,7 +185,7 @@ def test_frozen_routing_preserves_home_and_workspace_arguments(routing_inputs, m
 
 @pytest.mark.parametrize("routed", [None, {"policy_action": "allow"}])
 def test_authority_edge_returns_routed_response_or_original(monkeypatch, tmp_path, routed):
-    from codex_plugin_scanner.guard.adapters import zcode_contained_tests as adapter
+    from codex_plugin_scanner.guard import contained_sink_command as adapter
 
     original = {"decision": "deny"}
 
@@ -234,7 +234,7 @@ def test_linux_routes_every_profile_its_sink_runs(containment_resident, tmp_path
 
 def test_windows_sink_bootstrap_has_no_escaped_backslashes(tmp_path, monkeypatch):
     """Git Bash halves doubled backslashes, so the bootstrap must not need them."""
-    from codex_plugin_scanner.guard.adapters import zcode_contained_tests as adapter
+    from codex_plugin_scanner.guard import contained_sink_command as adapter
 
     package_root = tmp_path / "site\\packages"
     package_root.mkdir(parents=True)

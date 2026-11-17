@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_fail_closed import _without_raw_url
+from codex_plugin_scanner.guard.hook_review.hook_fail_closed import _without_raw_url
 
 FIXTURE = Path(__file__).resolve().parents[1] / "tests/fixtures/guard-review-link-strip.v1.json"
 

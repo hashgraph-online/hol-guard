@@ -1,32 +1,25 @@
-"""Refresh managed bounded hook clients after a Guard package update."""
+"""Move bounded hooks that still run a managed client script onto the native runtime."""
 
 from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable
 from pathlib import Path
 
-from ..adapters import copilot, devin, hermes, kimi, muse, openclaw_support, zcode
 from ..adapters.base import HarnessContext
-from ..adapters.bounded_cli_hook_bridge import _render_bounded_hook_script, bounded_hook_script_path
+from ..adapters.bounded_cli_hook_bridge import bounded_hook_script_path
 from ..store import GuardStore
 
-# Harnesses whose managed hook command points at a stable client script under
-# ``managed/bounded-hooks``. The command line never changes across releases, so
-# reinstall checks that compare commands miss a stale client body. Grok is
-# refreshed by its own repair path.
-# A timeout may be a constant or, where install derives it from the approval
-# wait, a callable that recomputes the same value for this context. Rendering a
-# constant for such a harness would shorten its approval wait on every update.
-_BOUNDED_HOOK_TIMEOUTS: tuple[tuple[str, str, float | Callable[[HarnessContext], float]], ...] = (
-    ("zcode", "ZCode", zcode._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
-    ("devin", "Devin", devin._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
-    ("kimi", "Kimi", kimi._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
-    ("copilot", "Copilot", copilot._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
-    ("openclaw", "OpenClaw", openclaw_support._GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS),
-    ("hermes", "Hermes", hermes._GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS),
-    ("muse", "Muse", muse.MuseHarnessAdapter._bridge_timeout_seconds),
+# Harnesses older releases installed with a stable client script under
+# ``managed/bounded-hooks``. Grok is repaired by its own path.
+_BOUNDED_HOOK_HARNESSES: tuple[tuple[str, str], ...] = (
+    ("zcode", "ZCode"),
+    ("devin", "Devin"),
+    ("kimi", "Kimi"),
+    ("copilot", "Copilot"),
+    ("openclaw", "OpenClaw"),
+    ("hermes", "Hermes"),
+    ("muse", "Muse"),
 )
 
 
@@ -45,12 +38,17 @@ def refresh_bounded_hook_clients(
     *,
     context: HarnessContext,
     store: GuardStore,
+    workspace: str | None,
+    now: str,
 ) -> tuple[list[dict[str, object]], list[str]]:
-    """Rewrite stale bounded hook clients for active installs; return refreshed installs and warnings."""
+    """Reinstall active hooks that still name a client script; return reinstalled installs and warnings."""
+
+    from .install_commands import apply_managed_install
+    from .managed_install_context import managed_install_context
 
     refreshed: list[dict[str, object]] = []
     warnings: list[str] = []
-    for harness, display_name, timeout_seconds in _BOUNDED_HOOK_TIMEOUTS:
+    for harness, display_name in _BOUNDED_HOOK_HARNESSES:
         try:
             managed_install = store.get_managed_install(harness)
         except (json.JSONDecodeError, sqlite3.Error):
@@ -61,25 +59,16 @@ def refresh_bounded_hook_clients(
         if script_path is None or _crosses_symlink(context.guard_home, script_path) or not script_path.is_file():
             continue
         try:
-            resolved_timeout = timeout_seconds(context) if callable(timeout_seconds) else timeout_seconds
-        except (OSError, RuntimeError, ValueError) as error:
-            warnings.append(f"Could not refresh {display_name} hook client during update: {error}")
+            repair_context, repair_workspace = managed_install_context(context, managed_install)
+            payload = apply_managed_install(
+                "install", harness, False, repair_context, store, repair_workspace or workspace, now
+            )
+            script_path.unlink(missing_ok=True)
+        except (OSError, RuntimeError, ValueError, json.JSONDecodeError, sqlite3.Error) as error:
+            warnings.append(f"Could not move {display_name} hooks to the native runtime during update: {error}")
             continue
-        expected = _render_bounded_hook_script(
-            guard_home=context.guard_home,
-            harness=harness,
-            timeout_seconds=resolved_timeout,
-        )
-        try:
-            if script_path.read_text(encoding="utf-8") == expected:
-                continue
-            from ..adapters.adapter_safe_output import write_text_at_authorized_path
-
-            write_text_at_authorized_path(script_path, expected)
-        except (OSError, RuntimeError, ValueError) as error:
-            warnings.append(f"Could not refresh {display_name} hook client during update: {error}")
-            continue
-        refreshed.append(dict(managed_install))
+        repaired = payload.get("managed_install")
+        refreshed.append(dict(repaired) if isinstance(repaired, dict) else dict(managed_install))
     return refreshed, warnings
 
 

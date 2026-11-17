@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 from codex_plugin_scanner.guard.cli import commands_support_hook_state
-from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+from codex_plugin_scanner.guard.hook_review import hook_native_review_approval
 
 PINNED_CLOCK = "2026-03-01T13:00:00.654321+00:00"
 PINNED_CODE = "0a1b2c3d4e5f"

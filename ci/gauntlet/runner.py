@@ -22,6 +22,7 @@ from .agent_prompt import fixture_authorization
 from .approval_retry_omp import OmpReview
 from .approval_retry_omp import enabled as approval_retry_enabled
 from .approval_retry_persistent import case_environment as approval_persistent_environment
+from .approval_retry_relay import RELAY_ORACLE, record_daemon_origin
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import (
@@ -66,6 +67,7 @@ from .native_tools import CREDENTIAL_REPORT_CASE, TASK_SCHEMA_CASE, cleanup_priv
 from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
+from .release_budgets import attempt_observations, release_budgets
 from .review_fixtures import GITHUB_ENABLED_CASES, GITHUB_STUB_CASES, WORKTREE_CASES, configure_github_review_controls
 from .runtime_cases import stage_runtime_cases
 from .script_cases import stage_script_cases
@@ -240,6 +242,8 @@ def run_case(
                 identity=identity,
                 register_workspace_policy=not first_contact,
             )
+            if scenario.oracle == RELAY_ORACLE:
+                record_daemon_origin(daemon)
             if scenario.oracle == "blocked-extension":
                 case["extension_control"] = configure_extension_permission_denial(
                     daemon, fixture.root / "guard-home", extension_adapter(scenario.commands[0])
@@ -323,7 +327,7 @@ def run_case(
                 environment["PATH"] = str(node_bin) + os.pathsep + environment["PATH"]
             environment.update(
                 GUARD_GAUNTLET_OBSERVER_LOG=str(guard_log),
-                GUARD_GAUNTLET_DAEMON_PORT=str(daemon._server.server_address[1]),
+                GUARD_GAUNTLET_DAEMON_PORT=str(daemon.port),
                 GUARD_GAUNTLET_HOST_OBSERVER_LOG=str(private / "host.jsonl"),
             )
             host_log = private / "host.jsonl"
@@ -370,8 +374,8 @@ def run_case(
                     timeout=timeout + 15,
                 )
             time.sleep(0.1)
-            if review is not None and approver is not None:
-                review.collect(case, worker, approver, replacements)
+            if review is not None:
+                review.collect(case, worker, approver, replacements, raw_log, f"http://127.0.0.1:{daemon.port}")
             if scenario.oracle == "watch-command":
                 case["watch_binding_after"] = _watch_binding(worker.store)
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
@@ -440,7 +444,7 @@ def run_case(
         case["execution_error_chain"] = chain
         (private / "execution-error.txt").write_text("\n".join(chain) + "\n", encoding="utf-8")
     finally:
-        case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+        case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id, scenario.path)
         remove_scratch_checkout(fixture.root)
         if daemon is not None:
             case.update(cleanup_case_resources(daemon, identity, fixture.root / "guard-home", private))
@@ -688,6 +692,14 @@ def run_suite(
     report["case_coverage"] = run_coverage(selected, catalog, completed)
     report["stopped_early"] = len(report["cases"]) < len(selected)
     report.update(report_sections(report["cases"]))
+    report["release_budgets"] = release_budgets(
+        report["cases"],
+        report["interruptions"],
+        summarize_hook_latency(
+            attempt_observations(output, [row["id"] for row in report["cases"]], report.get("case_retries") or [])
+        ),
+        report["known_gaps"],
+    )
     report["pass"] = (
         report["full_profile"]
         and len(report["cases"]) == len(selected)

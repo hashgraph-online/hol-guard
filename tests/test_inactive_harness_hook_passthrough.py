@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from codex_plugin_scanner.guard.daemon.hook_policy_admission import prepare_native_hook_policy
+from codex_plugin_scanner.guard.hook_review.hook_policy_admission import prepare_native_hook_policy
 from codex_plugin_scanner.guard.store import GuardStore
 
 _PRE_TOOL_PAYLOAD: dict[str, object] = {

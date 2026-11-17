@@ -1,0 +1,105 @@
+{
+ "key": "extensions-test-key",
+ "errors": [
+  {
+   "query": "limit=0",
+   "status": 400,
+   "body": {
+    "error": "limit_out_of_range"
+   }
+  },
+  {
+   "query": "limit=101",
+   "status": 400,
+   "body": {
+    "error": "limit_out_of_range"
+   }
+  },
+  {
+   "query": "limit=-1",
+   "status": 400,
+   "body": {
+    "error": "limit_out_of_range"
+   }
+  },
+  {
+   "query": "limit=x",
+   "status": 400,
+   "body": {
+    "error": "invalid_integer"
+   }
+  },
+  {
+   "query": "color=1",
+   "status": 400,
+   "body": {
+    "error": "unknown_query_parameter"
+   }
+  },
+  {
+   "query": "limit=1&limit=2",
+   "status": 400,
+   "body": {
+    "error": "invalid_query_parameter"
+   }
+  },
+  {
+   "query": "limit=",
+   "status": 400,
+   "body": {
+    "error": "invalid_query_parameter"
+   }
+  },
+  {
+   "query": "cursor=gca1.e30.AAAA",
+   "status": 400,
+   "body": {
+    "error": "invalid_cursor"
+   }
+  },
+  {
+   "query": "cursor=nope",
+   "status": 400,
+   "body": {
+    "error": "invalid_cursor"
+   }
+  },
+  {
+   "query": "cursor=gca1.eyJhZnRlciI6ImNvbW1hbmQuZ2l0Iiwia2luZCI6ImFjdGl2aXR5In0.zYOI0SnpMeo63xfANIF7--HnSKBXOfVuQ7oCEjjr7A0",
+   "status": 400,
+   "body": {
+    "error": "invalid_cursor"
+   }
+  }
+ ],
+ "cursor_after_command_git": "gca1.eyJhZnRlciI6ImNvbW1hbmQuZ2l0Iiwia2luZCI6ImV4dGVuc2lvbnMifQ.q3nMdfESRK-1GftsPOKwCruX2vRYL5wmEmKeWfTjpaY",
+ "item_keys": [
+  "extension_id",
+  "version",
+  "name",
+  "description",
+  "enabled",
+  "required",
+  "source",
+  "dependencies",
+  "conflicts",
+  "delegated_protection",
+  "action_classes",
+  "risk_classes",
+  "rule_count",
+  "rules"
+ ],
+ "rule_keys": [
+  "rule_id",
+  "title",
+  "description",
+  "severity",
+  "risk_classes",
+  "action_classes",
+  "default_mode",
+  "safe_variant_ids",
+  "compatibility_fallback"
+ ],
+ "schema_version": 2,
+ "source": "built-in"
+}

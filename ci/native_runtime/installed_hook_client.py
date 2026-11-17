@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
 
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 
 # Probes run this file with ``python -I`` against an installed wheel, so the
 # repository root is not importable; load the shared hook client and the auth

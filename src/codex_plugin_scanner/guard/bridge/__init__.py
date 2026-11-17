@@ -17,8 +17,8 @@ from urllib.parse import urlparse
 
 import requests
 
-from ..daemon.manager import load_guard_daemon_auth_token
 from ..mdm.network import managed_requests_session, refuse_encoded_responses
+from ..native_daemon_manage import load_guard_daemon_auth_token
 from ..store import GuardStore
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})

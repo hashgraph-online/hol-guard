@@ -66,7 +66,7 @@ impl Store {
         let PyVal::Dict(payload) = pyjson::parse(body).unwrap() else {
             panic!("{body}");
         };
-        respond(&route, &payload, &self.config, &self.reads)
+        respond(&route, &payload, true, &self.config, &self.reads)
     }
 
     fn events(&self) -> Vec<(String, String)> {

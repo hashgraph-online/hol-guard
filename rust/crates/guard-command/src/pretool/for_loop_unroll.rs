@@ -7,16 +7,18 @@
 
 #[path = "for_loop_unroll_body.rs"]
 pub(super) mod body;
+#[path = "for_loop_unroll_conditional.rs"]
+mod conditional;
 
 use body::{
-    body_items, rebinds, redirect_tail, references_are_quoted, references_stand_alone, substitute,
+    body_items, rebinds, redirect_tail, references_are_quoted, references_stand_alone,
     unquote_whole_references,
 };
 
 const MAX_WORDS: usize = 32;
 const MAX_WORD_BYTES: usize = 256;
 const MAX_BODY_BYTES: usize = 2048;
-const MAX_UNROLLED_BYTES: usize = 8192;
+const MAX_UNROLLED_BYTES: usize = crate::MAX_COMMAND_BYTES;
 
 const CONTROL_WORDS: &[&str] = &[
     "!", "[[", "case", "coproc", "do", "done", "elif", "else", "esac", "fi", "for", "function",
@@ -39,7 +41,61 @@ const SHELL_SPECIAL_NAMES: &[&str] = &[
 /// The unrolled command text for a top-level `for NAME in WORD...; do BODY; done`
 /// over literal words and glob patterns, or `None` when the command is
 /// anything else.
+#[cfg(test)]
 pub(super) fn unroll(command: &str) -> Option<String> {
+    unroll_at(command, None)
+}
+
+/// [`unroll`], also reading a word spelled from the home directory.
+///
+/// The shell expands an unquoted `~/` at the start of a loop word before the
+/// loop runs, so `for d in ~/work/a` hands the body the absolute path. The
+/// unrolled text writes that path out, as the loop spelled with it is
+/// written, so a quoted reference in the body still names the home path and
+/// not a literal `./~`. Only a home made of plain path characters is written
+/// out; any other keeps the review.
+pub(super) fn unroll_at(command: &str, home_dir: Option<&str>) -> Option<String> {
+    unrolled(command, home_dir, Place::Alone).map(|(text, _)| text)
+}
+
+/// Where a loop stands in the command it was read from.
+#[derive(Clone, Copy, PartialEq)]
+enum Place {
+    /// The loop is the whole command, with at most a filter or redirect after
+    /// `done`.
+    Alone,
+    /// The loop starts one item of a longer command list. `gated` says the
+    /// item follows `&&` or `||`, so the loop may not run at all.
+    InList { gated: bool },
+}
+
+/// A loop that opens the text, written out, and the text after its `done`,
+/// which is empty or starts with a list separator.
+///
+/// A loop over literal words runs its body once per word, every time, so the
+/// written-out list is the same work wherever the loop stands in a list. Two
+/// shapes need more care. When `&&` or `||` comes before the loop it may be
+/// skipped, while the written-out list skips only its first command, so a body
+/// that changes the directory or another piece of shell state would make the
+/// later steps look as if they ran somewhere else; that body keeps its review.
+/// When `&&` or `||` comes after `done`, it reads the status of the body's last
+/// command, so a `!` there cannot be dropped and keeps the review.
+pub(super) fn unroll_in_list<'a>(
+    command: &'a str,
+    home_dir: Option<&str>,
+    gated: bool,
+) -> Option<(String, &'a str)> {
+    unrolled(command, home_dir, Place::InList { gated })
+}
+
+fn unrolled<'a>(
+    command: &'a str,
+    home_dir: Option<&str>,
+    place: Place,
+) -> Option<(String, &'a str)> {
+    let home = home_dir
+        .map(|home| home.trim_end_matches('/'))
+        .filter(|home| home.starts_with('/') && home.len() > 1 && safe_value(home));
     if command
         .chars()
         .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
@@ -53,14 +109,54 @@ pub(super) fn unroll(command: &str) -> Option<String> {
         return None;
     }
     let rest = keyword(rest, "in")?;
-    let (words, rest) = header_words(rest)?;
+    let (words, rest) = header_words(rest, home)?;
     if words.is_empty() || words.len() > MAX_WORDS {
         return None;
     }
     let rest = rest.trim_start_matches([' ', '\t', '\n', ';']);
     let rest = keyword(rest, "do")?;
-    let (items, _, tail) = body_items(rest, name, &["done"])?;
-    let tail = redirect_tail(tail)?;
+    let (items, _, after) = body_items(rest, name, &["done"])?;
+    let (piped, tail, rest) = match place {
+        Place::Alone => {
+            // A pipe into text filters after `done` reads the whole loop's
+            // output as one stream, which is the unrolled list in a brace
+            // group piped the same way. `piped_group` decides that group.
+            let piped = super::piped_group::filter_tail(after);
+            // `cd DIR && for ...; done | FILTER` runs the filters in DIR, but
+            // the group would carry the `cd` inside it and the filters would
+            // be proved in the caller's directory, so that shape keeps its
+            // review.
+            if piped.is_some() && !prefix.is_empty() {
+                return None;
+            }
+            let tail = match piped {
+                Some(_) => String::new(),
+                None => redirect_tail(after)?,
+            };
+            (piped, tail, "")
+        }
+        Place::InList { gated } => {
+            let rest = after.trim_start_matches([' ', '\t']);
+            let joined = rest.starts_with("&&") || rest.starts_with("||");
+            if !(rest.is_empty()
+                || joined
+                || (rest.starts_with([';', '\n']) && !rest.starts_with(";;")))
+            {
+                return None;
+            }
+            let last_negated = items
+                .last()
+                .is_some_and(|(text, _)| text.trim_start().starts_with('!'));
+            let changes_state = !prefix.is_empty()
+                || items
+                    .iter()
+                    .any(|(text, _)| super::control_flow_chain::changes_shell_state(text));
+            if (joined && last_negated) || (gated && changes_state) {
+                return None;
+            }
+            (None, String::new(), rest)
+        }
+    };
     if items.is_empty() || items.iter().any(|(text, _)| rebinds(text, name)) {
         return None;
     }
@@ -95,17 +191,12 @@ pub(super) fn unroll(command: &str) -> Option<String> {
     };
     let mut out = prefix;
     for word in &words {
-        for (text, separator) in &items {
-            // The unrolled list runs the items the loop ran. A leading `!`
-            // only inverts an item's exit status, so it is dropped wherever
-            // the separator after it shows nothing reads that outcome.
-            let step =
-                super::control_flow_flatten::unnegated_part(&substitute(text, word)?, separator);
+        // The unrolled list runs the items the loop ran. A leading `!` only
+        // inverts an item's exit status, so it is dropped wherever the
+        // separator after it shows nothing reads that outcome. An `if … fi`
+        // statement is written out whole as one step.
+        for (step, separator) in conditional::written_steps(&items, word, &tail)? {
             out.push_str(&step);
-            if !tail.is_empty() {
-                out.push(' ');
-                out.push_str(&tail);
-            }
             out.push_str(separator);
         }
         if out.len() > MAX_UNROLLED_BYTES {
@@ -113,7 +204,13 @@ pub(super) fn unroll(command: &str) -> Option<String> {
         }
     }
     let trimmed = out.trim_end_matches([' ', ';']);
-    Some(trimmed.to_owned())
+    Some((
+        match piped {
+            Some(filters) => format!("{{ {trimmed}; }} | {filters}"),
+            None => trimmed.to_owned(),
+        },
+        rest,
+    ))
 }
 
 /// An optional leading `cd DIR && ` with a literal directory. It is kept once
@@ -263,7 +360,7 @@ fn names_a_file_type(value: &str) -> bool {
 /// literal rule: writing it back out unquoted would otherwise hand the body a
 /// pattern the loop never expanded. Its text may hold the separators the
 /// quotes protect, which [`spaced_value`] admits.
-fn header_words(text: &str) -> Option<(Vec<String>, &str)> {
+fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, &'a str)> {
     let mut words: Vec<(String, bool)> = Vec::new();
     let mut current = String::new();
     let mut in_word = false;
@@ -316,6 +413,11 @@ fn header_words(text: &str) -> Option<(Vec<String>, &str)> {
                         other => current.push(other),
                     }
                 }
+            }
+            // An unquoted `~/` opening a word is the home directory.
+            '~' if !in_word && chars.peek().is_some_and(|(_, next)| *next == '/') => {
+                current.push_str(home?);
+                in_word = true;
             }
             '$' | '`' | '\\' | '(' | ')' | '{' | '}' | '~' | '&' | '|' | '<' | '>' | '#' | '!' => {
                 return None

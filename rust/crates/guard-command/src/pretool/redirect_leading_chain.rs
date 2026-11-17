@@ -20,8 +20,8 @@ use crate::CanonicalCommandV1;
 /// Steps that print, count or filter. None executes a file it reads, changes
 /// directory, renames a file or creates a link.
 const READERS: &[&str] = &[
-    "cat", "cut", "diff", "echo", "grep", "head", "jq", "ls", "nl", "printf", "rg", "sort", "tail",
-    "tr", "true", "uniq", "wc",
+    "base64", "cat", "cut", "diff", "echo", "grep", "head", "jq", "ls", "nl", "printf", "rg",
+    "sort", "tail", "tr", "true", "uniq", "wc",
 ];
 
 /// Whether every step after the first is a plain reader spelled by name, with

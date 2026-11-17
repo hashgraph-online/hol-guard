@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source
+from tests.cline_test_support import plugin_source as _plugin_source
 from tests.cline_worker_config import worker_config as _worker_config
 
 

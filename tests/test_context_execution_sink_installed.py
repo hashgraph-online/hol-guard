@@ -17,7 +17,7 @@ import pytest
 
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_bash_protocol import runtime_status
 from codex_plugin_scanner.guard.native_context_assistance import ContextAssistanceError, control, workspace
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents

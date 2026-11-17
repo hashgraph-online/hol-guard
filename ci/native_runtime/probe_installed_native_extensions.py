@@ -17,9 +17,9 @@ import time
 from pathlib import Path
 
 import codex_plugin_scanner
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.approval_gate import update_settings
 from codex_plugin_scanner.guard.config import update_guard_settings
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_command_control_authority import AUTHORITY_FILE_NAME
 from codex_plugin_scanner.guard.native_hook_edge import review_raw_hook_native
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import (

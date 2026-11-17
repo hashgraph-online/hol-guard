@@ -100,12 +100,12 @@ class TestLazyDetectorRegistry:
 
 class TestClientTimeoutConstants:
     def test_default_request_timeout_is_five_seconds(self) -> None:
-        from codex_plugin_scanner.guard.daemon.client import _DEFAULT_REQUEST_TIMEOUT_S
+        from codex_plugin_scanner.guard.native_daemon_client import _DEFAULT_REQUEST_TIMEOUT_S
 
         assert _DEFAULT_REQUEST_TIMEOUT_S == 5.0
 
     def test_status_request_timeout_is_250ms(self) -> None:
-        from codex_plugin_scanner.guard.daemon.client import _STATUS_REQUEST_TIMEOUT_S
+        from codex_plugin_scanner.guard.native_daemon_client import _STATUS_REQUEST_TIMEOUT_S
 
         assert pytest.approx(0.25) == _STATUS_REQUEST_TIMEOUT_S
 

@@ -99,3 +99,36 @@ def test_runtime_answer_skips_status_and_process_once_stopped(monkeypatch) -> No
     stopped.set()
     with native_process_stop_scope(stopped):
         assert runtime_answer("feature", "command", {}, output_limit=1024) is None
+
+
+def test_native_publish_stops_when_its_owner_closes(tmp_path: Path, monkeypatch) -> None:
+    """A close during the publisher's generation-lock wait must not block in readline."""
+
+    import os
+    import time
+    from types import SimpleNamespace
+
+    import pytest
+
+    import codex_plugin_scanner.guard.native_policy_snapshot_business_bridge as bridge
+    import codex_plugin_scanner.guard.native_policy_snapshot_publisher_transport as transport
+    from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
+    from codex_plugin_scanner.guard.native_process_stop_scope import native_process_stop_scope
+
+    if os.name == "nt":
+        pytest.skip("the stand-in publisher is a POSIX shell script")
+    stand_in = tmp_path / "hol-guard-runtime"
+    stand_in.write_text("#!/bin/sh\nexec sleep 30\n")
+    stand_in.chmod(0o700)
+    status = SimpleNamespace(
+        identity=SimpleNamespace(path=stand_in),
+        capabilities=SimpleNamespace(features=(transport._PUBLISH_FEATURE,)),
+    )
+    monkeypatch.setattr(bridge, "_selected_runtime", lambda **_kwargs: status)
+    stop = threading.Event()
+    threading.Timer(0.3, stop.set).start()
+    started = time.monotonic()
+    with native_process_stop_scope(stop), pytest.raises(NativePolicySnapshotError) as stopped:
+        transport._run_publish(lambda: (bytearray(b"{}\n{}\n"), 60.0), lambda _payload, _timeout: None, business=False)
+    assert stopped.value.args[0] == "native_policy_snapshot_runtime_unavailable"
+    assert time.monotonic() - started < 5

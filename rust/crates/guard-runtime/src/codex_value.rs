@@ -101,7 +101,7 @@ impl HookVal {
         )
     }
 
-    fn from_item(item: &toml_edit::Item) -> Option<HookVal> {
+    pub(crate) fn from_item(item: &toml_edit::Item) -> Option<HookVal> {
         match item {
             toml_edit::Item::None => None,
             toml_edit::Item::Value(value) => Some(HookVal::from_edit(value)),
@@ -112,7 +112,7 @@ impl HookVal {
         }
     }
 
-    fn from_edit(value: &toml_edit::Value) -> HookVal {
+    pub(crate) fn from_edit(value: &toml_edit::Value) -> HookVal {
         match value {
             toml_edit::Value::String(text) => HookVal::Str(text.value().clone()),
             toml_edit::Value::Integer(number) => HookVal::Int(number.value().to_string()),

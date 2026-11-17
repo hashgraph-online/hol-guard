@@ -15,7 +15,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .daemon.hook_worker import HookWorker
+from .hook_review.hook_worker import HookWorker
 from .native_hook_edge import review_raw_hook_native
 from .native_runtime import NativeRuntimeIdentity, native_runtime_status
 from .runtime_transition import TransitionError

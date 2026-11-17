@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import codex_plugin_scanner.guard.daemon.hook_worker as hook_worker_module
+import codex_plugin_scanner.guard.hook_review.hook_worker as hook_worker_module
 from codex_plugin_scanner.guard import native_policy_snapshot as snapshot_api
 from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot_v3
 from codex_plugin_scanner.guard.native_policy_snapshot_acked import acked_snapshot_binding_for_store

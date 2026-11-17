@@ -120,7 +120,7 @@ def test_unpresentable_native_action_stays_blocked(
         raise ValueError("fixture-private-value")
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.native_review_query", cannot_describe
+        "codex_plugin_scanner.guard.hook_review.hook_native_review_approval.native_review_query", cannot_describe
     )
     result = worker.review_http_payload(
         payload={"hook_event_name": "PreToolUse", "tool_name": "eval", "tool_input": {"code": "1 + 1"}},

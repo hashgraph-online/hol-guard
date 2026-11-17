@@ -11,7 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_runtime as runtime
 from codex_plugin_scanner.guard import native_runtime_process_cache as process_cache
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_runtime_request_scope import native_status_request_scope
 from codex_plugin_scanner.guard.native_runtime_status_share import share_verified_runtime_status
 

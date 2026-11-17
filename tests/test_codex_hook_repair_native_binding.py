@@ -150,8 +150,8 @@ def test_real_configured_hook_native_protection_commits_repair(
     monkeypatch,
     boundary,
 ):
+    from ci.guard_daemon_harness import GuardDaemonServer
     from codex_plugin_scanner.guard import codex_hook_recovery as recovery
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
     from codex_plugin_scanner.guard.native_runtime import native_runtime_status
     from codex_plugin_scanner.guard.runtime_transition_admission import verified_admission_payload
@@ -216,7 +216,16 @@ def test_real_configured_hook_native_protection_commits_repair(
                 assert recovery.hook_publication_pending(context.guard_home)
                 assert recovery.recover_hook_publication(context.guard_home)
             if boundary == "record-cap":
-                monkeypatch.setattr(recovery, "_MAX_RECORD", recovery._record_path(context.guard_home).stat().st_size)
+                # The runtime refuses a committed record over its cap before
+                # writing it; the refusal must leave the predecessor in place.
+                native_publication = recovery._publication
+
+                def capped(op, home, **fields):
+                    if op == "commit_repair":
+                        raise recovery._error("record_too_large")
+                    return native_publication(op, home, **fields)
+
+                monkeypatch.setattr(recovery, "_publication", capped)
             if boundary == "stale-proof":
                 pass
             elif boundary == "commit-cleanup-crash":

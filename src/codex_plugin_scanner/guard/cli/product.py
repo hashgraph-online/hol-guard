@@ -16,8 +16,8 @@ from ..adapters import get_adapter
 from ..adapters.base import HarnessContext, artifacts_use_guard
 from ..config import GuardConfig
 from ..consumer import detect_all
-from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
 from ..models import HarnessDetection
+from ..native_daemon_peer import load_guard_daemon_endpoint_url
 from ..redaction import redact_local_path
 from ..runtime.connector_setup_items import connector_setup_status
 from ..store import GuardStore

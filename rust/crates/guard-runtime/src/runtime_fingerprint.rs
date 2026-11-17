@@ -1,5 +1,5 @@
 //! `runtime-fingerprint --stdin`: the identity of an installed Guard source
-//! tree, for daemon compatibility (`guard/daemon/manager.py` memoises the
+//! tree, for daemon compatibility (the retired Python `manager.py` memoises the
 //! answer for the life of its process).
 //!
 //! Two processes of the same install must compute the same identity, and an

@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import codex_resume as codex_resume_module
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -685,62 +685,3 @@ def test_codex_approve_returns_failed_resume_when_app_server_socket_missing(
     assert payload["codexResume"]["status"] == "failed"
     assert payload["codexResume"]["reason"] == "socket_not_available"
     assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
-
-
-def test_request_resume_retry_reports_a_missing_resident_as_unavailable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from codex_plugin_scanner.guard.codex_resume import ResumeUnavailableError
-    from codex_plugin_scanner.guard.daemon.server_control_policy import _ControlPolicyRoutes
-
-    written: dict[str, object] = {}
-
-    def _write_json(payload: dict[str, object], *, status: int = 200) -> None:
-        written["payload"] = payload
-        written["status"] = status
-
-    routes = _ControlPolicyRoutes.__new__(_ControlPolicyRoutes)
-    routes._write_json = _write_json  # type: ignore[method-assign]
-    routes.server = type("_Server", (), {"store": object()})()
-
-    def _retry(*args: object, **kwargs: object) -> dict[str, object]:
-        raise ResumeUnavailableError()
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server_control_policy.retry_request_resume",
-        _retry,
-    )
-    routes._handle_request_resume_retry("req-unavailable")
-
-    assert written == {"payload": {"error": "resume_unavailable"}, "status": 503}
-
-
-def test_request_resume_read_reports_a_missing_resident_as_unavailable(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from codex_plugin_scanner.guard.daemon.server_control_policy import _ControlPolicyRoutes
-
-    written: dict[str, object] = {}
-
-    def _write_json(payload: dict[str, object], *, status: int = 200) -> None:
-        written["payload"] = payload
-        written["status"] = status
-
-    store = type(
-        "_Store",
-        (),
-        {
-            "guard_home": tmp_path,
-            "path": tmp_path / "guard.db",
-            "get_approval_request": lambda self, request_id: {"request_id": request_id},
-        },
-    )()
-    routes = _ControlPolicyRoutes.__new__(_ControlPolicyRoutes)
-    routes._write_json = _write_json  # type: ignore[method-assign]
-    routes.server = type("_Server", (), {"store": store})()
-    monkeypatch.setattr("codex_plugin_scanner.guard.codex_resume.ensure_resident_prerequisite", lambda home: False)
-
-    routes._handle_request_resume_read("req-unavailable")
-
-    assert written == {"payload": {"error": "resume_unavailable"}, "status": 503}

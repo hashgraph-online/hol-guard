@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_codex_binding_capture as capture
-from codex_plugin_scanner.guard.daemon import hook_worker_native_review
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review import hook_worker_native_review
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_codex_binding_capture import CodexBindingCaptureWriter
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_pretool_edge_fixtures import canonical_receipt_bytes

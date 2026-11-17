@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline import ClineHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cline_mcp import install_cline_mcp_proxies
+from codex_plugin_scanner.guard.adapters.cline_runtime import ClineHarnessAdapter
+from codex_plugin_scanner.guard.adapters.cline_runtime import install_mcp_proxies as install_cline_mcp_proxies
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.adapters.mcp_servers import (
@@ -18,8 +18,9 @@ from codex_plugin_scanner.guard.adapters.mcp_servers import (
     managed_stdio_servers,
     proxy_cli_args,
 )
-from codex_plugin_scanner.guard.adapters.opencode_artifacts import native_artifacts
+from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from tests.cursor_test_support import cursor_mcp_state_path
 
 
 def _wrapped(tmp_path: Path, *, native: bool, layers: int = 1, account: str = "one") -> GuardArtifact:
@@ -224,10 +225,7 @@ def test_proxy_inventory_declines_wrong_host(tmp_path: Path) -> None:
     )
 
 
-def test_cursor_reinstall_refreshes_launcher_without_adding_proxy_layers(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_cursor_reinstall_refreshes_launcher_without_adding_proxy_layers(tmp_path: Path) -> None:
     home = tmp_path / "home"
     config = home / ".cursor/mcp.json"
     config.parent.mkdir(parents=True)
@@ -246,8 +244,6 @@ def test_cursor_reinstall_refreshes_launcher_without_adding_proxy_layers(
     config.write_text(
         json.dumps({"mcpServers": {"fixture": {"command": "hol-guard", "args": args, "env": server.env}}})
     )
-    # Hook installation is independent of the MCP JSON update under test.
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor.install_cursor_hooks", lambda context: {})
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=tmp_path / "guard")
     for _ in range(2):
         CursorHarnessAdapter().install(context)
@@ -268,7 +264,6 @@ def test_cursor_reinstall_refreshes_launcher_without_adding_proxy_layers(
 )
 def test_cursor_install_inventory_keeps_only_effective_server_env(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     blocked: str,
 ) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
@@ -287,7 +282,6 @@ def test_cursor_install_inventory_keeps_only_effective_server_env(
             }
         )
     )
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor.install_cursor_hooks", lambda context: {})
     CursorHarnessAdapter().install(context)
     installed = json.loads(config.read_text())["mcpServers"]["fixture"]
     assert f"--server-env-key={blocked}" not in installed["args"]
@@ -309,7 +303,7 @@ def test_cursor_install_inventory_keeps_only_effective_server_env(
     assert len(legacy) == 1 and legacy[0].identity.identity_hash == servers[0].identity.identity_hash
 
 
-def test_cursor_global_copy_recovers_saved_workspace_origin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cursor_global_copy_recovers_saved_workspace_origin(tmp_path: Path) -> None:
     context = HarnessContext(
         home_dir=tmp_path / "home", workspace_dir=tmp_path / "workspace", guard_home=tmp_path / "guard"
     )
@@ -336,11 +330,10 @@ def test_cursor_global_copy_recovers_saved_workspace_origin(tmp_path: Path, monk
         detections=(CursorHarnessAdapter().detect(context),),
     )
     assert len(before) == 1
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor.install_cursor_hooks", lambda context: {})
     CursorHarnessAdapter().install(context)
     global_context = replace(context, workspace_dir=None)
     # Simulate the state format written by earlier published installations.
-    state_path = CursorHarnessAdapter._state_path(context.home_dir / ".cursor/mcp.json", context)
+    state_path = cursor_mcp_state_path(context.home_dir / ".cursor/mcp.json", context.guard_home)
     state = json.loads(state_path.read_text())
     state.pop("managed_origins")
     state_path.write_text(json.dumps(state))
@@ -416,11 +409,13 @@ def test_cline_installed_inventory_uses_private_launch_values(tmp_path: Path) ->
 
 
 def test_opencode_installed_inventory_normalizes_padded_env_keys(tmp_path: Path) -> None:
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
+    config_path = context.home_dir / ".config" / "opencode" / "opencode.json"
     server = ManagedMcpServer(
         harness="opencode",
         name="fixture",
         source_scope="global",
-        config_path=str(tmp_path / "opencode.json"),
+        config_path=str(config_path),
         command="python",
         args=("fixture_server.py",),
         transport="local",
@@ -428,11 +423,13 @@ def test_opencode_installed_inventory_normalizes_padded_env_keys(tmp_path: Path)
         enabled=True,
     )
     args = proxy_cli_args(proxy_command="opencode-mcp-proxy", guard_home=str(tmp_path / "guard"), server=server)
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
     payload = {"mcp": {"fixture": {"type": "local", "command": ["hol-guard", *args], "environment": server.env}}}
-    artifacts, _found = native_artifacts(context, [(Path(server.config_path), "global", payload)])
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+    detected = OpenCodeHarnessAdapter().detect(context)
+    artifacts = [artifact for artifact in detected.artifacts if artifact.artifact_type == "mcp_server"]
     servers = discover_harness_mcp_servers(
-        home_dir=tmp_path,
+        home_dir=context.home_dir,
         guard_home=tmp_path / "guard",
         detections=(_detection(artifacts[0]),),
     )

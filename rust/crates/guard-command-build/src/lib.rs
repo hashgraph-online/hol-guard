@@ -407,6 +407,8 @@ pub mod restricted_command;
 pub mod restricted_pytest;
 #[path = "../../guard-command/src/safe_decode/mod.rs"]
 pub mod safe_decode;
+#[path = "../../guard-command/src/shell_comment_lines.rs"]
+mod shell_comment_lines;
 #[path = "../../guard-command/src/shims/mod.rs"]
 pub mod shims;
 #[path = "../../guard-command/src/strict_json.rs"]

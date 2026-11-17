@@ -149,11 +149,11 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::codex_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::bounded_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::bounded_hook_bridge::MUSE_BRIDGE_FEATURE.into());
     features.push(crate::cursor_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::pi_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::cline_hook_worker::WORKER_FEATURE.into());
-    #[cfg(unix)]
-    features.push(crate::daemon_edge::EDGE_FEATURE.into());
+    features.push(crate::daemon_edge::standalone::SERVE_FEATURE.into());
     features.push(guard_contracts::SKILL_DIRECTORY_IDENTITY_FEATURE.into());
     features.push(guard_contracts::SKILL_DOCUMENT_EVIDENCE_FEATURE.into());
     let (program_digest, catalog_digest, trust_digest) =
@@ -174,6 +174,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", content = "request", rename_all = "snake_case")]
 pub(crate) enum ResidentOperationV1 {
+    Swarm(crate::swarm_op::Request),
     ContextAssistance(crate::context_assistance_op::Request),
     ContextAgent(crate::context_assistance_agent_op::Request),
     ArchiveAcquisition(guard_contracts::ArchiveAcquisitionRequestV1),
@@ -349,6 +350,7 @@ pub(crate) enum ResidentOperationV1 {
     CloudCatalog(Value),
     DiscoveryPlacementProject(crate::discovery_placement_op::DiscoveryPlacementProjectRequest),
     ReleaseFeedProject(crate::release_feed_op::ReleaseFeedProjectRequest),
+    WindowsPrivateState(crate::windows_private_state::resident::ResidentRequest),
     DataFlowAnalyze(DataFlowAnalyzeRequestV1),
     ToolActionRequestIdentity(guard_contracts::ToolActionRequestIdentityRequestV1),
     RuntimeArtifactIdentity(guard_contracts::RuntimeArtifactIdentityRequestV1),

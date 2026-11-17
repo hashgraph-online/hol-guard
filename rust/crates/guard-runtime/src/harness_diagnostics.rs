@@ -10,18 +10,26 @@
 //!   "command_absence_proves_uninstalled", "runtime_probe", "detection"}`
 //!   answers `{"warnings": [...]}`, the warnings to append to the detection's
 //!   own, in order. `runtime_probe` is `null` when the adapter ran no probe,
-//!   else `{"timed_out", "failed", "reported_no_artifacts"}`: whether the probe
-//!   timed out, exited unsuccessfully, and listed no MCP servers.
+//!   else `{"timed_out", "failed", "reported_no_artifacts",
+//!   "managed_install_present", "runtime_hook_registered"}`: whether the probe
+//!   timed out, exited unsuccessfully and listed no MCP servers, and whether
+//!   a managed install exists with its runtime hook registered.
 //! - `{"op": "setup_status", "command_absence_proves_uninstalled",
 //!   "detection", "warnings"}` answers `{"setup_status": "active" | "broken" |
 //!   "partial" | "not_found"}`.
 //! - `{"op": "uses_guard", "artifacts"}` answers `{"uses_guard": bool}`.
+//! - `{"op": "launcher_shim", "paths"}` answers `{"launcher_shim": index}`,
+//!   the position of the first absolute path that is a Guard launcher shim:
+//!   a UTF-8 file whose text runs `codex_plugin_scanner.cli guard run`. It
+//!   answers `null` when none is.
 //!
 //! A detection is `{"config_paths", "command_available", "artifacts"}` and an
 //! artifact is `{"artifact_type", "command", "args", "harness"}`. The native
 //! request parser refuses any array wider than 4096 entries, so every list
 //! (config paths, artifacts, an artifact's args, warnings) crosses as a list
 //! of chunks that join back here in order.
+
+use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
@@ -92,8 +100,35 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
             let listed = artifacts(fields.get("artifacts"))?;
             Ok(json!({ "uses_guard": listed.iter().any(Artifact::uses_guard) }))
         }
+        "launcher_shim" => {
+            expect_keys(fields, &["op", "paths"])?;
+            let paths = fields
+                .get("paths")
+                .and_then(Value::as_array)
+                .ok_or(ERR_INVALID)?
+                .iter()
+                .map(|path| {
+                    path.as_str()
+                        .map(Path::new)
+                        .filter(|path| path.is_absolute())
+                        .ok_or(ERR_INVALID)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(json!({ "launcher_shim": paths.iter().position(|path| launcher_shim(path)) }))
+        }
         _ => Err(ERR_INVALID),
     }
+}
+
+/// Whether `path` is a launcher shim Guard wrote: a readable UTF-8 file that
+/// names its CLI module and the `guard run` command.
+fn launcher_shim(path: &Path) -> bool {
+    path.is_file()
+        && std::fs::read_to_string(path).is_ok_and(|text| {
+            ["codex_plugin_scanner.cli", "guard", "run"]
+                .iter()
+                .all(|needle| text.contains(needle))
+        })
 }
 
 struct Adapter<'a> {
@@ -107,6 +142,8 @@ struct Probe {
     timed_out: bool,
     failed: bool,
     reported_no_artifacts: bool,
+    managed_install_present: bool,
+    runtime_hook_registered: bool,
 }
 
 impl Probe {
@@ -117,11 +154,22 @@ impl Probe {
             return Ok(None);
         }
         let fields = value.as_object().ok_or(ERR_INVALID)?;
-        expect_keys(fields, &["timed_out", "failed", "reported_no_artifacts"])?;
+        expect_keys(
+            fields,
+            &[
+                "timed_out",
+                "failed",
+                "reported_no_artifacts",
+                "managed_install_present",
+                "runtime_hook_registered",
+            ],
+        )?;
         Ok(Some(Self {
             timed_out: flag(fields, "timed_out")?,
             failed: flag(fields, "failed")?,
             reported_no_artifacts: flag(fields, "reported_no_artifacts")?,
+            managed_install_present: flag(fields, "managed_install_present")?,
+            runtime_hook_registered: flag(fields, "runtime_hook_registered")?,
         }))
     }
 }
@@ -288,6 +336,12 @@ fn added_warnings(
                     .to_owned(),
             );
         }
+        "hermes" if probe.managed_install_present && !probe.runtime_hook_registered => warnings
+            .push(
+            "Hermes runtime hook is not registered. Shell and tool calls are launch-review only. \
+             Run `hol-guard install hermes` to write a fail-closed hooks.pre_tool_call entry."
+                .to_owned(),
+        ),
         _ => {}
     }
     warnings
@@ -325,7 +379,7 @@ fn warnings_include_setup_failure(warnings: &[&str]) -> bool {
 /// Whether any warning remains once the one about the missing tool command is
 /// set aside. Adapters word their own faults, so anything the missing command
 /// does not already explain keeps the setup broken.
-fn setup_failures_besides_missing_command(warnings: &[&str]) -> bool {
+pub(crate) fn setup_failures_besides_missing_command(warnings: &[&str]) -> bool {
     warnings
         .iter()
         .any(|warning| !warning.to_lowercase().contains(MISSING_COMMAND_MARKER))

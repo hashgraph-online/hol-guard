@@ -39,6 +39,8 @@ fn probe(timed_out: bool, failed: bool, reported_no_artifacts: bool) -> Value {
         "timed_out": timed_out,
         "failed": failed,
         "reported_no_artifacts": reported_no_artifacts,
+        "managed_install_present": false,
+        "runtime_hook_registered": false,
     })
 }
 
@@ -349,4 +351,49 @@ fn malformed_requests_are_refused() {
     ] {
         assert_eq!(dispatch(&request), Err(ERR_INVALID), "{request}");
     }
+}
+
+#[test]
+fn a_hermes_install_without_its_hook_reviews_launches_only() {
+    let warned = |registered: bool| {
+        let mut summary = probe(false, false, false);
+        summary["managed_install_present"] = json!(true);
+        summary["runtime_hook_registered"] = json!(registered);
+        probe_warnings("hermes", detection(&[], true, &[]), true, summary)
+    };
+    assert_eq!(
+        warned(false),
+        [
+            "Hermes runtime hook is not registered. Shell and tool calls are launch-review only. \
+          Run `hol-guard install hermes` to write a fail-closed hooks.pre_tool_call entry."
+        ]
+    );
+    assert!(warned(true).is_empty());
+    assert!(probe_warnings("hermes", detection(&[], true, &[]), true, Value::Null).is_empty());
+}
+
+#[test]
+fn the_first_file_running_guard_is_the_launcher_shim() {
+    let home = tempfile::tempdir().unwrap();
+    let bin = home.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    let other = bin.join("guard-codex");
+    std::fs::write(&other, "#!/bin/sh\nexec codex \"$@\"\n").unwrap();
+    let binary = bin.join("guard-codex.bin");
+    std::fs::write(&binary, [0xff, 0xfe, 0x00]).unwrap();
+    let shim = bin.join("guard-codex.cmd");
+    std::fs::write(
+        &shim,
+        "python -m codex_plugin_scanner.cli guard run codex %*\r\n",
+    )
+    .unwrap();
+    let ask = |paths: Value| dispatch(&json!({"op": "launcher_shim", "paths": paths}));
+    let paths = json!([bin.join("absent"), bin, other, binary, shim, shim]);
+    assert_eq!(ask(paths).unwrap(), json!({"launcher_shim": 4}));
+    assert_eq!(ask(json!([other])).unwrap(), json!({"launcher_shim": null}));
+    assert_eq!(ask(json!([])).unwrap(), json!({"launcher_shim": null}));
+    for paths in [json!(["relative/guard-codex"]), json!([1]), json!("x")] {
+        assert!(ask(paths).is_err());
+    }
+    assert!(dispatch(&json!({"op": "launcher_shim"})).is_err());
 }

@@ -80,14 +80,13 @@ def start_container(image: str) -> tuple[str, int]:
             "-p",
             "0:8474",
             image,
-            "python",
-            "-c",
-            "import os; os.makedirs('/tmp/guard-home', exist_ok=True); "
-            "from pathlib import Path; "
-            "from codex_plugin_scanner.guard.daemon import GuardDaemonServer; "
-            "from codex_plugin_scanner.guard.store import GuardStore; "
-            "s = GuardStore(Path('/tmp/guard-home')); d = GuardDaemonServer(s, host='0.0.0.0', port=8474); "
-            "d.start(); import time; time.sleep(999999)",
+            "hol-guard",
+            "daemon",
+            "--serve",
+            "--guard-home",
+            "/tmp/guard-home",
+            "--port",
+            "8474",
         ],
         capture_output=True,
         text=True,
@@ -416,7 +415,7 @@ def main():
                 "-c",
                 "import json; "
                 "from pathlib import Path; "
-                "from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token; "
+                "from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token; "
                 "home=Path('/tmp/guard-home'); "
                 "state=json.loads((home/'daemon-state.json').read_text()); "
                 "print(json.dumps({'auth_token': load_guard_daemon_auth_token(home) or '', "

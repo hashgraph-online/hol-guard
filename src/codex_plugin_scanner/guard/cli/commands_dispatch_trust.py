@@ -13,10 +13,15 @@ from typing import TextIO
 from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
-from ..daemon.manager import _guard_daemon_url_port, _load_state, load_guard_daemon_url, read_approval_center_locator
-from ..daemon.runtime_peer import daemon_source_is_desktop_core, load_guard_daemon_endpoint_url
 from ..local_trust_contract import TrustStatus
 from ..local_trust_controller import macos_native_backend_supported, resolve_passive_trust_state
+from ..native_daemon_manage import (
+    _guard_daemon_url_port,
+    _load_state,
+    load_guard_daemon_url,
+    read_approval_center_locator,
+)
+from ..native_daemon_peer import daemon_source_is_desktop_core, load_guard_daemon_endpoint_url
 from ..policy_integrity import is_remote_policy_source
 from ..store import GuardStore
 from .commands_support_interaction import _emit

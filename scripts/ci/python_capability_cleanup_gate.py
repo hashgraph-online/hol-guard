@@ -61,7 +61,7 @@ _MAX_DYNAMIC_IMPORT_DESTINATION: Final = 256
 _IMPORT_ROOTS: Final = (
     "codex_plugin_scanner.cli",
     "codex_plugin_scanner.guard.cli.commands",
-    "codex_plugin_scanner.guard.daemon.server",
+    "codex_plugin_scanner.guard.routes.request_handler",
 )
 
 

@@ -1,6 +1,5 @@
 //! The Grok answers of the bounded hook bridge: the pure steps of the
-//! generated Grok hook script (`bounded_cli_hook_script_template.py`
-//! rendered for `grok`), byte for byte.
+//! Grok hook client older releases generated, byte for byte.
 //!
 //! The script is the oracle. Its event names, daemon answer rendering,
 //! fail-closed payloads, approval request ids, decision rewrite and the
@@ -18,7 +17,7 @@ use crate::hook_env_stamp::{dumps, set_member};
 use crate::pyjson::{self, PyVal};
 
 const DEFAULT_EVENT: &str = "PreToolUse";
-const PROMPT_REASON: &str = "HOL Guard could not complete native prompt review safely.";
+const PROMPT_REASON: &str = "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running or not responding, open HOL Guard and choose Troubleshoot Guard, then Restart Guard, or run hol-guard daemon recovery restart, then send the prompt again. For a custom Guard home, run hol-guard daemon recovery restart --guard-home <path>.";
 const EVENT_NAME_KEYS: [&str; 6] = [
     "hook_event_name",
     "hookEventName",

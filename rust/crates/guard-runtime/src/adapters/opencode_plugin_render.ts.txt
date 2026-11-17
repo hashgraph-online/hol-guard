@@ -9,7 +9,6 @@ const GUARD_PYTHON = __GUARD_PYTHON__;
 const GUARD_FROZEN = __GUARD_FROZEN__;
 const GUARD_NATIVE_BRIDGE: {
   runtimePath: string;
-  bootstrap: string;
   config: Record<string, unknown>;
 } | null = __GUARD_NATIVE_BRIDGE__;
 const GUARD_HOOK_LAUNCHER = __GUARD_HOOK_LAUNCHER__;
@@ -75,7 +74,7 @@ function nativeHookArgs(pythonTarget: string, guardArgv: string[]): string[] {
     throw new Error("HOL Guard native hook bridge is not installed");
   }
   const config = { ...GUARD_NATIVE_BRIDGE.config, python_executable: pythonTarget, cli_args: guardArgv };
-  return ["bounded-hook-bridge", pythonTarget, "-I", "-c", GUARD_NATIVE_BRIDGE.bootstrap, JSON.stringify(config)];
+  return ["bounded-hook-bridge", JSON.stringify(config)];
 }
 
 export function verifyGuardPythonIdentity(): void {

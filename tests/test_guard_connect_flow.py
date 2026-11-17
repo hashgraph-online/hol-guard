@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import package_firewall_entitlement as entitlement_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.cli.connect_flow import (
@@ -20,8 +21,6 @@ from codex_plugin_scanner.guard.cli.connect_flow import (
     run_guard_browser_connect_command,
 )
 from codex_plugin_scanner.guard.cli.oauth_client import GuardDpopKeyMaterial
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.package_firewall_entitlement import resolve_package_firewall_entitlement
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
@@ -255,7 +254,6 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
             "runtime_sessions_visible": 1,
         },
     )
-    monkeypatch.setattr(daemon_server_module, "sync_supply_chain_bundle", lambda _store: {"packages": []})
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -291,7 +289,7 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
         daemon.stop()
 
     assert session.closed is True
-    assert preflight_calls == [store]
+    assert [called.guard_home for called in preflight_calls] == [store.guard_home]
     assert store.get_oauth_local_credential_health()["state"] == "healthy"
     assert store.get_cloud_sync_profile() is not None
     assert status_code == 200

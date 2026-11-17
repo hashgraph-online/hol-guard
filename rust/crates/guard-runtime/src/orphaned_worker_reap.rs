@@ -1,5 +1,5 @@
 //! `orphaned-worker-reap --stdin`: stop Guard hook workers left behind when
-//! their daemon is stopped (`guard/daemon/orphaned_daemon_workers.py` before
+//! their daemon is stopped (the retired Python `orphaned_daemon_workers.py` before
 //! it moved here).
 //!
 //! Hook workers call `setsid()` so a crash stays inside the worker. That also

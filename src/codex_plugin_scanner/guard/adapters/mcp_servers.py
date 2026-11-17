@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path, PurePath
+from pathlib import Path
 from typing import Any, cast
 
 from ..launcher import merge_guard_launcher_env
@@ -12,7 +12,6 @@ from ..models import GuardArtifact, HarnessDetection
 from ..runtime.mcp_protection import McpServerIdentity
 from ..stable_guard_cli import guard_cli_launcher
 from .base import HarnessContext
-from .managed_mcp_upstream import PROXY_LAUNCHER_ENV_KEYS, proxy_argument_tail
 from .mcp_relay_native import mcp_proxy_launch
 
 
@@ -45,21 +44,6 @@ def is_verified_guard_mcp_companion(
     args: tuple[str, ...],
 ) -> bool:
     return is_guard_mcp_companion_name(name) and is_guard_proxy_command(command, args)
-
-
-_GUARD_PROXY_COMMANDS = frozenset(
-    {
-        "cline-mcp-proxy",
-        "codex-mcp-proxy",
-        "opencode-mcp-proxy",
-        "copilot-mcp-proxy",
-        "cursor-mcp-proxy",
-        "hermes-mcp-proxy",
-        "mcp-proxy",
-    }
-)
-
-_PROXY_ENV_BLOCKLIST = PROXY_LAUNCHER_ENV_KEYS
 
 
 def managed_stdio_servers(detection: HarnessDetection) -> tuple[ManagedMcpServer, ...]:
@@ -96,38 +80,26 @@ def proxy_cli_args(
     home: str | None = None,
     workspace: str | None = None,
 ) -> list[str]:
-    """Build common CLI args for a Guard-managed MCP proxy command."""
+    """The native runtime's CLI args for a Guard-managed MCP proxy command."""
 
-    args = [
-        "-m",
-        "codex_plugin_scanner.cli",
-        "guard",
-        proxy_command,
-        "--guard-home",
-        guard_home,
-        "--server-name",
-        server.name,
-        "--server-id",
-        stable_mcp_server_identifier(server),
-        "--source-scope",
-        server.source_scope,
-        "--config-path",
-        server.config_path,
-        "--transport",
-        server.transport,
-        "--command",
-        server.command,
-    ]
-    if home is not None:
-        args.extend(["--home", home])
-    if workspace is not None:
-        args.extend(["--workspace", workspace])
-    for value in server.args:
-        args.append(f"--arg={value}")
-    for key in sorted(proxy_process_env(server.env)):
-        if key.strip():
-            args.append(f"--server-env-key={key.strip()}")
-    return args
+    request: dict[str, object] = {
+        "op": "proxy_args",
+        "proxy_command": proxy_command,
+        "guard_home": guard_home,
+        "home": home,
+        "workspace": workspace,
+        "server": {
+            "harness": server.harness,
+            "name": server.name,
+            "source_scope": server.source_scope,
+            "config_path": server.config_path,
+            "command": server.command,
+            "args": list(server.args),
+            "transport": server.transport,
+            "env": _env_pairs(server.env) or [],
+        },
+    }
+    return [_text(value) for value in _native(request, "args")]
 
 
 def stable_mcp_server_identifier(server: ManagedMcpServer) -> str:
@@ -153,15 +125,13 @@ def stable_mcp_server_identifier(server: ManagedMcpServer) -> str:
 
 
 def proxy_process_env(server_env: dict[str, str]) -> dict[str, str]:
-    """Return untrusted server env entries that are safe to inject into the Guard proxy."""
+    """The native runtime's choice of server env entries safe to inject into the Guard proxy."""
 
-    filtered: dict[str, str] = {}
-    for key, value in server_env.items():
-        normalized_key = key.strip()
-        if not normalized_key or normalized_key.upper() in _PROXY_ENV_BLOCKLIST:
-            continue
-        filtered[normalized_key] = value
-    return filtered
+    pairs = _native({"op": "proxy_env", "env": _env_pairs(server_env) or []}, "env")
+    try:
+        return {_text(key): _text(value) for key, value in cast(list[list[object]], pairs)}
+    except (TypeError, ValueError) as error:
+        raise ValueError("native_mcp_server_select_malformed") from error
 
 
 def proxy_launcher_entry(
@@ -328,25 +298,12 @@ def _text(value: object) -> str:
     return value
 
 
-def _hol_guard_command_name(command: str) -> str | None:
-    cmd_name = PurePath(command.replace("\\", "/")).name.lower()
-    for suffix in (".exe", ".cmd", ".bat"):
-        if cmd_name.endswith(suffix):
-            cmd_name = cmd_name[: -len(suffix)]
-            break
-    return cmd_name if cmd_name in {"hol-guard", "current-hol-guard"} else None
-
-
 def is_guard_proxy_command(command: str | None, args: tuple[str, ...]) -> bool:
-    if not isinstance(command, str):
-        return False
-    if _hol_guard_command_name(command) is not None:
-        # Packaged launchers also receive generated Python-module argv from
-        # existing adapter installations. Recognize that exact prefix too.
-        return proxy_argument_tail(args, _GUARD_PROXY_COMMANDS) is not None
-    if "codex_plugin_scanner.cli" not in args or "guard" not in args:
-        return False
-    return any(value in _GUARD_PROXY_COMMANDS for value in args)
+    """Whether the launch is a Guard MCP proxy, as the native runtime reads it."""
+
+    from .codex_install_plan import guard_proxy_server_names
+
+    return bool(guard_proxy_server_names({"launch": {"command": command, "args": list(args)}}))
 
 
 __all__ = [

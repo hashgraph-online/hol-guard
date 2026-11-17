@@ -34,7 +34,8 @@ def configure(actions: argparse._SubParsersAction[Any]) -> None:
         help="Show model usage per AI tool, read from each tool's own records on this computer",
         description=(
             "Adds up the usage Codex and Claude Code record for every model request in their session files. "
-            "Guard does not estimate; tools whose records it does not read are named, not counted."
+            "Usage is counted, not estimated; tools whose records it does not read are named, not counted. "
+            "The tokens CIGAR saved are an estimate, shown apart and labeled as one."
         ),
     )
     usage.set_defaults(context_kind="usage")
@@ -45,6 +46,7 @@ def configure(actions: argparse._SubParsersAction[Any]) -> None:
 def run(args: argparse.Namespace, output: TextIO) -> int:
     from ..config import resolve_guard_home
     from ..context_usage_meter import CACHE_NAME, scan, summarize
+    from ..native_context_assistance import ContextAssistanceError, savings
 
     guard_home = resolve_guard_home(args.guard_home)
     if not args.json and not (guard_home / CACHE_NAME).exists():
@@ -57,10 +59,15 @@ def run(args: argparse.Namespace, output: TextIO) -> int:
         else:
             print("Guard could not read the usage records on this computer.", file=output)
         return 1
+    try:
+        state["savings"] = savings(guard_home=guard_home)
+    except ContextAssistanceError:
+        state["savings"] = None
     if args.json:
         print(json.dumps(state, sort_keys=True), file=output)
     else:
         render(state, output)
+        render_savings(state["savings"], output)
     return 0
 
 
@@ -86,3 +93,34 @@ def render(state: dict[str, Any], output: TextIO) -> None:
     unread = ", ".join(names[:-1]) + " or " + names[-1] if len(names) > 1 else "".join(names)
     print(file=output)
     print(f"Guard does not read usage records from {unread}, so they are not counted here.", file=output)
+
+
+def render_savings(report: dict[str, Any] | None, output: TextIO) -> None:
+    def say(line: str) -> None:
+        print(line, file=output)
+
+    say("")
+    if report is None:
+        say("Guard's background service did not answer, so it cannot estimate what CIGAR saved.")
+        return
+    total, days = report["total"], report["window_days"]
+    if not total["sessions"]:
+        say(f"CIGAR has not handed code to a prompt in the last {days} days, so there is nothing to estimate.")
+        return
+    measured, sessions = total["measured_sessions"], total["sessions"]
+    if not measured:
+        say("CIGAR helped, but Guard could not read those sessions' records, so it cannot estimate yet.")
+    elif not total["used_tokens"]:
+        say("CIGAR helped, but those sessions' records show no tokens used, so Guard cannot estimate yet.")
+    else:
+        saved = total["estimated_saved_tokens"]
+        say(f"CIGAR saved about {saved:,} tokens in the last {days} days. This is an estimate.")
+        if measured < sessions:
+            say(f"  The estimate covers {measured:,} of {sessions:,} sessions. Guard could not read the rest.")
+    prompts = "prompt" if total["prompts"] == 1 else "prompts"
+    say(f"  It handed {total['prompts']:,} {prompts} about {total['context_tokens']:,} tokens of code.")
+    checked, opened = total.get("files_checked", 0), total["files_opened_anyway"]
+    if checked:
+        say(f"  Of {checked:,} files it showed, the agent opened {opened:,} again anyway.")
+    rates = ", ".join(f"{NAMES.get(app['app'], app['app'])} {app['rate_percent']}%" for app in report["apps"])
+    say(f"  How: the tokens those sessions used, and the share CIGAR saved on Guard's benchmark ({rates}).")

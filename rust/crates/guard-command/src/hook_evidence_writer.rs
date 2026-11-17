@@ -1,4 +1,4 @@
-//! `daemon/runtime_hook_evidence_writer.py` — background evidence writer
+//! the retired Python `runtime_hook_evidence_writer.py` — background evidence writer
 //! (RTM-024): a bounded queue plus append-durable JSONL journal keeping
 //! best-effort command-activity / native-decision-receipt / MCP-discovery
 //! writes outside the security-decision workers.

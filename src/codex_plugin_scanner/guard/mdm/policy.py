@@ -227,6 +227,7 @@ def fail_closed_managed_policy() -> ManagedPolicy:
         "new_network_domain_action": "block",
         "subprocess_action": "block",
         "sync": False,
+        "approval_surface_policy": "native-only",
     }
     return ManagedPolicy(
         schema_version=MDM_POLICY_SCHEMA_VERSION,

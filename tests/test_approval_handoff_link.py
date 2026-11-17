@@ -9,7 +9,6 @@ from codex_plugin_scanner.guard.approval_handoff_link import (
     build_approval_handoff_url,
     handoff_code_is_valid,
 )
-from codex_plugin_scanner.guard.daemon.approval_handoff_route import approval_handoff_location
 from codex_plugin_scanner.guard.local_dashboard_session import build_approval_browser_url
 from codex_plugin_scanner.guard.secret_redaction import sanitize_secret
 
@@ -65,20 +64,6 @@ def test_code_far_in_the_future_is_refused_even_when_signed() -> None:
     assert not handoff_code_is_valid(request_id=REQUEST_ID, code=_code(url), auth_token=AUTH, now=NOW)
 
 
-def test_daemon_route_signs_valid_links_and_drops_bad_ones_to_the_plain_page() -> None:
-    url = build_approval_browser_url(REVIEW_URL, auth_token=AUTH)
-    assert url is not None
-    path = url.removeprefix("http://127.0.0.1:5474")
-
-    signed = approval_handoff_location(path, auth_token=AUTH)
-    forged = approval_handoff_location(f"/requests/{REQUEST_ID}/1-{'0' * 32}", auth_token=AUTH)
-
-    assert signed is not None and signed.startswith(f"/requests/{REQUEST_ID}#guard-token=gld1.")
-    assert forged == f"/requests/{REQUEST_ID}"
-    assert approval_handoff_location(f"/requests/{REQUEST_ID}", auth_token=AUTH) is None
-    assert approval_handoff_location("/requests/abc/1-00", auth_token=AUTH) is None
-
-
 def test_diagnostics_redact_the_short_code() -> None:
     url = build_approval_browser_url(REVIEW_URL, auth_token=AUTH)
     assert url is not None
@@ -93,23 +78,3 @@ def _session_claims(location: str) -> dict[str, object]:
     session = location.split("=", 1)[1]
     payload = session.split(".")[1]
     return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
-
-
-def test_opening_the_link_late_never_extends_access_past_the_code() -> None:
-    import time
-    from datetime import datetime
-
-    # One clock: a link issued almost twelve hours ago, opened now.
-    issued = int(time.time()) - HANDOFF_TTL_SECONDS + 30
-    link = build_approval_handoff_url(REVIEW_URL, auth_token=AUTH, now=issued)
-    assert link is not None
-    expires = issued + HANDOFF_TTL_SECONDS
-    path = link.split("127.0.0.1:5474", 1)[1]
-
-    late = approval_handoff_location(path, auth_token=AUTH)
-
-    assert late is not None and "=" in late
-    claims = _session_claims(late)
-    assert datetime.fromisoformat(str(claims["expires_at"])).timestamp() <= expires + 1
-    assert datetime.fromisoformat(str(claims["session_started_at"])).timestamp() == issued
-    assert approval_handoff_location(path, auth_token=AUTH, now=expires + 1) == f"/requests/{REQUEST_ID}"

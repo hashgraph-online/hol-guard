@@ -30,8 +30,9 @@ if TYPE_CHECKING:
 
 from ..adapters.diagnostic_probes import without_command_probes
 from ..approval_gate_nudge import approval_gate_posture
-from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
+from ..harness_version_api import compatibility_or_unknown
 from ..native_aibom_summaries import NativeAibomSummariesError
+from ..native_daemon_peer import load_guard_daemon_endpoint_url
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
 from ..runtime.connector_setup_items import connector_setup_status
 from ..shims import package_shim_dashboard_status
@@ -346,6 +347,9 @@ def _run_guard_doctor_command(
         adapter = get_adapter(args.harness)
         payload: dict[str, object] = adapter.diagnostics(context)
         payload["runtime_readiness"] = doctor_runtime_readiness(payload)
+        # The native runtime decides the per-event proof states; a failure
+        # reports version_unknown, never a proven state.
+        payload["version_compatibility"] = compatibility_or_unknown(adapter.harness, context)
         payload["runtime_detector_registry"] = _runtime_detector_registry_payload(config)
         payload["connect_health"] = _guard_doctor_connect_health_payload(store)
         if args.harness == "codex":
@@ -448,6 +452,11 @@ def _run_guard_doctor_command(
     from ..protection_posture import protection_status_fields
 
     payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))
+    payload["protection_basis"] = "configured_posture_and_hook_registration"
+    payload["protection_health_note"] = (
+        "Live protection health is a separate runtime check. Run `hol-guard approvals list --json` "
+        "to inspect protection_health; trust it for current enforcement health."
+    )
     # A doctor run that reports a broken or partial registration must not also
     # report the posture as though something were applying it. Judge the one
     # harness this run inspected, or every harness the global run detected.

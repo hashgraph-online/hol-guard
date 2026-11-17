@@ -153,8 +153,9 @@ fn stamps_now_with_the_microseconds_python_always_prints() {
 #[test]
 fn routes_record_paths_the_way_the_daemon_dispatches_them() {
     let store = store("{}");
-    let route =
-        |path: &str, query: &str| super::super::route(path, query, &store.config, &store.reads);
+    let route = |path: &str, query: &str| {
+        super::super::routes::route(path, query, &store.config, &store.reads)
+    };
     assert_eq!(route("/v1/operations/op-1", "").unwrap().0, 200);
     assert_eq!(route("/v1/operations/op-1/items", ""), None);
     assert_eq!(route("/v1/sessions", "").unwrap().0, 200);
@@ -187,7 +188,8 @@ fn lists_events_past_the_cursor_as_the_daemon_does() {
                  ('a', '{\"k\": 1}', 't1'), ('b', '[1]', 't2'), ('c', '{}', 't3');",
         )
         .unwrap();
-    let route = |query: &str| super::super::route("/v1/events", query, &store.config, &store.reads);
+    let route =
+        |query: &str| super::super::routes::route("/v1/events", query, &store.config, &store.reads);
     assert_eq!(
         route("cursor=1"),
         Some((

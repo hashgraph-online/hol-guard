@@ -126,10 +126,14 @@ fn a_bridged_shell_call_gets_its_standalone_verdict() {
         assert!(contained(&omp(
             &f,
             "bash",
-            json!({"command": "python3 -I -c 'print(1)'"})
+            json!({"command": "python3 -I -c 'import os; print(os.getpid())'"})
         )));
         assert_eq!(
-            eval(&f, &bridged("python3 -I -c 'print(1)'")).minimum_action,
+            eval(
+                &f,
+                &bridged("python3 -I -c 'import os; print(os.getpid())'")
+            )
+            .minimum_action,
             "allow"
         );
     }

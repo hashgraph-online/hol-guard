@@ -197,7 +197,10 @@ pub(crate) fn py_fromhex(text: &str) -> Option<Vec<u8>> {
 
 /// `_sign_discovery_payload`: HMAC-SHA256 of the canonical payload under the
 /// 32-byte discovery key, as lowercase hex.
-fn sign_discovery_payload(key: &str, payload: &Map<String, Value>) -> Result<String, String> {
+pub(crate) fn sign_discovery_payload(
+    key: &str,
+    payload: &Map<String, Value>,
+) -> Result<String, String> {
     let key = py_fromhex(key)
         .filter(|key| key.len() == 32)
         .ok_or_else(|| MALFORMED_KEY.to_owned())?;

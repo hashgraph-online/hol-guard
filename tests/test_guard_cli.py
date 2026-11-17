@@ -31,8 +31,7 @@ from codex_plugin_scanner.guard.adapters import codex as codex_adapter_module
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor_cli import CursorCliLaunchEntry
-from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_connect as guard_connect_support_module
 from codex_plugin_scanner.guard.cli import commands_support_workspace as guard_workspace_support_module
@@ -45,6 +44,7 @@ from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, re
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import codex_hook_publication_helpers as publication_helpers
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
@@ -823,18 +823,6 @@ class TestGuardCli:
     def _bundled_native_runtime_present(self, monkeypatch):
         # These update tests simulate package-index installs; a source checkout has no bundled runtime.
         monkeypatch.setattr(guard_update_commands_module, "bundled_native_runtime_missing", lambda: False)
-
-    def test_claude_guard_hook_command_detection_handles_legacy_and_pinned_commands(self):
-        legacy_command = "/opt/python/bin/python3 -m codex_plugin_scanner.cli guard hook --guard-home /tmp/guard"
-        pinned_command = (
-            "/opt/python/bin/python3 -c "
-            "\"import sys;sys.path.insert(0, '/tmp/src');from codex_plugin_scanner.cli import main;"
-            "raise SystemExit(main(['guard', 'hook']))\""
-        )
-
-        assert claude_adapter_module._is_guard_hook_command(legacy_command) is True
-        assert claude_adapter_module._is_guard_hook_command(pinned_command) is True
-        assert claude_adapter_module._is_guard_hook_command("python something-else.py") is False
 
     def test_guard_prompt_renders_untrusted_metadata_as_literal_text(self):
         console = Console(record=True, width=120)
@@ -2977,7 +2965,7 @@ args = ["workspace-skill.js", "--changed"]
         expected_session_start_argv = ClaudeCodeHarnessAdapter._session_start_command_parts(context)
         assert (
             guard_pretool_entry["matcher"]
-            == "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+            == "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
         )
         assert (
             _command_handler_argv(install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0])
@@ -2997,10 +2985,10 @@ args = ["workspace-skill.js", "--changed"]
         assert _command_handler_argv(install_settings_payload["hooks"]["Stop"][0]["hooks"][0]) == expected_hook_argv
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
-        assert settings_payload["hooks"]["SessionStart"] == []
+        assert "SessionStart" not in settings_payload["hooks"]
         assert settings_payload["hooks"]["PreToolUse"] == [{"command": "python guard-pre.py"}]
-        assert settings_payload["hooks"]["Notification"] == []
-        assert settings_payload["hooks"]["Stop"] == []
+        assert "Notification" not in settings_payload["hooks"]
+        assert "Stop" not in settings_payload["hooks"]
 
     def test_guard_uninstall_handles_non_dict_claude_hook_entries(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3087,9 +3075,9 @@ args = ["workspace-skill.js", "--changed"]
         assert uninstall_rc == 0
         assert output["managed_install"]["active"] is False
         assert payload["hooks"]["PreToolUse"] == [{"command": "python guard-pre.py"}]
-        assert payload["hooks"].get("UserPromptSubmit", []) == []
-        assert payload["hooks"]["Notification"] == []
-        assert payload["hooks"]["Stop"] == []
+        assert "UserPromptSubmit" not in payload["hooks"]
+        assert "Notification" not in payload["hooks"]
+        assert "Stop" not in payload["hooks"]
 
     def test_guard_install_claude_alias_persists_canonical_managed_install(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -4381,7 +4369,7 @@ args = ["workspace-skill.js", "--changed"]
                 }
             },
         }
-        guard_update_commands_module.CodexHarnessAdapter._install_config_hooks(
+        publication_helpers.install_config_hooks(
             config_payload, context, config_path=home_dir / ".codex" / "config.toml"
         )
         hooks = config_payload["hooks"]
@@ -4395,7 +4383,7 @@ args = ["workspace-skill.js", "--changed"]
         entry = entries[0]
         assert isinstance(entry, dict)
         config_path = home_dir / ".codex" / "config.toml"
-        guard_update_commands_module.CodexHarnessAdapter._write_authenticated_hook_config(
+        publication_helpers.write_authenticated_hook_config(
             context,
             config_path=config_path,
             payload=config_payload,
@@ -4457,7 +4445,7 @@ args = ["workspace-skill.js", "--changed"]
         config_payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
         managed_handler = config_payload["hooks"]["PreToolUse"][-1]["hooks"][0]
         managed_handler["statusMessage"] = "HOL Guard checking tool action (tampered)"
-        _write_text(config_path, codex_adapter_module.dump_toml(config_payload))
+        _write_text(config_path, dump_toml(config_payload))
         context = HarnessContext(home_dir=home_dir, workspace_dir=Path.cwd(), guard_home=home_dir)
 
         before = codex_adapter_module.codex_native_hook_state(context)
@@ -4548,24 +4536,14 @@ args = ["workspace-skill.js", "--changed"]
         self, tmp_path, monkeypatch, capsys
     ):
         home_dir = tmp_path / "home"
-        bridge_path = tmp_path / "package" / "codex_daemon_hook_bridge.py"
+        # The hook runs the native runtime named here; its bytes are the
+        # authenticated "bridge" role.
+        bridge_path = tmp_path / "package" / "hol-guard-runtime"
         bridge_path.parent.mkdir(parents=True)
-        original_bridge = Path(codex_adapter_module.__file__).with_name("codex_daemon_hook_bridge.py").read_bytes()
+        original_bridge = b"#!/bin/sh\nexit 0\n"
         bridge_path.write_bytes(original_bridge)
         bridge_path.chmod(0o644)
-        original_command_parts = codex_adapter_module._hook_command_parts
-        original_packaged_paths = codex_adapter_module._hook_packaged_file_paths
-
-        def relocated_command_parts(hook_context: HarnessContext) -> tuple[str, ...]:
-            parts = list(original_command_parts(hook_context))
-            parts[1] = str(bridge_path)
-            return tuple(parts)
-
-        def relocated_packaged_paths() -> tuple[tuple[str, Path], ...]:
-            return tuple((role, bridge_path if role == "bridge" else path) for role, path in original_packaged_paths())
-
-        monkeypatch.setattr(codex_adapter_module, "_hook_command_parts", relocated_command_parts)
-        monkeypatch.setattr(codex_adapter_module, "_hook_packaged_file_paths", relocated_packaged_paths)
+        monkeypatch.setattr(codex_adapter_module, "_native_bridge_executable", lambda _guard_home: bridge_path)
         assert main(["guard", "install", "codex", "--home", str(home_dir), "--json"]) == 0
         json.loads(capsys.readouterr().out)
         context = HarnessContext(home_dir=home_dir, workspace_dir=Path.cwd(), guard_home=home_dir)
@@ -10224,15 +10202,12 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(cursor_adapter_module, "cursor_cli_command_available", lambda _context: True)
-        monkeypatch.setattr(
-            cursor_adapter_module,
-            "resolve_cursor_cli_entry",
-            lambda _context: CursorCliLaunchEntry(
-                executable="cursor-agent",
-                launch_mode="cursor-agent",
-            ),
-        )
+        cursor_bin = tmp_path / "cursor-bin"
+        cursor_bin.mkdir()
+        cursor_agent = cursor_bin / ("cursor-agent.exe" if os.name == "nt" else "cursor-agent")
+        cursor_agent.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        cursor_agent.chmod(0o755)
+        monkeypatch.setenv("PATH", str(cursor_bin))
         monkeypatch.setattr(
             cursor_adapter_module,
             "_run_command_probe",

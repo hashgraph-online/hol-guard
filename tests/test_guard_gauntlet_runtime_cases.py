@@ -25,8 +25,8 @@ from ci.gauntlet.runtime_cases import (
     runtime_case_checks,
     stage_runtime_cases,
 )
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = pytest.mark.skipif(not hasattr(__import__("os"), "geteuid"), reason="POSIX launch fixtures")

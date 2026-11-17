@@ -24,7 +24,7 @@
 //! runs when it asks whether the Allow settles its order check, through
 //! [`allow_settles_read_order`].
 
-use super::git_output_target::points_output_at_a_protected_file;
+use super::git_output_target::{names_an_output_file, points_output_at_a_protected_file};
 
 use super::PathContext;
 use crate::CanonicalCommandV1;
@@ -96,6 +96,15 @@ const WRITES_NOTHING_STEPS: &[&str] = &[
     "var",
     "whatchanged",
 ];
+
+/// Git's diff plumbing, which compares trees, the index and the working tree
+/// and prints the result. Like `git diff`, each takes `--output=<file>` and
+/// writes wherever it points, so a step qualifies only when it names no
+/// output at all; without one it prints and writes nothing, the way
+/// `git whatchanged` and `git log` do. Users reach for `git diff-tree` where
+/// Git 2.53 refuses `git whatchanged`, so leaving these out stopped a full
+/// Git Allow partway through the same read.
+const DIFF_PLUMBING_STEPS: &[&str] = &["diff-files", "diff-index", "diff-tree"];
 
 /// `git worktree` actions that write no file at a new path. Removing a linked
 /// worktree deletes files, which can drop configuration but never adds a
@@ -478,9 +487,11 @@ fn writes_nothing(arguments: &[String]) -> bool {
     let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
         return false;
     };
-    arguments
-        .get(index)
-        .is_some_and(|operation| WRITES_NOTHING_STEPS.contains(&operation.as_str()))
+    arguments.get(index).is_some_and(|operation| {
+        WRITES_NOTHING_STEPS.contains(&operation.as_str())
+            || (DIFF_PLUMBING_STEPS.contains(&operation.as_str())
+                && !names_an_output_file(&arguments[index + 1..]))
+    })
 }
 
 #[cfg(test)]

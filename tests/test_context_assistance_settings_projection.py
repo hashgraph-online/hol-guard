@@ -10,8 +10,8 @@ import pytest
 
 from codex_plugin_scanner.guard import config as config_module
 from codex_plugin_scanner.guard.config import GuardConfig, editable_guard_settings
-from codex_plugin_scanner.guard.daemon.server_common import _settings_export_payload
 from codex_plugin_scanner.guard.native_policy_effective import _config_fields
+from codex_plugin_scanner.guard.runtime_health.server_common import _settings_export_payload
 
 
 @pytest.fixture(autouse=True)

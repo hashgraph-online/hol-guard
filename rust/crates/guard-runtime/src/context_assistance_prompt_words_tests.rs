@@ -12,6 +12,69 @@ fn a_file_path_gives_no_search_words() {
     assert!(asks_for_tests(&terms("make tests/test_basic.py pass")));
 }
 
+/// An absolute path, to a file or a folder, names a place on the machine the
+/// prompt was written on; its folders are not words to look for either.
+#[test]
+fn an_absolute_path_gives_no_search_words() {
+    let found = terms(
+        "Output is in /private/tmp/run-501/tasks/b45t.output and C:\\Users\\tester\\wc-q\\out.txt; \
+         fix parse in ~/work/app.",
+    );
+    for word in [
+        "private", "tmp", "task", "b45t", "user", "tester", "work", "app",
+    ] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    assert!(found.contains(&"parse".to_owned()), "{found:?}");
+    // A path behind `=`, with forward slashes after a drive, or quoted with
+    // spaces in it is still a path.
+    let found = terms(
+        "Set output_file=/private/tmp/run-501/b45t.output, path=/home/alice/work, \
+         C:/Users/bob/proj and \"C:\\Program Files\\Vendor\\cache\" or `D:\\My Files\\stash`.",
+    );
+    for word in [
+        "private", "tmp", "home", "alice", "user", "bob", "proj", "program", "vendor", "cache",
+        "stash",
+    ] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    assert!(found.contains(&"outputfile".to_owned()), "{found:?}");
+    // A path inside a tag, as a harness writes a background task's output
+    // file, is still a path; the words around the tags stay.
+    let found = terms(
+        "<task-notification><output-file>/private/tmp/claude-501/-Users-alice-work/tasks/b5k.output\
+         </output-file><summary>Watch render CI</summary></task-notification>",
+    );
+    for word in ["private", "tmp", "claude", "user", "alice", "work", "b5k"] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    assert!(found.contains(&"render".to_owned()), "{found:?}");
+}
+
+/// Only the path is left out: a name written right after it stays, a path
+/// that holds a `tests` folder asks for no tests, and a web route is not a
+/// path on the machine.
+#[test]
+fn words_beside_a_path_and_web_routes_still_count() {
+    let found = terms("Run /tmp/repro.py:parse() then fix (/tmp/out),render in the app.");
+    for word in ["parse", "render"] {
+        assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    let found = terms("Fix parse; the log is /private/tmp/tests/task.output");
+    assert!(!found.contains(&"test".to_owned()), "{found:?}");
+    assert!(found.contains(&"parse".to_owned()), "{found:?}");
+    let found = terms("Fix the /api/cart/{id} handler, GET /users/{id}/orders and `/v1/refund`.");
+    for word in ["api", "cart", "handler", "user", "order", "refund"] {
+        assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    // A backticked command keeps reading as one with its path left out.
+    let found = terms("Run `cat /tmp/out/log.txt` and fix render");
+    assert_eq!(found, ["render"]);
+    // Nor does a path give names written as code.
+    let found = spellings("Fix `parse` in C:\\Users\\alice\\Parser.parse and /tmp/my_run/out.log");
+    assert_eq!(found, ["parse"]);
+}
+
 /// Quoted punctuation, such as the `>>>` of a doctest, is not a phrase.
 #[test]
 fn quoted_punctuation_is_no_phrase() {
@@ -56,6 +119,18 @@ fn task_words_name_nothing_unless_written_as_code() {
     assert!(found.contains(&"convert".to_owned()), "{found:?}");
     let found = terms("Fix `last` and `edit` so `toolz.first` keeps working");
     for word in ["last", "edit", "first"] {
+        assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    // "out" here found `SortedList._pos`, which has a local named `out`, and
+    // the agent read that method before looking at what was pushed.
+    let found = terms(
+        "tests are red on main since the last push, can you sort it out? don't touch the tests",
+    );
+    for word in ["red", "main", "since", "out", "touch"] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    let found = terms("make `out` and `main()` stop going green when red");
+    for word in ["out", "main"] {
         assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
     }
 }
@@ -121,4 +196,35 @@ fn a_long_quote_is_searched_by_its_first_words() {
     );
     assert_eq!(pasted, found);
     assert_eq!(quoted(&docstring.to_lowercase(), &pasted), [true]);
+}
+
+/// A question that says not to change anything asks where code is, so its
+/// note lists tests instead of showing them; a fix that keeps the tests
+/// unchanged is not one.
+#[test]
+fn a_prompt_that_asks_for_no_change_is_told_apart() {
+    for prompt in [
+        "Question, no code changes: which function does this?",
+        "quick question, don\u{2019}t change anything: where is the parser?",
+        "Explain how retries work without changing anything.",
+        "Do not edit files, just tell me where the cache is cleared.",
+        "Don't change anything at all. Where is the cache cleared?",
+    ] {
+        assert!(asks_no_change(prompt), "{prompt}");
+    }
+    for prompt in [
+        "Find every root cause and fix them all without changing the tests.",
+        "Rename `a` to `b` everywhere. Behavior must not change.",
+        "Implement it again so the existing tests pass.",
+        // A prohibition on part of the project limits a fix.
+        "Fix the bug in the library code; don't edit the tests.",
+        "Fix the parser but don't change anything else.",
+        "Make no changes to the public API, just fix the off-by-one.",
+        "Don't edit files in tests/, fix the parser.",
+        "Change anything needed to fix this.",
+        "Tune the piano changes in score.py.",
+        "Fix `parse` so it returns \"no changes\" for empty input.",
+    ] {
+        assert!(!asks_no_change(prompt), "{prompt}");
+    }
 }

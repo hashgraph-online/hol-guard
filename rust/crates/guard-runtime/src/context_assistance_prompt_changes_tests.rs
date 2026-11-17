@@ -101,8 +101,7 @@ impl Repo {
     }
 
     fn changes_shown(&self, base: Option<&str>, show_diffs: bool) -> Option<String> {
-        let since = base.map_or(Since::Nothing, Since::Start);
-        self.since(since, show_diffs)
+        self.since(base.map_or(Since::Nothing, Since::Start), show_diffs)
     }
 
     fn since(&self, since: Since, show_diffs: bool) -> Option<String> {
@@ -115,37 +114,8 @@ impl Repo {
                 })
                 .collect()
         })
+        .map(|changed| changed.text)
     }
-}
-
-#[test]
-fn prompts_about_changes_are_recognised() {
-    for prompt in [
-        "A teammate pushed a fix, check it",
-        "review the diff before I merge",
-        "What changed in convert?",
-        "this regression is new",
-        "test_parse started failing after the last commit",
-        "convert started returning None recently",
-        "what did we do in this session",
-    ] {
-        assert!(about_changes(prompt), "{prompt}");
-    }
-    for prompt in [
-        "add a --verbose flag",
-        "Implement parse again so its tests pass",
-        "rename convert to parse",
-        "session cookies leak",
-        "Question, no code changes: which function does this?",
-    ] {
-        assert!(!about_changes(prompt), "{prompt}");
-    }
-    assert!(about_others("A teammate pushed a fix, check it"));
-    assert!(about_others(
-        "the parser test is failing since this session"
-    ));
-    assert!(!about_others("review the diff before I merge"));
-    assert!(!about_others("what did we do in this session"));
 }
 
 #[test]

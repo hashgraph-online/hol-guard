@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.connect_flow import CONNECT_SYNC_AUTH_CONTEXT_KEY
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
-from codex_plugin_scanner.guard.daemon import server_control_cloud_sync as _ctl_cloud_sync
-from codex_plugin_scanner.guard.daemon import server_control_connect_flow as _ctl_connect_flow
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.cloud_control import server_control_cloud_sync as _ctl_cloud_sync
+from codex_plugin_scanner.guard.cloud_control import server_control_connect_flow as _ctl_connect_flow
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
+from codex_plugin_scanner.guard.routes import request_handler as daemon_server_module
+from codex_plugin_scanner.guard.runtime.runner import GuardSyncNotConfiguredError
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_control_patching import patch_daemon_global
 from tests.test_guard_headless_daemon_api import _dashboard_token, _read_json_response, _request
@@ -447,15 +448,16 @@ def test_guard_daemon_runtime_request_queues_pending_first_sync(tmp_path, monkey
     )
     calls: list[str] = []
 
+    # The daemon's library calls open their own store, so the class is patched.
     monkeypatch.setattr(
-        store,
+        GuardStore,
         "get_cloud_sync_profile",
-        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+        lambda _self: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
     )
     monkeypatch.setattr(
-        store,
+        GuardStore,
         "get_oauth_local_credential_health",
-        lambda: {"configured": True, "state": "healthy"},
+        lambda _self: {"configured": True, "state": "healthy"},
     )
 
     def _record_queue(*, store: GuardStore) -> dict[str, object]:
@@ -606,7 +608,7 @@ def test_headless_cloud_sync_repairs_storage_and_records_sync_success(tmp_path, 
     def _resolve_with_repair(_store: GuardStore) -> dict[str, object]:
         resolve_calls["count"] += 1
         if resolve_calls["count"] == 1:
-            raise daemon_server_module.GuardSyncNotConfiguredError("Guard is not logged in.")
+            raise GuardSyncNotConfiguredError("Guard is not logged in.")
         return {
             "access_token": "access-token-1",
             "sync_url": "https://hol.org/api/guard/receipts/sync",
@@ -681,7 +683,7 @@ def test_headless_cloud_sync_survives_storage_repair_failure(tmp_path, monkeypat
         monkeypatch,
         "_resolve_guard_sync_auth_context",
         lambda _store: (_ for _ in ()).throw(
-            daemon_server_module.GuardSyncNotConfiguredError("Guard is not logged in."),
+            GuardSyncNotConfiguredError("Guard is not logged in."),
         ),
     )
     patch_daemon_global(
@@ -711,7 +713,7 @@ def test_headless_cloud_sync_retry_unexpected_error_becomes_pending(tmp_path, mo
     def _resolve_with_repair(_store: GuardStore) -> dict[str, object]:
         resolve_calls["count"] += 1
         if resolve_calls["count"] == 1:
-            raise daemon_server_module.GuardSyncNotConfiguredError("Guard is not logged in.")
+            raise GuardSyncNotConfiguredError("Guard is not logged in.")
         return {
             "access_token": "access-token-1",
             "sync_url": "https://hol.org/api/guard/receipts/sync",

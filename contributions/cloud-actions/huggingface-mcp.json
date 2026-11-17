@@ -1,0 +1,1004 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "huggingface-mcp",
+    "name": "Hugging Face MCP",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "huggingface.co"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "openid"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "huggingface-mcp.hub_repo_search",
+      "title": "Search Hugging Face repositories",
+      "link": {
+        "tool": "hub_repo_search"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "hub_repo_search"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "repository"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "openid"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls hub_repo_search",
+          "kind": "safe",
+          "arguments": {
+            "query": "whisper",
+            "repo_types": [
+              "model"
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "repository"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "huggingface-mcp.hub_repo_details",
+      "title": "Read repository details",
+      "link": {
+        "tool": "hub_repo_details"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "hub_repo_details"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "repository"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "openid"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls hub_repo_details",
+          "kind": "safe",
+          "arguments": {
+            "repo_ids": [
+              "openai/whisper-large-v3"
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "repository"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "huggingface-mcp.hf_fs",
+      "title": "Read Hub files",
+      "link": {
+        "tool": "hf_fs"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "hf_fs"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "query_selected"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "openid"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls hf_fs",
+          "kind": "safe",
+          "arguments": {
+            "path": "datasets/org/data/README.md"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "huggingface-mcp.hf_fs_write",
+      "title": "Write Hub files",
+      "link": {
+        "tool": "hf_fs_write"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "hf_fs_write"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "openid"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls hf_fs_write",
+          "kind": "safe",
+          "arguments": {
+            "path": "spaces/me/demo/app.py",
+            "content": "print(1)"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "huggingface-mcp.create_repo",
+      "title": "Create a repository",
+      "link": {
+        "tool": "create_repo"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "create_repo"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "repository"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "openid"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls create_repo",
+          "kind": "safe",
+          "arguments": {
+            "repo_id": "me/demo",
+            "repo_type": "space"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "repository"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "huggingface-mcp.hf_jobs",
+      "title": "Run or manage a compute job",
+      "link": {
+        "tool": "hf_jobs"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "hf_jobs"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "execute",
+        "object": {
+          "const": "deployment"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "openid"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls hf_jobs",
+          "kind": "safe",
+          "arguments": {
+            "operation": "ps"
+          },
+          "expect": {
+            "facts": {
+              "class": "execute",
+              "object": {
+                "state": "known",
+                "value": "deployment"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "huggingface-mcp.hf_sandbox",
+      "title": "Create or manage a sandbox",
+      "link": {
+        "tool": "hf_sandbox"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "hf_sandbox"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "execute",
+        "object": {
+          "const": "deployment"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "openid"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls hf_sandbox",
+          "kind": "safe",
+          "arguments": {
+            "operation": "status"
+          },
+          "expect": {
+            "facts": {
+              "class": "execute",
+              "object": {
+                "state": "known",
+                "value": "deployment"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "huggingface-mcp.hf_sandbox_exec",
+      "title": "Run a command in a sandbox",
+      "link": {
+        "tool": "hf_sandbox_exec"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "hf_sandbox_exec"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "execute",
+        "object": {
+          "const": "deployment"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "openid"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls hf_sandbox_exec",
+          "kind": "safe",
+          "arguments": {
+            "command": "ls"
+          },
+          "expect": {
+            "facts": {
+              "class": "execute",
+              "object": {
+                "state": "known",
+                "value": "deployment"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "huggingface-mcp.hf_sandbox_fs",
+      "title": "Read or write sandbox files",
+      "link": {
+        "tool": "hf_sandbox_fs"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "hf_sandbox_fs"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "openid"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls hf_sandbox_fs",
+          "kind": "safe",
+          "arguments": {
+            "path": "/app/main.py"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "huggingface-mcp.dynamic_space",
+      "title": "Call a Space",
+      "link": {
+        "tool": "dynamic_space"
+      },
+      "executor": {
+        "kind": "remote-mcp",
+        "tool": "dynamic_space"
+      },
+      "arguments": {},
+      "openArguments": {
+        "maxBytes": 8192
+      },
+      "facts": {
+        "class": "execute",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "openid"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "calls dynamic_space",
+          "kind": "safe",
+          "arguments": {
+            "operation": "discover"
+          },
+          "expect": {
+            "facts": {
+              "class": "execute",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an argument name the tool cannot declare",
+          "kind": "risky",
+          "arguments": {
+            "$where": "1"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    }
+  ]
+}
