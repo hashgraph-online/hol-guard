@@ -2,8 +2,18 @@ import { harnessDisplayName } from "../approval-center-utils";
 import type { GuardActionEnvelope, GuardApprovalRequest } from "../guard-types";
 import { explainComposioTool, THOUGHT_CAPTION, type McpCallBody } from "./composio-calls";
 import type { McpCallExplanation } from "./mcp-call-types";
-import { classifyMcpEffect, MCP_EFFECT_COPY, type McpEffectKind } from "./mcp-effects";
-import { CORE_STRING_LIMIT, recordOf, scalarFacts, selectToolInput, textOf, type SelectedToolInput } from "./mcp-input";
+import { consequenceFor } from "./mcp-consequence";
+import { classifyMcpEffect, type McpEffectKind } from "./mcp-effects";
+import {
+  CORE_STRING_LIMIT,
+  joinList,
+  recordOf,
+  scalarFacts,
+  selectToolInput,
+  textOf,
+  unique,
+  type SelectedToolInput,
+} from "./mcp-input";
 import {
   isPlainNamePart,
   parseNamespacedMcpName,
@@ -42,12 +52,19 @@ export function explainMcpCall(item: GuardApprovalRequest): McpCallExplanation |
 
   return {
     ...body,
+    consequence: consequenceFor(body.effect, whereItActs(body, connector)),
     connector,
     rawInput: selected.text,
     truncated: wasTruncated(item, selected),
     toolId: ref.server.length > 0 ? `${ref.server} / ${ref.tool}` : ref.tool,
     whyAsked: `Guard has not reviewed ${ref.server.length > 0 ? `${connector}'s` : "this"} tool yet, and your policy asks before any unreviewed tool runs.`,
   };
+}
+
+/** The services a call acts in: the apps its actions name, else the connector it goes through. */
+function whereItActs(body: McpCallBody, connector: string): string {
+  const apps = unique(body.steps.map((step) => step.app).filter((app): app is string => app !== null));
+  return apps.length > 0 ? joinList(apps) : connector;
 }
 
 /** Replaces the policy-setting name Core gives for an unreviewed MCP tool with the reason in plain words. */
@@ -104,13 +121,13 @@ function explainGenericTool(context: {
   const effect = classifyMcpEffect(shortTool);
   const title = sentenceCase(shortTool);
   // `thought` and `use_case` are the agent's own account of the call. They are quoted, never shown as a fact.
-  const { facts } = scalarFacts(input, { skip: AGENT_TEXT_KEYS });
+  const { facts } = scalarFacts(input, { skip: AGENT_TEXT_KEYS, tool: shortTool });
   const thought = textOf(input?.thought, 300);
   const firstValue = facts[0]?.value ?? null;
   return {
     headline: `${harness} wants to ${effectPhrase(effect, connector)}`,
     title,
-    summary: `${harness} is calling ${connector}'s “${title}” tool. ${MCP_EFFECT_COPY[effect].meaning}`,
+    aside: null,
     effect,
     effectBasis:
       effect === "unknown"

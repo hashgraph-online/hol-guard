@@ -1,6 +1,8 @@
 import { cleanAgentText } from "../agent-stated-intent";
 import type { McpFact } from "./mcp-call-types";
+import { previewFieldsFor } from "./mcp-previews";
 import { sentenceCase } from "./mcp-services";
+import { valueKindOf } from "./mcp-values";
 
 // The keys Core reads a tool's input from, in its order (see `agent-stated-intent.ts`).
 const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"] as const;
@@ -11,7 +13,8 @@ export const CORE_STRING_LIMIT = 240;
 // Bidirectional controls reorder text on screen, so the exact input shows them as escapes.
 const BIDI_CONTROLS = new RegExp("[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]", "g");
 const KEY_PATTERN = /^[A-Za-z0-9_.-]{1,60}$/;
-const VALUE_CHARS = 160;
+// Core cuts every recorded string at its limit, so a row can show all that was kept.
+const VALUE_CHARS = CORE_STRING_LIMIT;
 const MAX_FACTS = 8;
 const MAX_LIST_ITEMS = 6;
 // Everything except tab and newline, plus bidirectional overrides that could reorder code on screen.
@@ -172,24 +175,48 @@ export function scalarText(value: unknown): string | null {
   return null;
 }
 
-/** One row per simple field in an input, plus how many fields were left for the full input. */
+/**
+ * One row per simple field in an input, plus how many fields were left for the
+ * full input. When `tool` names an action Guard knows, the fields people look
+ * for (who an email goes to, what it says) come first, under plain labels.
+ */
 export function scalarFacts(
   input: Record<string, unknown> | null,
-  options: { skip?: string[]; max?: number } = {},
+  options: { skip?: string[]; max?: number; tool?: string } = {},
 ): { facts: McpFact[]; hidden: number } {
   if (input === null) return { facts: [], hidden: 0 };
   const skip = new Set(options.skip ?? []);
   const max = options.max ?? MAX_FACTS;
-  const facts: McpFact[] = [];
+  const facts = promotedFacts(input, skip, options.tool, max);
+  const promoted = new Set(facts.map((fact) => fact.key));
   let hidden = 0;
   for (const [key, value] of Object.entries(input)) {
-    if (skip.has(key)) continue;
+    if (skip.has(key) || promoted.has(key)) continue;
     const text = KEY_PATTERN.test(key) ? scalarText(value) : null;
     if (text === null || text.length === 0 || facts.length >= max) {
       hidden += value === null || value === "" ? 0 : 1;
       continue;
     }
-    facts.push({ label: sentenceCase(key), value: text });
+    facts.push({ label: sentenceCase(key), value: text, kind: valueKindOf(text), key });
   }
   return { facts, hidden };
+}
+
+function promotedFacts(input: Record<string, unknown>, skip: Set<string>, tool: string | undefined, max: number): McpFact[] {
+  const fields = tool !== undefined ? previewFieldsFor(tool) : null;
+  if (fields === null) return [];
+  const keysByLowerCase = new Map(Object.keys(input).map((key) => [key.toLowerCase(), key]));
+  const facts: McpFact[] = [];
+  for (const field of fields) {
+    if (facts.length >= max) break;
+    for (const candidate of field.keys) {
+      const key = keysByLowerCase.get(candidate);
+      if (key === undefined || skip.has(key) || facts.some((fact) => fact.key === key)) continue;
+      const text = KEY_PATTERN.test(key) ? scalarText(input[key]) : null;
+      if (text === null || text.length === 0) continue;
+      facts.push({ label: field.label, value: text, kind: field.kind ?? valueKindOf(text), key });
+      break;
+    }
+  }
+  return facts;
 }

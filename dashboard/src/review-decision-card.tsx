@@ -32,7 +32,6 @@ import {
   scopeChoicesForRequest,
   standardScopeChoicesForRequest,
   taskCapabilityExplanation,
-  willPersistExactAction,
 } from "./approval-scopes";
 import { ApprovalGateRecommendationNotice, approvalGateNeedsSetup } from "./approval-proof-inline";
 import { guardAwareHref } from "./guard-api";
@@ -41,11 +40,9 @@ import { plainEnglishRequestTitle } from "./evidence/plain-english";
 import type { DecisionScope, GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import { guardActionPresentation } from "./guard-action";
 import { buildEvidenceItems, buildTopAlertItems } from "./review-evidence";
-import {
-  allowButtonLabel,
-  blockButtonLabel,
-  ReviewScopeControls,
-} from "./review-scope-controls";
+import { simpleMcpChoiceApplies } from "./mcp-call/mcp-decision-choice";
+import { ReviewDecisionControls } from "./review-decision-controls";
+import { decisionButtonLabels } from "./review-decision-labels";
 import { buildWhatWouldHappen, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
@@ -229,20 +226,12 @@ export function ReviewDecisionCard(props: {
     sectionLabel = "Watch-only finding";
     badgeLabel = "Would have stopped";
   }
-  const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
-  const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
-  let resolvedAllowButtonLabel = allowButtonLabel(allowScope, versionBoundScript, persistExactAllow);
-  if (watchOnlyObservation) {
-    resolvedAllowButtonLabel = "Keep allowing";
-  } else if (persistExactAllow && !versionBoundScript) {
-    resolvedAllowButtonLabel = "Approve and remember";
-  } else if (retryCannotReuseApproval(item)) {
-    resolvedAllowButtonLabel = "Choose an available approval duration";
-  }
-  let resolvedBlockButtonLabel = blockButtonLabel(blockScope);
-  if (watchOnlyObservation || persistExactBlock) {
-    resolvedBlockButtonLabel = "Stop this next time";
-  }
+  const simpleMcp = simpleMcpChoiceApplies(item);
+  const {
+    persistExactAllow,
+    allowLabel: resolvedAllowButtonLabel,
+    blockLabel: resolvedBlockButtonLabel,
+  } = decisionButtonLabels({ item, allowScope, blockScope, rememberExactAction, watchOnlyObservation, simpleMcp });
   return (
     <div className="min-w-0 space-y-5">
       {resolved && (
@@ -372,7 +361,8 @@ export function ReviewDecisionCard(props: {
         )}
 
         {resolutionBlockReason === null && resolved === null && (
-          <ReviewScopeControls
+          <ReviewDecisionControls
+            simpleMcp={simpleMcp}
             commonScopeOptions={commonScopeOptions}
             broaderScopeOptions={broaderScopeOptions}
             advancedScopeOptions={advancedScopeOptions}

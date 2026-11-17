@@ -1,0 +1,219 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import type { GuardActionEnvelope, GuardApprovalRequest } from "../guard-types";
+import { queueItemPreview } from "../review-queue-item";
+import { resolveQueueCategory } from "../queue-state";
+import { whyPaused } from "../evidence/plain-english";
+import { PrimaryActionCard } from "../review-states";
+import { decisionButtonLabels } from "../review-decision-labels";
+import { ReviewDecisionControls } from "../review-decision-controls";
+import { explainMcpCall } from "./explain-mcp-call";
+import { consequenceFor } from "./mcp-consequence";
+import { simpleMcpChoiceApplies } from "./mcp-decision-choice";
+import { listedMcpPreview } from "./mcp-queue-name";
+import { previewFieldsFor } from "./mcp-previews";
+import { emailAddresses, linkParts, valueKindOf } from "./mcp-values";
+
+function assert(condition: boolean, message: string): void {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function envelope(toolName: string, toolInput: unknown): GuardActionEnvelope {
+  const parts = toolName.split("__");
+  return {
+    schema_version: 1,
+    action_id: "act-mcp",
+    harness: "zcode",
+    event_name: "PreToolUse",
+    action_type: "mcp_tool",
+    workspace: "/workspace/project",
+    workspace_hash: null,
+    tool_name: toolName,
+    command: null,
+    prompt_excerpt: null,
+    prompt_text: null,
+    target_paths: [],
+    network_hosts: [],
+    mcp_server: parts[1] ?? null,
+    mcp_tool: parts.slice(2).join("__") || null,
+    package_manager: null,
+    package_name: null,
+    script_name: null,
+    raw_payload_redacted: { hook_event_name: "PreToolUse", tool_name: toolName, tool_input: toolInput },
+  };
+}
+
+function request(env: GuardActionEnvelope | null, toolName: string, extra: Partial<GuardApprovalRequest> = {}): GuardApprovalRequest {
+  return {
+    request_id: "request-mcp",
+    harness: "zcode",
+    artifact_id: `tool:${toolName}`,
+    artifact_name: toolName,
+    artifact_type: "tool_call",
+    artifact_hash: "sha256-mcp",
+    publisher: null,
+    policy_action: "require-reapproval",
+    recommended_scope: "artifact",
+    changed_fields: ["runtime_tool_call"],
+    source_scope: "project",
+    config_path: "./mcp.json",
+    launch_target: toolName,
+    transport: "stdio",
+    review_command: "hol-guard approvals approve request-mcp",
+    approval_url: "http://127.0.0.1:4781/approvals/request-mcp",
+    status: "pending",
+    resolution_action: null,
+    resolution_scope: null,
+    reason: null,
+    created_at: "2026-11-17T12:00:00Z",
+    resolved_at: null,
+    action_envelope_json: env,
+    exact_action_persistence_eligible: true,
+    allowed_scopes: ["artifact", "workspace"],
+    ...extra,
+  };
+}
+
+// A value's shape comes from the text only.
+{
+  assert(valueKindOf("a@example.com") === "email", "T-UX-1: an address is an address");
+  assert(valueKindOf("a@example.com, b@example.org") === "email", "T-UX-2: a list of addresses is a list");
+  assert(emailAddresses("a@example.com, not an address") === null, "T-UX-3: one bad part means it is not a list of addresses");
+  assert(valueKindOf("https://example.com/path?q=1") === "url", "T-UX-4: a web address is a web address");
+  assert(linkParts("https://example.com/path?q=1")?.host === "example.com", "T-UX-5: the host is split from the path");
+  assert(linkParts("javascript:alert(1)") === null && linkParts("https://a.com/x y") === null, "T-UX-6: only plain http and https addresses are links");
+  assert(valueKindOf("x".repeat(121)) === "long" && valueKindOf("one\ntwo") === "long", "T-UX-7: long or multi-line text is long");
+  assert(valueKindOf("Fix login") === "text", "T-UX-8: a short title is plain text");
+}
+
+// A send action shows who it goes to first, under plain labels, in the order a person reads them.
+{
+  assert(previewFieldsFor("GMAIL_SEND_EMAIL") === previewFieldsFor("send_email"), "T-UX-9: a service prefix does not change the preview");
+  assert(previewFieldsFor("frobnicate") === null, "T-UX-10: an unknown action has no preview");
+  const item = request(
+    envelope("mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", {
+      tools: [
+        {
+          tool_slug: "GMAIL_SEND_EMAIL",
+          arguments: { body: "Hello there", subject: "Hi", recipient_email: "ann@example.com", priority: "high" },
+        },
+      ],
+    }),
+    "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+  );
+  const labels = explainMcpCall(item)?.steps[0].details.map((fact) => fact.label) ?? [];
+  assert(labels.join(",") === "To,Subject,Message,Priority", "T-UX-11: recipient, subject and message come before other fields");
+  const markup = renderToStaticMarkup(PrimaryActionCard({ item }));
+  assert(markup.includes("ann@example.com") && markup.includes("Sends something through Gmail"), "T-UX-12: the card names who gets it and what approving does");
+  assert(markup.includes("Run actions") || markup.includes("Send email"), "T-UX-13: the action reads in words");
+}
+
+// A call with one action names it once, in the heading. Several actions are numbered.
+{
+  const one = request(
+    envelope("mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", { tools: [{ tool_slug: "GMAIL_SEND_EMAIL", arguments: { recipient_email: "a@example.com" } }] }),
+    "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+  );
+  const oneMarkup = renderToStaticMarkup(PrimaryActionCard({ item: one }));
+  assert((oneMarkup.match(/Send email/g) ?? []).length === 1, "T-UX-44: a lone action is named once, not again in its row");
+  assert(oneMarkup.includes("a@example.com"), "T-UX-45: its details still show");
+  const many = request(
+    envelope("mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", {
+      tools: [
+        { tool_slug: "GMAIL_FETCH_EMAILS", arguments: { query: "x" } },
+        { tool_slug: "GMAIL_SEND_EMAIL", arguments: { recipient_email: "a@example.com" } },
+      ],
+    }),
+    "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+  );
+  const manyMarkup = renderToStaticMarkup(PrimaryActionCard({ item: many }));
+  assert(manyMarkup.includes("Fetch emails") && manyMarkup.includes("Send email"), "T-UX-46: each of several actions is listed");
+  assert(whyPaused(one) === "Guard asks before a tool it has not reviewed runs.", "T-UX-47: Why paused names the reason for a tool Guard has not reviewed");
+}
+
+// What approving lets happen follows the effect, in "may" words, and unknown is never calm.
+{
+  assert(consequenceFor("read", "Gmail").tone === "calm", "T-UX-14: a lookup is calm");
+  assert(consequenceFor("write", "GitHub").tone === "care", "T-UX-15: a change asks for care");
+  assert(consequenceFor("send", "Gmail").tone === "danger" && consequenceFor("delete", "Gmail").tone === "danger", "T-UX-16: send and delete are the strongest tone");
+  assert(consequenceFor("run-code", "x").tone === "danger", "T-UX-17: running code is the strongest tone");
+  assert(consequenceFor("unknown", "x").tone === "care", "T-UX-18: a name Guard cannot read still asks for care");
+  assert(consequenceFor("read", "Gmail").text.includes("should not change anything"), "T-UX-19: a lookup is a hope, not a promise");
+  const all = (["read", "write", "send", "delete", "run-code", "connect", "unknown"] as const).map((effect) => consequenceFor(effect, "Gmail").text);
+  assert(all.every((text) => !/\bsafe\b/i.test(text)), "T-UX-20: no consequence calls a tool safe");
+}
+
+// The card names the one app a call acts in, and the connector it goes through.
+{
+  const composio = request(
+    envelope("mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", { tools: [{ tool_slug: "GMAIL_FETCH_EMAILS", arguments: { query: "x" } }] }),
+    "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+  );
+  const markup = renderToStaticMarkup(PrimaryActionCard({ item: composio }));
+  assert(markup.includes("Gmail, through Composio"), "T-UX-21: the subtitle names the app and the connector");
+  const github = request(envelope("mcp__github__create_issue", { title: "Fix login" }), "mcp__github__create_issue");
+  assert(renderToStaticMarkup(PrimaryActionCard({ item: github })).includes("Tool from GitHub"), "T-UX-22: a plain tool says whose tool it is");
+}
+
+// A list row that arrives without its envelope still reads in words, and is filed as a tool call.
+{
+  const listed = (name: string) => request(null, name, { artifact_id: `tool:${name}`, queue_preview: name });
+  const composio = listed("mcp__composio__COMPOSIO_SEARCH_TOOLS");
+  assert(listedMcpPreview(composio) === "Composio · Search for tools", "T-UX-23: a Composio row is named without the envelope");
+  assert(queueItemPreview(composio) === "Composio · Search for tools", "T-UX-24: the queue row uses it");
+  assert(resolveQueueCategory(composio).id === "mcp_tool", "T-UX-25: the row is filed as an MCP tool call, not an other review");
+  assert(listedMcpPreview(listed("mcp__codex_apps__github__create_issue")) === "GitHub · Create issue", "T-UX-26: a Codex connector row names the connector");
+  assert(listedMcpPreview(listed("mcp__github__list_issues")) === "GitHub · List issues", "T-UX-27: a plain tool row reads as a short action");
+  const shell = request(null, "ls", { artifact_id: "command:ls", queue_preview: "ls -la", launch_target: "ls", artifact_name: "ls", artifact_type: "command" });
+  assert(listedMcpPreview(shell) === null && queueItemPreview(shell) === "ls -la", "T-UX-28: a row that is not an MCP tool is left alone");
+  const withEnvelope = request(envelope("mcp__github__list_issues", {}), "mcp__github__list_issues");
+  assert(listedMcpPreview(withEnvelope) === null, "T-UX-29: a row with its envelope uses the full explanation");
+}
+
+// The two-card choice applies only when both choices can really be offered.
+{
+  const base = request(envelope("mcp__github__create_issue", { title: "Fix login" }), "mcp__github__create_issue");
+  assert(simpleMcpChoiceApplies(base), "T-UX-30: a plain MCP review gets the two-card choice");
+  assert(!simpleMcpChoiceApplies({ ...base, exact_action_persistence_eligible: false }), "T-UX-31: no Always allow means the full controls stay");
+  assert(!simpleMcpChoiceApplies({ ...base, scope_restrictions: ["retry_cannot_reuse_approval"] }), "T-UX-32: a request that cannot take Allow once keeps the full controls");
+  assert(!simpleMcpChoiceApplies({ ...base, allowed_scopes: ["workspace"] }), "T-UX-33: a request without the exact scope keeps the full controls");
+  const shell = request(envelope("Bash", { command: "ls" }), "Bash");
+  assert(!simpleMcpChoiceApplies({ ...shell, action_envelope_json: { ...envelope("Bash", { command: "ls" }), action_type: "shell_command", mcp_server: null, mcp_tool: null } }), "T-UX-34: a shell review keeps the full controls");
+
+  const props = {
+    commonScopeOptions: [],
+    broaderScopeOptions: [],
+    advancedScopeOptions: [],
+    blockScopeOptions: [],
+    hasAllowScope: true,
+    taskCapabilityCopy: null,
+    exactActionPersistenceEligible: true,
+    rememberExactAction: false,
+    allowScope: "artifact" as const,
+    blockScope: "artifact" as const,
+    onAllowScopeChange: () => undefined,
+    onBlockScopeChange: () => undefined,
+    onRememberExactActionChange: () => undefined,
+  };
+  const simple = renderToStaticMarkup(<ReviewDecisionControls {...props} simpleMcp />);
+  assert(simple.includes("Just this once") && simple.includes("Always allow this call"), "T-UX-35: both choices are offered in plain words");
+  assert(simple.includes("More choices") && !simple.includes("Approval scope"), "T-UX-36: wider choices are one click away and the old heading is gone");
+  assert(simple.includes('aria-checked="true"'), "T-UX-37: the current choice is marked");
+  const full = renderToStaticMarkup(<ReviewDecisionControls {...props} simpleMcp={false} />);
+  assert(full.includes("Approval scope") && !full.includes("Just this once"), "T-UX-38: every other review keeps the full controls");
+}
+
+// The Allow button says what it will do, and Always allow is never dropped.
+{
+  const item = request(envelope("mcp__github__create_issue", { title: "Fix login" }), "mcp__github__create_issue");
+  const labels = (rememberExactAction: boolean, simpleMcp: boolean, watchOnlyObservation = false) =>
+    decisionButtonLabels({ item, allowScope: "artifact", blockScope: "artifact", rememberExactAction, watchOnlyObservation, simpleMcp });
+  assert(labels(false, true).allowLabel === "Allow once", "T-UX-39: once reads as Allow once");
+  assert(labels(true, true).allowLabel === "Always allow this call", "T-UX-40: always reads as Always allow");
+  assert(labels(true, true).persistExactAllow && !labels(false, true).persistExactAllow, "T-UX-41: only Always allow saves the call");
+  assert(labels(true, false).allowLabel === "Approve and remember", "T-UX-42: other reviews keep their wording");
+  assert(labels(false, true, true).allowLabel === "Keep allowing", "T-UX-43: a watch-only observation keeps its wording");
+}
+
+console.log("mcp-call ux tests passed");

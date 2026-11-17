@@ -416,6 +416,7 @@ export function plainEnglishRequestTitle(request: GuardApprovalRequest): string 
 }
 
 export function whyPaused(request: GuardApprovalRequest): string {
+  if (explainMcpCall(request) !== null) return "Guard asks before a tool it has not reviewed runs.";
   const category = detectCategory({
     ...request,
     timestamp: request.created_at,

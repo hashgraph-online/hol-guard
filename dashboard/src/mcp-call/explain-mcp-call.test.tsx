@@ -94,8 +94,10 @@ const SEARCH_INPUT = {
     "T-MCP-5: the agent's use case is kept as a quote",
   );
   assert(
-    !(explained?.headline ?? "").includes("Riverside") && !(explained?.summary ?? "").includes("Riverside"),
-    "T-MCP-6: the agent's words never reach the headline or the summary",
+    !(explained?.headline ?? "").includes("Riverside") &&
+      !(explained?.consequence.text ?? "").includes("Riverside") &&
+      !(explained?.aside ?? "").includes("Riverside"),
+    "T-MCP-6: the agent's words never reach the headline, the consequence or the aside",
   );
   assert(explained?.toolId === "composio / COMPOSIO_SEARCH_TOOLS", "T-MCP-7: the tool's own name stays available");
   assert(plainEnglishRequestTitle(item) === "ZCode wants to search for tools in Composio", "T-MCP-8: the review page uses the plain title");
@@ -103,7 +105,7 @@ const SEARCH_INPUT = {
     queueItemPreview(item) === "Composio · Search for tools — Gmail, YouTube and Bing Webmaster Tools",
     "T-MCP-9: the queue row reads in words instead of an identifier",
   );
-  assert(buildWhatWouldHappen(item)?.includes("Composio") === true, "T-MCP-10: the what-would-happen line names the connector");
+  assert(buildWhatWouldHappen(item) === null, "T-MCP-10: the card says what approving does, so no what-would-happen filler is added");
 
   const markup = renderToStaticMarkup(PrimaryActionCard({ item }));
   assert(markup.includes("Search for tools") && markup.includes("Tool from Composio"), "T-MCP-11: the card names the action and connector");
@@ -137,11 +139,14 @@ const SEARCH_INPUT = {
   assert(explained?.effect === "send", "T-MCP-22: a batch takes its most serious effect");
   assert(explained?.headline === "ZCode wants to run 2 actions in Gmail", "T-MCP-23: the batch title counts the actions and names the app");
   assert(
-    explained?.steps[1].details.some((fact) => fact.label === "Recipient email" && fact.value === "a@example.com") === true,
-    "T-MCP-24: simple inputs show as labelled rows",
+    explained?.steps[1].details.some((fact) => fact.label === "To" && fact.value === "a@example.com" && fact.kind === "email") === true,
+    "T-MCP-24: a send action puts who it goes to first, under a plain label",
   );
   assert(explained?.steps[1].hiddenDetails === 1, "T-MCP-25: a nested field is left for the exact input and counted");
-  assert(!(explained?.summary ?? "").includes("Everything is fine"), "T-MCP-26: the agent's reassurance never reaches the summary");
+  assert(
+    !(explained?.consequence.text ?? "").includes("Everything is fine") && !(explained?.aside ?? "").includes("Everything is fine"),
+    "T-MCP-26: the agent's reassurance never reaches the consequence or the aside",
+  );
   assert(explained?.quotes?.items[0] === "Everything is fine, just checking mail", "T-MCP-27: it appears only as an attributed quote");
 }
 
