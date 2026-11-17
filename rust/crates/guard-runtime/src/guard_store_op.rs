@@ -447,7 +447,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_local_cli_items"
         | "list_cached_advisories"
         | "policy_source_contexts"
-        | "matching_native_review_block" => Kind::Read,
+        | "matching_native_review_block"
+        | "native_admitted_call" => Kind::Read,
         // Its lookup runs on the shared connection and its claim takes the
         // write lock itself, so no transaction is held around them.
         "settle_claimed_native_allow" => Kind::Read,
@@ -496,6 +497,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "settle_native_review_reuse"
+        | "record_native_admitted_call"
         | "resolve_matching_approval_requests"
         | "resolve_approval_request"
         | "resolve_one_request_only"
@@ -739,6 +741,8 @@ fn dispatch(
         "consume_native_review_approval" => native_review_consume::consume(connection, args),
         "matching_native_review_block" => native_review_consume::matching_block(connection, args),
         "settle_native_review_reuse" => native_review_consume::settle(connection, args),
+        "record_native_admitted_call" => crate::native_admitted_call::record(connection, args),
+        "native_admitted_call" => crate::native_admitted_call::lookup(connection, args),
         "add_approval_request" => queue_with_live_wait(connection, args, |args| {
             add_approval_request(connection, source, args)
         })

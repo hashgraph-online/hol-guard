@@ -343,7 +343,7 @@ fn claude_turn_stop_answer(
         .map_err(|_| HookDirectDefer::PermissionNotice)
 }
 
-pub(super) fn utc_now_isoformat() -> Option<String> {
+pub(crate) fn utc_now_isoformat() -> Option<String> {
     let micros = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?

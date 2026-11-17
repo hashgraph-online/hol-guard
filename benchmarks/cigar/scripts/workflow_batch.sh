@@ -1,5 +1,7 @@
 #!/bin/bash
 # workflow_batch.sh <tag> "<arm> ..." seed...: the workflow set's batch (workflow_run.py), any harness.
+# CIGAR_GAUNTLET_RUNNER=swarm_run.py or replay_run.py runs another set the same way (a replay "seed"
+# is a task index); CIGAR_GAUNTLET_ARGS adds arguments, such as "--mode cold".
 # Same loop as batch.sh: CIGAR_GAUNTLET_JOBS=N sessions at once (default 4); Codex arms get a copy of
 # ~/.codex/auth.json for the run and the last batch using an arm removes it. Oh My Pi and Claude Code
 # arms use their own logins.
@@ -40,11 +42,15 @@ for a in $arms; do
   fi
 done
 jobs_max=${CIGAR_GAUNTLET_JOBS:-4}
+runner=${CIGAR_GAUNTLET_RUNNER:-workflow_run.py}
+extra=${CIGAR_GAUNTLET_ARGS:-}
+suffix=$(printf '%s' "$extra" | tr -c 'a-z0-9' '-' | tr -s '-')
 set -m
 for s in $seeds; do
   for a in $arms; do
     while [ "$jobs_max" -gt 0 ] && [ "$(jobs -rp | wc -l)" -ge "$jobs_max" ]; do sleep 5; done
-    python3 "$HERE/workflow_run.py" --arm "$a" --seed "$s" --tag "$tag" > "$logs/$a-$s.log" 2>&1 &
+    # shellcheck disable=SC2086 # extra is a list of arguments
+    python3 "$HERE/$runner" --arm "$a" --seed "$s" --tag "$tag" $extra > "$logs/$a-$s$suffix.log" 2>&1 &
     pids+=($!)
   done
 done

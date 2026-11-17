@@ -262,6 +262,7 @@ pub(crate) fn run(args: &[String]) -> i32 {
             return EXIT_LISTENER;
         }
     };
+    super::widen_backlog(&listener);
     let Ok(port) = listener.local_addr().map(|address| address.port()) else {
         return EXIT_LISTENER;
     };

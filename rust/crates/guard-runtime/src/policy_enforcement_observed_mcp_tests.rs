@@ -169,10 +169,6 @@ fn observed_mcp_allow_preserves_native_findings_and_security_policy() {
     let mut result = generic_result("review");
     result.action.harness = "codex".into();
     result.action.action_type = PreToolActionTypeV1::McpTool;
-    result.reason_code = "native_mcp_tool_review".into();
-    let output =
-        apply_pre_tool_policy(&snapshot, &json!({"tool_name": tool}), result.clone()).unwrap();
-    assert_eq!(output.minimum_action, "review");
     result.reason_code = "native_sensitive_access_review".into();
     let output =
         apply_pre_tool_policy(&snapshot, &json!({"tool_name": tool}), result.clone()).unwrap();
@@ -183,6 +179,101 @@ fn observed_mcp_allow_preserves_native_findings_and_security_policy() {
     let output = apply_pre_tool_policy(&snapshot, &json!({"tool_name": tool}), result).unwrap();
     assert_eq!(output.minimum_action, "block");
     assert_eq!(output.reason_code, "native_secret_exfiltration");
+}
+
+#[test]
+fn observed_mcp_allow_answers_the_unreviewed_tool_setting() {
+    let tool = "mcp__composio__COMPOSIO_SEARCH_TOOLS";
+    for (setting, expected) in [
+        ("review", "allow"),
+        ("require-reapproval", "allow"),
+        ("block", "block"),
+    ] {
+        let mut policy = policy("allow");
+        policy
+            .mcp_tool_actions
+            .insert(format!("claude-code:{tool}"), "allow".into());
+        policy
+            .risk_actions
+            .insert("mcp_dangerous_tool".into(), setting.into());
+        let snapshot = snapshot(policy);
+        let mut result = generic_result("review");
+        result.action.harness = "claude-code".into();
+        result.action.action_type = PreToolActionTypeV1::McpTool;
+        result.reason_code = "native_mcp_tool_review".into();
+        let output =
+            apply_pre_tool_policy(&snapshot, &json!({"tool_name": tool}), result.clone()).unwrap();
+        assert_eq!(output.minimum_action, expected, "{setting}");
+        let other = apply_pre_tool_policy(
+            &snapshot,
+            &json!({"tool_name": "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL"}),
+            result,
+        )
+        .unwrap();
+        assert_ne!(other.minimum_action, "allow", "{setting}");
+    }
+}
+
+#[test]
+fn observed_mcp_allow_cannot_cover_a_renamed_composio_executor() {
+    for tool in [
+        "mcp__work_COMPOSIO_MULTI_EXECUTE_TOOL",
+        "mcp__work__COMPOSIO_MULTI_EXECUTE_TOOL",
+        "work_composio_remote_bash_tool",
+    ] {
+        let mut policy = policy("allow");
+        policy
+            .mcp_tool_actions
+            .insert(format!("omp:{tool}"), "allow".into());
+        policy
+            .risk_actions
+            .insert("mcp_dangerous_tool".into(), "require-reapproval".into());
+        let mut result = generic_result("review");
+        result.action.harness = "omp".into();
+        result.action.action_type = PreToolActionTypeV1::McpTool;
+        result.reason_code = "native_mcp_tool_review".into();
+        let output =
+            apply_pre_tool_policy(&snapshot(policy), &json!({"tool_name": tool}), result).unwrap();
+        assert_ne!(output.decision, "allow", "{tool}");
+    }
+}
+
+#[test]
+fn observed_mcp_allow_answers_the_unreviewed_tool_setting_for_its_output() {
+    let tool = "mcp__composio__COMPOSIO_SEARCH_TOOLS";
+    let mut policy = policy("allow");
+    policy
+        .mcp_tool_actions
+        .insert(format!("claude-code:{tool}"), "allow".into());
+    policy
+        .risk_actions
+        .insert("mcp_dangerous_tool".into(), "require-reapproval".into());
+    let snapshot = snapshot(policy);
+    let post = |tool: &str, response: HookReviewResponseV1| {
+        apply_post_tool_policy(
+            &snapshot,
+            &post_request(json!({
+                "tool_name": tool,
+                "tool_input": {"queries": [{"use_case": "find issues"}]},
+                "tool_response": "results"
+            })),
+            GuardHookPayloadKindV2::Inline,
+            response,
+        )
+        .unwrap()
+    };
+    let output = post(tool, HookReviewResponseV1::allow("output_scan_allow"));
+    assert_eq!(output.decision, "allow", "{:?}", output.reason);
+    let other = post(
+        "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+        HookReviewResponseV1::allow("output_scan_allow"),
+    );
+    assert_eq!(other.decision, "deny");
+    let secret = post(
+        tool,
+        HookReviewResponseV1::deny("output_secret_match", "output contains a secret"),
+    );
+    assert_eq!(secret.decision, "deny");
 }
 
 #[test]

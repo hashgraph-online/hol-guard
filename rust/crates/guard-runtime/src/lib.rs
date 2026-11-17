@@ -301,6 +301,7 @@ mod context_assistance_notifications;
 mod context_assistance_op;
 mod context_assistance_prompt;
 mod context_assistance_prompt_files;
+mod context_assistance_prompt_generated;
 mod context_assistance_prompt_ignore;
 mod context_assistance_prompt_words;
 mod context_assistance_savings;
@@ -932,6 +933,7 @@ mod mdm_integrity_snapshot;
 mod memory_decision_event;
 mod memory_decision_receipt;
 mod memory_pattern;
+mod native_admitted_call;
 #[cfg(target_os = "macos")]
 mod native_bash_client;
 mod native_bash_reply_validation;

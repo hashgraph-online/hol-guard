@@ -183,6 +183,7 @@ pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
 mod guard_home_option;
+pub use guard_home_option::guard_approval_inspection_command;
 mod guard_names;
 mod helm_usage;
 pub(crate) mod help_probes;

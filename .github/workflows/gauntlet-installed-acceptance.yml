@@ -96,7 +96,9 @@ jobs:
           compiler: ${{ env.COMPILER }}
 
       - name: Lane tests
-        # The Codex hook-publication helpers ask the native runtime for hook owners.
+        # The ownership fixture invokes the native runner-authority endpoint. Its
+        # executable was just built above, but these tests run before wheel
+        # installation and must not fall back to the absent packaged runtime.
         env:
           HOL_GUARD_NATIVE_REGRESSION: '1'
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/${{ env.TARGET }}/release/hol-guard-runtime

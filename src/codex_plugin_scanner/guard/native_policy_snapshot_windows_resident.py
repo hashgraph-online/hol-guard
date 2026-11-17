@@ -4,8 +4,9 @@ A process that already holds a live resident client stream for a Guard home
 sends each private-state request inside that home over that stream to the
 resident, which runs the same held handles and owner/DACL checks as the
 one-shot ``windows-private-state`` command without starting a process per op.
-Only an idle stream already parked in this process is borrowed: asking never
-starts a client stream, so it never brings back a resident that was stopped.
+Only a stream this process already holds is borrowed, waiting briefly for one
+in use to be parked: asking never starts a client stream, so it never brings
+back a resident that was stopped.
 ``None`` means the resident is not this request's route (no idle stream here
 for the home, a runtime without the operation, or a resident or transport
 failure), and the caller starts the one-shot command.
@@ -23,6 +24,9 @@ RESIDENT_FEATURE = "native-windows-private-state-resident-v1"
 _OPERATION = "windows_private_state"
 _SCHEMA = "windows-private-state-resident.v1"
 _TIMEOUT_SECONDS = 10.0
+# A busy stream frees up within one resident round trip; this bounds the wait
+# for it so an op that lands mid-request does not start a one-shot process.
+_IDLE_WAIT_SECONDS = 1.0
 
 
 def resident_private_state_answer(request: Mapping[str, object], *, output_limit: int) -> dict[str, object] | None:
@@ -55,6 +59,7 @@ def resident_private_state_answer(request: Mapping[str, object], *, output_limit
         payload=json.dumps(envelope, separators=(",", ":"), sort_keys=True).encode("utf-8"),
         deadline_monotonic=deadline,
         idle_only=True,
+        idle_wait_seconds=_IDLE_WAIT_SECONDS,
     )
     if response is None or len(response) > output_limit:
         return None

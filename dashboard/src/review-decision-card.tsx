@@ -382,7 +382,6 @@ export function ReviewDecisionCard(props: {
             exactActionPersistenceEligible={item.exact_action_persistence_eligible === true}
             versionBoundScript={versionBoundScript}
             rememberExactAction={rememberExactAction}
-            persistExactBlock={persistExactBlock}
             oneTimeRetryBlocked={retryCannotReuseApproval(item)}
             retryWindowMinutes={oneTimeRetryWindowMinutes(item)}
             allowScope={allowScope}
