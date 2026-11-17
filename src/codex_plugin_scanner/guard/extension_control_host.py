@@ -56,6 +56,8 @@ class _InstalledAuthorityMigrationError(Exception):
 # same work, and once it lands this one finds it done in a moment.
 WORKER_MIGRATION_TURN_WAIT_SECONDS = 180.0
 _SLOW_MIGRATION_SECONDS = 5.0
+_MIGRATION_RETRY_INTERVAL_SECONDS = 5.0
+_MIGRATION_BUSY_RETRY_INTERVAL_SECONDS = 0.25
 
 
 def _verify_installed_bundle_early() -> None:
@@ -80,6 +82,7 @@ def migrate_installed_authority(
     *,
     wait_seconds: float = WORKER_MIGRATION_TURN_WAIT_SECONDS,
     on_phase: Callable[[str], None] | None = None,
+    on_busy: Callable[[], None] | None = None,
 ) -> bool:
     """Admit the installed release's command packs, recording why when it cannot.
 
@@ -115,6 +118,9 @@ def migrate_installed_authority(
         with installed_authority_migration_turn(store.guard_home, wait_seconds=wait_seconds) as held:
             if not held:
                 _LOGGER.info("Installed command-pack authority is being migrated by another Guard process")
+                if on_busy is not None:
+                    with suppress(Exception):
+                        on_busy()
                 return False
             report("turn_held")
             store.migrate_installed_command_pack_authority()
@@ -145,6 +151,7 @@ class ExtensionControlHost:
 
         self.store = store
         self._installed_authority_pending = False
+        self._installed_authority_retry_at = 0.0
         self._on_core_registry = False
         try:
             self._migrate_installed_authority()
@@ -170,8 +177,17 @@ class ExtensionControlHost:
 
         # An extension-control host never queues behind another process's
         # migration: it starts on the fallback view and retries on refresh.
-        if not migrate_installed_authority(self.store, wait_seconds=0.0):
+        busy = False
+
+        def mark_busy() -> None:
+            nonlocal busy
+            busy = True
+
+        if not migrate_installed_authority(self.store, wait_seconds=0.0, on_busy=mark_busy):
             self._installed_authority_pending = True
+            self._installed_authority_retry_at = time.monotonic() + (
+                _MIGRATION_BUSY_RETRY_INTERVAL_SECONDS if busy else _MIGRATION_RETRY_INTERVAL_SECONDS
+            )
             raise _InstalledAuthorityMigrationError
         self._installed_authority_pending = False
 
@@ -259,10 +275,18 @@ class ExtensionControlHost:
             return snapshot
 
         if self._installed_authority_pending:
+            now = time.monotonic()
+            if now < self._installed_authority_retry_at:
+                # A failed native migration is fail-closed, but it must not
+                # make every hook pay the migration cost while the authority
+                # service is unavailable. Keep serving the current tampered
+                # view and retry on the next backoff window.
+                return self.runtime.current()
             try:
                 self._migrate_installed_authority()
             except _InstalledAuthorityMigrationError:
                 return self.runtime.current()
+            self._installed_authority_retry_at = 0.0
             self._enroll_authority_by_default()
         try:
             try:

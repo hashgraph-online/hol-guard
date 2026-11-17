@@ -2,8 +2,18 @@ import { harnessDisplayName } from "../approval-center-utils";
 import type { GuardActionEnvelope, GuardApprovalRequest } from "../guard-types";
 import { explainComposioTool, THOUGHT_CAPTION, type McpCallBody } from "./composio-calls";
 import type { McpCallExplanation } from "./mcp-call-types";
-import { classifyMcpEffect, MCP_EFFECT_COPY, type McpEffectKind } from "./mcp-effects";
-import { CORE_STRING_LIMIT, recordOf, scalarFacts, selectToolInput, textOf, type SelectedToolInput } from "./mcp-input";
+import { explainHostAppTool, hostAppTool, type HostAppTool } from "./host-app-tools";
+import { consequenceFor } from "./mcp-consequence";
+import { classifyMcpEffect, type McpEffectKind } from "./mcp-effects";
+import {
+  CORE_STRING_LIMIT,
+  joinList,
+  recordOf,
+  scalarFacts,
+  selectToolInput,
+  textOf,
+  type SelectedToolInput,
+} from "./mcp-input";
 import {
   isPlainNamePart,
   parseNamespacedMcpName,
@@ -30,24 +40,41 @@ export function explainMcpCall(item: GuardApprovalRequest): McpCallExplanation |
   const ref = resolveMcpRef(envelope);
   if (ref === null) return null;
 
-  const harness = harnessDisplayName(item.harness);
   const raw = recordOf(envelope.raw_payload_redacted);
   const selected = selectToolInput(raw);
   const input = selected.record;
-  const connector = ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER;
   const shortTool = shortToolName(ref.server, ref.tool);
+  const host = hostAppTool(ref.server, shortTool, { harness: item.harness, raw });
+  // A built-in tool exists only inside its own app, so once the call is shown to come from that app, it is the one asking.
+  const harness = host?.requester ?? harnessDisplayName(item.harness);
+  const connector = host?.app ?? (ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER);
   const body =
+    (host !== null ? explainHostAppTool(host, input) : null) ??
     (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ??
     explainGenericTool({ harness, connector, shortTool, input });
 
   return {
     ...body,
+    consequence: consequenceFor(body.effect, whereItActs(body, connector)),
     connector,
+    requester: harness,
     rawInput: selected.text,
     truncated: wasTruncated(item, selected),
     toolId: ref.server.length > 0 ? `${ref.server} / ${ref.tool}` : ref.tool,
-    whyAsked: `Guard has not reviewed ${ref.server.length > 0 ? `${connector}'s` : "this"} tool yet, and your policy asks before any unreviewed tool runs.`,
+    whyAsked: whyAskedFor(host, ref.server.length > 0 ? connector : null),
   };
+}
+
+function whyAskedFor(host: HostAppTool | null, connector: string | null): string {
+  if (host !== null) return `Guard asks before any tool it has not reviewed, including tools built into ${host.app}.`;
+  if (connector !== null) return `Guard asks before any tool it has not reviewed, and it has not reviewed this ${connector} tool.`;
+  return "Guard asks before any tool it has not reviewed, and it has not reviewed this one.";
+}
+
+/** The services the call's effect lands in: the apps of the actions that carry it, else the connector it goes through. */
+function whereItActs(body: McpCallBody, connector: string): string {
+  const apps = body.effectApps ?? [];
+  return apps.length > 0 ? joinList(apps) : connector;
 }
 
 /** Replaces the policy-setting name Core gives for an unreviewed MCP tool with the reason in plain words. */
@@ -104,13 +131,13 @@ function explainGenericTool(context: {
   const effect = classifyMcpEffect(shortTool);
   const title = sentenceCase(shortTool);
   // `thought` and `use_case` are the agent's own account of the call. They are quoted, never shown as a fact.
-  const { facts } = scalarFacts(input, { skip: AGENT_TEXT_KEYS });
+  const { facts } = scalarFacts(input, { skip: AGENT_TEXT_KEYS, tool: shortTool });
   const thought = textOf(input?.thought, 300);
   const firstValue = facts[0]?.value ?? null;
   return {
     headline: `${harness} wants to ${effectPhrase(effect, connector)}`,
     title,
-    summary: `${harness} is calling ${connector}'s “${title}” tool. ${MCP_EFFECT_COPY[effect].meaning}`,
+    aside: null,
     effect,
     effectBasis:
       effect === "unknown"
@@ -127,6 +154,8 @@ function explainGenericTool(context: {
 
 function effectPhrase(effect: McpEffectKind, connector: string): string {
   switch (effect) {
+    case "in-app":
+      return `change what ${connector} shows you`;
     case "read":
       return `look something up in ${connector}`;
     case "write":

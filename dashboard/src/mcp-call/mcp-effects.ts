@@ -6,7 +6,7 @@
  * A name that carries a change word is never called a read, so
  * `search_and_delete` is a delete and `get_or_create_user` is a change.
  */
-export type McpEffectKind = "read" | "write" | "send" | "delete" | "run-code" | "connect" | "unknown";
+export type McpEffectKind = "in-app" | "read" | "write" | "send" | "delete" | "run-code" | "connect" | "unknown";
 
 export type McpEffectCopy = {
   /** Short pill text. */
@@ -16,6 +16,8 @@ export type McpEffectCopy = {
 };
 
 export const MCP_EFFECT_COPY: Record<McpEffectKind, McpEffectCopy> = {
+  // Only a built-in agent-app tool gets this; no name is read as in-app on its own.
+  "in-app": { label: "Only in the app", meaning: "It changes what the agent app shows you and nothing else." },
   read: { label: "Looks things up", meaning: "The name suggests it reads or searches and does not change anything." },
   write: { label: "Makes changes", meaning: "The name suggests it creates or changes something." },
   send: { label: "Sends something", meaning: "The name suggests it sends or posts something to other people or services." },
@@ -97,6 +99,7 @@ export function classifyMcpEffect(identifier: string): McpEffectKind {
 }
 
 const SEVERITY: Record<McpEffectKind, number> = {
+  "in-app": 0,
   read: 1,
   unknown: 2,
   connect: 3,
@@ -108,8 +111,8 @@ const SEVERITY: Record<McpEffectKind, number> = {
 
 /** The effect a group of actions has as a whole: the most serious one in it. */
 export function worstMcpEffect(effects: McpEffectKind[]): McpEffectKind {
-  let worst: McpEffectKind = "read";
   if (effects.length === 0) return "unknown";
+  let worst = effects[0];
   for (const effect of effects) {
     if (SEVERITY[effect] > SEVERITY[worst]) worst = effect;
   }

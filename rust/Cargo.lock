@@ -1187,6 +1187,7 @@ dependencies = [
  "guard-seatbelt",
  "guard-secure-fs",
  "guard-swarm",
+ "guard-yanez-pulse",
  "hex",
  "hmac",
  "landlock",

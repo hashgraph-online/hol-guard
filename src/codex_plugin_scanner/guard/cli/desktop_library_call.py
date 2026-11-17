@@ -75,6 +75,25 @@ def answer_line(guard_home: Path, request: bytes) -> bytes:
     return line.encode("utf-8")
 
 
+def _worker_failure_line(request: bytes) -> bytes:
+    """Return a bounded answer when a resident worker raises unexpectedly."""
+
+    try:
+        call_id = json.loads(request.decode("utf-8")).get("id")
+    except (UnicodeDecodeError, ValueError, AttributeError, RecursionError):
+        call_id = None
+    result: dict[str, object] = {
+        "error": {
+            "type": "LibraryWorkerError",
+            "message": "worker_failed",
+            "kind": "library_worker",
+        }
+    }
+    if isinstance(call_id, int) and not isinstance(call_id, bool):
+        result = {"id": call_id, **result}
+    return (json.dumps(result, separators=(",", ":")) + "\n").encode("utf-8")
+
+
 def _expires_at(request: bytes, received: float) -> float | None:
     """The monotonic time the daemon stops waiting for ``request``'s answer.
 
@@ -120,6 +139,18 @@ def serve_lines(guard_home: Path, read_line: Callable[[], bytes], write: Callabl
                     write(line)
             except OSError:
                 pass
+            except BaseException as error:
+                try:
+                    from ..runtime_health.background_diagnostics import failure_detail, record_background_event
+
+                    record_background_event("library_worker_failed", failure_detail(error))
+                except BaseException:
+                    pass
+                try:
+                    with write_lock:
+                        write(_worker_failure_line(request))
+                except BaseException:
+                    pass
 
     def _taken(size: int) -> None:
         nonlocal queued_bytes

@@ -48,20 +48,7 @@ pub(super) fn require_high_risk(
     payload: &Map<String, Value>,
     config: &ReadConfig,
 ) -> Option<Gate> {
-    let input = wire_input(payload);
-    call(
-        ApprovalGateMethodV1::RequireHighRisk,
-        Some(json!({
-            "action": null,
-            "scope": null,
-            "subject": null,
-            "session_nonce": null,
-        })),
-        input,
-        None,
-        Some(purpose),
-        config,
-    )
+    pulse::require_high_risk_for(purpose, payload, None, config)
 }
 
 /// `require_settings_write(guard_home, approval_gate_grant=grant)`, run
@@ -162,14 +149,44 @@ pub(super) fn operate(
     device_label: Option<&str>,
     config: &ReadConfig,
 ) -> Option<Operated> {
-    let input = wire_input(payload);
+    let options = Options {
+        purpose: None,
+        strict: false,
+        timeout: GATE_TIMEOUT,
+    };
+    operate_with(
+        method,
+        params,
+        wire_input(payload),
+        options,
+        device_label,
+        config,
+    )
+}
+
+/// The request options [`build`] does not take from the method.
+#[derive(Clone, Copy)]
+struct Options<'a> {
+    purpose: Option<&'a str>,
+    strict: bool,
+    timeout: Duration,
+}
+
+fn operate_with(
+    method: ApprovalGateMethodV1,
+    params: Option<Value>,
+    input: Option<ApprovalGateInputWireV1>,
+    options: Options<'_>,
+    device_label: Option<&str>,
+    config: &ReadConfig,
+) -> Option<Operated> {
     let (request, digest, encoded) =
-        build(method, params, input, None, None, device_label, config)?;
+        build(method, params, input, None, options, device_label, config)?;
     let refusal = |gate: Gate| match gate {
         Gate::Refused(status, body) => Err((status, body)),
         Gate::Passed(_) => Ok(Map::new()),
     };
-    let Ok(Value::Object(envelope)) = send(&encoded, config) else {
+    let Ok(Value::Object(envelope)) = send(&encoded, options.timeout, config) else {
         return Some(refusal(unavailable()));
     };
     if envelope.get("schema").and_then(Value::as_str) != Some(APPROVAL_GATE_RESULT_SCHEMA)
@@ -205,6 +222,14 @@ pub(super) fn public_config(answer: &Map<String, Value>) -> Option<Value> {
         "totp_enabled": flag("totp_enabled")?,
         "totp_pending": flag("totp_pending")?,
         "totp_recent_satisfied": flag("totp_recent_satisfied").unwrap_or(false),
+        // `config_from_wire`: Pulse is off, and the command hidden, unless
+        // the resident says otherwise.
+        "pulse_enabled": answer.get("pulse_enabled") == Some(&Value::Bool(true)),
+        "pulse_cooldown_seconds": answer
+            .get("pulse_cooldown_seconds")
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
+        "pulse_show_command": answer.get("pulse_show_command") == Some(&Value::Bool(true)),
     }))
 }
 
@@ -220,14 +245,22 @@ fn truthy(value: &Value) -> bool {
 }
 
 fn wire_input(payload: &Map<String, Value>) -> Option<ApprovalGateInputWireV1> {
-    input_from_mapping(Some(&Value::Object(payload.clone()))).map(|input| ApprovalGateInputWireV1 {
-        password: input.password,
-        new_password: input.new_password,
-        confirm_password: input.confirm_password,
-        totp_code: input.totp_code,
-        use_cooldown: input.use_cooldown,
-        revoke_cooldown: input.revoke_cooldown,
-        require_fresh_totp: input.require_fresh_totp,
+    input_from_mapping(Some(&Value::Object(payload.clone()))).map(|input| {
+        // With a Pulse request id the YID approval is the proof; the resident
+        // refuses a password or code beside it (`input_from_mapping`).
+        let pulse = input.pulse_request_id.is_some();
+        ApprovalGateInputWireV1 {
+            password: input.password.filter(|_| !pulse),
+            new_password: input.new_password,
+            confirm_password: input.confirm_password,
+            totp_code: input.totp_code.filter(|_| !pulse),
+            use_cooldown: input.use_cooldown,
+            revoke_cooldown: input.revoke_cooldown,
+            require_fresh_totp: input.require_fresh_totp,
+            pulse_request_id: input.pulse_request_id,
+            pulse_agent_key: None,
+            pulse_recovery_code: None,
+        }
     })
 }
 
@@ -241,7 +274,7 @@ fn build(
     params: Option<Value>,
     approval_gate_input: Option<ApprovalGateInputWireV1>,
     approval_gate_grant: Option<ApprovalGateGrantWireV1>,
-    purpose: Option<&str>,
+    options: Options<'_>,
     device_label: Option<&str>,
     config: &ReadConfig,
 ) -> Option<Built> {
@@ -257,8 +290,8 @@ fn build(
         params,
         approval_gate_input,
         approval_gate_grant,
-        strict: false,
-        purpose: purpose.map(str::to_owned),
+        strict: options.strict,
+        purpose: options.purpose.map(str::to_owned),
         now: None,
         duration_seconds: None,
         device_label: device_label.map(str::to_owned),
@@ -267,7 +300,7 @@ fn build(
     let digest = crate::approval_gate_op::request_digest(&request).ok()?;
     let encoded = serde_json::to_vec(&json!({
         "operation": "approval_gate",
-        "deadline_budget_ms": GATE_BUDGET_MS,
+        "deadline_budget_ms": u64::try_from(options.timeout.as_millis()).unwrap_or(GATE_BUDGET_MS),
         "request": request,
     }))
     .ok()?;
@@ -277,12 +310,12 @@ fn build(
 /// The resident's answer. `Err(true)` when this home has no native runtime
 /// state at all, which the daemon's client reads as no native authority;
 /// `Err(false)` when a provisioned resident did not answer.
-fn send(encoded: &[u8], config: &ReadConfig) -> Result<Value, bool> {
+fn send(encoded: &[u8], timeout: Duration, config: &ReadConfig) -> Result<Value, bool> {
     let Ok(state_dir) = std::fs::canonicalize(Path::new(&config.guard_home).join("native-runtime"))
     else {
         return Err(true);
     };
-    crate::managed_resident::client_request(&state_dir, encoded, GATE_TIMEOUT)
+    crate::managed_resident::client_request(&state_dir, encoded, timeout)
         .ok()
         .and_then(|output| serde_json::from_slice::<Value>(&output).ok())
         .ok_or(false)
@@ -294,6 +327,26 @@ fn call(
     approval_gate_input: Option<ApprovalGateInputWireV1>,
     approval_gate_grant: Option<ApprovalGateGrantWireV1>,
     purpose: Option<&str>,
+    config: &ReadConfig,
+) -> Option<Gate> {
+    call_with(
+        method,
+        params,
+        approval_gate_input,
+        approval_gate_grant,
+        purpose,
+        GATE_TIMEOUT,
+        config,
+    )
+}
+
+fn call_with(
+    method: ApprovalGateMethodV1,
+    params: Option<Value>,
+    approval_gate_input: Option<ApprovalGateInputWireV1>,
+    approval_gate_grant: Option<ApprovalGateGrantWireV1>,
+    purpose: Option<&str>,
+    timeout: Duration,
     config: &ReadConfig,
 ) -> Option<Gate> {
     let grant_expected = method == ApprovalGateMethodV1::RequireHighRisk;
@@ -309,11 +362,15 @@ fn call(
         params,
         approval_gate_input,
         approval_gate_grant,
-        purpose,
+        Options {
+            purpose,
+            strict: false,
+            timeout,
+        },
         None,
         config,
     )?;
-    match send(&encoded, config) {
+    match send(&encoded, timeout, config) {
         Ok(envelope) => answer(
             &envelope,
             &request.request_id,
@@ -427,3 +484,7 @@ pub(super) fn unavailable() -> Gate {
 #[cfg(all(test, unix))]
 #[path = "daemon_edge_gate_tests.rs"]
 mod tests;
+
+#[path = "daemon_edge_gate_pulse.rs"]
+mod pulse;
+pub(super) use pulse::require_high_risk_for;

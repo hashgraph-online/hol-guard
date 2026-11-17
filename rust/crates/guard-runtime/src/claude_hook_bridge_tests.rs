@@ -434,3 +434,33 @@ fn timeouts_stay_under_the_harness_budget() {
     // left of the hook deadline, not another full IO timeout.
     assert!(capped(Instant::now() + MINIMUM_RECOVERY, DAEMON_IO_TIMEOUT) <= MINIMUM_RECOVERY);
 }
+
+#[test]
+fn a_hook_that_fires_inside_cursor_is_reviewed_as_cursor() {
+    use super::attributed_query;
+    use std::collections::HashMap;
+    let env = |pairs: &[(&str, &str)]| -> HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect()
+    };
+    let query = "guard-home=%2Fg&home=%2Fh";
+    let cursor = env(&[("CURSOR_TRACE_ID", "trace")]);
+    assert_eq!(
+        attributed_query(query, &cursor),
+        "guard-home=%2Fg&home=%2Fh&runtime-harness=cursor"
+    );
+    // Claude Code started from a Cursor terminal keeps its own review.
+    let claude_in_cursor = env(&[("CURSOR_TRACE_ID", "trace"), ("CLAUDECODE", "1")]);
+    assert_eq!(attributed_query(query, &claude_in_cursor), query);
+    // No markers, or an empty one, leaves the query alone.
+    assert_eq!(attributed_query(query, &env(&[])), query);
+    assert_eq!(
+        attributed_query(query, &env(&[("CURSOR_TRACE_ID", " ")])),
+        query
+    );
+    // A query that already names a harness is not changed.
+    let named = "guard-home=%2Fg&runtime-harness=codex";
+    assert_eq!(attributed_query(named, &cursor), named);
+}
