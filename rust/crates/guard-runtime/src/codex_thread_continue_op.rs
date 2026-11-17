@@ -337,6 +337,25 @@ fn user_home(_name: &str) -> Option<PathBuf> {
     None
 }
 
+/// `_is_trusted_local_socket` under the caller's own home and temporary
+/// directories: a safe location, and an owner-only socket in an owner-only
+/// directory.
+#[cfg(unix)]
+pub(crate) fn trusted_local_socket(
+    home_dir: Option<&str>,
+    temp_dir: Option<&str>,
+) -> impl Fn(&Path) -> bool {
+    let roots = SocketRoots::new(&ContinueRequest {
+        approval_request_id: "",
+        action: "",
+        home_dir,
+        temp_dir,
+        cwd: None,
+        timeout_ms: 0,
+    });
+    move |path| roots.is_safe(path) && is_trusted_socket(path)
+}
+
 /// `_is_trusted_local_socket`: an owner-only socket in an owner-only directory.
 #[cfg(unix)]
 fn is_trusted_socket(path: &Path) -> bool {

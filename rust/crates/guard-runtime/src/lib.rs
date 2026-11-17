@@ -217,6 +217,10 @@ mod codex_hooks;
 #[cfg(test)]
 mod codex_hooks_parity_tests;
 mod codex_host_inventory;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod codex_host_probe;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod codex_host_read;
 mod codex_identity;
 #[path = "adapters/codex_install_plan.rs"]
 mod codex_install_plan;
