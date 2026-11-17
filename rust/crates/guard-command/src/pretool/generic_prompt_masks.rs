@@ -158,7 +158,9 @@ fn mask_layout_nouns(value: &str) -> String {
 
 /// A strong action verb up to three words before `format` names the
 /// operation, as in `run the same format on it`, unless a relation word such
-/// as `in` or `as` sits between them, as in `run tests in JSON format`.
+/// as `in` or `as` sits between them, as in `run tests in JSON format`. A
+/// relation word that only names who the work is for, as in `perform for me
+/// the format`, is skipped with its pronoun and does not count as a word.
 fn verb_leads(lead_text: &str) -> bool {
     const VERBS: [&str; 8] = [
         "run", "do", "perform", "execute", "trigger", "launch", "redo", "schedule",
@@ -173,16 +175,36 @@ fn verb_leads(lead_text: &str) -> bool {
         .filter(|word| !word.is_empty())
         .map(str::to_ascii_lowercase)
         .collect::<Vec<_>>();
-    (0..=3).any(|gap| {
+    const PRONOUNS: [&str; 7] = ["me", "us", "you", "them", "him", "her", "it"];
+    let operates = |between: &[String]| {
+        let mut counted = 0;
+        let mut index = 0;
+        while index < between.len() {
+            let word = between[index].as_str();
+            if !word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+                return false;
+            }
+            if RELATIONS.contains(&word) {
+                if !between
+                    .get(index + 1)
+                    .is_some_and(|next| PRONOUNS.contains(&next.as_str()))
+                {
+                    return false;
+                }
+                index += 2;
+                continue;
+            }
+            counted += 1;
+            index += 1;
+        }
+        counted <= 3
+    };
+    (0..=7).any(|gap| {
         let Some(at) = words.len().checked_sub(gap + 1) else {
             return false;
         };
         let verb = words[at].trim_start_matches(|c: char| !c.is_ascii_alphanumeric());
-        VERBS.contains(&verb)
-            && words[at + 1..].iter().all(|word| {
-                word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-                    && !RELATIONS.contains(&word.as_str())
-            })
+        VERBS.contains(&verb) && operates(&words[at + 1..])
     })
 }
 
