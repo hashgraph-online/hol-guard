@@ -23,6 +23,8 @@ struct StaleHost {
     /// Owner checks that hang until their timeout, as a stuck `ps` does.
     slow_owner_checks: bool,
     owner_timeouts: RefCell<Vec<Duration>>,
+    /// How long each command-line lookup takes.
+    command_delay: Duration,
     sent: RefCell<Vec<(u32, Stop)>>,
     started: Instant,
     elapsed: Cell<Duration>,
@@ -36,6 +38,7 @@ impl StaleHost {
             foreign: Vec::new(),
             slow_owner_checks: false,
             owner_timeouts: RefCell::default(),
+            command_delay: Duration::ZERO,
             sent: RefCell::default(),
             started: Instant::now(),
             elapsed: Cell::new(Duration::ZERO),
@@ -63,6 +66,7 @@ impl Host for StaleHost {
     }
 
     fn command(&self, pid: u32) -> Option<String> {
+        self.elapsed.set(self.elapsed.get() + self.command_delay);
         self.command_of(pid)
     }
 
@@ -189,6 +193,35 @@ fn look_alike_and_foreign_processes_are_left_running() {
         line(47, 1, &native_daemon(GONE_HOME)),
         // A zombie has nothing left to stop.
         format!("48 1 Z {}", native_daemon(GONE_HOME)),
+        // A script that only names the packaged module is not its daemon.
+        line(
+            49,
+            1,
+            &format!(
+                "/usr/bin/python3 -c import time; time.sleep(3600) codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"
+            ),
+        ),
+        line(
+            50,
+            1,
+            &format!(
+                "/usr/bin/python3 -c pass -m codex_plugin_scanner.cli guard daemon --serve --guard-home {GONE_HOME}"
+            ),
+        ),
+        line(
+            51,
+            1,
+            &format!(
+                "/usr/bin/python3 -m other codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"
+            ),
+        ),
+        line(
+            52,
+            1,
+            &format!(
+                "/usr/bin/node -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"
+            ),
+        ),
     ]);
     host.foreign.push(47);
 
@@ -220,6 +253,7 @@ fn a_reused_pid_is_not_signalled() {
         &stale_guard_processes(&listed, &processes, &[], None),
         &[],
         Duration::ZERO,
+        None,
     );
     assert!(signalled.is_empty() && forced.is_empty());
     assert!(reused.signalled().is_empty());
@@ -296,4 +330,44 @@ fn owner_checks_stop_when_the_budget_is_spent() {
         [Duration::from_millis(500), Duration::from_millis(200)]
     );
     assert!(host.now() <= deadline);
+}
+
+#[test]
+fn a_packaged_module_daemon_of_a_deleted_home_is_retired() {
+    let host = StaleHost::new(&[
+        line(
+            90,
+            1,
+            &format!("python -m codex_plugin_scanner.cli guard daemon --serve --guard-home {GONE_HOME}"),
+        ),
+        line(
+            91,
+            1,
+            &format!("/usr/bin/python3 -I -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"),
+        ),
+        line(
+            92,
+            1,
+            &format!("/usr/bin/python3 -m codex_plugin_scanner.cli daemon --serve --guard-home {LIVE_HOME}"),
+        ),
+    ]);
+
+    assert_eq!(stale(&host), [90, 91]);
+}
+
+#[test]
+fn termination_stops_when_the_pass_budget_is_spent() {
+    let lines: Vec<String> = (100..110)
+        .map(|pid| line(pid, 1, &native_daemon(GONE_HOME)))
+        .collect();
+    let mut host = StaleHost::new(&lines);
+    // Each process costs two 400 ms command lookups before its signal.
+    host.command_delay = Duration::from_millis(400);
+    let deadline = host.now() + Duration::from_secs(3);
+
+    reap(&host, &[], Some(Duration::from_secs(3)));
+
+    // Checks start at 0, 0.8, 1.6 and 2.4 s; none starts at 3.2 s.
+    assert_eq!(host.signalled(), [100, 101, 102, 103]);
+    assert!(host.now() <= deadline + Duration::from_millis(800));
 }

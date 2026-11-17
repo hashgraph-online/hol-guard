@@ -22,14 +22,19 @@ use std::time::Instant;
 
 use super::Host;
 use super::{
-    is_absolute_hol_guard_executable, is_absolute_path, is_hol_guard_daemon_serve, py_strip,
-    ProcessSnapshot,
+    is_absolute_hol_guard_executable, is_absolute_path, py_split, py_strip, ProcessSnapshot,
 };
 
 const RUNTIME_EXECUTABLES: [&str; 2] = ["hol-guard-runtime", "hol-guard-runtime.exe"];
 const NATIVE_DAEMON_MARKER: &str = " daemon-serve";
 const RELAY_MARKER: &str = " mcp-relay";
 const GUARD_HOME_FLAG: &str = " --guard-home ";
+const FROZEN_DAEMON_MARKER: &str = " --_hol-guard-daemon-serve";
+const PYTHON_DAEMON_MARKERS: [&str; 2] = [" guard daemon --serve", " daemon --serve"];
+const PACKAGED_MODULE: &str = "codex_plugin_scanner.cli";
+/// Python options that take no value, so none can hide a `-c` script or
+/// another module in front of `-m`.
+const BARE_PYTHON_OPTIONS: &str = "bBdEiIOPqRsSuv";
 
 /// The processes in `processes` that serve nothing any more, by pid.
 ///
@@ -91,11 +96,12 @@ fn is_stale<H: Host>(host: &H, process: &ProcessSnapshot) -> bool {
 /// an absolute path is dropped, and a daemon with no absolute reading is
 /// never stale.
 fn daemon_guard_homes(command: &str) -> Option<Vec<&str>> {
-    let daemon_at = if is_hol_guard_daemon_serve(command) {
-        0
-    } else {
-        let marker_at = marker_after_runtime(command, NATIVE_DAEMON_MARKER)?;
-        marker_at + NATIVE_DAEMON_MARKER.len()
+    let daemon_at = match python_daemon_at(command) {
+        Some(daemon_at) => daemon_at,
+        None => {
+            let marker_at = marker_after_runtime(command, NATIVE_DAEMON_MARKER)?;
+            marker_at + NATIVE_DAEMON_MARKER.len()
+        }
     };
     let rest = &command[daemon_at..];
     let Some(flag_at) = rest.find(GUARD_HOME_FLAG) else {
@@ -111,6 +117,48 @@ fn daemon_guard_homes(command: &str) -> Option<Vec<&str>> {
             .filter(|home| is_absolute_path(home))
             .collect(),
     )
+}
+
+/// Where the daemon flag of a Python Guard daemon command line starts.
+///
+/// Only an absolute Guard executable or a Python interpreter running
+/// `-m codex_plugin_scanner.cli` counts. The hook-worker matcher accepts any
+/// command that mentions the module, which is right for keeping workers, but
+/// a process chosen for retirement must not be a `-c` script that only
+/// names the module.
+fn python_daemon_at(command: &str) -> Option<usize> {
+    if let Some(marker_at) = command.find(FROZEN_DAEMON_MARKER) {
+        if marker_at > 0 && is_absolute_hol_guard_executable(&command[..marker_at]) {
+            return Some(marker_at);
+        }
+    }
+    PYTHON_DAEMON_MARKERS.iter().find_map(|marker| {
+        let marker_at = command.find(marker)?;
+        let prefix = &command[..marker_at];
+        (marker_at > 0
+            && (is_absolute_hol_guard_executable(prefix) || runs_packaged_module(prefix)))
+        .then_some(marker_at)
+    })
+}
+
+/// `python [bare options] -m codex_plugin_scanner.cli`, and nothing else.
+fn runs_packaged_module(prefix: &str) -> bool {
+    let words: Vec<&str> = py_split(prefix).collect();
+    let [interpreter, options @ .., flag, module] = words.as_slice() else {
+        return false;
+    };
+    let name = interpreter.rsplit(['/', '\\']).next().unwrap_or_default();
+    name.to_ascii_lowercase().starts_with("python")
+        && *flag == "-m"
+        && *module == PACKAGED_MODULE
+        && options.iter().all(|option| {
+            option.strip_prefix('-').is_some_and(|letters| {
+                !letters.is_empty()
+                    && letters
+                        .chars()
+                        .all(|letter| BARE_PYTHON_OPTIONS.contains(letter))
+            })
+        })
 }
 
 /// The executable of a Guard `mcp-relay` command line.

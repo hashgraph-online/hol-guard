@@ -38,6 +38,9 @@ const MAX_BUDGET_MS: u64 = 60_000;
 const LISTING_TIMEOUT: Duration = Duration::from_secs(5);
 const GRACE: Duration = Duration::from_secs(1);
 const POLL: Duration = Duration::from_millis(50);
+/// Budget kept back from the grace wait so a process that ignored SIGTERM
+/// can still be killed in the same pass.
+const KILL_RESERVE: Duration = Duration::from_millis(250);
 const MAX_PARENT_HOPS: usize = 8;
 const HOOK_WORKER_COMMAND_MARKER: &str = "--hol-guard-hook-worker";
 const FORK_MARKER: &str = "--multiprocessing-fork";
@@ -156,7 +159,7 @@ pub(crate) fn reap<H: Host>(host: &H, excluded: &[u32], budget: Option<Duration>
     }
     workers.sort_by_key(|process| process.pid);
     let grace = remaining(host).map_or(GRACE, |left| left.min(GRACE));
-    let (signalled, forced) = terminate(host, &workers, excluded, grace);
+    let (signalled, forced) = terminate(host, &workers, excluded, grace, deadline);
     json!({
         "listed": true,
         "selected": workers.iter().map(|worker| worker.pid).collect::<Vec<_>>(),
@@ -246,9 +249,16 @@ pub(crate) fn terminate<H: Host>(
     workers: &[ProcessSnapshot],
     excluded: &[u32],
     grace: Duration,
+    deadline: Option<Instant>,
 ) -> (Vec<u32>, Vec<u32>) {
+    // Every identity check runs `ps`, so none starts once the pass deadline
+    // is spent. A process not reached is left for the next pass.
+    let open = |host: &H| deadline.is_none_or(|deadline| host.now() < deadline);
     let mut armed: Vec<(&ProcessSnapshot, String)> = Vec::new();
     for worker in workers {
+        if !open(host) {
+            break;
+        }
         if worker.pid <= 1 || excluded.contains(&worker.pid) {
             continue;
         }
@@ -257,16 +267,22 @@ pub(crate) fn terminate<H: Host>(
         }
     }
     let signalled = armed.iter().map(|(worker, _)| worker.pid).collect();
-    let deadline = host.now() + grace;
+    let mut grace_end = host.now() + grace;
+    if let Some(kill_by) = deadline.and_then(|deadline| deadline.checked_sub(KILL_RESERVE)) {
+        grace_end = grace_end.min(kill_by);
+    }
     let mut pending = armed;
-    while !pending.is_empty() && host.now() < deadline {
-        host.sleep(POLL.min(deadline.saturating_duration_since(host.now())));
+    while !pending.is_empty() && host.now() < grace_end {
+        host.sleep(POLL.min(grace_end.saturating_duration_since(host.now())));
         pending.retain(|(worker, token)| {
             worker_identity_matches(host, worker, Some(token.as_str())).is_some()
         });
     }
     let mut forced = Vec::new();
     for (worker, token) in &pending {
+        if !open(host) {
+            break;
+        }
         if signal_matching_worker(host, worker, Stop::Kill, Some(token.as_str())).is_some() {
             forced.push(worker.pid);
         }
