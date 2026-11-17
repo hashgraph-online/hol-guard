@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 /// The literal-name fallback must refuse this operand. A bracket class can
 /// name a leading dot under `dotglob`, it can hold a range, or it uses `]`,
 /// `!`, or a POSIX class that this matcher closes at the first `]`.
@@ -69,4 +71,59 @@ pub(super) fn glob_class_matches(class: &[u8], value: u8) -> bool {
         }
     }
     matched != negated
+}
+
+/// Whether a bracket expression holds what [`glob_class_matches`] cannot
+/// read the way a shell does: a POSIX class, equivalence class or collating
+/// symbol (`[[:alpha:]]`, `[[=a=]]`, `[[.a.]]`), a leading `]` member, or an
+/// escape. The matcher closes such a class at its first `]`, so it would
+/// answer for a different pattern: `[[:alpha:]]d_rsa` would miss `id_rsa`.
+pub(super) fn unmodeled_bracket_class(value: &[u8]) -> bool {
+    unmodeled_class_start(value).is_some()
+}
+
+/// `component` with everything from its first class that
+/// [`unmodeled_bracket_class`] finds through its last `]` replaced by `*`.
+/// The shell closes that class at one of those `]`, and `*` matches whatever
+/// the class and the text after it can, so the result is a superset:
+/// `[[:alpha:]]d_rsa` becomes `*d_rsa`, which still names `id_rsa`.
+pub(super) fn widen_unmodeled_class(component: &str) -> Cow<'_, str> {
+    match (
+        unmodeled_class_start(component.as_bytes()),
+        component.rfind(']'),
+    ) {
+        (Some(open), Some(close)) if open < close => Cow::Owned(format!(
+            "{}*{}",
+            &component[..open],
+            &component[close + 1..]
+        )),
+        _ => Cow::Borrowed(component),
+    }
+}
+
+fn unmodeled_class_start(value: &[u8]) -> Option<usize> {
+    let mut open = None;
+    for (index, &byte) in value.iter().enumerate() {
+        match open {
+            None if byte == b'[' => open = Some(index),
+            None => {}
+            Some(start) => {
+                let leading = index == start + 1
+                    || (index == start + 2 && matches!(value[start + 1], b'!' | b'^'));
+                // A class that never closes is literal text to the shell.
+                let closes = value[index + 1..].contains(&b']');
+                if closes
+                    && (byte == b'\\'
+                        || (byte == b']' && leading)
+                        || (byte == b'[' && matches!(value[index + 1], b':' | b'.' | b'=')))
+                {
+                    return Some(start);
+                }
+                if byte == b']' {
+                    open = None;
+                }
+            }
+        }
+    }
+    None
 }

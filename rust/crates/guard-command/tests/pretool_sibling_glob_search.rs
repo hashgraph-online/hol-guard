@@ -188,6 +188,34 @@ fn wide_globs_are_proven_by_the_entries_they_name() {
     }
 }
 
+/// The entry list holds files alone. A matched directory, whose name such as
+/// `credentials` only the walk of its parent keeps in view, and a pattern the
+/// list cannot match the way the shell does, such as a `[[:alpha:]]` class,
+/// both fall back to that walk, which a key anywhere in the directory holds.
+#[test]
+fn wide_globs_walk_the_directory_for_matched_directories_and_classes() {
+    let layout = layout("sibling-glob-search-named-fallback");
+    let cwd = layout.org.join("app-portal");
+    for index in 0..300 {
+        write(cwd.join(format!("tests/test_guard_{index}.py")), "x = 1\n");
+    }
+    write(cwd.join("tests/a]x.py"), "x = 1\n");
+    write(cwd.join("tests/credentials/prod.json"), "{}\n");
+    for command in ["grep -rn TOKEN tests/c*", "grep -rn TOKEN tests/*"] {
+        assert_decision(&cwd, &layout.home, command, false);
+    }
+    // The shell reads `[[:alpha:]]` as one letter, so both name `id_rsa`.
+    write(cwd.join("tests/id_rsa"), "fixture\n");
+    for command in [
+        "grep -n x tests/[[:alpha:]]*",
+        "grep -n x tests/[[:alpha:]]d_rsa",
+        "rg -n x tests/[[:lower:]]d_rsa",
+    ] {
+        assert_decision(&cwd, &layout.home, command, false);
+    }
+    assert_decision(&cwd, &layout.home, "grep -n x tests/test_*.py", true);
+}
+
 /// The directory proof stands in only for an expansion that ran out of room.
 /// A glob that steps back out of the directory, or that the shell would
 /// expand to a link the search then follows, stays reviewed whether or not

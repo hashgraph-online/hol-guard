@@ -11,15 +11,14 @@ use super::{
     hidden_allowed, ReadContext, HAZARDS, MAX_GLOB_ENTRIES, MAX_GLOB_MATCHES, MAX_WALK_DEPTH,
     MAX_WALK_ENTRIES, SECRET_EXTENSIONS,
 };
-use crate::pretool::search::glob_matches;
+use crate::pretool::search::{glob_class::unmodeled_bracket_class, glob_matches};
 use std::path::{Path, PathBuf};
 
 const GLOB_CHARACTERS: [char; 3] = ['*', '?', '['];
 
 /// Expand a glob. `None` when any step is ambiguous: dot components, `..`,
 /// links to directories, an absolute or `~` prefix outside a repository below
-/// home, or too many matches. A pattern matching nothing is an empty list, so
-/// a caller can tell it apart from an unsafe match.
+/// home, or too many matches. Matching nothing is an empty list, not `None`.
 ///
 /// A component made only of `*` (such as `**`) is expanded as the union of
 /// what shells do with it: zero or more nested directories with `globstar`,
@@ -76,10 +75,8 @@ pub(super) enum GlobSearch {
     /// directory it expands below holds every match and no link, so a walk
     /// of that directory proves what the shell could hand the search.
     Capped(PathBuf),
-    /// As [`GlobSearch::Capped`], where only the last component is a
-    /// pattern: the shell can hand the search nothing but entries of the
-    /// directory that the pattern names, all of which are listed here. The
-    /// rest of the directory is never opened, so it needs no proof.
+    /// As [`GlobSearch::Capped`], with every file of the directory that its
+    /// last and only pattern can name. The search opens nothing else there.
     Entries(PathBuf, Vec<PathBuf>),
     /// The glob reached something unsafe or ambiguous.
     Refused,
@@ -104,11 +101,11 @@ pub(super) fn expand_glob_search(value: &str, context: ReadContext<'_>) -> GlobS
     }
 }
 
-/// Every entry of `directory` that the last component `pattern` can name
-/// under any shell option: a hidden name as under `dotglob`, and either case
-/// as under `nocaseglob`. `None` when a name is not ASCII, where `?` means a
-/// byte or a character depending on the locale, when the directory holds
-/// more entries than an expansion lists, or when nothing matches.
+/// Every file in `directory` that `pattern` can name under any shell option,
+/// hidden (`dotglob`) or in either case (`nocaseglob`). `None` for a name
+/// that is not ASCII, where `?` means a byte or a character by locale, for
+/// more entries than an expansion lists, for no match, and for a matched
+/// directory or link, whose name (`credentials/`) only the full walk keeps.
 fn named_entries(directory: &Path, pattern: &str) -> Option<Vec<PathBuf>> {
     let folded = pattern.to_ascii_lowercase();
     let mut entries = Vec::new();
@@ -116,11 +113,13 @@ fn named_entries(directory: &Path, pattern: &str) -> Option<Vec<PathBuf>> {
         if inspected >= MAX_GLOB_ENTRIES {
             return None;
         }
-        let name = entry.ok()?.file_name();
+        let entry = entry.ok()?;
+        let name = entry.file_name();
         let name = name.to_str().filter(|name| name.is_ascii())?;
         if glob_matches(pattern.as_bytes(), name.as_bytes())
             || glob_matches(folded.as_bytes(), name.to_ascii_lowercase().as_bytes())
         {
+            entry.file_type().ok()?.is_file().then_some(())?;
             entries.push(directory.join(name));
         }
     }
@@ -171,10 +170,12 @@ fn search_glob_directory(
         return None;
     }
     no_links_below(&directory)?;
-    // `**` alone reaches every depth under `globstar`, which only the walk of
-    // the whole directory answers for.
-    let last = (literal + 1 == components.len() && !components[literal].contains("**"))
-        .then(|| components[literal].to_owned());
+    // Only the walk of the whole directory answers for `**`, which reaches
+    // every depth under `globstar`, and for a pattern beyond `*` and `?` over
+    // plain names: a class such as `[[:alpha:]]`, an escape, an extglob.
+    let plain = |byte: u8| byte.is_ascii_alphanumeric() || b"*?._-".contains(&byte);
+    let last = (literal + 1 == components.len()).then(|| components[literal].to_owned());
+    let last = last.filter(|last| !last.contains("**") && last.bytes().all(plain));
     Some((directory, last))
 }
 
@@ -300,6 +301,7 @@ fn expand_bounded(
             || (component.starts_with('.')
                 && !hidden_listing
                 && (is_pattern || !hidden_allowed(component)))
+            || (is_pattern && unmodeled_bracket_class(component.as_bytes()))
             || (mode.refuse_ambiguous
                 && is_pattern
                 && (component.contains('[') || component.contains("**")))

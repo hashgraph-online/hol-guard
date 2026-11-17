@@ -303,11 +303,10 @@ pub(in crate::pretool) fn safe_glob_search_operand(value: &str, context: ReadCon
     match glob_expand::expand_glob_search(value, context) {
         GlobSearch::Matches(matches) => !matches.is_empty() && matches.into_iter().all(searched),
         GlobSearch::Capped(directory) => searched(directory),
-        // Each named entry meets the screen the directory walk gives it.
-        GlobSearch::Entries(directory, entries) => entries.into_iter().all(|entry| {
-            let file = std::fs::symlink_metadata(&entry).is_ok_and(|kind| kind.is_file());
-            descendant_allowed(&entry, &directory, file) && searched(entry)
-        }),
+        // Each named file meets the screen the directory walk gives it.
+        GlobSearch::Entries(directory, entries) => entries
+            .into_iter()
+            .all(|entry| descendant_allowed(&entry, &directory, true) && searched(entry)),
         GlobSearch::Refused => false,
     }
 }
