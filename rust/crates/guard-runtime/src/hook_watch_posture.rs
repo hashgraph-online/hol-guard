@@ -148,9 +148,7 @@ pub(crate) fn watch_for(
     }
     let before = |deadline: Option<&u64>| deadline.is_none_or(|deadline| now_us < *deadline);
     match sidecar.harness_postures.get(harness).map(String::as_str) {
-        Some(posture) => {
-            posture == WATCH && before(sidecar.harness_watch_ends_at_us.get(harness))
-        }
+        Some(posture) => posture == WATCH && before(sidecar.harness_watch_ends_at_us.get(harness)),
         None => snapshot.mode == OBSERVE_MODE && before(sidecar.watch_ends_at_us.as_ref()),
     }
 }

@@ -150,7 +150,7 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
     let mut hooks = hooks_of(&payload).unwrap_or_default();
     synced(ctx, &facts, &contract, &mut hooks)?;
     payload.set("hooks", hooks.value());
-    let after = payload.render()?.into_bytes();
+    let after = payload.render_document("")?.into_bytes();
     let mode = match before {
         Some(_) => files::mode(ctx, &path).ok_or_else(|| Failure::Os(path_text(&path)))?,
         None => 0o644,
@@ -192,7 +192,7 @@ fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
         }
         writes.push(json!({
             "path": path_text(&path),
-            "text": payload.render()?,
+            "text": payload.render_document("")?,
             "parents": true,
         }));
     }
@@ -217,7 +217,7 @@ fn refresh(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let facts = argv::facts(ctx, fields)?;
     synced(ctx, &facts, &contract, &mut hooks)?;
     payload.set("hooks", hooks.value());
-    let text = payload.render()?;
+    let text = payload.render_document("")?;
     let target = ctx.absolute(&path);
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent).map_err(|error| Failure::Os(error.to_string()))?;

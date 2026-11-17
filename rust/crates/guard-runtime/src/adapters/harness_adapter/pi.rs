@@ -150,7 +150,7 @@ fn with_extensions(mut payload: Object, items: Vec<String>) -> Step<Vec<u8>> {
         "extensions",
         PyVal::List(items.into_iter().map(PyVal::Str).collect()),
     );
-    Ok(format!("{}\n", payload.render()?).into_bytes())
+    Ok(payload.render_document("\n")?.into_bytes())
 }
 
 /// The settings without Guard's extension. When it was the only one listed,
@@ -160,7 +160,7 @@ fn without_extension(mut payload: Object, kept: Vec<String>) -> Step<Vec<u8>> {
         return with_extensions(payload, kept);
     }
     payload.entries.retain(|(key, _)| key != "extensions");
-    Ok(format!("{}\n", payload.render()?).into_bytes())
+    Ok(payload.render_document("\n")?.into_bytes())
 }
 
 /// The settings with the managed reference listed once and no other.

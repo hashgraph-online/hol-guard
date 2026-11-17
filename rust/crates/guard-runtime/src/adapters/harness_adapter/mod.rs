@@ -48,6 +48,8 @@ mod codex_config_hooks;
 mod codex_detect_legacy;
 mod codex_files;
 mod codex_hook_state;
+mod codex_incident;
+mod codex_incident_read;
 mod codex_install;
 mod codex_install_plan;
 mod codex_live_hooks;
@@ -130,6 +132,7 @@ mod simple;
 mod uninstall_apply;
 mod which;
 mod zcode;
+mod zcode_desktop_keys;
 
 #[cfg(test)]
 #[path = "tests.rs"]

@@ -359,4 +359,4 @@ def test_an_install_from_cursor_writes_no_cursor_attribution(tmp_path: Path, mon
     monkeypatch.setenv("CURSOR_PROJECT_DIR", str(tmp_path / "cursor-project"))
     monkeypatch.setattr(claude_hook_entry, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:4781")
     facts = json.loads(claude_hook_entry.claude_facts(tmp_path / "guard"))
-    assert facts == {"daemon_url": "http://127.0.0.1:4781", "query_extras": []}
+    assert facts == {"daemon_url": "http://127.0.0.1:4781"}

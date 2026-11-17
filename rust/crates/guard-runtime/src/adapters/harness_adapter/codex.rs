@@ -92,6 +92,7 @@ pub(super) fn dispatch(
             let spec_fields = codex_spec::with_spec(ctx, fields)?;
             codex_live_state::live_hook_state(ctx, &spec_fields)
         }
+        "incident_report" => super::codex_incident::incident_report(ctx, fields),
         "runtime_hooks_verified" => {
             let spec_fields = codex_spec::with_spec(ctx, fields)?;
             codex_live_read::runtime_hooks_verified(ctx, &spec_fields)

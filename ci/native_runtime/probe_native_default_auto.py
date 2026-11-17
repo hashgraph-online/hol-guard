@@ -23,7 +23,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.append(str(_REPO_ROOT))
 
 import codex_plugin_scanner
-from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.native_resident_client import (
     close_native_residents,
     native_resident_client_failure_code,
@@ -58,6 +57,19 @@ _POST_TOOL_REVIEW_MODULE = importlib.util.module_from_spec(_POST_TOOL_REVIEW_SPE
 # Dataclasses resolve their annotations through sys.modules while the module loads.
 sys.modules[_POST_TOOL_REVIEW_SPEC.name] = _POST_TOOL_REVIEW_MODULE
 _POST_TOOL_REVIEW_SPEC.loader.exec_module(_POST_TOOL_REVIEW_MODULE)
+
+# The daemon harness is loaded by path for the same reason: an installed
+# dependency can own the top-level `ci` name, so `import ci.…` would miss it.
+_DAEMON_HARNESS_SPEC = importlib.util.spec_from_file_location(
+    "hol_guard_daemon_harness",
+    _REPO_ROOT / "ci" / "guard_daemon_harness.py",
+)
+if _DAEMON_HARNESS_SPEC is None or _DAEMON_HARNESS_SPEC.loader is None:
+    raise RuntimeError("native_default_auto_probe_failed: daemon harness could not be loaded")
+_DAEMON_HARNESS_MODULE = importlib.util.module_from_spec(_DAEMON_HARNESS_SPEC)
+sys.modules[_DAEMON_HARNESS_SPEC.name] = _DAEMON_HARNESS_MODULE
+_DAEMON_HARNESS_SPEC.loader.exec_module(_DAEMON_HARNESS_MODULE)
+GuardDaemonServer = _DAEMON_HARNESS_MODULE.GuardDaemonServer
 review_post_tool_native = _POST_TOOL_REVIEW_MODULE.review_post_tool_native
 HookReviewRequest = _POST_TOOL_REVIEW_MODULE.HookReviewRequest
 _POLICY_SUPPORT_SPEC = importlib.util.spec_from_file_location(

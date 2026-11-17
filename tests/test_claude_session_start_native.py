@@ -33,8 +33,6 @@ def _own_home_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Harnes
     home = tmp_path / "home 雪 'quote'"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
-    for key in _CURSOR_ENV:
-        monkeypatch.delenv(key, raising=False)
     workspace = tmp_path / 'work "quoted"'
     workspace.mkdir()
     return HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=home / ".hol-guard")

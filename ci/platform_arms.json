@@ -1,6 +1,6 @@
 {
  "schema_version": 1,
- "comment": "Every non-Unix behaviour arm in rust/crates/*/src — `#[cfg(..)]` attribute or `cfg!(..)` expression — with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
+ "comment": "Every non-Unix behaviour arm in rust/crates/*/src \u2014 `#[cfg(..)]` attribute or `cfg!(..)` expression \u2014 with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
  "arms": [
   {
    "file": "rust/crates/guard-command/src/adapters/hook/hook_adapter_paths.rs",
@@ -854,7 +854,7 @@
    "verdict": "posix-primitive",
    "note": "Tells the manifest verifier whether POSIX owner and mode bits exist. Windows has neither, so the verifier skips those two checks there and still checks the digests and the hook commands; Python passed `os.name != \"nt\"` for the same flag.",
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/codex_live_state.rs",
-   "item": "fn live_hook_state -- cfg! expression",
+   "item": "fn verified_state -- cfg! expression",
    "cfg": "unix",
    "body": "c995a2b7d895"
   },
@@ -1091,12 +1091,12 @@
    "body": "414921ce24d3"
   },
   {
-   "file": "rust/crates/guard-runtime/src/claude_session_start.rs",
-   "item": "fn hand_off(argv: &[String]) -> i32",
    "verdict": "windows-equivalent",
-   "note": "Spawns the fallback and returns its exit code because Windows has no `exec`. The shim stays resident as the parent for the child's lifetime.",
+   "note": "Spawns the fallback on the same stdio and returns its exit code because Windows has no `exec`. Used only when no SessionStart event was read; with one, both platforms run the same child that gets the event on stdin.",
+   "file": "rust/crates/guard-runtime/src/claude_session_start.rs",
+   "item": "fn replace(argv: &[String]) -> i32",
    "cfg": "not(unix)",
-   "body": "a4eef17b5531"
+   "body": "7ba0c4e1be96"
   },
   {
    "verdict": "other-platform",
@@ -2577,6 +2577,22 @@
    "item": "fn anchored -- cfg! expression",
    "cfg": "unix",
    "body": "5bf21e38ad03"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "The launch-failure record leaves out the parent pid off Unix, where the standard library has no parent-pid call. The record is a diagnostic only; nothing is allowed or refused on it.",
+   "file": "rust/crates/guard-runtime/src/runtime_output.rs",
+   "item": "fn parent_pid() -> Option<u32>",
+   "cfg": "not(unix)",
+   "body": "119d5d1ff5cc"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Path-based opens under the Guard home, which inherits its ACL; the directory and the log are refused when they are symlinks, and a rename never replaces one. Windows has no openat; the record is a diagnostic and writes nothing Guard reads back.",
+   "file": "rust/crates/guard-runtime/src/runtime_output_directory.rs",
+   "item": "mod imp",
+   "cfg": "not(unix)",
+   "body": "4f17010d9edc"
   },
   {
    "verdict": "posix-primitive",

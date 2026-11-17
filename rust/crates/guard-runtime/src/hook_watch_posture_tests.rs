@@ -272,10 +272,28 @@ fn a_watch_whose_signed_revert_deadline_has_passed_proves_nothing() {
         &[("claude-code", at)],
         None,
     );
-    assert!(watch_for(&enforcing, &override_ending, "claude-code", &KEY, at - 1));
-    assert!(!watch_for(&enforcing, &override_ending, "claude-code", &KEY, at));
+    assert!(watch_for(
+        &enforcing,
+        &override_ending,
+        "claude-code",
+        &KEY,
+        at - 1
+    ));
+    assert!(!watch_for(
+        &enforcing,
+        &override_ending,
+        "claude-code",
+        &KEY,
+        at
+    ));
     // A Watch override with no revert date is one the daemon never ends.
-    assert!(watch_for(&enforcing, &override_ending, "codex", &KEY, u64::MAX));
+    assert!(watch_for(
+        &enforcing,
+        &override_ending,
+        "codex",
+        &KEY,
+        u64::MAX
+    ));
 
     let observing = snapshot_in_mode(&probe, "observe");
     let global_ending = sidecar_ending(
@@ -285,7 +303,13 @@ fn a_watch_whose_signed_revert_deadline_has_passed_proves_nothing() {
         &[],
         Some(at),
     );
-    assert!(watch_for(&observing, &global_ending, "cursor", &KEY, at - 1));
+    assert!(watch_for(
+        &observing,
+        &global_ending,
+        "cursor",
+        &KEY,
+        at - 1
+    ));
     assert!(!watch_for(&observing, &global_ending, "cursor", &KEY, at));
 
     // The live clock: a deadline in the past ends Watch on disk too.
@@ -311,7 +335,9 @@ fn a_moved_deadline_cannot_be_forged_under_the_old_mac() {
         &[("claude-code", 1)],
         None,
     );
-    signed.harness_watch_ends_at_us.insert("claude-code".to_owned(), u64::MAX);
+    signed
+        .harness_watch_ends_at_us
+        .insert("claude-code".to_owned(), u64::MAX);
     assert!(!watch_for(&snapshot, &signed, "claude-code", &KEY, 2));
     signed.harness_watch_ends_at_us.clear();
     assert!(!watch_for(&snapshot, &signed, "claude-code", &KEY, 2));

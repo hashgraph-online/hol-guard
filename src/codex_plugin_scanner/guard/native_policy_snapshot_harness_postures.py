@@ -250,7 +250,8 @@ def read_harness_postures_sidecar(
     document = _read_sidecar_document(guard_home)
     if document is None:
         return {}
-    postures = valid_harness_postures(document.get("harness_postures"))
+    raw_postures = document.get("harness_postures")
+    postures = valid_harness_postures(raw_postures)
     harness_ends = document.get("harness_watch_ends_at_us")
     posture_end = document.get("watch_ends_at_us")
     mac = document.get("mac")
@@ -258,7 +259,8 @@ def read_harness_postures_sidecar(
         document.get("generation") != generation
         or document.get("policy_digest") != policy_digest
         or not postures
-        or len(postures) != len(document.get("harness_postures") or {})
+        or not isinstance(raw_postures, dict)
+        or len(postures) != len(raw_postures)
         or not isinstance(harness_ends, dict)
         or not all(isinstance(key, str) and type(at) is int for key, at in harness_ends.items())
         or not (posture_end is None or type(posture_end) is int)

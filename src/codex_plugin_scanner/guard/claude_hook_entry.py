@@ -40,18 +40,8 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
 
 
 def claude_facts(guard_home: Path) -> str:
-    """What only this process knows about the daemon the hooks reach.
-
-    The hooks live in Claude's shared user settings, and Cursor runs them too.
-    Which of the two runs a hook is known only when the hook runs, so the
-    bridge attributes it then; nothing about the installing process is written.
-    """
-    return json.dumps(
-        {
-            "daemon_url": load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home),
-            "query_extras": [],
-        }
-    )
+    """What only this process knows about the daemon the hooks reach."""
+    return json.dumps({"daemon_url": load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home)})
 
 
 def _claude_adapter() -> NativeHarnessAdapter:

@@ -31,11 +31,12 @@
 //! drift at the next session start, which hands off and rewrites the URL.
 //!
 //! Any other failure, including a parse error, a pid that still runs but
-//! does not answer, or a start that fails, replaces this process with the
-//! installer's Python SessionStart command (same argv, same environment,
-//! same stdin), so the Python transaction runs exactly as before inside the
-//! same hook timeout. Windows has no `exec`, so there it runs that command
-//! as a child on the same stdio and exits with its status. This lane never writes settings, never reads or
+//! does not answer, or a start that fails, hands off to the installer's
+//! Python SessionStart command (same argv, same environment, and the event
+//! this lane read from stdin written to its stdin), so the Python transaction
+//! runs exactly as before inside the same hook timeout. It runs as a child
+//! that this lane exits with; with no event read, Unix replaces this process
+//! and Windows runs the child on the same stdio. This lane never writes settings, never reads or
 //! writes the installation journal, and never mints the auth token.
 //!
 //! The config pins the runtime build (`PACKAGE_VERSION+BUILD_SHA`) that
@@ -271,9 +272,43 @@ pub(crate) fn fallback_process(argv: &[String]) -> Command {
     command
 }
 
+/// Hand off to the Python SessionStart command with the event this lane read
+/// on its stdin, the late reader's bytes once a slow caller closes stdin, or,
+/// with neither, this process's stdin.
+fn hand_off(argv: &[String], event: &[u8], late: Option<LateEvent>) -> i32 {
+    if event.is_empty() && late.is_none() {
+        return replace(argv);
+    }
+    let mut command = fallback_process(argv);
+    command.stdin(Stdio::piped());
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            let _ = writeln!(
+                io::stderr(),
+                "claude session start fallback could not start: {error}"
+            );
+            return 1;
+        }
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let event = event.to_vec();
+        std::thread::spawn(move || {
+            if let Ok(Ok(event)) = late.map_or(Ok(Ok(event)), |late| late.recv()) {
+                let _ = stdin.write_all(&event);
+            }
+        });
+    }
+    child
+        .wait()
+        .ok()
+        .and_then(|status| status.code())
+        .unwrap_or(1)
+}
+
 /// Replace this process with the Python SessionStart command.
 #[cfg(unix)]
-fn hand_off(argv: &[String]) -> i32 {
+fn replace(argv: &[String]) -> i32 {
     use std::os::unix::process::CommandExt;
 
     let error = fallback_process(argv).exec();
@@ -287,7 +322,7 @@ fn hand_off(argv: &[String]) -> i32 {
 /// Windows has no `exec`: run the Python SessionStart command with this
 /// process's stdin, stdout and stderr, and exit with its status.
 #[cfg(not(unix))]
-fn hand_off(argv: &[String]) -> i32 {
+fn replace(argv: &[String]) -> i32 {
     match fallback_process(argv).status() {
         Ok(status) => status.code().unwrap_or(1),
         Err(error) => {
@@ -310,25 +345,35 @@ fn hand_off(argv: &[String]) -> i32 {
 /// answer, its budget and its hand-off are exactly what they were without
 /// it. A resident another client already holds, a runtime whose restart
 /// budget is paused, and a spawn that fails all end the same way, silently.
-fn prewarm_resident(config_text: &str) {
+fn prewarm_resident(config_text: &str, restarted: Option<&str>) {
     let Ok(executable) = std::env::current_exe() else {
         return;
     };
-    let Some(mut command) = prewarm_command(config_text, &executable) else {
+    let Some(mut command) = prewarm_command(config_text, &executable, restarted) else {
         return;
     };
     let _ = command.spawn();
 }
 
 /// The detached prewarm for this session's Guard home, or `None` when the
-/// configuration names no home to warm.
-fn prewarm_command(config_text: &str, executable: &Path) -> Option<Command> {
+/// configuration names no home to warm. `restarted` names a session Claude
+/// Code just compacted or cleared, so the resident forgets which code it
+/// already showed that session.
+fn prewarm_command(
+    config_text: &str,
+    executable: &Path,
+    restarted: Option<&str>,
+) -> Option<Command> {
     let state_directory = guard_home(config_text)?.join(RESIDENT_STATE_DIRECTORY);
     let mut command = Command::new(executable);
     command
         .arg(PREWARM_MODE)
         .arg("--state-dir")
-        .arg(state_directory)
+        .arg(state_directory);
+    if let Some(session) = restarted {
+        command.arg(RESTARTED_SESSION_FLAG).arg(session);
+    }
+    command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -342,6 +387,52 @@ fn prewarm_command(config_text: &str, executable: &Path) -> Option<Command> {
     Some(command)
 }
 
+/// The prewarm argument that carries a restarted session's id.
+pub(crate) const RESTARTED_SESSION_FLAG: &str = "--restarted-session";
+/// Claude Code's SessionStart event is a few hundred bytes.
+const EVENT_LIMIT: u64 = 64 * 1024;
+/// Claude Code writes the event and closes stdin before it waits on the
+/// hook; a caller that leaves stdin open costs the hook no more than this.
+const EVENT_WAIT: Duration = Duration::from_millis(200);
+
+/// The reader of an event that took longer than `EVENT_WAIT`.
+type LateEvent = std::sync::mpsc::Receiver<io::Result<Vec<u8>>>;
+
+/// The SessionStart event on stdin, or nothing when stdin is a terminal or
+/// unreadable; past `EVENT_WAIT`, nothing plus the reader still holding it.
+fn read_event() -> (Vec<u8>, Option<LateEvent>) {
+    use std::io::{IsTerminal, Read};
+    if io::stdin().is_terminal() {
+        return (Vec::new(), None);
+    }
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut event = Vec::new();
+        let read = io::stdin().take(EVENT_LIMIT).read_to_end(&mut event);
+        let _ = sender.send(read.map(|_| event));
+    });
+    match receiver.recv_timeout(EVENT_WAIT) {
+        Ok(read) => (read.unwrap_or_default(), None),
+        Err(_) => (Vec::new(), Some(receiver)),
+    }
+}
+
+/// The id of a session Claude Code compacted or cleared, from its
+/// SessionStart event. The agent no longer holds what the session was shown,
+/// so CIGAR must send that code again. A resumed or new session gives none.
+pub(crate) fn restarted_session(event: &[u8]) -> Option<String> {
+    let event: Value = serde_json::from_slice(event).ok()?;
+    if !matches!(
+        event.get("source").and_then(Value::as_str),
+        Some("compact" | "clear")
+    ) {
+        return None;
+    }
+    let id = event.get("session_id")?.as_str()?.trim();
+    (!id.is_empty() && id.len() <= 128 && id.bytes().all(|byte| byte.is_ascii_graphic()))
+        .then(|| id.to_owned())
+}
+
 pub(crate) fn run(config_text: &str) -> i32 {
     let started = Instant::now();
     let deadline = started + CHECK_BUDGET;
@@ -350,7 +441,9 @@ pub(crate) fn run(config_text: &str) -> i32 {
         return 2;
     };
     // Before the checks, so a session that hands off to Python warms too.
-    prewarm_resident(config_text);
+    // The hand-off passes the event on to the Python command.
+    let (event, late) = read_event();
+    prewarm_resident(config_text, restarted_session(&event).as_deref());
     let home = guard_home(config_text);
     let start = |command: &[String]| {
         start_daemon(
@@ -375,7 +468,7 @@ pub(crate) fn run(config_text: &str) -> i32 {
             if let Some(home) = &home {
                 hook_bridge_fallback::note(home, "claude-code", Fallback::ContractDrift);
             }
-            hand_off(&fallback)
+            hand_off(&fallback, &event, late)
         }
     }
 }

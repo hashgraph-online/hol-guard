@@ -377,7 +377,8 @@ fn the_session_start_warms_this_home_s_resident() {
         &runtime_build(),
     );
     let runtime = Path::new("/opt/hol guard/bin/hol-guard-runtime");
-    let command = prewarm_command(&text, runtime).expect("a configured home should be warmed");
+    let command =
+        prewarm_command(&text, runtime, None).expect("a configured home should be warmed");
     assert_eq!(command.get_program(), runtime.as_os_str());
     let arguments: Vec<_> = command.get_args().collect();
     assert_eq!(
@@ -399,11 +400,56 @@ fn a_configuration_without_a_home_warms_nothing() {
         &runtime_build(),
     );
     assert!(
-        prewarm_command(&relative, Path::new("/opt/hol-guard-runtime")).is_none(),
+        prewarm_command(&relative, Path::new("/opt/hol-guard-runtime"), None).is_none(),
         "a relative state path names no home to warm"
     );
     assert!(
-        prewarm_command("{}", Path::new("/opt/hol-guard-runtime")).is_none(),
+        prewarm_command("{}", Path::new("/opt/hol-guard-runtime"), None).is_none(),
         "a configuration with no bridge config names no home to warm"
+    );
+}
+
+#[test]
+fn a_compacted_session_tells_the_resident_to_send_its_code_again() {
+    let event = |source: &str| {
+        format!(
+            r#"{{"session_id":"5f0c-11","hook_event_name":"SessionStart","source":"{source}"}}"#
+        )
+    };
+    assert_eq!(
+        restarted_session(event("compact").as_bytes()).as_deref(),
+        Some("5f0c-11")
+    );
+    assert_eq!(
+        restarted_session(event("clear").as_bytes()).as_deref(),
+        Some("5f0c-11")
+    );
+    for kept in ["resume", "startup"] {
+        assert_eq!(
+            restarted_session(event(kept).as_bytes()),
+            None,
+            "{kept} keeps the memory"
+        );
+    }
+    assert_eq!(restarted_session(b""), None);
+    assert_eq!(
+        restarted_session(br#"{"source":"compact","session_id":"a b"}"#),
+        None
+    );
+    let guard_home = Path::new("/home/warm user/.hol-guard");
+    let text = config_text(
+        Path::new("/home/warm user/.claude"),
+        &guard_home.join("daemon-state.json"),
+        &runtime_build(),
+    );
+    let runtime = Path::new("/opt/hol guard/bin/hol-guard-runtime");
+    let command = prewarm_command(&text, runtime, Some("5f0c-11")).expect("a home is warmed");
+    let arguments: Vec<_> = command.get_args().collect();
+    assert_eq!(
+        arguments[3..],
+        [
+            std::ffi::OsStr::new(RESTARTED_SESSION_FLAG),
+            std::ffi::OsStr::new("5f0c-11")
+        ]
     );
 }
