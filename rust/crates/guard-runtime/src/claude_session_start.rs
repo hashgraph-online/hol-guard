@@ -328,25 +328,35 @@ fn hand_off(argv: &[String]) -> i32 {
 /// answer, its budget and its hand-off are exactly what they were without
 /// it. A resident another client already holds, a runtime whose restart
 /// budget is paused, and a spawn that fails all end the same way, silently.
-fn prewarm_resident(config_text: &str) {
+fn prewarm_resident(config_text: &str, restarted: Option<&str>) {
     let Ok(executable) = std::env::current_exe() else {
         return;
     };
-    let Some(mut command) = prewarm_command(config_text, &executable) else {
+    let Some(mut command) = prewarm_command(config_text, &executable, restarted) else {
         return;
     };
     let _ = command.spawn();
 }
 
 /// The detached prewarm for this session's Guard home, or `None` when the
-/// configuration names no home to warm.
-fn prewarm_command(config_text: &str, executable: &Path) -> Option<Command> {
+/// configuration names no home to warm. `restarted` names a session Claude
+/// Code just compacted or cleared, so the resident forgets which code it
+/// already showed that session.
+fn prewarm_command(
+    config_text: &str,
+    executable: &Path,
+    restarted: Option<&str>,
+) -> Option<Command> {
     let state_directory = guard_home(config_text)?.join(RESIDENT_STATE_DIRECTORY);
     let mut command = Command::new(executable);
     command
         .arg(PREWARM_MODE)
         .arg("--state-dir")
-        .arg(state_directory)
+        .arg(state_directory);
+    if let Some(session) = restarted {
+        command.arg(RESTARTED_SESSION_FLAG).arg(session);
+    }
+    command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -360,6 +370,50 @@ fn prewarm_command(config_text: &str, executable: &Path) -> Option<Command> {
     Some(command)
 }
 
+/// The prewarm argument that carries a restarted session's id.
+pub(crate) const RESTARTED_SESSION_FLAG: &str = "--restarted-session";
+/// Claude Code's SessionStart event is a few hundred bytes.
+const EVENT_LIMIT: u64 = 64 * 1024;
+/// Claude Code writes the event and closes stdin before it waits on the
+/// hook; a caller that leaves stdin open costs the hook no more than this.
+const EVENT_WAIT: Duration = Duration::from_millis(200);
+
+/// The SessionStart event on stdin, or nothing when stdin is a terminal,
+/// too slow, or unreadable.
+fn read_event() -> Vec<u8> {
+    use std::io::{IsTerminal, Read};
+    if io::stdin().is_terminal() {
+        return Vec::new();
+    }
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut event = Vec::new();
+        let read = io::stdin().take(EVENT_LIMIT).read_to_end(&mut event);
+        let _ = sender.send(read.map(|_| event));
+    });
+    receiver
+        .recv_timeout(EVENT_WAIT)
+        .ok()
+        .and_then(Result::ok)
+        .unwrap_or_default()
+}
+
+/// The id of a session Claude Code compacted or cleared, from its
+/// SessionStart event. The agent no longer holds what the session was shown,
+/// so CIGAR must send that code again. A resumed or new session gives none.
+pub(crate) fn restarted_session(event: &[u8]) -> Option<String> {
+    let event: Value = serde_json::from_slice(event).ok()?;
+    if !matches!(
+        event.get("source").and_then(Value::as_str),
+        Some("compact" | "clear")
+    ) {
+        return None;
+    }
+    let id = event.get("session_id")?.as_str()?.trim();
+    (!id.is_empty() && id.len() <= 128 && id.bytes().all(|byte| byte.is_ascii_graphic()))
+        .then(|| id.to_owned())
+}
+
 pub(crate) fn run(config_text: &str) -> i32 {
     let started = Instant::now();
     let deadline = started + CHECK_BUDGET;
@@ -368,7 +422,9 @@ pub(crate) fn run(config_text: &str) -> i32 {
         return 2;
     };
     // Before the checks, so a session that hands off to Python warms too.
-    prewarm_resident(config_text);
+    // The Python hook never reads the event, so reading it here takes
+    // nothing from the hand-off.
+    prewarm_resident(config_text, restarted_session(&read_event()).as_deref());
     let home = guard_home(config_text);
     let start = |command: &[String]| {
         start_daemon(

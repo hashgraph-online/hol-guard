@@ -33,6 +33,10 @@
 //! that fails changes nothing. A resident this prewarm just started has no
 //! policy binding until the daemon pushes one, so it answers `waiting` and the
 //! prewarm asks again for a bounded window.
+//!
+//! A session Claude Code compacted or cleared rides on the warm as
+//! `restarted_session`: the agent no longer holds the code CIGAR showed it,
+//! so the resident forgets what it sent that session, policy binding or not.
 
 use std::path::Path;
 use std::thread;
@@ -65,11 +69,11 @@ const WARM_WAIT: Duration = Duration::from_secs(30);
 /// How often the prewarm asks again while the resident is waiting.
 const WARM_RETRY: Duration = Duration::from_millis(500);
 
-pub(super) fn run(state_base: &Path) -> Result<(), String> {
+pub(super) fn run(state_base: &Path, restarted: Option<&str>) -> Result<(), String> {
     run_with_hold(
         state_base,
         PREWARM_HOLD,
-        warm_payload(state_base).as_deref(),
+        warm_payload(state_base, restarted).as_deref(),
     )
 }
 
@@ -144,14 +148,18 @@ fn warm_until_answered(
 
 /// The CIGAR warm request for the Guard home holding `state_base`, or `None`
 /// when that home is not an absolute path the resident could match.
-fn warm_payload(state_base: &Path) -> Option<Vec<u8>> {
+fn warm_payload(state_base: &Path, restarted: Option<&str>) -> Option<Vec<u8>> {
     let guard_home = state_base.parent().filter(|home| home.is_absolute())?;
+    let input = match restarted {
+        Some(session) => json!({"restarted_session": session}),
+        None => json!({}),
+    };
     let frame = json!({
         "operation": "context_assistance",
         "request": {
             "schema": "guard-context-assistance-request.v1",
             "request_id": "session-start-warm",
-            "query": {"kind": "warm", "guard_home": guard_home.to_str()?, "input": {}},
+            "query": {"kind": "warm", "guard_home": guard_home.to_str()?, "input": input},
         },
     });
     serde_json::to_vec(&frame).ok()
