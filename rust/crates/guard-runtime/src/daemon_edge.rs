@@ -143,12 +143,20 @@ fn serve(
     }
 }
 
-fn reject_overloaded(client: TcpStream, stalled_write: Duration) {
+fn reject_overloaded(mut client: TcpStream, stalled_write: Duration) {
     let timeout = stalled_write.min(Duration::from_millis(25));
     let _ = client.set_write_timeout(Some(timeout));
-    let mut client = client;
     let _ = std::io::Write::write_all(&mut client, OVERLOAD_RESPONSE);
-    let _ = client.shutdown(Shutdown::Both);
+    let _ = client.shutdown(Shutdown::Write);
+    let _ = client.set_nonblocking(true);
+    let mut sink = [0u8; 4096];
+    for _ in 0..16 {
+        match std::io::Read::read(&mut client, &mut sink) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+    }
+    let _ = client.shutdown(Shutdown::Read);
 }
 
 /// Asks for a deeper listen backlog than the standard library's 128, so a

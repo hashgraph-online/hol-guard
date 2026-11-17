@@ -139,9 +139,18 @@ def serve_lines(guard_home: Path, read_line: Callable[[], bytes], write: Callabl
                     write(line)
             except OSError:
                 pass
-            except BaseException:
-                with write_lock:
-                    write(_worker_failure_line(request))
+            except BaseException as error:
+                try:
+                    from ..runtime_health.background_diagnostics import failure_detail, record_background_event
+
+                    record_background_event("library_worker_failed", failure_detail(error))
+                except BaseException:
+                    pass
+                try:
+                    with write_lock:
+                        write(_worker_failure_line(request))
+                except BaseException:
+                    pass
 
     def _taken(size: int) -> None:
         nonlocal queued_bytes
