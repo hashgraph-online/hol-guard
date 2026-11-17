@@ -2,19 +2,22 @@
 //! by the legacy launcher `adapters/claude_daemon_hook_bridge.py`. Claude Code runs this once per
 //! hook. It forwards the hook to the authenticated loopback Guard daemon and
 //! recovers a dead daemon once, waiting for it to come back up, all inside the harness's hook deadline. Every
-//! failure ends in a hook response that denies or degrades the action; nothing
-//! here decides a verdict itself, and no Python hook command runs in its place.
+//! failure ends in a hook response that denies or degrades the action, unless
+//! the signed posture proves the harness is in Watch, where a live daemon would
+//! only have recorded the call; nothing here decides a verdict itself, and no
+//! Python hook command runs in its place.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use crate::claude_hook_bridge_harness::{attributed_query, current_cursor_run};
 use crate::claude_hook_bridge_http::{remaining, MINIMUM_OPERATION};
 use crate::claude_hook_bridge_recovery::launcher_recovery;
 use crate::claude_hook_bridge_render::{
-    control_plane_failure, degraded, event_name, limit_denied, py_strip, should_suppress_output,
-    valid_hook_json_or_degraded,
+    control_plane_failure, degraded, event_name, hook_decision, limit_denied, py_strip,
+    should_suppress_output, DEFAULT_EVENT,
 };
 use crate::claude_hook_bridge_transport::{
     authenticated_claude_hook_response, daemon_proves_identity, json_failure, BridgeError,
@@ -27,7 +30,7 @@ use crate::codex_hook_bridge_direct_resident::DirectMiss;
 use crate::hook_bridge_daemon_start::{await_daemon, Attempt, MINIMUM_REQUEST};
 use crate::hook_env_stamp::{current_environment, stamp_hook_input_text, Stamp};
 use crate::hook_process_spawn::{isolated_hook_environment, run_isolated_hook_process};
-use guard_command::harness_attribution::resolve_environment_harness_from;
+use crate::hook_watch_posture::harness_in_watch;
 
 /// argv marker that selects the bridge, mirroring the Python module path.
 pub(crate) const BRIDGE_MARKER: &str = "HOL_GUARD_CLAUDE_DAEMON_HOOK";
@@ -148,26 +151,12 @@ fn hook_environment() -> BTreeMap<String, String> {
     environment
 }
 
-/// The daemon query this hook is reviewed under. Cursor can run the hooks in
-/// the user's Claude settings, so a hook that fires inside Cursor is reviewed
-/// as Cursor. That answer comes from this hook process's own environment,
-/// never from whoever installed the hook, and Claude Code's own markers win,
-/// so a Claude session started from a Cursor terminal stays Claude.
-pub(crate) fn attributed_query(query: &str, environment: &HashMap<String, String>) -> String {
-    let query = endpoint_query(query);
-    let names_harness = query
-        .split('&')
-        .any(|pair| pair.split('=').next() == Some("runtime-harness"));
-    if names_harness || resolve_environment_harness_from(environment).as_deref() != Some("cursor") {
-        return query;
-    }
-    let separator = if query.is_empty() { "" } else { "&" };
-    format!("{query}{separator}runtime-harness=cursor")
-}
-
 struct Bridge<'a> {
     config: &'a BridgeConfig,
+    /// The configured query, attributed to the harness running this hook.
     query: String,
+    /// The runtime harness key of that harness.
+    harness: &'static str,
     data: String,
     deadline: Instant,
 }
@@ -175,14 +164,14 @@ struct Bridge<'a> {
 impl Bridge<'_> {
     /// One authenticated daemon exchange and its hook-JSON validation,
     /// classified exactly as the Python `try` block classifies it. `miss`
-    /// names why the resident did not answer.
+    /// names why the resident did not answer. `Ok(None)` is a reply that is
+    /// not a decision.
     fn exchange(
         &self,
         state_path: &Path,
         deadline: Instant,
-        malformed: &str,
         miss: DirectMiss,
-    ) -> Result<String, BridgeError> {
+    ) -> Result<Option<String>, BridgeError> {
         if !state_names_loopback_port(state_path) {
             let fallback = format!("{}/", self.config.fallback_daemon_url.trim_end_matches('/'));
             assert_loopback_http_url(&fallback).map_err(BridgeError::Value)?;
@@ -195,14 +184,15 @@ impl Bridge<'_> {
         }
         let response =
             authenticated_claude_hook_response(state_path, &self.query, &self.data, timeout, miss)?;
-        valid_hook_json_or_degraded(&response, malformed, &self.data).map_err(json_failure)
+        hook_decision(&response, &self.data).map_err(json_failure)
     }
 
     /// The response a live resident answered for a passed-through `PreToolUse`,
     /// a reviewed `PostToolUse`, a `UserPromptSubmit` hook without Guard's
     /// notice or a `PermissionRequest`, checked as a daemon response is; the
-    /// miss takes the daemon path.
-    fn direct_response(&self, state_path: &Path) -> Result<String, DirectMiss> {
+    /// miss takes the daemon path. `Ok(None)` is a reply that is not a
+    /// decision.
+    fn direct_response(&self, state_path: &Path) -> Result<Option<String>, DirectMiss> {
         let guard_home = state_path.parent().ok_or(DirectMiss::NoState)?;
         let event = event_name(&self.data);
         let text = direct_answer_reporting(
@@ -213,38 +203,63 @@ impl Bridge<'_> {
             &self.data,
             self.deadline,
         )?;
-        valid_hook_json_or_degraded(&text, "resident returned malformed hook JSON", &self.data)
-            .map_err(|_| DirectMiss::Unanswered)
+        hook_decision(&text, &self.data).map_err(|_| DirectMiss::Unanswered)
     }
 
     fn respond(&self, state_path: &Path) -> Option<String> {
-        let (answered, miss) = match self.direct_response(state_path) {
-            Ok(body) => (Ok(body), DirectMiss::Unanswered),
+        let (answered, miss, malformed) = match self.direct_response(state_path) {
+            Ok(reply) => (
+                Ok(reply),
+                DirectMiss::Unanswered,
+                "resident returned malformed hook JSON",
+            ),
             Err(miss) => (
-                self.exchange(
-                    state_path,
-                    self.deadline,
-                    "daemon returned malformed hook JSON",
-                    miss,
-                ),
+                self.exchange(state_path, self.deadline, miss),
                 miss,
+                "daemon returned malformed hook JSON",
             ),
         };
         let error = match answered {
-            Ok(body) if should_suppress_output(&self.data, &body) => return None,
-            Ok(body) if py_strip(&body).is_empty() => return Some("{}".to_owned()),
-            Ok(body) => return Some(body),
+            Ok(reply) => {
+                // A reply that is not a decision answers nothing, so it takes
+                // the same Watch check as a daemon that never replied.
+                let body = reply.unwrap_or_else(|| {
+                    self.unanswered(degraded(malformed, &self.data), state_path)
+                });
+                if should_suppress_output(&self.data, &body) {
+                    return None;
+                }
+                if py_strip(&body).is_empty() {
+                    return Some("{}".to_owned());
+                }
+                return Some(body);
+            }
             Err(error) => error,
         };
         let reason = error.reason();
         let kind = error.failure_kind();
         Some(if kind == CONTROL_PLANE_FAILURE {
-            control_plane_failure(&reason, &self.data)
+            self.unanswered(control_plane_failure(&reason, &self.data), state_path)
         } else if error.is_recoverable() {
             self.recover_or_degrade(reason, state_path, kind, miss)
         } else {
-            degraded(&reason, &self.data)
+            self.unanswered(degraded(&reason, &self.data), state_path)
         })
+    }
+
+    /// The answer for a hook no daemon answered: `failure`, which denies a
+    /// tool call, unless the signed posture proves this harness is in Watch.
+    /// A live daemon only records a Watch harness's calls, so a dead one
+    /// leaves the call to the harness's own permission flow.
+    fn unanswered(&self, failure: String, state_path: &Path) -> String {
+        let event = event_name(&self.data);
+        let denies = event.name == DEFAULT_EVENT || event.is_permission();
+        match state_path.parent() {
+            Some(guard_home) if denies && harness_in_watch(guard_home, self.harness) => {
+                "{}".to_owned()
+            }
+            _ => failure,
+        }
     }
 
     /// Restarts a dead daemon once and retries the hook; the action is
@@ -276,18 +291,22 @@ impl Bridge<'_> {
                 }
             });
             if started.is_none() {
-                return degraded(
-                    &format!("{reason}; daemon recovery retry failed: the restarted daemon did not answer in time"),
-                    &self.data,
+                return self.unanswered(
+                    degraded(
+                        &format!("{reason}; daemon recovery retry failed: the restarted daemon did not answer in time"),
+                        &self.data,
+                    ),
+                    state_path,
                 );
             }
             let malformed = format!("{reason}; recovered daemon returned malformed hook JSON");
-            match self.exchange(state_path, self.deadline, &malformed, miss) {
-                Ok(body) => return body,
+            match self.exchange(state_path, self.deadline, miss) {
+                Ok(Some(body)) => return body,
+                Ok(None) => return self.unanswered(degraded(&malformed, &self.data), state_path),
                 Err(error) => reason = format!("{reason}; daemon recovery retry failed: {error}"),
             }
         }
-        degraded(&reason, &self.data)
+        self.unanswered(degraded(&reason, &self.data), state_path)
     }
 
     fn run_recovery(&self, recovery_deadline: Instant, kind: &str) -> bool {
@@ -348,19 +367,15 @@ pub(crate) fn hook_response(config_text: &str, input: &mut impl Read) -> Option<
     let Some(config) = parse_config(config_text) else {
         return Some(degraded(INVALID_CONFIG, &data));
     };
+    let cursor = current_cursor_run();
     let bridge = Bridge {
         config: &config,
-        query: attributed_query(
-            &config.query,
-            &std::env::vars_os()
-                .map(|(key, value)| {
-                    (
-                        key.to_string_lossy().into_owned(),
-                        value.to_string_lossy().into_owned(),
-                    )
-                })
-                .collect(),
-        ),
+        query: attributed_query(&endpoint_query(&config.query), cursor.as_ref()),
+        harness: if cursor.is_some() {
+            "cursor"
+        } else {
+            "claude-code"
+        },
         data,
         deadline,
     };
@@ -392,3 +407,7 @@ mod tests;
 #[cfg(all(test, unix))]
 #[path = "claude_hook_bridge_unmanaged_tests.rs"]
 mod unmanaged_tests;
+
+#[cfg(all(test, unix))]
+#[path = "claude_hook_bridge_watch_tests.rs"]
+mod watch_tests;

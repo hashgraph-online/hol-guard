@@ -5,12 +5,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+import codex_plugin_scanner.guard.native_policy_snapshot_publication as publication_module
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.config import load_guard_config
+from codex_plugin_scanner.guard.config import load_guard_config, update_guard_settings
 from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
+from codex_plugin_scanner.guard.native_policy_snapshot_harness_postures import read_harness_postures_sidecar
 from codex_plugin_scanner.guard.store import GuardStore
 
-from .native_policy_snapshot_test_fixtures import _DeterministicClock
+from .native_policy_snapshot_test_fixtures import _ack, _DeterministicClock, _status
 from .test_guard_settings_api import _json_request, _with_daemon
 
 
@@ -98,5 +102,58 @@ def test_publisher_binding_carries_postures_captured_at_ack(tmp_path: Path) -> N
         assert binding is not None
         assert binding["harness_postures"] == {"codex": "watch"}
         assert binding["mode"] == "enforce"
+    finally:
+        publisher.close()
+
+
+def test_a_posture_only_change_publishes_a_new_generation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A publish that stops before the sidecar is written leaves no stale Watch.
+
+    Postures ride beside the snapshot, so the materializer would keep the
+    generation for a posture-only change, and the old sidecar would still
+    match the ACKed snapshot for a hook bridge whose daemon is down.
+    """
+
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    master = b"p" * 32
+    # update_guard_settings opens its own store, so every store shares the key.
+    monkeypatch.setattr(GuardStore, "_policy_integrity_secret_material", lambda _self, *, create: (master, "master-id"))
+    clock = _DeterministicClock()
+
+    def client_request(**kwargs: object) -> bytes:
+        payload = kwargs["payload"]
+        assert isinstance(payload, bytes)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
+
+    publisher = NativePolicySnapshotPublisher(
+        store=store,
+        status_provider=_status,
+        client_request=client_request,
+        poll_interval_seconds=0.05,
+        wall_clock=clock.wall_time,
+        monotonic_clock=clock.monotonic_time,
+    )
+    try:
+        update_guard_settings(guard_home, {"harness_postures": {"codex": "watch"}})
+        publisher._publish_once()
+        first = publisher.current_snapshot()
+        assert first is not None, publisher._last_error
+        bound = {"generation": first["generation"], "policy_digest": first["policy_digest"]}
+        assert read_harness_postures_sidecar(store, **bound) == {"codex": "watch"}
+        sidecar = json.loads((guard_home / "native-runtime" / "harness-postures-v1.json").read_text(encoding="utf-8"))
+        assert type(sidecar["harness_watch_ends_at_us"]["codex"]) is int
+
+        update_guard_settings(guard_home, {"harness_postures": {"codex": None}})
+        # The publish stops after the snapshot is saved, before the sidecar.
+        monkeypatch.setattr(publication_module, "write_harness_postures_sidecar", lambda *_args, **_kwargs: {})
+        publisher._publish_once()
+        second = publisher.current_snapshot()
+        assert second is not None
+        assert second["generation"] > first["generation"]
+        assert (
+            read_harness_postures_sidecar(store, generation=second["generation"], policy_digest=second["policy_digest"])
+            == {}
+        )
     finally:
         publisher.close()

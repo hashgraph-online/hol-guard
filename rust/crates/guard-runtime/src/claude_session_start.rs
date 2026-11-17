@@ -12,7 +12,7 @@
 //! a reboot or a crash. It requires every one of these, in process:
 //! - the installer's config parses, it was written for this runtime build,
 //!   and the session environment matches the one the installer described
-//!   (same home, not running inside Cursor);
+//!   (same home; the bridge, not the settings, says whether Cursor runs it);
 //! - the Guard entries of the settings file already equal what the Python
 //!   refresh would write, per `claude_session_start_contract`;
 //! - the daemon is verified live by `claude_session_start_live`: the
