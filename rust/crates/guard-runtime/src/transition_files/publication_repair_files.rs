@@ -22,7 +22,7 @@ use crate::codex_hook_key;
 use crate::codex_hook_launch_trust::{self, Refusal, LAUNCH_INVALID};
 use crate::codex_hook_manifest_auth::authenticate_text;
 use crate::codex_hook_manifest_build::bridge_argv_sha256;
-use crate::codex_hook_manifest_refusal::refusal;
+use crate::codex_hook_manifest_refusal::refusal as manifest_refusal;
 
 type Object = Map<String, Value>;
 
@@ -70,7 +70,7 @@ fn manifest_arg(call: &Call<'_>) -> Step<Object> {
         let home = call.home()?;
         let home = home.to_str().ok_or(Fault::Transition("files_invalid"))?;
         return authenticate_text(home, text, None, None).map_err(|reason| {
-            let (code, message) = refusal(reason);
+            let (code, message) = manifest_refusal(reason);
             Fault::Integrity(code, message)
         });
     }
