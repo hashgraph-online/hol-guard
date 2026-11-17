@@ -76,6 +76,7 @@ mod codex_uninstall;
 mod codex_uninstall_config;
 mod codex_uninstall_op;
 mod codex_uninstall_plan;
+mod contract_config_paths;
 mod copilot;
 mod copilot_install;
 mod copilot_mcp;
@@ -336,6 +337,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     let ctx = Ctx::parse(fields.get("context"))?;
     if grok_protection_checks::handles(op) {
         return answer(grok_protection_checks::dispatch(op, &ctx));
+    }
+    if contract_config_paths::handles(op) {
+        return answer(contract_config_paths::dispatch(&ctx, fields));
     }
     if live_hook_verification::handles(op) {
         return answer(live_hook_verification::dispatch(&ctx, fields));

@@ -19,6 +19,8 @@ mod cline_family;
 mod cline_opencode_apply_family;
 #[path = "tests_codex.rs"]
 mod codex_family;
+#[path = "tests_contract_config_paths.rs"]
+mod contract_config_paths_family;
 #[path = "tests_copilot.rs"]
 mod copilot_family;
 #[path = "tests_cursor.rs"]

@@ -109,6 +109,16 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     }
 }
 
+/// The config paths a harness's contract names, by harness or install alias.
+pub(crate) fn config_paths(name: &str) -> Option<Vec<String>> {
+    let row = bundled()?.contract(name)?;
+    row["config_paths"]
+        .as_array()?
+        .iter()
+        .map(|path| path.as_str().map(str::to_owned))
+        .collect()
+}
+
 fn bundled() -> Option<&'static Registry> {
     static REGISTRY: OnceLock<Option<Registry>> = OnceLock::new();
     REGISTRY

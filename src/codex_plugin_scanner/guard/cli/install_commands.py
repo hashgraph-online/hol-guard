@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import glob as globlib
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ..harness.base import HarnessAdapter, HarnessContext
-from ..harness.contracts import contract_for
+from ..harness.native_harness import ask as native_ask
 from ..harness.registry import get_adapter, list_adapters
 from ..managed_install_proof import verify_managed_install_proof
 from ..native_mcp_tool_evidence import NativeMcpToolEvidenceError, native_skill_firewall_metadata_patch
@@ -328,15 +327,13 @@ def _safe_setup_detection(
             "command_available": diagnostics.get("command_available", False),
             "config_paths": diagnostics.get("config_paths", []),
         }
-    protection_contract = contract_for(adapter.harness)
-    config_paths = protection_contract.config_paths if protection_contract is not None else ()
     managed_active = bool(managed and managed.get("active"))
     checked_status = _fleet_checked_setup_status(adapter.harness, managed, store) if use_fleet_check else None
     return {
         "installed": checked_status == "active" or (checked_status is None and managed_active),
         "needs_repair": checked_status == "broken" or (managed_active and checked_status in {"partial", "not_found"}),
         "command_available": adapter.resolved_executable(context) is not None,
-        "config_paths": _existing_contract_config_paths(config_paths, context),
+        "config_paths": _existing_contract_config_paths(adapter.harness, context),
     }
 
 
@@ -374,29 +371,11 @@ def _fleet_checked_setup_status(
     return status if status in {"active", "broken", "partial", "not_found"} else None
 
 
-def _existing_contract_config_paths(config_paths: tuple[str, ...], context: HarnessContext) -> list[str]:
-    existing: list[str] = []
-    for config_path in config_paths:
-        for candidate in _contract_config_path_candidates(config_path, context):
-            if candidate.exists():
-                existing.append(str(candidate))
-    return sorted(dict.fromkeys(existing))
-
-
-def _contract_config_path_candidates(config_path: str, context: HarnessContext) -> tuple[Path, ...]:
-    expanded_path = _expand_contract_config_path(config_path, context)
-    if globlib.has_magic(str(expanded_path)):
-        return tuple(sorted(Path(path) for path in globlib.glob(str(expanded_path))))
-    return (expanded_path,)
-
-
-def _expand_contract_config_path(config_path: str, context: HarnessContext) -> Path:
-    path = Path(config_path)
-    if path.parts and path.parts[0] == "~":
-        return context.home_dir.joinpath(*path.parts[1:])
-    if path.is_absolute():
-        return path
-    return context.home_dir / path
+def _existing_contract_config_paths(harness: str, context: HarnessContext) -> list[str]:
+    """The contract's config paths that exist; the runtime expands and matches them."""
+    answer = native_ask("existing_contract_config_paths", context, harness=harness)
+    paths = answer.get("config_paths")
+    return [path for path in paths if isinstance(path, str)] if isinstance(paths, list) else []
 
 
 def scan_workspace_skills(
