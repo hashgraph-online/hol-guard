@@ -37,9 +37,6 @@
 //! A session Claude Code compacted or cleared rides on the warm as
 //! `restarted_session`: the agent no longer holds the code CIGAR showed it,
 //! so the resident forgets what it sent that session, policy binding or not.
-//! That warm still goes to a held resident when the restart budget is nearly
-//! spent: the forget only matters to a resident that is up, and accepting the
-//! small chance that it exits first is better than resending nothing.
 
 use std::path::Path;
 use std::thread;
@@ -77,28 +74,25 @@ pub(super) fn run(state_base: &Path, restarted: Option<&str>) -> Result<(), Stri
         state_base,
         PREWARM_HOLD,
         warm_payload(state_base, restarted).as_deref(),
-        restarted.is_some(),
     )
 }
 
 /// The prewarm with its hold window and the CIGAR warm request to send, if
-/// any. `restarted` marks a warm that carries a compacted session.
+/// any.
 pub(super) fn run_with_hold(
     state_base: &Path,
     hold: Duration,
     warm: Option<&[u8]>,
-    restarted: bool,
 ) -> Result<(), String> {
     let digest = runtime_digest()?;
     let live = super::lease::any_live(state_base, &digest);
     // A held resident should answer without a spawn, but one that exited
-    // since the check would be started again, so the budget gates both.
-    // The one exception is a compacted session's warm to a held resident:
-    // only a running resident remembers what it sent, so skipping it would
-    // leave that session without the code it lost.
-    let spawn_allowed =
-        super::restart_budget::speculative_spawn_allowed(&state_scope(state_base, &digest)?)?;
-    if !spawn_allowed && !(live && restarted) {
+    // since the check would be started again, so the budget gates both. That
+    // includes a compacted session's warm: on a nearly spent budget the
+    // resident keeps what it sent, which costs that session some code it
+    // must open itself, while a warm that started a resident could take the
+    // last restart a real request needs.
+    if !super::restart_budget::speculative_spawn_allowed(&state_scope(state_base, &digest)?)? {
         return Ok(());
     }
     if live {

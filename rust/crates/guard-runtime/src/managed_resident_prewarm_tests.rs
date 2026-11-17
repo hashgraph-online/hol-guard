@@ -110,7 +110,7 @@ fn a_client_already_holding_a_lease_keeps_the_prewarm_out() {
     let state_base = test_directory("held");
     let held = super::super::lease::acquire(&state_base).expect("the test should hold a lease");
     let started = Instant::now();
-    run_with_hold(&state_base, Duration::from_secs(600), None, false)
+    run_with_hold(&state_base, Duration::from_secs(600), None)
         .expect("a held resident is a warm one");
     assert!(
         started.elapsed() < PREWARM_HOLD,
@@ -203,7 +203,7 @@ fn a_nearly_spent_restart_budget_keeps_the_prewarm_out() {
     );
 
     let started = Instant::now();
-    run_with_hold(&state_base, Duration::from_secs(600), None, false)
+    run_with_hold(&state_base, Duration::from_secs(600), None)
         .expect("a prewarm that stands down is not a failure");
     assert!(
         started.elapsed() < PREWARM_HOLD,
