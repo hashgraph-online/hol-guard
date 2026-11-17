@@ -279,8 +279,7 @@ fn dispatched_arguments(payload: &Value) -> Option<&Value> {
         // Never ignore a direct batch beside nested arguments, whether
         // they appear in separate envelopes or in the same input record.
         if inputs.iter().any(|input| {
-            input.contains_key("tools")
-                || ARGUMENT_KEYS.iter().all(|key| !input.contains_key(*key))
+            input.contains_key("tools") || ARGUMENT_KEYS.iter().all(|key| !input.contains_key(*key))
         }) {
             return None;
         }
