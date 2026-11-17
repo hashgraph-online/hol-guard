@@ -25,7 +25,7 @@ pub(super) fn release_abandoned_receipt(
         && !records::pending_is_resolved(home)
         && !retire::resolve_abandoned(caller, pending)
     {
-        retire::retire_all(caller, None, deadline);
+        retire::retire_all(caller, None, "abandoned_receipt", deadline);
     }
 }
 
@@ -36,6 +36,6 @@ pub(super) fn release_abandoned_receipt(
 /// remains.
 pub(super) fn retire_unadopted(caller: &Caller, deadline: Deadline) {
     if host::daemon_inventory(caller).is_some_and(|inventory| !inventory.is_empty()) {
-        retire::retire_all(caller, None, deadline);
+        retire::retire_all(caller, None, "unadopted_daemon", deadline);
     }
 }
