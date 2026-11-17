@@ -1107,6 +1107,38 @@
    "body": "46c45130b1ff"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "Reports what CPython's `os.stat` reported on Windows: `0o444` or `0o666` from the read-only attribute. The mode is only recorded in the backup record and given back to a restored file, where `set_mode` turns it into the same attribute, so a file Guard restores is as writable as it was.",
+   "file": "rust/crates/guard-runtime/src/cloud_actions_host_apply_files.rs",
+   "item": "pub(super) fn file_mode(path: &Path) -> io::Result<u32>",
+   "cfg": "not(unix)",
+   "body": "dc8c03491ee8"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "`os.chmod` on Windows only toggles the read-only attribute from the owner write bit, which this arm reproduces; the group and other bits mean nothing there.",
+   "file": "rust/crates/guard-runtime/src/cloud_actions_host_apply_files.rs",
+   "item": "fn set_mode(file: &File, mode: u32) -> io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "9d410d2bad33"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Windows metadata from the standard library carries no stable file ID, so the arm answers that sameness cannot be told. The caller reads that as an unknown move result: the temporary file is cleaned up and Guard's copy of the earlier file is kept for `restore`, never dropped, so the cost is one extra kept copy after a create-file write. CPython's `os.path.samefile` could tell; this is a deliberate loss of that precision, covered off Unix by the unknown-move-result tests.",
+   "file": "rust/crates/guard-runtime/src/cloud_actions_host_apply_files.rs",
+   "item": "fn same_file(_left: &fs::Metadata, _right: &fs::Metadata) -> io::Result<bool>",
+   "cfg": "not(unix)",
+   "body": "28fb2d4087b9"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "A folder's mode bits have no Windows reading (`os.chmod` on a directory does nothing there), so the owner-only mode Guard asks for on its backup folder is a no-op, the same as the Python it replaces.",
+   "file": "rust/crates/guard-runtime/src/cloud_actions_host_apply_files.rs",
+   "item": "fn set_directory_mode(_directory: &Path, _mode: u32) -> io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "150db436f6f6"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/codex_app_server_socket.rs",
    "item": "pub(crate) fn exchange( _socket: &Path, _trusted: impl Fn(&Path) -> bool, _messages: &[Value], _deadline: Instant, ) -> Result<Option<Map<String, Value>>, Failure>",
    "verdict": "windows-unsupported",

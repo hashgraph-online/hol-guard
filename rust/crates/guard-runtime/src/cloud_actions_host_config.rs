@@ -1,14 +1,11 @@
 //! The one settings entry that adds Cloud actions to an AI tool.
 //!
-//! Each supported AI tool keeps its MCP servers in one user-level file. Guard
-//! adds or changes a single entry there, named `hol-guard-cloud`. The plan
-//! renders the whole file as it would be written and checks that, apart from
-//! that entry, it reads back exactly as before; the undo puts that entry back
-//! as it was, or removes it, under the same check. Nothing is read or written
-//! here: the CLI reads the file, sends its text, and writes what comes back.
-//!
-//! JSON files are rewritten with their own indentation, line endings and key
-//! order. TOML files are edited in place, so comments and layout are kept.
+//! The plan renders the whole settings file as it would be written and checks
+//! that, apart from the `hol-guard-cloud` entry, it reads back exactly as
+//! before; the undo puts that entry back as it was, or removes it, under the
+//! same check. Reading and writing the file is `cloud_actions_host_apply`.
+//! JSON files keep their own indentation, line endings and key order; TOML
+//! files are edited in place, so comments and layout are kept.
 
 use std::io::Read;
 
@@ -22,7 +19,7 @@ mod json_text;
 #[path = "cloud_actions_host_config_toml.rs"]
 mod toml_text;
 
-use self::address::display_url;
+use self::address::{display_url, points_at};
 use self::json_text::{dump_like, is_blank, json_root, lookup, parse_json, set, upsert, Node};
 use self::toml_text::{toml_edit_entry, toml_remove_entry};
 
@@ -88,14 +85,11 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     if bytes.len() as u64 > MAX_REQUEST_BYTES {
         return Err("cloud_actions_host_config_request_too_large".to_owned());
     }
+    let invalid = || "cloud_actions_host_config_request_invalid".to_owned();
     let request: Value = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
     let answer = answer(request).ok_or_else(invalid)?;
     serde_json::to_vec(&answer)
         .map_err(|_| "cloud_actions_host_config_response_encode_failed".to_owned())
-}
-
-fn invalid() -> String {
-    "cloud_actions_host_config_request_invalid".to_owned()
 }
 
 #[derive(Deserialize)]
@@ -119,32 +113,58 @@ struct UndoRequest {
 }
 
 fn answer(request: Value) -> Option<Value> {
-    match request.get("op").and_then(Value::as_str)? {
+    let op = request.get("op").and_then(Value::as_str)?.to_owned();
+    match op.as_str() {
         "plan" => {
             let request: PlanRequest = serde_json::from_value(request).ok()?;
-            let tool = tool(&request.ai_tool)?;
-            let wanted = Fields::from_request(&request.entry)?;
-            (request.op == "plan").then_some(())?;
-            Some(plan(tool, request.before.as_deref(), &wanted, &request.url))
+            plan_text(
+                &request.ai_tool,
+                request.before.as_deref(),
+                &request.entry,
+                &request.url,
+            )
         }
         "undo" => {
             let request: UndoRequest = serde_json::from_value(request).ok()?;
-            let tool = tool(&request.ai_tool)?;
-            (request.op == "undo").then_some(())?;
-            Some(
-                match undo(
-                    tool,
-                    &request.current,
-                    &request.written,
-                    request.prior.as_deref(),
-                ) {
-                    Ok((after, removed)) => json!({"after": after, "removed": removed}),
-                    Err(problem) => json!({"problem": problem}),
-                },
-            )
+            let undone = undo_text(
+                &request.ai_tool,
+                &request.current,
+                &request.written,
+                request.prior.as_deref(),
+            )?;
+            Some(match undone {
+                Ok((after, removed)) => json!({"after": after, "removed": removed}),
+                Err(problem) => json!({"problem": problem}),
+            })
         }
-        _ => None,
+        _ => crate::cloud_actions_host_apply::answer(&op, request),
     }
+}
+
+/// Whether `slug` names an AI tool with a Cloud actions setup.
+pub(crate) fn supports(slug: &str) -> bool {
+    tool(slug).is_some()
+}
+
+/// The plan for one settings text; `None` when the AI tool or the entry is not one Guard writes.
+pub(crate) fn plan_text(
+    ai_tool: &str,
+    before: Option<&str>,
+    entry: &Value,
+    url: &str,
+) -> Option<Value> {
+    let wanted = Fields::from_request(entry)?;
+    Some(plan(tool(ai_tool)?, before, &wanted, url))
+}
+
+/// `undo` for one settings text; `None` when the AI tool is not supported.
+pub(crate) fn undo_text(
+    ai_tool: &str,
+    current: &str,
+    written: &Value,
+    prior: Option<&str>,
+) -> Option<Result<(String, bool), String>> {
+    Some(undo(tool(ai_tool)?, current, written, prior))
 }
 
 fn tool(slug: &str) -> Option<&'static Tool> {
@@ -359,13 +379,6 @@ fn undo(
         return Err(EDIT_ERROR.to_owned());
     }
     Ok((after, true))
-}
-
-fn points_at(entry: &Map<String, Value>, url: &str) -> bool {
-    entry
-        .get("url")
-        .and_then(Value::as_str)
-        .is_some_and(|value| value.trim_end_matches('/') == url.trim_end_matches('/'))
 }
 
 /// The settings file's values, as the AI tool reads them.

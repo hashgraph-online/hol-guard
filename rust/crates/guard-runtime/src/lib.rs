@@ -174,6 +174,7 @@ mod cloud_action_envelope_fields;
 mod cloud_actions_access;
 mod cloud_actions_connect;
 mod cloud_actions_health;
+mod cloud_actions_host_apply;
 mod cloud_actions_host_config;
 mod cloud_actions_status;
 mod cloud_exception_lift;

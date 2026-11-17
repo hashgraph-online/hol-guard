@@ -41,6 +41,24 @@ def _ai_tool_settings_path(args: argparse.Namespace) -> Path | None:
         return None
 
 
+def _settings_path_or_reply(args: argparse.Namespace, reply: _Reply) -> Path | int:
+    """The AI tool's settings file, or the exit code after explaining why there is none."""
+
+    from .cloud_actions_host_config import HostConfigNativeUnavailableError
+
+    try:
+        path = _ai_tool_settings_path(args)
+    except HostConfigNativeUnavailableError as error:
+        return reply(
+            CLOUD_ACTIONS_UNAVAILABLE_EXIT,
+            f"{error} Nothing was changed.",
+            state="unavailable",
+            reason="native_unavailable",
+            ai_tool=args.ai_tool,
+        )
+    return path if path is not None else _ai_tool_not_supported(args, reply)
+
+
 def settings_guard_home(args: argparse.Namespace) -> Path:
     """The Guard home the AI tool's entry names; under `--home` when it is given.
 
@@ -134,7 +152,7 @@ def _apply_ai_tool(plan: HostConfigPlan, store: GuardStore, reply: _Reply, *, wa
             **fields,
         )
     try:
-        _ = apply_host_config(plan, guard_home=store.guard_home)
+        apply_host_config(plan, guard_home=store.guard_home)
     except HostConfigWriteError as error:
         return reply(
             CLOUD_ACTIONS_SIGN_IN_FAILED_EXIT,
@@ -164,9 +182,9 @@ def restore_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
     from . import cloud_actions_access
     from .cloud_actions_host_apply import HostConfigWriteError, restore_host_config
 
-    path = _ai_tool_settings_path(args)
-    if path is None:
-        return _ai_tool_not_supported(args, reply)
+    path = _settings_path_or_reply(args, reply)
+    if isinstance(path, int):
+        return path
     guard_home = settings_guard_home(args)
     fields: dict[str, object] = {"ai_tool": args.ai_tool, "settings_file": str(path)}
     # End the access before touching the file. Restoring consumes a saved copy,
@@ -278,9 +296,9 @@ def _configure_pairing(
 def configure_ai_tool(args: argparse.Namespace, reply: _Reply) -> int:
     from .cloud_actions_host_config import bridge_entry, plan_host_config
 
-    path = _ai_tool_settings_path(args)
-    if path is None:
-        return _ai_tool_not_supported(args, reply)
+    path = _settings_path_or_reply(args, reply)
+    if isinstance(path, int):
+        return path
     guard_home = settings_guard_home(args)
     paired = _configure_pairing(args, guard_home, reply)
     if isinstance(paired, int):
