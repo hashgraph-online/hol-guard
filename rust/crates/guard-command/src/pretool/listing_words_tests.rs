@@ -42,3 +42,13 @@ fn a_quoted_word_sharing_text_with_an_unquoted_glob_is_left_out() {
     let words = literal_words(r#"grep "x\|.en*" .en*"#);
     assert!(!words.contains(&r"x\|.en*".to_owned()));
 }
+
+#[test]
+fn unquoted_parentheses_make_the_word_a_glob() {
+    let words = literal_words(r#"rg -n x "app/(shop)/[id]""#);
+    assert!(words.contains(&"app/(shop)/[id]".to_owned()));
+    let words = literal_words(r#"rg -n x "app/(shop)/[id]" "app/"(shop)"/[id]""#);
+    assert!(!words.contains(&"app/(shop)/[id]".to_owned()));
+    let words = quoted_words(r#"ls "app/"(shop)"/[id]""#).expect("words");
+    assert!(words[1].unquoted_glob);
+}

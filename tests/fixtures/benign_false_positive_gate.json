@@ -1147,6 +1147,23 @@
       "expect": "allow"
     },
     {
+      "id": "grep-quoted-route-group-slug-file-in-sibling-checkout",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n -A8 Post \"${PARENT}/app/(marketing)/blog/[slug]/page.tsx\" | head -14"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "ls-slug-dir-quoted",
       "fix_area": "shell",
       "harnesses": [

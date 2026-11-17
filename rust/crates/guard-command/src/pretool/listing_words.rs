@@ -73,8 +73,11 @@ pub(super) fn quoted_words(text: &str) -> Option<Vec<Word>> {
                     unquoted_expansion: false,
                 });
                 // A brace list is expanded too: `.env{,.local}` becomes two
-                // words, the second of them a file operand.
-                word.unquoted_glob |= matches!(character, '*' | '?' | '[' | '{');
+                // words, the second of them a file operand. zsh reads
+                // parentheses in a word as a pattern group, so
+                // `"app/"(x)"/[id]"` is a glob there even with the class
+                // quoted.
+                word.unquoted_glob |= matches!(character, '*' | '?' | '[' | '{' | '(' | ')');
                 word.unquoted_expansion |= matches!(character, '$' | '`');
                 word.value.push(character);
             }
