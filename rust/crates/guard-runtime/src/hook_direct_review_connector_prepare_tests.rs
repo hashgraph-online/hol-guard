@@ -1,6 +1,7 @@
 //! The lookup a connector-setup candidate prepares, and what defers it.
 
 use super::*;
+use crate::guard_store_connector_context::{scrub_context_text, MAX_LABEL_CHARS};
 
 #[cfg(unix)]
 fn with_context<T>(tag: &str, payload: Value, run: impl FnOnce(&Context<'_>, &str) -> T) -> T {

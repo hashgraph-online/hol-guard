@@ -29,6 +29,13 @@ B, O = R.B, R.O
 LANG_OF = {"py": None, "go": "go", "rust": "rust", "ts": "ts"}
 
 
+# Claude Code (Haiku) read a bare PR description as a question and asked what to do, in one
+# request and with no edits, on about a third of base runs. Codex and Oh My Pi act on it. Both
+# Claude Code arms get this line, so their comparison holds; the other harnesses keep the bare
+# prompt their results were measured with.
+CLAUDE_LEAD = "Make this change in the repository. Do not ask; do the work and verify it.\n\n"
+
+
 def build(task, project):
     """Copy the tree at the PR's parent into a new repository with one commit."""
     clone = P.ROOT / task["repo"] / "git"
@@ -90,7 +97,7 @@ def main():
     try:
         if harness == B.claude.HARNESS:
             model = B.claude.MODEL
-            B.claude_exec(project, where, python, task["prompt"], thread, False, out)
+            B.claude_exec(project, where, python, CLAUDE_LEAD + task["prompt"], thread, False, out)
         elif harness == O.HARNESS:
             model = O.MODEL
             env = B.agent_env(project, where / "codex_unused", None, python)

@@ -271,10 +271,8 @@ export function buildWhatWouldHappen(item: GuardApprovalRequest): string | null 
   if (isWatchOnlyObservation(item)) {
     return `Watch allowed this action to continue. ${watchProtectedOutcome(item)}`;
   }
-  const mcpCall = explainMcpCall(item);
-  if (mcpCall !== null) {
-    return `Without Guard, ${harnessDisplayName(item.harness)} would call ${mcpCall.connector} right away. Guard paused it so you can see what it asks for first.`;
-  }
+  // The MCP card says what the call does and why Guard paused it, so it has no generic line to add.
+  if (explainMcpCall(item) !== null) return null;
   const type = item.artifact_type;
   if (type?.includes("file_write") || type?.includes("file_read")) {
     return `Without Guard, ${harnessDisplayName(item.harness)} would access "${item.artifact_name ?? item.artifact_id}" immediately. Guard paused it so you can review first.`;

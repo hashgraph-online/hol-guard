@@ -137,3 +137,27 @@ def test_a_deeply_nested_call_line_is_answered_as_invalid(tmp_path: Path) -> Non
     answer = json.loads(desktop_library_call.answer_line(tmp_path, request))
 
     assert answer == {"error": {"type": "LibraryCallError", "message": "invalid_request", "kind": "library_call"}}
+
+
+def test_a_worker_exception_returns_a_structured_answer_and_the_pool_continues(monkeypatch, tmp_path: Path) -> None:
+    calls = 0
+
+    def _answer(_guard_home: Path, request: bytes) -> bytes:
+        nonlocal calls
+        calls += 1
+        if json.loads(request)["id"] == 1:
+            raise RuntimeError("fixture failure")
+        return json.dumps({"id": json.loads(request)["id"], "ok": None}).encode() + b"\n"
+
+    monkeypatch.setattr(desktop_library_call, "answer_line", _answer)
+    written: list[bytes] = []
+    lines = iter([_line(1), _line(2), b""])
+
+    assert desktop_library_call.serve_lines(tmp_path, lambda: next(lines), written.append) == 0
+    assert calls == 2
+    responses = {json.loads(line)["id"]: json.loads(line) for line in written}
+    assert responses[1] == {
+        "id": 1,
+        "error": {"type": "LibraryWorkerError", "message": "worker_failed", "kind": "library_worker"},
+    }
+    assert responses[2] == {"id": 2, "ok": None}

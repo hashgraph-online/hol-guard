@@ -1,6 +1,19 @@
 import type { McpEffectKind } from "./mcp-effects";
 
-export type McpFact = { label: string; value: string; mono?: boolean };
+/** How a value is drawn: addresses as chips, a link with its host first, long text clamped, code in a block. */
+export type McpValueKind = "text" | "email" | "url" | "long" | "code";
+
+export type McpFact = {
+  label: string;
+  value: string;
+  mono?: boolean;
+  kind?: McpValueKind;
+  /** The input field the value came from, so a field is never listed twice. */
+  key?: string;
+};
+
+/** What the call will do to the world, in one line, and how much care it asks for. */
+export type McpConsequence = { tone: "calm" | "care" | "danger"; text: string };
 
 /** One action a call will carry out, such as a single Gmail send inside a batch. */
 export type McpStep = {
@@ -24,9 +37,16 @@ export type McpCallExplanation = {
   headline: string;
   /** The service the call goes to, such as Composio or GitHub. */
   connector: string;
+  /** The tool is part of the agent app itself, not a server the user added. */
+  builtIn?: boolean;
+  /** The app that asked, in people's words. Set when the tool can only come from one app. */
+  requester?: string;
   /** The card heading: what the call does, in a few words. */
   title: string;
-  summary: string;
+  /** A sentence of context for a tool whose name says little, such as a Composio meta-tool. */
+  aside: string | null;
+  /** The line under the heading: what approving lets happen. */
+  consequence: McpConsequence;
   effect: McpEffectKind;
   /** Where the effect label comes from, so it is never read as a safety check. */
   effectBasis: string;
@@ -34,6 +54,8 @@ export type McpCallExplanation = {
   steps: McpStep[];
   /** Actions past the rows the card lists. They still count toward the title and the effect. */
   hiddenSteps?: number;
+  /** The apps whose actions carry the call's effect, read from every action, listed or not. */
+  effectApps?: string[];
   quotes: McpAgentQuotes | null;
   code: McpCodeBlock | null;
   /** The exact input Guard matches an approval against. */

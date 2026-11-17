@@ -161,6 +161,13 @@ const CONNECTOR_APPROVAL_WAIT: &str = "It is waiting for the user to approve it 
      the same action until it is approved; continue with other work meanwhile.";
 /// `CONNECTOR_SETUP_REASON_PREFIX`.
 const CONNECTOR_SETUP_REASON_PREFIX: &str = "HOL Guard has not been set up for `";
+/// The start every connector setup reason shares, including the one for a
+/// file that changed after the user allowed it.
+const CONNECTOR_SETUP_REASON_MARKER: &str = "HOL Guard has not been set up for ";
+/// The opening for a local CLI or script the user allowed an earlier version of.
+const CONNECTOR_CHANGED_REASON_PREFIX: &str = "HOL Guard has not been set up for this version of `";
+const CONNECTOR_CHANGED_REASON_SUFFIX: &str =
+    " on this device: the user allowed an earlier version, and the file has changed since.";
 
 /// `connector_setup_reason(name, surface, ask=..., permitted=..., approvable=...)`:
 /// a local CLI or script whose review is `approvable` says it waits for the
@@ -171,6 +178,7 @@ const CONNECTOR_SETUP_REASON_PREFIX: &str = "HOL Guard has not been set up for `
 /// the link.
 /// The daemon and the resident's review queue both render this text; the
 /// vector test keeps the two byte-identical.
+#[cfg(test)]
 pub(crate) fn connector_setup_reason(
     name: &str,
     surface: &str,
@@ -178,13 +186,34 @@ pub(crate) fn connector_setup_reason(
     permitted: &[&str],
     approvable: bool,
 ) -> String {
+    connector_setup_reason_for(name, surface, ask, permitted, approvable, false)
+}
+
+/// `connector_setup_reason(...)`, opening with the earlier allow when the user
+/// allowed an earlier version of the file. An allow is bound to the file's
+/// content, so it does not carry over; saying "not set up" alone reads as if
+/// the user's allow had been lost.
+pub(crate) fn connector_setup_reason_for(
+    name: &str,
+    surface: &str,
+    ask: bool,
+    permitted: &[&str],
+    approvable: bool,
+    allowed_earlier_version: bool,
+) -> String {
     let label = match surface {
         "cli" => "local CLI",
         "package-scripts" => "package script",
         "mcp" => "MCP server",
         other => other,
     };
-    let reason = format!("{CONNECTOR_SETUP_REASON_PREFIX}{name}` ({label}) on this device.");
+    let reason = if allowed_earlier_version {
+        format!(
+            "{CONNECTOR_CHANGED_REASON_PREFIX}{name}` ({label}){CONNECTOR_CHANGED_REASON_SUFFIX}"
+        )
+    } else {
+        format!("{CONNECTOR_SETUP_REASON_PREFIX}{name}` ({label}) on this device.")
+    };
     if approvable && matches!(surface, "cli" | "package-scripts") {
         return format!("{reason} {CONNECTOR_APPROVAL_WAIT}");
     }
@@ -216,7 +245,7 @@ pub(crate) fn connector_setup_reason(
 /// `is_unlinked_connector_setup_reason`: a default-mode connector setup
 /// reason, to which a harness renderer adds no approval link or step.
 pub(crate) fn is_unlinked_connector_setup_reason(text: &str) -> bool {
-    text.contains(CONNECTOR_SETUP_REASON_PREFIX) && text.contains(SAFE_ALTERNATIVE_GUIDANCE)
+    text.contains(CONNECTOR_SETUP_REASON_MARKER) && text.contains(SAFE_ALTERNATIVE_GUIDANCE)
 }
 
 /// `_BUILD_REVIEW_PREFIX`: a package review of a build or test says why in

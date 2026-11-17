@@ -1,17 +1,22 @@
 """Swarm set: one task that splits in three, done by one agent or by three cold agents.
 
-Usage: swarm_run.py --arm <arm> --seed <n> --tag <tag> --mode one|cold
+Usage: swarm_run.py --arm <arm> --seed <n> --tag <tag> --mode one|cold|warm
 
 The seed picks a Python repo and three independent pieces of work in it: two broken functions and
 one stubbed function, each in its own file. All three are set up as teammate commits, then:
   one   one session gets a prompt listing the three pieces.
   cold  three fresh sessions, one piece each, one after another (agents that share nothing).
+  warm  as cold, but each session after the first starts with a hand-off: for every earlier
+        session, the piece it was given, the files it changed and the test suite's summary line
+        after it finished (Track F's hand-off facts and shared test result, F4 and F5). The
+        prompt hook still sends its note, so the launch brief (F1) adds nothing here.
 Both are checked the same way: the full suite passes and the tests are unchanged. The row in
-runs/<tag>/results.jsonl has the summed tokens and cost of every session. The third arm (agents
-launched with Guard's brief) needs Swarm's launch brief, which does not exist yet.
+runs/<tag>/results.jsonl has the summed tokens and cost of every session. `warm` is that third arm,
+built in the runner to test whether Swarm hand-offs would pay before building them in Guard.
 """
 
 import argparse
+import hashlib
 import json
 import random
 import shutil
@@ -25,7 +30,17 @@ import run as R
 from rig import ARMS, PROJECTS, REPOS_DIR, RUNS, pool_path
 
 B, O = R.B, R.O
+HANDOFF = ("Other agents already worked on this project. Guard's record of what they did "
+           "(their work is in the files now; do not redo it):\n")
 JOINED = "Three separate pieces of work are needed in this project. Do all three:\n\n"
+
+
+def snapshot(project):
+    """Content hash of every tracked and untracked file, so a session's own edits show up even if
+    the agent staged or committed them."""
+    out = R.git(project, "ls-files", "-z", "-c", "-o", "--exclude-standard")
+    names = [n for n in out.split("\0") if n]
+    return {n: hashlib.sha1((project / n).read_bytes()).hexdigest() for n in names if (project / n).is_file()}
 
 
 def plan(seed):
@@ -83,7 +98,7 @@ def main():
     ap.add_argument("--arm", required=True)
     ap.add_argument("--seed", type=int, required=True)
     ap.add_argument("--tag", required=True)
-    ap.add_argument("--mode", choices=("one", "cold"), required=True)
+    ap.add_argument("--mode", choices=("one", "cold", "warm"), required=True)
     a = ap.parse_args()
     repo, pool, tasks = plan(a.seed)
     where = ARMS / a.arm
@@ -110,8 +125,9 @@ def main():
     if not all(R.apply_setup(project, t) for t in tasks):
         error = "setup did not apply"
     prompts = [JOINED + "\n".join(f"{n}. {t['prompt']}" for n, t in enumerate(tasks, 1))]
-    if a.mode == "cold":
+    if a.mode != "one":
         prompts = [t["prompt"] for t in tasks]
+    handoff = []
     ledger, tokens, model, started = [], B.usage.empty(), None, time.time()
 
     def spent(paths, used, used_model):
@@ -121,12 +137,21 @@ def main():
         model = used_model
 
     for n, prompt in enumerate(prompts if error is None else [], 1):
+        if handoff:
+            prompt = HANDOFF + "\n".join(handoff) + "\n\nYour piece:\n" + prompt
+        before = snapshot(project)
         try:
             session(harness, where, project, python, prompt, box,
                     runs / f"{a.arm}-{a.mode}-s{a.seed}-{n}.jsonl", spent)
         except (B.StepError, R.subprocess.TimeoutExpired) as failure:
             error = f"session {n}: {failure}"
             break
+        if a.mode == "warm":
+            after = snapshot(project)
+            changed = sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p))
+            handoff.append(f"- Agent {n} was given: {tasks[n - 1]['prompt'].splitlines()[0][:200]}\n"
+                           f"  Files it changed: {', '.join(changed) or 'none'}\n"
+                           f"  Test suite after it finished: {R.suite(python, project, repo, pool)}")
     suite = R.suite(python, project, repo, pool)
     unchanged = R.tests_unchanged(project, repo, since)
     row = {

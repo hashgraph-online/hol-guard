@@ -32,7 +32,7 @@ use super::pyjson::{parse_mapping_lone_surrogates, JsonFailure, PyVal, Surrogate
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 use super::zcode_hook_settings::{lookup, remove_key, set_key, Dict};
-use super::zcode_hook_surface::render_file;
+use super::zcode_hook_surface::{render_file, render_file_over};
 
 const DEVIN_PRESERVED: &str =
     "User permissions, read_config_from, MCP servers, and any pre-existing hooks were preserved";
@@ -77,7 +77,11 @@ fn install(harness: Harness, map: &Map<String, Value>) -> KindResult {
     let groups = harness.groups(timing_seconds(&map[harness.timing_key()])?)?;
     let command = map["command"].as_str().ok_or(ERR_INVALID)?;
     let config_path = map["config_path"].as_str().ok_or(ERR_INVALID)?;
-    let (mut payload, lone) = match content(&map["content"])? {
+    let captured = content(&map["content"])?;
+    let original = captured
+        .as_deref()
+        .and_then(|bytes| std::str::from_utf8(bytes).ok());
+    let (mut payload, lone) = match captured.clone() {
         None => (Dict::new(), false),
         Some(bytes) => match read(harness, bytes)? {
             Read::Payload(payload, lone) => (payload, lone),
@@ -127,7 +131,7 @@ fn install(harness: Harness, map: &Map<String, Value>) -> KindResult {
     set_key(&mut payload, "hooks", PyVal::Dict(rebuilt));
     let state = vec![(state_key.to_owned(), PyVal::Str(config_path.to_owned()))];
     Ok(json!({
-        "text": render_file(payload, lone)?,
+        "text": render_file_over(payload, lone, original)?,
         "state": render_file(state, false)?,
         "notes": install_notes(harness),
     }))
@@ -135,7 +139,11 @@ fn install(harness: Harness, map: &Map<String, Value>) -> KindResult {
 
 fn uninstall(harness: Harness, map: &Map<String, Value>) -> KindResult {
     let present = map["present"].as_bool().ok_or(ERR_INVALID)?;
-    let read = match (content(&map["content"])?, present) {
+    let captured = content(&map["content"])?;
+    let original = captured
+        .as_deref()
+        .and_then(|bytes| std::str::from_utf8(bytes).ok());
+    let read = match (captured.clone(), present) {
         (Some(bytes), true) => read(harness, bytes)?,
         (None, true) => Read::Unreadable,
         (None, false) => Read::Payload(Dict::new(), false),
@@ -166,7 +174,7 @@ fn uninstall(harness: Harness, map: &Map<String, Value>) -> KindResult {
                 } else {
                     set_key(&mut payload, "hooks", PyVal::Dict(pruned));
                 }
-                match render_file(payload, lone) {
+                match render_file_over(payload, lone, original) {
                     Ok(text) => (Some(text), removed_notes(harness)),
                     // A lone surrogate escape has no Rust string form to write
                     // back; the file is left as it is so the rest of the

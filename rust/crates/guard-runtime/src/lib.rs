@@ -38,7 +38,15 @@ mod approval_gate_consumers;
 mod approval_gate_enrollment;
 mod approval_gate_grants;
 mod approval_gate_op;
+mod approval_gate_pulse;
+mod approval_gate_pulse_command;
+mod approval_gate_pulse_disable;
+mod approval_gate_pulse_enrollment;
+mod approval_gate_pulse_setup;
+mod approval_gate_pulse_store;
+mod approval_gate_pulse_summary;
 mod approval_gate_settings;
+mod approval_gate_settings_binding;
 mod approval_gate_state;
 mod approval_gate_verify;
 mod approval_link;
@@ -829,6 +837,9 @@ mod inventory_snapshot_digest_op;
 mod inventory_source_evidence_op;
 mod inventory_url_redaction_op;
 mod isolation_provider_registry;
+mod json_splice;
+#[cfg(test)]
+mod json_splice_tests;
 #[path = "adapters/detection/kimi_detect.rs"]
 mod kimi_detect;
 #[path = "adapters/detection/kimi_hook_config.rs"]
