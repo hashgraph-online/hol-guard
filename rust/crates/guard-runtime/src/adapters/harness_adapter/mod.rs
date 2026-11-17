@@ -50,6 +50,7 @@ mod codex_files;
 mod codex_hook_state;
 mod codex_install;
 mod codex_install_plan;
+mod codex_install_request;
 mod codex_live_hooks;
 mod codex_live_read;
 mod codex_live_state;

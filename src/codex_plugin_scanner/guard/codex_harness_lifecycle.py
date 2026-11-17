@@ -29,7 +29,6 @@ from .codex_harness_client import (
     _check_sources,
     _codex,
     _hook_manifest_spec,
-    _hook_registration,
     _launch_fields,
     _legacy_fields,
     _plan_file,
@@ -40,7 +39,6 @@ from .codex_harness_client import (
 from .codex_hook_integrity import hook_authority_receipt_path, hook_manifest_path
 from .codex_hook_manifest import (
     PreparedCodexHookPublication,
-    generation_request,
     load_hook_manifest_baseline,
 )
 from .codex_hook_manifest import (
@@ -261,28 +259,21 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         pairs = self._config_hook_pairs(context)
         contents = {path: _snapshot(path) for pair in pairs for path in pair}
         detection = self.detect(context, config_contents=contents)
-        registration = _hook_registration(context)
-        workspace = pairs[1][0] if len(pairs) > 1 else None
-        generation = generation_request(spec, previous_manifest=previous_manifest, create_key=enroll)
-        # The runtime builds the spec from the launch below.
-        generation.pop("spec")
+        # The runtime builds the spec, the pairs, the managed groups, the
+        # legacy bridge identity and the generation's paths from the launch.
         request: dict[str, Any] = {
             "launch": _launch_fields(context),
-            "pairs": [[str(config), str(hooks)] for config, hooks in pairs],
             "contents": {str(path): _b64(data) for path, data in contents.items()},
-            "workspace_config": None if workspace is None else str(workspace),
             "owned": json.dumps(_manifest_bindings(previous_manifest), separators=(",", ":")),
-            "managed": registration.groups,
             "require_owners": enroll,
             "artifacts": [
                 _wire_artifact(artifact) for artifact in detection.artifacts if artifact.artifact_type == "mcp_server"
             ],
             "generation": {
-                "home": os.path.abspath(spec.guard_home),
-                **generation,
+                "previous_manifest": None if previous_manifest is None else dict(previous_manifest),
+                "create_key": enroll,
             },
             "interpreter": shim_interpreter(),
-            **_legacy_fields(context, registration),
             **install_fields(_runtime_guard_home(context), None),
             **short_path_fields(),
         }
@@ -351,12 +342,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         # A source that is not a readable regular file refuses before the journal opens.
         _check_sources(context, self._config_hook_pairs(context))
         request, detection = self._plan_request(context, enroll=True)
-        request.update(
-            home=os.path.abspath(context.guard_home),
-            config=os.path.abspath(spec.config_path.expanduser()),
-            operation_id=_owned(context.guard_home),
-            budget_spent=False,
-        )
+        request["operation_id"] = _owned(context.guard_home)
         answer = _ask_install_plan(context, request, spec.guard_home, op="install")
         shim_manifest, fields = _plan_report(answer["plan"], detection)
         hook_state = json.loads(_reply_text(answer, "state"))
@@ -404,9 +390,9 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                 str(_located(hook_manifest_path(context.guard_home, hook_config_path))),
             ],
             "home": os.path.abspath(context.guard_home),
+            "launch": _launch_fields(context),
             "package_roots": _package_roots(),
             "budget": _budget(),
-            **_legacy_fields(context),
             **install_fields(_runtime_guard_home(context), None),
             **short_path_fields(),
         }

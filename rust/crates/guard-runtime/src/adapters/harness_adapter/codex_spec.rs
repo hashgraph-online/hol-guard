@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Map, Value};
 
 use super::codex::{argv, config_path, groups, strings};
+use super::paseo_paths::abspath;
 use super::{caller, kimi, path_text, Ctx, Failure, Step};
 
 /// Each authenticated role's file under the caller's `codex_plugin_scanner`
@@ -30,7 +31,7 @@ const ROLES: [(&str, &str); 9] = [
 ];
 
 /// `str(path.expanduser())`.
-fn spelled(ctx: &Ctx, path: &Path) -> String {
+pub(super) fn spelled(ctx: &Ctx, path: &Path) -> String {
     path_text(&kimi::expand_user(ctx, &path_text(path)))
 }
 
@@ -127,9 +128,46 @@ pub(super) fn manifest_spec(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Valu
     Ok(json!({ "spec": build(ctx, launch, fields)? }))
 }
 
+/// `os.path.abspath` of a spec path.
+fn anchored(ctx: &Ctx, spec: &Value, key: &str) -> Value {
+    match spec.get(key).and_then(Value::as_str) {
+        Some(text) => json!(path_text(&abspath(ctx, Path::new(text)))),
+        None => Value::Null,
+    }
+}
+
+/// What a publication generation says of its installation, from the spec it
+/// publishes (`generation_request`): the anchored home, config, Guard home,
+/// runtime Guard home and workspace, and whether the workspace may be
+/// rebound. A field the request names is kept.
+fn generation_base(
+    ctx: &Ctx,
+    spec: &Value,
+    launch: &Map<String, Value>,
+    generation: &mut Map<String, Value>,
+) {
+    let rebinding = launch.get("workspace_explicit").and_then(Value::as_bool) != Some(true);
+    for (key, from) in [
+        ("home", "guard_home"),
+        ("config", "config_path"),
+        ("guard_home", "guard_home"),
+        ("home_dir", "home_dir"),
+        ("runtime_guard_home", "runtime_guard_home"),
+        ("workspace_dir", "workspace_dir"),
+    ] {
+        generation
+            .entry(key)
+            .or_insert_with(|| anchored(ctx, spec, from));
+    }
+    generation
+        .entry("workspace_rebinding_allowed")
+        .or_insert(json!(rebinding));
+}
+
 /// A request whose `launch` stands for the spec it needs: the spec is built
 /// here and set at the top level and in a `generation` request. A request
-/// without `launch` carries its own spec and is left as it is.
+/// without `launch` carries its own spec and is left as it is; one with both
+/// keeps its spec.
 pub(super) fn with_spec<'a>(
     ctx: &Ctx,
     fields: &'a Map<String, Value>,
@@ -138,11 +176,15 @@ pub(super) fn with_spec<'a>(
         return Ok(Cow::Borrowed(fields));
     };
     let launch = launch.as_object().ok_or(Failure::Invalid)?;
-    let spec = build(ctx, launch, fields)?;
+    let spec = match fields.get("spec") {
+        Some(spec) => spec.clone(),
+        None => build(ctx, launch, fields)?,
+    };
     let mut request = fields.clone();
     request.remove("launch");
     if let Some(Value::Object(generation)) = request.get_mut("generation") {
         generation.insert("spec".into(), spec.clone());
+        generation_base(ctx, &spec, launch, generation);
     }
     request.insert("spec".into(), spec);
     Ok(Cow::Owned(request))

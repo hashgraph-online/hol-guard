@@ -15,10 +15,10 @@ use sha2::{Digest, Sha256};
 
 use super::files::{self, Doc};
 use super::{
-    codex_alternate_plan, codex_config_hooks, codex_files, codex_live_read, codex_live_state,
-    codex_main_plan, codex_merge, codex_migration, codex_publish, codex_servers, codex_sources,
-    codex_spec, codex_uninstall, codex_uninstall_config, codex_uninstall_plan, common, hook_render,
-    path_answer, path_text, Ctx, Failure, Spec, Step,
+    codex_alternate_plan, codex_config_hooks, codex_files, codex_install_request, codex_live_read,
+    codex_live_state, codex_main_plan, codex_merge, codex_migration, codex_publish, codex_servers,
+    codex_sources, codex_spec, codex_uninstall, codex_uninstall_config, codex_uninstall_plan,
+    common, hook_render, path_answer, path_text, Ctx, Failure, Spec, Step,
 };
 use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 use crate::harness_diagnostics::setup_failures_besides_missing_command;
@@ -32,7 +32,7 @@ pub(super) const TOOL_MATCHER: &str = "Bash|Read|Write|Edit|MultiEdit|^apply_pat
 const POST_TOOL_MATCHER: &str = "Bash|Read|mcp__.*";
 pub(super) const ENFORCEMENT_BOUNDARY: &str = "codex-native-hooks";
 pub(super) const HOOK_UNAVAILABLE: &str = "codex_authoritative_hook_unavailable";
-const NATIVE_HOOK_COMMAND: &str = "codex-hook-bridge";
+pub(super) const NATIVE_HOOK_COMMAND: &str = "codex-hook-bridge";
 
 /// `(event, matcher, status message, long timeout)` in registration order.
 pub(super) const EVENTS: [(&str, Option<&str>, &str, bool); 4] = [
@@ -87,7 +87,10 @@ pub(super) fn dispatch(
         "uninstall_restore" => codex_uninstall::uninstall_restore(fields),
         "uninstall_config" => codex_uninstall_config::uninstall_config(ctx, fields),
         "uninstall_plan" => codex_uninstall_plan::uninstall_plan(ctx, fields),
-        "uninstall" => super::codex_uninstall_op::uninstall(ctx, fields),
+        "uninstall" => {
+            let request = codex_install_request::complete_uninstall(ctx, fields)?;
+            super::codex_uninstall_op::uninstall(ctx, &request)
+        }
         "manifest_spec" => codex_spec::manifest_spec(ctx, fields),
         "live_hook_state" => {
             let spec_fields = codex_spec::with_spec(ctx, fields)?;
@@ -99,11 +102,13 @@ pub(super) fn dispatch(
         }
         "publish_hooks" => codex_publish::publish_hooks(ctx, fields),
         "install" => {
-            let spec_fields = codex_spec::with_spec(ctx, fields)?;
+            let request = codex_install_request::complete(ctx, fields, true)?;
+            let spec_fields = codex_spec::with_spec(ctx, &request)?;
             super::codex_install::install(ctx, &spec_fields)
         }
         "install_plan" => {
-            let spec_fields = codex_spec::with_spec(ctx, fields)?;
+            let request = codex_install_request::complete(ctx, fields, false)?;
+            let spec_fields = codex_spec::with_spec(ctx, &request)?;
             super::codex_install_plan::install_plan(ctx, &spec_fields)
         }
         _ => common(spec, op, ctx),
@@ -137,7 +142,7 @@ pub(super) fn backup_path(ctx: &Ctx) -> PathBuf {
 }
 
 /// The config and hooks files Guard reads, the global pair first.
-fn paths(ctx: &Ctx) -> Value {
+pub(super) fn paths(ctx: &Ctx) -> Value {
     let mut pairs = vec![(config_path(ctx), hooks_path(ctx))];
     if let Some(workspace) = &ctx.workspace {
         let root = workspace.join(".codex");
