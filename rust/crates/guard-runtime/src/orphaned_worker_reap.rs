@@ -41,6 +41,9 @@ const POLL: Duration = Duration::from_millis(50);
 /// Budget kept back from the grace wait so a process that ignored SIGTERM
 /// can still be killed in the same pass.
 const KILL_RESERVE: Duration = Duration::from_millis(250);
+/// What one identity check and signal may take: two command-line lookups
+/// and a start-time lookup, each bounded by the 500 ms command timeout.
+const SIGNAL_RESERVE: Duration = Duration::from_millis(1_500);
 const MAX_PARENT_HOPS: usize = 8;
 const HOOK_WORKER_COMMAND_MARKER: &str = "--hol-guard-hook-worker";
 const FORK_MARKER: &str = "--multiprocessing-fork";
@@ -152,7 +155,16 @@ pub(crate) fn reap<H: Host>(host: &H, excluded: &[u32], budget: Option<Duration>
     let processes = parse_process_snapshot(&output);
     let mut workers = orphaned_daemon_workers(&processes, excluded);
     let deadline = budget.map(|budget| started + budget);
-    for process in stale::stale_guard_processes(host, &processes, excluded, deadline) {
+    // Owner checks stop early enough that what they select can still be
+    // signalled: a pass whose checks spent the whole budget would select
+    // processes and then stop none of them, on every pass.
+    let selection_deadline = deadline.map(|deadline| {
+        deadline
+            .checked_sub(SIGNAL_RESERVE)
+            .filter(|end| *end > started)
+            .unwrap_or(started)
+    });
+    for process in stale::stale_guard_processes(host, &processes, excluded, selection_deadline) {
         if !workers.iter().any(|worker| worker.pid == process.pid) {
             workers.push(process);
         }

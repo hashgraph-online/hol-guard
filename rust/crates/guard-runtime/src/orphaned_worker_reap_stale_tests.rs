@@ -371,3 +371,61 @@ fn termination_stops_when_the_pass_budget_is_spent() {
     assert_eq!(host.signalled(), [100, 101, 102, 103]);
     assert!(host.now() <= deadline + Duration::from_millis(800));
 }
+
+#[test]
+fn a_packaged_module_daemon_under_a_spaced_directory_is_retired() {
+    let host = StaleHost::new(&[
+        line(
+            93,
+            1,
+            &format!("/opt/Team Tools/.venv/bin/python -I -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"),
+        ),
+        // Another program that runs a file named python is not a daemon.
+        line(
+            94,
+            1,
+            &format!("/bin/sh /opt/tools/python -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"),
+        ),
+        line(
+            95,
+            1,
+            &format!("/bin/sh -x python -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"),
+        ),
+        line(
+            96,
+            1,
+            &format!("relative tools/python -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"),
+        ),
+        line(
+            97,
+            1,
+            &format!("/opt/Team Tools/python3 -c pass -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"),
+        ),
+        line(
+            98,
+            1,
+            &format!("/opt/Team Tools/node -m codex_plugin_scanner.cli daemon --serve --guard-home {GONE_HOME}"),
+        ),
+    ]);
+
+    assert_eq!(stale(&host), [93]);
+    reap(&host, &[], None);
+    assert_eq!(host.signalled(), [93]);
+}
+
+#[test]
+fn owner_checks_leave_time_to_signal_what_they_select() {
+    let lines: Vec<String> = (110..116)
+        .map(|pid| line(pid, 1, &native_daemon(GONE_HOME)))
+        .collect();
+    let mut host = StaleHost::new(&lines);
+    host.slow_owner_checks = true;
+    host.command_delay = Duration::from_millis(400);
+
+    reap(&host, &[], Some(Duration::from_millis(2_500)));
+
+    // Owner checks of 500 ms each stop at 1 s, leaving 1.5 s in which the
+    // two selected daemons are checked and signalled. Without the reserve
+    // the checks select five daemons, spend the budget and signal none.
+    assert_eq!(host.signalled(), [110, 111]);
+}

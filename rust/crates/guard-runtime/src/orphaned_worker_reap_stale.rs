@@ -142,23 +142,49 @@ fn python_daemon_at(command: &str) -> Option<usize> {
 }
 
 /// `python [bare options] -m codex_plugin_scanner.cli`, and nothing else.
+///
+/// `ps` joins arguments with spaces, so an interpreter under a directory
+/// whose name has a space arrives as several words. Those words are taken as
+/// one path only when it is absolute, no later word starts a new path or an
+/// option, and the file name itself is a Python interpreter: `sh /x/python`
+/// and `python3 -c pass` are still refused.
 fn runs_packaged_module(prefix: &str) -> bool {
     let words: Vec<&str> = py_split(prefix).collect();
-    let [interpreter, options @ .., flag, module] = words.as_slice() else {
+    let [head @ .., flag, module] = words.as_slice() else {
         return false;
     };
-    let name = interpreter.rsplit(['/', '\\']).next().unwrap_or_default();
+    if *flag != "-m" || *module != PACKAGED_MODULE {
+        return false;
+    }
+    let options = head
+        .iter()
+        .rev()
+        .take_while(|word| is_bare_python_option(word))
+        .count();
+    let interpreter = &head[..head.len() - options];
+    let [first, rest @ ..] = interpreter else {
+        return false;
+    };
+    if !rest.is_empty()
+        && (!is_absolute_path(first)
+            || rest
+                .iter()
+                .any(|word| word.starts_with(['/', '-']) || word.contains(':')))
+    {
+        return false;
+    }
+    let last = rest.last().unwrap_or(first);
+    let name = last.rsplit(['/', '\\']).next().unwrap_or_default();
     name.to_ascii_lowercase().starts_with("python")
-        && *flag == "-m"
-        && *module == PACKAGED_MODULE
-        && options.iter().all(|option| {
-            option.strip_prefix('-').is_some_and(|letters| {
-                !letters.is_empty()
-                    && letters
-                        .chars()
-                        .all(|letter| BARE_PYTHON_OPTIONS.contains(letter))
-            })
-        })
+}
+
+fn is_bare_python_option(word: &str) -> bool {
+    word.strip_prefix('-').is_some_and(|letters| {
+        !letters.is_empty()
+            && letters
+                .chars()
+                .all(|letter| BARE_PYTHON_OPTIONS.contains(letter))
+    })
 }
 
 /// The executable of a Guard `mcp-relay` command line.
