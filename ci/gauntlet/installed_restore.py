@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
 import tomllib
 
-from .installed_registration import install_harness, stop_daemon
+from .installed_registration import assess_harness, install_harness, stop_daemon
 from .installed_runtime import InstalledRuntime, isolated_environment, run_guard
 
 # Synthetic settings a user might already have. Every value is invented; the
@@ -140,30 +141,44 @@ def restore_pass(
     project_local.write_text(PROJECT_LOCAL_SETTINGS, encoding="utf-8", newline="\n")
     seeded["workspace/.claude/settings.local.json"] = (project_local, project_local.read_bytes())
 
-    installs = [
-        install_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
-        for harness in harnesses
-    ]
-    uninstalls = [
-        uninstall_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
-        for harness in harnesses
-    ]
-    daemon_stop = stop_daemon(runtime, home=home, guard_home=guard_home)
+    failures: list[str] = []
+    uninstalls: list[dict[str, Any]] = []
+    try:
+        installs = [
+            install_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
+            for harness in harnesses
+        ]
+        # An installer that skipped the seeded file and still exited 0 would
+        # leave every seed untouched, so the byte check below would pass
+        # without testing removal. Require Guard to be registered first.
+        registered = {
+            harness: assess_harness(home, harness, contract["harnesses"][harness])["registered"]
+            for harness in harnesses
+        }
+        for entry in installs:
+            if entry["exit_code"] != 0:
+                failures.append(f"{entry['harness']}: install exited {entry['exit_code']}: {entry['stderr_tail']}")
+            elif not registered[entry["harness"]]:
+                failures.append(f"{entry['harness']}: install exited 0 but Guard is not registered in the seeded home")
+        for harness in harnesses:
+            try:
+                entry = uninstall_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
+            except subprocess.TimeoutExpired:
+                entry = {"harness": harness, "exit_code": None, "stderr_tail": "uninstall timed out"}
+            uninstalls.append(entry)
+            if entry["exit_code"] != 0:
+                failures.append(f"{harness}: uninstall exited {entry['exit_code']}: {entry['stderr_tail']}")
+    finally:
+        daemon_stop = stop_daemon(runtime, home=home, guard_home=guard_home)
 
     files = compare_seeded(seeded)
-    failures: list[str] = []
-    for entry in installs:
-        if entry["exit_code"] != 0:
-            failures.append(f"{entry['harness']}: install exited {entry['exit_code']}: {entry['stderr_tail']}")
-    for entry in uninstalls:
-        if entry["exit_code"] != 0:
-            failures.append(f"{entry['harness']}: uninstall exited {entry['exit_code']}: {entry['stderr_tail']}")
     for row in files:
         if not row["bytes_identical"]:
             detail = "missing" if row["after"] is None else f"parsed_equal={row.get('parsed_equal')}"
             failures.append(f"{row['path']}: user bytes changed after install and uninstall ({detail})")
     return {
         "install": [entry["exit_code"] for entry in installs],
+        "registered": registered,
         "uninstall": uninstalls,
         "daemon_stop_exit_code": daemon_stop,
         "files": files,

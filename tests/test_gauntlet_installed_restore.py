@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from ci.gauntlet import installed_restore
@@ -15,7 +16,7 @@ class _Runtime:
     native_runtime = None
 
 
-def _drive(tmp_path: Path, monkeypatch, *, uninstall) -> dict:
+def _drive(tmp_path: Path, monkeypatch, *, uninstall, registered: bool = True) -> dict:
     contract = load_contract()
     saved: dict[Path, bytes] = {}
 
@@ -38,6 +39,11 @@ def _drive(tmp_path: Path, monkeypatch, *, uninstall) -> dict:
     monkeypatch.setattr(installed_restore, "install_harness", install)
     monkeypatch.setattr(installed_restore, "uninstall_harness", remove)
     monkeypatch.setattr(installed_restore, "stop_daemon", lambda runtime, *, home, guard_home: 0)
+    monkeypatch.setattr(
+        installed_restore,
+        "assess_harness",
+        lambda home, harness, expectation: {"harness": harness, "registered": registered, "failures": []},
+    )
     workspace = tmp_path / "restore" / "workspace"
     workspace.mkdir(parents=True)
     return installed_restore.restore_pass(
@@ -107,3 +113,30 @@ def test_a_failed_uninstall_is_a_failure(tmp_path: Path, monkeypatch) -> None:
         _Runtime(), ["muse"], load_contract(), home=tmp_path / "again", workspace=tmp_path / "again-ws"
     )
     assert any("muse: uninstall exited 4" in failure for failure in second["failures"])
+
+
+def test_an_install_that_registers_nothing_fails(tmp_path: Path, monkeypatch) -> None:
+    result = _drive(
+        tmp_path, monkeypatch, uninstall=lambda path, before, workspace: path.write_bytes(before), registered=False
+    )
+    assert result["passed"] is False
+    assert any("install exited 0 but Guard is not registered" in failure for failure in result["failures"])
+
+
+def test_a_hung_uninstall_is_recorded_and_the_daemon_still_stops(tmp_path: Path, monkeypatch) -> None:
+    _drive(tmp_path, monkeypatch, uninstall=lambda path, before, workspace: path.write_bytes(before))
+    stopped: list[Path] = []
+
+    def hang(runtime, harness, *, home, guard_home, workspace):
+        raise subprocess.TimeoutExpired(cmd="uninstall", timeout=300)
+
+    monkeypatch.setattr(installed_restore, "uninstall_harness", hang)
+    monkeypatch.setattr(
+        installed_restore, "stop_daemon", lambda runtime, *, home, guard_home: stopped.append(home) or 0
+    )
+    result = installed_restore.restore_pass(
+        _Runtime(), ["muse"], load_contract(), home=tmp_path / "hung", workspace=tmp_path / "hung-ws"
+    )
+    assert stopped == [tmp_path / "hung"]
+    assert result["uninstall"][0]["exit_code"] is None
+    assert any("muse: uninstall exited None: uninstall timed out" in failure for failure in result["failures"])
