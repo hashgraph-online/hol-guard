@@ -140,3 +140,28 @@ def test_a_hung_uninstall_is_recorded_and_the_daemon_still_stops(tmp_path: Path,
     assert stopped == [tmp_path / "hung"]
     assert result["uninstall"][0]["exit_code"] is None
     assert any("muse: uninstall exited None: uninstall timed out" in failure for failure in result["failures"])
+
+
+def test_a_hung_install_is_recorded_and_the_pass_still_compares(tmp_path: Path, monkeypatch) -> None:
+    _drive(tmp_path, monkeypatch, uninstall=lambda path, before, workspace: path.write_bytes(before))
+
+    def hang(runtime, harness, *, home, guard_home, workspace):
+        raise subprocess.TimeoutExpired(cmd="install", timeout=600)
+
+    monkeypatch.setattr(installed_restore, "install_harness", hang)
+    monkeypatch.setattr(
+        installed_restore,
+        "uninstall_harness",
+        lambda runtime, harness, *, home, guard_home, workspace: {
+            "harness": harness,
+            "exit_code": 0,
+            "stderr_tail": "",
+        },
+    )
+    result = installed_restore.restore_pass(
+        _Runtime(), ["muse"], load_contract(), home=tmp_path / "hung", workspace=tmp_path / "hung-ws"
+    )
+    assert result["install"] == [None]
+    assert len(result["uninstall"]) == 1
+    assert result["files"]
+    assert any("muse: install exited None: install timed out" in failure for failure in result["failures"])

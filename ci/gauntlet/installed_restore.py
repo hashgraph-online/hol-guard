@@ -148,10 +148,16 @@ def restore_pass(
     failures: list[str] = []
     uninstalls: list[dict[str, Any]] = []
     try:
-        installs = [
-            install_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
-            for harness in harnesses
-        ]
+        installs: list[dict[str, Any]] = []
+        for harness in harnesses:
+            # A hung install is a failed result, so the lane still uninstalls,
+            # compares and writes its evidence.
+            try:
+                installs.append(
+                    install_harness(runtime, harness, home=home, guard_home=guard_home, workspace=workspace)
+                )
+            except subprocess.TimeoutExpired:
+                installs.append({"harness": harness, "exit_code": None, "stderr_tail": "install timed out"})
         # An installer that skipped the seeded file and still exited 0 would
         # leave every seed untouched, so the byte check below would pass
         # without testing removal. Require Guard to be registered first.
