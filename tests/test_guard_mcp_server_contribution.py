@@ -107,6 +107,15 @@ def test_agentic_linkedin_launch_package_is_version_pinned() -> None:
     }
 
 
+def test_agentic_linkedin_private_reads_require_review() -> None:
+    payload = _agentic_linkedin_payload()
+    defaults = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    assert defaults["get_posts"] == "review"
+    assert defaults["get_voice_profile"] == "review"
+    assert mcp_tool_state(payload, "get_posts") == "review"
+    assert mcp_tool_state(payload, "get_voice_profile") == "review"
+
+
 def test_tether_declares_every_memory_tool_with_inherited_policy() -> None:
     """Require all four memory verbs before checking their inherited states."""
     payload = _tether_payload()

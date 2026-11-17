@@ -48,7 +48,7 @@
     },
     {
       "name": "get_posts",
-      "state": "allow"
+      "state": "review"
     },
     {
       "name": "get_connections_summary",
@@ -68,7 +68,7 @@
     },
     {
       "name": "get_voice_profile",
-      "state": "allow"
+      "state": "review"
     },
     {
       "name": "audit_draft",
