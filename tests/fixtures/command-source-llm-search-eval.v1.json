@@ -12199,7 +12199,9 @@
         "command.llm-search-eval"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "comment-uvx-equality-pin",
       "rule_id": "command.llm-search-eval.comment"
     },
@@ -12338,7 +12340,9 @@
         "command.llm-search-eval"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "judge-uvx-equality-pin",
       "rule_id": "command.llm-search-eval.judge"
     },
