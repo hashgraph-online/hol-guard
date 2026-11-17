@@ -689,6 +689,7 @@ mod harness_backup_restore_tests;
 mod harness_coverage;
 mod harness_coverage_command;
 mod harness_diagnostics;
+mod harness_diagnostics_readiness;
 #[path = "adapters/harness_hook_settings.rs"]
 mod harness_hook_settings;
 #[cfg(test)]
