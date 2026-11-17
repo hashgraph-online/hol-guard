@@ -115,6 +115,11 @@ fn home(tag: &str) -> PathBuf {
             .as_nanos()
     ));
     std::fs::create_dir_all(&h).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&h, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
     h
 }
 
@@ -130,6 +135,13 @@ fn password_gate(tag: &str) -> Gate {
         crate::approval_gate_settings::create_verifier(PASSWORD).unwrap(),
     );
     write_state(&home, &st, Some(NOW)).unwrap();
+    let daemon_token = home.join("daemon-auth-token");
+    std::fs::write(&daemon_token, "command-flow-daemon-key").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&daemon_token, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
     let fake = Rc::new(FakePulse::new(epoch(Some(NOW)) as i64));
     TEST_TRANSPORT.with(|t| *t.borrow_mut() = Some(fake.clone()));
     Gate {
