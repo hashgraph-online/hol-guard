@@ -50,7 +50,7 @@ def resident_stop_executable() -> Path:
     return _bundled_runtime_candidate()
 
 
-def retire_native_resident_for_home(guard_home: Path) -> bool:
+def retire_native_resident_for_home(guard_home: Path, *, hold_install_lock: bool = False) -> bool:
     """Stop this Guard home's native resident while its runtime is still intact.
 
     Both callers need it gone for the same reason: the resident is a long-lived
@@ -73,6 +73,7 @@ def retire_native_resident_for_home(guard_home: Path) -> bool:
                 guard_home=guard_home,
                 environment=_isolated_environment(),
                 timeout_seconds=timeout_seconds,
+                hold_install_lock=hold_install_lock,
             ),
             sleep=time.sleep,
         )

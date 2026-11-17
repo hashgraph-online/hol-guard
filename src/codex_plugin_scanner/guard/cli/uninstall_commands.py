@@ -335,18 +335,17 @@ def retire_native_resident_after_last_harness(context: HarnessContext, store: Gu
     if _resident_kept(context, store):
         return None
     try:
-        # The update barrier alone serializes this stop against installs. The
-        # install transaction's lease is held by the resident, and every
-        # resident request takes the barrier's shared side, so while this
-        # process holds the exclusive side no install can take or use a lease.
-        # Asking for that lease here would contend with this very barrier.
+        # The store is read through the resident, which refuses every request
+        # while this process holds the barrier's exclusive side, so it is read
+        # only above. The Rust stop holds the installation lock instead: an
+        # install that holds its lease finishes first, and none can start
+        # until the resident is gone. A resident an install needs again
+        # starts on its next request.
         with hold_native_resident_update_lock(
             context.guard_home,
             initial_executable=resident_stop_executable(),
         ):
-            if _resident_kept(context, store):
-                return None
-            return retire_native_resident_for_home(context.guard_home)
+            return retire_native_resident_for_home(context.guard_home, hold_install_lock=True)
     except (NativeResidentUpdateLockError, OSError, RuntimeError, TimeoutError, ValueError):
         # The harness is already disconnected; a resident that could not be
         # stopped is reported, never turned into a failed uninstall.

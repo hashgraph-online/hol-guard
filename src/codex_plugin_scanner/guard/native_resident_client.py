@@ -252,12 +252,20 @@ def stop_native_resident(
     environment: Mapping[str, str],
     timeout_seconds: float = 3.0,
     retire_clients: bool = False,
+    install_lock_home: Path | None = None,
     deadline_monotonic: float | None = None,
 ) -> bool:
-    """Stop one Rust-managed resident and wait for its state retirement."""
+    """Stop one Rust-managed resident and wait for its state retirement.
+
+    With ``install_lock_home`` the Rust stop holds that Guard home's
+    installation lock across the stop, so an install holding its lease
+    finishes first and none can start while the resident goes.
+    """
     command = [str(executable), "resident-stop", "--state-dir", str(state_dir)]
     if retire_clients:
         command.append("--retire-clients")
+        if install_lock_home is not None:
+            command.extend(("--hold-install-lock", str(install_lock_home)))
     result = run_isolated_hook_process(
         tuple(command),
         input_text="",
@@ -292,6 +300,7 @@ def retire_native_resident_for_update(
     guard_home: Path,
     environment: Mapping[str, str],
     timeout_seconds: float = 3.0,
+    hold_install_lock: bool = False,
 ) -> bool:
     """Retire any resident before its executable can be replaced in place.
 
@@ -315,6 +324,7 @@ def retire_native_resident_for_update(
             environment=environment,
             timeout_seconds=timeout_seconds,
             retire_clients=True,
+            install_lock_home=resolved_guard_home if hold_install_lock else None,
         )
     except (OSError, RuntimeError, ValueError):
         return False

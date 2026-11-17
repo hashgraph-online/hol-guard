@@ -344,6 +344,34 @@ fn install_lease_excludes_a_second_owner_until_released() {
     assert!(fixture.path("managed/codex/installation.lock").is_file());
 }
 
+#[test]
+fn a_resident_stop_waits_out_an_install_lease_and_then_excludes_new_ones() {
+    let fixture = Fixture::new();
+    let acquire = json!({
+        "op": "lease_acquire", "lock": "install",
+        "guard_home": fixture.0.to_string_lossy(), "client_pid": std::process::id(),
+    });
+    let lease = dispatch(&acquire).unwrap()["lease"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let wait = std::time::Duration::from_millis(50);
+    assert_eq!(
+        super::hold_install_lock(&fixture.0, wait).unwrap_err(),
+        "native_resident_install_in_progress"
+    );
+    dispatch(&json!({ "op": "lease_release", "lease": lease })).unwrap();
+    let held = super::hold_install_lock(&fixture.0, wait).unwrap();
+    assert_eq!(
+        dispatch(&acquire).unwrap(),
+        json!({ "ok": false, "busy": true })
+    );
+    drop(held);
+    let again = dispatch(&acquire).unwrap();
+    assert_eq!(again["ok"], true);
+    dispatch(&json!({ "op": "lease_release", "lease": again["lease"] })).unwrap();
+}
+
 #[cfg(unix)]
 #[test]
 fn install_lease_refuses_a_shared_lock_file() {
