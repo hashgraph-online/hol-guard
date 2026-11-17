@@ -420,3 +420,33 @@ fn grok_dispatched_calls_take_the_choice_for_the_tool_they_name() {
         assert_eq!(codex.minimum_action, "review", "{choice}");
     }
 }
+
+#[test]
+fn grok_dispatched_output_takes_the_choice_for_the_tool_it_ran() {
+    let mut policy = policy("allow");
+    policy
+        .mcp_tool_actions
+        .insert("grok:mcp__ads_api__list_ads".into(), "allow".into());
+    policy
+        .risk_actions
+        .insert("mcp_dangerous_tool".into(), "require-reapproval".into());
+    let snapshot = snapshot(policy);
+    let post = |name: &str| {
+        let mut request = post_request(json!({
+            "toolName": "use_tool",
+            "tool_input": {"tool_name": name, "tool_input": {"limit": 5}},
+            "tool_response": "results"
+        }));
+        request.harness = "grok".into();
+        apply_post_tool_policy(
+            &snapshot,
+            &request,
+            GuardHookPayloadKindV2::Inline,
+            HookReviewResponseV1::allow("output_scan_allow"),
+        )
+        .unwrap()
+    };
+    let output = post("ads_api__list_ads");
+    assert_eq!(output.decision, "allow", "{:?}", output.reason);
+    assert_eq!(post("ads_api__delete_ads").decision, "deny");
+}

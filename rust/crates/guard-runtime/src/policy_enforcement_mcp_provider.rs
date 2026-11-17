@@ -9,6 +9,17 @@ use serde_json::{Map, Value};
 
 use super::preferred_tool_name;
 
+/// The hook payload and the envelopes some harnesses wrap the call in.
+fn envelopes(record: &Map<String, Value>) -> Vec<&Map<String, Value>> {
+    let mut envelopes = vec![record];
+    for key in ["tool_call", "toolCall", "preToolUse", "pre_tool_use"] {
+        if let Some(envelope) = record.get(key).and_then(Value::as_object) {
+            envelopes.push(envelope);
+        }
+    }
+    envelopes
+}
+
 /// The outer tool of a hook payload. Tool arguments can themselves contain
 /// `tool_name` (dispatchers are common). They are data, never the outer
 /// tool's authority selector.
@@ -16,17 +27,22 @@ pub(super) fn outer_tool_name(payload: &Value) -> Result<Option<String>, String>
     let Some(record) = payload.as_object() else {
         return Ok(None);
     };
-    let mut envelopes: Vec<&Map<String, Value>> = vec![record];
-    for key in ["tool_call", "toolCall", "preToolUse", "pre_tool_use"] {
-        if let Some(envelope) = record.get(key).and_then(Value::as_object) {
-            envelopes.push(envelope);
-        }
-    }
-    Ok(preferred_tool_name(&envelopes)?.or_else(|| {
+    Ok(preferred_tool_name(&envelopes(record))?.or_else(|| {
         ["action", "operation"]
             .into_iter()
             .find_map(|key| record.get(key).and_then(Value::as_str).map(str::to_owned))
     }))
+}
+
+/// Whether this is Grok's MCP dispatcher, which runs the tool its input names.
+pub(super) fn grok_dispatch(payload: &Value, harness: &str) -> Result<bool, String> {
+    Ok(harness == "grok"
+        && outer_tool_name(payload)?.is_some_and(|name| {
+            matches!(
+                name.to_ascii_lowercase().as_str(),
+                "use_tool" | "callmcptool" | "mcptool"
+            )
+        }))
 }
 
 /// The MCP tool a hook payload calls, under the name the operator's choices
@@ -34,57 +50,92 @@ pub(super) fn outer_tool_name(payload: &Value) -> Result<Option<String>, String>
 /// input names the tool as `<server>__<tool>`; Grok runs exactly that tool, so
 /// it is the call's identity, written `mcp__<server>__<tool>` as the observed
 /// tool list records it. The adapter's prepared form says the same in
-/// `mcp_server` and `mcp_tool`. Two different names name no tool.
+/// `mcp_server` and `mcp_tool`. Every name the call carries must be complete
+/// and name the same tool, or the call names no tool.
 pub(super) fn mcp_tool_name(payload: &Value, harness: &str) -> Result<Option<String>, String> {
-    let outer = outer_tool_name(payload)?;
-    let dispatcher = outer.as_deref().is_some_and(|name| {
-        matches!(
-            name.to_ascii_lowercase().as_str(),
-            "use_tool" | "callmcptool" | "mcptool"
-        )
-    });
-    if harness != "grok" || !dispatcher {
-        return Ok(outer);
+    if !grok_dispatch(payload, harness)? {
+        return outer_tool_name(payload);
     }
-    let pair = |record: &Map<String, Value>, server: &str, tool: &str| match (
-        record.get(server),
-        record.get(tool),
-    ) {
-        (Some(Value::String(server)), Some(Value::String(tool))) => {
-            Some(format!("{server}__{tool}"))
-        }
-        _ => None,
+    let Some(root) = payload.as_object() else {
+        return Ok(None);
     };
     let mut names = Vec::new();
-    if let Some(record) = payload.as_object() {
-        names.extend(pair(record, "mcp_server", "mcp_tool"));
-    }
-    for key in ["tool_input", "toolInput"] {
-        let Some(record) = payload.get(key).and_then(Value::as_object) else {
-            continue;
-        };
-        match pair(record, "server", "tool")
-            .or_else(|| preferred_tool_name(&[record]).ok().flatten())
-        {
-            Some(name) => names.push(name),
-            None => return Ok(None),
+    for envelope in envelopes(root) {
+        if !dispatched_names(envelope, false, &mut names) {
+            return Ok(None);
+        }
+        for key in ["tool_input", "toolInput"] {
+            let Some(input) = envelope.get(key) else {
+                continue;
+            };
+            let Some(input) = input.as_object() else {
+                return Ok(None);
+            };
+            if !dispatched_names(input, true, &mut names) {
+                return Ok(None);
+            }
         }
     }
-    let named = names
-        .first()
-        .filter(|first| names.iter().all(|name| name == *first))
-        .cloned();
-    Ok(named.and_then(|name| {
-        let qualified = if name.starts_with("mcp__") {
-            name
-        } else {
-            format!("mcp__{name}")
-        };
-        let rest = &qualified["mcp__".len()..];
-        rest.split_once("__")
-            .is_some_and(|(server, tool)| !server.is_empty() && !tool.is_empty())
-            .then_some(qualified)
-    }))
+    let Some(first) = names.first() else {
+        return Ok(None);
+    };
+    Ok(names
+        .iter()
+        .all(|name| name == first)
+        .then(|| first.clone()))
+}
+
+/// Adds the qualified names one record gives its tool. Returns false when a
+/// name is incomplete, malformed or ambiguous, or when a tool input names no
+/// tool at all.
+fn dispatched_names(record: &Map<String, Value>, input: bool, names: &mut Vec<String>) -> bool {
+    let before = names.len();
+    let pairs: &[(&str, &str)] = if input {
+        &[("server", "tool"), ("mcp_server", "mcp_tool")]
+    } else {
+        &[("mcp_server", "mcp_tool")]
+    };
+    for (server, tool) in pairs {
+        match (record.get(*server), record.get(*tool)) {
+            (None, None) => {}
+            (Some(Value::String(server)), Some(Value::String(tool))) => {
+                match qualified(&format!("{}__{}", server.trim(), tool.trim())) {
+                    Some(name) => names.push(name),
+                    None => return false,
+                }
+            }
+            _ => return false,
+        }
+    }
+    if input {
+        for key in ["tool_name", "toolName", "toolname"] {
+            match record.get(key) {
+                None => {}
+                Some(Value::String(name)) => match qualified(name.trim()) {
+                    Some(name) => names.push(name),
+                    None => return false,
+                },
+                Some(_) => return false,
+            }
+        }
+    }
+    !input || names.len() > before
+}
+
+/// `mcp__<server>__<tool>`, with exactly one boundary between two non-empty
+/// parts so that no other split names a different tool.
+fn qualified(name: &str) -> Option<String> {
+    let rest = name.strip_prefix("mcp__").unwrap_or(name);
+    let (server, tool) = rest.split_once("__")?;
+    let valid = |part: &str| {
+        !part.is_empty()
+            && part.len() <= 128
+            && !part.starts_with('_')
+            && !part.ends_with('_')
+            && !part.contains("__")
+            && !part.chars().any(char::is_whitespace)
+    };
+    (valid(server) && valid(tool)).then(|| format!("mcp__{server}__{tool}"))
 }
 
 /// Whether the operator's custom allow covers this exact tool. A Composio
@@ -132,7 +183,12 @@ pub(super) fn denied_provider_execution(
     if name != "composio_multi_execute_tool" {
         return Some(opaque);
     }
-    let Some(arguments) = unambiguous_arguments(payload).and_then(Value::as_object) else {
+    let arguments = if grok_dispatch(payload, harness).unwrap_or(true) {
+        dispatched_arguments(payload)
+    } else {
+        unambiguous_arguments(payload)
+    };
+    let Some(arguments) = arguments.and_then(Value::as_object) else {
         return Some(opaque);
     };
     let Some(members) = arguments.get("tools").and_then(Value::as_array) else {
@@ -191,18 +247,30 @@ pub(super) fn denied_provider_execution(
     None
 }
 
+const ARGUMENT_KEYS: [&str; 3] = ["tool_input", "toolInput", "arguments"];
+
 fn unambiguous_arguments(payload: &Value) -> Option<&Value> {
-    let record = payload.as_object()?;
-    let mut envelopes = vec![record];
-    for key in ["tool_call", "toolCall", "preToolUse", "pre_tool_use"] {
-        if let Some(envelope) = record.get(key).and_then(Value::as_object) {
-            envelopes.push(envelope);
-        }
-    }
+    one_value(envelopes(payload.as_object()?))
+}
+
+/// The arguments Grok's dispatcher passes to the tool it runs, nested one
+/// level inside its own input.
+fn dispatched_arguments(payload: &Value) -> Option<&Value> {
+    let inputs = envelopes(payload.as_object()?)
+        .into_iter()
+        .flat_map(|envelope| ["tool_input", "toolInput"].map(|key| envelope.get(key)))
+        .flatten()
+        .map(Value::as_object)
+        .collect::<Option<Vec<_>>>()?;
+    one_value(inputs)
+}
+
+/// The one argument value the records carry; two different values are none.
+fn one_value(records: Vec<&Map<String, Value>>) -> Option<&Value> {
     let mut selected = None;
-    for envelope in envelopes {
-        for key in ["tool_input", "toolInput", "arguments"] {
-            if let Some(arguments) = envelope.get(key) {
+    for record in records {
+        for key in ARGUMENT_KEYS {
+            if let Some(arguments) = record.get(key) {
                 if selected.is_some_and(|previous| previous != arguments) {
                     return None;
                 }
@@ -290,6 +358,85 @@ mod tests {
                 "mcp__codex_apps__composio__composio_search_tools",
                 &payload
             ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_grok_call_names_one_complete_tool_or_none() {
+        let named = |input: Value| {
+            mcp_tool_name(
+                &json!({"toolName": "use_tool", "tool_input": input}),
+                "grok",
+            )
+            .unwrap()
+        };
+        let list = Some("mcp__ads_api__list_ads".to_owned());
+        assert_eq!(named(json!({"tool_name": "ads_api__list_ads"})), list);
+        assert_eq!(named(json!({"tool_name": "mcp__ads_api__list_ads"})), list);
+        assert_eq!(
+            named(
+                json!({"server": "ads_api", "tool": "list_ads", "tool_name": "ads_api__list_ads"})
+            ),
+            list
+        );
+        for input in [
+            json!({"server": "ads_api", "tool": "list_ads", "tool_name": "ads_api__delete_ads"}),
+            json!({"server": "ads_api", "tool_name": "ads_api__list_ads"}),
+            json!({"tool": "list_ads"}),
+            json!({"tool_name": ["ads_api__list_ads"]}),
+            json!({"tool_name": "list_ads"}),
+            json!({"tool_name": "ads__api__list_ads"}),
+            json!({"tool_name": "ads_api___list_ads"}),
+            json!({"tool_name": "ads_api__list__ads"}),
+            json!({"server": "ads__api", "tool": "list_ads"}),
+            json!({"limit": 5}),
+        ] {
+            assert_eq!(named(input.clone()), None, "{input}");
+        }
+        let wrapped = |inner: &str| {
+            json!({
+                "toolName": "use_tool",
+                "tool_input": {"tool_name": "ads_api__list_ads"},
+                "tool_call": {"tool_input": {"tool_name": inner}},
+            })
+        };
+        assert_eq!(
+            mcp_tool_name(&wrapped("ads_api__list_ads"), "grok").unwrap(),
+            list
+        );
+        assert_eq!(
+            mcp_tool_name(&wrapped("ads_api__delete_ads"), "grok").unwrap(),
+            None
+        );
+        let codex = json!({"tool_name": "use_tool", "tool_input": {"tool_name": "ads_api__x"}});
+        assert_eq!(
+            mcp_tool_name(&codex, "codex").unwrap(),
+            Some("use_tool".into())
+        );
+    }
+
+    #[test]
+    fn a_grok_dispatched_batch_is_judged_by_the_actions_it_runs() {
+        let choices = BTreeMap::from([(
+            "grok:mcp__composio__:composio:all-accounts:SLACK_SEND_MESSAGE".to_owned(),
+            "block".to_owned(),
+        )]);
+        let batch = |slug: &str| {
+            json!({"toolName": "use_tool", "tool_input": {
+                "tool_name": "composio__COMPOSIO_MULTI_EXECUTE_TOOL",
+                "tool_input": {"tools": [{"tool_slug": slug, "arguments": {}}]},
+            }})
+        };
+        let tool = mcp_tool_name(&batch("SLACK_SEND_MESSAGE"), "grok")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            denied_provider_execution(&choices, "grok", &tool, &batch("SLACK_SEND_MESSAGE")),
+            Some("native_composio_denied_batch_member")
+        );
+        assert_eq!(
+            denied_provider_execution(&choices, "grok", &tool, &batch("SLACK_SEARCH_MESSAGES")),
             None
         );
     }
