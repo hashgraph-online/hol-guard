@@ -126,10 +126,15 @@ pub(super) fn note_received(guard_home: &Path, harness: &str, miss: Option<&str>
     }
     state.logged_at = Some(now);
     let current = state.counts.clone();
+    // The log write waits on the store; every hook counts through this lock,
+    // so it is released first rather than held across the write.
+    drop(state);
     if super::super::writes::record_diagnostic(guard_home, LOG_EVENT, Some(&current.detail()))
         .is_ok()
     {
-        state.logged = Some(current);
+        if let Ok(mut state) = self::state().lock() {
+            state.logged = Some(current);
+        }
     }
 }
 
