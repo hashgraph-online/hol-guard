@@ -327,8 +327,6 @@ class NativeHarnessAdapter(HarnessAdapter):
         fields: dict[str, object] = {"shim": json.dumps(shim.manifest)}
         if self._spec.get("hook") is not None:
             fields["hook_argv"] = self._hook_argv(context)
-        if self._spec.get("retired_hooks"):
-            fields["retired_commands"] = self._retired_hooks(context, fields["hook_argv"])
         answer = self._ask("prepare_install", context, **fields)
         files = planned_files(answer)
         return PreparedHarnessInstall((*shim.files, *files), json.loads(_text(answer, "manifest")))
@@ -337,16 +335,6 @@ class NativeHarnessAdapter(HarnessAdapter):
         """The hook command an install would write now, as the harness config spells it."""
 
         return _text(self._ask("hook_candidates", context, hook_argv=self._hook_argv(context)), "hook_command")
-
-    def _retired_hooks(self, context: HarnessContext, hook_argv: object) -> list[str]:
-        """Generated hook clients the config names whose client is gone; the CLI's validator decides."""
-        from ..cli.grok_hook_validation import is_missing_grok_hook_command
-
-        answer = self._ask("hook_candidates", context, hook_argv=hook_argv)
-        hook_command = _text(answer, "hook_command")
-        return [
-            str(command) for command in answer["commands"] if is_missing_grok_hook_command(str(command), hook_command)
-        ]
 
     def preflight_management(self, context: HarnessContext, *, operation: str) -> None:
         if operation == "install" and self._spec.get("install") == "delegated":
@@ -375,8 +363,6 @@ class NativeHarnessAdapter(HarnessAdapter):
         fields: dict[str, object] = {}
         if self._spec.get("hook") is not None:
             fields["hook_argv"] = self._hook_argv(context)
-        if self._spec.get("retired_hooks"):
-            fields["retired_commands"] = self._retired_hooks(context, fields["hook_argv"])
         if self._spec.get("frozen_fact"):
             from ..frozen_runtime_commands import is_frozen_guard_runtime
 

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_command
 from codex_plugin_scanner.guard.cli.native_install_checks import (
+    _grok_hook_command_is_guard,
     _grok_managed_config_is_active,
     _grok_protection_checks,
 )
@@ -38,38 +37,7 @@ def test_generated_grok_hook_is_recognized(tmp_path: Path, runtime: Path) -> Non
     """The host runtime, the bridge command and the Grok config are accepted."""
     command = _command(tmp_path)
     assert command[:2] == (str(runtime), "bounded-hook-bridge")
-    assert is_grok_hook_command(_shell_command(command)) is True
-
-
-@pytest.mark.parametrize(
-    "mutation", ["runtime", "bridge", "executable", "harness", "home", "extra", "shell", "malformed"]
-)
-def test_grok_hook_rejects_marker_only_or_modified_invocations(tmp_path: Path, runtime: Path, mutation: str) -> None:
-    """Marker strings cannot make an ineffective or redirected command report ready."""
-    del runtime
-    command = list(_command(tmp_path))
-    config = json.loads(command[-1])
-    if mutation == "runtime":
-        command[0] = str(tmp_path / "other-runtime")
-    elif mutation == "bridge":
-        command[1] = "claude-hook-bridge"
-    elif mutation == "executable":
-        config["python_executable"] = "/bin/echo"
-    elif mutation == "harness":
-        config["cli_args"][5] = "pi"
-    elif mutation == "home":
-        config["guard_home"] = str(tmp_path / "another")
-    elif mutation == "extra":
-        config["cli_args"] += ["--help"]
-    elif mutation == "shell":
-        command = ["sh", "-c", "echo hol-guard hook"]
-    elif mutation == "malformed":
-        return_value = is_grok_hook_command("'unterminated")
-        assert return_value is False
-        return
-    if mutation != "shell":
-        command[-1] = json.dumps(config)
-    assert is_grok_hook_command(_shell_command(tuple(command))) is False
+    assert _grok_hook_command_is_guard(_shell_command(command)) is True
 
 
 def test_frozen_generated_grok_hook_is_recognized(
@@ -83,7 +51,7 @@ def test_frozen_generated_grok_hook_is_recognized(
     assert json.loads(command[-1])["frozen_launcher"] is True
     # A frozen hook names the durable runtime copy under its Guard home.
     context = HarnessContext(tmp_path / "home", tmp_path / "workspace", tmp_path / "guard")
-    assert is_grok_hook_command(_shell_command(command), context) is True
+    assert _grok_hook_command_is_guard(_shell_command(command), context) is True
 
 
 def test_grok_hook_is_bound_to_its_owner(tmp_path: Path, runtime: Path) -> None:
@@ -91,45 +59,9 @@ def test_grok_hook_is_bound_to_its_owner(tmp_path: Path, runtime: Path) -> None:
     del runtime
     context = HarnessContext(tmp_path / "home", tmp_path / "workspace", tmp_path / "guard")
     command = grok_hook_command_parts(context)
-    assert is_grok_hook_command(_shell_command(command), context) is True
+    assert _grok_hook_command_is_guard(_shell_command(command), context) is True
     other = HarnessContext(tmp_path / "other", None, tmp_path / "other-guard")
-    assert is_grok_hook_command(_shell_command(command), other) is False
-
-
-@pytest.mark.skipif(os.name == "nt", reason="macOS signed proxy uses POSIX shell serialization")
-def test_desktop_grok_proxy_requires_all_signatures(
-    tmp_path: Path, runtime: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The known proxy script needs matching verified bundle, proxy, and Core teams."""
-    from .desktop_proxy_test_support import launch_script, sign_every_path
-
-    del runtime
-    base = _command(tmp_path)
-    config = json.loads(base[-1])
-    bundle = tmp_path / "Guard.app"
-    candidate = bundle / "Contents/MacOS/proxy"
-    core = candidate.with_name("core")
-    config.update(frozen_launcher=True, python_executable=str(core))
-    command = (
-        "/bin/sh",
-        "-c",
-        *launch_script(),
-        str(candidate),
-        "TEAM123",
-        str(bundle),
-        json.dumps(config),
-        str(core),
-        "1",
-    )
-    monkeypatch.setattr(sys, "platform", "darwin")
-    sign_every_path(monkeypatch, "TEAM123")
-    assert is_grok_hook_command(_shell_command(command)) is True
-    # The launch script reads the require flag as $6, so a launch without it never runs.
-    assert is_grok_hook_command(_shell_command(command[:-1])) is False
-    sign_every_path(monkeypatch, None)
-    assert is_grok_hook_command(_shell_command(command)) is False
-    altered = (*command[:2], "echo hol-guard hook", *command[3:])
-    assert is_grok_hook_command(_shell_command(altered)) is False
+    assert _grok_hook_command_is_guard(_shell_command(command), other) is False
 
 
 @pytest.mark.parametrize(

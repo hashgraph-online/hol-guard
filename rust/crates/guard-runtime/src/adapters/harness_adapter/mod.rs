@@ -97,6 +97,9 @@ mod desktop_core;
 mod durable_runtime;
 mod files;
 mod grok;
+mod grok_hook_command;
+mod grok_hook_files;
+mod grok_hook_op;
 mod grok_install;
 mod grok_update;
 mod guard_shim;
@@ -328,6 +331,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         return answer(mcp_servers::dispatch(op, fields));
     }
     let ctx = Ctx::parse(fields.get("context"))?;
+    if grok_hook_op::handles(op) {
+        return answer(grok_hook_op::dispatch(op, &ctx, fields));
+    }
     if op == "proof_verify" || op == "proof_bind" {
         return answer(proof::dispatch(op, &ctx, fields));
     }

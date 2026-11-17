@@ -35,6 +35,17 @@ pub(crate) fn answer(fields: &Fields) -> KindResult {
     Ok(json!({ "shell_command": line }))
 }
 
+/// The command line for the shell this runtime runs on, as `shell_command`
+/// answers it with no `windows` choice.
+pub(crate) fn platform_command_line(command: &[String]) -> String {
+    let parts: Vec<&str> = command.iter().map(String::as_str).collect();
+    if cfg!(windows) {
+        windows_command_line(&parts)
+    } else {
+        posix_command_line(&parts)
+    }
+}
+
 /// `shlex.join`: each argument quoted unless it is made only of characters
 /// the shell never treats specially.
 fn posix_command_line(command: &[&str]) -> String {

@@ -28,11 +28,8 @@ from .cursor_actions import (
 from .install_targets import _resolve_targets
 from .managed_install_payload import managed_install_payload as _managed_install_payload
 from .managed_install_record import _native_install_ask, _record_managed_install
-from .native_install_checks import _grok_event_has_command_hook as _grok_event_has_command_hook
 from .native_install_checks import _grok_hook_command_is_guard as _grok_hook_command_is_guard
 from .native_install_checks import _grok_managed_config_is_active as _grok_managed_config_is_active
-from .native_install_checks import _grok_pretool_is_catchall as _grok_pretool_is_catchall
-from .native_install_checks import _grok_prompt_hook_is_observe as _grok_prompt_hook_is_observe
 from .native_install_checks import _grok_protection_checks as _grok_protection_checks
 from .native_install_checks import _opencode_protection_checks as _opencode_protection_checks
 from .native_install_checks import grok_hooks_protection_ready as grok_hooks_protection_ready

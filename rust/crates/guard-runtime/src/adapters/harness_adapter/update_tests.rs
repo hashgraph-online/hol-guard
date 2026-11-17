@@ -144,7 +144,7 @@ fn grok_installed(home: &Home) -> (PathBuf, PathBuf) {
     let installed = home.ask(
         "grok",
         "prepare_install",
-        json!({"shim": shim(), "hook_argv": spec["hook_argv"], "retired_commands": []}),
+        json!({"shim": shim(), "hook_argv": spec["hook_argv"]}),
     );
     let mut pretool = None;
     let mut prompt = None;

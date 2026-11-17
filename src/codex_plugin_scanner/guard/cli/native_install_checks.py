@@ -26,77 +26,28 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
     return json.loads(str(answer["checks"]))
 
 
-def _grok_pretool_is_catchall(pretool_hook: Path, context: HarnessContext | None = None) -> bool:
-    """Check that Grok uses one managed catch-all pre-tool hook."""
-    if not pretool_hook.is_file():
-        return False
-    try:
-        payload = json.loads(pretool_hook.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    if not isinstance(payload, dict):
-        return False
-    hooks = payload.get("hooks")
-    if not isinstance(hooks, dict):
-        return False
-    entries = hooks.get("PreToolUse")
-    if not isinstance(entries, list) or len(entries) != 1 or not isinstance(entries[0], dict):
-        return False
-    matcher = entries[0].get("matcher")
-    if matcher not in {None, ""}:
-        return False
-    nested = entries[0].get("hooks")
-    if not isinstance(nested, list) or len(nested) != 1 or not isinstance(nested[0], dict):
-        return False
-    command = nested[0].get("command")
-    return (
-        nested[0].get("type") == "command"
-        and isinstance(command, str)
-        and _grok_hook_command_is_guard(command, context)
-    )
+#: A hook check may verify a signed Desktop proxy, which runs three `codesign` checks of up to 5s each.
+_GROK_HOOK_CHECK_TIMEOUT_SECONDS = 60.0
+
+
+def _grok_hook_check(op: str, context: HarnessContext | None, **fields: object) -> dict[str, Any]:
+    """Ask the native runtime a Grok hook question, owned by ``context`` or by no one."""
+    from ..config import resolve_guard_home
+    from ..harness.native_harness import ask
+
+    scope = context or HarnessContext(Path.home(), None, resolve_guard_home())
+    return ask(op, scope, owner=context is not None, timeout_seconds=_GROK_HOOK_CHECK_TIMEOUT_SECONDS, **fields)
 
 
 def _grok_hook_command_is_guard(command: str, context: HarnessContext | None = None) -> bool:
-    """Validate a serialized native hook invocation, not arbitrary Guard marker text."""
-    from .grok_hook_validation import is_grok_hook_command
-
-    return is_grok_hook_command(command, context)
+    """Whether a serialized hook invocation is Guard's native Grok hook, not arbitrary marker text."""
+    return _grok_hook_check("grok_hook_command", context, command=command)["valid"] is True
 
 
-def _grok_prompt_hook_is_observe(prompt_hook: Path, context: HarnessContext | None = None) -> bool:
-    """Verify the prompt gate and passive lifecycle callbacks have managed hooks."""
-    if not prompt_hook.is_file():
-        return False
-    try:
-        payload = json.loads(prompt_hook.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    if not isinstance(payload, dict):
-        return False
-    hooks = payload.get("hooks")
-    if not isinstance(hooks, dict):
-        return False
-    required = ("UserPromptSubmit", "SubagentStart", "SessionStart")
-    return all(_grok_event_has_command_hook(hooks.get(event_name), context) for event_name in required)
-
-
-def _grok_event_has_command_hook(entries: object, context: HarnessContext | None = None) -> bool:
-    """Find a valid Guard command hook in a native event configuration."""
-    if not isinstance(entries, list) or not entries:
-        return False
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        nested = entry.get("hooks")
-        if not isinstance(nested, list):
-            continue
-        for hook_entry in nested:
-            if not isinstance(hook_entry, dict) or hook_entry.get("type") != "command":
-                continue
-            command = hook_entry.get("command")
-            if isinstance(command, str) and _grok_hook_command_is_guard(command, context):
-                return True
-    return False
+def _grok_hook_files(context: HarnessContext, pretool_hook: Path, prompt_hook: Path) -> tuple[bool, bool]:
+    """Whether the pre-tool file is the managed catch-all and the prompt file has the prompt and lifecycle hooks."""
+    answer = _grok_hook_check("grok_hook_files", context, pretool=str(pretool_hook), prompt=str(prompt_hook))
+    return answer["pretool"] is True, answer["prompt"] is True
 
 
 def grok_protection(context: HarnessContext) -> dict[str, Any]:
@@ -114,9 +65,7 @@ def grok_runtime_hooks_verified(context: HarnessContext) -> bool:
     intercept every tool.
     """
     protection = grok_protection(context)
-    return _grok_pretool_is_catchall(Path(protection["pretool_hook_path"]), context) and _grok_prompt_hook_is_observe(
-        Path(protection["prompt_hook_path"]), context
-    )
+    return all(_grok_hook_files(context, Path(protection["pretool_hook_path"]), Path(protection["prompt_hook_path"])))
 
 
 def _grok_managed_config_is_active(managed_text: str, context: HarnessContext) -> bool:
@@ -143,14 +92,8 @@ def _grok_managed_config_is_active(managed_text: str, context: HarnessContext) -
     hooks = payload.get("hooks")
     if not isinstance(hooks, dict):
         return False
-    for event in ("PreToolUse", "UserPromptSubmit", "SessionStart", "SubagentStart"):
-        entries = hooks.get(event)
-        if not isinstance(entries, list):
-            return False
-        catchall = [entry for entry in entries if isinstance(entry, dict) and not entry.get("matcher")]
-        if not _grok_event_has_command_hook(catchall, context):
-            return False
-    return True
+    events = [hooks.get(event) for event in ("PreToolUse", "UserPromptSubmit", "SessionStart", "SubagentStart")]
+    return _grok_hook_check("grok_hook_events", context, events=events, catchall=True)["valid"] is True
 
 
 def grok_hooks_protection_ready(context: HarnessContext) -> bool:
@@ -195,13 +138,14 @@ def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
     pretool_hook = Path(protection["pretool_hook_path"])
     prompt_hook = Path(protection["prompt_hook_path"])
     warnings: list[str] = []
+    pretool_catchall, prompt_observe = _grok_hook_files(context, pretool_hook, prompt_hook)
     if not pretool_hook.is_file() or not prompt_hook.is_file():
         warnings.append("Grok Guard hook files are missing from ~/.grok/hooks/. Re-run `hol-guard apps connect grok`.")
-    elif not _grok_pretool_is_catchall(pretool_hook, context):
+    elif not pretool_catchall:
         warnings.append(
             "Grok Guard pre-tool hook still uses a stale per-tool matcher list. Re-run `hol-guard apps repair grok`."
         )
-    elif not _grok_prompt_hook_is_observe(prompt_hook, context):
+    elif not prompt_observe:
         warnings.append("The Grok prompt gate or lifecycle hooks are missing. Re-run `hol-guard apps repair grok`.")
     try:
         managed_text = managed_config.read_text(encoding="utf-8") if managed_config.is_file() else ""
@@ -229,7 +173,7 @@ def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
     return {
         "pretool_hook_installed": pretool_hook.is_file(),
         "prompt_hook_installed": prompt_hook.is_file(),
-        "pretool_catchall_installed": _grok_pretool_is_catchall(pretool_hook, context),
+        "pretool_catchall_installed": pretool_catchall,
         "managed_config_installed": _grok_managed_config_is_active(managed_text, context),
         "launch_shim_installed": shim_path.is_file(),
         "warnings": warnings,

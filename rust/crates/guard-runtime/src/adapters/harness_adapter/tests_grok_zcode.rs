@@ -46,7 +46,7 @@ fn grok_install_writes_both_hooks_and_uninstall_removes_them() {
     let answer = home.ask(
         "grok",
         "prepare_install",
-        json!({"shim": shim(), "hook_argv": ["/py", "hook"], "retired_commands": []}),
+        json!({"shim": shim(), "hook_argv": ["/py", "hook"]}),
     );
     let files = answer["files"].as_array().unwrap();
     assert_eq!(files.len(), 8);
@@ -86,14 +86,14 @@ fn grok_install_writes_both_hooks_and_uninstall_removes_them() {
 #[test]
 fn grok_repeated_install_does_not_back_up_its_own_hooks() {
     let home = Home::new();
-    let args = json!({"shim": shim(), "hook_argv": ["/py", "hook"], "retired_commands": []});
+    let args = json!({"shim": shim(), "hook_argv": ["/py", "hook"]});
     apply(
         home.ask("grok", "prepare_install", args)["files"]
             .as_array()
             .unwrap(),
     );
     // A later install with a moved interpreter renders a different hook.
-    let moved = json!({"shim": shim(), "hook_argv": ["/py2", "hook"], "retired_commands": []});
+    let moved = json!({"shim": shim(), "hook_argv": ["/py2", "hook"]});
     let again = home.ask("grok", "prepare_install", moved);
     let files = again["files"].as_array().unwrap();
     assert!(
