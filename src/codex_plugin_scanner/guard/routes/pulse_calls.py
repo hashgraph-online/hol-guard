@@ -97,10 +97,13 @@ def _run(guard_home: Path, action: str, payload: dict[str, object]) -> dict[str,
             raise ApprovalGateError("approval_gate_pulse_invalid_request", "A Pulse request id is required.")
         return _reply({"status": poll_pulse_approval(guard_home, request_id)})
     if action == "confirm":
+        cooldown = payload.get("cooldown_seconds") or 0
+        if not isinstance(cooldown, (int, float, str)):
+            raise TypeError("cooldown_seconds")
         confirmed = confirm_pulse_enrollment(
             guard_home,
             request_id=_text(payload, "request_id") or "",
-            cooldown_seconds=int(payload.get("cooldown_seconds") or 0),  # type: ignore[call-overload]
+            cooldown_seconds=int(cooldown),
         )
         return _confirmed_reply(guard_home, confirmed)
     if action == "disable":

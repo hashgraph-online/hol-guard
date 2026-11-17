@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-CcNVkqUm.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-BQ6EUpFF.js","assets/chunks/home-protection-module-D_Yhjn0E.js","assets/chunks/supply-chain-protection-stats-CPD_X4uy.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-opR5EnGM.js","assets/chunks/harness-version-label-CUjIRfNl.js","assets/chunks/settings-save-proof-modal-D5T3JAnf.js","assets/chunks/connect-guard-cloud-button-ClD8c_aU.js","assets/chunks/guard-repair-control-BRIdS8_6.js","assets/chunks/settings-workspace-BwqIbMpW.js","assets/chunks/confirm-dialog-CUSyIm1u.js","assets/chunks/extensions-workspace-DAAmp_gK.js","assets/chunks/app-detail-workspace-DzaiFTPz.js","assets/chunks/harness-action-errors-7RhsXctt.js","assets/chunks/supply-chain-hub-workspace-C53RwWkC.js","assets/chunks/policy-workspace-page-Bbj6-Y22.js","assets/chunks/about-workspace-D-wgjjDL.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-kRl-7zJ5.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-ZIZ8SzzP.js","assets/chunks/home-protection-module-CxLLv76D.js","assets/chunks/supply-chain-protection-stats-XiD1X6oR.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-BtuWwBDd.js","assets/chunks/harness-version-label-B2Ob_2J1.js","assets/chunks/settings-save-proof-modal-DdKoGp14.js","assets/chunks/connect-guard-cloud-button-04d3wLni.js","assets/chunks/guard-repair-control-sTMvCuK1.js","assets/chunks/settings-workspace-CB6pqYHE.js","assets/chunks/confirm-dialog-D0lvG39B.js","assets/chunks/extensions-workspace-D3HZ-0j4.js","assets/chunks/app-detail-workspace-l62psSHl.js","assets/chunks/harness-action-errors-BMFGvfEG.js","assets/chunks/supply-chain-hub-workspace-DtPx5OaO.js","assets/chunks/policy-workspace-page-DEdPWtqE.js","assets/chunks/about-workspace-MVcBq84r.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -17925,6 +17925,179 @@ function guardOffPrompt(settings, harness, next, displayName) {
   }
   return `Guard will only record in ${displayName} until you turn it back on.`;
 }
+const PULSE_APPROVAL_EVENT = "hol-guard:pulse-approval";
+const PULSE_POLL_PATH = "/v1/approval-gate/pulse/poll";
+const PULSE_DEADLINE_MS = 96e4;
+const PULSE_POLL_INTERVAL_MS = 1e4;
+const PULSE_POLL_TIMEOUT_MS = 2e4;
+function announce(detail) {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
+  window.dispatchEvent(new CustomEvent(PULSE_APPROVAL_EVENT, { detail }));
+}
+function jsonObjectBody(init) {
+  if ((init?.method ?? "GET").toUpperCase() !== "POST" || typeof init?.body !== "string") return null;
+  try {
+    const parsed = JSON.parse(init.body);
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+async function peekJson(response) {
+  try {
+    const parsed = await response.clone().json();
+    return parsed !== null && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function failure(code, message, status = 403) {
+  return new Response(JSON.stringify({ error: code, message }), {
+    status,
+    headers: { "Content-Type": "application/json" }
+  });
+}
+const OUTCOME_ERRORS = {
+  rejected: ["approval_gate_pulse_rejected", "The action was rejected in the YID app."],
+  expired: ["approval_gate_pulse_expired", "The Pulse request expired before it was approved."],
+  error: ["approval_gate_pulse_unavailable", "Yanez Pulse is unreachable. The action stays blocked."],
+  cancelled: ["approval_gate_pulse_cancelled", "The Pulse approval was cancelled."]
+};
+function pause(ms, signal) {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
+}
+async function checkOnce(send, requestId, signal, timeoutMs) {
+  const check = new AbortController();
+  let timer;
+  let stop = () => check.abort();
+  const cutOff = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      check.abort();
+      resolve("retry");
+    }, timeoutMs);
+    stop = () => {
+      check.abort();
+      resolve("cancelled");
+    };
+  });
+  signal?.addEventListener("abort", stop, { once: true });
+  try {
+    return await Promise.race([checkResponse(send, requestId, check.signal, signal), cutOff]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", stop);
+  }
+}
+async function checkResponse(send, requestId, checkSignal, signal) {
+  try {
+    const response = await send(PULSE_POLL_PATH, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ request_id: requestId }),
+      signal: checkSignal
+    });
+    const payload = await peekJson(response);
+    if (response.ok) {
+      const reported = payload?.status;
+      return reported === "pending" || reported === "approved" || reported === "rejected" || reported === "expired" ? reported : "error";
+    }
+    if (response.status === 503) return "retry";
+    return payload?.error === "approval_gate_pulse_expired" ? "expired" : "error";
+  } catch {
+    return signal?.aborted ? "cancelled" : "retry";
+  }
+}
+async function waitForPulseApproval(send, detail, signal, timing = {}) {
+  const { deadlineMs = PULSE_DEADLINE_MS, intervalMs = PULSE_POLL_INTERVAL_MS, pollTimeoutMs = PULSE_POLL_TIMEOUT_MS } = timing;
+  announce({ ...detail, status: "pending" });
+  const deadline = Date.now() + deadlineMs;
+  let unreachable = false;
+  for (let remaining = deadlineMs; remaining > 0; remaining = deadline - Date.now()) {
+    await pause(Math.min(intervalMs, remaining), signal);
+    const checkMs = Math.max(1, Math.min(pollTimeoutMs, deadline - Date.now()));
+    const status2 = signal?.aborted ? "cancelled" : await checkOnce(send, detail.requestId, signal, checkMs);
+    unreachable = status2 === "retry";
+    if (status2 !== "pending" && status2 !== "retry") {
+      announce({ ...detail, status: status2 });
+      return status2;
+    }
+  }
+  const status = unreachable ? "error" : "expired";
+  announce({ ...detail, status });
+  return status;
+}
+async function sendWithPulseApproval(send, input, init, timing) {
+  let response = await send(input, init);
+  let body = jsonObjectBody(init);
+  if (body === null || typeof input !== "string" || input.startsWith(PULSE_POLL_PATH)) return response;
+  if (response.status === 403 && body.approval_gate_pulse !== true && body.approval_pulse_request_id === void 0) {
+    const refused = await peekJson(response);
+    if (refused?.error !== "approval_gate_pulse_required") return response;
+    body = { ...body, approval_gate_pulse: true };
+    response = await send(input, { ...init, body: JSON.stringify(body) });
+  }
+  if (response.status !== 202) return response;
+  const pending = await peekJson(response);
+  const requestId = pending?.pulse_request_id;
+  if (pending?.error !== "approval_gate_pulse_pending" || typeof requestId !== "string" || requestId === "") {
+    return response;
+  }
+  timing?.onPending?.();
+  const outcome = await waitForPulseApproval(
+    send,
+    {
+      requestId,
+      matchCode: typeof pending.pulse_match_code === "string" ? pending.pulse_match_code : null,
+      decideBy: typeof pending.pulse_decide_by === "string" ? pending.pulse_decide_by : null
+    },
+    init?.signal,
+    timing
+  );
+  if (outcome !== "approved") {
+    const [code, message] = OUTCOME_ERRORS[outcome];
+    return failure(code, message, outcome === "error" ? 503 : 403);
+  }
+  const { approval_gate_pulse: _defer, approval_password: _password, approval_totp_code: _code, ...rest } = body;
+  timing?.onApproved?.();
+  return send(input, { ...init, body: JSON.stringify({ ...rest, approval_pulse_request_id: requestId }) });
+}
+const PULSE_FACE_SCAN_OPTIONS = [
+  { value: "medium", label: "Standard face scan (recommended)" },
+  { value: "high", label: "Strict face scan" }
+];
+function pulseEnrollmentBody(agentKey, minTier) {
+  return { pulse_agent_key: agentKey, min_tier: minTier };
+}
+function pulseShowCommandBody(show) {
+  return { settings: { approval_gate: { pulse_show_command: show } } };
+}
+function pulseSetupRefusalMessage(code, minTier) {
+  if (code === "approval_gate_pulse_no_signing_key") {
+    return minTier === "high" ? "None of your devices in the YID app supports a strict face scan. Choose Standard face scan, or add a device that supports it in the YID app, then try again." : "Your Yanez identity has no device that can approve yet. Finish setting up the YID app on your phone, then try again.";
+  }
+  if (code === "approval_gate_pulse_invalid_tier") {
+    return "Choose Standard or Strict face scan, then try again.";
+  }
+  return null;
+}
+function nextPulseToasts(current, detail) {
+  return current.some((entry) => entry.requestId === detail.requestId) ? current.map((entry) => entry.requestId === detail.requestId ? detail : entry) : [...current, detail];
+}
+function dropFinishedPulseToast(current, requestId) {
+  return current.filter((entry) => entry.requestId !== requestId || entry.status === "pending");
+}
 function isRecord$5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -17996,19 +18169,34 @@ class GuardOperationTimeoutError extends Error {
 function withLocalProtectionDeadline(operation, timeoutMs, message) {
   const controller = new AbortController();
   let timer;
+  let expire = () => void 0;
+  const pause2 = () => {
+    if (timer !== void 0) clearTimeout(timer);
+    timer = void 0;
+  };
+  const restart = () => {
+    pause2();
+    timer = setTimeout(expire, timeoutMs);
+  };
   const deadline = new Promise((_, reject) => {
-    timer = setTimeout(() => {
+    expire = () => {
       reject(new GuardOperationTimeoutError(message));
       controller.abort();
-    }, timeoutMs);
+    };
   });
-  return Promise.race([Promise.resolve().then(() => operation(controller.signal)), deadline]).finally(() => {
-    if (timer !== void 0) clearTimeout(timer);
-  });
+  restart();
+  return Promise.race([
+    Promise.resolve().then(() => operation(controller.signal, { pause: pause2, restart })),
+    deadline
+  ]).finally(pause2);
 }
 function fetchLocalProtectionJson(input, init, timeoutMs, message) {
-  return withLocalProtectionDeadline(async (signal) => {
-    const response = await fetchGuardApi(input, { ...init, signal });
+  return withLocalProtectionDeadline(async (signal, deadline) => {
+    const response = await fetchWithGuardAuth(
+      input,
+      { ...init, signal },
+      { onPending: deadline.pause, onApproved: deadline.restart }
+    );
     const payload = await response.json().catch(() => null);
     return { response, payload };
   }, timeoutMs, message);
@@ -18673,7 +18861,10 @@ function withGuardAuthForToken(init, guardToken) {
     headers
   };
 }
-async function fetchWithGuardAuth(input, init) {
+async function fetchWithGuardAuth(input, init, pulse) {
+  return sendWithPulseApproval(fetchWithGuardAuthOnce, input, init, pulse);
+}
+async function fetchWithGuardAuthOnce(input, init) {
   const requestInput = guardApiInput(input);
   const guardToken = readGuardToken();
   const response = await daemonFetch(requestInput, withGuardAuthForToken(init, guardToken));
@@ -20353,7 +20544,8 @@ async function bulkAllowReadOnce(input) {
       request_ids: input.requestIds,
       ...input.approval_password !== void 0 ? { approval_password: input.approval_password } : {},
       ...input.approval_totp_code !== void 0 ? { approval_totp_code: input.approval_totp_code } : {},
-      approval_gate_use_cooldown: input.approval_gate_use_cooldown ?? false
+      approval_gate_use_cooldown: input.approval_gate_use_cooldown ?? false,
+      ...input.approval_gate_pulse === true ? { approval_gate_pulse: true } : {}
     })
   });
   return {
@@ -21273,6 +21465,63 @@ async function resolveMcpPolicyRequest(input) {
     message: typeof record2["message"] === "string" ? record2["message"] : void 0
   };
 }
+async function authorizeApprovalGatePulseSetup(payload) {
+  return readJson$1("/v1/approval-gate/pulse/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, step: "authorize" })
+  });
+}
+async function beginApprovalGatePulseEnrollment(payload) {
+  const response = await fetchWithGuardAuth("/v1/approval-gate/pulse/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(pulseEnrollmentBody(payload.pulse_agent_key, payload.min_tier))
+  });
+  if (!response.ok) {
+    let code = null;
+    try {
+      const refused = await response.clone().json();
+      code = isRecord$4(refused) ? refused["error"] : null;
+    } catch {
+      code = null;
+    }
+    throw new Error(
+      pulseSetupRefusalMessage(code, payload.min_tier) ?? await requestErrorMessage(response, `Request failed with ${response.status}`)
+    );
+  }
+  return await response.json();
+}
+async function confirmApprovalGatePulseEnrollment(payload) {
+  return readJson$1("/v1/approval-gate/pulse/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+async function disableApprovalGatePulse(signal) {
+  return readJson$1("/v1/approval-gate/pulse/disable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+    signal
+  });
+}
+async function setApprovalGatePulseShowCommand(show, signal) {
+  return readJson$1("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
+    body: JSON.stringify(pulseShowCommandBody(show)),
+    signal
+  });
+}
+async function recoverApprovalGatePulse(payload) {
+  return readJson$1("/v1/approval-gate/pulse/recover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
 const GITHUB_ISSUE_BASE_URL = "https://github.com/hashgraph-online/hol-guard/issues/new";
 const DEFAULT_ISSUE_BODY = [
   "## What happened?",
@@ -22140,12 +22389,21 @@ function defaultUseApprovalCooldown(gate) {
 function isBulkApproveGateReady(gate) {
   return gate?.enabled === true && gate?.configured === true;
 }
+function bulkApproveUsesPulse(gate) {
+  return isBulkApproveGateReady(gate) && gate?.pulse_enabled === true;
+}
+function bulkPulsePrompt(selectedGroupCount) {
+  return selectedGroupCount === 1 ? "Approve this request in your YID app." : `Approve these ${selectedGroupCount} requests in your YID app.`;
+}
 function bulkApproveCooldownOpen(gate) {
-  return isBulkApproveGateReady(gate) && gate?.totp_enabled !== true && gate?.strict_all_decisions !== true && (gate?.cooldown_seconds ?? 0) > 0 && gate?.cooldown_active === true;
+  return isBulkApproveGateReady(gate) && gate?.totp_enabled !== true && gate?.pulse_enabled !== true && gate?.strict_all_decisions !== true && (gate?.cooldown_seconds ?? 0) > 0 && gate?.cooldown_active === true;
 }
 function validateBulkApproveCredentials(gate, credentials) {
   if (!isBulkApproveGateReady(gate)) {
     return "Set up an approval gate in Settings before bulk approval.";
+  }
+  if (bulkApproveUsesPulse(gate)) {
+    return null;
   }
   if (gate?.totp_enabled === true) {
     return credentials.totpCode.trim() ? null : "Enter your authenticator code to continue.";
@@ -22158,6 +22416,9 @@ function validateBulkApproveCredentials(gate, credentials) {
 function buildBulkGateCredentials(gate, password, totpCode) {
   if (!isBulkApproveGateReady(gate)) {
     return void 0;
+  }
+  if (bulkApproveUsesPulse(gate)) {
+    return { approval_gate_pulse: true };
   }
   if (gate?.totp_enabled === true) {
     return {
@@ -22177,13 +22438,22 @@ function bulkApprovalProof(credentials) {
   if (credentials?.approval_password?.trim() || credentials?.approval_totp_code?.trim()) {
     return "secret";
   }
+  if (credentials?.approval_gate_pulse === true) {
+    return "pulse";
+  }
   return credentials?.approval_gate_use_cooldown === true ? "cooldown" : null;
 }
 function approvalProofRecentlySatisfied(gate) {
   return gate?.totp_enabled === true && gate.totp_recent_satisfied === true;
 }
 function approvalProofRequiresPassword(gate) {
-  return gate?.totp_enabled !== true;
+  return gate?.totp_enabled !== true && !approvalProofUsesPulse(gate);
+}
+function approvalProofUsesPulse(gate) {
+  return gate?.enabled === true && gate.pulse_enabled === true;
+}
+function PulseApprovalProofNotice() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", role: "note", children: "You will approve this in the YID app with a face scan. Check that the app shows the same match code as this page." });
 }
 function approvalGateNeedsSetup(gate) {
   return gate !== null && gate !== void 0 && gate.enabled !== true;
@@ -22229,6 +22499,9 @@ function isApprovalProofSubmitDisabled(gate, credentials, busy, requireFreshTotp
   if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
     return false;
   }
+  if (approvalProofUsesPulse(gate)) {
+    return false;
+  }
   if (approvalProofRequiresPassword(gate)) {
     return credentials.approvalPassword.trim() === "";
   }
@@ -22242,6 +22515,9 @@ function buildApprovalProofCredentials(gate, credentials, requireFreshTotp = fal
     return {};
   }
   if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
+    return {};
+  }
+  if (approvalProofUsesPulse(gate)) {
     return {};
   }
   if (approvalProofRequiresPassword(gate)) {
@@ -22267,6 +22543,9 @@ function ApprovalProofFieldInputs(props) {
   }
   if (!props.requireFreshTotp && approvalProofRecentlySatisfied(props.approvalGate)) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Recently confirmed with your authenticator. A new code is not needed yet." });
+  }
+  if (approvalProofUsesPulse(props.approvalGate)) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(PulseApprovalProofNotice, {});
   }
   const needsPassword = approvalProofRequiresPassword(props.approvalGate);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: passwordFieldId, children: [
@@ -31931,7 +32210,8 @@ function QueueBulkDrawer(props) {
           ] }),
           !executionApprovalAvailable ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-attention", role: "status", children: "Run once is unavailable for part of this selection. Open those requests individually before approving the remaining actions." }) : gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
             bulkApproveCooldownOpen(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", children: "Your approval window is still open, so no password is needed." }),
-            props.approvalGate?.totp_enabled !== true && !bulkApproveCooldownOpen(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            bulkApproveUsesPulse(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", children: bulkPulsePrompt(props.selectedGroups.length) }),
+            props.approvalGate?.totp_enabled !== true && !bulkApproveUsesPulse(props.approvalGate) && !bulkApproveCooldownOpen(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
@@ -31950,7 +32230,7 @@ function QueueBulkDrawer(props) {
                 }
               )
             ] }),
-            props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            props.approvalGate?.totp_enabled === true && !bulkApproveUsesPulse(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-totp", className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" })
@@ -32609,8 +32889,12 @@ function useQueueBulkApprove(props) {
     }
   };
 }
-function approvalProofModalTitle(locked, recentlySatisfied, needsPassword) {
+function approvalProofCooldownOptionShown(gate) {
+  return gate.cooldown_seconds > 0 && !gate.cooldown_active && gate.totp_enabled !== true && !approvalProofUsesPulse(gate);
+}
+function approvalProofModalTitle(locked, recentlySatisfied, needsPassword, usesPulse = false) {
   if (locked) return "Approval gate temporarily locked";
+  if (usesPulse) return "Approve in the YID app";
   if (recentlySatisfied) return "Recently confirmed";
   if (needsPassword) return "Approval password required";
   return "Authenticator code required";
@@ -32648,7 +32932,7 @@ function ApprovalPasswordModal(props) {
   if (gateLocked) {
     modalDescription = `Approval gate is temporarily locked. Try again in ${lockRemainingSeconds} seconds.`;
   }
-  const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
+  const showCooldownOption = approvalProofCooldownOptionShown(props.gate);
   const handleBackdropClick = reactExports.useCallback(
     (e) => {
       if (e.target === e.currentTarget && props.busy !== true) props.onCancel();
@@ -32679,7 +32963,7 @@ function ApprovalPasswordModal(props) {
               {
                 id: "approval-password-modal-title",
                 className: "text-lg font-semibold tracking-tight text-brand-dark",
-                children: approvalProofModalTitle(gateLocked, recentlySatisfied, needsPassword)
+                children: approvalProofModalTitle(gateLocked, recentlySatisfied, needsPassword, approvalProofUsesPulse(props.gate))
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: modalDescription })
@@ -39436,7 +39720,7 @@ function WatchProtectionBanner(props) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-BdAnclkg.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-BJaQ7PQg.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -40123,36 +40407,84 @@ function RuntimeGate(props) {
     }
   );
 }
+const STATUS_COPY = {
+  pending: "Approve this in the YID app with your face scan.",
+  approved: "Approved in the YID app. Verifying the receipt…",
+  rejected: "Rejected in the YID app. The action stays blocked.",
+  expired: "The Pulse request expired. The action stays blocked.",
+  error: "Yanez Pulse is unreachable. The action stays blocked.",
+  cancelled: "Pulse approval cancelled."
+};
+function PulseApprovalOverlay() {
+  const [toasts, setToasts] = reactExports.useState([]);
+  reactExports.useEffect(() => {
+    const timers = /* @__PURE__ */ new Set();
+    const onEvent = (event) => {
+      const detail = event.detail;
+      setToasts((current) => nextPulseToasts(current, detail));
+      if (detail.status !== "pending") {
+        const timer = setTimeout(() => {
+          timers.delete(timer);
+          setToasts((current) => dropFinishedPulseToast(current, detail.requestId));
+        }, 4e3);
+        timers.add(timer);
+      }
+    };
+    window.addEventListener(PULSE_APPROVAL_EVENT, onEvent);
+    return () => {
+      window.removeEventListener(PULSE_APPROVAL_EVENT, onEvent);
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, []);
+  if (toasts.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed bottom-4 right-4 z-50 w-full max-w-sm space-y-2", children: toasts.map((detail) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      role: "status",
+      "aria-live": "polite",
+      className: "rounded-xl border border-brand-blue/20 bg-white p-4 shadow-xl",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-brand-blue", children: "Yanez Pulse" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: STATUS_COPY[detail.status] }),
+        detail.status === "pending" && detail.matchCode ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-slate-600", children: [
+          "Match code ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "font-mono text-base tracking-widest text-brand-dark", children: detail.matchCode })
+        ] }) : null
+      ]
+    },
+    detail.requestId
+  )) });
+}
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-CcNVkqUm.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-BQ6EUpFF.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-opR5EnGM.js"), true ? __vite__mapDeps([10,11,12,13,9,14]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-BwqIbMpW.js"), true ? __vite__mapDeps([15,14,9,16,12,13,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-kRl-7zJ5.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-ZIZ8SzzP.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BtuWwBDd.js"), true ? __vite__mapDeps([10,11,12,13,9,14]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CB6pqYHE.js"), true ? __vite__mapDeps([15,14,9,16,12,13,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-DAAmp_gK.js"), true ? __vite__mapDeps([17,16]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-D3HZ-0j4.js"), true ? __vite__mapDeps([17,16]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-DzaiFTPz.js"), true ? __vite__mapDeps([18,19,11,12]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-CtJlE48x.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-l62psSHl.js"), true ? __vite__mapDeps([18,19,11,12]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-DavIenbm.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-C53RwWkC.js").then((n) => n.d), true ? __vite__mapDeps([20,19]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-DtPx5OaO.js").then((n) => n.d), true ? __vite__mapDeps([20,19]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-Bbj6-Y22.js"), true ? __vite__mapDeps([21,13]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-DEdPWtqE.js"), true ? __vite__mapDeps([21,13]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-D-wgjjDL.js"), true ? __vite__mapDeps([22,7,8,23]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-MVcBq84r.js"), true ? __vite__mapDeps([22,7,8,23]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-pJ4W0YHf.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-WkR2kpPf.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-BHs-MTQv.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-BgmJmHZx.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -40793,7 +41125,8 @@ function App() {
         requestIds: ids,
         approval_password: gateCredentials.approval_password,
         approval_totp_code: gateCredentials.approval_totp_code,
-        approval_gate_use_cooldown: gateCredentials.approval_gate_use_cooldown
+        approval_gate_use_cooldown: gateCredentials.approval_gate_use_cooldown,
+        approval_gate_pulse: gateCredentials.approval_gate_pulse
       });
       await refreshStateAfterAction();
       if (result.failed.length > 0) {
@@ -40943,6 +41276,7 @@ function App() {
     navigate
   ]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PulseApprovalOverlay, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "a",
       {
@@ -41120,7 +41454,7 @@ export {
   HiMiniShieldExclamation as Z,
   __vitePreload as _,
   fetchContextAssistance as a,
-  harnessPostureRows as a$,
+  POSTURE_OUTCOME_COLUMNS as a$,
   HiMiniClipboardDocument as a0,
   openRecoveryView as a1,
   useReceiptAnalytics as a2,
@@ -41131,33 +41465,33 @@ export {
   unavailableProtectionHealth as a7,
   buildHomeRuntimeErrorCopy as a8,
   RuntimeErrorState as a9,
-  hasRepairableProtectionGap as aA,
-  remainingProtectionRepairParts as aB,
-  protectionGapSignature as aC,
-  repairOutcomeIsStalled as aD,
-  ProtectionRepairFlowError as aE,
-  nextProtectionRepairOutcome as aF,
-  waitForAuthorizeUrl as aG,
-  startOrRecoverCloudConnect as aH,
-  safeCloudConnectUrl as aI,
-  openPackageFirewallAuthorizeFallback as aJ,
-  waitForCloudConnection as aK,
-  activeFailedHarnesses as aL,
-  resetRepairOutcomeTracker as aM,
-  HiMiniWrenchScrewdriver as aN,
-  harnessRowTone as aO,
-  appModesNote as aP,
-  harnessRowStatus as aQ,
-  HiMiniEye as aR,
-  HiMiniXCircle as aS,
-  GuardHero as aT,
-  ProofStrip as aU,
-  HiMiniClipboardDocumentCheck as aV,
-  HiMiniClipboard as aW,
-  fetchResolvedApprovalGate as aX,
-  ApprovalProofModal as aY,
-  PROTECTION_POSTURE_COPY as aZ,
-  POSTURE_OUTCOME_COLUMNS as a_,
+  HiMiniExclamationCircle as aA,
+  hasRepairableProtectionGap as aB,
+  remainingProtectionRepairParts as aC,
+  protectionGapSignature as aD,
+  repairOutcomeIsStalled as aE,
+  ProtectionRepairFlowError as aF,
+  nextProtectionRepairOutcome as aG,
+  waitForAuthorizeUrl as aH,
+  startOrRecoverCloudConnect as aI,
+  safeCloudConnectUrl as aJ,
+  openPackageFirewallAuthorizeFallback as aK,
+  waitForCloudConnection as aL,
+  activeFailedHarnesses as aM,
+  resetRepairOutcomeTracker as aN,
+  HiMiniWrenchScrewdriver as aO,
+  harnessRowTone as aP,
+  appModesNote as aQ,
+  harnessRowStatus as aR,
+  HiMiniEye as aS,
+  HiMiniXCircle as aT,
+  GuardHero as aU,
+  ProofStrip as aV,
+  HiMiniClipboardDocumentCheck as aW,
+  HiMiniClipboard as aX,
+  fetchResolvedApprovalGate as aY,
+  ApprovalProofModal as aZ,
+  PROTECTION_POSTURE_COPY as a_,
   watchBannerModel as aa,
   WatchProtectionBanner as ab,
   EvidenceInsightsShareModal as ac,
@@ -41167,323 +41501,332 @@ export {
   guardActionDisposition as ag,
   approvalLeftActionStopped as ah,
   guardActionActivityCopy as ai,
-  HiMiniSparkles as aj,
-  HiMiniXMark as ak,
-  EmptyState as al,
-  resolveCloudIntelCopy as am,
-  HiMiniCloud as an,
-  HiMiniQuestionMarkCircle as ao,
-  useFocusTrap as ap,
-  approvalProofRequiresPassword as aq,
-  HiMiniExclamationTriangle as ar,
-  HiMiniBolt as as,
-  Badge as at,
-  HiMiniMinusCircle as au,
-  buildDaemonErrorCopy as av,
-  isUnsupportedPlatformCheck as aw,
-  RECHECK_UNAVAILABLE_SIGNATURE as ax,
-  protectionReasonText as ay,
-  HiMiniExclamationCircle as az,
+  approvalProofUsesPulse as aj,
+  approvalProofRequiresPassword as ak,
+  HiMiniSparkles as al,
+  HiMiniXMark as am,
+  EmptyState as an,
+  resolveCloudIntelCopy as ao,
+  HiMiniCloud as ap,
+  HiMiniQuestionMarkCircle as aq,
+  useFocusTrap as ar,
+  HiMiniExclamationTriangle as as,
+  HiMiniBolt as at,
+  Badge as au,
+  HiMiniMinusCircle as av,
+  buildDaemonErrorCopy as aw,
+  isUnsupportedPlatformCheck as ax,
+  RECHECK_UNAVAILABLE_SIGNATURE as ay,
+  protectionReasonText as az,
   HiMiniCommandLine as b,
-  forgetTurnOn as b$,
-  overrideRows as b0,
-  harnessPostureSummary as b1,
-  joinNames as b2,
-  sortHarnessRows as b3,
-  globalPosture as b4,
-  selectHarnessPosture as b5,
-  restartHarnessWatch as b6,
-  harnessWatchPrompt as b7,
-  harnessPostureOptions as b8,
-  canRestartHarnessWatch as b9,
-  HiMiniArrowUturnLeft as bA,
-  HiMiniCodeBracketSquare as bB,
-  HiMiniHome as bC,
-  HiMiniFolderPlus as bD,
-  HiMiniClock as bE,
-  HiMiniFolderOpen as bF,
-  manageContextWorkspace as bG,
-  compileWorkspaceContext as bH,
-  HiMiniChatBubbleLeftEllipsis as bI,
-  HiMiniDocumentMagnifyingGlass as bJ,
-  HiMiniPower as bK,
-  HiMiniEyeSlash as bL,
-  HiMiniCpuChip as bM,
-  HiMiniAcademicCap as bN,
-  HiMiniArrowLeft as bO,
-  isCigarProducerVersion as bP,
-  isCigarCoreLabel as bQ,
-  subscribeDashboardLocation as bR,
-  HiMiniChatBubbleLeftRight as bS,
-  HiMiniArrowUpCircle as bT,
-  parseContextAssistanceStatus as bU,
-  isCigarBuildIdentity as bV,
-  fetchContextInstallations as bW,
-  HiMiniCloudArrowDown as bX,
-  turnOnJob as bY,
-  shouldResumeTurnOn as bZ,
-  turnOnRequestedAt as b_,
-  getDefaultExportFromCjs as ba,
-  React as bb,
-  HiMiniBellAlert as bc,
-  HiMiniAdjustmentsHorizontal as bd,
-  TabBar as be,
-  SelectMenu as bf,
-  fetchCloudReviewSettings as bg,
-  ApprovalProofFieldInputs as bh,
-  isApprovalProofSubmitDisabled as bi,
-  buildApprovalProofCredentials as bj,
-  changeCloudReviewSettings as bk,
-  isRecord$5 as bl,
-  HiMiniArrowTopRightOnSquare as bm,
-  shellHref as bn,
-  HiMiniPauseCircle as bo,
-  listContextAgentSessions as bp,
-  HiMiniLink as bq,
-  revokeContextAgentSession as br,
-  grantContextWorkspace as bs,
-  authorizeContextAgentSession as bt,
-  ContextAssistanceApiError as bu,
-  ask as bv,
-  parseContextScope as bw,
-  validContextBrokerRevision as bx,
-  isGuardDemoMode as by,
-  commitDashboardLocation as bz,
+  subscribeDashboardLocation as b$,
+  harnessPostureRows as b0,
+  overrideRows as b1,
+  harnessPostureSummary as b2,
+  joinNames as b3,
+  sortHarnessRows as b4,
+  globalPosture as b5,
+  selectHarnessPosture as b6,
+  restartHarnessWatch as b7,
+  harnessWatchPrompt as b8,
+  harnessPostureOptions as b9,
+  HiMiniLink as bA,
+  revokeContextAgentSession as bB,
+  grantContextWorkspace as bC,
+  authorizeContextAgentSession as bD,
+  ContextAssistanceApiError as bE,
+  ask as bF,
+  parseContextScope as bG,
+  validContextBrokerRevision as bH,
+  isGuardDemoMode as bI,
+  commitDashboardLocation as bJ,
+  HiMiniArrowUturnLeft as bK,
+  HiMiniCodeBracketSquare as bL,
+  HiMiniHome as bM,
+  HiMiniFolderPlus as bN,
+  HiMiniClock as bO,
+  HiMiniFolderOpen as bP,
+  manageContextWorkspace as bQ,
+  compileWorkspaceContext as bR,
+  HiMiniChatBubbleLeftEllipsis as bS,
+  HiMiniDocumentMagnifyingGlass as bT,
+  HiMiniPower as bU,
+  HiMiniEyeSlash as bV,
+  HiMiniCpuChip as bW,
+  HiMiniAcademicCap as bX,
+  HiMiniArrowLeft as bY,
+  isCigarProducerVersion as bZ,
+  isCigarCoreLabel as b_,
+  canRestartHarnessWatch as ba,
+  getDefaultExportFromCjs as bb,
+  React as bc,
+  authorizeApprovalGatePulseSetup as bd,
+  confirmApprovalGatePulseEnrollment as be,
+  waitForPulseApproval as bf,
+  beginApprovalGatePulseEnrollment as bg,
+  GuardModalLayer as bh,
+  PULSE_FACE_SCAN_OPTIONS as bi,
+  SelectMenu as bj,
+  disableApprovalGatePulse as bk,
+  setApprovalGatePulseShowCommand as bl,
+  recoverApprovalGatePulse as bm,
+  HiMiniBellAlert as bn,
+  HiMiniAdjustmentsHorizontal as bo,
+  TabBar as bp,
+  fetchCloudReviewSettings as bq,
+  ApprovalProofFieldInputs as br,
+  isApprovalProofSubmitDisabled as bs,
+  buildApprovalProofCredentials as bt,
+  changeCloudReviewSettings as bu,
+  isRecord$5 as bv,
+  HiMiniArrowTopRightOnSquare as bw,
+  shellHref as bx,
+  HiMiniPauseCircle as by,
+  listContextAgentSessions as bz,
   HiMiniFolder as c,
-  hasSuggestedRules as c$,
-  rememberTurnOn as c0,
-  forgetTurnOnClick as c1,
-  rememberTurnOnJob as c2,
-  HiMiniArrowDownTray as c3,
-  downloadBlob as c4,
-  savedEvidenceCopy as c5,
-  guardAwareHref as c6,
-  fetchContextData as c7,
-  forgetContextHistory as c8,
-  forgetSavedEvidence as c9,
-  fetchExtensionCatalog as cA,
-  ExtensionControlApiError as cB,
-  normalizeExtensionCatalogSummary as cC,
-  normalizeExtensionPermission as cD,
-  ExtensionControlProtocolError as cE,
-  normalizeExtensionCatalogItem as cF,
-  guardApiCacheScope as cG,
-  fetchExtensionCatalogV2Api as cH,
-  localPermissionDraftState as cI,
-  setLocalPermissionDraftState as cJ,
-  extensionPolicyAuthorityUnchanged as cK,
-  newExtensionPolicyDraftIdentity as cL,
-  extensionPolicyDraftIsDirty as cM,
-  setLocalPermissionDraftStates as cN,
-  buildExtensionPolicyDraftMutation as cO,
-  fetchEffectiveExtensionControls as cP,
-  previewExtensionMutation as cQ,
-  isCurrentExtensionPolicyDraft as cR,
-  applyExtensionMutation as cS,
-  fetchExtensionControlHistory as cT,
-  managedPermissionState as cU,
-  controlProvenance as cV,
-  treatmentLabel as cW,
-  useResolvedApprovalGate as cX,
-  groupPermissionsByFamily as cY,
-  HiMiniInformationCircle as cZ,
-  LocalCliApiError as c_,
-  resolveProtectionLevelCopy as ca,
-  fetchSettings as cb,
-  fetchRuntimeSnapshot as cc,
-  clearHarnessWatchOverrides as cd,
-  withHarnessPosturePatch as ce,
-  clearPolicy as cf,
-  clearReviewQueue as cg,
-  revokeApprovalGateCooldown as ch,
-  disableApprovalGateTotp as ci,
-  importSettings as cj,
-  resetSettings as ck,
-  enrollApprovalGateTotp as cl,
-  verifyApprovalGateTotp as cm,
-  clearEvidence as cn,
-  exportDiagnostics as co,
-  repairApprovalCenter as cp,
-  exportSettings as cq,
-  setupDesktopNotifications as cr,
-  settingsWatchBannerModel as cs,
-  WorkspacePageHeader as ct,
-  navigateFromAnchor as cu,
-  humanizeList as cv,
-  isProtectionPosture as cw,
-  deriveProtectionPosture as cx,
-  normalizeHarnessPostures as cy,
-  approvalGateCooldownLabel as cz,
+  isCurrentExtensionPolicyDraft as c$,
+  HiMiniChatBubbleLeftRight as c0,
+  HiMiniArrowUpCircle as c1,
+  parseContextAssistanceStatus as c2,
+  isCigarBuildIdentity as c3,
+  fetchContextInstallations as c4,
+  HiMiniCloudArrowDown as c5,
+  turnOnJob as c6,
+  shouldResumeTurnOn as c7,
+  turnOnRequestedAt as c8,
+  forgetTurnOn as c9,
+  exportSettings as cA,
+  setupDesktopNotifications as cB,
+  settingsWatchBannerModel as cC,
+  WorkspacePageHeader as cD,
+  navigateFromAnchor as cE,
+  humanizeList as cF,
+  isProtectionPosture as cG,
+  deriveProtectionPosture as cH,
+  normalizeHarnessPostures as cI,
+  approvalGateCooldownLabel as cJ,
+  fetchExtensionCatalog as cK,
+  ExtensionControlApiError as cL,
+  normalizeExtensionCatalogSummary as cM,
+  normalizeExtensionPermission as cN,
+  ExtensionControlProtocolError as cO,
+  normalizeExtensionCatalogItem as cP,
+  guardApiCacheScope as cQ,
+  fetchExtensionCatalogV2Api as cR,
+  localPermissionDraftState as cS,
+  setLocalPermissionDraftState as cT,
+  extensionPolicyAuthorityUnchanged as cU,
+  newExtensionPolicyDraftIdentity as cV,
+  extensionPolicyDraftIsDirty as cW,
+  setLocalPermissionDraftStates as cX,
+  buildExtensionPolicyDraftMutation as cY,
+  fetchEffectiveExtensionControls as cZ,
+  previewExtensionMutation as c_,
+  rememberTurnOn as ca,
+  forgetTurnOnClick as cb,
+  rememberTurnOnJob as cc,
+  HiMiniArrowDownTray as cd,
+  downloadBlob as ce,
+  savedEvidenceCopy as cf,
+  guardAwareHref as cg,
+  fetchContextData as ch,
+  forgetContextHistory as ci,
+  forgetSavedEvidence as cj,
+  resolveProtectionLevelCopy as ck,
+  fetchSettings as cl,
+  fetchRuntimeSnapshot as cm,
+  clearHarnessWatchOverrides as cn,
+  withHarnessPosturePatch as co,
+  clearPolicy as cp,
+  clearReviewQueue as cq,
+  revokeApprovalGateCooldown as cr,
+  disableApprovalGateTotp as cs,
+  importSettings as ct,
+  resetSettings as cu,
+  enrollApprovalGateTotp as cv,
+  verifyApprovalGateTotp as cw,
+  clearEvidence as cx,
+  exportDiagnostics as cy,
+  repairApprovalCenter as cz,
   HiMiniCircleStack as d,
-  CODEX_HOST_FALLBACK as d$,
-  approvalProofRecentlySatisfied as d0,
-  StyledSelect as d1,
-  bulkCommandState as d2,
-  fetchLocalCliApi as d3,
-  ExtensionBrandMark as d4,
-  fetchMcpProviderActions as d5,
-  connectorSetupReady as d6,
-  shortIdentity as d7,
-  customExtensionDisplayName as d8,
-  previewLocalCliMutation as d9,
-  refreshMcpInventory as dA,
-  connectorGroupOutcome as dB,
-  allowedEarlierVersion as dC,
-  startGuardCloudConnect as dD,
-  extensionEffectiveState as dE,
-  permissionEffectiveState as dF,
-  fetchExtensionControlApi as dG,
-  permissionForRule as dH,
-  refreshEffectiveExtensionControls as dI,
-  fetchExtensionDiscoveryApi as dJ,
-  startCancelableDiscoveryJob as dK,
-  waitForMcpDiscoveryJob as dL,
-  isLocalCliId as dM,
-  localCliHref as dN,
-  fetchPluginUpdatesApi as dO,
-  filterCodexHostApps as dP,
-  connectorWorkspaceItems as dQ,
-  customExtensionNeedsReview as dR,
-  profileSetupCommand as dS,
-  customExtensionBadge as dT,
-  extensionDisplayName as dU,
-  catalogRowSecondLine as dV,
-  extensionStateLabel as dW,
-  HiMiniGlobeAlt as dX,
-  HiMiniFunnel as dY,
-  discoveryFailureMessage as dZ,
-  refreshCodexHostInventory as d_,
-  applyLocalCliMutation as da,
-  LOCAL_CLI_CAPABILITIES as db,
-  loadLocalCliCommands as dc,
-  DiscoveryFailure as dd,
-  readJson as de,
-  enrollablePackageScriptCommands as df,
-  seenSuggestionMeta as dg,
-  looksLikeProjectRelocatePaste as dh,
-  packageScriptFilterNeedle as di,
-  initialAddCommand as dj,
-  suggestedPackageScriptExtensions as dk,
-  filterExtensionSuggestions as dl,
-  suggestedHarnessExtensions as dm,
-  suggestedSeenExtensions as dn,
-  keepsPackageScriptCatalog as dp,
-  prefillSuggestedStates as dq,
-  recognizeLocalCli as dr,
-  preferredPackageScriptExtension as ds,
-  looksLikePackageScriptPaste as dt,
-  enrollmentCommandStates as du,
-  isBulkApproveGateReady as dv,
-  fetchLocalCliList as dw,
-  normalizeLocalCliList as dx,
-  unreviewedToolChangeCount as dy,
-  connectorSetupMatch as dz,
+  customExtensionNeedsReview as d$,
+  applyExtensionMutation as d0,
+  fetchExtensionControlHistory as d1,
+  managedPermissionState as d2,
+  controlProvenance as d3,
+  treatmentLabel as d4,
+  useResolvedApprovalGate as d5,
+  groupPermissionsByFamily as d6,
+  HiMiniInformationCircle as d7,
+  LocalCliApiError as d8,
+  hasSuggestedRules as d9,
+  prefillSuggestedStates as dA,
+  recognizeLocalCli as dB,
+  preferredPackageScriptExtension as dC,
+  looksLikePackageScriptPaste as dD,
+  enrollmentCommandStates as dE,
+  isBulkApproveGateReady as dF,
+  fetchLocalCliList as dG,
+  normalizeLocalCliList as dH,
+  unreviewedToolChangeCount as dI,
+  connectorSetupMatch as dJ,
+  refreshMcpInventory as dK,
+  connectorGroupOutcome as dL,
+  allowedEarlierVersion as dM,
+  startGuardCloudConnect as dN,
+  extensionEffectiveState as dO,
+  permissionEffectiveState as dP,
+  fetchExtensionControlApi as dQ,
+  permissionForRule as dR,
+  refreshEffectiveExtensionControls as dS,
+  fetchExtensionDiscoveryApi as dT,
+  startCancelableDiscoveryJob as dU,
+  waitForMcpDiscoveryJob as dV,
+  isLocalCliId as dW,
+  localCliHref as dX,
+  fetchPluginUpdatesApi as dY,
+  filterCodexHostApps as dZ,
+  connectorWorkspaceItems as d_,
+  approvalProofRecentlySatisfied as da,
+  StyledSelect as db,
+  bulkCommandState as dc,
+  fetchLocalCliApi as dd,
+  ExtensionBrandMark as de,
+  fetchMcpProviderActions as df,
+  connectorSetupReady as dg,
+  shortIdentity as dh,
+  customExtensionDisplayName as di,
+  previewLocalCliMutation as dj,
+  applyLocalCliMutation as dk,
+  LOCAL_CLI_CAPABILITIES as dl,
+  loadLocalCliCommands as dm,
+  DiscoveryFailure as dn,
+  readJson as dp,
+  enrollablePackageScriptCommands as dq,
+  seenSuggestionMeta as dr,
+  looksLikeProjectRelocatePaste as ds,
+  packageScriptFilterNeedle as dt,
+  initialAddCommand as du,
+  suggestedPackageScriptExtensions as dv,
+  filterExtensionSuggestions as dw,
+  suggestedHarnessExtensions as dx,
+  suggestedSeenExtensions as dy,
+  keepsPackageScriptCatalog as dz,
   HiMiniSquares2X2 as e,
-  startPackageFirewallConnect as e$,
-  CONFIGURED_CONNECTIONS_FALLBACK as e0,
-  loadCurrentDashboardBuild as e1,
-  canonicalExtensionId as e2,
-  extensionDetailHref as e3,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as e4,
-  addCustomExtensionPrefillHref as e5,
-  acknowledgeDegradedExtensionControlAuthority as e6,
-  recoverExtensionControlAuthority as e7,
-  connectorSetupLinkFromSearch as e8,
-  readExtensionDetailUrlState as e9,
-  appModesUpdate as eA,
-  appModesStatusMessage as eB,
-  needsConfirm as eC,
-  cigarReady as eD,
-  cigarSupported as eE,
-  guardOffPrompt as eF,
-  cigarUnavailableReason as eG,
-  HiMiniCheckBadge as eH,
-  HiMiniKey as eI,
-  isSupplyChainAuditIncomplete as eJ,
-  isSupplyChainAuditEvidence as eK,
-  readString$1 as eL,
-  IconActionButton as eM,
-  HiMiniBeaker as eN,
-  HiMiniBugAnt as eO,
-  ActivationSummary as eP,
-  ActionResultPanel as eQ,
-  fetchSupplyChainBundle as eR,
-  closeOnEscape as eS,
-  ConnectFlowCard as eT,
-  ApprovalProofInline as eU,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eV,
-  fetchPackageFirewallStatus as eW,
-  runPackageAudit as eX,
-  resolveSupplyChainAuditFailure as eY,
-  runPackageSync as eZ,
-  GuardOperationTimeoutError as e_,
-  parseProtectionRoute as ea,
-  addCustomExtensionHref as eb,
-  GuardModalLayer as ec,
-  runHarnessAction as ed,
-  GuardHarnessActionError as ee,
-  HiMiniRocketLaunch as ef,
-  HiMiniTrash as eg,
-  fetchGuardApi as eh,
-  formatHarnessCommand as ei,
-  appModes as ej,
-  fetchApprovalPage as ek,
-  fetchPolicy as el,
-  appSetupTarget as em,
-  guardActionPresentation as en,
-  DEFAULT_FILTER_STATE as eo,
-  filterEvidence as ep,
-  sortEvidence as eq,
-  computeMetrics as er,
-  CommandActivityWorkspace as es,
-  EvidenceFilterBar as et,
-  EvidenceInsightStrip as eu,
-  EvidenceActionList as ev,
-  EvidenceActionDetail as ew,
-  policyIdentityKey as ex,
-  clearLabelForScope as ey,
-  HiMiniChartBar as ez,
+  closeOnEscape as e$,
+  profileSetupCommand as e0,
+  customExtensionBadge as e1,
+  extensionDisplayName as e2,
+  catalogRowSecondLine as e3,
+  extensionStateLabel as e4,
+  HiMiniGlobeAlt as e5,
+  HiMiniFunnel as e6,
+  discoveryFailureMessage as e7,
+  refreshCodexHostInventory as e8,
+  CODEX_HOST_FALLBACK as e9,
+  computeMetrics as eA,
+  CommandActivityWorkspace as eB,
+  EvidenceFilterBar as eC,
+  EvidenceInsightStrip as eD,
+  EvidenceActionList as eE,
+  EvidenceActionDetail as eF,
+  policyIdentityKey as eG,
+  clearLabelForScope as eH,
+  HiMiniChartBar as eI,
+  appModesUpdate as eJ,
+  appModesStatusMessage as eK,
+  needsConfirm as eL,
+  cigarReady as eM,
+  cigarSupported as eN,
+  guardOffPrompt as eO,
+  cigarUnavailableReason as eP,
+  HiMiniCheckBadge as eQ,
+  HiMiniKey as eR,
+  isSupplyChainAuditIncomplete as eS,
+  isSupplyChainAuditEvidence as eT,
+  readString$1 as eU,
+  IconActionButton as eV,
+  HiMiniBeaker as eW,
+  HiMiniBugAnt as eX,
+  ActivationSummary as eY,
+  ActionResultPanel as eZ,
+  fetchSupplyChainBundle as e_,
+  CONFIGURED_CONNECTIONS_FALLBACK as ea,
+  loadCurrentDashboardBuild as eb,
+  canonicalExtensionId as ec,
+  extensionDetailHref as ed,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as ee,
+  addCustomExtensionPrefillHref as ef,
+  acknowledgeDegradedExtensionControlAuthority as eg,
+  recoverExtensionControlAuthority as eh,
+  connectorSetupLinkFromSearch as ei,
+  readExtensionDetailUrlState as ej,
+  parseProtectionRoute as ek,
+  addCustomExtensionHref as el,
+  runHarnessAction as em,
+  GuardHarnessActionError as en,
+  HiMiniRocketLaunch as eo,
+  HiMiniTrash as ep,
+  fetchGuardApi as eq,
+  formatHarnessCommand as er,
+  appModes as es,
+  fetchApprovalPage as et,
+  fetchPolicy as eu,
+  appSetupTarget as ev,
+  guardActionPresentation as ew,
+  DEFAULT_FILTER_STATE as ex,
+  filterEvidence as ey,
+  sortEvidence as ez,
   fetchWithGuardAuth as f,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f0,
-  repairSupplyChainProtection as f1,
-  runPackageFirewallAction as f2,
-  parseInterceptProofSnapshot as f3,
-  activatePackageFirewallRuntime as f4,
-  EntitlementNotice as f5,
-  chooseSupplyChainAuditFolder as f6,
-  fetchReceipts as f7,
-  lazyWorkspace as f8,
-  scopeLabel as f9,
-  runAuditRemediation as fA,
-  isBlockedGuardAction as fB,
-  isSupplyChainScannerEvidence as fC,
-  HiMiniSignal as fD,
-  HiMiniCloudArrowUp as fa,
-  HiMiniCodeBracket as fb,
-  HiMiniUsers as fc,
-  HiMiniIdentification as fd,
-  policyActionLabel as fe,
-  createCloudExceptionRequest as ff,
-  HiMiniPuzzlePiece as fg,
-  fetchCloudExceptions as fh,
-  fetchCloudExceptionRequests as fi,
-  PaginationControls as fj,
-  PolicyStatField as fk,
-  HiMiniInbox as fl,
-  HiMiniQueueList as fm,
-  Surface as fn,
-  HiMiniEllipsisHorizontal as fo,
-  HiMiniMinus as fp,
-  HiMiniWrench as fq,
-  HiMiniArrowLongRight as fr,
-  fetchReleaseFeedApi as fs,
-  fetchMcpPolicyRequest as ft,
-  resolveMcpPolicyRequest as fu,
-  HiMiniDocumentPlus as fv,
-  HiMiniArrowUpRight as fw,
-  HiMiniArrowUp as fx,
-  HiMiniChevronLeft as fy,
-  HiMiniArrowDown as fz,
+  ConnectFlowCard as f0,
+  ApprovalProofInline as f1,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as f2,
+  fetchPackageFirewallStatus as f3,
+  runPackageAudit as f4,
+  resolveSupplyChainAuditFailure as f5,
+  runPackageSync as f6,
+  GuardOperationTimeoutError as f7,
+  startPackageFirewallConnect as f8,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f9,
+  HiMiniArrowLongRight as fA,
+  fetchReleaseFeedApi as fB,
+  fetchMcpPolicyRequest as fC,
+  resolveMcpPolicyRequest as fD,
+  HiMiniDocumentPlus as fE,
+  HiMiniArrowUpRight as fF,
+  HiMiniArrowUp as fG,
+  HiMiniChevronLeft as fH,
+  HiMiniArrowDown as fI,
+  runAuditRemediation as fJ,
+  isBlockedGuardAction as fK,
+  isSupplyChainScannerEvidence as fL,
+  HiMiniSignal as fM,
+  repairSupplyChainProtection as fa,
+  runPackageFirewallAction as fb,
+  parseInterceptProofSnapshot as fc,
+  activatePackageFirewallRuntime as fd,
+  EntitlementNotice as fe,
+  chooseSupplyChainAuditFolder as ff,
+  fetchReceipts as fg,
+  lazyWorkspace as fh,
+  scopeLabel as fi,
+  HiMiniCloudArrowUp as fj,
+  HiMiniCodeBracket as fk,
+  HiMiniUsers as fl,
+  HiMiniIdentification as fm,
+  policyActionLabel as fn,
+  createCloudExceptionRequest as fo,
+  HiMiniPuzzlePiece as fp,
+  fetchCloudExceptions as fq,
+  fetchCloudExceptionRequests as fr,
+  PaginationControls as fs,
+  PolicyStatField as ft,
+  HiMiniInbox as fu,
+  HiMiniQueueList as fv,
+  Surface as fw,
+  HiMiniEllipsisHorizontal as fx,
+  HiMiniMinus as fy,
+  HiMiniWrench as fz,
   HiMiniComputerDesktop as g,
   HiMiniMagnifyingGlass as h,
   HiMiniListBullet as i,

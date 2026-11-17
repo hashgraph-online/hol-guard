@@ -317,7 +317,7 @@ def test_enrollment_sends_the_chosen_floor_and_leaves_the_default_to_the_residen
 def test_the_cli_offers_only_medium_and_high() -> None:
     import argparse
 
-    from codex_plugin_scanner.guard.cli.approval_pulse_commands import add_approval_pulse_parser
+    from codex_plugin_scanner.guard.cli.approval_pulse_parser import add_approval_pulse_parser
 
     root = argparse.ArgumentParser()
     settings = root.add_subparsers(dest="settings_command")
@@ -435,7 +435,7 @@ def test_the_approval_password_is_sent_as_typed(monkeypatch: pytest.MonkeyPatch)
 def test_json_works_before_or_after_the_subcommand(argv: list[str]) -> None:
     import argparse
 
-    from codex_plugin_scanner.guard.cli.approval_pulse_commands import add_approval_pulse_parser
+    from codex_plugin_scanner.guard.cli.approval_pulse_parser import add_approval_pulse_parser
 
     root = argparse.ArgumentParser()
     settings = root.add_subparsers(dest="settings_command")
@@ -574,7 +574,7 @@ def test_every_pulse_command_help_says_where_to_get_the_app_and_read_more(
 ) -> None:
     import argparse
 
-    from codex_plugin_scanner.guard.cli.approval_pulse_commands import add_approval_pulse_parser
+    from codex_plugin_scanner.guard.cli.approval_pulse_parser import add_approval_pulse_parser
 
     root = argparse.ArgumentParser()
     settings = root.add_subparsers(dest="settings_command")
@@ -695,7 +695,7 @@ def test_show_command_needs_pulse(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 def test_show_command_takes_only_on_or_off() -> None:
     import argparse
 
-    from codex_plugin_scanner.guard.cli.approval_pulse_commands import add_approval_pulse_parser
+    from codex_plugin_scanner.guard.cli.approval_pulse_parser import add_approval_pulse_parser
 
     root = argparse.ArgumentParser()
     settings = root.add_subparsers(dest="settings_command")

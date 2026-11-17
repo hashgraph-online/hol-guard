@@ -9,7 +9,7 @@ import argparse
 
 from ...argparse_utils import FriendlyArgumentParser
 from ..config_constants import VALID_GUARD_ACTIONS, VALID_SECURITY_LEVELS
-from .approval_pulse_commands import add_approval_pulse_parser
+from .approval_pulse_parser import add_approval_pulse_parser
 from .commands_parser_constants import _guard_risk_action_key
 from .commands_parser_helpers import *
 
