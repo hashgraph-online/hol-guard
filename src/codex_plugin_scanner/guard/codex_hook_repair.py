@@ -149,21 +149,20 @@ class CodexHookRepairAuthorization:
         ).resolve(strict=False)
         if expected_home != self.authority_home:
             raise TransitionError("approval_authority_mismatch")
-        claim = publication_record("repair_claimed", self.plan.guard_home, grant_id=self.grant.grant_id)
-        if (
-            self.plan.subject() != self.approved_subject
-            or not isinstance(claim, dict)
-            or (claim.get("subject"), claim.get("owner_operation_id"), claim.get("owner_pid"), claim.get("deadline"))
-            != (
-                self.approved_subject,
-                self.owner_operation_id,
-                self.owner_pid,
-                self.deadline_monotonic,
-            )
-        ):
+        if self.plan.subject() != self.approved_subject:
             raise TransitionError("authority_repair_authorization_invalid")
-        if publication is not None and claim.get("publication") != publication.publication_monotonic:
-            raise TransitionError("authority_repair_authorization_invalid")
+        # The resident holds the claim: it must be this grant's, for this
+        # subject, owner and deadline, and for the one publication named here.
+        publication_record(
+            "repair_claim_check",
+            self.plan.guard_home,
+            grant_id=self.grant.grant_id,
+            subject=self.approved_subject,
+            owner_operation_id=self.owner_operation_id,
+            owner_pid=self.owner_pid,
+            deadline=self.deadline_monotonic,
+            publication=None if publication is None else publication.publication_monotonic,
+        )
         validate_grant(
             self.authority_home,
             self.grant,

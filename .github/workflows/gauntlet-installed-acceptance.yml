@@ -184,6 +184,7 @@ jobs:
             --runtime "$RUNNER_TEMP/wheel-venv/bin/hol-guard" \
             --harness claude-code codex muse omp zcode \
             --repeat "$REPEAT" \
+            --uninstall-restore \
             $REPORT_ONLY \
             --output "$RUNNER_TEMP/evidence/wheel"
 
@@ -223,6 +224,7 @@ jobs:
             --runtime "$ONEDIR/hol-guard" \
             --harness claude-code codex muse omp zcode \
             --repeat "$REPEAT" \
+            --uninstall-restore \
             --require-frozen \
             $REPORT_ONLY \
             --output "$RUNNER_TEMP/evidence/frozen"
@@ -352,6 +354,7 @@ jobs:
             --runtime "$bin/hol-guard$EXE" \
             --harness claude-code codex muse omp zcode \
             --repeat "$REPEAT" \
+            --uninstall-restore \
             $REPORT_ONLY \
             --output "$RUNNER_TEMP/evidence/wheel-${{ matrix.os }}"
 

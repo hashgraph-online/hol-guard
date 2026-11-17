@@ -91,3 +91,7 @@ pub(crate) fn unsigned(mut manifest: Map<String, Value>) -> Map<String, Value> {
     manifest.remove("authentication");
     manifest
 }
+
+#[cfg(test)]
+#[path = "codex_hook_manifest_auth_tests.rs"]
+mod tests;

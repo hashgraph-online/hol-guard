@@ -19,6 +19,8 @@
 //!   "detection", "warnings"}` answers `{"setup_status": "active" | "broken" |
 //!   "partial" | "not_found"}`.
 //! - `{"op": "uses_guard", "artifacts"}` answers `{"uses_guard": bool}`.
+//! - `{"op": "readiness", "setup_status", "runtime_probe"}` answers the
+//!   doctor's runtime readiness; `harness_diagnostics_readiness` has it.
 //! - `{"op": "launcher_artifact", ...}` answers the artifact for the Guard
 //!   launcher shim a harness installed; `harness_launcher_artifact` has the
 //!   request and answer.
@@ -107,6 +109,10 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "launcher_artifact" => crate::harness_launcher_artifact::answer(fields),
         "diagnostics" => crate::harness_diagnostics_report::answer(fields),
         "shell_command" => crate::harness_shell_command::answer(fields),
+        "readiness" => {
+            expect_keys(fields, &["op", "setup_status", "runtime_probe"])?;
+            crate::harness_diagnostics_readiness::answer(fields)
+        }
         _ => Err(ERR_INVALID),
     }
 }

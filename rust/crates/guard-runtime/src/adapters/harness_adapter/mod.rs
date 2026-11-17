@@ -49,6 +49,8 @@ mod codex_detect_legacy;
 mod codex_failure;
 mod codex_files;
 mod codex_hook_state;
+mod codex_incident;
+mod codex_incident_read;
 mod codex_install;
 mod codex_install_plan;
 mod codex_install_request;
@@ -138,6 +140,7 @@ mod update_bounded;
 mod update_support;
 mod which;
 mod zcode;
+mod zcode_desktop_keys;
 
 pub(crate) use codex_repair_verify::{verify_captured, Verdict};
 

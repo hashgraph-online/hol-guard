@@ -21,17 +21,11 @@ from pathlib import Path
 from typing import Literal
 
 from .codex_hook_file_integrity import CodexHookIntegrityError, canonical_path, check_hook_validation_deadline
-from .local_authority_integrity import (
-    LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM,
-    sign_local_authority_payload,
-)
-from .native_owned import record_codex_mutation
+from .local_authority_integrity import LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM
 
 HOOK_MANIFEST_SCHEMA_VERSION = 2
 HOOK_MANIFEST_MAC_ALGORITHM = LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM
-_HOOK_MANIFEST_INTEGRITY_PURPOSE = "codex-managed-hook-manifest"
 _PRIVATE_FILE_MODE = 0o600
-_MAX_HOOK_MANIFEST_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,11 +60,6 @@ def hook_authority_receipt_path(guard_home: Path, config_path: Path) -> Path:
 
 def canonical_manifest_bytes(payload: Mapping[str, object]) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-
-
-def load_or_create_hook_secret(guard_home: Path) -> HookSecretMaterial:
-    with _ordinary_hook_writer(guard_home, hook_secret_path(guard_home), actor="codex.authority-key"):
-        return _hook_key("key_ensure", guard_home)
 
 
 @contextmanager
@@ -131,26 +120,6 @@ def _hook_key(op: _KeyOp, guard_home: Path) -> HookSecretMaterial:
     return HookSecretMaterial(installation_id, key_id, fingerprint, guard_home)
 
 
-def sign_hook_manifest(unsigned_manifest: dict[str, object], secret: HookSecretMaterial) -> dict[str, object]:
-    if "authentication" in unsigned_manifest:
-        raise ValueError("Unsigned Codex hook manifests must not contain authentication metadata.")
-    generated_at = unsigned_manifest.get("generated_at")
-    if not isinstance(generated_at, str) or not generated_at:
-        raise ValueError("Unsigned Codex hook manifests require a generation time.")
-    payload = dict(unsigned_manifest)
-    payload["authentication"] = {
-        "algorithm": HOOK_MANIFEST_MAC_ALGORITHM,
-        **sign_local_authority_payload(
-            payload,
-            key_home=_home_text(secret.guard_home),
-            key_id=secret.key_id,
-            purpose=_HOOK_MANIFEST_INTEGRITY_PURPOSE,
-            signed_at=generated_at,
-        ),
-    }
-    return payload
-
-
 def load_authenticated_hook_manifest(
     guard_home: Path,
     config_path: Path,
@@ -173,10 +142,8 @@ def authenticate_hook_manifest_text(
     *,
     _secret: HookSecretMaterial | None = None,
 ) -> dict[str, object]:
-    """Authenticate bounded captured text; this does not validate its file or package."""
+    """Authenticate captured text; the runtime refuses more than 1 MiB. This does not validate its file or package."""
 
-    if len(raw.encode("utf-8")) > _MAX_HOOK_MANIFEST_BYTES:
-        raise CodexHookIntegrityError("codex_hook_manifest_invalid", "Codex hook manifest exceeds its read limit.")
     if _secret is None:
         return _authenticated(guard_home, text=raw)
     return _authenticated(_secret.guard_home, text=raw, key_id=_secret.key_id, installation_id=_secret.installation_id)
@@ -229,45 +196,6 @@ def manifest_refusal(reason: str) -> CodexHookIntegrityError:
         reason, "The private Codex hook authentication key is not usable; repair the Codex installation."
     )
     return CodexHookIntegrityError(reason, message)
-
-
-def write_hook_manifest(guard_home: Path, config_path: Path, manifest: dict[str, object]) -> Path:
-    with _ordinary_hook_writer(guard_home, config_path, actor="codex.authority-manifest"):
-        return _write_hook_manifest_owned(guard_home, config_path, manifest)
-
-
-def _write_hook_manifest_owned(guard_home: Path, config_path: Path, manifest: dict[str, object]) -> Path:
-    path = hook_manifest_path(guard_home, config_path)
-    atomic_write_bytes(path, canonical_manifest_bytes(manifest) + b"\n", mode=_PRIVATE_FILE_MODE, private=True)
-    return path
-
-
-def remove_hook_manifest(guard_home: Path, config_path: Path) -> None:
-    with _ordinary_hook_writer(guard_home, config_path, actor="codex.remove-manifest"):
-        _remove_hook_manifest_owned(guard_home, config_path)
-
-
-def _remove_hook_manifest_owned(guard_home: Path, config_path: Path) -> None:
-    # Explicit uninstall revokes the retained authority before removing the
-    # live manifest. A crash can leave protection without a repair receipt,
-    # but cannot leave a receipt behind after successful removal.
-    _native("remove_manifest", guard_home, config=_path_text(config_path))
-
-
-def remove_hook_secret_if_unused(guard_home: Path) -> None:
-    """Remove the private key after an explicit uninstall removes its last manifest."""
-
-    with _ordinary_hook_writer(guard_home, hook_secret_path(guard_home), actor="codex.remove-unused-key"):
-        _remove_hook_secret_if_unused_owned(guard_home)
-
-
-def _remove_hook_secret_if_unused_owned(guard_home: Path) -> None:
-    if _hook_key_answer("key_remove_if_unused", guard_home).get("removed") is True:
-        record_codex_mutation("remove_unused_key", hook_secret_path(guard_home), b"", None)
-
-
-def restore_private_file(path: Path, payload: bytes | None) -> None:
-    _native("restore", path.parent, path=_path_text(path), payload=_encode(payload))
 
 
 def atomic_write_text(
@@ -329,10 +257,4 @@ __all__ = [
     "hook_secret_path",
     "load_authenticated_hook_manifest",
     "load_authenticated_hook_manifest_path",
-    "load_or_create_hook_secret",
-    "remove_hook_manifest",
-    "remove_hook_secret_if_unused",
-    "restore_private_file",
-    "sign_hook_manifest",
-    "write_hook_manifest",
 ]

@@ -36,11 +36,13 @@ mod publication_inverse_plan;
 mod publication_inverse_prepare;
 mod publication_inverse_publish;
 mod publication_io;
+mod publication_lean;
 mod publication_observer;
 mod publication_receipt;
 mod publication_repair_files;
 mod publication_repair_plan;
 mod publication_repair_prepare;
+mod publication_repair_request;
 mod publication_request;
 mod publication_target;
 mod repair_claims;
@@ -55,6 +57,8 @@ mod tests_publication_inverse_plan;
 #[cfg(test)]
 mod tests_publication_repair_plan;
 #[cfg(test)]
+mod tests_publication_repair_request;
+#[cfg(test)]
 mod tests_publication_target;
 
 use std::path::{Path, PathBuf};
@@ -65,7 +69,7 @@ use serde_json::{json, Map, Value};
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
 pub(crate) use inspect::resolve_lenient;
-pub(crate) use lease::hold_opencode_lock;
+pub(crate) use lease::{hold_install_lock, hold_opencode_lock};
 pub(crate) use output::{managed_write, remove_no_follow, write_no_follow};
 
 /// The plan sizes `_record_files` accepts, with room for an install that

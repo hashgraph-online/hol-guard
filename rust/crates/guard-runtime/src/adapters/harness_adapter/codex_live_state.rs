@@ -55,21 +55,7 @@ pub(super) fn live_hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
         tokens,
     } = LiveHooks::read(ctx);
     let live = live_hooks(&toml_hooks, &json_hooks);
-    // A caller whose hook budget is already spent gets the unverified state
-    // the resident verifier gave it before, without touching the manifest.
-    let (manifest, failure) = if fields.get("budget_spent").and_then(Value::as_bool) == Some(true) {
-        (None, Some(owned(UNAVAILABLE)))
-    } else {
-        authenticated(ctx, spec, &config)?
-    };
-    let state = verified_state(
-        ctx,
-        spec,
-        &config,
-        (manifest, failure),
-        hooks_wire(live, &tokens),
-        fields,
-    )?;
+    let state = verified_live_state(ctx, spec, fields, &config, live, &tokens)?;
     let integrity = match pyjson::parse(&Value::Object(state).to_string()) {
         Ok(PyVal::Dict(entries)) => entries,
         _ => return Err(Failure::Invalid),
@@ -83,6 +69,27 @@ pub(super) fn live_hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
     base.insert("config_path".into(), json!(path_text(&config)));
     base.insert("hooks_path".into(), json!(path_text(&hooks_file)));
     decide(ctx, &base, read, integrity, Some(&tokens))
+}
+
+/// The resident verifier's integrity state for the live `hooks` (with the
+/// TOML `tokens` they carry), and the manifest path it checked. Request
+/// fields are `live_hook_state`'s.
+pub(super) fn verified_live_state(
+    ctx: &Ctx,
+    spec: &Map<String, Value>,
+    fields: &Map<String, Value>,
+    config: &Path,
+    live: &PyVal,
+    tokens: &Map<String, Value>,
+) -> Step<Map<String, Value>> {
+    // A caller whose hook budget is already spent gets the unverified state
+    // the resident verifier gave it before, without touching the manifest.
+    let loaded = if fields.get("budget_spent").and_then(Value::as_bool) == Some(true) {
+        (None, Some(owned(UNAVAILABLE)))
+    } else {
+        authenticated(ctx, spec, config)?
+    };
+    verified_state(ctx, spec, config, loaded, hooks_wire(live, tokens), fields)
 }
 
 /// The integrity state the verifier decides for one authenticated manifest

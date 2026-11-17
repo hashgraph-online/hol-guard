@@ -206,7 +206,9 @@ pub(crate) fn hand_off(python_argv: &[String]) -> i32 {
         return 2;
     };
     let error = Command::new(program).args(args).exec();
-    eprintln!("{LINE_PREFIX}python proxy launch failed: {error}");
+    crate::runtime_output::stderr_line(format_args!(
+        "{LINE_PREFIX}python proxy launch failed: {error}"
+    ));
     1
 }
 
@@ -225,7 +227,9 @@ pub(crate) fn hand_off(python_argv: &[String]) -> i32 {
     let mut child = match spawned {
         Ok(child) => child,
         Err(error) => {
-            eprintln!("{LINE_PREFIX}python proxy launch failed: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "{LINE_PREFIX}python proxy launch failed: {error}"
+            ));
             return 1;
         }
     };
@@ -234,7 +238,9 @@ pub(crate) fn hand_off(python_argv: &[String]) -> i32 {
         Err(error) => {
             let _ = child.kill();
             let _ = child.wait();
-            eprintln!("{LINE_PREFIX}python proxy launch failed: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "{LINE_PREFIX}python proxy launch failed: {error}"
+            ));
             return 1;
         }
     };
@@ -243,7 +249,9 @@ pub(crate) fn hand_off(python_argv: &[String]) -> i32 {
     match status {
         Ok(status) => crate::mcp_relay_launch::exit_code(status),
         Err(error) => {
-            eprintln!("{LINE_PREFIX}python proxy wait failed: {error}");
+            crate::runtime_output::stderr_line(format_args!(
+                "{LINE_PREFIX}python proxy wait failed: {error}"
+            ));
             1
         }
     }

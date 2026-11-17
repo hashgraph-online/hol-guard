@@ -362,8 +362,9 @@ except TimeoutError:
 def test_mutation_journal_contains_identities_and_no_private_contents(tmp_path: Path) -> None:
     import json
 
-    from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_text, restore_private_file
+    from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_text
     from codex_plugin_scanner.guard.native_owned import codex_install_transaction
+    from tests.codex_hook_integrity_fixtures import restore_private_file
 
     home = tmp_path / "guard-home"
     config = tmp_path / "home/.codex/config.toml"

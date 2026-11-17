@@ -170,9 +170,8 @@ def signed_native_bridge_argv(runtime: Path, guard_home: Path, registered: dict[
         atomic_write_bytes,
         canonical_manifest_bytes,
         hook_manifest_path,
-        load_or_create_hook_secret,
-        sign_hook_manifest,
     )
+    from tests.codex_hook_integrity_fixtures import load_or_create_hook_secret, sign_hook_manifest
 
     config_target = guard_home.parent / ".codex" / "config.toml"
     config_target.parent.mkdir(parents=True, exist_ok=True)
