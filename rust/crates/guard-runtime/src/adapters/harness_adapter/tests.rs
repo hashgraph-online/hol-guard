@@ -39,6 +39,8 @@ mod opencode_family;
 mod pi_family;
 #[path = "tests_probe_run.rs"]
 mod probe_run_family;
+#[path = "tests_round_trip.rs"]
+mod round_trip;
 #[path = "tests_shims.rs"]
 mod shim_family;
 #[path = "tests_shims_apply.rs"]
@@ -213,6 +215,8 @@ fn describe_names_the_hermes_and_copilot_preparation_and_hook_ownership() {
     assert_eq!(copilot["prepare"], "detected");
     assert_eq!(copilot["launch_op"], "launch_command");
     assert_eq!(find("grok")["launch_op"], "");
+    // Cursor resolves `cursor-agent` or `cursor agent` itself.
+    assert_eq!(find("cursor")["launch_op"], "launch_command");
     assert!(copilot["hook_ownership"]["message"]
         .as_str()
         .unwrap()

@@ -6,14 +6,7 @@ import json
 from pathlib import Path
 
 from ..harness.base import HarnessContext
-from ..harness.native_harness import NativeHarnessAdapter
-
-
-def _text(answer: dict[str, object], key: str) -> str:
-    value = answer.get(key)
-    if not isinstance(value, str):
-        raise ValueError("Harness adapter answer is malformed")
-    return value
+from ..harness.native_harness import NativeHarnessAdapter, _text
 
 
 def extension_source(

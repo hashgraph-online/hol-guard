@@ -153,6 +153,16 @@ fn with_extensions(mut payload: Object, items: Vec<String>) -> Step<Vec<u8>> {
     Ok(format!("{}\n", payload.render()?).into_bytes())
 }
 
+/// The settings without Guard's extension. When it was the only one listed,
+/// the `extensions` key goes too, so uninstall leaves no empty list behind.
+fn without_extension(mut payload: Object, kept: Vec<String>) -> Step<Vec<u8>> {
+    if !kept.is_empty() {
+        return with_extensions(payload, kept);
+    }
+    payload.entries.retain(|(key, _)| key != "extensions");
+    Ok(format!("{}\n", payload.render()?).into_bytes())
+}
+
 /// The settings with the managed reference listed once and no other.
 fn enabled_settings(ctx: &Ctx, payload: Object, settings: &Path, extension: &str) -> Step<Vec<u8>> {
     let mut items: Vec<String> = extensions(&payload.entries)
@@ -189,7 +199,7 @@ fn disabled_settings(ctx: &Ctx, settings: &Path, extension: &str) -> Step<Option
         })
         .collect();
     let rendered =
-        String::from_utf8(with_extensions(payload, kept)?).map_err(|_| Failure::Invalid)?;
+        String::from_utf8(without_extension(payload, kept)?).map_err(|_| Failure::Invalid)?;
     Ok(Some(json!({"path": path_text(settings), "text": rendered})))
 }
 
