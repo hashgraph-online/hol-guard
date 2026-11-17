@@ -913,12 +913,6 @@ def load_daemon_lifecycle_events(guard_home: Path, *, limit: int = 20) -> list[d
     return _lifecycle_events(guard_home, limit=limit, incident=False)[0]
 
 
-def load_bounded_incident_lifecycle_events(guard_home: Path, *, limit: int = 20) -> tuple[list[dict[str, object]], str]:
-    """A small journal snapshot for incident reports, with why entries are missing."""
-
-    return _lifecycle_events(guard_home, limit=limit, incident=True)
-
-
 def _guard_daemon_start_in_progress(guard_home: Path) -> bool:
     return _ask("start_in_progress", guard_home, current=_current_state()).get("in_progress") is True
 

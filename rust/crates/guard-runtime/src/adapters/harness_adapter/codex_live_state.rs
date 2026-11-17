@@ -57,46 +57,7 @@ pub(super) fn live_hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
         tokens,
     } = LiveHooks::read(ctx);
     let live = live_hooks(&toml_hooks, &json_hooks);
-    // A caller whose hook budget is already spent gets the unverified state
-    // the resident verifier gave it before, without touching the manifest.
-    let (manifest, failure) = if fields.get("budget_spent").and_then(Value::as_bool) == Some(true) {
-        (None, Some(owned(UNAVAILABLE)))
-    } else {
-        authenticated(ctx, spec, &config)?
-    };
-    let request = CodexHookManifestVerifyRequestV1 {
-        schema: CODEX_HOOK_MANIFEST_VERIFY_REQUEST_SCHEMA.to_owned(),
-        request_id: String::new(),
-        posix: cfg!(unix),
-        current_uid: current_uid(),
-        failure: failure.map(|(reason, message)| CodexHookManifestFailureV1 { reason, message }),
-        expected: match &manifest {
-            Some(_) => Some(expected(ctx, spec, &config)?),
-            None => None,
-        },
-        canonical_paths: manifest
-            .as_ref()
-            .map(|manifest| canonical_paths(ctx, manifest))
-            .unwrap_or_default(),
-        installed_python_package_files: manifest
-            .as_ref()
-            .map(|manifest| installed(ctx, manifest, fields))
-            .transpose()?
-            .unwrap_or_default(),
-        manifest,
-        hooks: hooks_wire(live, &tokens),
-        windows: flag(fields, "windows")?,
-        long_paths: super::codex_owners::long_paths(fields)?,
-        private_groups: Vec::new(),
-    };
-    let verified = evaluate_request(&request);
-    let mut state = verified
-        .get("state")
-        .and_then(Value::as_object)
-        .cloned()
-        .ok_or(Failure::Invalid)?;
-    let manifest_path = manifest_path(ctx, Path::new(spec_text(spec, "guard_home")?), &config);
-    state.insert("manifest_path".into(), json!(path_text(&manifest_path)));
+    let state = verified_state(ctx, spec, fields, &config, live, &tokens)?;
     let integrity = match pyjson::parse(&Value::Object(state).to_string()) {
         Ok(PyVal::Dict(entries)) => entries,
         _ => return Err(Failure::Invalid),
@@ -110,6 +71,60 @@ pub(super) fn live_hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
     base.insert("config_path".into(), json!(path_text(&config)));
     base.insert("hooks_path".into(), json!(path_text(&hooks_file)));
     decide(ctx, &base, read, integrity, Some(&tokens))
+}
+
+/// The resident verifier's integrity state for the live `hooks` (with the
+/// TOML `tokens` they carry), and the manifest path it checked. Request
+/// fields are `live_hook_state`'s.
+pub(super) fn verified_state(
+    ctx: &Ctx,
+    spec: &Map<String, Value>,
+    fields: &Map<String, Value>,
+    config: &Path,
+    live: &PyVal,
+    tokens: &Map<String, Value>,
+) -> Step<Map<String, Value>> {
+    // A caller whose hook budget is already spent gets the unverified state
+    // the resident verifier gave it before, without touching the manifest.
+    let (manifest, failure) = if fields.get("budget_spent").and_then(Value::as_bool) == Some(true) {
+        (None, Some(owned(UNAVAILABLE)))
+    } else {
+        authenticated(ctx, spec, config)?
+    };
+    let request = CodexHookManifestVerifyRequestV1 {
+        schema: CODEX_HOOK_MANIFEST_VERIFY_REQUEST_SCHEMA.to_owned(),
+        request_id: String::new(),
+        posix: cfg!(unix),
+        current_uid: current_uid(),
+        failure: failure.map(|(reason, message)| CodexHookManifestFailureV1 { reason, message }),
+        expected: match &manifest {
+            Some(_) => Some(expected(ctx, spec, config)?),
+            None => None,
+        },
+        canonical_paths: manifest
+            .as_ref()
+            .map(|manifest| canonical_paths(ctx, manifest))
+            .unwrap_or_default(),
+        installed_python_package_files: manifest
+            .as_ref()
+            .map(|manifest| installed(ctx, manifest, fields))
+            .transpose()?
+            .unwrap_or_default(),
+        manifest,
+        hooks: hooks_wire(live, tokens),
+        windows: flag(fields, "windows")?,
+        long_paths: super::codex_owners::long_paths(fields)?,
+        private_groups: Vec::new(),
+    };
+    let verified = evaluate_request(&request);
+    let mut state = verified
+        .get("state")
+        .and_then(Value::as_object)
+        .cloned()
+        .ok_or(Failure::Invalid)?;
+    let manifest_path = manifest_path(ctx, Path::new(spec_text(spec, "guard_home")?), config);
+    state.insert("manifest_path".into(), json!(path_text(&manifest_path)));
+    Ok(state)
 }
 
 fn spec_text<'a>(spec: &'a Map<String, Value>, key: &str) -> Step<&'a str> {

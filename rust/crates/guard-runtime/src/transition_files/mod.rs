@@ -31,10 +31,12 @@ mod publication_generation;
 mod publication_inverse_plan;
 mod publication_inverse_publish;
 mod publication_io;
+mod publication_lean;
 mod publication_observer;
 mod publication_receipt;
 mod publication_repair_files;
 mod publication_repair_plan;
+mod publication_repair_request;
 mod publication_request;
 mod publication_target;
 mod repair_claims;
@@ -44,6 +46,8 @@ mod tests;
 mod tests_publication_inverse_plan;
 #[cfg(test)]
 mod tests_publication_repair_plan;
+#[cfg(test)]
+mod tests_publication_repair_request;
 #[cfg(test)]
 mod tests_publication_target;
 

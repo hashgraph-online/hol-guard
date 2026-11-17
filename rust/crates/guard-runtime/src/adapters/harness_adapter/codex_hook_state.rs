@@ -15,7 +15,7 @@ use super::codex_owners::{long_paths, EVENTS as OWNER_EVENTS};
 use super::files::{self, Doc};
 use super::{codex_config_hooks, Ctx, Failure, Step};
 use crate::cursor_hook_command::Syntax;
-use crate::pyjson::PyVal;
+use crate::pyjson::{self, PyVal};
 
 /// The state from the files read (`features`, `toml_hooks`, `json_hooks`),
 /// the manifest's integrity state and the tokens standing for the TOML
@@ -157,4 +157,23 @@ pub(super) fn with_syntax<T>(
 ) -> Step<T> {
     let mut syntax = Syntax::new(flag(fields, "windows")?, long_paths(fields)?);
     body(&mut syntax)
+}
+
+/// `overlay_live_owned_event_matches`: keep stale-CLI ownership, but never
+/// treat a missing or tampered manifest as installed.
+pub(super) fn overlay(fields: &Map<String, Value>, syntax: &mut Syntax) -> Step<Value> {
+    let integrity = fields
+        .get("integrity")
+        .and_then(Value::as_object)
+        .ok_or(Failure::Invalid)?;
+    let field = |key: &str| integrity.get(key).and_then(Value::as_str);
+    let recorded = integrity.get("event_matches").and_then(Value::as_object);
+    let held = |event: &str| recorded.and_then(|m| m.get(event)) == Some(&Value::Bool(true));
+    let hooks = match pyjson::parse(text(fields, "hooks")?) {
+        Ok(PyVal::Dict(hooks)) => Some(hooks),
+        _ => None,
+    };
+    let (status, reason) = (field("integrity_status"), field("integrity_reason"));
+    let matches = owned_matches(status, reason, held, hooks.as_ref(), syntax);
+    Ok(json!({ "matches": matches }))
 }

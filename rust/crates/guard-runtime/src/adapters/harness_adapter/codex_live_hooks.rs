@@ -37,6 +37,7 @@ pub(super) const FALLBACK_REASONS: [&str; 5] = [
 ];
 const FALSE_UNINSTALLED: &str = "guard is not installed for this harness";
 const REPAIR: &str = "Run `hol-guard install codex` or `hol-guard update`";
+const TRUST_WARNING: &str = "Codex has not trusted the current HOL Guard hooks, so Codex skips them. Open Codex, run /hooks, and press t to trust them.";
 
 pub(super) const FIELDS: [(&str, &[&str]); 6] = [
     ("live", &["command"]),
@@ -80,12 +81,17 @@ pub(super) fn run(op: &str, fields: &Map<String, Value>, syntax: &mut Syntax) ->
             Ok(json!({ "conflict": conflict(command, ownership, place, syntax) }))
         }
         "matches" => {
-            let hooks = dict(fields, "hooks")?;
+            // A `hooks` value that is not a table routes nothing.
+            let hooks = match pyjson::parse(text(fields, "hooks")?) {
+                Ok(PyVal::Dict(entries)) => entries,
+                Ok(_) => Vec::new(),
+                Err(_) => return Err(Failure::Invalid),
+            };
             let matches = event_matches(&hooks, syntax);
             Ok(json!({ "matches": matches, "intercept": intercept(&hooks, syntax) }))
         }
         "install" => install(fields, syntax),
-        "overlay" => overlay(fields, syntax),
+        "overlay" => codex_hook_state::overlay(fields, syntax),
         "doctor" => doctor(fields),
         _ => Err(Failure::Invalid),
     }
@@ -406,27 +412,13 @@ fn install(fields: &Map<String, Value>, syntax: &mut Syntax) -> Step<Value> {
     Ok(json!({ "hooks": compact(&PyVal::Dict(hooks), false) }))
 }
 
-/// `overlay_live_owned_event_matches`: keep stale-CLI ownership, but never
-/// treat a missing or tampered manifest as installed.
-fn overlay(fields: &Map<String, Value>, syntax: &mut Syntax) -> Step<Value> {
-    let integrity = fields
-        .get("integrity")
-        .and_then(Value::as_object)
-        .ok_or(Failure::Invalid)?;
-    let field = |key: &str| integrity.get(key).and_then(Value::as_str);
-    let recorded = integrity.get("event_matches").and_then(Value::as_object);
-    let held = |event: &str| recorded.and_then(|m| m.get(event)) == Some(&Value::Bool(true));
-    let hooks = match pyjson::parse(text(fields, "hooks")?) {
-        Ok(PyVal::Dict(hooks)) => Some(hooks),
-        _ => None,
-    };
-    let (status, reason) = (field("integrity_status"), field("integrity_reason"));
-    let matches = codex_hook_state::owned_matches(status, reason, held, hooks.as_ref(), syntax);
-    Ok(json!({ "matches": matches }))
-}
-
 fn state_flag(state: &Map<String, Value>, key: &str) -> bool {
     state.get(key).and_then(Value::as_bool).unwrap_or(false)
+}
+
+/// The hook manifest check passed: the state's `integrity_status` is `valid`.
+fn integrity_valid(state: &Map<String, Value>) -> bool {
+    state.get("integrity_status").and_then(Value::as_str) == Some("valid")
 }
 
 /// `finalize_codex_doctor_warnings` then `finalize_codex_doctor_setup_status`
@@ -448,7 +440,7 @@ fn doctor(fields: &Map<String, Value>) -> Step<Value> {
             warnings.push(format!(
                 "Codex config was found, but Guard's managed Codex hooks are missing. {REPAIR} to repair protection."
             ));
-        } else if !state_flag(state, "integrity_valid") {
+        } else if !integrity_valid(state) {
             warnings.push(format!(
                 "Codex hooks are installed but do not match this Guard CLI. {REPAIR} to rebind them."
             ));
@@ -480,8 +472,15 @@ fn doctor(fields: &Map<String, Value>) -> Step<Value> {
     finish.insert("warnings".to_owned(), json!(warnings));
     finish.insert("status".to_owned(), json!(status));
     finish.insert("base_status".to_owned(), json!(base));
-    let answer = super::codex::doctor_status(&finish)?;
-    Ok(json!({ "warnings": warnings, "status": answer["status"] }))
+    let mut status = super::codex::doctor_status(&finish)?["status"].clone();
+    // Codex skips hooks it has not trusted, so they are never called active.
+    if state_flag(state, "hook_trust_stale") {
+        warnings.push(TRUST_WARNING.to_owned());
+        if status == "active" {
+            status = json!("partial");
+        }
+    }
+    Ok(json!({ "warnings": warnings, "status": status }))
 }
 
 #[cfg(test)]
