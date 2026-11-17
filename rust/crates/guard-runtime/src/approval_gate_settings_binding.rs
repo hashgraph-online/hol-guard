@@ -145,7 +145,7 @@ fn save_subject(guard_home: &Path, settings: &Value) -> Result<String, ApprovalG
         gate.retain(|name, _| !PROOF_KEYS.contains(&name.as_str()));
     }
     let key = crate::daemon_policy_authority::load_guard_daemon_auth_token(guard_home)
-        .unwrap_or_default();
+        .ok_or_else(|| invalid("Settings binding key is unavailable."))?;
     Ok(format!(
         "settings:{}",
         keyed_digest(key.as_bytes(), &canonical(&Value::Object(changes))?)
