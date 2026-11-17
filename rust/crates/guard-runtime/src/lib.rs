@@ -191,6 +191,7 @@ mod cloud_review_batch;
 mod cloud_review_event;
 mod cloud_sync_privacy;
 mod codex_app_server_socket;
+mod codex_app_server_target_op;
 mod codex_config_rpc;
 #[path = "adapters/detection/codex_detect.rs"]
 mod codex_detect;

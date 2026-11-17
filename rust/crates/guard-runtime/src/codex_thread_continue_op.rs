@@ -23,6 +23,18 @@ const THREAD_ID_KEYS: [&str; 5] = [
     "session_id",
     "sessionId",
 ];
+/// What a recorded target may call its thread when only its reachability is
+/// asked: the continuation's keys, and the two conversation spellings.
+#[cfg(unix)]
+const TARGET_THREAD_ID_KEYS: [&str; 7] = [
+    "codex_thread_id",
+    "thread_id",
+    "threadId",
+    "conversation_id",
+    "conversationId",
+    "session_id",
+    "sessionId",
+];
 const TURN_ID_KEYS: [&str; 3] = ["codex_turn_id", "turn_id", "turnId"];
 const SOCKET_KEYS: [&str; 3] = [
     "codex_app_server_socket",
@@ -381,6 +393,45 @@ pub(crate) fn default_socket_available(
 pub(crate) fn default_socket_available(
     _request: &ContinueRequest<'_>,
     _codex_home: Option<&str>,
+) -> bool {
+    false
+}
+
+/// `codex_app_server_target_reachable`: a recorded Codex target names a safe
+/// thread, and its control socket (the recorded one, else the default for the
+/// recorded Codex home) is a trusted local socket that accepts a connection
+/// within 200 ms.
+#[cfg(unix)]
+pub(crate) fn target_reachable(
+    request: &ContinueRequest<'_>,
+    metadata: &Map<String, Value>,
+) -> bool {
+    let Some(thread_id) = first_optional_string(metadata, &TARGET_THREAD_ID_KEYS) else {
+        return false;
+    };
+    if !is_safe_thread_id(thread_id) {
+        return false;
+    }
+    let roots = SocketRoots::new(request);
+    let socket = match first_optional_string(metadata, &SOCKET_KEYS) {
+        Some(text) => roots.absolute(text),
+        None => roots.default_socket(first_optional_string(metadata, &CODEX_HOME_KEYS)),
+    };
+    socket.is_some_and(|socket| {
+        roots.is_safe(&socket)
+            && is_trusted_socket(&socket)
+            && crate::codex_app_server_socket::connect(
+                &socket,
+                Instant::now() + Duration::from_millis(200),
+            )
+            .is_ok()
+    })
+}
+
+#[cfg(not(unix))]
+pub(crate) fn target_reachable(
+    _request: &ContinueRequest<'_>,
+    _metadata: &Map<String, Value>,
 ) -> bool {
     false
 }

@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard import codex_app_server as codex_app_server_module
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_app_server_fake import codex_app_server
@@ -134,13 +133,6 @@ def test_guard_approvals_resume_uses_codex_home_default_socket(
     assert output["status"] == "sent"
     [continuation] = server.continuations()
     assert continuation["params"]["responsesapiClientMetadata"]["hol_guard_request_id"] == "req-cli-home"
-
-
-def test_codex_app_server_rejects_regular_file_as_control_socket(tmp_path: Path) -> None:
-    fake_socket = tmp_path / "app-server.sock"
-    fake_socket.write_text("not a socket", encoding="utf-8")
-
-    assert codex_app_server_module._is_trusted_local_socket(fake_socket) is False
 
 
 def test_guard_doctor_codex_reports_resume_diagnostics(

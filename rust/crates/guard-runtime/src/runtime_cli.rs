@@ -259,6 +259,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = cloud_actions_host_config::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if codex_app_server_target_op::is_command(command) && flag == "--stdin" => {
+            let response = codex_app_server_target_op::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if codex_mcp_setup::is_command(command) && flag == "--stdin" => {
             let response = codex_mcp_setup::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
