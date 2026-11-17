@@ -14,7 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Map, Value};
 
-const DIRECTORY: &str = "daemon-lifecycle";
+pub(crate) const DIRECTORY: &str = "daemon-lifecycle";
 const RECOVERY_PREFIX: &str = "recovery_";
 const RECOVERY_SUFFIX: &str = ".recovery.json";
 /// Daemon starts, exits and retirements: weeks of history, not days.
@@ -49,7 +49,7 @@ const STARTED_EVENTS: [&str; 5] = [
     "reconciled",
 ];
 /// Records also written to `logs/daemon.log`, where people look first.
-const LOGGED_EVENTS: [&str; 7] = [
+const LOGGED_EVENTS: [&str; 8] = [
     "published",
     "ready",
     "exiting",
@@ -57,6 +57,7 @@ const LOGGED_EVENTS: [&str; 7] = [
     "retirement_requested",
     "shutdown_requested",
     "unclean_exit_detected",
+    "repair_requested",
 ];
 
 /// The optional fields of one record.
@@ -389,7 +390,7 @@ pub(crate) fn load_events(
     )
 }
 
-fn read_event(path: &Path) -> Option<Value> {
+pub(crate) fn read_event(path: &Path) -> Option<Value> {
     let raw =
         crate::daemon_policy_authority::read_private_regular_text(path, MAX_EVENT_BYTES, false)?;
     let value: Value = serde_json::from_str(&raw).ok()?;
@@ -457,7 +458,7 @@ fn safe_session_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
-fn is_symlink(path: &Path) -> bool {
+pub(crate) fn is_symlink(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink())
 }
 

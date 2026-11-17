@@ -423,7 +423,11 @@ def _configure_guard_policy_parsers(
     events_parser.add_argument("--json", action="store_true")
 
     doctor_parser = guard_subparsers.add_parser("doctor", help="Emit Guard diagnostics for a harness")
-    doctor_parser.add_argument("harness", nargs="?")
+    doctor_parser.add_argument(
+        "harness",
+        nargs="?",
+        help="A harness to diagnose, or 'reliability' for the daemon reliability report",
+    )
     _add_guard_common_args(doctor_parser)
     doctor_parser.add_argument("--json", action="store_true")
     doctor_parser.add_argument(
@@ -437,6 +441,12 @@ def _configure_guard_policy_parsers(
         help="List all supported harnesses with their protection contract",
     )
     doctor_parser.add_argument("--perf", action="store_true", help="Include detector performance timings")
+    doctor_parser.add_argument(
+        "--days",
+        type=int,
+        default=30,
+        help="With 'doctor reliability', how many days of records to report, 1 to 90 (default 30)",
+    )
     # --native is read only and --repair changes local state, so the pair is
     # refused here. Accepting it would run the lifecycle gate's repairs, which
     # can revive a resident, before the read-only report the user asked for.
