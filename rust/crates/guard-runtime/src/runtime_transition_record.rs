@@ -39,12 +39,7 @@ pub(crate) fn check_change(change: &Map<String, Value>) -> Result<(), (String, O
     plan::one(change)
 }
 
-/// `check_transition_files`: the planned changes form one record.
-pub(crate) fn check_files(files: &[Value]) -> Result<(), (String, Option<String>)> {
-    let mut wrapped = Map::new();
-    wrapped.insert("files".to_owned(), Value::Array(files.to_vec()));
-    shape::record_files(&wrapped).map(|_| ())
-}
+pub(crate) use plan::check_files;
 
 const SCHEMA: &str = "runtime-transition-record.v1";
 const RECORD_SCHEMA: &str = "hol-guard.runtime-transition.v1";

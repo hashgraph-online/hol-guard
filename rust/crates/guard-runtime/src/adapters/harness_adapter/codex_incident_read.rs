@@ -1,7 +1,7 @@
 //! Codex incident report: the bounded, race-checked reads of `config.toml`
 //! and `hooks.json` that `guard/cli/doctor_incident.py` made.
 
-use std::fs::{self, File, Metadata};
+use std::fs::{self, Metadata};
 use std::io::{ErrorKind, Read};
 use std::path::Path;
 
@@ -110,7 +110,10 @@ pub(super) fn bounded_regular_bytes(path: &Path) -> (Option<Vec<u8>>, &'static s
     if before.len() > MAX_CONFIG_BYTES {
         return (None, "too_large");
     }
-    let Ok(file) = open_no_follow(path) else {
+    // No-follow and non-blocking: a swapped-in link or FIFO is opened as
+    // itself (and then refused as not a regular file) instead of followed
+    // or waited on.
+    let Ok(file) = crate::local_skill_index::open_no_follow(path) else {
         return (None, "unreadable");
     };
     let Ok(opened) = file.metadata() else {
@@ -146,27 +149,14 @@ pub(super) fn bounded_regular_bytes(path: &Path) -> (Option<Vec<u8>>, &'static s
 }
 
 #[cfg(unix)]
-fn open_no_follow(path: &Path) -> std::io::Result<File> {
-    use std::os::unix::fs::OpenOptionsExt;
-    fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-        .open(path)
-}
-
-#[cfg(windows)]
-fn open_no_follow(path: &Path) -> std::io::Result<File> {
-    File::open(path)
-}
-
-#[cfg(unix)]
 fn identity(metadata: &Metadata) -> (u64, u64) {
     use std::os::unix::fs::MetadataExt;
     (metadata.dev(), metadata.ino())
 }
 
-/// Windows has no stable file index in `std`; the stamp check after the read
-/// still refuses a file that changed.
+/// Windows has no stable file index in `std`. The open does not follow a
+/// reparse point, a swapped-in link is refused as not a regular file, and
+/// the stamp check after the read refuses a file that changed.
 #[cfg(windows)]
 fn identity(_metadata: &Metadata) -> (u64, u64) {
     (0, 0)

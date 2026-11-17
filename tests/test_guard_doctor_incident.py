@@ -291,3 +291,16 @@ def test_incident_export_rejects_repair_without_running_diagnostics(tmp_path: Pa
 
     assert result == 2
     assert json.loads(output.getvalue())["error"] == "incident_export_requires_codex_without_other_doctor_actions"
+
+
+def test_incident_export_names_an_unreadable_guard_config(tmp_path: Path, monkeypatch) -> None:
+    context = _context(tmp_path)
+
+    def broken(*_args, **_kwargs):
+        raise ValueError("Invalid value")
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.cli.doctor_incident.live_hook_ask", broken)
+    output = io.StringIO()
+
+    assert run_codex_incident_export(argparse.Namespace(harness="codex"), context, output_stream=output) == 2
+    assert json.loads(output.getvalue()) == {"error": "guard_config_unreadable", "detail": "ValueError"}

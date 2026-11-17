@@ -14,6 +14,7 @@ turns it off.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
@@ -93,13 +94,20 @@ def render(state: dict[str, object], output: TextIO) -> None:
 def _wire_limit(limit: object) -> object:
     """A limit JSON can carry; anything else is refused as invalid natively."""
 
+    if isinstance(limit, float) and not math.isfinite(limit):
+        return str(limit)
     if limit is None or isinstance(limit, bool | int | float | str):
         return limit
     return str(limit)
 
 
 def _home_fields(home_dir: Path, environ: Mapping[str, str] | None) -> dict[str, object]:
-    return {"home_dir": str(Path(home_dir).absolute()), "codex_home": (environ or {}).get("CODEX_HOME")}
+    codex_home = (environ or {}).get("CODEX_HOME")
+    if codex_home and codex_home.strip() and not codex_home.strip().startswith("~"):
+        # Codex resolves a relative CODEX_HOME from the directory it runs in;
+        # the runtime runs elsewhere, so send the path this process means.
+        codex_home = str(Path(codex_home.strip()).absolute())
+    return {"home_dir": str(Path(home_dir).absolute()), "codex_home": codex_home}
 
 
 def _ask(
