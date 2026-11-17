@@ -21,9 +21,6 @@ from .codex_hook_file_integrity import (
     hook_validation_deadline,
     validate_regular_file,
 )
-from .codex_hook_integrity import (
-    authenticate_hook_manifest_text,
-)
 from .codex_hook_manifest import CodexHookManifestSpec, _verify_hook_manifest, transition_file
 from .codex_hook_recovery import (
     _MAX_RECORD,
@@ -70,9 +67,9 @@ def _predecessor_dependencies(home: Path, manifest_bytes: bytes) -> tuple[Transi
 
 
 def _capture_predecessor_dependencies(home: Path, manifest_bytes: bytes) -> tuple[TransitionFile, ...]:
-    authenticated = authenticate_hook_manifest_text(home, manifest_bytes.decode("utf-8"))
     check_hook_validation_deadline()
-    answer = publication("inverse_dependencies", home, manifest=authenticated)
+    answer = publication("inverse_dependencies", home, manifest_text=manifest_bytes.decode("utf-8"))
+    check_hook_validation_deadline()
     pinned = answer.get("files") if isinstance(answer, dict) else None
     if not isinstance(pinned, list) or not all(isinstance(item, dict) for item in pinned):
         raise TransitionError("native_transition_invalid")

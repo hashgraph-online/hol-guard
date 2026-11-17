@@ -207,6 +207,7 @@ mod codex_hook_launch_trust;
 mod codex_hook_manifest_auth;
 mod codex_hook_manifest_build;
 mod codex_hook_manifest_iso_time;
+mod codex_hook_manifest_refusal;
 mod codex_hook_manifest_verify_op;
 #[cfg(unix)]
 mod codex_hook_private_group;

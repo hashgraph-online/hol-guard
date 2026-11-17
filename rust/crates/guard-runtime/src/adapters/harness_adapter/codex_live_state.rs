@@ -22,6 +22,7 @@ use super::codex_hook_state::decide;
 use super::codex_live_read::{live_hooks, LiveHooks};
 use super::{path_text, Ctx, Failure, Step};
 use crate::codex_hook_manifest_auth as manifest_auth;
+use crate::codex_hook_manifest_refusal::refusal;
 use crate::codex_hook_manifest_verify_op::evaluate_request;
 use crate::pyjson::{self, PyVal};
 
@@ -32,10 +33,7 @@ type Entries = Vec<(String, PyVal)>;
 const MAX_GROUP_DEPTH: usize = 29;
 const MAX_MANIFEST_DEPTH: usize = 31;
 
-const UNAVAILABLE: (&str, &str) = (
-    "codex_hook_manifest_verification_unavailable",
-    "Guard could not verify the Codex hook installation; run repair and retry.",
-);
+pub(super) use crate::codex_hook_manifest_refusal::UNAVAILABLE;
 
 /// `codex_native_hook_state`. Request fields: `spec` (the installation the
 /// caller expects), `package_roots`, `windows`, `long_paths` and an optional
@@ -64,39 +62,14 @@ pub(super) fn live_hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
     } else {
         authenticated(ctx, spec, &config)?
     };
-    let request = CodexHookManifestVerifyRequestV1 {
-        schema: CODEX_HOOK_MANIFEST_VERIFY_REQUEST_SCHEMA.to_owned(),
-        request_id: String::new(),
-        posix: cfg!(unix),
-        current_uid: current_uid(),
-        failure: failure.map(|(reason, message)| CodexHookManifestFailureV1 { reason, message }),
-        expected: match &manifest {
-            Some(_) => Some(expected(ctx, spec, &config)?),
-            None => None,
-        },
-        canonical_paths: manifest
-            .as_ref()
-            .map(|manifest| canonical_paths(ctx, manifest))
-            .unwrap_or_default(),
-        installed_python_package_files: manifest
-            .as_ref()
-            .map(|manifest| installed(ctx, manifest, fields))
-            .transpose()?
-            .unwrap_or_default(),
-        manifest,
-        hooks: hooks_wire(live, &tokens),
-        windows: flag(fields, "windows")?,
-        long_paths: super::codex_owners::long_paths(fields)?,
-        private_groups: Vec::new(),
-    };
-    let verified = evaluate_request(&request);
-    let mut state = verified
-        .get("state")
-        .and_then(Value::as_object)
-        .cloned()
-        .ok_or(Failure::Invalid)?;
-    let manifest_path = manifest_path(ctx, Path::new(spec_text(spec, "guard_home")?), &config);
-    state.insert("manifest_path".into(), json!(path_text(&manifest_path)));
+    let state = verified_state(
+        ctx,
+        spec,
+        &config,
+        (manifest, failure),
+        hooks_wire(live, &tokens),
+        fields,
+    )?;
     let integrity = match pyjson::parse(&Value::Object(state).to_string()) {
         Ok(PyVal::Dict(entries)) => entries,
         _ => return Err(Failure::Invalid),
@@ -112,7 +85,53 @@ pub(super) fn live_hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
     decide(ctx, &base, read, integrity, Some(&tokens))
 }
 
-fn spec_text<'a>(spec: &'a Map<String, Value>, key: &str) -> Step<&'a str> {
+/// The integrity state the verifier decides for one authenticated manifest
+/// (or the failure that left none), with the path its config target owns.
+pub(super) fn verified_state(
+    ctx: &Ctx,
+    spec: &Map<String, Value>,
+    config: &Path,
+    (manifest, failure): Authenticated,
+    hooks: Option<Value>,
+    fields: &Map<String, Value>,
+) -> Step<Map<String, Value>> {
+    let request = CodexHookManifestVerifyRequestV1 {
+        schema: CODEX_HOOK_MANIFEST_VERIFY_REQUEST_SCHEMA.to_owned(),
+        request_id: String::new(),
+        posix: cfg!(unix),
+        current_uid: current_uid(),
+        failure: failure.map(|(reason, message)| CodexHookManifestFailureV1 { reason, message }),
+        expected: match &manifest {
+            Some(_) => Some(expected(ctx, spec, config)?),
+            None => None,
+        },
+        canonical_paths: manifest
+            .as_ref()
+            .map(|manifest| canonical_paths(ctx, manifest))
+            .unwrap_or_default(),
+        installed_python_package_files: manifest
+            .as_ref()
+            .map(|manifest| installed(ctx, manifest, fields))
+            .transpose()?
+            .unwrap_or_default(),
+        manifest,
+        hooks,
+        windows: flag(fields, "windows")?,
+        long_paths: super::codex_owners::long_paths(fields)?,
+        private_groups: Vec::new(),
+    };
+    let verified = evaluate_request(&request);
+    let mut state = verified
+        .get("state")
+        .and_then(Value::as_object)
+        .cloned()
+        .ok_or(Failure::Invalid)?;
+    let manifest_path = manifest_path(ctx, Path::new(spec_text(spec, "guard_home")?), config);
+    state.insert("manifest_path".into(), json!(path_text(&manifest_path)));
+    Ok(state)
+}
+
+pub(super) fn spec_text<'a>(spec: &'a Map<String, Value>, key: &str) -> Step<&'a str> {
     spec.get(key)
         .and_then(Value::as_str)
         .ok_or(Failure::Invalid)
@@ -128,13 +147,22 @@ fn spec_strings(spec: &Map<String, Value>, key: &str) -> Step<Vec<String>> {
 }
 
 /// `load_authenticated_hook_manifest`, or the failure the verifier reports.
-type Authenticated = (Option<Value>, Option<(String, String)>);
+pub(super) type Authenticated = (Option<Value>, Option<(String, String)>);
 
-fn authenticated(ctx: &Ctx, spec: &Map<String, Value>, config: &Path) -> Step<Authenticated> {
+pub(super) fn authenticated(
+    ctx: &Ctx,
+    spec: &Map<String, Value>,
+    config: &Path,
+) -> Step<Authenticated> {
     let guard_home = ctx.absolute(Path::new(spec_text(spec, "guard_home")?));
     let path = ctx.absolute(&manifest_path(ctx, &guard_home, config));
     let home = guard_home.to_str().ok_or(Failure::Invalid)?;
-    Ok(match manifest_auth::load_path(home, &path) {
+    Ok(settled(manifest_auth::load_path(home, &path)))
+}
+
+/// The authenticated manifest, or the failure the verifier reports for it.
+pub(super) fn settled(loaded: Result<Map<String, Value>, &'static str>) -> Authenticated {
+    match loaded {
         Ok(manifest) if depth(&Value::Object(manifest.clone())) <= MAX_MANIFEST_DEPTH => {
             (Some(Value::Object(manifest)), None)
         }
@@ -146,51 +174,10 @@ fn authenticated(ctx: &Ctx, spec: &Map<String, Value>, config: &Path) -> Step<Au
             ))),
         ),
         Err(reason) => (None, Some(refusal(reason))),
-    })
-}
-
-fn owned((reason, message): (&str, &str)) -> (String, String) {
-    (reason.to_owned(), message.to_owned())
-}
-
-/// `manifest_refusal`: the status-safe failure for an authentication reason.
-fn refusal(reason: &str) -> (String, String) {
-    if matches!(reason, "runtime_unavailable" | "invalid") {
-        return owned(UNAVAILABLE);
     }
-    let message = match reason {
-        "codex_hook_manifest_missing" => {
-            "The authenticated Codex hook manifest is missing; run `hol-guard install codex` to repair it."
-        }
-        "codex_hook_manifest_not_regular" => {
-            "The Codex hook manifest must be a private regular file, not a symlink."
-        }
-        "codex_hook_manifest_owner_mismatch" => "The Codex hook manifest has an unexpected owner.",
-        "codex_hook_manifest_permissions_unsafe" => {
-            "The Codex hook manifest permissions are not owner-only."
-        }
-        "codex_hook_manifest_invalid" => {
-            "The authenticated Codex hook manifest is unreadable; run `hol-guard install codex` to repair it."
-        }
-        "codex_hook_manifest_authentication_missing" => {
-            "The Codex hook manifest is not authenticated; run `hol-guard install codex` to repair it."
-        }
-        "codex_hook_manifest_authentication_invalid" => {
-            "The Codex hook manifest authentication metadata is invalid; repair the Codex installation."
-        }
-        "codex_hook_manifest_key_mismatch" | "codex_hook_manifest_installation_mismatch" => {
-            "The Codex hook manifest belongs to another Guard installation; run `hol-guard install codex`."
-        }
-        "codex_hook_manifest_mac_invalid" => {
-            "The Codex hook manifest authentication failed; run `hol-guard install codex` to repair it."
-        }
-        "codex_hook_manifest_secret_missing" => {
-            "The private Codex hook authentication key is missing; run `hol-guard install codex` to repair it."
-        }
-        _ => {
-            "The private Codex hook authentication key is not usable; repair the Codex installation."
-        }
-    };
+}
+
+pub(super) fn owned((reason, message): (&str, &str)) -> (String, String) {
     (reason.to_owned(), message.to_owned())
 }
 
@@ -339,7 +326,7 @@ fn hooks_wire(hooks: &PyVal, tokens: &Map<String, Value>) -> Option<Value> {
 }
 
 /// `_plain`: the value as JSON, or `None` for one JSON cannot carry.
-fn plain(value: &PyVal, depth: usize, tokens: &Map<String, Value>) -> Option<Value> {
+pub(super) fn plain(value: &PyVal, depth: usize, tokens: &Map<String, Value>) -> Option<Value> {
     if depth > MAX_GROUP_DEPTH {
         return None;
     }

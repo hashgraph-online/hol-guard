@@ -55,6 +55,7 @@ mod codex_live_hooks;
 mod codex_live_read;
 mod codex_live_state;
 mod codex_main_plan;
+mod codex_manifest_verify;
 mod codex_merge;
 mod codex_migration;
 mod codex_owner_home;

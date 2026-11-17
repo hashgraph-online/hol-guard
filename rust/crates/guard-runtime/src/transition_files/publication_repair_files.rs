@@ -20,7 +20,9 @@ use super::publication_generation::{identity_dependency, package_roots};
 use super::{Fault, Step};
 use crate::codex_hook_key;
 use crate::codex_hook_launch_trust::{self, Refusal, LAUNCH_INVALID};
+use crate::codex_hook_manifest_auth::authenticate_text;
 use crate::codex_hook_manifest_build::bridge_argv_sha256;
+use crate::codex_hook_manifest_refusal::refusal;
 
 type Object = Map<String, Value>;
 
@@ -59,10 +61,23 @@ impl Purpose {
     }
 }
 
-fn manifest_arg<'a>(call: &Call<'a>) -> Step<&'a Object> {
+/// The authenticated manifest a request names: `manifest_text`, captured
+/// bytes this runtime authenticates under its own key, or `manifest`, one a
+/// caller already authenticated.
+fn manifest_arg(call: &Call<'_>) -> Step<Object> {
+    if let Some(text) = call.args.get("manifest_text") {
+        let text = text.as_str().ok_or(Fault::Transition("files_invalid"))?;
+        let home = call.home()?;
+        let home = home.to_str().ok_or(Fault::Transition("files_invalid"))?;
+        return authenticate_text(home, text, None, None).map_err(|reason| {
+            let (code, message) = refusal(reason);
+            Fault::Integrity(code, message)
+        });
+    }
     call.args
         .get("manifest")
         .and_then(Value::as_object)
+        .cloned()
         .ok_or(Fault::Transition("files_invalid"))
 }
 
@@ -81,7 +96,7 @@ pub(super) fn inverse(call: &mut Call<'_>) -> Step<Value> {
     let roots = roots(call)?;
     let key = identity_dependency(call, &codex_hook_key::key_path(&home))?;
     let mut files = vec![as_object(key)?];
-    pin_generations(call, &mut files, manifest, &roots, None, INVERSE)?;
+    pin_generations(call, &mut files, &manifest, &roots, None, INVERSE)?;
     Ok(json!({ "files": files }))
 }
 
@@ -142,7 +157,7 @@ pub(super) fn files(call: &mut Call<'_>) -> Step<Value> {
     pin_generations(
         call,
         &mut files,
-        manifest,
+        &manifest,
         &roots,
         Some(&manifest_slot),
         REPAIR,

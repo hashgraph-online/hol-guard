@@ -351,26 +351,75 @@ def _raise_publication_error(answer: Mapping[str, object]) -> None:
     raise failure
 
 
-def live_hook_ask(op: str, context: HarnessContext) -> dict[str, Any]:
-    """Ask a live hook state op: the runtime reads the config and hooks files,
-    authenticates and verifies the hook manifest, and decides which managed
-    events Guard owns."""
-    from .codex_hook_file_integrity import _python_package_roots, active_hook_validation_deadline
+def _live_budget() -> tuple[float, bool]:
+    """Verification gets ten seconds, or what is left of a hook's budget; a
+    spent budget leaves the installation unverified."""
+    from .codex_hook_file_integrity import active_hook_validation_deadline
 
-    # Verification gets ten seconds, or what is left of a hook's budget; a
-    # spent budget leaves the installation unverified.
     timeout = _LIVE_STATE_TIMEOUT_SECONDS
     deadline = active_hook_validation_deadline()
     if deadline is not None:
         timeout = min(timeout, deadline - time.monotonic())
+    return max(timeout, _LIVE_STATE_MIN_SECONDS), timeout <= 0
+
+
+def live_hook_ask(op: str, context: HarnessContext) -> dict[str, Any]:
+    """Ask a live hook state op: the runtime reads the config and hooks files,
+    authenticates and verifies the hook manifest, and decides which managed
+    events Guard owns."""
+    from .codex_hook_file_integrity import _python_package_roots
+
+    timeout, spent = _live_budget()
     request: dict[str, Any] = {
         "launch": _launch_fields(context),
         "package_roots": [str(root) for root in _python_package_roots()],
-        "budget_spent": timeout <= 0,
+        "budget_spent": spent,
         **short_path_fields(),
     }
-    timeout = max(timeout, _LIVE_STATE_MIN_SECONDS)
     return dict(ask(op, context, harness="codex", timeout_seconds=timeout, **request))
+
+
+def _group_text(group: object) -> str | None:
+    """One hook group as JSON text; the runtime reads what JSON can carry."""
+    try:
+        return json.dumps(group, allow_nan=False)
+    except (TypeError, ValueError, RecursionError):
+        return None
+
+
+def verify_manifest_state(
+    spec: CodexHookManifestSpec, *, hooks: object, captured_text: str | None = None
+) -> dict[str, object]:
+    """The integrity state of the manifest on disk, or of ``captured_text``,
+    against ``spec``. The runtime authenticates it under its own key."""
+    from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
+    from .codex_hook_file_integrity import _python_package_roots
+
+    context = HarnessContext(home_dir=spec.home_dir, workspace_dir=spec.workspace_dir, guard_home=spec.guard_home)
+    wire_hooks: dict[str, list[str | None]] | None = None
+    if isinstance(hooks, dict):
+        wire_hooks = {
+            event: [_group_text(group) for group in hooks[event]]
+            for event in MANAGED_CODEX_HOOK_EVENTS
+            if isinstance(hooks.get(event), list)
+        }
+    timeout, spent = _live_budget()
+    answer = ask(
+        "verify_manifest",
+        context,
+        harness="codex",
+        timeout_seconds=timeout,
+        spec=spec.payload(),
+        hooks=wire_hooks,
+        manifest_text=captured_text,
+        package_roots=[str(root) for root in _python_package_roots()],
+        budget_spent=spent,
+        **short_path_fields(),
+    )
+    state = answer.get("state")
+    if not isinstance(state, dict):
+        raise ValueError("Harness adapter answer is malformed")
+    return dict(state)
 
 
 def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
