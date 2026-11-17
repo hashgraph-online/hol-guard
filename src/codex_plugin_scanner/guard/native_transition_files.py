@@ -103,11 +103,12 @@ def _ask(
     *,
     files: Sequence[TransitionFile] | None = None,
     on_write: Callable[[TransitionFile], None] | None = None,
+    timeout_seconds: float = _TIMEOUT_SECONDS,
 ) -> Mapping[str, object]:
     from .native_runner_authority import native_runner_authority
 
     request = {**request, **transition_context()}
-    answer = native_runner_authority("transition_files", request, timeout_seconds=_TIMEOUT_SECONDS)
+    answer = native_runner_authority("transition_files", request, timeout_seconds=timeout_seconds)
     return _settle(answer, files, on_write)
 
 
@@ -143,13 +144,13 @@ def _settle(
     return answer
 
 
-def publication(op: str, home: Path, **fields: object) -> object:
+def publication(op: str, home: Path, *, timeout_seconds: float = _TIMEOUT_SECONDS, **fields: object) -> object:
     """One ``publication_*`` op on the home's Codex publication record."""
 
     import os
 
     request: dict[str, object] = {"op": f"publication_{op}", "home": os.path.abspath(home), **fields}
-    return _ask(request).get("value")
+    return _ask(request, timeout_seconds=timeout_seconds).get("value")
 
 
 def merge_dependency(previous: dict[str, object], change: dict[str, object]) -> Mapping[str, object]:

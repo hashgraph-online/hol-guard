@@ -82,7 +82,9 @@ pub struct BoundedHookProcessResult {
 
 /// `desktop_hook_proxy_context`: only the signed Desktop proxy selectors cross
 /// a hook boundary, and only when the proxy is an absolute path.
-fn desktop_hook_proxy_context(source: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+pub(crate) fn desktop_hook_proxy_context(
+    source: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
     let mut selected = BTreeMap::new();
     if source.get("HOL_GUARD_DESKTOP").map(String::as_str) != Some("1") {
         return selected;
