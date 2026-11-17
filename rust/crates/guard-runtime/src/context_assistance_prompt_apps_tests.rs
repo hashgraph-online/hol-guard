@@ -58,4 +58,6 @@ fn cline_prompts_are_read_from_their_nested_field() {
     assert_eq!(prompt_text(&cline), Some("fix the cart total"));
     assert_eq!(prompt_text(&json!({"prompt": "fix it"})), Some("fix it"));
     assert_eq!(prompt_text(&json!({"hookName": "UserPromptSubmit"})), None);
+    let finished = "<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>";
+    assert_eq!(prompt_text(&json!({"prompt": finished})), None);
 }
