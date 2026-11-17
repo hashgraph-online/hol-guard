@@ -137,7 +137,7 @@ def test_expired_authenticated_context_cannot_start_a_child_with_fresh_budget(tm
     def forbidden(*args, **kwargs):
         raise AssertionError("expired authenticated context launched a child")
 
-    monkeypatch.setattr(launches, "_spawn_hook_process", forbidden)
+    monkeypatch.setattr(launches, "_exchange", forbidden)
     context = trust.TrustedCodexHookLaunch(tmp_path, {}, deadline_monotonic=4)
     assert not context.run_start(("fixture",), timeout_seconds=99)
     assert context.run_fallback(("fixture",), data="{}", timeout_seconds=99) is None

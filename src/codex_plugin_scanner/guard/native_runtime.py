@@ -271,6 +271,9 @@ def _run_native_process_result(
         stop_event=stop_event,
         allow_windows_breakaway=allow_windows_breakaway,
         windows_kill_on_job_close=windows_kill_on_job_close,
+        # The binary being run is the launcher: it is already identity-checked,
+        # and asking for the current runtime here would probe it through itself.
+        launcher=path,
     )
 
 

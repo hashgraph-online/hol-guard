@@ -8,9 +8,11 @@
 //! allowlist, bounded combined output, a hard deadline, a cooperative
 //! stop flag, and process-group containment + quarantine-on-leak.
 //!
-//! Windows Job-object legs (`spawn_windows_hook_process`, `WindowsHookJob`)
-//! are `cfg(windows)`-gated; the unix path uses `process_group(0)` +
-//! `killpg(SIGKILL)` for containment.
+//! On Windows the child starts suspended and joins a Job Object
+//! (`guard_runtime_windows_process::ChildTree`) before it resumes; on unix it
+//! leads its own process group and `killpg(SIGKILL)` contains the tree.
+//! `hook_launch_cli` is the one-shot entry Python calls instead of spawning
+//! the child itself.
 
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
@@ -37,14 +39,17 @@ const WAIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 /// `_HOOK_ENVIRONMENT_KEYS` (`codex_hook_launch_runtime.py:30-52`): the only
 /// base-env keys forwarded to a contained hook process. `LC_*` is a prefix
 /// allowlist on top.
-#[allow(dead_code)]
-const HOOK_ENVIRONMENT_KEYS: [&str; 19] = [
+const HOOK_ENVIRONMENT_KEYS: [&str; 20] = [
     "CODEX_HOME",
     "COMSPEC",
     "HOME",
     "HOL_GUARD_HOOK_FAILURE_KIND",
     "HOL_GUARD_NATIVE",
     "HOL_GUARD_NATIVE_BINARY",
+    // A source checkout names its source compiler; the compiler refuses either
+    // override when a packaged compiler is present.
+    "HOL_GUARD_NATIVE_SOURCE_COMPILER",
+    "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER",
     "HOL_GUARD_TEST_MODE",
     "HOL_GUARD_NATIVE_DIAGNOSTIC",
     "HOL_GUARD_RESIDENT_TEST_SEAMS",
@@ -57,11 +62,8 @@ const HOOK_ENVIRONMENT_KEYS: [&str; 19] = [
     "TMPDIR",
     "USERPROFILE",
     "WINDIR",
-    // 18th slot reserved for future OS keys; keep count honest.
-    "HOL_GUARD_RUNTIME_DIR",
 ];
 
-#[allow(dead_code)]
 fn env_key_allowed(name: &str) -> bool {
     let upper = name.to_uppercase();
     HOOK_ENVIRONMENT_KEYS.iter().any(|k| upper == *k) || upper.starts_with("LC_")
@@ -78,14 +80,34 @@ pub struct BoundedHookProcessResult {
     pub containment_failed: bool,
 }
 
-/// `isolated_hook_environment` (`codex_hook_launch_runtime.py:216-224`).
-#[allow(dead_code)]
+/// `desktop_hook_proxy_context`: only the signed Desktop proxy selectors cross
+/// a hook boundary, and only when the proxy is an absolute path.
+fn desktop_hook_proxy_context(source: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+    let mut selected = BTreeMap::new();
+    if source.get("HOL_GUARD_DESKTOP").map(String::as_str) != Some("1") {
+        return selected;
+    }
+    let Some(proxy) = source.get("HOL_GUARD_DESKTOP_HOOK_PROXY") else {
+        return selected;
+    };
+    if proxy.is_empty() || proxy.contains('\0') || !Path::new(proxy).is_absolute() {
+        return selected;
+    }
+    selected.insert("HOL_GUARD_DESKTOP".to_owned(), "1".to_owned());
+    selected.insert("HOL_GUARD_DESKTOP_HOOK_PROXY".to_owned(), proxy.clone());
+    selected
+}
+
+/// `isolated_hook_environment`: OS, user-home, locale, temp, PATH, Codex,
+/// native and signed proxy state, and nothing else.
 pub fn isolated_hook_environment(source: &BTreeMap<String, String>) -> BTreeMap<String, String> {
-    source
+    let mut kept: BTreeMap<String, String> = source
         .iter()
         .filter(|(k, _)| env_key_allowed(k))
         .map(|(k, v)| (k.clone(), v.clone()))
-        .collect()
+        .collect();
+    kept.extend(desktop_hook_proxy_context(source));
+    kept
 }
 
 /// `isolated_guard_cli_command` (`codex_hook_launch_runtime.py:171-184`):
@@ -205,7 +227,16 @@ pub fn private_hook_runtime_cwd(manifest_path: &Path) -> Result<PathBuf, String>
 #[allow(dead_code)]
 struct Quarantined {
     child: Child,
+    tree: Tree,
     readers_done: Arc<AtomicBool>,
+}
+
+/// What contains one child's whole tree: its process group on unix, a Job
+/// Object on Windows (`_HOOK_PROCESS_QUARANTINE`'s `windows_job`).
+#[derive(Default)]
+struct Tree {
+    #[cfg(windows)]
+    job: Option<guard_runtime_windows_process::ChildTree>,
 }
 
 #[allow(dead_code)]
@@ -233,7 +264,7 @@ fn retry_quarantined() -> bool {
     let mut q = quarantine_lock();
     let mut survivors = Vec::new();
     for mut entry in q.drain(..) {
-        let mut contained = kill_process_group(&mut entry.child);
+        let mut contained = kill_tree(&mut entry.child, &entry.tree);
         if entry.child.try_wait().ok().flatten().is_none() {
             // Still running after kill attempt.
             if entry.child.wait_timeout(FINAL_REAP_TIMEOUT).is_none() {
@@ -255,11 +286,27 @@ fn retry_quarantined() -> bool {
     drained
 }
 
+/// Retry the quarantine until it drains or `window` closes. The one-shot
+/// launcher calls this before it exits, since no later call can retry for it.
+pub fn settle_quarantine(window: Duration) -> bool {
+    let end = Instant::now() + window;
+    loop {
+        if retry_quarantined() {
+            return true;
+        }
+        if Instant::now() >= end {
+            return false;
+        }
+        std::thread::sleep(WAIT_POLL_INTERVAL * 5);
+    }
+}
+
 #[allow(dead_code)]
-fn quarantine_child(child: Child, readers_done: Arc<AtomicBool>) {
+fn quarantine_child(child: Child, tree: Tree, readers_done: Arc<AtomicBool>) {
     let mut q = quarantine_lock();
     q.push(Quarantined {
         child,
+        tree,
         readers_done,
     });
     containment_failed_flag().store(true, Ordering::SeqCst);
@@ -287,12 +334,23 @@ fn kill_process_group(child: &mut Child) -> bool {
     }
 }
 
-#[cfg(not(unix))]
-fn kill_process_group(child: &mut Child) -> bool {
-    if child.try_wait().ok().flatten().is_some() {
-        return true;
+/// `_kill_hook_process`: end the whole tree; `true` only when that is proven.
+#[cfg(unix)]
+fn kill_tree(child: &mut Child, _tree: &Tree) -> bool {
+    kill_process_group(child)
+}
+
+#[cfg(windows)]
+fn kill_tree(child: &mut Child, tree: &Tree) -> bool {
+    if let Some(job) = &tree.job {
+        if job.terminate().is_ok() {
+            return true;
+        }
     }
-    child.kill().is_ok()
+    if child.try_wait().ok().flatten().is_some() {
+        return tree.job.is_none();
+    }
+    child.kill().is_ok() && tree.job.is_none()
 }
 
 /// Shared output counters across the two drain readers — Python's
@@ -302,6 +360,8 @@ struct OutputBound {
     count: AtomicU64,
     limit: u64,
     exceeded: AtomicBool,
+    /// A read failed before EOF: the captured bytes are not the whole output.
+    capture_error: AtomicBool,
 }
 
 #[allow(dead_code)]
@@ -329,7 +389,11 @@ fn drain_stream<R: Read + Send + 'static>(
         let mut buf = [0u8; 64 * 1024];
         loop {
             match stream.read(&mut buf) {
-                Ok(0) | Err(_) => break,
+                Ok(0) => break,
+                Err(_) => {
+                    bound.capture_error.store(true, Ordering::SeqCst);
+                    break;
+                }
                 Ok(n) => {
                     let accepted = bound.take(n);
                     if accepted > 0 {
@@ -401,7 +465,131 @@ impl WaitTimeout for Child {
     }
 }
 
-/// `run_isolated_hook_process` (`codex_hook_launch_runtime.py:299-377`).
+/// What one launch asks for beyond the plain bounded run.
+#[derive(Clone, Copy, Debug)]
+pub struct LaunchExtras {
+    /// Pass the child a pipe that stays open until it ends
+    /// (`HOL_GUARD_PARENT_LIVENESS_FD`); unix only.
+    pub parent_liveness: bool,
+    /// Let a Windows child leave its Job (`allow_windows_breakaway`).
+    pub allow_breakaway: bool,
+    /// Kill the Windows Job's members when its handle closes.
+    pub kill_on_close: bool,
+    /// Windows Job-wide memory ceiling in bytes.
+    pub job_memory_limit_bytes: Option<usize>,
+    /// Windows Job active-process ceiling.
+    pub active_process_limit: Option<u32>,
+}
+
+impl Default for LaunchExtras {
+    fn default() -> Self {
+        Self {
+            parent_liveness: false,
+            allow_breakaway: false,
+            kill_on_close: true,
+            job_memory_limit_bytes: None,
+            active_process_limit: None,
+        }
+    }
+}
+
+/// One finished launch: the result plus the raw bytes behind its decoded text.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LaunchOutcome {
+    pub result: BoundedHookProcessResult,
+    pub stdout_raw: Vec<u8>,
+    pub stderr_raw: Vec<u8>,
+    pub capture_incomplete: bool,
+}
+
+fn refused_outcome(timed_out: bool, containment_failed: bool) -> LaunchOutcome {
+    LaunchOutcome {
+        result: BoundedHookProcessResult {
+            returncode: None,
+            stdout: String::new(),
+            stderr: String::new(),
+            output_limit_exceeded: false,
+            timed_out,
+            containment_failed,
+        },
+        stdout_raw: Vec::new(),
+        stderr_raw: Vec::new(),
+        capture_incomplete: false,
+    }
+}
+
+/// The write end of the parent-liveness pipe; closing it is the signal.
+#[cfg(unix)]
+type Liveness = Option<std::os::fd::OwnedFd>;
+#[cfg(not(unix))]
+type Liveness = Option<()>;
+
+/// Start the child inside its containment (`_spawn_hook_process`).
+fn spawn_contained(
+    command: &[String],
+    cwd: &Path,
+    environment: &BTreeMap<String, String>,
+    extras: &LaunchExtras,
+) -> std::io::Result<(Child, Tree, Liveness)> {
+    let mut cmd = Command::new(&command[0]);
+    cmd.args(&command[1..])
+        .current_dir(cwd)
+        .env_clear()
+        .envs(environment.iter())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::process::CommandExt;
+        // Own process group, so killpg(pid) contains the tree.
+        cmd.process_group(0);
+        let mut liveness: Liveness = None;
+        let mut read_end = None;
+        if extras.parent_liveness {
+            let (read, write) = nix::unistd::pipe().map_err(std::io::Error::from)?;
+            // The child inherits the read end only.
+            nix::fcntl::fcntl(
+                &write,
+                nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
+            )
+            .map_err(std::io::Error::from)?;
+            cmd.env("HOL_GUARD_PARENT_LIVENESS_FD", read.as_raw_fd().to_string());
+            liveness = Some(write);
+            read_end = Some(read);
+        }
+        let child = cmd.spawn()?;
+        drop(read_end);
+        Ok((child, Tree::default(), liveness))
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NEW_PROCESS_GROUP, plus suspended: the Job holds the child
+        // before its first instruction.
+        cmd.creation_flags(guard_runtime_windows_process::CHILD_TREE_CREATION_FLAGS | 0x0000_0200);
+        let mut child = cmd.spawn()?;
+        let options = guard_runtime_windows_process::ChildTreeOptions {
+            kill_on_close: extras.kill_on_close,
+            allow_breakaway: extras.allow_breakaway,
+            job_memory_limit_bytes: extras.job_memory_limit_bytes,
+            active_process_limit: extras.active_process_limit,
+        };
+        match guard_runtime_windows_process::ChildTree::adopt_suspended_with(&child, options) {
+            Ok(job) => Ok((child, Tree { job: Some(job) }, None)),
+            Err(error) => {
+                // `_cleanup_failed_spawn`: the suspended child must not outlive the refusal.
+                let _ = child.kill();
+                let _ = child.wait();
+                Err(error)
+            }
+        }
+    }
+}
+
+/// `run_isolated_hook_process` (`codex_hook_launch_runtime.py`), the plain
+/// form the runtime's own callers use.
 ///
 /// `deadline` (absolute `Instant`) is authoritative when given — startup and
 /// stream cleanup consume the caller's existing budget; `timeout_seconds` is
@@ -419,61 +607,69 @@ pub fn run_isolated_hook_process(
     stop_event: Option<Arc<AtomicBool>>,
     deadline: Option<Instant>,
 ) -> BoundedHookProcessResult {
-    // Retry containment on any previously-quarantined leak before spawning.
-    if containment_failed_flag().load(Ordering::SeqCst) && !retry_quarantined() {
-        return BoundedHookProcessResult {
-            returncode: None,
-            stdout: String::new(),
-            stderr: String::new(),
-            output_limit_exceeded: false,
-            timed_out: false,
-            containment_failed: true,
-        };
+    run_isolated_hook_process_extended(
+        command,
+        input_text,
+        cwd,
+        environment,
+        timeout_seconds,
+        output_limit,
+        stop_event,
+        deadline,
+        &LaunchExtras::default(),
+    )
+    .result
+}
+
+/// The whole kernel: `run_isolated_hook_process` with its containment
+/// options and the raw output bytes.
+#[allow(clippy::too_many_arguments)]
+pub fn run_isolated_hook_process_extended(
+    command: &[String],
+    input_text: &str,
+    cwd: &Path,
+    environment: &BTreeMap<String, String>,
+    timeout_seconds: Option<f64>,
+    output_limit: Option<usize>,
+    stop_event: Option<Arc<AtomicBool>>,
+    deadline: Option<Instant>,
+    extras: &LaunchExtras,
+) -> LaunchOutcome {
+    if command.is_empty() {
+        return refused_outcome(false, false);
+    }
+    if stop_event
+        .as_ref()
+        .is_some_and(|e| e.load(Ordering::SeqCst))
+    {
+        return refused_outcome(false, false);
     }
     let output_limit = output_limit.unwrap_or(HOOK_SUBPROCESS_OUTPUT_LIMIT);
     let deadline = match deadline {
         Some(d) => d,
         None => match timeout_seconds {
-            None => {
-                return BoundedHookProcessResult {
-                    returncode: None,
-                    stdout: String::new(),
-                    stderr: String::new(),
-                    output_limit_exceeded: false,
-                    timed_out: false,
-                    containment_failed: false,
-                }
+            None => return refused_outcome(false, false),
+            Some(t) => {
+                let t = if t.is_nan() {
+                    0.0
+                } else {
+                    t.clamp(0.0, 86_400.0)
+                };
+                Instant::now() + Duration::from_secs_f64(t)
             }
-            Some(t) => Instant::now() + Duration::from_secs_f64(t.max(0.0)),
         },
     };
-
-    let mut cmd = Command::new(&command[0]);
-    cmd.args(&command[1..])
-        .current_dir(cwd)
-        .env_clear()
-        .envs(environment.iter())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        // New session + own process group so killpg(pid) contains the tree.
-        cmd.process_group(0);
+    if Instant::now() >= deadline {
+        return refused_outcome(true, containment_failed_flag().load(Ordering::SeqCst));
     }
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
-        Err(_) => {
-            return BoundedHookProcessResult {
-                returncode: None,
-                stdout: String::new(),
-                stderr: String::new(),
-                output_limit_exceeded: false,
-                timed_out: false,
-                containment_failed: false,
-            }
-        }
+    // Retry containment on any previously-quarantined leak before spawning.
+    if containment_failed_flag().load(Ordering::SeqCst) && !retry_quarantined() {
+        return refused_outcome(false, true);
+    }
+
+    let (mut child, tree, liveness) = match spawn_contained(command, cwd, environment, extras) {
+        Ok(spawned) => spawned,
+        Err(_) => return refused_outcome(false, false),
     };
 
     // start_hook_io: bounded stdout/stderr readers + a stdin writer.
@@ -481,29 +677,24 @@ pub fn run_isolated_hook_process(
         count: AtomicU64::new(0),
         limit: output_limit as u64,
         exceeded: AtomicBool::new(false),
+        capture_error: AtomicBool::new(false),
     });
     let stdout_buf = Arc::new(Mutex::new(Vec::<u8>::new()));
     let stderr_buf = Arc::new(Mutex::new(Vec::<u8>::new()));
     let readers_done = Arc::new(AtomicBool::new(false));
 
     let mut io_handles: Vec<JoinHandle<()>> = Vec::new();
-    let mut readers_pending = 2;
     if let Some(out) = child.stdout.take() {
         let d = readers_done.clone();
         io_handles.push(drain_stream(out, stdout_buf.clone(), bound.clone(), d));
-    } else {
-        readers_pending -= 1;
     }
     if let Some(err) = child.stderr.take() {
         let d = readers_done.clone();
         io_handles.push(drain_stream(err, stderr_buf.clone(), bound.clone(), d));
-    } else {
-        readers_pending -= 1;
     }
     if let Some(stdin) = child.stdin.take() {
         io_handles.push(write_input(stdin, input_text.as_bytes().to_vec()));
     }
-    let _ = readers_pending;
 
     // wait_for_hook_process: poll stop / output-limit / deadline, terminate
     // the group on the first trigger, then reap.
@@ -514,23 +705,15 @@ pub fn run_isolated_hook_process(
         if child.try_wait().ok().flatten().is_some() {
             break;
         }
-        if stop_event
+        let stopped = stop_event
             .as_ref()
-            .is_some_and(|e| e.load(Ordering::SeqCst))
-        {
+            .is_some_and(|e| e.load(Ordering::SeqCst));
+        let over = bound.exceeded.load(Ordering::SeqCst);
+        let late = Instant::now() >= deadline;
+        if stopped || over || late {
+            timed_out = late && !stopped && !over;
             termination_requested = true;
-            containment_confirmed = kill_process_group(&mut child);
-            break;
-        }
-        if bound.exceeded.load(Ordering::SeqCst) {
-            termination_requested = true;
-            containment_confirmed = kill_process_group(&mut child);
-            break;
-        }
-        if Instant::now() >= deadline {
-            timed_out = true;
-            termination_requested = true;
-            containment_confirmed = kill_process_group(&mut child);
+            containment_confirmed = kill_tree(&mut child, &tree);
             break;
         }
         std::thread::sleep(WAIT_POLL_INTERVAL);
@@ -538,7 +721,7 @@ pub fn run_isolated_hook_process(
     let returncode = match child.wait_timeout(REAP_TIMEOUT) {
         Some(s) => s.code(),
         None => {
-            containment_confirmed = kill_process_group(&mut child) && containment_confirmed;
+            containment_confirmed = kill_tree(&mut child, &tree) && containment_confirmed;
             match child.wait_timeout(FINAL_REAP_TIMEOUT) {
                 Some(s) => s.code(),
                 None => {
@@ -560,7 +743,7 @@ pub fn run_isolated_hook_process(
             .is_some_and(|e| e.load(Ordering::SeqCst));
     if result_failed && (!termination_requested || !containment_confirmed) {
         termination_requested = true;
-        containment_confirmed = kill_process_group(&mut child) && containment_confirmed;
+        containment_confirmed = kill_tree(&mut child, &tree) && containment_confirmed;
     }
 
     // join_and_cleanup_hook_process: join IO threads on a deadline; if a
@@ -571,9 +754,7 @@ pub fn run_isolated_hook_process(
     }
     if io_handles.iter().any(|h| !h.is_finished()) {
         if !termination_requested || !containment_confirmed {
-            termination_requested = true;
-            containment_confirmed = kill_process_group(&mut child) && containment_confirmed;
-            let _ = termination_requested;
+            containment_confirmed = kill_tree(&mut child, &tree) && containment_confirmed;
         }
         let final_join_deadline = Instant::now() + FINAL_IO_JOIN_TIMEOUT;
         for h in &io_handles {
@@ -583,36 +764,42 @@ pub fn run_isolated_hook_process(
             containment_confirmed = false;
         }
     }
-    if io_handles.iter().any(|h| !h.is_finished()) {
-        containment_confirmed = false;
-    }
 
     if !containment_confirmed {
-        quarantine_child(child, readers_done);
+        quarantine_child(child, tree, readers_done);
     }
+    // The liveness pipe closes now the child is done (or quarantined).
+    drop(liveness);
     // Drain joinable handles (they're detached-safe; finishing is enough).
     for h in io_handles {
-        let _ = h.join();
+        // A reader that outlived the final join belongs to a quarantined child;
+        // joining it would block the answer on the very process we failed to stop.
+        if h.is_finished() {
+            let _ = h.join();
+        }
     }
 
-    let stdout_lock = stdout_buf.lock().unwrap_or_else(|e| e.into_inner());
-    let stderr_lock = stderr_buf.lock().unwrap_or_else(|e| e.into_inner());
+    let stdout_raw = stdout_buf.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let stderr_raw = stderr_buf.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let (stdout_decoded, stderr_decoded) =
-        decode_combined_output(&stdout_lock, &stderr_lock, output_limit);
-    drop(stdout_lock);
-    drop(stderr_lock);
+        decode_combined_output(&stdout_raw, &stderr_raw, output_limit);
 
-    BoundedHookProcessResult {
-        returncode: if containment_confirmed {
-            returncode
-        } else {
-            None
+    LaunchOutcome {
+        result: BoundedHookProcessResult {
+            returncode: if containment_confirmed {
+                returncode
+            } else {
+                None
+            },
+            stdout: stdout_decoded,
+            stderr: stderr_decoded,
+            output_limit_exceeded: bound.exceeded.load(Ordering::SeqCst),
+            timed_out,
+            containment_failed: !containment_confirmed,
         },
-        stdout: stdout_decoded,
-        stderr: stderr_decoded,
-        output_limit_exceeded: bound.exceeded.load(Ordering::SeqCst),
-        timed_out,
-        containment_failed: !containment_confirmed,
+        stdout_raw,
+        stderr_raw,
+        capture_incomplete: bound.capture_error.load(Ordering::SeqCst),
     }
 }
 
@@ -650,6 +837,16 @@ mod tests {
         std::fs::canonicalize(&p).unwrap_or(p)
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn settling_the_quarantine_drains_a_contained_child_and_clears_the_latch() {
+        let mut child = std::process::Command::new("/usr/bin/true").spawn().unwrap();
+        let _ = child.wait();
+        quarantine_child(child, Tree::default(), Arc::new(AtomicBool::new(true)));
+        assert!(settle_quarantine(Duration::from_millis(500)));
+        assert!(quarantine_lock().is_empty());
+    }
+
     #[test]
     fn environment_allowlist_filters() {
         let mut src = BTreeMap::new();
@@ -661,6 +858,20 @@ mod tests {
         let e = isolated_hook_environment(&src);
         assert!(e.contains_key("HOME"));
         assert!(e.contains_key("LC_ALL"));
+        let mut compiler = BTreeMap::new();
+        compiler.insert(
+            "HOL_GUARD_NATIVE_SOURCE_COMPILER".to_string(),
+            "/c".to_string(),
+        );
+        compiler.insert(
+            "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER".to_string(),
+            "/c".to_string(),
+        );
+        compiler.insert("HOL_GUARD_RUNTIME_DIR".to_string(), "/r".to_string());
+        let kept = isolated_hook_environment(&compiler);
+        assert!(kept.contains_key("HOL_GUARD_NATIVE_SOURCE_COMPILER"));
+        assert!(kept.contains_key("HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER"));
+        assert!(!kept.contains_key("HOL_GUARD_RUNTIME_DIR"));
         assert!(e.contains_key("PATH"));
         assert!(!e.contains_key("AWS_SECRET"));
         assert!(!e.contains_key("LD_PRELOAD"));
@@ -822,5 +1033,36 @@ mod tests {
         assert!(cmd[3].contains("codex_plugin_scanner.cli"));
         assert_eq!(cmd[4], "guard");
         assert_eq!(cmd[5], "check");
+    }
+}
+
+#[cfg(test)]
+mod desktop_proxy_tests {
+    use super::*;
+
+    fn source(proxy: &str, desktop: &str) -> BTreeMap<String, String> {
+        let mut source = BTreeMap::new();
+        source.insert("HOL_GUARD_DESKTOP".to_owned(), desktop.to_owned());
+        source.insert("HOL_GUARD_DESKTOP_HOOK_PROXY".to_owned(), proxy.to_owned());
+        source
+    }
+
+    #[test]
+    fn the_desktop_proxy_crosses_only_when_signed_and_absolute() {
+        let absolute = std::env::temp_dir()
+            .join("proxy")
+            .to_string_lossy()
+            .into_owned();
+        let kept = isolated_hook_environment(&source(&absolute, "1"));
+        assert_eq!(kept.get("HOL_GUARD_DESKTOP").map(String::as_str), Some("1"));
+        assert_eq!(kept.get("HOL_GUARD_DESKTOP_HOOK_PROXY"), Some(&absolute));
+        for refused in [
+            source("relative/proxy", "1"),
+            source("", "1"),
+            source("/p\0q", "1"),
+            source(&absolute, "0"),
+        ] {
+            assert!(isolated_hook_environment(&refused).is_empty());
+        }
     }
 }

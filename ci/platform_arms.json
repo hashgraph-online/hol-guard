@@ -1868,11 +1868,11 @@
   },
   {
    "file": "rust/crates/guard-runtime/src/hook_process_spawn.rs",
-   "item": "fn kill_process_group(child: &mut Child) -> bool",
-   "verdict": "windows-unsupported",
-   "note": "There are no process groups, so only the direct child is killed. Its own children can outlive it; a Job Object is the Windows mechanism and is not used here.",
+   "item": "type Liveness",
+   "verdict": "windows-equivalent",
+   "note": "The parent-liveness pipe is a Unix descriptor. On Windows the child sits in a kill-on-close Job Object, and a caller that holds the launcher through its stdin pipe is contained by `hold_job`, so the type is unit there and the pipe is never made. Proven off Unix by the Windows job tests in guard-runtime-windows-process and the hold_job request tests.",
    "cfg": "not(unix)",
-   "body": "fc902ad11bdf"
+   "body": "4928f1f2006e"
   },
   {
    "file": "rust/crates/guard-runtime/src/isolation_provider_registry.rs",

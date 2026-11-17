@@ -298,6 +298,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = daemon_manage::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if hook_launch_cli::is_command(command) && flag == "--stdin" => {
+            let response = hook_launch_cli::run_command(io::stdin())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if posix_processes::is_command(command) && flag == "--stdin" => {
             let response = posix_processes::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
