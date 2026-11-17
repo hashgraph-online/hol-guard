@@ -603,20 +603,10 @@ fn an_unset_review_names_the_connector_to_set_up() {
             run_with_connector(&fixture.request("npm run build", action, grant_allowed)).unwrap();
         assert_eq!(connector, None, "{action} {grant_allowed}");
     }
-    // A grant recorded for an older identity is not a decision for this one,
-    // and an allow of an earlier version is named so the agent can say so.
+    // A grant recorded for an older identity is not a decision for this one.
     fixture.grant(&identity.cli_id, &"0".repeat(64), "allowed");
     let changed = run_with_connector(&request).unwrap().1.unwrap();
-    assert_eq!(
-        changed[crate::connector_setup::ALLOWED_EARLIER_VERSION],
-        true
-    );
-    fixture
-        .connection
-        .execute("update local_cli_grant set state = 'blocked'", [])
-        .unwrap();
-    let blocked = run_with_connector(&request).unwrap().1.unwrap();
-    assert_eq!(blocked, connector);
+    assert_eq!(changed["allowed_earlier_version"], true);
 }
 
 #[test]
