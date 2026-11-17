@@ -139,3 +139,82 @@ fn a_symlinked_log_directory_is_refused() {
     record_failure("redirected", "error", None, &named);
     assert!(!elsewhere.path().join(FAILURE_LOG).exists());
 }
+
+#[test]
+fn concurrent_failures_at_the_bound_keep_the_rotated_history() {
+    let home = tempfile::tempdir().unwrap();
+    let named = arguments(&[
+        "daemon-serve",
+        "--guard-home",
+        home.path().to_str().unwrap(),
+    ]);
+    record_failure("first_failure", "error", None, &named);
+    let path = home.path().join(LOG_DIRECTORY).join(FAILURE_LOG);
+    fs::write(&path, vec![b'x'; MAX_FAILURE_LOG_BYTES as usize]).unwrap();
+    let launches = 16;
+    let barrier = std::sync::Barrier::new(launches);
+    std::thread::scope(|scope| {
+        for _ in 0..launches {
+            scope.spawn(|| {
+                barrier.wait();
+                record_failure("concurrent_failure", "error", None, &named);
+            });
+        }
+    });
+    // One launch moved the full log aside; no other moved the fresh log
+    // over it, and no record was lost.
+    let rotated = home.path().join(LOG_DIRECTORY).join(ROTATED_FAILURE_LOG);
+    assert_eq!(fs::metadata(&rotated).unwrap().len(), MAX_FAILURE_LOG_BYTES);
+    let fresh = fs::read_to_string(&path).unwrap();
+    assert_eq!(fresh.lines().count(), launches, "{fresh}");
+}
+
+#[test]
+fn a_held_rotation_lock_still_records_without_rotating() {
+    let home = tempfile::tempdir().unwrap();
+    let named = arguments(&[
+        "daemon-serve",
+        "--guard-home",
+        home.path().to_str().unwrap(),
+    ]);
+    record_failure("first_failure", "error", None, &named);
+    let directory = home.path().join(LOG_DIRECTORY);
+    let path = directory.join(FAILURE_LOG);
+    fs::write(&path, vec![b'x'; MAX_FAILURE_LOG_BYTES as usize]).unwrap();
+    let held = rotation_lock(&directory).expect("rotation lock");
+    let started = Instant::now();
+    record_failure("while_locked", "error", None, &named);
+    assert!(started.elapsed() < Duration::from_secs(5));
+    drop(held);
+    assert!(!directory.join(ROTATED_FAILURE_LOG).exists());
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.ends_with("\n") && text.contains("while_locked"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_fifo_in_place_of_the_log_does_not_hold_up_the_exit() {
+    let home = tempfile::tempdir().unwrap();
+    let directory = home.path().join(LOG_DIRECTORY);
+    fs::create_dir(&directory).unwrap();
+    let path = directory.join(FAILURE_LOG);
+    let made = std::process::Command::new("mkfifo")
+        .arg(&path)
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let named = arguments(&[
+        "daemon-serve",
+        "--guard-home",
+        home.path().to_str().unwrap(),
+    ]);
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        record_failure("behind_a_fifo", "error", None, &named);
+        let _ = sender.send(());
+    });
+    assert!(
+        receiver.recv_timeout(Duration::from_secs(10)).is_ok(),
+        "recording a failure blocked on a FIFO"
+    );
+}

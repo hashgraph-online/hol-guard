@@ -10,16 +10,18 @@
 //! survives a missing reader.
 
 use std::fmt;
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Map, Value};
 
 const LOG_DIRECTORY: &str = "logs";
 const FAILURE_LOG: &str = "runtime-failures.jsonl";
 const ROTATED_FAILURE_LOG: &str = "runtime-failures.jsonl.1";
+const ROTATION_LOCK: &str = "runtime-failures.lock";
+const ROTATION_LOCK_WAIT: Duration = Duration::from_millis(200);
 const MAX_FAILURE_LOG_BYTES: u64 = 256 * 1024;
 const MAX_LABEL_BYTES: usize = 96;
 const RUNTIME_DIRECTORY: &str = "native-runtime";
@@ -100,25 +102,63 @@ fn append_failure(
     if is_symlink(&path) {
         return None;
     }
-    if fs::metadata(&path).is_ok_and(|metadata| metadata.len() >= MAX_FAILURE_LOG_BYTES) {
+    let mut line = failure_record(code, kind, location, arguments)?.to_string();
+    line.push('\n');
+    // Only the holder of the rotation lock may move a full log aside; a
+    // second launch that also saw it full would otherwise move the fresh log
+    // over the one just kept. A launch that cannot get the lock in time
+    // appends without rotating, so its record is never dropped.
+    let rotation_lock = rotation_lock(&directory);
+    if rotation_lock.is_some()
+        && fs::metadata(&path).is_ok_and(|metadata| metadata.len() >= MAX_FAILURE_LOG_BYTES)
+    {
         let rotated = directory.join(ROTATED_FAILURE_LOG);
         if is_symlink(&rotated) {
             return None;
         }
         fs::rename(&path, &rotated).ok()?;
     }
-    let mut line = failure_record(code, kind, location, arguments)?.to_string();
-    line.push('\n');
-    let mut options = OpenOptions::new();
-    options.append(true).create(true);
+    let mut file = open_regular(&path, OpenOptions::new().append(true).create(true))?;
+    // One write per record, so concurrent failing launches do not interleave.
+    let written = file.write_all(line.as_bytes()).ok();
+    drop(rotation_lock);
+    written
+}
+
+/// The rotation lock, held until the returned file is dropped. The wait is
+/// bounded so that reporting a failure never holds up the exit it reports.
+fn rotation_lock(directory: &Path) -> Option<File> {
+    let lock = open_regular(
+        &directory.join(ROTATION_LOCK),
+        OpenOptions::new().write(true).create(true),
+    )?;
+    let deadline = Instant::now() + ROTATION_LOCK_WAIT;
+    loop {
+        match lock.try_lock() {
+            Ok(()) => return Some(lock),
+            Err(TryLockError::WouldBlock) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            Err(_) => return None,
+        }
+    }
+}
+
+/// Opens `path` without following a symlink or waiting on a FIFO, and keeps
+/// it only if it is a regular file. A FIFO with no reader would otherwise
+/// block the open, and the runtime with it.
+fn open_regular(path: &Path, options: &mut OpenOptions) -> Option<File> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
     }
-    let mut file = options.open(&path).ok()?;
-    // One write per record, so concurrent failing launches do not interleave.
-    file.write_all(line.as_bytes()).ok()
+    let file = options.open(path).ok()?;
+    file.metadata()
+        .is_ok_and(|metadata| metadata.is_file())
+        .then_some(file)
 }
 
 /// The record holds labels only. Arguments and messages are left out: hook
