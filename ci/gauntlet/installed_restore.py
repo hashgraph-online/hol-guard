@@ -62,6 +62,19 @@ def _parsed(path: Path, text: str) -> object:
         return None
 
 
+def _check_project(path: Path, seeded: dict[str, tuple[Path, bytes]], step: str, failures: list[str]) -> None:
+    """Record a change to the workspace's own settings the moment a command makes it.
+
+    A later command could put the bytes back, so checking only at the end
+    would miss an install that wrote the file and an uninstall that undid it.
+    """
+
+    before = seeded["workspace/.claude/settings.local.json"][1]
+    after = path.read_bytes() if path.is_file() else None
+    if after != before:
+        failures.append(f"workspace/.claude/settings.local.json: changed by {step}")
+
+
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()[:16]
 
@@ -158,6 +171,7 @@ def restore_pass(
                 )
             except subprocess.TimeoutExpired:
                 installs.append({"harness": harness, "exit_code": None, "stderr_tail": "install timed out"})
+            _check_project(project_local, seeded, f"{harness} install", failures)
         # An installer that skipped the seeded file and still exited 0 would
         # leave every seed untouched, so the byte check below would pass
         # without testing removal. Require Guard to be registered first.
@@ -176,6 +190,7 @@ def restore_pass(
             except subprocess.TimeoutExpired:
                 entry = {"harness": harness, "exit_code": None, "stderr_tail": "uninstall timed out"}
             uninstalls.append(entry)
+            _check_project(project_local, seeded, f"{harness} uninstall", failures)
             if entry["exit_code"] != 0:
                 failures.append(f"{harness}: uninstall exited {entry['exit_code']}: {entry['stderr_tail']}")
     finally:

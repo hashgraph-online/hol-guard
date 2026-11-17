@@ -165,3 +165,32 @@ def test_a_hung_install_is_recorded_and_the_pass_still_compares(tmp_path: Path, 
     assert len(result["uninstall"]) == 1
     assert result["files"]
     assert any("muse: install exited None: install timed out" in failure for failure in result["failures"])
+
+
+def test_a_project_file_changed_and_put_back_is_still_reported(tmp_path: Path, monkeypatch) -> None:
+    contract = load_contract()
+
+    def install(runtime, harness, *, home, guard_home, workspace):
+        (workspace / ".claude" / "settings.local.json").write_text("{}", encoding="utf-8")
+        return {"harness": harness, "exit_code": 0, "payload": {}, "stderr_tail": ""}
+
+    def remove(runtime, harness, *, home, guard_home, workspace):
+        project = workspace / ".claude" / "settings.local.json"
+        project.write_text(installed_restore.PROJECT_LOCAL_SETTINGS, encoding="utf-8", newline="\n")
+        return {"harness": harness, "exit_code": 0, "stderr_tail": ""}
+
+    monkeypatch.setattr(installed_restore, "install_harness", install)
+    monkeypatch.setattr(installed_restore, "uninstall_harness", remove)
+    monkeypatch.setattr(installed_restore, "stop_daemon", lambda runtime, *, home, guard_home: 0)
+    monkeypatch.setattr(
+        installed_restore,
+        "assess_harness",
+        lambda home, harness, expectation: {"harness": harness, "registered": True, "failures": []},
+    )
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    result = installed_restore.restore_pass(_Runtime(), ["muse"], contract, home=tmp_path / "h", workspace=workspace)
+    project = next(row for row in result["files"] if row["path"] == "workspace/.claude/settings.local.json")
+    assert project["bytes_identical"] is True
+    assert result["passed"] is False
+    assert "workspace/.claude/settings.local.json: changed by muse install" in result["failures"]
