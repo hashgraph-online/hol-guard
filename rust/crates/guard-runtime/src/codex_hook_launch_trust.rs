@@ -31,9 +31,8 @@ use crate::hook_process_spawn::{isolated_daemon_start_command, isolated_guard_cl
 pub(crate) const LAUNCH_INVALID: &str = "codex_hook_launch_invalid";
 const SCHEMA_VERSION: i64 = 2;
 const STATE_FILE: &str = "daemon-state.json";
-const REQUIRED_ROLES: [&str; 8] = [
+const REQUIRED_ROLES: [&str; 7] = [
     "bridge",
-    "bridge_runtime",
     "daemon_entrypoint",
     "daemon_manager",
     "fallback_entrypoint",
@@ -354,11 +353,6 @@ fn verify_transport(
     let trust = Value::from(spelled(&canonical(runtime_path)));
     for (role, expected, what) in [
         (
-            "bridge_runtime",
-            beside("codex_hook_bridge_runtime.py"),
-            "bridge runtime",
-        ),
-        (
             "launch_runtime",
             beside("codex_hook_launch_runtime.py"),
             "launch runtime",
@@ -375,13 +369,7 @@ fn verify_transport(
         }
     }
     let transport = mapping(manifest.get("transport"), "transport")?;
-    for role in [
-        "bridge",
-        "bridge_runtime",
-        "launch_runtime",
-        "runtime_trust",
-        "windows_job",
-    ] {
+    for role in ["bridge", "launch_runtime", "runtime_trust", "windows_job"] {
         if transport.get(role).and_then(Value::as_object) != Some(packaged_role(packaged, role)?) {
             return Err(invalid("transport identity is invalid"));
         }

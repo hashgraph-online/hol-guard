@@ -18,8 +18,7 @@ use super::{caller, kimi, path_text, Ctx, Failure, Step};
 
 /// Each authenticated role's file under the caller's `codex_plugin_scanner`
 /// directory, after `bridge` (the native runtime the hook runs).
-const ROLES: [(&str, &str); 9] = [
-    ("bridge_runtime", "guard/codex_hook_bridge_runtime.py"),
+const ROLES: [(&str, &str); 8] = [
     ("hook_probe", "guard/runtime_transition_hook_probe.py"),
     ("native_receipt", "guard/native_decision_receipt.py"),
     ("fallback_entrypoint", "cli.py"),

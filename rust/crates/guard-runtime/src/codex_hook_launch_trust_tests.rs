@@ -122,7 +122,6 @@ fn a_captured_manifest_without_events_is_refused_before_any_launch() {
 fn layout(drop: &[&str], foreign: Option<&str>) -> Vec<(&'static str, Object)> {
     let names = [
         ("bridge", "native-bridge"),
-        ("bridge_runtime", "codex_hook_bridge_runtime.py"),
         ("daemon_entrypoint", "daemon.py"),
         ("daemon_manager", "manager.py"),
         ("fallback_entrypoint", "cli.py"),
@@ -168,5 +167,25 @@ fn observation_roles_come_all_together_or_not_at_all() {
     assert_eq!(
         check(&[], Some("hook_probe")).unwrap_err(),
         "managed Codex observation package path is invalid"
+    );
+}
+
+#[test]
+fn an_install_that_still_records_the_retired_bridge_runtime_role_is_refused() {
+    // The role named a Python file the hook never runs; a manifest from before
+    // it was retired fails closed with the repair wording, not a crash.
+    let mut owned = layout(&[], None);
+    owned.push((
+        "bridge_runtime",
+        object(
+            json!({"role": "bridge_runtime", "path": "/opt/guard/codex_hook_bridge_runtime.py"}),
+        ),
+    ));
+    let packaged: Packaged<'_> = owned.iter().map(|(role, id)| (*role, id)).collect();
+    let refusal = complete(&packaged).unwrap_err();
+    assert_eq!(refusal.0, LAUNCH_INVALID);
+    assert_eq!(
+        refusal.1,
+        "managed Codex hook package identity is incomplete"
     );
 }

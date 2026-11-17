@@ -176,6 +176,32 @@ fn a_packaged_path_the_installation_no_longer_names_is_stale() {
 }
 
 #[test]
+fn a_manifest_that_still_records_the_retired_bridge_runtime_role_is_stale() {
+    // An install from before `bridge_runtime` was retired: its manifest lists
+    // a role the installation no longer names. Status says "stale" and points
+    // at repair, the route that rewrites the manifest.
+    let fixture = Fixture::new();
+    let mut request = fixture.request();
+    let retired = identity(&fixture.bridge, "bridge_runtime", false);
+    let manifest = manifest_mut(&mut request);
+    manifest["packaged_files"]
+        .as_array_mut()
+        .expect("packaged files")
+        .push(retired.clone());
+    manifest["transport"]["bridge_runtime"] = retired;
+    expect(
+        &request,
+        "codex_hook_manifest_packaged_files_stale",
+        "stale",
+    );
+    let message = state(&request)["integrity_message"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert!(message.contains("run repair"), "{message}");
+}
+
+#[test]
 fn interpreter_identity_changes_are_refused() {
     let fixture = Fixture::new();
     let mut request = fixture.request();

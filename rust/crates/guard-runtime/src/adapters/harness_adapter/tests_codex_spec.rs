@@ -50,7 +50,6 @@ fn a_source_caller_names_its_package_files_under_its_root() {
         roles,
         [
             "bridge",
-            "bridge_runtime",
             "hook_probe",
             "native_receipt",
             "fallback_entrypoint",

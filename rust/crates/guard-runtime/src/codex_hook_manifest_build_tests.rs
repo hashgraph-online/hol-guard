@@ -42,7 +42,6 @@ fn fixture() -> Fixture {
     let mut packaged = Vec::new();
     for role in [
         "bridge",
-        "bridge_runtime",
         "launch_runtime",
         "runtime_trust",
         "windows_job",
