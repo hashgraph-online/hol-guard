@@ -332,12 +332,13 @@ fn a_plain_word_defined_only_in_examples_names_nothing() {
     assert!(text.contains(NAMED_TITLE), "{text}");
 }
 
-/// A plain word only in comments and docstrings is prose about the code and
-/// places nothing; on a code line it does.
+/// A word only in comments and docstrings is prose about the code and
+/// places nothing; on a code line it does. (Written as code: one plain word
+/// alone places nothing anyway.)
 #[test]
 fn words_in_comments_and_docstrings_place_nothing() {
     let prose = "def run(value):\n    \"\"\"\n    Reticulate it.\n    Reticulate it again.\n    \"\"\"\n    # reticulate\n    return value\n";
-    let words = [("reticulate", false, 1)];
+    let words = [("reticulate", true, 1)];
     assert_eq!(mapped_text(&[("src/run.py", prose)], &words), None);
     let code = "def run(value):\n    reticulate = value\n    return reticulate\n";
     let text = mapped_text(&[("src/run.py", code)], &words).unwrap();

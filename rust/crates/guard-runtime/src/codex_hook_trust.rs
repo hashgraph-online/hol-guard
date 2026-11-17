@@ -85,6 +85,15 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     Ok(answer.to_string().into_bytes())
 }
 
+/// One trust request already in hand, for a caller inside the runtime.
+pub(crate) fn answer_value(request: Value) -> Result<Value, String> {
+    let request: Request = serde_json::from_value(request).map_err(|_| invalid())?;
+    if request.schema != SCHEMA {
+        return Err(invalid());
+    }
+    answer(&request)
+}
+
 fn invalid() -> String {
     "codex_hook_trust_request_invalid".to_owned()
 }

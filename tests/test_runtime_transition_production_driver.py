@@ -190,12 +190,13 @@ try:
         runtime.restore_files(operation_id, first_cause="candidate_hook_failed")
         if phase == "inverse-restored":
             finish()
-        original = runtime._write
-        def crash_after_previous(payload):
-            original(payload)
-            if payload.get("phase") == "PreviousFunctional":
+        original = runtime._commit
+        def crash_after_previous(*args, **kwargs):
+            phase_now = original(*args, **kwargs)
+            if phase_now == "PreviousFunctional":
                 finish()
-        runtime._write = crash_after_previous
+            return phase_now
+        runtime._commit = crash_after_previous
         runtime.finish_rollback(operation_id, functional_proof=proof(predecessor_generation))
     raise SystemExit("crash boundary was not reached")
 finally:

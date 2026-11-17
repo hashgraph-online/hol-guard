@@ -792,6 +792,12 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::ReleaseFeedProject(request) => {
                 crate::release_feed_op::evaluate_release_feed_project(&request)
             }
+            // Owner-private Windows state files inside the pinned Guard home,
+            // through the same held handles as `windows-private-state --stdin`.
+            ResidentOperationV1::WindowsPrivateState(request) => {
+                policy_store.ok_or_else(|| "native_windows_private_state_resident_required".to_owned())?;
+                crate::windows_private_state::resident::evaluate(&request)
+            }
             ResidentOperationV1::DataFlowAnalyze(request) => {
                 crate::data_flow_analyze_op::evaluate_data_flow_analyze(&request)
             }
@@ -878,6 +884,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::CatalogReadV2(request) => request.guard_home.to_str(),
         ResidentOperationV1::CatalogPrepareV1(request) => request.guard_home.to_str(),
         ResidentOperationV1::CatalogReadPreparedV1(request) => request.guard_home.to_str(),
+        ResidentOperationV1::WindowsPrivateState(request) => Some(&request.guard_home),
         ResidentOperationV1::NativeBashPrepare(request) => Some(&request.capture.guard_home),
         ResidentOperationV1::NativeBashExecute(request) => Some(&request.capture.guard_home),
         ResidentOperationV1::NativeBashCancel(request) => Some(&request.guard_home),

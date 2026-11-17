@@ -1,104 +1,32 @@
-"""Signed macOS Desktop proxy launcher for frozen bounded hooks."""
+"""Signed macOS Desktop proxy launch for frozen bounded hooks.
+
+The native ``desktop_hook_proxy`` kind checks the proxy, Core and app bundle,
+verifies their Apple Team ID and renders the launch script that checks them
+again before every hook. This module sends the Desktop launch environment and
+keeps the frozen-process check, which only this process knows. A resident that
+cannot answer keeps the Core bridge.
+"""
 
 from __future__ import annotations
 
 import os
-import stat
 import sys
-from pathlib import Path
+from collections.abc import Sequence
 
 _DESKTOP_PROXY_ENV = "HOL_GUARD_DESKTOP_HOOK_PROXY"
+# Three `codesign` verifications of up to 5s each, one of them a whole bundle.
+_TIMEOUT_SECONDS = 45.0
 
 
-def _codesign_team(path: Path) -> str | None:
-    """Return a verified Apple TeamIdentifier without importing the Desktop runtime."""
-
-    from ..macos_code_signing import verified_macos_signing_team
-
-    return verified_macos_signing_team(path)
-
-
-_DESKTOP_PROXY_LAUNCH_SCRIPT = r"""
-set -u
-proxy=$1
-expected_team=$2
-bundle=$3
-config=$4
-fallback=$5
-proxy_required=$6
-fallback_bridge() {
-  [ "$proxy_required" = "1" ] && exit 125
-  exec "$fallback" __guard-bounded-hook "$config"
-}
-verify_team() {
-  candidate=$1
-  /usr/bin/codesign --verify --strict --verbose=2 "$candidate" >/dev/null 2>&1 || return 1
-  actual_team=$(
-    /usr/bin/codesign --display --verbose=4 "$candidate" 2>&1 \
-      | /usr/bin/sed -n 's/^TeamIdentifier=//p' \
-      | /usr/bin/head -n 1
-  ) || return 1
-  [ -n "$actual_team" ] || return 1
-  [ "$actual_team" != "not set" ] || return 1
-  [ "$actual_team" = "$expected_team" ]
-}
-[ -x "$proxy" ] && [ ! -L "$proxy" ] || fallback_bridge
-[ -x "$fallback" ] && [ ! -L "$fallback" ] || fallback_bridge
-[ -d "$bundle" ] && [ ! -L "$bundle" ] || fallback_bridge
-proxy_before=$(/usr/bin/stat -f '%d:%i:%u:%p' "$proxy" 2>/dev/null) || fallback_bridge
-fallback_before=$(/usr/bin/stat -f '%d:%i:%u:%p' "$fallback" 2>/dev/null) || fallback_bridge
-verify_team "$bundle" || fallback_bridge
-verify_team "$proxy" || fallback_bridge
-verify_team "$fallback" || fallback_bridge
-proxy_after=$(/usr/bin/stat -f '%d:%i:%u:%p' "$proxy" 2>/dev/null) || fallback_bridge
-fallback_after=$(/usr/bin/stat -f '%d:%i:%u:%p' "$fallback" 2>/dev/null) || fallback_bridge
-[ "$proxy_before" = "$proxy_after" ] || fallback_bridge
-[ "$fallback_before" = "$fallback_after" ] || fallback_bridge
-"$proxy" __guard-hook-proxy "$config"
-status=$?
-if [ "$status" -eq 125 ] || [ "$status" -eq 126 ] || [ "$status" -eq 127 ]; then
-  fallback_bridge
-fi
-exit "$status"
-""".strip()
-
-
-def _bundle_for_executable(path: Path) -> Path | None:
-    for ancestor in path.parents:
-        if ancestor.suffix == ".app":
-            return ancestor
-    return None
-
-
-def _trusted_desktop_path(path: Path) -> bool:
-    """Require a regular private executable under a non-symlinked app bundle."""
+def _ask(request: dict[str, object]) -> dict[str, object] | None:
+    # Imported here: the bounded hook bridge imports this module on every call
+    # and must stay off the native runtime client until it asks.
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     try:
-        raw_metadata = path.lstat()
-        resolved = path.resolve(strict=True)
-        metadata = resolved.stat()
-    except OSError:
-        return False
-    if stat.S_ISLNK(raw_metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
-        return False
-    if not os.access(resolved, os.X_OK):
-        return False
-    if metadata.st_uid not in {os.getuid(), 0} or stat.S_IMODE(metadata.st_mode) & 0o022:
-        return False
-    bundle = _bundle_for_executable(resolved)
-    if bundle is None:
-        return False
-    for directory in (bundle, bundle / "Contents", bundle / "Contents" / "MacOS"):
-        try:
-            raw = directory.lstat()
-            current = directory.stat()
-        except OSError:
-            return False
-        if stat.S_ISLNK(raw.st_mode) or not stat.S_ISDIR(current.st_mode):
-            return False
-        if current.st_uid not in {os.getuid(), 0} or stat.S_IMODE(current.st_mode) & 0o022:
-            return False
-    return True
+        return native_runner_authority("desktop_hook_proxy", request, timeout_seconds=_TIMEOUT_SECONDS)
+    except (NativeRunnerAuthorityError, OSError):
+        return None
 
 
 def _trusted_desktop_hook_proxy_command(
@@ -109,46 +37,29 @@ def _trusted_desktop_hook_proxy_command(
 ) -> tuple[str, ...] | None:
     """Return a runtime-verified signed macOS proxy command or retain Core."""
 
-    if (
-        sys.platform != "darwin"
-        or not bool(getattr(sys, "frozen", False))
-        or os.environ.get("HOL_GUARD_DESKTOP") != "1"
-    ):
+    # Only a frozen Core on macOS launched with a proxy can have one to check.
+    if not getattr(sys, "frozen", False) or sys.platform != "darwin" or not os.environ.get(_DESKTOP_PROXY_ENV):
         return None
-    raw = os.environ.get(_DESKTOP_PROXY_ENV)
-    if not raw:
-        return None
-    candidate = Path(raw)
-    core_candidate = Path(python_executable)
-    if not candidate.is_absolute() or not core_candidate.is_absolute():
-        return None
-    if not _trusted_desktop_path(candidate) or not _trusted_desktop_path(core_candidate):
-        return None
-    try:
-        proxy = candidate.resolve(strict=True)
-        core = core_candidate.resolve(strict=True)
-    except OSError:
-        return None
-    proxy_bundle = _bundle_for_executable(proxy)
-    core_bundle = _bundle_for_executable(core)
-    if proxy_bundle is None or proxy_bundle != core_bundle or proxy.parent != core.parent:
-        return None
-
-    proxy_team = _codesign_team(proxy)
-    core_team = _codesign_team(core)
-    bundle_team = _codesign_team(proxy_bundle)
-    if proxy_team is None or proxy_team == "not set" or proxy_team != core_team or proxy_team != bundle_team:
-        return None
-
-    return (
-        "/bin/sh",
-        "-c",
-        _DESKTOP_PROXY_LAUNCH_SCRIPT,
-        "hol-guard-desktop-proxy",
-        str(proxy),
-        proxy_team,
-        str(proxy_bundle),
-        config_json,
-        str(core),
-        "1" if require_proxy else "0",
+    answer = _ask(
+        {
+            "op": "command",
+            "core": python_executable,
+            "config": config_json,
+            "require_proxy": require_proxy,
+            "desktop": os.environ.get("HOL_GUARD_DESKTOP"),
+            "proxy": os.environ.get(_DESKTOP_PROXY_ENV),
+        }
     )
+    argv = answer.get("argv") if answer is not None else None
+    return tuple(str(part) for part in argv) if isinstance(argv, list) else None
+
+
+def verified_desktop_proxy_launch(args: Sequence[str]) -> tuple[str, str] | None:
+    """The config and Core path of a stored proxy launch the kind verified, or ``None``."""
+
+    if sys.platform != "darwin":
+        return None
+    answer = _ask({"op": "verify", "args": list(args)})
+    config = answer.get("config") if answer is not None else None
+    core = answer.get("core") if answer is not None else None
+    return (config, core) if isinstance(config, str) and isinstance(core, str) else None

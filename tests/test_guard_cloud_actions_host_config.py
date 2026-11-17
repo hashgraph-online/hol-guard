@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import tomllib
 
 from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli import cloud_actions_host_config
@@ -21,7 +22,6 @@ from codex_plugin_scanner.guard.cli.cloud_actions_host_config import (
     plan_host_config,
     settings_path,
 )
-from codex_plugin_scanner.guard.codex_config import tomllib
 from tests.cloud_actions_pairing_support import URL, WS, FakeCloud, entry, pair, wanted
 
 CANARY = "sk-test-CANARY-7f3a9c"

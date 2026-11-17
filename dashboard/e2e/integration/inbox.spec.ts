@@ -83,8 +83,12 @@ test("each request detail shows the action Guard stopped", async ({ page, state 
   await expect(page.getByRole("main").getByText(readA.preview.replace("Read ", "")).last()).toBeVisible();
 
   await page.goto(`/requests/${mcp.id}`);
-  await expect(page.getByText("MCP server / tool").first()).toBeVisible();
-  await expect(page.getByRole("main").getByText(/create.?issue/i).last()).toBeVisible();
+  // The MCP card reads in plain words: the tool's title, the service it belongs to, and what kind of call it is.
+  const mcpCard = page.getByRole("region", { name: "What the agent is asking to do" });
+  await expect(mcpCard.getByRole("heading", { name: "Create issue" })).toBeVisible();
+  await expect(mcpCard.getByText("Tool from GitHub")).toBeVisible();
+  await expect(mcpCard.getByText("Makes changes")).toBeVisible();
+  await expect(mcpCard.getByText("See the exact input")).toBeVisible();
   await expectNoErrorBoundary(page);
 });
 

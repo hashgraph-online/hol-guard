@@ -68,7 +68,7 @@ def test_direct_writers_see_the_normalized_mode(tmp_path: Path) -> None:
 def test_new_group_writable_file_request_is_rejected_with_path(tmp_path: Path) -> None:
     target = tmp_path / "new"
     with pytest.raises(TransitionError, match="file_mode_invalid") as raised:
-        TransitionFile(target, None, b"b", after_mode=0o664).payload()
+        TransitionFile(target, None, b"b", after_mode=0o664).checked()
     assert str(target) in str(raised.value)
 
 
@@ -76,7 +76,7 @@ def test_new_group_writable_file_request_is_rejected_with_path(tmp_path: Path) -
 def test_special_mode_bits_are_still_rejected_with_path(tmp_path: Path, mode: int) -> None:
     target = tmp_path / "x"
     with pytest.raises(TransitionError) as raised:
-        TransitionFile(target, b"a", b"b", before_mode=0o644, after_mode=mode).payload()
+        TransitionFile(target, b"a", b"b", before_mode=0o644, after_mode=mode).checked()
     assert str(target) in str(raised.value)
 
 
@@ -86,7 +86,7 @@ def test_pinned_group_writable_dependency_is_still_rejected(tmp_path: Path) -> N
     target.write_bytes(b"secret")
     target.chmod(0o664)
     with pytest.raises(TransitionError) as raised:
-        TransitionFile.identity_dependency(target).payload()
+        TransitionFile.identity_dependency(target).checked()
     assert str(target.resolve()) in str(raised.value)
 
 
@@ -102,12 +102,12 @@ def test_claude_hooks_use_entrypoint_not_dash_c_when_frozen(monkeypatch: pytest.
     _frozen(monkeypatch)
     monkeypatch.setattr(claude_code, "native_hook_bridge_executable", lambda *_args, **_kwargs: None)
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
-    daemon = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
     session = ClaudeCodeHarnessAdapter._session_start_command_parts(context)  # pyright: ignore[reportPrivateUsage]
     fallback = ClaudeCodeHarnessAdapter._hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
-    for argv in (daemon, session, fallback):
+    for argv in (session, fallback):
         assert "-c" not in argv and "-m" not in argv
-    assert daemon[1:3] == (_FROZEN_CLAUDE_HOOK_COMMAND, CLAUDE_GUARD_DAEMON_HOOK_MARKER)
+    with pytest.raises(RuntimeError, match="hol-guard repair"):
+        ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
     assert session[1:3] == (_FROZEN_CLAUDE_HOOK_COMMAND, CLAUDE_GUARD_SESSION_START_HOOK_MARKER)
     assert fallback[1] == "hook"
 
@@ -229,17 +229,6 @@ def test_frozen_dry_run_does_not_promise_package_removal(monkeypatch: pytest.Mon
     assert payload["command"] == []
     assert "hol-guard package" not in str(payload["message"])
     assert "desktop core" in str(payload["message"])
-
-
-def test_frozen_claude_bridge_recovers_through_the_frozen_core(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard import frozen_runtime_commands
-    from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge
-
-    monkeypatch.setattr(frozen_runtime_commands, "is_frozen_guard_runtime", lambda: True)
-    monkeypatch.setattr(frozen_runtime_commands, "resolve_frozen_guard_cli", lambda: "/opt/guard/hol-guard")
-    command = claude_daemon_hook_bridge._recovery_command(tmp_path / "guard-home" / "state.json", "home=/h")
-    assert command[:2] == ("/opt/guard/hol-guard", frozen_runtime_commands.FROZEN_DAEMON_RECOVER_ARG)
-    assert "-c" not in command
 
 
 def test_failed_harness_removal_reports_name_and_prior_removals(

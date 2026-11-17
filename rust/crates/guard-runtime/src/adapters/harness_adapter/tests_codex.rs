@@ -7,8 +7,18 @@ use serde_json::{json, Value};
 
 use super::{after, Home};
 
+#[path = "tests_codex_alternate_plan.rs"]
+mod alternate_plan;
+#[path = "tests_codex_config_hooks.rs"]
+mod config_hooks;
+#[path = "tests_codex_main_plan.rs"]
+mod main_plan;
+#[path = "tests_codex_migration.rs"]
+mod migration;
 #[path = "tests_codex_uninstall.rs"]
 mod uninstall;
+#[path = "tests_codex_uninstall_config.rs"]
+mod uninstall_config;
 
 const SHELL_BEGIN: &str = "# >>> HOL Guard Codex shell guard >>>";
 const SHELL_END: &str = "# <<< HOL Guard Codex shell guard <<<";
@@ -32,18 +42,42 @@ fn config_with(hooks: &Value) -> String {
     json!({"features": {"hooks": true}, "hooks": hooks}).to_string()
 }
 
-#[test]
-fn argv_asks_for_the_launch_then_wraps_the_bridge() {
-    let home = Home::new();
-    let fields = json!({
+fn argv_fields(home: &Home, frozen: bool) -> Value {
+    json!({
         "home_is_current": false,
         "runtime_guard_home": home.guard(),
         "workspace_explicit": false,
-    });
-    let reply = ask(&home, "argv", fields.clone());
-    let launch = reply["reply"]["launch"].as_array().unwrap();
+        "python": "/py",
+        "frozen": frozen,
+        "package_root": "/opt/guard/site",
+        "native_bridge": "/g/hol-guard-runtime",
+        "manifest_path": "/g/manifest.json",
+        "long_timeout": 85,
+    })
+}
+
+#[test]
+fn argv_wraps_the_bridge_and_derives_its_launch_commands() {
+    let home = Home::new();
+    let answer = ask(&home, "argv", argv_fields(&home, false));
+    let argv = answer["argv"].as_array().unwrap();
+    assert_eq!(argv.len(), 3);
     assert_eq!(
-        launch[..4],
+        argv[..2],
+        [json!("/g/hol-guard-runtime"), json!("codex-hook-bridge")]
+    );
+    let config: Value = serde_json::from_str(argv[2].as_str().unwrap()).unwrap();
+    assert_eq!(config["hook_timeouts"]["PreToolUse"], 85);
+    assert_eq!(config["hook_timeouts"]["PermissionRequest"], 30);
+    let fallback = answer["fallback"].as_array().unwrap();
+    assert_eq!(config["fallback_command"], answer["fallback"]);
+    assert_eq!(fallback[..3], [json!("/py"), json!("-I"), json!("-c")]);
+    assert!(fallback[3]
+        .as_str()
+        .unwrap()
+        .contains("from codex_plugin_scanner.cli import main"));
+    assert_eq!(
+        fallback[4..8],
         [
             json!("guard"),
             json!("hook"),
@@ -51,38 +85,56 @@ fn argv_asks_for_the_launch_then_wraps_the_bridge() {
             json!("codex")
         ]
     );
-    assert!(launch.contains(&json!("--home")));
+    assert!(fallback.contains(&json!("--home")));
+    let start = answer["start"].as_array().unwrap();
+    assert_eq!(config["start_command"], answer["start"]);
+    assert!(start[3]
+        .as_str()
+        .unwrap()
+        .contains("schedule_guard_daemon_recovery"));
+}
 
-    let mut settled = fields;
-    for (key, value) in [
-        ("python", json!("/py")),
-        ("bridge", json!("/g/bridge.py")),
-        ("native_bridge", json!("/g/hol-guard-runtime")),
-        ("manifest_path", json!("/g/manifest.json")),
-        ("long_timeout", json!(85)),
-        (
-            "launch",
-            json!({"fallback": ["/py", "-I", "fb"], "start": ["/py", "start"]}),
-        ),
-    ] {
-        settled[key] = value;
+#[test]
+fn argv_without_a_native_runtime_asks_for_repair() {
+    let home = Home::new();
+    for frozen in [false, true] {
+        let mut fields = argv_fields(&home, frozen);
+        fields.as_object_mut().unwrap().remove("native_bridge");
+        let answer = ask(&home, "argv", fields);
+        assert_eq!(
+            answer["runtime_error"],
+            crate::harness_adapter::claude_argv::RUNTIME_MISSING
+        );
     }
-    let answer = ask(&home, "argv", settled);
+}
+
+#[test]
+fn a_frozen_guard_is_its_own_interpreter_for_every_launch() {
+    let home = Home::new();
+    let answer = ask(&home, "argv", argv_fields(&home, true));
     let argv = answer["argv"].as_array().unwrap();
     assert_eq!(
-        argv[..5],
+        argv[..2],
+        [json!("/g/hol-guard-runtime"), json!("codex-hook-bridge")]
+    );
+    assert_eq!(argv.len(), 3);
+    let fallback = answer["fallback"].as_array().unwrap();
+    assert_eq!(
+        fallback[..4],
         [
-            json!("/g/hol-guard-runtime"),
-            json!("codex-hook-bridge"),
             json!("/py"),
-            json!("-I"),
-            json!("/g/bridge.py"),
+            json!("hook"),
+            json!("--harness"),
+            json!("codex")
         ]
     );
-    let config: Value = serde_json::from_str(argv[5].as_str().unwrap()).unwrap();
-    assert_eq!(config["hook_timeouts"]["PreToolUse"], 85);
-    assert_eq!(config["hook_timeouts"]["PermissionRequest"], 30);
-    assert_eq!(config["fallback_command"], json!(["/py", "-I", "fb"]));
+    let start = answer["start"].as_array().unwrap();
+    assert_eq!(
+        start[..2],
+        [json!("/py"), json!("--_hol-guard-codex-daemon-recover")]
+    );
+    let payload: Value = serde_json::from_str(start[2].as_str().unwrap()).unwrap();
+    assert!(payload["guard_home"].is_string() && payload["home_dir"].is_string());
 }
 
 #[test]
@@ -91,7 +143,7 @@ fn groups_register_every_event_with_one_bound_handler() {
     let answer = ask(
         &home,
         "groups",
-        json!({"argv": ["/py", "-I"], "command": "/py -I", "env": "{}", "long_timeout": 85}),
+        json!({"argv": ["/py", "-I"], "env": "{}", "long_timeout": 85}),
     );
     let groups: Value = serde_json::from_str(answer["groups"].as_str().unwrap()).unwrap();
     let mut events: Vec<&String> = groups.as_object().unwrap().keys().collect();
@@ -113,6 +165,38 @@ fn groups_register_every_event_with_one_bound_handler() {
         "codex:PreToolUse:guard-handler-v1"
     );
     assert_eq!(bindings[0]["handler"]["timeout"], 85);
+    assert_eq!(bindings[0]["handler"]["command"], "/py -I");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_posix_groups_command_is_shlex_joined() {
+    let home = Home::new();
+    let fields = json!({"argv": ["/a b/py", "-I"], "env": "{}", "long_timeout": 85});
+    let answer = ask(&home, "groups", fields);
+    let groups: Value = serde_json::from_str(answer["groups"].as_str().unwrap()).unwrap();
+    assert_eq!(groups["PreToolUse"]["hooks"][0]["command"], "'/a b/py' -I");
+}
+
+#[cfg(windows)]
+#[test]
+fn a_windows_groups_command_asks_the_host_to_shorten_spaced_paths() {
+    let home = Home::new();
+    let fields =
+        json!({"argv": ["C:\\Program Files\\py.exe", "-I"], "env": "{}", "long_timeout": 85});
+    assert_eq!(
+        ask(&home, "groups", fields.clone())["reply"],
+        json!({"shorten": ["C:\\Program Files\\py.exe"]})
+    );
+    let mut fields = fields;
+    fields["short_names"] =
+        json!({"C:\\Program Files\\py.exe": ["C:\\PROGRA~1\\py.exe", "C:\\Program Files\\py.exe"]});
+    let answer = ask(&home, "groups", fields);
+    let groups: Value = serde_json::from_str(answer["groups"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        groups["PreToolUse"]["hooks"][0]["command"],
+        "C:\\PROGRA~1\\py.exe -I"
+    );
 }
 
 #[test]
@@ -196,9 +280,15 @@ fn readback_and_subset_refuse_a_lost_group() {
 #[test]
 fn alternate_cleanup_drops_guard_entries_and_the_idle_hook_feature() {
     let home = Home::new();
+    let status = "HOL Guard checking Bash command";
+    let current = json!({
+        "type": "command",
+        "command": "/py -I /pkg/bridge.py '{\"a\":1}'",
+        "statusMessage": status,
+    });
     let payload = json!({
         "features": {"hooks": true},
-        "hooks": {"PreToolUse": [group("guard", 5)]},
+        "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [current]}]},
         "mcp_servers": {
             "managed": {"command": "npx", "args": ["server"]},
             "user": {"command": "npx", "args": ["mine"]},
@@ -211,8 +301,13 @@ fn alternate_cleanup_drops_guard_entries_and_the_idle_hook_feature() {
         json!({
             "payload": payload,
             "remove_hooks": true,
-            "legacy": {"removed": true, "cleaned": "{}"},
             "managed_server_names": ["managed"],
+            "expected": json!([{"event": "PreToolUse", "group": {"matcher": "Bash"}}]).to_string(),
+            "argv": ["/py", "-I", "/pkg/bridge.py", "{\"a\":1}"],
+            "legacy_argv": ["/old", "x"],
+            "statuses": [status],
+            "windows": false,
+            "long_paths": {},
         }),
     );
     assert_eq!(answer["changed"], true);
@@ -263,6 +358,30 @@ fn shell_cleanup_removes_only_the_guard_block() {
         .iter()
         .filter(|other| other["path"] != change["path"])
         .all(|other| other["before"].is_null()));
+}
+
+#[test]
+fn managed_mcp_leaves_a_workspace_entry_shadowing_a_global_server() {
+    let home = Home::new();
+    let workspace = json!({"mcp_servers": {"shared": {"command": "mine"}}}).to_string();
+    let entry = "{\"command\":\"x\"}";
+    let servers = json!([
+        {"name": "shared", "source_scope": "global", "entry": entry},
+        {"name": "project", "source_scope": "project", "entry": entry},
+    ]);
+    let rendered = |workspace_payload: Value| {
+        let answer = ask(
+            &home,
+            "managed_mcp",
+            json!({"payload": "{}", "workspace_payload": workspace_payload, "servers": servers}),
+        );
+        let rendered: Value = serde_json::from_str(answer["rendered"].as_str().unwrap()).unwrap();
+        rendered["mcp_servers"].clone()
+    };
+    let shadowed = rendered(json!(workspace));
+    assert!(shadowed.get("shared").is_none());
+    assert_eq!(shadowed["project"], json!({"command": "x"}));
+    assert_eq!(rendered(Value::Null)["shared"], json!({"command": "x"}));
 }
 
 /// Every tool the PreToolUse rows of the Codex protection contract name.

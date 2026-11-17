@@ -144,6 +144,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_edge.py",
         "src/codex_plugin_scanner/guard/native_pretool.py",
         "src/codex_plugin_scanner/guard/native_resident_client.py",
+        # Decodes the bounded resident windows_private_state envelope; the file
+        # op and its owner/DACL checks run in Rust and the answer is returned as is.
+        "src/codex_plugin_scanner/guard/native_policy_snapshot_windows_resident.py",
         # Resident-op dispatch bridge: decodes the bounded native response and
         # returns a DTO; it does not interpret response content into a decision.
         "src/codex_plugin_scanner/guard/native_execution.py",

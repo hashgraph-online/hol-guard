@@ -45,14 +45,6 @@
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.adapters.codex_daemon_hook_bridge",
-        "surface": "hook_http_and_cli_events"
-      },
-      {
-        "module": "codex_plugin_scanner.guard.adapters.claude_daemon_hook_bridge",
-        "surface": "hook_http_and_cli_events"
-      },
-      {
         "module": "codex_plugin_scanner.guard.adapters.desktop_hook_proxy",
         "surface": "hook_http_and_cli_events"
       },
@@ -78,10 +70,6 @@
       },
       {
         "module": "codex_plugin_scanner.guard.launcher",
-        "surface": "guard_run_and_launch"
-      },
-      {
-        "module": "codex_plugin_scanner.guard.durable_harness_launcher",
         "surface": "guard_run_and_launch"
       },
       {
@@ -307,7 +295,7 @@
       {
         "id": "install-uninstall-doctor",
         "category": "install_config",
-        "reason": "Install/uninstall/doctor/connect/pairing/OAuth/desktop-bootstrap CLI flows and repair/inverse lifecycle. codex_hook_recovery.py/codex_hook_rollback.py are the hook-publication journal, called only from CodexHarnessAdapter._write_authenticated_hook_config_owned, prepare_* migration/backup functions, prepare_install, the shim and cursor prepare functions and the excluded repair/inverse modules. commands_remove_hooks, hook_removal_presence, daemon_stop and commands_repair back the uninstall/repair CLI commands and are imported only by the commands_support facade and the excluded parser/dispatchers. cloud_actions_* and commands_dispatch_cloud_actions back `hol-guard cloud-actions` status, doctor, AI tool setup and the AI tool bridge, all of which use the `hol-guard connect` pairing, plus the one-time removal of sign-ins saved by alpha builds. The commands_support facade imports the dispatcher, which hook_worker also loads, but the dispatcher imports cloud_actions_* only inside its command handlers, so no hook run loads them.",
+        "reason": "Install/uninstall/doctor/connect/pairing/OAuth/desktop-bootstrap CLI flows and repair/inverse lifecycle. codex_hook_recovery.py/codex_hook_rollback.py are the hook-publication journal, called only from prepare_* migration/backup functions, prepare_install, the shim and cursor prepare functions and the excluded repair/inverse modules. commands_remove_hooks, hook_removal_presence, daemon_stop and commands_repair back the uninstall/repair CLI commands and are imported only by the commands_support facade and the excluded parser/dispatchers. cloud_actions_* and commands_dispatch_cloud_actions back `hol-guard cloud-actions` status, doctor, AI tool setup and the AI tool bridge, all of which use the `hol-guard connect` pairing, plus the one-time removal of sign-ins saved by alpha builds. The commands_support facade imports the dispatcher, which hook_worker also loads, but the dispatcher imports cloud_actions_* only inside its command handlers, so no hook run loads them.",
         "path": [
           "src/codex_plugin_scanner/guard/cli/install_*.py",
           "src/codex_plugin_scanner/guard/cli/uninstall_commands.py",
@@ -426,7 +414,8 @@
           "src/codex_plugin_scanner/guard/runtime_transition_admission.py",
           "src/codex_plugin_scanner/guard/runtime_transition_legacy_receipt.py",
           "src/codex_plugin_scanner/guard/runtime_transition.py",
-          "src/codex_plugin_scanner/guard/runtime_transition_modes.py"
+          "src/codex_plugin_scanner/guard/runtime_transition_modes.py",
+          "src/codex_plugin_scanner/guard/runtime_transition_record.py"
         ]
       },
       {
@@ -537,13 +526,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/adapters/_modules/__init__.py",
-          "src/codex_plugin_scanner/guard/adapters/_modules/zcode/__init__.py"
-        ],
-        "reason": "Reviewed adapter family package initializers introduced by the source-layout refactor. Each contains only its package docstring; these modules are reached through lazy hook imports and remain counted in runtime scope. No runtime behavior is excluded."
-      },
-      {
-        "path": [
           "src/codex_plugin_scanner/guard/runtime/extension_catalog_completion.py",
           "src/codex_plugin_scanner/guard/runtime/extension_catalog_pages.py"
         ],
@@ -620,13 +602,9 @@
           "src/codex_plugin_scanner/guard/adapters/codex_detect_sources.py",
           "src/codex_plugin_scanner/guard/adapters/codex_lifecycle_lock.py",
           "src/codex_plugin_scanner/guard/adapters/codex_remote_control.py",
-          "src/codex_plugin_scanner/guard/adapters/codex_uninstall_restore.py",
-          "src/codex_plugin_scanner/guard/adapters/grok_approval_resume.py",
           "src/codex_plugin_scanner/guard/adapters/guard_cli_attestation.py",
-          "src/codex_plugin_scanner/guard/adapters/managed_mcp_upstream.py",
           "src/codex_plugin_scanner/guard/adapters/mcp_relay_native.py",
           "src/codex_plugin_scanner/guard/adapters/mcp_servers.py",
-          "src/codex_plugin_scanner/guard/adapters/workspace_overrides.py",
           "src/codex_plugin_scanner/guard/contained_sink_command.py",
           "src/codex_plugin_scanner/guard/windows_paths.py"
         ],
@@ -637,17 +615,13 @@
           "src/codex_plugin_scanner/guard/codex_hook_health.py",
           "src/codex_plugin_scanner/guard/codex_hook_identity.py",
           "src/codex_plugin_scanner/guard/codex_hook_inventory.py",
-          "src/codex_plugin_scanner/guard/codex_hook_owned_paths.py",
-          "src/codex_plugin_scanner/guard/codex_hook_owner_commands.py",
-          "src/codex_plugin_scanner/guard/codex_hook_owner_message.py",
-          "src/codex_plugin_scanner/guard/codex_hook_owner_preflight.py",
           "src/codex_plugin_scanner/guard/codex_hook_registration.py",
           "src/codex_plugin_scanner/guard/codex_hook_runtime_trust.py",
           "src/codex_plugin_scanner/guard/codex_hook_self_binding.py",
           "src/codex_plugin_scanner/guard/codex_hook_sources.py",
           "src/codex_plugin_scanner/guard/codex_hook_trust.py"
         ],
-        "reason": "Reviewed: codex hook inventory, identity, sources, trust, registration, owner commands/preflight and health modules: codex_hook_trust_stale is called from codex_native_hook_state, which gates launch_command/preview_launch_commands for codex, and it imports registration and owner_commands; runtime_trust is used by frozen_codex_runtime.trusted_hook_launch; inventory/identity/sources are used by the same adapter. codex_hook_owner_preflight and codex_hook_health are tiny status/install-only modules left in scope under the in-doubt rule. codex_hook_self_binding and codex_hook_owned_paths decide whether an existing Codex handler belongs to this installation, which registration consults before it will replace or refuse one, and codex_hook_owner_message writes the refusal that decision produces; all three are reached from the same adapter and stay in scope with it."
+        "reason": "Reviewed: codex hook inventory, identity, sources, trust, registration and health modules: codex_hook_trust words the trust warning for codex_native_hook_state, which gates launch_command/preview_launch_commands for codex, and it imports registration; runtime_trust is used by frozen_codex_runtime.trusted_hook_launch; inventory/identity/sources are used by the same adapter. codex_hook_health is a tiny status/install-only module left in scope under the in-doubt rule. codex_hook_self_binding asks the native runtime whether an existing Codex handler belongs to this installation, which registration consults before it will replace or refuse one (the native runtime also writes the refusal that decision produces); both are reached from the same adapter and stay in scope with it."
       },
       {
         "path": [
@@ -720,7 +694,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/adapters/adapter_state_integrity.py",
           "src/codex_plugin_scanner/guard/adapters/cline_runtime.py",
           "src/codex_plugin_scanner/guard/adapters/copilot.py",
           "src/codex_plugin_scanner/guard/adapters/cursor.py",
@@ -728,7 +701,6 @@
           "src/codex_plugin_scanner/guard/adapters/native_extension.py",
           "src/codex_plugin_scanner/guard/adapters/native_harness.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_runtime.py",
-          "src/codex_plugin_scanner/guard/adapters/state_files.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
         "reason": "Reviewed: adapter implementations behind the harness registry. Adapters normalize harness payloads into hook requests, so they sit on the hook path, and hook-path authority is never excluded. Install and setup methods that have a function_exclusions entry are excluded as install_config, not hook path; install helpers without an entry (for example in the Cline support modules) stay counted, which understates the Rust share."
@@ -779,17 +751,18 @@
       },
       {
         "path": [
+          "src/codex_plugin_scanner/guard/codex_hook_authority_record.py",
+          "src/codex_plugin_scanner/guard/codex_hook_bridge_runtime.py",
           "src/codex_plugin_scanner/guard/codex_hook_command_line.py",
           "src/codex_plugin_scanner/guard/codex_hook_compatibility.py",
           "src/codex_plugin_scanner/guard/codex_hook_events.py",
           "src/codex_plugin_scanner/guard/codex_hook_file_integrity.py",
           "src/codex_plugin_scanner/guard/codex_hook_integrity.py",
           "src/codex_plugin_scanner/guard/codex_hook_manifest.py",
-          "src/codex_plugin_scanner/guard/codex_hook_package_identity.py",
           "src/codex_plugin_scanner/guard/codex_install_transaction.py",
           "src/codex_plugin_scanner/guard/local_authority_integrity.py"
         ],
-        "reason": "Reviewed: Codex hook event names, manifest, integrity, compatibility and install transaction modules. The Codex hook bridge no longer imports them at load; launch validation and the installer load them lazily. The event-name tuple was previously imported eagerly by the Python binding-capture modules, which now run natively, and the manifest still loads it when launch trust reads the hook manifest. They stay counted as runtime because launch trust still runs them until the native resident owns that lane. local_authority_integrity.py signs and verifies the local authority payloads those modules write and read, and codex_hook_recovery, codex_hook_repair_request, codex_publication_inverse and runtime_transition reach it the same way; it is now reached only lazily because the one-shot approval mint moved into the native store, so it is named here to stay counted rather than drop out of the measurement."
+        "reason": "Reviewed: Codex hook event names, manifest, integrity, compatibility and install transaction modules. The Codex hook bridge no longer imports them at load; launch validation and the installer load them lazily. The event-name tuple was previously imported eagerly by the Python binding-capture modules, which now run natively, and the manifest still loads it when launch trust reads the hook manifest. They stay counted as runtime because launch trust still runs them until the native resident owns that lane. local_authority_integrity.py signs and verifies the local authority payloads those modules write and read, and codex_hook_recovery, codex_hook_repair_request, codex_publication_inverse and runtime_transition reach it the same way; it is now reached only lazily because the one-shot approval mint moved into the native store, so it is named here to stay counted rather than drop out of the measurement. codex_hook_authority_record.py is the thin client codex_hook_integrity uses to ask the runtime for the Codex hook key identity; the runtime holds the key. codex_hook_bridge_runtime.py decodes the bridge config argument codex_hook_command_line reads back from a Windows registration, so it is counted with it."
       },
       {
         "path": "src/codex_plugin_scanner/guard/protection_coverage.py",
@@ -1110,44 +1083,24 @@
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/adapters/codex.py",
         "symbols": [
-          "_migrate_hooks_json_into_config",
           "_install_manifest",
-          "_require_hook_semantics_readback",
-          "_unmanaged_migration_payload",
-          "_prepare_hook_migration_backup",
-          "_write_hook_migration_backup",
-          "prepare_codex_hook_migration",
-          "prepare_codex_main_backup",
-          "render_codex_managed_mcp",
-          "render_codex_alternate_cleanup",
-          "prepare_codex_alternate_cleanup",
-          "_publish_codex_alternate_cleanup",
-          "_require_complete_preactivation_inventory",
-          "prepare_codex_shell_cleanup",
-          "CodexHarnessAdapter._all_hook_paths",
+          "_plan_report",
+          "_located",
           "CodexHarnessAdapter.prepare_install",
+          "CodexHarnessAdapter._prepare_plan",
+          "CodexHarnessAdapter._plan_request",
+          "CodexHarnessAdapter._planned",
           "CodexHarnessAdapter.install",
           "CodexHarnessAdapter._install_owned",
           "CodexHarnessAdapter.uninstall",
           "CodexHarnessAdapter._uninstall_owned",
           "CodexHarnessAdapter._target_config_path",
           "CodexHarnessAdapter._backup_path",
-          "CodexHarnessAdapter._proxy_server_entry",
-          "CodexHarnessAdapter._load_hook_payloads",
-          "CodexHarnessAdapter._migrate_alternate_hook_configs",
-          "CodexHarnessAdapter._remove_managed_hooks_from_alternate_configs",
-          "CodexHarnessAdapter._remove_managed_mcp_servers_from_alternate_configs",
-          "CodexHarnessAdapter._verify_json_hook_migrations",
-          "CodexHarnessAdapter._remove_json_hook_files",
-          "CodexHarnessAdapter._install_config_hooks",
-          "CodexHarnessAdapter._write_authenticated_hook_config",
-          "CodexHarnessAdapter._write_authenticated_hook_config_owned",
-          "CodexHarnessAdapter._uninstall_shell_guard",
-          "CodexHarnessAdapter._remove_hooks"
+          "CodexHarnessAdapter._proxy_server_entry"
         ],
         "entry_points": [],
         "reason": "Codex config.toml and hooks.json install, uninstall, migration, alternate-config cleanup and shell-guard cleanup, plus the helpers only they use; the shell-guard block ranges and the Guard proxy recognition they act on run in the native codex_install_plan runner-authority kind.",
-        "evidence": "install, prepare_install, uninstall and prepare_codex_hook_migration have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. Launch, detect, diagnostics and the runtime hook-state readers stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. Launch, detect, diagnostics and the runtime hook-state readers stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "runtime-policy-admin-payloads",
@@ -1522,12 +1475,11 @@
           "ClineHarnessAdapter.uninstall",
           "_reconcile",
           "_facts",
-          "_node_check",
           "install_mcp_proxies",
           "proxy_entry"
         ],
         "entry_points": [],
-        "reason": "Cline adapter install and uninstall; the native harness_adapter kind chooses the transport, writes the native hooks or the AgentPlugin, rewrites the MCP settings and removes them, and Python keeps the attested Guard CLI, the node --check and hook-canary subprocesses, the launcher shim and Guard's proxy argv.",
+        "reason": "Cline adapter install and uninstall; the native harness_adapter kind chooses the transport, writes the native hooks or the AgentPlugin, runs the hook canary and the plugin's node --check, rewrites the MCP settings and removes them, and Python keeps the attested Guard CLI and Guard's proxy argv.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
@@ -1586,14 +1538,11 @@
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/codex_hook_registration.py",
         "symbols": [
-          "_HEALTH_INTERCEPT_EVENTS",
-          "_matcher_covers_shell",
-          "_group_has_active_guard_shell_handler",
           "live_guard_codex_hooks_intercept"
         ],
         "entry_points": [],
         "reason": "Checking whether the installed Codex hooks still route shell tool calls through Guard, for the hook health report. It inspects installed configuration and never runs on a hook call.",
-        "evidence": "The only caller of live_guard_codex_hooks_intercept is codex_hook_health.py, which is outside runtime scope. The private helpers are reached only from it. The retained hook registration and doctor-finalization code does not reference these symbols, and the report validates this reference closure on every run."
+        "evidence": "The only caller of live_guard_codex_hooks_intercept is codex_hook_health.py, which is outside runtime scope. The retained hook registration and doctor-finalization code does not reference these symbols, and the report validates this reference closure on every run."
       },
       {
         "id": "unlisted-cli-check-for-mcp-probe",
@@ -1708,11 +1657,12 @@
           "NativeHarnessAdapter.install",
           "NativeHarnessAdapter.uninstall",
           "NativeHarnessAdapter._hook_argv",
-          "NativeHarnessAdapter._install_delegated"
+          "NativeHarnessAdapter._install_delegated",
+          "NativeHarnessAdapter.current_hook_command"
         ],
         "entry_points": [],
         "reason": "Install and uninstall for the harnesses the native harness_adapter kind answers (Devin, Antigravity, Gemini, Kimi, OpenClaw, Paseo and Muse): the launcher shim, the bounded hook argv, publishing the native file plan and Paseo's delegated provider installs.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_argv and _install_delegated are called only from them. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_argv and _install_delegated are called only from them; current_hook_command is called only by the excluded update repair, to tell an up-to-date hook from an old one. The report validates that no retained symbol or in-scope module references the excluded names."
       }
     ],
     "dynamic_imports": []

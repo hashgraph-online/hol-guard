@@ -70,7 +70,7 @@ pub(super) fn run() -> Result<(), String> {
             std::process::exit(codex_hook_bridge::run(python_argv))
         }
         [command, python_argv @ ..]
-            if command == bounded_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
+            if command == bounded_hook_bridge::BRIDGE_COMMAND && !python_argv.is_empty() =>
         {
             std::process::exit(bounded_hook_bridge::run(python_argv))
         }
@@ -233,6 +233,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if hermes_file_inspect::is_command(command) && flag == "--stdin" => {
             let response = hermes_file_inspect::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if runtime_transition_record::is_command(command) && flag == "--stdin" => {
+            let response = runtime_transition_record::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if codex_hook_authority_record::is_command(command) && flag == "--stdin" => {

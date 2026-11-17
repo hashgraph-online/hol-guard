@@ -14,17 +14,13 @@ turns it off.
 
 from __future__ import annotations
 
-import importlib
 import json
-import sys
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TextIO
 
-from .codex_config import dump_toml
-
-tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
+from .codex_config import TomlRefusedError, dump_toml, loads_toml
 
 KEY = "model_auto_compact_token_limit"
 # Below this Codex would summarize before a session has done any real work.
@@ -146,8 +142,8 @@ def _read_config(path: Path) -> tuple[str | None, dict[str, object]]:
         raise LeanSessionsError("codex_config_not_regular_file")
     try:
         text = path.read_text(encoding="utf-8")
-        payload = tomllib.loads(text)
-    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        payload = loads_toml(text)
+    except (OSError, UnicodeDecodeError, TomlRefusedError) as error:
         raise LeanSessionsError("codex_config_unreadable") from error
     return text, payload
 

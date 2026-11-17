@@ -389,6 +389,24 @@ def native_resident_client_ready(executable: Path, guard_home: Path) -> bool:
     return pool is not None and pool.has_idle_client()
 
 
+def native_resident_guard_home_containing(executable: Path, paths: tuple[Path, ...]) -> Path | None:
+    """The Guard home of a resident this process already talks to that holds every path.
+
+    Only homes with a client pool for `executable` count, and the lookup
+    starts nothing; a caller with no pool of its own for the home keeps its
+    own route.
+    """
+
+    targets = [os.path.normcase(os.path.abspath(path)) for path in paths]
+    with _CLIENTS_LOCK:
+        state_dirs = [Path(state_dir) for runtime, state_dir in _CLIENT_POOLS if runtime == str(executable)]
+    for state_dir in state_dirs:
+        home = os.path.normcase(str(state_dir.parent)).rstrip("\\/")
+        if all(target == home or target.startswith(home + os.sep) for target in targets):
+            return state_dir.parent
+    return None
+
+
 def _client_pool_for(executable: Path, state_dir: Path, environment: Mapping[str, str]) -> _PersistentNativeClientPool:
     normalized_state_dir = _pinned_state_dir(state_dir)
     key = (str(executable), str(normalized_state_dir))
@@ -752,6 +770,7 @@ __all__ = [
     "native_resident_client_ready",
     "native_resident_client_request",
     "native_resident_client_request_if_idle",
+    "native_resident_guard_home_containing",
     "record_native_resident_client_failure_code",
     "record_native_resident_client_failure_hold_key",
     "record_native_resident_error_frame",

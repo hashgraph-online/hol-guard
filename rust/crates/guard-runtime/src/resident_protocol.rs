@@ -350,6 +350,7 @@ pub(crate) enum ResidentOperationV1 {
     CloudCatalog(Value),
     DiscoveryPlacementProject(crate::discovery_placement_op::DiscoveryPlacementProjectRequest),
     ReleaseFeedProject(crate::release_feed_op::ReleaseFeedProjectRequest),
+    WindowsPrivateState(crate::windows_private_state::resident::ResidentRequest),
     DataFlowAnalyze(DataFlowAnalyzeRequestV1),
     ToolActionRequestIdentity(guard_contracts::ToolActionRequestIdentityRequestV1),
     RuntimeArtifactIdentity(guard_contracts::RuntimeArtifactIdentityRequestV1),

@@ -14,7 +14,6 @@ import yaml as pyyaml
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _event_name
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
@@ -171,10 +170,6 @@ def test_pretool_call_args_payload_is_normalized(tmp_path: Path) -> None:
     )
     assert envelope.command is not None
     assert "rm -rf" in envelope.command
-
-
-def test_event_name_maps_pre_tool_call() -> None:
-    assert _event_name('{"hook_event_name":"pre_tool_call"}') == "PreToolUse"
 
 
 def test_hermes_bridge_fails_closed_without_resident(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

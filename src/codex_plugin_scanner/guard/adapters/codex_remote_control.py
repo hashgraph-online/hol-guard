@@ -1,10 +1,10 @@
 """Launch Codex through its local app-server for same-thread continuation.
 
 The native runtime (``codex_remote_launch``) decides which argv a launch may
-use, whether the control socket is trusted and live, and whether the
-app-server Guard started before can be kept, or is stopped or gone. Python
-starts processes and records the direct app-server's pid. A resident that
-cannot answer leaves the ordinary launch.
+use and runs the launch sequence: it names each process to start, checks the
+control socket, keeps or stops the app-server Guard started before, and
+records the pid of a new one. Python only starts the processes it names. A
+resident that cannot answer leaves the ordinary launch.
 """
 
 from __future__ import annotations
@@ -14,13 +14,13 @@ import os
 import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 
-_REMOTE_CONTROL_START_TIMEOUT_SECONDS = 10
 _REMOTE_CONTROL_READY_TIMEOUT_SECONDS = 3.0
-# Beyond the ready wait, the resident may spend a second reading the tracked
-# command line and a second stopping it.
-_RECLAIM_BUDGET_SECONDS = _REMOTE_CONTROL_READY_TIMEOUT_SECONDS + 4.0
+# One step may wait for the socket three times and spend a second reading the
+# tracked command line and a second stopping it.
+_PREPARE_BUDGET_SECONDS = 3 * _REMOTE_CONTROL_READY_TIMEOUT_SECONDS + 4.0
+_MAX_PREPARE_STEPS = 3
 
 
 def codex_home_for_user(home_dir: Path) -> Path:
@@ -71,30 +71,7 @@ def guarded_codex_launch_command_from_prefix(
     if len(tails) < 2:
         return plain_command
     environment = dict(os.environ if environ is None else environ)
-    codex_home = codex_home_for_user(home_dir)
-    try:
-        codex_home.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        return plain_command
-    environment["HOME"] = str(home_dir)
-    environment["CODEX_HOME"] = str(codex_home)
-    try:
-        result = subprocess.run(
-            [*prefix, "remote-control", "start", "--json"],
-            capture_output=True,
-            text=True,
-            timeout=_REMOTE_CONTROL_START_TIMEOUT_SECONDS,
-            check=False,
-            env=environment,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        result = None
-    managed_daemon_ready = result is not None and result.returncode == 0 and _wait_for_socket(socket_path)
-    if not managed_daemon_ready and not _start_direct_app_server(
-        executable_prefix=prefix,
-        socket_path=socket_path,
-        environment=environment,
-    ):
+    if not _prepare_remote(prefix, home_dir, socket_path, environment):
         return plain_command
     return [*prefix, *tails[0]]
 
@@ -146,44 +123,53 @@ def _planned_tails(passthrough_args: tuple[str, ...], socket: str) -> tuple[tupl
     return (passthrough_args,)
 
 
-def _wait_for_socket(socket_path: Path) -> bool:
-    seconds = _REMOTE_CONTROL_READY_TIMEOUT_SECONDS
-    return _ask("wait", {"socket": str(socket_path), "seconds": seconds}, seconds + 2.0).get("ready") is True
+def _prepare_remote(prefix: Sequence[str], home_dir: Path, socket_path: Path, environment: dict[str, str]) -> bool:
+    """Run each process the resident's launch sequence names; True when the remote TUI can connect."""
+
+    request: dict[str, object] = {
+        "home_dir": str(home_dir),
+        "socket": str(socket_path),
+        "seconds": _REMOTE_CONTROL_READY_TIMEOUT_SECONDS,
+        "stage": "start",
+    }
+    for _ in range(_MAX_PREPARE_STEPS):
+        answer = _ask("prepare", request, _PREPARE_BUDGET_SECONDS)
+        if "launch" in answer:
+            return answer["launch"] == "remote"
+        env = answer.get("env")
+        if isinstance(env, dict):
+            environment.update({str(key): str(value) for key, value in env.items()})
+        stage, run, spawn = answer.get("stage"), answer.get("run"), answer.get("spawn")
+        if _argv(run) and isinstance(answer.get("timeout"), int):
+            try:
+                exit_code = subprocess.run(
+                    [*prefix, *run],
+                    capture_output=True,
+                    text=True,
+                    timeout=answer["timeout"],
+                    check=False,
+                    env=environment,
+                ).returncode
+            except (OSError, subprocess.TimeoutExpired):
+                exit_code = None
+            request = {**request, "stage": stage, "exit": exit_code}
+        elif _argv(spawn):
+            try:
+                process = subprocess.Popen(
+                    [*prefix, *spawn],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    env=dict(environment),
+                    start_new_session=True,
+                )
+            except OSError:
+                return False
+            request = {**request, "stage": stage, "pid": process.pid}
+        else:
+            return False
+    return False
 
 
-def _start_direct_app_server(
-    *,
-    executable_prefix: Sequence[str],
-    socket_path: Path,
-    environment: Mapping[str, str],
-) -> bool:
-    if os.name == "nt":
-        return False
-    if _wait_for_socket(socket_path):
-        return True
-    try:
-        socket_path.parent.mkdir(parents=True, exist_ok=True)
-        socket_path.parent.chmod(0o700)
-    except OSError:
-        return False
-    seconds = _REMOTE_CONTROL_READY_TIMEOUT_SECONDS
-    state = _ask("reclaim", {"socket": str(socket_path), "seconds": seconds}, _RECLAIM_BUDGET_SECONDS).get("state")
-    if state == "ready":
-        return True
-    if state != "free":
-        return False
-    try:
-        process = subprocess.Popen(
-            [*executable_prefix, "app-server", "--listen", f"unix://{socket_path}"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env=dict(environment),
-            start_new_session=True,
-        )
-        pid_path = socket_path.parent / "hol-guard-app-server.pid"
-        pid_path.write_text(str(process.pid), encoding="utf-8")
-        pid_path.chmod(0o600)
-    except OSError:
-        return False
-    return _wait_for_socket(socket_path)
+def _argv(value: object) -> TypeGuard[list[str]]:
+    return isinstance(value, list) and bool(value) and all(isinstance(part, str) for part in value)

@@ -1214,6 +1214,9 @@ dependencies = [
  "tempfile",
  "toml 0.8.23",
  "toml_edit",
+ "tree-sitter",
+ "tree-sitter-language",
+ "tree-sitter-python",
  "unicode-normalization",
  "windows-permissions",
  "zeroize",
@@ -2716,6 +2719,16 @@ name = "tree-sitter-language"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
+
+[[package]]
+name = "tree-sitter-python"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bf85fd39652e740bf60f46f4cda9492c3a9ad75880575bf14960f775cb74a1c"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
 
 [[package]]
 name = "typed-path"

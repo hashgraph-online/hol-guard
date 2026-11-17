@@ -44,6 +44,7 @@ from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, re
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import codex_hook_publication_helpers as publication_helpers
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
@@ -4368,7 +4369,7 @@ args = ["workspace-skill.js", "--changed"]
                 }
             },
         }
-        guard_update_commands_module.CodexHarnessAdapter._install_config_hooks(
+        publication_helpers.install_config_hooks(
             config_payload, context, config_path=home_dir / ".codex" / "config.toml"
         )
         hooks = config_payload["hooks"]
@@ -4382,7 +4383,7 @@ args = ["workspace-skill.js", "--changed"]
         entry = entries[0]
         assert isinstance(entry, dict)
         config_path = home_dir / ".codex" / "config.toml"
-        guard_update_commands_module.CodexHarnessAdapter._write_authenticated_hook_config(
+        publication_helpers.write_authenticated_hook_config(
             context,
             config_path=config_path,
             payload=config_payload,
@@ -4444,7 +4445,7 @@ args = ["workspace-skill.js", "--changed"]
         config_payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
         managed_handler = config_payload["hooks"]["PreToolUse"][-1]["hooks"][0]
         managed_handler["statusMessage"] = "HOL Guard checking tool action (tampered)"
-        _write_text(config_path, codex_adapter_module.dump_toml(config_payload))
+        _write_text(config_path, dump_toml(config_payload))
         context = HarnessContext(home_dir=home_dir, workspace_dir=Path.cwd(), guard_home=home_dir)
 
         before = codex_adapter_module.codex_native_hook_state(context)
@@ -4535,24 +4536,14 @@ args = ["workspace-skill.js", "--changed"]
         self, tmp_path, monkeypatch, capsys
     ):
         home_dir = tmp_path / "home"
-        bridge_path = tmp_path / "package" / "codex_daemon_hook_bridge.py"
+        # The hook runs the native runtime named here; its bytes are the
+        # authenticated "bridge" role.
+        bridge_path = tmp_path / "package" / "hol-guard-runtime"
         bridge_path.parent.mkdir(parents=True)
-        original_bridge = Path(codex_adapter_module.__file__).with_name("codex_daemon_hook_bridge.py").read_bytes()
+        original_bridge = b"#!/bin/sh\nexit 0\n"
         bridge_path.write_bytes(original_bridge)
         bridge_path.chmod(0o644)
-        original_command_parts = codex_adapter_module._hook_command_parts
-        original_packaged_paths = codex_adapter_module._hook_packaged_file_paths
-
-        def relocated_command_parts(hook_context: HarnessContext) -> tuple[str, ...]:
-            parts = list(original_command_parts(hook_context))
-            parts[1] = str(bridge_path)
-            return tuple(parts)
-
-        def relocated_packaged_paths() -> tuple[tuple[str, Path], ...]:
-            return tuple((role, bridge_path if role == "bridge" else path) for role, path in original_packaged_paths())
-
-        monkeypatch.setattr(codex_adapter_module, "_hook_command_parts", relocated_command_parts)
-        monkeypatch.setattr(codex_adapter_module, "_hook_packaged_file_paths", relocated_packaged_paths)
+        monkeypatch.setattr(codex_adapter_module, "_native_bridge_executable", lambda _guard_home: bridge_path)
         assert main(["guard", "install", "codex", "--home", str(home_dir), "--json"]) == 0
         json.loads(capsys.readouterr().out)
         context = HarnessContext(home_dir=home_dir, workspace_dir=Path.cwd(), guard_home=home_dir)

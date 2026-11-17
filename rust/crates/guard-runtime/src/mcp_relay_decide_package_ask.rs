@@ -120,16 +120,18 @@ pub(super) fn queue(
         ask::write(request, oauth_source, args).map_err(|_| PACKAGE_ASK_FAILED)?;
     let row = ask::read_back(request, &request_id).map_err(|_| PACKAGE_ASK_FAILED)?;
     let review_url = ask::review_url(&row, center, &request_id);
-    let message = format!(
-        "HOL Guard stopped package install request {} from {}. Approve request {request_id} at \
-         {review_url}, then retry the same action.",
+    let stopped = format!(
+        "HOL Guard stopped package install request {} from {}",
         request.build.tool_name, request.build.server_name
     );
+    let agent =
+        super::review_link::agent_review(&request.guard_home, &stopped, &request_id, &review_url);
+    let message = agent.message;
     let data = json!({
         "approvalCenterUrl": center,
         "approvalRequests": [Value::Object(row)],
         "guardPolicyAction": answer.policy_action,
-        "reviewUrl": review_url,
+        "reviewUrl": agent.review_url,
         "supplyChainEvaluation": evaluation,
     });
     // `_notify_pending_approval` once the row is written. A notice the

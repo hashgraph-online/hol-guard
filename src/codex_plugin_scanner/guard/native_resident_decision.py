@@ -211,7 +211,8 @@ class BoundCall:
     apart from an outage. ``check_circuit`` skips the call while the shared
     availability circuit is open. ``clock_after_prerequisite`` gives the
     resident its whole transport window once setup is done, for bridges that
-    never charged provisioning to it.
+    never charged provisioning to it. ``max_budget_ms`` caps the envelope
+    budget and the client wait, for operations whose callers may widen it.
     """
 
     operation: str
@@ -227,6 +228,7 @@ class BoundCall:
     check_circuit: bool = False
     transport_failure: str = "resident_unavailable"
     clock_after_prerequisite: bool = False
+    max_budget_ms: int = _MAX_DEADLINE_BUDGET_MS
 
     @property
     def invalid(self) -> str:
@@ -345,7 +347,7 @@ def bound_resident_call(
     if remaining_ms <= 0:
         raise spec.error(unavailable)
     # The budget is the call's own allowance; only a caller deadline shortens it.
-    budget_ms = min(_MAX_DEADLINE_BUDGET_MS, round((local_deadline - started_at) * 1_000))
+    budget_ms = min(spec.max_budget_ms, round((local_deadline - started_at) * 1_000))
     if deadline_monotonic is not None:
         budget_ms = min(budget_ms, remaining_ms)
     try:

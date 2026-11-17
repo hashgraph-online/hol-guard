@@ -8,10 +8,27 @@ import pytest
 from codex_plugin_scanner.guard.adapters import codex as adapter
 from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer
 from codex_plugin_scanner.guard.codex_config import dump_toml
-from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionError
+from tests import codex_plan_segments as segments
 
 from .test_codex_publication_preparation import _context, _tree
 from .test_runtime_transition import begin, transition  # noqa: F401 -- shared pytest fixture
+
+
+def _backup(context, *, original, migrated_payload=None):
+    content = (
+        {"migrated": dump_toml(migrated_payload, original=original)}
+        if migrated_payload is not None
+        else {"original": adapter._b64(original)}
+    )
+    return segments._one_planned_file(adapter._codex("main_backup", context, **content))
+
+
+def _publish(change):
+    payload = {"files": [change.payload()]}
+    RuntimeTransition._compare(payload, "before")
+    RuntimeTransition._write_file(payload["files"][0], "after")
+    RuntimeTransition._compare(payload, "after")
 
 
 @pytest.mark.parametrize(
@@ -21,7 +38,7 @@ from .test_runtime_transition import begin, transition  # noqa: F401 -- shared p
 def test_backup_preparation_preserves_content_rule_without_writes(tmp_path, monkeypatch, original, migrated):
     context = _context(tmp_path, monkeypatch)
     before = _tree(tmp_path)
-    change = adapter.prepare_codex_main_backup(context, original=original, migrated_payload=migrated)
+    change = _backup(context, original=original, migrated_payload=migrated)
     assert _tree(tmp_path) == before
     assert change.before is None
     assert change.after == (
@@ -38,8 +55,8 @@ def test_existing_backup_retains_bytes_mode_and_inode(tmp_path, monkeypatch):
     path.write_bytes(b"prior backup generation")
     path.chmod(0o640)
     before = _tree(tmp_path)
-    change = adapter.prepare_codex_main_backup(context, original=b"new config")
-    adapter._publish_codex_alternate_cleanup(change)
+    change = _backup(context, original=b"new config")
+    _publish(change)
     assert _tree(tmp_path) == before
     assert change.before == change.after == b"prior backup generation"
     assert change.before_mode == change.after_mode == 0o640
@@ -47,11 +64,11 @@ def test_existing_backup_retains_bytes_mode_and_inode(tmp_path, monkeypatch):
 
 def test_backup_foreign_generation_before_publication_is_preserved(tmp_path, monkeypatch):
     context = _context(tmp_path, monkeypatch)
-    change = adapter.prepare_codex_main_backup(context, original=b"original config")
+    change = _backup(context, original=b"original config")
     change.path.parent.mkdir(parents=True)
     change.path.write_bytes(b"foreign backup")
     with pytest.raises(TransitionError, match="generation_changed"):
-        adapter._publish_codex_alternate_cleanup(change)
+        _publish(change)
     assert change.path.read_bytes() == b"foreign backup"
 
 
@@ -79,7 +96,7 @@ def test_mcp_renderer_refreshes_proxy_preserves_input_and_workspace_precedence(t
     workspace = {"mcp_servers": {"shadow": {"command": "workspace"}, "project": {"command": "node"}}}
     originals = deepcopy((payload, workspace))
     before = _tree(tmp_path)
-    rendered, migrated = adapter.render_codex_managed_mcp(
+    rendered, migrated = segments.render_codex_managed_mcp(
         context,
         payload,
         workspace_payload=workspace,
@@ -110,7 +127,7 @@ def test_signed_backup_inverse_preserves_prior_generation(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"prior backup")
         path.chmod(0o640)
-    change = adapter.prepare_codex_main_backup(context, original=b"original config")
+    change = _backup(context, original=b"original config")
     plan = replace(plan, files=(*plan.files, change))
     begin(runtime, plan)
     runtime.publish(plan.operation_id, "AuthorizedForExactTransition")

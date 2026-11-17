@@ -13,6 +13,9 @@ _SIGNATURES = {
     "function approvalUrlFromResponse(response: GuardResponse): string | null {": (
         "function approvalUrlFromResponse(response) {"
     ),
+    "function desktopUrlFromResponse(response: GuardResponse): string | null {": (
+        "function desktopUrlFromResponse(response) {"
+    ),
     "function approvalManualRetryReason(response: GuardResponse, fallbackReason: string): string {": (
         "function approvalManualRetryReason(response, fallbackReason) {"
     ),
@@ -95,3 +98,44 @@ def test_the_approval_page_line_keeps_the_signed_link_from_the_reason(tmp_path: 
     # Without a signed link for this request in the reason, the page is all there is.
     assert unsigned.endswith(f"copied in full: {page}")
     assert foreign.endswith(f"copied in full: {page}")
+
+
+def test_the_link_line_asks_for_the_desktop_link_and_the_signed_link(tmp_path: Path) -> None:
+    request_id = "a" * 32
+    page = f"http://127.0.0.1:1/requests/{request_id}"
+    signed = page + "/1794444686-" + "b" * 32
+    desktop = f"hol-guard-desktop://requests/{request_id}"
+    reason = (
+        "HOL Guard requires review. Open HOL Guard to approve or keep this blocked: "
+        f"{desktop} (HOL Guard Desktop), or in a browser: {signed}."
+    )
+    other_desktop = "hol-guard-desktop://requests/" + "c" * 32
+    [held, foreign, unlabeled] = _reasons(
+        tmp_path,
+        [
+            {"decision": "deny", "reason": reason, "approval_request_id": request_id, "approval_url": page},
+            {
+                "decision": "deny",
+                "reason": reason.replace(desktop, other_desktop),
+                "approval_request_id": request_id,
+                "approval_url": page,
+            },
+            {
+                "decision": "deny",
+                "reason": f"HOL Guard requires review. See {desktop} and {signed}.",
+                "approval_request_id": request_id,
+                "approval_url": page,
+            },
+        ],
+    )
+
+    # Desktop handles request links here, so the agent is asked for both links,
+    # each on its own line so neither is cut short or merged into prose.
+    assert held.endswith(
+        "Give the user both HOL Guard approval links, each copied in full:\n"
+        f"HOL Guard Desktop: {desktop}\nBrowser: {signed}"
+    )
+    # Another request's Desktop link, or one Guard did not offer as the Desktop
+    # step, never replaces the single signed-link line.
+    assert foreign.endswith(f"Give the user this exact HOL Guard approval link, copied in full: {signed}")
+    assert unlabeled.endswith(f"Give the user this exact HOL Guard approval link, copied in full: {signed}")

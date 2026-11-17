@@ -11,12 +11,13 @@ import { DataFlowEvidenceCard } from "./data-flow-evidence-card";
 import { whyPaused } from "./evidence/plain-english";
 import type { GuardApprovalRequest } from "./guard-types";
 import { DecodedLayerCard, SkillRiskCard, SupplyChainRiskCard } from "./risk-signal-cards";
+import { plainMcpReason } from "./mcp-call/explain-mcp-call";
 import { RuleMatchExplanation, ruleMatchLines } from "./rule-match-explanation";
 import { ScannerEvidenceSection } from "./scanner-evidence-badge";
 
 export function buildTopAlertItems(item: GuardApprovalRequest): EvidenceItem[] {
   const items: EvidenceItem[] = [];
-  const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
+  const secondaryRiskSummary = plainMcpReason(item, resolveSecondaryRiskSummary(item));
   const watchOnly = isWatchOnlyObservation(item);
   // The rules Core matched, in the catalog's words, replace the category guess
   // whenever there are any; the guess stays for everything else.

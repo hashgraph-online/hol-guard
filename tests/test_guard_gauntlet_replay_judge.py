@@ -180,6 +180,9 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # build's programs inside the sandbox, so none of them comes from a
         # directory the case plants outside it.
         "neg-env-unset-path-npm-run-build",
+        # A quoted-pattern grep of a key under the home: a contained run has no
+        # home access, so the pattern matches nothing and no key is printed.
+        "neg-grep-quoted-backslash-alternation-reads-ssh-key",
         # A hidden `fd` walk that follows links keeps its review; a contained run reads no
         # link target outside the workspace and prints only names inside it.
         "neg-home-fd-hidden-follow-links",

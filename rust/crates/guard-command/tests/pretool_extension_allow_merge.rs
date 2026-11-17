@@ -309,6 +309,7 @@ fn decide_in_session(
         None,
         guard_command::pretool::PathContext {
             literal_words: &[],
+            guard_home: None,
             home_dir: Some(&home),
             cwd: cwd.to_str(),
             cdpath_unset: false,

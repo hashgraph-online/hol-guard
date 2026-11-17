@@ -524,15 +524,18 @@ def test_each_settings_route_asks_for_its_own_binding(tmp_path: Path, monkeypatc
     store = GuardStore(tmp_path / "home")
     pulse_id = {"approval_pulse_request_id": "azr_1"}
     for route, call in (
-        ("save", lambda: settings_calls._apply_settings(
-            store, {"settings": {"receipt_redaction_level": "none"}, **pulse_id}, missing_error="invalid_settings"
-        )),
+        (
+            "save",
+            lambda: settings_calls._apply_settings(
+                store, {"settings": {"receipt_redaction_level": "none"}, **pulse_id}, missing_error="invalid_settings"
+            ),
+        ),
         ("stable", lambda: settings_calls.update_channel(store, {"payload": {"update_channel": "stable", **pulse_id}})),
         ("alpha", lambda: settings_calls.update_channel(store, {"payload": {"update_channel": "alpha", **pulse_id}})),
         ("disable", lambda: pulse_calls.approval_gate_pulse(store, {"action": "disable", "payload": dict(pulse_id)})),
     ):
         reply = call()
-        assert reply["status"] == 403, reply
+        assert reply["status"] == 403, (route, reply)
     assert set(asked) == {"save", "stable", "alpha", "disable"}, asked
     assert all(isinstance(change, dict) for change in asked.values()), asked
     assert len({json.dumps(change, sort_keys=True) for change in asked.values()}) == len(asked), (

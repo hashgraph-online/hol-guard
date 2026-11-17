@@ -877,6 +877,7 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
             None,
             guard_command::pretool::PathContext {
                 literal_words: &[],
+                guard_home: None,
                 home_dir: Some(r"C:\Users\tester"),
                 cwd: Some(cwd),
                 cdpath_unset: true,

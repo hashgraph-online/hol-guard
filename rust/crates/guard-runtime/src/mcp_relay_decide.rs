@@ -1029,6 +1029,8 @@ mod package_answer;
 mod package_archive;
 #[path = "mcp_relay_decide_package_ask.rs"]
 mod package_ask;
+#[path = "mcp_relay_decide_review_link.rs"]
+mod review_link;
 // What the claimed package lane composes, short of the store write.
 #[path = "mcp_relay_decide_package_claim.rs"]
 mod package_claim;

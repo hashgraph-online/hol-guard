@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -43,9 +42,10 @@ def test_frozen_bounded_hook_command_bakes_current_hol_guard_shim(
     monkeypatch.setattr(
         bounded_cli_hook_bridge,
         "_trusted_desktop_hook_proxy_command",
-        lambda executable, config: None,
+        lambda executable, config, require_proxy=False: None,
     )
-    monkeypatch.setattr(bounded_cli_hook_bridge, "isolated_cursor_hook_python", lambda: None)
+    runtime = tmp_path / "guard-home" / "native-runtime" / "hol-guard-runtime"
+    monkeypatch.setattr(bounded_cli_hook_bridge, "native_bridge_executable", lambda *_args, **_kwargs: runtime)
     command = bounded_cli_hook_bridge.bounded_cli_hook_command(
         python_executable=str(versioned),
         package_root=tmp_path,
@@ -61,18 +61,16 @@ def test_frozen_bounded_hook_command_bakes_current_hol_guard_shim(
         harness="grok",
         timeout_seconds=25,
     )
-    assert command[0] == str(shim)
-    assert command[1] == "__guard-bounded-hook"
+    assert command[:2] == (str(runtime), "bounded-hook-bridge")
     config = json.loads(command[2])
     assert config["python_executable"] == str(shim)
     assert config["frozen_launcher"] is True
 
 
-def test_unfrozen_bounded_hook_command_uses_isolated_python_script(
+def test_unfrozen_bounded_hook_command_names_the_native_runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(bounded_cli_hook_bridge, "isolated_cursor_hook_python", lambda: sys.executable)
     runtime = tmp_path / "hol-guard-runtime"
     monkeypatch.setattr(bounded_cli_hook_bridge, "native_bridge_executable", lambda *_args, **_kwargs: runtime)
     versioned, shim = _versioned_core(tmp_path)
@@ -81,26 +79,15 @@ def test_unfrozen_bounded_hook_command_uses_isolated_python_script(
         python_executable=str(versioned),
         package_root=tmp_path,
         guard_home=guard_home,
-        cli_args=(
-            "guard",
-            "hook",
-            "--guard-home",
-            str(guard_home),
-            "--harness",
-            "grok",
-        ),
+        cli_args=("guard", "hook", "--guard-home", str(guard_home), "--harness", "grok"),
         harness="grok",
         timeout_seconds=25,
     )
     assert command[:2] == (str(runtime), "bounded-hook-bridge")
-    assert command[2] == bounded_cli_hook_bridge.isolated_cursor_hook_python()
-    assert command[3] == "-I"
-    assert Path(command[4]) == guard_home / "managed/bounded-hooks/grok.py"
-    script = Path(command[4]).read_text(encoding="utf-8")
-    assert 'HARNESS = "grok"' in script
-    assert "TIMEOUT_SECONDS = 25" in script
-    assert str(versioned) not in command
-    assert str(shim) not in command
+    assert len(command) == 3
+    # Only a frozen Guard swaps its versioned path for the stable shim.
+    assert json.loads(command[2])["python_executable"] == str(versioned)
+    assert str(shim) not in command[2]
 
 
 def test_prune_safe_cli_executable_ignores_unix_shim_on_windows(

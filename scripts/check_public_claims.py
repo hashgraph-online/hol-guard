@@ -66,7 +66,14 @@ FOLLOWING_PROSE_BLOCKS = 2
 
 # Public pages that describe what Guard protects. Planning notes, research,
 # execution logs, ADRs and audits are working documents, not product claims.
-PUBLIC_PAGES = ("README.md",)
+# Agent skill and droid text is copy that agents repeat to users, so it is
+# held to the same rule as the README.
+PUBLIC_PAGES = (
+    "README.md",
+    "HOL_GUARD_ANSWERS.md",
+    ".factory/skills/hol-guard/SKILL.md",
+    ".factory/droids/hol-guard-runner.md",
+)
 PUBLIC_DOC_DIRECTORY = Path("docs/guard")
 WORKING_DOCUMENT = re.compile(r"(?:^|[-_.])(?:prd|todo|research|plan|log|handoff|ledger)(?:[-_.]|$)", re.IGNORECASE)
 WORKING_DIRECTORIES = frozenset({"adr", "audits"})

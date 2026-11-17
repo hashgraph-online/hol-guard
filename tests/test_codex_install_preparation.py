@@ -235,14 +235,16 @@ def test_prepared_file_generations_match_ordinary_install(tmp_path, monkeypatch)
 
 def test_foreign_source_during_migration_prevents_plan_without_overwriting(tmp_path, monkeypatch):
     harness, context, _global_config, workspace_config = _sources(tmp_path, monkeypatch)
-    migrate = adapter.prepare_codex_hook_migration
+    ask = adapter.ask
 
-    def foreign_write(*args, **kwargs):
-        result = migrate(*args, **kwargs)
-        workspace_config.write_text('model="foreign"\n')
-        return result
+    def foreign_write(op, *args, **kwargs):
+        # The sources were captured before the plan; a write while it runs
+        # must fail the plan's own comparison against disk.
+        if op == "install_plan":
+            workspace_config.write_text('model="foreign"\n')
+        return ask(op, *args, **kwargs)
 
-    monkeypatch.setattr(adapter, "prepare_codex_hook_migration", foreign_write)
+    monkeypatch.setattr(adapter, "ask", foreign_write)
     with pytest.raises(TransitionError):
         harness.prepare_install(context)
     assert workspace_config.read_text() == 'model="foreign"\n'

@@ -2,8 +2,10 @@
 
 The runtime owns what each record may contain and whether it opens: the
 pending publication inverse, the retained authority receipt and the repair
-and inverse review requests. Callers read the key and the files, then raise
-the refused reason with their own error type. No answer is a refusal.
+and inverse review requests. The runtime also creates, reads and removes the
+Codex hook key itself: callers name its Guard home and read only the records'
+files, then raise the refused reason with their own error type. No answer is
+a refusal.
 """
 
 from __future__ import annotations
@@ -111,17 +113,48 @@ def repair_proof_matches(payload: Mapping[str, object], proof: Mapping[str, obje
     return matches
 
 
+def authenticated_manifest(
+    guard_home: str,
+    *,
+    path: str | None = None,
+    text: str | None = None,
+    key_id: str | None = None,
+    installation_id: str | None = None,
+) -> dict[str, object]:
+    """The runtime authenticates the manifest at `path`, or captured `text`."""
+
+    request: dict[str, object] = {"guard_home": guard_home}
+    if path is not None:
+        request.update(op="manifest_load", path=path)
+    else:
+        request.update(op="manifest_authenticate", text=text)
+        if key_id is not None:
+            request.update(key_id=key_id, installation_id=installation_id)
+    manifest = _call(request).get("manifest")
+    if not isinstance(manifest, dict):
+        raise AuthorityRecordRefusedError(RUNTIME_UNAVAILABLE)
+    return manifest
+
+
 def _ask(op: str, kind: RecordKind, hook_key: HookKey, request: dict[str, object]) -> dict[str, object]:
     return _call(
         {
             "op": op,
             "kind": kind,
-            "key_hex": hook_key.key.hex(),
+            "key_home": str(hook_key.guard_home),
             "key_id": hook_key.key_id,
             "installation_id": hook_key.installation_id,
             **request,
         }
     )
+
+
+def hook_key_answer(
+    op: Literal["key_identity", "key_ensure", "key_remove_if_unused"], guard_home: str
+) -> dict[str, object]:
+    """The runtime's answer for the Codex hook key under `guard_home`; never the key itself."""
+
+    return _call({"op": op, "guard_home": guard_home})
 
 
 def _call(request: dict[str, object]) -> dict[str, object]:
@@ -150,7 +183,9 @@ def _call(request: dict[str, object]) -> dict[str, object]:
 __all__ = [
     "RUNTIME_UNAVAILABLE",
     "AuthorityRecordRefusedError",
+    "authenticated_manifest",
     "check_receipt_manifest",
+    "hook_key_answer",
     "open_authority_record",
     "repair_proof_matches",
     "seal_authority_record",
