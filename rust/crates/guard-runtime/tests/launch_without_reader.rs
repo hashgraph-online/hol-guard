@@ -56,7 +56,9 @@ fn a_failed_launch_with_no_reader_exits_with_its_code_and_records_it() {
     assert_eq!(records.len(), 1, "{text}");
     assert_eq!(records[0]["kind"], "error");
     assert_eq!(records[0]["code"], "usage:");
-    assert_eq!(records[0]["subcommand"], "not-a-runtime-command");
+    // An argument that is not a known subcommand may be user data, so the
+    // record names it only as "other".
+    assert_eq!(records[0]["subcommand"], "other");
 }
 
 #[test]
