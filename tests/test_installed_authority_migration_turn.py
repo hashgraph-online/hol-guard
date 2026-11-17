@@ -105,6 +105,29 @@ def test_an_extension_control_host_does_not_queue_behind_another_migration(tmp_p
     assert store.calls == 1
 
 
+def test_a_pending_migration_backoff_keeps_refresh_from_blocking() -> None:
+    sentinel = object()
+    calls = 0
+
+    def retry() -> None:
+        nonlocal calls
+        calls += 1
+        raise _InstalledAuthorityMigrationError
+
+    server = SimpleNamespace(
+        _installed_authority_pending=True,
+        _installed_authority_retry_at=0.0,
+        runtime=SimpleNamespace(current=lambda: sentinel),
+    )
+    server._migrate_installed_authority = retry
+
+    assert ExtensionControlHost.refresh(server) is sentinel  # pyright: ignore[reportArgumentType]
+    assert calls == 1
+    assert server._installed_authority_retry_at > time.monotonic()
+    assert ExtensionControlHost.refresh(server) is sentinel  # pyright: ignore[reportArgumentType]
+    assert calls == 1
+
+
 def test_the_worker_host_waits_for_another_process_to_finish(tmp_path) -> None:
     store = _SlowStore(tmp_path, seconds=0.0)
     ready = tmp_path / "held"

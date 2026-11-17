@@ -55,6 +55,7 @@ class _InstalledAuthorityMigrationError(Exception):
 # same work, and once it lands this one finds it done in a moment.
 WORKER_MIGRATION_TURN_WAIT_SECONDS = 180.0
 _SLOW_MIGRATION_SECONDS = 5.0
+_MIGRATION_RETRY_INTERVAL_SECONDS = 5.0
 
 
 def _verify_installed_bundle_early() -> None:
@@ -138,6 +139,7 @@ class ExtensionControlHost:
 
         self.store = store
         self._installed_authority_pending = False
+        self._installed_authority_retry_at = 0.0
         self._on_core_registry = False
         try:
             self._migrate_installed_authority()
@@ -238,10 +240,19 @@ class ExtensionControlHost:
             return snapshot
 
         if self._installed_authority_pending:
+            now = time.monotonic()
+            if now < self._installed_authority_retry_at:
+                # A failed native migration is fail-closed, but it must not
+                # make every hook pay the migration cost while the authority
+                # service is unavailable. Keep serving the current tampered
+                # view and retry on the next backoff window.
+                return self.runtime.current()
             try:
                 self._migrate_installed_authority()
             except _InstalledAuthorityMigrationError:
+                self._installed_authority_retry_at = now + _MIGRATION_RETRY_INTERVAL_SECONDS
                 return self.runtime.current()
+            self._installed_authority_retry_at = 0.0
             self._enroll_authority_by_default()
         try:
             try:
