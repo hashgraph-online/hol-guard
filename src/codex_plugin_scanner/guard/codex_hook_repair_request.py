@@ -17,9 +17,8 @@ from typing import cast
 
 from .codex_hook_authority_record import AuthorityRecordRefusedError, open_authority_record, seal_authority_record
 from .codex_hook_file_integrity import hook_validation_deadline
-from .codex_hook_integrity import hook_manifest_path, load_hook_secret
+from .codex_hook_integrity import load_hook_secret
 from .codex_hook_manifest import (
-    CODEX_AUTHORITY_REPAIR_ACTION,
     CodexHookManifestSpec,
     PreparedCodexHookRepair,
     transition_file,
@@ -35,7 +34,6 @@ from .native_transition_files import publication
 from .runtime_transition import (
     RuntimeTransition,
     TransitionError,
-    check_transition_files,
     inverse_recovery_budget,
 )
 
@@ -51,13 +49,6 @@ _INVERSE_PURPOSE = "codex-publication-inverse-request"
 RepairPlan = PreparedCodexHookRepair | PreparedCodexPublicationInverse
 
 
-def _checked_files(value: object) -> list[dict[str, object]]:
-    if not isinstance(value, list) or not 0 < len(value) <= 128 or not all(isinstance(item, dict) for item in value):
-        raise TransitionError("files_invalid")
-    check_transition_files(value)
-    return value
-
-
 def _inverse_from_payload(
     value: object,
     spec: CodexHookManifestSpec,
@@ -65,22 +56,12 @@ def _inverse_from_payload(
 ) -> PreparedCodexPublicationInverse:
     # Reconstruct targets and predecessor bytes from the authenticated live WAL.
     # Serialized targets and dependencies never independently confer authority.
+    publication("repair_request_plan", spec.guard_home, kind="inverse", payload=value)
     if not isinstance(value, dict):
         raise TransitionError("authority_repair_request_plan_invalid")
-    native = value.get("native_runtime")
-    operation = value.get("operation_id")
-    workspace = value.get("verification_workspace")
-    if (
-        not isinstance(native, dict)
-        or set(native) != {"path", "size", "mtime_ns", "sha256"}
-        or not isinstance(native["path"], str)
-        or not isinstance(native["sha256"], str)
-        or type(native["size"]) is not int
-        or type(native["mtime_ns"]) is not int
-        or not isinstance(operation, str)
-        or not isinstance(workspace, str)
-    ):
-        raise TransitionError("authority_repair_request_plan_invalid")
+    native = cast(dict[str, object], value["native_runtime"])
+    operation = cast(str, value["operation_id"])
+    workspace = cast(str, value["verification_workspace"])
     if str(uuid.UUID(operation)) != operation:
         raise TransitionError("authority_repair_request_plan_invalid")
     with inverse_recovery_budget(deadline), hook_validation_deadline(deadline):
@@ -88,7 +69,10 @@ def _inverse_from_payload(
         bound = bind_codex_publication_inverse_verification(
             replace(fresh, operation_id=operation),
             expected_runtime=NativeRuntimeIdentity(
-                Path(native["path"]), native["size"], native["mtime_ns"], native["sha256"]
+                Path(cast(str, native["path"])),
+                cast(int, native["size"]),
+                cast(int, native["mtime_ns"]),
+                cast(str, native["sha256"]),
             ),
             workspace=Path(workspace),
             deadline_monotonic=deadline,
@@ -104,50 +88,29 @@ def _check_deadline(deadline: float) -> None:
 
 
 def _plan_from_payload(value: object, *, home: Path, config: Path) -> PreparedCodexHookRepair:
-    if not isinstance(value, dict) or set(value) != {
-        "schema",
-        "action",
-        "guard_home",
-        "config_path",
-        "operation_id",
-        "files",
-        "native_runtime",
-        "verification_workspace",
-    }:
+    # The native runtime owns every shape, context and file-set check; it
+    # answers which file is the manifest change.
+    answer = publication(
+        "repair_request_plan", home, kind="repair", payload=value, guard_home=str(home), config_path=str(config)
+    )
+    if not isinstance(answer, dict) or type(answer.get("change")) is not int or not isinstance(value, dict):
         raise TransitionError("authority_repair_request_plan_invalid")
-    if (
-        value["schema"] != "hol-guard.codex-authority-repair-plan.v1"
-        or value["action"] != CODEX_AUTHORITY_REPAIR_ACTION
-        or value["guard_home"] != str(home)
-        or value["config_path"] != str(config)
-        or not isinstance(value["operation_id"], str)
-        or not isinstance(value["verification_workspace"], str)
-    ):
-        raise TransitionError("authority_repair_request_context_invalid")
-    native = value["native_runtime"]
-    if (
-        not isinstance(native, dict)
-        or set(native) != {"path", "size", "mtime_ns", "sha256"}
-        or not isinstance(native["path"], str)
-        or not isinstance(native["sha256"], str)
-        or type(native["size"]) is not int
-        or type(native["mtime_ns"]) is not int
-    ):
-        raise TransitionError("authority_repair_request_plan_invalid")
-    files = tuple(transition_file(item) for item in _checked_files(value.get("files")))
-    changes = [item for item in files if item.path == hook_manifest_path(home, config)]
-    if len(changes) != 1:
-        raise TransitionError("authority_repair_request_plan_invalid")
+    raw_files = cast(list[dict[str, object]], value["files"])
+    files = tuple(transition_file(item) for item in raw_files)
+    native = cast(dict[str, object], value["native_runtime"])
     plan = PreparedCodexHookRepair(
-        changes[0],
+        files[answer["change"]],
         files,
         home,
         config,
-        value["operation_id"],
+        cast(str, value["operation_id"]),
         NativeRuntimeIdentity(
-            Path(native["path"]), cast(int, native["size"]), cast(int, native["mtime_ns"]), native["sha256"]
+            Path(cast(str, native["path"])),
+            cast(int, native["size"]),
+            cast(int, native["mtime_ns"]),
+            cast(str, native["sha256"]),
         ),
-        Path(value["verification_workspace"]),
+        Path(cast(str, value["verification_workspace"])),
     )
     # Refuse normalization that silently changes a reviewed payload.
     if plan.payload() != value:

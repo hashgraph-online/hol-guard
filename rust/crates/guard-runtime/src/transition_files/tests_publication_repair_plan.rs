@@ -8,10 +8,10 @@ use super::dispatch;
 use super::inspect::sha256_hex;
 use super::publication::Call;
 
-struct Home(PathBuf);
+pub(super) struct Home(pub(super) PathBuf);
 
 impl Home {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let root = std::env::temp_dir().join(format!(
             "publication-repair-plan-{}-{}",
             std::process::id(),
@@ -22,15 +22,15 @@ impl Home {
         Self(fs::canonicalize(root).unwrap())
     }
 
-    fn guard(&self) -> PathBuf {
+    pub(super) fn guard(&self) -> PathBuf {
         self.0.join("guard")
     }
 
-    fn config(&self) -> PathBuf {
+    pub(super) fn config(&self) -> PathBuf {
         self.0.join("home/.codex/config.toml")
     }
 
-    fn change(&self) -> Value {
+    pub(super) fn change(&self) -> Value {
         let (manifest, _) = Call::targets(&self.guard(), &self.config().to_string_lossy());
         json!({
             "path": manifest.to_string_lossy(),
@@ -43,7 +43,7 @@ impl Home {
         })
     }
 
-    fn files(&self) -> Vec<Value> {
+    pub(super) fn files(&self) -> Vec<Value> {
         let (_, receipt) = Call::targets(&self.guard(), &self.config().to_string_lossy());
         let secret = self.guard().join("managed/codex/hook-manifest.key");
         let mut files = vec![self.change()];
@@ -78,7 +78,7 @@ impl Drop for Home {
     }
 }
 
-fn dependency(path: &Path) -> Value {
+pub(super) fn dependency(path: &Path) -> Value {
     json!({
         "path": path.to_string_lossy(),
         "before": null,
@@ -91,7 +91,7 @@ fn dependency(path: &Path) -> Value {
     })
 }
 
-const OPERATION: &str = "1b4e28ba-2fa1-41d2-883f-0016d3cca427";
+pub(super) const OPERATION: &str = "1b4e28ba-2fa1-41d2-883f-0016d3cca427";
 
 #[test]
 fn a_restore_of_the_missing_manifest_answers_its_subject() {

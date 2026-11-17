@@ -89,22 +89,38 @@ pub(super) fn claim(call: &mut Call<'_>) -> Step<Value> {
     Ok(Value::Null)
 }
 
-/// `publication_repair_claimed`: the grant's claim as it was made, or null.
-pub(super) fn claimed(call: &mut Call<'_>) -> Step<Value> {
+/// `publication_repair_claim_check`: the grant's claim must be the one made
+/// for this subject, owner and deadline and, once the caller names it, for
+/// the one publication the claim allows. Any other claim, or none, leaves
+/// the authorization invalid.
+pub(super) fn check(call: &mut Call<'_>) -> Step<Value> {
     let grant = grant(call)?;
+    let subject = call.text("subject").map_err(|_| INVALID)?;
+    let owner_operation_id = call.text("owner_operation_id").map_err(|_| INVALID)?;
+    let owner_pid = call
+        .args
+        .get("owner_pid")
+        .and_then(Value::as_u64)
+        .ok_or(INVALID)?;
+    let deadline = number(call, "deadline")?;
+    let publication = match call.args.get("publication") {
+        None | Some(Value::Null) => None,
+        Some(_) => Some(number(call, "publication")?),
+    };
     let guard = CLAIMS.lock().unwrap_or_else(PoisonError::into_inner);
-    Ok(guard
+    let claim = guard
         .as_ref()
         .and_then(|claims| claims.get(&grant))
-        .map_or(Value::Null, |claim| {
-            json!({
-                "subject": claim.subject,
-                "owner_operation_id": claim.owner_operation_id,
-                "owner_pid": claim.owner_pid,
-                "deadline": claim.deadline,
-                "publication": claim.publication,
-            })
-        }))
+        .ok_or(INVALID)?;
+    if claim.subject != subject
+        || claim.owner_operation_id != owner_operation_id
+        || claim.owner_pid != owner_pid
+        || claim.deadline != deadline
+        || publication.is_some_and(|publication| claim.publication != Some(publication))
+    {
+        return Err(INVALID);
+    }
+    Ok(Value::Null)
 }
 
 /// `publication_repair_publish`: record the one publication a claim allows.
@@ -125,7 +141,7 @@ pub(super) fn publish(call: &mut Call<'_>) -> Step<Value> {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     use crate::transition_files::dispatch;
 
@@ -153,17 +169,69 @@ mod tests {
         assert!(ask(claim)
             .unwrap_err()
             .contains("authority_repair_authorization_claimed"));
-        let claimed =
-            || ask(json!({"op": "publication_repair_claimed", "grant_id": grant})).unwrap();
-        assert_eq!(claimed()["owner_pid"], json!(7));
-        assert_eq!(claimed()["publication"], json!(null));
+        let check = |publication: Value| {
+            ask(json!({
+                "op": "publication_repair_claim_check",
+                "grant_id": grant,
+                "subject": "subject",
+                "owner_operation_id": "owner",
+                "owner_pid": 7,
+                "deadline": 12.5,
+                "publication": publication,
+            }))
+        };
+        assert_eq!(check(json!(null)).unwrap(), json!(null));
+        assert!(check(json!(3.5)).is_err(), "nothing was published yet");
         let publish =
             json!({"op": "publication_repair_publish", "grant_id": grant, "publication": 3.5});
         assert_eq!(ask(publish.clone()).unwrap(), json!(null));
         assert!(ask(publish)
             .unwrap_err()
             .contains("authority_repair_publication_claimed"));
-        assert_eq!(claimed()["publication"], json!(3.5));
+        assert_eq!(check(json!(3.5)).unwrap(), json!(null));
+        assert!(check(json!(4.0))
+            .unwrap_err()
+            .contains("authority_repair_authorization_invalid"));
+    }
+
+    #[test]
+    fn a_claim_for_another_subject_owner_or_deadline_is_invalid() {
+        let grant = format!("grant-{}", crate::unique_nanos::unique_nanos());
+        let claim = json!({
+            "op": "publication_repair_claim",
+            "grant_id": grant,
+            "subject": "subject",
+            "owner_operation_id": "owner",
+            "owner_pid": 7,
+            "deadline": 12.5,
+            "retire_ms": 60_000,
+        });
+        ask(claim).unwrap();
+        let check = |field: &str, value: Value| {
+            let mut request = json!({
+                "op": "publication_repair_claim_check",
+                "grant_id": grant,
+                "subject": "subject",
+                "owner_operation_id": "owner",
+                "owner_pid": 7,
+                "deadline": 12.5,
+            });
+            request[field] = value;
+            ask(request)
+        };
+        assert!(check("subject", json!("subject")).is_ok());
+        for (field, value) in [
+            ("subject", json!("other")),
+            ("owner_operation_id", json!("other")),
+            ("owner_pid", json!(8)),
+            ("deadline", json!(13.0)),
+        ] {
+            let error = check(field, value).unwrap_err();
+            assert!(
+                error.contains("authority_repair_authorization_invalid"),
+                "{field}: {error}"
+            );
+        }
     }
 
     #[test]
