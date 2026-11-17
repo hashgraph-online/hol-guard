@@ -1039,7 +1039,7 @@ fn handoff_binds(
 /// its handle is its identity; the end of its launch is journaled first.
 fn terminate(caller: &Caller, child: &mut Child) {
     let pid = i64::from(child.id());
-    retire::record_retirement(caller, pid, Some("launch_abandoned"));
+    retire::record_retirement(caller, pid, Some("launch_abandoned"), None);
     let wait = |child: &mut Child| {
         let until = Instant::now() + TERMINATE_WAIT;
         while Instant::now() < until {

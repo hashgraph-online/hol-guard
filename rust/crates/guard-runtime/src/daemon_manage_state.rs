@@ -155,6 +155,7 @@ pub(super) fn answer(
                     start_marker: text(args, "start_marker"),
                     owner_marker: text(args, "owner_marker"),
                     reason: Some("requested_pid"),
+                    session_id: None,
                 };
                 json!({"retired": retire::retire_pid(&target, pid, &expected, deadline)})
             }
@@ -600,6 +601,7 @@ fn retire_duplicates(caller: &Caller, current: &Map<String, Value>, deadline: De
             start_marker: Some(&start),
             owner_marker: Some(&owner),
             reason: Some("duplicate_daemon"),
+            session_id: None,
         };
         if !retire::retire_pid(caller, pid, &expected, deadline) {
             return;
@@ -758,6 +760,7 @@ fn reap_ephemeral(caller: &Caller, deadline: Deadline) {
             start_marker: Some(&start),
             owner_marker: Some(&owner),
             reason: Some("ephemeral_daemon"),
+            session_id: None,
         };
         if retire::retire_pid(&target, pid, &expected, deadline) {
             let _ = records::clear_state(&home);

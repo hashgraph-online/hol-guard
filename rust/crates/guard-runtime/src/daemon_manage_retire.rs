@@ -9,13 +9,18 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
-use crate::daemon_edge::lifecycle;
 use crate::daemon_policy_authority::{
     load_authenticated_daemon_identity, load_authenticated_daemon_state,
 };
 
 use super::host::{self, Caller};
 use super::records::{self, int, owner, text};
+
+#[path = "daemon_manage_retire_state.rs"]
+mod state;
+
+pub(super) use state::record_retirement;
+use state::retire_state_daemon;
 
 const DEFAULT_WAIT: Duration = Duration::from_secs(1);
 const ORPHAN_REAP_TIMEOUT: Duration = Duration::from_secs(15);
@@ -29,10 +34,11 @@ pub(super) struct Expected<'a> {
     pub(super) start_marker: Option<&'a str>,
     pub(super) owner_marker: Option<&'a str>,
     /// Why the caller retires the process. When set, `retire_pid` journals
-    /// `retirement_requested` for it, naming the caller, before the first
-    /// signal. Left unset by a caller that has journaled the retirement
-    /// itself.
+    /// `retirement_requested` for it, naming the caller, once the process has
+    /// passed its checks and before the first signal.
     pub(super) reason: Option<&'a str>,
+    /// The daemon state's id, journaled with the retirement when known.
+    pub(super) session_id: Option<&'a str>,
 }
 
 /// The shared deadline of one management request.
@@ -101,6 +107,7 @@ pub(super) fn retire_generation(
         start_marker: Some(start_marker),
         owner_marker,
         reason: Some(reason),
+        session_id: None,
     };
     retire_pid(caller, pid, &expected, deadline)
 }
@@ -119,7 +126,7 @@ pub(super) fn retire_pid(
     };
     let terminate_exact = |creation_time: i64| {
         start_marker_matches(pid, marker) && owner_marker_matches(pid, expected.owner_marker) && {
-            record_retirement(caller, pid, expected.reason);
+            record_retirement(caller, pid, expected.reason, expected.session_id);
             host::windows_terminate_if_creation_time(pid, creation_time, deadline.remaining())
         }
     };
@@ -165,7 +172,7 @@ pub(super) fn retire_pid(
             return false;
         }
         if !kill_now {
-            record_retirement(caller, pid, expected.reason);
+            record_retirement(caller, pid, expected.reason, expected.session_id);
         }
         match host::signal(pid, kill_now) {
             Ok(false) => return true,
@@ -177,21 +184,6 @@ pub(super) fn retire_pid(
         }
     }
     false
-}
-
-/// Journals that `caller` is about to retire `pid`, and why, so the daemon's
-/// end has a cause on record even though it cannot write one itself.
-pub(super) fn record_retirement(caller: &Caller, pid: i64, reason: Option<&str>) {
-    let (Some(reason), Ok(pid)) = (reason, u32::try_from(pid)) else {
-        return;
-    };
-    let details = lifecycle::Details {
-        reason: Some(reason),
-        by_pid: u32::try_from(caller.own_pid).ok().filter(|pid| *pid > 0),
-        by_parent_pid: u32::try_from(caller.parent_pid).ok().filter(|pid| *pid > 0),
-        ..lifecycle::Details::default()
-    };
-    lifecycle::record_details(&caller.guard_home, pid, "retirement_requested", &details);
 }
 
 /// `_guard_daemon_pid_identity_for_retirement`: the generation and owner an
@@ -494,67 +486,6 @@ pub(super) fn retire_all(
     }
     reap_orphaned_workers(caller, deadline);
     retired
-}
-
-fn retire_state_daemon(
-    caller: &Caller,
-    state: &Map<String, Value>,
-    keep_port: Option<i64>,
-    reason: &str,
-    deadline: Deadline,
-    handled: &mut Vec<i64>,
-    retired: &mut Vec<i64>,
-) {
-    let home = caller.guard_home.as_path();
-    let (Some(pid), Some(port)) = (int(state, "pid").filter(|pid| *pid > 0), int(state, "port"))
-    else {
-        return;
-    };
-    if keep_port == Some(port) {
-        handled.push(pid);
-        return;
-    }
-    if handled.contains(&pid) {
-        if host::pid_is_proven_dead(pid) {
-            records::clear_state_if_current(home, state);
-        }
-        return;
-    }
-    handled.push(pid);
-    // Journaled here, before the identity checks, with the state's id; the
-    // `Expected` below carries no reason so `retire_pid` does not repeat it.
-    if let Ok(raw_pid) = u32::try_from(pid) {
-        let details = lifecycle::Details {
-            reason: Some(reason),
-            session_id: text(state, "state_id"),
-            by_pid: u32::try_from(caller.own_pid).ok().filter(|pid| *pid > 0),
-            by_parent_pid: u32::try_from(caller.parent_pid).ok().filter(|pid| *pid > 0),
-            ..lifecycle::Details::default()
-        };
-        lifecycle::record_details(home, raw_pid, "retirement_requested", &details);
-    }
-    let succeeded = match text(state, "process_start_marker").filter(|m| !m.trim().is_empty()) {
-        Some(marker) => {
-            let expected = Expected {
-                start_marker: Some(marker),
-                owner_marker: text(state, "user").filter(|user| !user.is_empty()),
-                ..Expected::default()
-            };
-            retire_pid(caller, pid, &expected, deadline)
-        }
-        // A markerless state cannot name a pid generation: only a proven
-        // exit counts, and nothing is signalled.
-        None => host::pid_is_proven_dead(pid),
-    };
-    if !succeeded {
-        return;
-    }
-    if host::pid_is_proven_dead(pid) {
-        records::clear_state_if_current(home, state);
-        if !retired.contains(&pid) {
-            retired.push(pid);
-        }
-    }
 }
 
 /// `reap_orphaned_daemon_workers`.
