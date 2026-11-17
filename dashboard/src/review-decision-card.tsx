@@ -32,7 +32,6 @@ import {
   scopeChoicesForRequest,
   standardScopeChoicesForRequest,
   taskCapabilityExplanation,
-  willPersistExactAction,
 } from "./approval-scopes";
 import { ApprovalGateRecommendationNotice, approvalGateNeedsSetup } from "./approval-proof-inline";
 import { guardAwareHref } from "./guard-api";
@@ -41,11 +40,10 @@ import { plainEnglishRequestTitle } from "./evidence/plain-english";
 import type { DecisionScope, GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import { guardActionPresentation } from "./guard-action";
 import { buildEvidenceItems, buildTopAlertItems } from "./review-evidence";
-import {
-  allowButtonLabel,
-  blockButtonLabel,
-  ReviewScopeControls,
-} from "./review-scope-controls";
+import { explainMcpCall } from "./mcp-call/explain-mcp-call";
+import { simpleMcpChoiceApplies } from "./mcp-call/mcp-decision-choice";
+import { ReviewDecisionControls } from "./review-decision-controls";
+import { decisionButtonLabels } from "./review-decision-labels";
 import { buildWhatWouldHappen, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
@@ -116,7 +114,9 @@ export function ReviewDecisionCard(props: {
 
   useEffect(() => {
     if (item) {
-      setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
+      // The two plain choices are "just this once" and "always allow this call", both on the exact call.
+      // A broader recommended scope would leave neither card selected, so it never starts selected here.
+      setAllowScope(simpleMcpChoiceApplies(item) ? "artifact" : (recommendedScopeForAction(item, "allow") ?? "artifact"));
       setBlockScope(recommendedScopeForAction(item, "block") ?? "artifact");
       setRememberExactAction(false);
     }
@@ -215,7 +215,8 @@ export function ReviewDecisionCard(props: {
   const nativeDisplayOnly = item.native_business_review_display_only === true;
   const versionBoundScript = item.artifact_type === "native_bash_request";
   const plainTitle = nativeDisplayOnly ? item.artifact_name : plainEnglishRequestTitle(item);
-  const harnessName = harnessDisplayName(item.harness);
+  const mcpCall = nativeDisplayOnly ? null : explainMcpCall(item);
+  const harnessName = mcpCall?.requester ?? harnessDisplayName(item.harness);
   const whatWouldHappen = nativeDisplayOnly ? null : buildWhatWouldHappen(item);
   const topAlertItems = nativeDisplayOnly ? [] : buildTopAlertItems(item);
   const evidenceItems = nativeDisplayOnly ? [] : buildEvidenceItems(item);
@@ -229,20 +230,12 @@ export function ReviewDecisionCard(props: {
     sectionLabel = "Watch-only finding";
     badgeLabel = "Would have stopped";
   }
-  const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
-  const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
-  let resolvedAllowButtonLabel = allowButtonLabel(allowScope, versionBoundScript, persistExactAllow);
-  if (watchOnlyObservation) {
-    resolvedAllowButtonLabel = "Keep allowing";
-  } else if (persistExactAllow && !versionBoundScript) {
-    resolvedAllowButtonLabel = "Approve and remember";
-  } else if (retryCannotReuseApproval(item)) {
-    resolvedAllowButtonLabel = "Choose an available approval duration";
-  }
-  let resolvedBlockButtonLabel = blockButtonLabel(blockScope);
-  if (watchOnlyObservation || persistExactBlock) {
-    resolvedBlockButtonLabel = "Stop this next time";
-  }
+  const simpleMcp = simpleMcpChoiceApplies(item);
+  const {
+    persistExactAllow,
+    allowLabel: resolvedAllowButtonLabel,
+    blockLabel: resolvedBlockButtonLabel,
+  } = decisionButtonLabels({ item, allowScope, blockScope, rememberExactAction, watchOnlyObservation, simpleMcp });
   return (
     <div className="min-w-0 space-y-5">
       {resolved && (
@@ -270,9 +263,12 @@ export function ReviewDecisionCard(props: {
           <div className="min-w-0 flex-1">
             {!nativeDisplayOnly && <SectionLabel>{sectionLabel}</SectionLabel>}
             <h2 className={`${nativeDisplayOnly ? "" : "mt-2 "}text-lg font-semibold text-brand-dark`}>{plainTitle}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              From {harnessName}
-            </p>
+            {/* An MCP headline already names the app that asked. */}
+            {mcpCall === null && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                From {harnessName}
+              </p>
+            )}
           </div>
           <Badge tone={item.native_business_review_display_only || watchOnlyObservation ? "info" : actionPresentation.tone}>
             {badgeLabel}
@@ -372,7 +368,8 @@ export function ReviewDecisionCard(props: {
         )}
 
         {resolutionBlockReason === null && resolved === null && (
-          <ReviewScopeControls
+          <ReviewDecisionControls
+            simpleMcp={simpleMcp}
             commonScopeOptions={commonScopeOptions}
             broaderScopeOptions={broaderScopeOptions}
             advancedScopeOptions={advancedScopeOptions}
@@ -474,7 +471,19 @@ export function ReviewDecisionCard(props: {
         </div>
       )}
 
-      <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+      {mcpCall === null ? (
+        <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+      ) : (
+        // The MCP card answers the question on its own; extra context is there for anyone who wants it.
+        <details className="rounded-xl border border-slate-100 px-4 py-3 sm:px-5">
+          <summary className="cursor-pointer select-none text-sm font-medium text-brand-dark/80">
+            Prepare more context for this decision
+          </summary>
+          <div className="mt-3">
+            <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+          </div>
+        </details>
+      )}
       <ReviewLastTimeCard detail={detail} />
 
       {pendingAction !== null && approvalGate !== null && (
