@@ -226,12 +226,15 @@ pub(crate) fn next_settings_state(
         }
     }
     if gate_was_enabled {
-        // Sending commands to Pulse is a privacy choice, so the resident
-        // itself requires an approval bound to exactly this save.
-        let binding = if payload.get("pulse_show_command").is_some() {
-            Some(crate::approval_gate_settings_binding::gate_save_binding(
-                guard_home, payload,
-            )?)
+        // Every settings write is bound to the exact change being applied. A
+        // daemon save may carry the complete change in this private field;
+        // direct resident callers bind the approval-gate payload itself.
+        let binding = if pulse::pulse_enabled(&state) {
+            Some(if let Some(change) = payload.get("settings_change") {
+                crate::approval_gate_settings_binding::binding_for_change(guard_home, change)?
+            } else {
+                crate::approval_gate_settings_binding::gate_save_binding(guard_home, payload)?
+            })
         } else {
             None
         };
@@ -365,6 +368,11 @@ pub(crate) fn update_settings(
     let previous_generation = factor_generation(&load_state(guard_home));
     let next_state = next_settings_state(guard_home, grants, payload, approval_gate_grant, now)?;
     if let Some(mut ns) = next_state {
+        let pulse_secret_ids = if ns.get("pulse_enabled") == Some(&Value::Bool(false)) {
+            pulse::pulse_secret_ids(&ns)
+        } else {
+            Vec::new()
+        };
         if ns.get("pulse_enabled") == Some(&Value::Bool(false)) {
             pulse::clear_pulse_state(guard_home, &mut ns);
         }
@@ -375,6 +383,7 @@ pub(crate) fn update_settings(
                 500,
             )
         })?;
+        pulse::delete_pulse_secrets(guard_home, &pulse_secret_ids);
         if factor_generation(&ns) != previous_generation {
             invalidate_active_grants(grants, guard_home);
         }

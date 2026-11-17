@@ -25,13 +25,14 @@ type PulseSettingsPanelProps = {
   gateConfig: GuardApprovalGatePublicConfig | null;
   savedGateConfig: GuardApprovalGatePublicConfig | null;
   onSettingsPayload: (payload: GuardSettingsPayload) => void;
+  onSetupOpenChange?: (open: boolean) => void;
 };
 
 const INPUT_CLASS =
   "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20";
 
 /** Settings > Approval gate > Yanez Pulse: the third factor beside the password and the authenticator. */
-export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayload }: PulseSettingsPanelProps) {
+export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayload, onSetupOpenChange }: PulseSettingsPanelProps) {
   const id = useId();
   const pulseEnabled = gateConfig?.pulse_enabled === true;
   const wasConfigured = savedGateConfig?.configured === true;
@@ -45,9 +46,11 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
   const cancelWait = useRef<AbortController | null>(null);
   const [waitingFor, setWaitingFor] = useState<"disable" | "show-command" | null>(null);
   const [confirmingShowCommand, setConfirmingShowCommand] = useState(false);
+  const running = useRef(false);
 
   // Leaving the page stops waiting for the YID app.
   useEffect(() => () => cancelWait.current?.abort(), []);
+  useEffect(() => onSetupOpenChange?.(step === "setup"), [onSetupOpenChange, step]);
 
   const reset = useCallback(() => {
     setStep("closed");
@@ -57,6 +60,8 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
   }, []);
 
   const run = useCallback(async (action: () => Promise<void>) => {
+    if (running.current) return;
+    running.current = true;
     setPending(true);
     setError(null);
     try {
@@ -64,6 +69,7 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Pulse request failed.");
     } finally {
+      running.current = false;
       setPending(false);
     }
   }, []);
@@ -159,6 +165,7 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
                 <p className="text-xs leading-5 text-slate-600">{PULSE_SHOW_COMMAND_NOTICE}</p>
                 <div className="flex flex-wrap gap-2">
                   <ActionButton
+                    disabled={pending}
                     onClick={() => {
                       setConfirmingShowCommand(false);
                       void saveShowCommand(true);
@@ -166,7 +173,7 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
                   >
                     Turn on and approve in the YID app
                   </ActionButton>
-                  <ActionButton variant="outline" onClick={() => setConfirmingShowCommand(false)}>Keep it off</ActionButton>
+                  <ActionButton variant="outline" disabled={pending} onClick={() => setConfirmingShowCommand(false)}>Keep it off</ActionButton>
                 </div>
               </div>
             ) : null}

@@ -182,7 +182,12 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
     // A settings change is named by its caller and bound by the resident.
     let settings_scoped =
         crate::approval_gate_settings_binding::is_settings_write(request.purpose.as_deref())
-            || matches!(request.method, ApprovalGateMethodV1::RequireSettingsWrite);
+            || matches!(
+                request.method,
+                ApprovalGateMethodV1::RequireSettingsWrite
+                    | ApprovalGateMethodV1::UpdateSettings
+                    | ApprovalGateMethodV1::ValidateSettingsUpdate
+            );
     let bound = crate::approval_gate_settings_binding::bind(
         &guard_home,
         settings_scoped,

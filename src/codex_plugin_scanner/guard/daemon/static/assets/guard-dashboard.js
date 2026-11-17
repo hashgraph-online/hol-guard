@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-kRl-7zJ5.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-ZIZ8SzzP.js","assets/chunks/home-protection-module-CxLLv76D.js","assets/chunks/supply-chain-protection-stats-XiD1X6oR.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-BtuWwBDd.js","assets/chunks/harness-version-label-B2Ob_2J1.js","assets/chunks/settings-save-proof-modal-DdKoGp14.js","assets/chunks/connect-guard-cloud-button-04d3wLni.js","assets/chunks/guard-repair-control-sTMvCuK1.js","assets/chunks/settings-workspace-CB6pqYHE.js","assets/chunks/confirm-dialog-D0lvG39B.js","assets/chunks/extensions-workspace-D3HZ-0j4.js","assets/chunks/app-detail-workspace-l62psSHl.js","assets/chunks/harness-action-errors-BMFGvfEG.js","assets/chunks/supply-chain-hub-workspace-DtPx5OaO.js","assets/chunks/policy-workspace-page-DEdPWtqE.js","assets/chunks/about-workspace-MVcBq84r.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-kRl-7zJ5.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-CmqdRvvS.js","assets/chunks/home-protection-module-DPMDKD16.js","assets/chunks/supply-chain-protection-stats-XiD1X6oR.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-J-EYqDgj.js","assets/chunks/harness-version-label-B2Ob_2J1.js","assets/chunks/settings-save-proof-modal-DdKoGp14.js","assets/chunks/connect-guard-cloud-button-04d3wLni.js","assets/chunks/guard-repair-control-sTMvCuK1.js","assets/chunks/settings-workspace-BaJqouWC.js","assets/chunks/confirm-dialog-D0lvG39B.js","assets/chunks/extensions-workspace-DU3QYQU4.js","assets/chunks/app-detail-workspace-BII5IeG3.js","assets/chunks/harness-action-errors-BMFGvfEG.js","assets/chunks/supply-chain-hub-workspace-CZ4ZPeWf.js","assets/chunks/policy-workspace-page-DVW5txUL.js","assets/chunks/about-workspace-MVcBq84r.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -17930,6 +17930,9 @@ const PULSE_POLL_PATH = "/v1/approval-gate/pulse/poll";
 const PULSE_DEADLINE_MS = 96e4;
 const PULSE_POLL_INTERVAL_MS = 1e4;
 const PULSE_POLL_TIMEOUT_MS = 2e4;
+function monotonicNow() {
+  return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+}
 function announce(detail) {
   if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
   window.dispatchEvent(new CustomEvent(PULSE_APPROVAL_EVENT, { detail }));
@@ -18022,11 +18025,11 @@ async function checkResponse(send, requestId, checkSignal, signal) {
 async function waitForPulseApproval(send, detail, signal, timing = {}) {
   const { deadlineMs = PULSE_DEADLINE_MS, intervalMs = PULSE_POLL_INTERVAL_MS, pollTimeoutMs = PULSE_POLL_TIMEOUT_MS } = timing;
   announce({ ...detail, status: "pending" });
-  const deadline = Date.now() + deadlineMs;
+  const deadline = monotonicNow() + deadlineMs;
   let unreachable = false;
-  for (let remaining = deadlineMs; remaining > 0; remaining = deadline - Date.now()) {
+  for (let remaining = deadlineMs; remaining > 0; remaining = deadline - monotonicNow()) {
     await pause(Math.min(intervalMs, remaining), signal);
-    const checkMs = Math.max(1, Math.min(pollTimeoutMs, deadline - Date.now()));
+    const checkMs = Math.max(1, Math.min(pollTimeoutMs, deadline - monotonicNow()));
     const status2 = signal?.aborted ? "cancelled" : await checkOnce(send, detail.requestId, signal, checkMs);
     unreachable = status2 === "retry";
     if (status2 !== "pending" && status2 !== "retry") {
@@ -39720,7 +39723,7 @@ function WatchProtectionBanner(props) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-BJaQ7PQg.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-UHe4wCGV.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -40457,22 +40460,22 @@ function PulseApprovalOverlay() {
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-kRl-7zJ5.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-ZIZ8SzzP.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BtuWwBDd.js"), true ? __vite__mapDeps([10,11,12,13,9,14]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CB6pqYHE.js"), true ? __vite__mapDeps([15,14,9,16,12,13,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-CmqdRvvS.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-J-EYqDgj.js"), true ? __vite__mapDeps([10,11,12,13,9,14]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-BaJqouWC.js"), true ? __vite__mapDeps([15,14,9,16,12,13,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-D3HZ-0j4.js"), true ? __vite__mapDeps([17,16]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-DU3QYQU4.js"), true ? __vite__mapDeps([17,16]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-l62psSHl.js"), true ? __vite__mapDeps([18,19,11,12]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-BII5IeG3.js"), true ? __vite__mapDeps([18,19,11,12]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-DavIenbm.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-DtPx5OaO.js").then((n) => n.d), true ? __vite__mapDeps([20,19]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CZ4ZPeWf.js").then((n) => n.d), true ? __vite__mapDeps([20,19]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-DEdPWtqE.js"), true ? __vite__mapDeps([21,13]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-DVW5txUL.js"), true ? __vite__mapDeps([21,13]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
@@ -40480,7 +40483,7 @@ const AboutWorkspace = lazyWorkspace(
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-WkR2kpPf.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-D8usC0IR.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
@@ -41460,11 +41463,11 @@ export {
   useReceiptAnalytics as a2,
   updateSettings as a3,
   turnProtectionOnUpdate as a4,
-  useProtectionPresentationState as a5,
-  protectionHealthFor as a6,
-  unavailableProtectionHealth as a7,
-  buildHomeRuntimeErrorCopy as a8,
-  RuntimeErrorState as a9,
+  approvalProofUsesPulse as a5,
+  useProtectionPresentationState as a6,
+  protectionHealthFor as a7,
+  unavailableProtectionHealth as a8,
+  buildHomeRuntimeErrorCopy as a9,
   HiMiniExclamationCircle as aA,
   hasRepairableProtectionGap as aB,
   remainingProtectionRepairParts as aC,
@@ -41492,16 +41495,16 @@ export {
   fetchResolvedApprovalGate as aY,
   ApprovalProofModal as aZ,
   PROTECTION_POSTURE_COPY as a_,
-  watchBannerModel as aa,
-  WatchProtectionBanner as ab,
-  EvidenceInsightsShareModal as ac,
-  OperatorHealthCard as ad,
-  HiMiniShieldCheck as ae,
-  DeviceProofCard as af,
-  guardActionDisposition as ag,
-  approvalLeftActionStopped as ah,
-  guardActionActivityCopy as ai,
-  approvalProofUsesPulse as aj,
+  RuntimeErrorState as aa,
+  watchBannerModel as ab,
+  WatchProtectionBanner as ac,
+  EvidenceInsightsShareModal as ad,
+  OperatorHealthCard as ae,
+  HiMiniShieldCheck as af,
+  DeviceProofCard as ag,
+  guardActionDisposition as ah,
+  approvalLeftActionStopped as ai,
+  guardActionActivityCopy as aj,
   approvalProofRequiresPassword as ak,
   HiMiniSparkles as al,
   HiMiniXMark as am,

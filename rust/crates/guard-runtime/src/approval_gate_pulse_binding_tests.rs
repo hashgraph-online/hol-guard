@@ -76,8 +76,8 @@ fn assert_pulse_still_on(g: &Gate) {
 #[test]
 fn an_update_channel_approval_cannot_be_used_to_disable_pulse_or_reset() {
     let (g, _) = pulse_gate("bind-channel", 0);
-    let id = approved_request(&g, &update_channel(CHANNEL_STABLE));
     for other in [disable_binding(), reset()] {
+        let id = approved_request(&g, &update_channel(CHANNEL_STABLE));
         let r = verify_for(&g, &id, &other);
         assert_ne!(
             r["status"], "ok",
@@ -90,16 +90,16 @@ fn an_update_channel_approval_cannot_be_used_to_disable_pulse_or_reset() {
 #[test]
 fn a_disable_or_reset_approval_cannot_be_used_for_another_change() {
     let (g, _) = pulse_gate("bind-reverse", 0);
-    let id = approved_request(&g, &disable_binding());
     for other in [update_channel(CHANNEL_STABLE), reset()] {
+        let id = approved_request(&g, &disable_binding());
         let r = verify_for(&g, &id, &other);
         assert_ne!(
             r["status"], "ok",
             "{other} accepted a disable approval: {r}"
         );
     }
-    let id = approved_request(&g, &reset());
     for other in [update_channel(CHANNEL_STABLE), disable_binding()] {
+        let id = approved_request(&g, &reset());
         let r = verify_for(&g, &id, &other);
         assert_ne!(r["status"], "ok", "{other} accepted a reset approval: {r}");
     }

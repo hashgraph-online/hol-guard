@@ -124,10 +124,18 @@ pub(crate) fn gate_save_binding(
     gate_payload: &Value,
 ) -> Result<(String, String), ApprovalGateErrorV1> {
     let settings = serde_json::json!({ "approval_gate": gate_payload });
-    Ok((
-        SETTINGS_SAVE_ACTION.to_owned(),
-        save_subject(guard_home, &settings)?,
-    ))
+    binding_for_change(
+        guard_home,
+        &serde_json::json!({"kind": "save", "settings": settings}),
+    )
+}
+
+/// Derive the binding for a complete settings change.
+pub(crate) fn binding_for_change(
+    guard_home: &Path,
+    change: &Value,
+) -> Result<(String, String), ApprovalGateErrorV1> {
+    binding(guard_home, change)
 }
 
 /// `settings:<hmac-sha256>` of the change without its proof fields.

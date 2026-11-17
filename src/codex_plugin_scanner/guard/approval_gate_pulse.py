@@ -188,10 +188,16 @@ def _with_pulse(
                     "pulse_decide_by": request.get("decide_by"),
                 },
             )
-        request_id = await_pulse_approval(guard_home, request, on_status=approval_gate_input.pulse_on_status, now=now)
+        request_id = await_pulse_approval(
+            guard_home,
+            request,
+            on_status=approval_gate_input.pulse_on_status,
+            now=None,
+        )
     retry_input = replace(approval_gate_input, pulse_request_id=request_id, pulse_mode="off", pulse_on_status=None)
     if request_id is not None:
         kwargs = {**kwargs, "timeout_seconds": _PULSE_TIMEOUT_SECONDS}
+    kwargs.pop("now", None)
     return _gate._native_or_unconfigured(method, guard_home, params=params, approval_gate_input=retry_input, **kwargs)
 
 

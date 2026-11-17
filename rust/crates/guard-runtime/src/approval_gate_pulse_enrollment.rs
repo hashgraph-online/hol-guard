@@ -371,6 +371,18 @@ pub(crate) fn confirm_pulse_enrollment(
         return Err(pulse_error(&e));
     }
 
+    // Consuming the receipt is a network round trip. Re-read the state after
+    // it succeeds so a concurrent settings change cannot be overwritten by
+    // this enrollment.
+    state = load_state(guard_home);
+    if pulse_enabled(&state)
+        || !enabled(&state)
+        || factor_generation(&state) != entry.factor_generation
+    {
+        forget_secrets(&mut store);
+        return Err(pulse_error(&PulseError::TermsMismatch));
+    }
+
     let recovery_code = Zeroizing::new(format!(
         "{}-{}-{}-{}",
         token_urlsafe(6),

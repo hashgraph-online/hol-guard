@@ -50,6 +50,10 @@ export type PulseApprovalDetail = {
   status: PulseApprovalStatus;
 };
 
+function monotonicNow(): number {
+  return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+}
+
 type Send = (input: RequestInfo, init?: RequestInit) => Promise<Response>;
 
 function announce(detail: PulseApprovalDetail): void {
@@ -183,12 +187,12 @@ export async function waitForPulseApproval(
   const { deadlineMs = PULSE_DEADLINE_MS, intervalMs = PULSE_POLL_INTERVAL_MS, pollTimeoutMs = PULSE_POLL_TIMEOUT_MS } =
     timing;
   announce({ ...detail, status: "pending" });
-  const deadline = Date.now() + deadlineMs;
+  const deadline = monotonicNow() + deadlineMs;
   let unreachable = false;
-  for (let remaining = deadlineMs; remaining > 0; remaining = deadline - Date.now()) {
+  for (let remaining = deadlineMs; remaining > 0; remaining = deadline - monotonicNow()) {
     await pause(Math.min(intervalMs, remaining), signal);
     // A check never runs past the window, so a stalled one cannot hold the wait open.
-    const checkMs = Math.max(1, Math.min(pollTimeoutMs, deadline - Date.now()));
+    const checkMs = Math.max(1, Math.min(pollTimeoutMs, deadline - monotonicNow()));
     const status = signal?.aborted ? "cancelled" : await checkOnce(send, detail.requestId, signal, checkMs);
     unreachable = status === "retry";
     if (status !== "pending" && status !== "retry") {

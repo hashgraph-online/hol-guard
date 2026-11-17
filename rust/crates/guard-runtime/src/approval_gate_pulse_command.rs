@@ -44,8 +44,9 @@ const NAME_END: &str = r#"/\\\s'"`;:|&<>()$,"#;
 /// What can come right before a path: the start, any character that cannot
 /// be part of a file name, or a short flag such as `-I` or `-L`.
 const PATH_LEAD: &str = r"(?P<lead>^|[^A-Za-z0-9._~\-]|-[A-Za-z]{1,2})";
-/// One shell word: a quoted string or a run of non-space characters.
-const WORD: &str = r#"'[^']*'|"[^"]*"|[^\s'"]+"#;
+/// One shell word, including adjacent quoted and unquoted segments such as
+/// `''swordfish`.
+const WORD: &str = r#"(?:'[^']*'|"[^"]*"|[^\s'"]+)+"#;
 /// Request headers whose value is never a secret.
 const HARMLESS_HEADERS: [&str; 6] = [
     "accept",
@@ -150,7 +151,7 @@ fn redact_credentials(text: &str) -> String {
             // The -a password of redis-cli.
             format!(r"(?i)(?P<key>\bredis-cli\b[^;|&\n]*?\s-a\s+)(?P<value>{WORD})"),
             // A variable whose name ends in PWD, PASS or AUTH: MYSQL_PWD=x.
-            format!(r"(?P<key>\b[A-Za-z_][A-Za-z0-9_]*(?:PWD|PASS|PASSWD|AUTH|pwd|pass|passwd|auth)=)(?P<value>{WORD})"),
+            format!(r"(?i)(?P<key>\b(?:[A-Za-z_][A-Za-z0-9_]*?)?(?:PWD|PASS|PASSWD|AUTH)=)(?P<value>{WORD})"),
         ]
         .iter()
         .map(|pattern| Regex::new(pattern).expect("credential pattern"))

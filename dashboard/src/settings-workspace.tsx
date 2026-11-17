@@ -550,6 +550,7 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
   const [pendingMode, setPendingMode] = useState<GuardSettings["mode"] | null>(null);
   const [pendingPosture, setPendingPosture] = useState<ProtectionPosture | null>(null);
   const [activeTab, setActiveTab] = useState<LocalSettingsTabKey>(() => resolveInitialSettingsTab(window.location.search));
+  const [pulseSetupOpen, setPulseSetupOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
     if (!returnToExtensions || activeTab !== "approval" || state.kind !== "ready") return;
@@ -635,12 +636,13 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
 
   useEffect(() => {
     const handlePopState = () => {
+      if (pulseSetupOpen) return;
       setActiveTab(resolveInitialSettingsTab(window.location.search));
       setActionMessage(null);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [pulseSetupOpen]);
 
   useEffect(() => {
     function handleBeforeUnload(event: BeforeUnloadEvent) {
@@ -1321,8 +1323,21 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
   }, [totpActionPassword, approvalGateTotpCode, onApprovalGateChange]);
 
   const handlePulseSettingsPayload = useCallback((payload: GuardSettingsPayload) => {
-    applyLoadedSettingsPayload(normalizeSettingsPayload(payload));
-  }, [applyLoadedSettingsPayload]);
+    const normalized = normalizeSettingsPayload(payload);
+    const nextGate = normalized.settings.approval_gate;
+    if (!nextGate) return;
+    setState((current) => current.kind === "ready"
+      ? { ...current, payload: { ...current.payload, settings: { ...current.payload.settings, approval_gate: nextGate } } }
+      : current);
+    setDraft((current) => current ? { ...current, approval_gate: nextGate } : current);
+    savedSettingsRef.current = savedSettingsRef.current
+      ? { ...savedSettingsRef.current, approval_gate: nextGate }
+      : savedSettingsRef.current;
+    setApprovalGateEnabled(nextGate.enabled);
+    setApprovalGateCooldown(nextGate.cooldown_seconds);
+    setApprovalGateStrictAllDecisions(nextGate.strict_all_decisions);
+    onApprovalGateChange?.(nextGate);
+  }, [onApprovalGateChange]);
 
   const handleDisableTotp = useCallback(async () => {
     handleRequestDisableTotp();
@@ -1853,6 +1868,7 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
                   gateConfig={draft.approval_gate ?? null}
                   savedGateConfig={savedSettingsRef.current?.approval_gate ?? null}
                   onSettingsPayload={handlePulseSettingsPayload}
+                  onSetupOpenChange={setPulseSetupOpen}
                 />
               }
             />

@@ -1,6 +1,6 @@
-import { r as reactExports, a as fetchContextAssistance, j as jsxRuntimeExports, o as controlContextAssistance, p as contextStatusCopy, S as SectionLabel, q as HiMiniChevronRight, s as formatRelativeTime, t as harnessDisplayName, u as formatNumber, v as normalizeHarnessSlug, w as HiMiniChevronUp, x as HiMiniChevronDown, A as ActionButton, k as HiMiniArrowPath, y as HiMiniCheck, z as HiMiniNoSymbol, B as HiMiniHandRaised, C as HiMiniArrowUpTray, D as HiMiniCube, E as HiMiniPencilSquare, b as HiMiniCommandLine, h as HiMiniMagnifyingGlass, F as HiMiniDocumentText, G as HiMiniCheckCircle, T as Tag, I as HiMiniArrowRight, J as isConnectableAppHarness, K as HiMiniLockClosed, L as getHeatmapLevel, M as EvidenceInsightsShareButton, N as GuardStatMetric, O as HomeInsightsMetrics, P as EvidenceActivityHeatmapMini, Q as homeCommandActivityModel, R as createCommandActivityClient, U as fetchCommandActivityApi, V as getRecoveryCapabilities, W as recoveryRunsInDesktopWindow, X as resolveDesktopWindowRecoveryInstructions, Y as resolveRecoveryInstructions, Z as HiMiniShieldExclamation, $ as DESKTOP_WINDOW_RECOVERY_MESSAGE, a0 as HiMiniClipboardDocument, a1 as openRecoveryView, a2 as useReceiptAnalytics, a3 as updateSettings, a4 as turnProtectionOnUpdate, a5 as useProtectionPresentationState, a6 as protectionHealthFor, a7 as unavailableProtectionHealth, a8 as buildHomeRuntimeErrorCopy, a9 as RuntimeErrorState, aa as watchBannerModel, ab as WatchProtectionBanner, ac as EvidenceInsightsShareModal, ad as OperatorHealthCard, ae as HiMiniShieldCheck, af as DeviceProofCard, ag as guardActionDisposition, ah as approvalLeftActionStopped, ai as guardActionActivityCopy, aj as approvalProofUsesPulse, ak as approvalProofRequiresPassword, al as HiMiniSparkles, am as HiMiniXMark, an as EmptyState, ao as resolveCloudIntelCopy, ap as HiMiniCloud, aq as HiMiniQuestionMarkCircle, ar as useFocusTrap, as as HiMiniExclamationTriangle, at as HiMiniBolt, au as Badge, av as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { r as reactExports, a as fetchContextAssistance, j as jsxRuntimeExports, o as controlContextAssistance, p as contextStatusCopy, S as SectionLabel, q as HiMiniChevronRight, s as formatRelativeTime, t as harnessDisplayName, u as formatNumber, v as normalizeHarnessSlug, w as HiMiniChevronUp, x as HiMiniChevronDown, A as ActionButton, k as HiMiniArrowPath, y as HiMiniCheck, z as HiMiniNoSymbol, B as HiMiniHandRaised, C as HiMiniArrowUpTray, D as HiMiniCube, E as HiMiniPencilSquare, b as HiMiniCommandLine, h as HiMiniMagnifyingGlass, F as HiMiniDocumentText, G as HiMiniCheckCircle, T as Tag, I as HiMiniArrowRight, J as isConnectableAppHarness, K as HiMiniLockClosed, L as getHeatmapLevel, M as EvidenceInsightsShareButton, N as GuardStatMetric, O as HomeInsightsMetrics, P as EvidenceActivityHeatmapMini, Q as homeCommandActivityModel, R as createCommandActivityClient, U as fetchCommandActivityApi, V as getRecoveryCapabilities, W as recoveryRunsInDesktopWindow, X as resolveDesktopWindowRecoveryInstructions, Y as resolveRecoveryInstructions, Z as HiMiniShieldExclamation, $ as DESKTOP_WINDOW_RECOVERY_MESSAGE, a0 as HiMiniClipboardDocument, a1 as openRecoveryView, a2 as useReceiptAnalytics, a3 as updateSettings, a4 as turnProtectionOnUpdate, a5 as approvalProofUsesPulse, a6 as useProtectionPresentationState, a7 as protectionHealthFor, a8 as unavailableProtectionHealth, a9 as buildHomeRuntimeErrorCopy, aa as RuntimeErrorState, ab as watchBannerModel, ac as WatchProtectionBanner, ad as EvidenceInsightsShareModal, ae as OperatorHealthCard, af as HiMiniShieldCheck, ag as DeviceProofCard, ah as guardActionDisposition, ai as approvalLeftActionStopped, aj as guardActionActivityCopy, ak as approvalProofRequiresPassword, al as HiMiniSparkles, am as HiMiniXMark, an as EmptyState, ao as resolveCloudIntelCopy, ap as HiMiniCloud, aq as HiMiniQuestionMarkCircle, ar as useFocusTrap, as as HiMiniExclamationTriangle, at as HiMiniBolt, au as Badge, av as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { aw } from "../guard-dashboard.js";
-import { H as HomeProtectionModule } from "./home-protection-module-CxLLv76D.js";
+import { H as HomeProtectionModule } from "./home-protection-module-DPMDKD16.js";
 import { c as cigarHomeCopy } from "./workspace-model-hR3eI7UO.js";
 import { B as BrandHero, a as BrandHeroFacts, b as BrandHeroBadge, u as useReducedMotion, c as brandMarkSvg } from "./brand-hero-COty1p6U.js";
 import { A as ABOUT_LOCAL_SECTION_TITLE, a as ABOUT_LOCAL_SECTION_BODY } from "./about-content-Dr9zFg1V.js";
@@ -1186,10 +1186,11 @@ function HomeWorkspace(props) {
     setClearSubmitting(true);
     setClearError(null);
     try {
-      await props.onConfirmClear({
+      const credentials = approvalProofUsesPulse(props.approvalGate) ? void 0 : {
         ...clearPassword ? { approval_password: clearPassword } : {},
         ...clearTotpCode ? { approval_totp_code: clearTotpCode } : {}
-      });
+      };
+      await props.onConfirmClear(credentials);
       setClearPassword("");
       setClearTotpCode("");
       if (confirm?.harness) {
@@ -1202,7 +1203,7 @@ function HomeWorkspace(props) {
     } finally {
       setClearSubmitting(false);
     }
-  }, [clearPassword, clearTotpCode, props.clearConfirm, props.onConfirmClear, showToast]);
+  }, [clearPassword, clearTotpCode, props.approvalGate, props.clearConfirm, props.onConfirmClear, showToast]);
   const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
   const queuedCount = resolveHomeQueuedCount({
     pendingCount: snapshot?.pending_count ?? null,

@@ -38,17 +38,26 @@ use crate::totp::TotpSecretStore;
 /// authenticator's secret stays stored but Guard accepts no codes from it.
 pub(crate) const TOTP_PAUSED_BY_PULSE: &str = "totp_paused_by_pulse";
 
+pub(crate) fn pulse_secret_ids(state: &Value) -> Vec<String> {
+    ["pulse_agent_secret_id", "pulse_binding_secret_id"]
+        .into_iter()
+        .filter_map(|key| optional_string(state.get(key)))
+        .collect()
+}
+
+pub(crate) fn delete_pulse_secrets(guard_home: &Path, ids: &[String]) {
+    let store = TotpSecretStore::new(guard_home);
+    for id in ids {
+        let _ = store.delete_secret(id);
+    }
+}
+
 /// Remove Pulse's settings and secrets. An authenticator Pulse paused comes
 /// back as it was, if its secret is still stored.
 pub(crate) fn clear_pulse_state(guard_home: &Path, state: &mut Value) {
     // Requests made under the old factor can never verify; free their slots.
     clear_pending_for_home(guard_home);
     let mut store = TotpSecretStore::new(guard_home);
-    for key in ["pulse_agent_secret_id", "pulse_binding_secret_id"] {
-        if let Some(id) = optional_string(state.get(key)) {
-            let _ = store.delete_secret(&id);
-        }
-    }
     if let Some(o) = state.as_object_mut() {
         o.retain(|k, _| !k.starts_with("pulse_"));
         if o.remove(TOTP_PAUSED_BY_PULSE) == Some(Value::Bool(true)) {
@@ -70,10 +79,12 @@ fn turn_pulse_off(
     mut state: Value,
     now: Option<&str>,
 ) -> Result<Value, ApprovalGateErrorV1> {
+    let secret_ids = pulse_secret_ids(&state);
     clear_pulse_state(guard_home, &mut state);
     reset_failed_attempts(&mut state);
     rotate_authentication_state(&mut state);
     write_state(guard_home, &state, now).map_err(|_| state_io())?;
+    delete_pulse_secrets(guard_home, &secret_ids);
     invalidate_active_grants(grants, guard_home);
     Ok(public_config_locked(guard_home, now).to_dict())
 }

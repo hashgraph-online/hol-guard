@@ -58,7 +58,9 @@ use crate::approval_gate_verify::{
 use crate::totp::TotpSecretStore;
 
 /// Clearing Pulse lives with turning it off.
-pub(crate) use crate::approval_gate_pulse_disable::{clear_pulse_state, TOTP_PAUSED_BY_PULSE};
+pub(crate) use crate::approval_gate_pulse_disable::{
+    clear_pulse_state, delete_pulse_secrets, pulse_secret_ids, TOTP_PAUSED_BY_PULSE,
+};
 
 /// Pulse cooldowns a user may choose. `0`, the default, means a fresh
 /// biometric approval for every held action.

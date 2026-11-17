@@ -417,7 +417,10 @@ def test_every_resident_call_for_one_action_uses_the_callers_clock(tmp_path: Pat
     )
     clocks = {method: kwargs.get("now") for method, kwargs in fake.calls}
     assert set(clocks) == {"require_approval_decision", "pulse_request", "pulse_poll"}
-    assert set(clocks.values()) == {"2026-10-02T00:00:00+00:00"}
+    # The request is created at the caller's timestamp; polling and the retry
+    # use the resident clock so a delayed face scan cannot be rejected as too
+    # new for the stale request timestamp.
+    assert set(clocks.values()) == {"2026-10-02T00:00:00+00:00", None}
 
 
 def test_the_approval_password_is_sent_as_typed(monkeypatch: pytest.MonkeyPatch) -> None:

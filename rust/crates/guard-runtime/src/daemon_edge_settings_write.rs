@@ -77,9 +77,10 @@ pub(super) fn apply(
         };
         // The resident has run, so from here on nothing goes to the daemon.
         if let Some(gate_payload) = gate_payload {
+            let resident_payload = resident_gate_payload(gate_payload, json_payload);
             let method = ApprovalGateMethodV1::ValidateSettingsUpdate;
             if let Gate::Refused(status, body) =
-                gate::settings_method(method, gate_payload, grant.as_deref(), config)
+                gate::settings_method(method, &resident_payload, grant.as_deref(), config)
             {
                 return Some((status, Value::Object(body)));
             }
@@ -95,9 +96,10 @@ pub(super) fn apply(
             Err(answer) => return Some(answer),
         };
         if let Some(gate_payload) = gate_payload {
+            let resident_payload = resident_gate_payload(gate_payload, json_payload);
             let method = ApprovalGateMethodV1::UpdateSettings;
             if let Gate::Refused(status, body) =
-                gate::settings_method(method, gate_payload, grant.as_deref(), config)
+                gate::settings_method(method, &resident_payload, grant.as_deref(), config)
             {
                 return Some((status, Value::Object(body)));
             }
@@ -129,6 +131,14 @@ fn settings_without_gate(settings: &[(String, PyVal)]) -> Vec<(String, PyVal)> {
         .filter(|(key, _)| key != "approval_gate")
         .cloned()
         .collect()
+}
+
+/// Preserve the full daemon settings-save binding while the resident applies
+/// the approval-gate portion of the payload.
+fn resident_gate_payload(gate_payload: &Value, json_payload: &Map<String, Value>) -> Value {
+    let mut payload = gate_payload.as_object().cloned().unwrap_or_default();
+    payload.insert("settings_change".to_owned(), save_change(json_payload));
+    Value::Object(payload)
 }
 
 /// `update_guard_settings`: the previous values, or the answer to send.

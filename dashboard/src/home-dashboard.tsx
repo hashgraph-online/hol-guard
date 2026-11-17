@@ -226,10 +226,13 @@ export function HomeWorkspace(props: {
     setClearSubmitting(true);
     setClearError(null);
     try {
-      await props.onConfirmClear({
-        ...(clearPassword ? { approval_password: clearPassword } : {}),
-        ...(clearTotpCode ? { approval_totp_code: clearTotpCode } : {}),
-      });
+      const credentials = approvalProofUsesPulse(props.approvalGate)
+        ? undefined
+        : {
+          ...(clearPassword ? { approval_password: clearPassword } : {}),
+          ...(clearTotpCode ? { approval_totp_code: clearTotpCode } : {}),
+        };
+      await props.onConfirmClear(credentials);
       setClearPassword("");
       setClearTotpCode("");
       if (confirm?.harness) {
@@ -242,7 +245,7 @@ export function HomeWorkspace(props: {
     } finally {
       setClearSubmitting(false);
     }
-  }, [clearPassword, clearTotpCode, props.clearConfirm, props.onConfirmClear, showToast]);
+  }, [clearPassword, clearTotpCode, props.approvalGate, props.clearConfirm, props.onConfirmClear, showToast]);
 
   const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
   const queuedCount = resolveHomeQueuedCount({
