@@ -217,6 +217,6 @@ fn report_json_is_sorted_compact_and_ascii() {
     let value = json!({"b": "é😀", "a": {"d": 1, "c": [true, null]}});
     assert_eq!(
         ascii_json(&value),
-        r#"{"a":{"c":[true,null],"d":1},"b":"é😀"}"#
+        r#"{"a":{"c":[true,null],"d":1},"b":"\u00e9\ud83d\ude00"}"#
     );
 }
