@@ -80,7 +80,13 @@ def contract_for(harness: str) -> HarnessProtectionContract | None:
     """The contract a harness name or install alias identifies, or ``None``."""
 
     row = _registry("contract", harness=harness)["contract"]
-    return None if row is None else _contract(row)
+    if row is None:
+        return None
+    # The same object ``harness_contracts()`` holds, so identity checks agree.
+    return next(
+        (contract for contract in harness_contracts() if contract.harness == row["harness"]),
+        _contract(row),
+    )
 
 
 def __getattr__(name: str) -> object:

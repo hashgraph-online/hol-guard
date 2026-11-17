@@ -34,45 +34,44 @@ def _main(argv: list[str]) -> tuple[int, str]:
     return returncode, output.getvalue()
 
 
-@pytest.mark.parametrize(
-    ("harness", "key", "value"),
-    [
-        ("copilot", "permissionDecision", "deny"),
-        ("grok", "decision", "deny"),
-        ("hermes", "decision", "block"),
-        ("openclaw", "decision", "deny"),
-    ],
-)
+@pytest.mark.parametrize("harness", ["copilot", "grok", "hermes", "openclaw"])
 def test_a_hook_without_a_native_runtime_is_blocked_with_a_repair_hint(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, harness: str, key: str, value: str
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path, harness: str
 ) -> None:
     _runtime(monkeypatch, None)
 
-    _returncode, output = _main([json.dumps(_config(tmp_path, harness=harness))])
+    returncode, output = _main([json.dumps(_config(tmp_path, harness=harness))])
 
-    payload = _json_object(output)
-    assert payload[key] == value
-    assert "hol-guard repair" in output
+    assert returncode == 2
+    assert output == ""
+    assert "hol-guard repair" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("argv", [["not json"], ["[]"], ["{}", "extra"], []])
-def test_a_malformed_config_is_blocked(monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> None:
+def test_a_malformed_config_is_blocked(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], argv: list[str]
+) -> None:
     started: list[object] = []
     monkeypatch.setattr(bounded_cli_hook_bridge.subprocess, "run", lambda *args, **_kwargs: started.append(args))
 
-    _returncode, output = _main(argv)
+    returncode, output = _main(argv)
 
     assert started == []
-    assert "hol-guard repair" in output
+    assert returncode == 2
+    assert output == ""
+    assert "hol-guard repair" in capsys.readouterr().err
 
 
-def test_a_runtime_that_cannot_start_is_blocked(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_a_runtime_that_cannot_start_is_blocked(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
     _runtime(monkeypatch, tmp_path / "missing-runtime")
 
     returncode, output = _main([json.dumps(_config(tmp_path, harness="copilot"))])
 
-    assert returncode == 0
-    assert _json_object(output)["permissionDecision"] == "deny"
+    assert returncode == 2
+    assert output == ""
+    assert "hol-guard repair" in capsys.readouterr().err
 
 
 def test_the_runtime_gets_the_config_with_the_time_left(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

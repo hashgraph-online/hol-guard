@@ -11,7 +11,7 @@ fn shown(artifact_type: &str, command: Option<&str>, args: &[&str]) -> Value {
         "command": command,
         "args": [args],
         "harness": "stubtool",
-        "serialized": { "name": "shown", "args": args },
+        "serialized": { "name": "shown", "args": [args] },
     })
 }
 

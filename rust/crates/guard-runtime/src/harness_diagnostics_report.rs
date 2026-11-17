@@ -9,7 +9,8 @@
 //!   "artifacts", "warnings"}`. Each artifact is `{"artifact_type",
 //!   "command", "args", "harness", "serialized"}`, where `serialized` is the
 //!   artifact as the report shows it (the adapter's own redaction applies
-//!   there). Every list crosses as chunks that join back in order.
+//!   there). Every list crosses as chunks that join back in order, the
+//!   shown artifact's `args` too.
 //! - `guard_home` and `names` find the Guard launcher shim the harness has
 //!   installed (`launcher_artifact`). A shim counts as a detected, Guard
 //!   managed artifact and marks the harness installed.
@@ -72,7 +73,7 @@ pub(crate) fn answer(fields: &Fields) -> KindResult {
     };
     let mut shown: Vec<Value> = Vec::new();
     for item in chunked(found.get("artifacts"))? {
-        shown.push(item.get("serialized").cloned().ok_or(ERR_INVALID)?);
+        shown.push(joined_args(item.get("serialized").ok_or(ERR_INVALID)?)?);
     }
     let mut installed = flag(found, "installed")?;
     if let (Some(launcher), Some(view)) = (&launcher, &view) {
@@ -157,3 +158,13 @@ fn serialized_launcher(launcher: &Value) -> Value {
 #[cfg(test)]
 #[path = "harness_diagnostics_report_tests.rs"]
 mod tests;
+
+/// The shown artifact with its chunked `args` joined back into one list.
+fn joined_args(serialized: &Value) -> Result<Value, &'static str> {
+    let mut shown = serialized.as_object().ok_or(ERR_INVALID)?.clone();
+    if let Some(args) = shown.get("args") {
+        let joined: Vec<Value> = chunked(Some(args))?.into_iter().cloned().collect();
+        shown.insert("args".to_owned(), Value::Array(joined));
+    }
+    Ok(Value::Object(shown))
+}

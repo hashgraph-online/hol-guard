@@ -20,6 +20,12 @@ def _chunks(items: Sequence[_T]) -> list[list[_T]]:
     return [list(items[start : start + _NATIVE_JSON_WIDTH]) for start in range(0, len(items), _NATIVE_JSON_WIDTH)]
 
 
+def _shown(artifact: GuardArtifact) -> dict[str, object]:
+    serialized = artifact.to_dict()
+    serialized["args"] = _chunks(serialized.get("args") or [])
+    return serialized
+
+
 def _artifacts_request(artifacts: Sequence[GuardArtifact], *, shown: bool = False) -> list[list[dict[str, object]]]:
     return _chunks(
         [
@@ -28,7 +34,7 @@ def _artifacts_request(artifacts: Sequence[GuardArtifact], *, shown: bool = Fals
                 "command": artifact.command,
                 "args": _chunks(artifact.args),
                 "harness": artifact.harness,
-                **({"serialized": artifact.to_dict()} if shown else {}),
+                **({"serialized": _shown(artifact)} if shown else {}),
             }
             for artifact in artifacts
         ]

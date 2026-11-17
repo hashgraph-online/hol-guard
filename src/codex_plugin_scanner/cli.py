@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -36,8 +37,14 @@ def _supported_harness_values() -> tuple[str, ...]:
     # Deferred: product_model transitively imports the whole Guard command
     # surface, which short-lived invocations must not pay for.
     from .guard.harness.contract_registry import harness_names
+    from .guard.native_runner_authority import NativeRunnerAuthorityError
 
-    return harness_names()
+    try:
+        return harness_names()
+    except NativeRunnerAuthorityError:
+        # Without a runtime no argument names a harness; the scanner's
+        # doctor still runs.
+        return ()
 
 
 def _run_scan(args: argparse.Namespace) -> int:
@@ -283,7 +290,12 @@ def _resolve_legacy_args(
         is_hol_guard_default_doctor = _is_hol_guard_program(program_name) and (
             len(argv) == 1 or "-h" in argv[1:] or "--help" in argv[1:]
         )
-        has_harness_arg = len(argv) >= 2 and not argv[1].startswith("-") and argv[1] in _supported_harness_values()
+        # Only a bare name can be a harness; a path never asks the runtime.
+        has_harness_arg = (
+            len(argv) >= 2
+            and re.fullmatch(r"[a-z][a-z0-9-]*", argv[1]) is not None
+            and argv[1] in _supported_harness_values()
+        )
         if has_guard_doctor_flag or is_hol_guard_default_doctor or has_harness_arg:
             return ["guard", *argv]
     known_commands = {
