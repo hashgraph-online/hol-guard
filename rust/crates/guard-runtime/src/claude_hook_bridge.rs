@@ -16,8 +16,8 @@ use crate::claude_hook_bridge_harness::{attributed_query, current_cursor_run};
 use crate::claude_hook_bridge_http::{remaining, MINIMUM_OPERATION};
 use crate::claude_hook_bridge_recovery::launcher_recovery;
 use crate::claude_hook_bridge_render::{
-    control_plane_failure, degraded, event_name, limit_denied, py_strip, should_suppress_output,
-    valid_hook_json_or_degraded, DEFAULT_EVENT,
+    control_plane_failure, degraded, event_name, hook_decision, limit_denied, py_strip,
+    should_suppress_output, DEFAULT_EVENT,
 };
 use crate::claude_hook_bridge_transport::{
     authenticated_claude_hook_response, daemon_proves_identity, json_failure, BridgeError,
@@ -164,14 +164,14 @@ struct Bridge<'a> {
 impl Bridge<'_> {
     /// One authenticated daemon exchange and its hook-JSON validation,
     /// classified exactly as the Python `try` block classifies it. `miss`
-    /// names why the resident did not answer.
+    /// names why the resident did not answer. `Ok(None)` is a reply that is
+    /// not a decision.
     fn exchange(
         &self,
         state_path: &Path,
         deadline: Instant,
-        malformed: &str,
         miss: DirectMiss,
-    ) -> Result<String, BridgeError> {
+    ) -> Result<Option<String>, BridgeError> {
         if !state_names_loopback_port(state_path) {
             let fallback = format!("{}/", self.config.fallback_daemon_url.trim_end_matches('/'));
             assert_loopback_http_url(&fallback).map_err(BridgeError::Value)?;
@@ -184,14 +184,15 @@ impl Bridge<'_> {
         }
         let response =
             authenticated_claude_hook_response(state_path, &self.query, &self.data, timeout, miss)?;
-        valid_hook_json_or_degraded(&response, malformed, &self.data).map_err(json_failure)
+        hook_decision(&response, &self.data).map_err(json_failure)
     }
 
     /// The response a live resident answered for a passed-through `PreToolUse`,
     /// a reviewed `PostToolUse`, a `UserPromptSubmit` hook without Guard's
     /// notice or a `PermissionRequest`, checked as a daemon response is; the
-    /// miss takes the daemon path.
-    fn direct_response(&self, state_path: &Path) -> Result<String, DirectMiss> {
+    /// miss takes the daemon path. `Ok(None)` is a reply that is not a
+    /// decision.
+    fn direct_response(&self, state_path: &Path) -> Result<Option<String>, DirectMiss> {
         let guard_home = state_path.parent().ok_or(DirectMiss::NoState)?;
         let event = event_name(&self.data);
         let text = direct_answer_reporting(
@@ -202,27 +203,37 @@ impl Bridge<'_> {
             &self.data,
             self.deadline,
         )?;
-        valid_hook_json_or_degraded(&text, "resident returned malformed hook JSON", &self.data)
-            .map_err(|_| DirectMiss::Unanswered)
+        hook_decision(&text, &self.data).map_err(|_| DirectMiss::Unanswered)
     }
 
     fn respond(&self, state_path: &Path) -> Option<String> {
-        let (answered, miss) = match self.direct_response(state_path) {
-            Ok(body) => (Ok(body), DirectMiss::Unanswered),
+        let (answered, miss, malformed) = match self.direct_response(state_path) {
+            Ok(reply) => (
+                Ok(reply),
+                DirectMiss::Unanswered,
+                "resident returned malformed hook JSON",
+            ),
             Err(miss) => (
-                self.exchange(
-                    state_path,
-                    self.deadline,
-                    "daemon returned malformed hook JSON",
-                    miss,
-                ),
+                self.exchange(state_path, self.deadline, miss),
                 miss,
+                "daemon returned malformed hook JSON",
             ),
         };
         let error = match answered {
-            Ok(body) if should_suppress_output(&self.data, &body) => return None,
-            Ok(body) if py_strip(&body).is_empty() => return Some("{}".to_owned()),
-            Ok(body) => return Some(body),
+            Ok(reply) => {
+                // A reply that is not a decision answers nothing, so it takes
+                // the same Watch check as a daemon that never replied.
+                let body = reply.unwrap_or_else(|| {
+                    self.unanswered(degraded(malformed, &self.data), state_path)
+                });
+                if should_suppress_output(&self.data, &body) {
+                    return None;
+                }
+                if py_strip(&body).is_empty() {
+                    return Some("{}".to_owned());
+                }
+                return Some(body);
+            }
             Err(error) => error,
         };
         let reason = error.reason();
@@ -289,8 +300,9 @@ impl Bridge<'_> {
                 );
             }
             let malformed = format!("{reason}; recovered daemon returned malformed hook JSON");
-            match self.exchange(state_path, self.deadline, &malformed, miss) {
-                Ok(body) => return body,
+            match self.exchange(state_path, self.deadline, miss) {
+                Ok(Some(body)) => return body,
+                Ok(None) => return self.unanswered(degraded(&malformed, &self.data), state_path),
                 Err(error) => reason = format!("{reason}; daemon recovery retry failed: {error}"),
             }
         }

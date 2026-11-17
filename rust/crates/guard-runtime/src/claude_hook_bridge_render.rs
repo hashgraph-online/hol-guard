@@ -282,6 +282,9 @@ pub(crate) fn should_suppress_output(data: &str, response_body: &str) -> bool {
 
 /// `_valid_hook_json_or_degraded`. `Err` carries the failure CPython's
 /// `json.loads` would raise on the response instead of `JSONDecodeError`.
+/// The bridge itself uses `hook_decision`, so a reply that is not a decision
+/// can still pass the Watch check.
+#[cfg(test)]
 pub(crate) fn valid_hook_json_or_degraded(
     output: &str,
     reason: &str,
@@ -300,7 +303,13 @@ fn is_unmanaged_passthrough(entries: &[(String, PyVal)]) -> bool {
 }
 
 /// The response trimmed when it is a decision Claude Code will honor for the
-/// hook event, or `None` when it is not one.
+/// hook event, or `None` when it is not one: empty, not JSON, or no decision
+/// for this event. `Err` carries the failure CPython's `json.loads` would
+/// raise instead of `JSONDecodeError`.
+pub(crate) fn hook_decision(output: &str, data: &str) -> Result<Option<String>, JsonFailure> {
+    checked_hook_json(output, data)
+}
+
 fn checked_hook_json(output: &str, data: &str) -> Result<Option<String>, JsonFailure> {
     let trimmed = py_strip(output);
     if trimmed.is_empty() {

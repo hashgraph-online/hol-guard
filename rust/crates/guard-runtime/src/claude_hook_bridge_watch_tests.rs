@@ -6,7 +6,7 @@ use std::io::Cursor;
 use serde_json::{json, Value};
 
 use crate::claude_hook_bridge::hook_response;
-use crate::claude_hook_bridge_fixture::{closed_port, GuardHome};
+use crate::claude_hook_bridge_fixture::{closed_port, home_with_daemon, Exchange, GuardHome};
 use crate::claude_hook_bridge_harness::current_cursor_run;
 use crate::hook_watch_posture::tests::sign_postures;
 
@@ -29,6 +29,22 @@ fn down_daemon(label: &str) -> (GuardHome, String) {
     .to_string();
     (home, config)
 }
+
+/// The config of a hook whose live daemon is `home`'s, with nothing to fall
+/// back to or recover with.
+fn live_config(home: &GuardHome) -> String {
+    json!({
+        "state_path": home.state_path.to_str().unwrap(),
+        "fallback_daemon_url": format!("http://127.0.0.1:{}", closed_port()),
+        "query": format!("guard-home={}", home.home_text().replace('/', "%2F")),
+        "fallback_command": ["/bin/sh", "-c", "exit 3"],
+        "recovery_command": [],
+    })
+    .to_string()
+}
+
+/// Replies a live daemon can send that are not a decision for the hook.
+const NON_DECISIONS: [&str; 3] = ["", "not json", r#"{"hookSpecificOutput":{}}"#];
 
 fn respond(config: &str, input: &str) -> String {
     hook_response(config, &mut Cursor::new(input.as_bytes().to_vec())).expect("hook response")
@@ -106,4 +122,41 @@ fn an_unproven_watch_is_still_denied_while_the_daemon_is_down() {
     // No signed posture at all, as before the daemon ever published one.
     let output = respond(&config, PRE_TOOL_USE);
     assert!(denied(&output), "{output}");
+}
+
+#[test]
+fn a_watch_harness_continues_when_its_daemon_answers_with_no_decision() {
+    if running_inside_cursor() {
+        return;
+    }
+    for (index, reply) in NON_DECISIONS.iter().enumerate() {
+        let (home, daemon) = home_with_daemon(
+            &format!("watch-degraded-{index}"),
+            vec![Exchange::Hook(200, (*reply).to_owned())],
+        );
+        sign_postures(&home.home, "enforce", &[("claude-code", "watch")]);
+        assert_eq!(
+            respond(&live_config(&home), PRE_TOOL_USE),
+            "{}",
+            "{reply:?}"
+        );
+        daemon.join().unwrap();
+    }
+}
+
+#[test]
+fn a_protected_harness_is_still_denied_when_its_daemon_answers_with_no_decision() {
+    if running_inside_cursor() {
+        return;
+    }
+    for (index, reply) in NON_DECISIONS.iter().enumerate() {
+        let (home, daemon) = home_with_daemon(
+            &format!("protected-degraded-{index}"),
+            vec![Exchange::Hook(200, (*reply).to_owned())],
+        );
+        sign_postures(&home.home, "observe", &[("claude-code", "protected")]);
+        let output = respond(&live_config(&home), PRE_TOOL_USE);
+        assert!(denied(&output), "{reply:?}: {output}");
+        daemon.join().unwrap();
+    }
 }
