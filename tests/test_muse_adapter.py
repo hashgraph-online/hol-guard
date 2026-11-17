@@ -372,13 +372,3 @@ class TestMuseHookRender:
             event_name=event_name,
             guard_home=tmp_path / "guard-home",
         ) == ("", "HOL Guard blocked this action.", 2)
-
-
-class TestMuseApprovalResume:
-    def test_exit_code_uses_zero_envelope_for_pretool(self) -> None:
-        from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
-
-        assert native_hook_verdict_exit_code("muse", "block", "PreToolUse") == 0
-        assert native_hook_verdict_exit_code("muse", "block", "UserPromptSubmit") == 0
-        assert native_hook_verdict_exit_code("muse", "block", "PostToolUse") == 1
-        assert native_hook_verdict_exit_code("muse", "allow", "PreToolUse") == 0

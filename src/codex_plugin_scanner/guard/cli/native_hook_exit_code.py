@@ -1,85 +1,74 @@
-"""Single source of truth for native-hook verdict exit codes.
+"""The process exit status a native hook sends its harness.
 
-Every verdict-bearing emit path, including structured JSON responses, uses
-``native_hook_verdict_exit_code`` with the canonical harness and hook event.
+The verdict-to-exit-code table is Guard's native runtime (`hook-exit-code`,
+`hook_decision_directive::exit_code`): which harness exits 2, which exits 1,
+which carries a block in its envelope and exits 0, and how an action this
+build does not recognise is treated as the review tier. This module sends it
+the verdict and the one fact it cannot know: for grok, whether the Guard home
+records protection as off.
 
-- cursor/devin/kimi/hermes: blocking verdicts exit 2.
-- opencode/superagent: blocking verdicts exit 1.
-- codex/claude-code/copilot/pi/omp: pre-execution and approval verdicts travel
-  in JSON and exit 0; blocking observation events exit 1.
-- grok: blocking verdicts exit 2 unless the Guard home records protection off.
-- zcode: a review-tier PreToolUse exits 0 so ZCode opens its own prompt;
-  other blocking verdicts exit 2.
-
-The native runtime answers these codes itself; this module serves the
-outage path, where no resident is left to ask.
-
-Missing event context never assumes that the host will consume an envelope.
-An action this build does not recognise is normalized to the review tier before
-any exit code is chosen, so a newer or malformed producer value can never leave
-the process on the allow path.
+With no native runtime the outage policy is block and repair: a verdict that
+blocks exits with the fixed blocking code and the hook says how to repair; an
+allow still lets the turn continue, as the caller chose when it picked it.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
-from ..action_lattice import normalize_guard_action
-
-_BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
-_RC_BLOCK_IS_ONE = frozenset({"opencode", "superagent"})
-_RC_BLOCK_IS_TWO = frozenset({"cursor", "devin", "kimi", "hermes"})
-_RC_BLOCK_IS_ZERO_ENVELOPE = frozenset({"codex", "claude-code", "copilot", "pi", "omp", "muse"})
-_PREEMPTIVE_EVENTS = frozenset({"PreToolUse", "UserPromptSubmit", "PermissionRequest"})
-_ZCODE_ASK_ACTIONS = frozenset({"review", "require-reapproval"})
+_FEATURE = "native-hook-exit-code-v1"
+_COMMAND = "hook-exit-code"
+_OUTPUT_LIMIT = 4096
+_TIMEOUT_SECONDS = 5.0
+RUNTIME_ABSENT_EXIT_CODE = 2
+_PASSING_ACTIONS = frozenset({"allow", "warn"})
+RUNTIME_ABSENT_REPAIR_HINT = (
+    "HOL Guard's native runtime is unavailable, so this action is blocked. Run `hol-guard repair`."
+)
 
 
 def native_hook_verdict_exit_code(
     harness: str,
-    policy_action: str,
+    policy_action: object,
     event_name: str | None = None,
 ) -> int:
     """Return the process exit code a harness expects for ``policy_action``.
 
-    ``policy_action`` is the resolved action (``"allow"``, ``"block"``,
-    ``"review"``, ``"require-reapproval"``, ``"sandbox-required"``, …), not the
-    wire ``decision`` string.  Callers pass ``"block"`` for the unavailable /
-    fail-closed deny and the adapter's own contract decides the rc.
-
-    An action outside the canonical lattice is not evidence of permission, so
-    it is normalized to the review tier rather than falling through to the
-    non-blocking exit code.
+    ``policy_action`` is the resolved action, not the wire ``decision`` string;
+    an unrecognised value is the review tier. Without the native runtime the
+    status is ``RUNTIME_ABSENT_EXIT_CODE`` unless the action is allow or warn.
     """
 
-    policy_action = normalize_guard_action(policy_action)
-    blocking = policy_action in _BLOCKING_ACTIONS
-    if harness == "grok":
-        return 2 if blocking and not _grok_recording_only() else 0
-    if harness == "zcode":
-        return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name)
-    if harness in _RC_BLOCK_IS_TWO:
-        return 2 if blocking else 0
-    if harness in _RC_BLOCK_IS_ONE:
-        return 1 if blocking else 0
-    if harness in _RC_BLOCK_IS_ZERO_ENVELOPE:
-        if not blocking or event_name in _PREEMPTIVE_EVENTS:
-            return 0
-        return 1
-    # Unknown harness: fail safe on the exit status only for blocking verdicts.
-    return 1 if blocking else 0
+    from ..mdm.runtime_request import runtime_answer
 
-
-def zcode_hook_process_exit(*, policy_action: str, event_name: str | None = None) -> int:
-    """The exit code ZCode expects: exit 2 discards stdout, so a review-tier
-    PreToolUse exits 0 and its ``ask`` envelope opens ZCode's own prompt."""
-
-    compact = (event_name or "PreToolUse").replace("_", "").replace("-", "").lower()
-    normalized = normalize_guard_action(policy_action)
-    if compact == "pretooluse" and normalized in _ZCODE_ASK_ACTIONS:
+    encoded = _encode(harness, policy_action, event_name)
+    answer = runtime_answer(_FEATURE, _COMMAND, encoded, output_limit=_OUTPUT_LIMIT, timeout_seconds=_TIMEOUT_SECONDS)
+    code = None if answer is None else answer.get("exit_code")
+    if isinstance(code, int) and not isinstance(code, bool) and 0 <= code <= 255:
+        return code
+    if policy_action in _PASSING_ACTIONS:
         return 0
-    return 2 if normalized in _BLOCKING_ACTIONS else 0
+    _ = sys.stderr.write(RUNTIME_ABSENT_REPAIR_HINT + "\n")
+    return RUNTIME_ABSENT_EXIT_CODE
+
+
+def _encode(harness: str, policy_action: object, event_name: str | None) -> str:
+    request = {
+        "harness": harness,
+        "policy_action": policy_action,
+        "event_name": event_name,
+        "recording_only": _grok_recording_only() if harness == "grok" else False,
+    }
+    try:
+        return json.dumps(request, allow_nan=False)
+    except (TypeError, ValueError):
+        # A value JSON cannot carry is not evidence of permission: the runtime
+        # reads a missing action as the review tier.
+        request["policy_action"] = None
+        return json.dumps(request, allow_nan=False)
 
 
 def _grok_recording_only() -> bool:
@@ -106,4 +95,4 @@ def _grok_recording_only() -> bool:
     return protection_is_off(posture=config.protection_posture, mode=config.mode)
 
 
-__all__ = ["native_hook_verdict_exit_code", "zcode_hook_process_exit"]
+__all__ = ["RUNTIME_ABSENT_EXIT_CODE", "RUNTIME_ABSENT_REPAIR_HINT", "native_hook_verdict_exit_code"]

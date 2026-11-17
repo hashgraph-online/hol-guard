@@ -14,6 +14,8 @@ from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.hook_review.hook_worker_native import HookWorkerNativeMixin
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .native_exit_code_support import native_exit_code_is
+
 STRUCTURED_OUTPUT_SETTING_PATH = "data_control.structured_output"
 
 
@@ -201,6 +203,7 @@ def test_cli_native_unavailable_blocks_the_prompt(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    native_exit_code_is(monkeypatch, 0)
     response, rc = _emit_unavailable(
         monkeypatch,
         tmp_path,

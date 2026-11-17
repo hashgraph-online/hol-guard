@@ -805,6 +805,7 @@ mod hook_direct;
 mod hook_direct_counters;
 mod hook_direct_evidence;
 mod hook_env_stamp;
+mod hook_exit_code_op;
 mod hook_failure_op;
 mod hook_launch_scan;
 #[path = "adapters/hook_python_identity.rs"]

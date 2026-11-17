@@ -13,6 +13,8 @@ from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.hook_review.hook_availability_policy import availability_harness_response
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .native_exit_code_support import native_exit_code_is
+
 
 @pytest.mark.parametrize("failure", ("worker_none", "worker_response", "worker_raise"))
 @pytest.mark.parametrize("json_requested", (False, True))
@@ -43,6 +45,7 @@ def test_native_failure_preserves_codex_wire_response(
         return None
 
     monkeypatch.setattr(cli, "try_native_hook_authority", unavailable)
+    native_exit_code_is(monkeypatch, 0)
     result = cli.route_native_hook(
         Mock(harness="codex", json=json_requested),
         context=context,
