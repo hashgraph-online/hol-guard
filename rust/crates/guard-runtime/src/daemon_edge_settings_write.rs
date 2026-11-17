@@ -65,25 +65,22 @@ pub(super) fn apply(
             .iter()
             .all(|(key, _)| PRESENTATION_KEYS.contains(&key.as_str()));
     if !presentation_only {
-        // `require_high_risk` reads the proof from the top level only when
-        // one is offered there; otherwise it runs with no input.
-        let offered = ["approval_password", "approval_totp_code"]
-            .iter()
-            .any(|key| json_payload.get(*key).is_some_and(truthy));
-        let input = match gate_payload {
-            _ if offered => json_payload.clone(),
-            Some(gate) => Map::from_iter([("approval_gate".to_owned(), gate.clone())]),
-            None => Map::new(),
-        };
-        let grant = match gate::require_high_risk("settings_write", &input, config)? {
+        let input = save_gate_input(json_payload, gate_payload);
+        let grant = match gate::require_high_risk_for(
+            "settings_write",
+            &input,
+            Some(save_change(json_payload)),
+            config,
+        )? {
             Gate::Refused(status, body) => return Some((status, Value::Object(body))),
             Gate::Passed(grant) => grant,
         };
         // The resident has run, so from here on nothing goes to the daemon.
         if let Some(gate_payload) = gate_payload {
+            let resident_payload = resident_gate_payload(gate_payload, json_payload);
             let method = ApprovalGateMethodV1::ValidateSettingsUpdate;
             if let Gate::Refused(status, body) =
-                gate::settings_method(method, gate_payload, grant.as_deref(), config)
+                gate::settings_method(method, &resident_payload, grant.as_deref(), config)
             {
                 return Some((status, Value::Object(body)));
             }
@@ -99,9 +96,10 @@ pub(super) fn apply(
             Err(answer) => return Some(answer),
         };
         if let Some(gate_payload) = gate_payload {
+            let resident_payload = resident_gate_payload(gate_payload, json_payload);
             let method = ApprovalGateMethodV1::UpdateSettings;
             if let Gate::Refused(status, body) =
-                gate::settings_method(method, gate_payload, grant.as_deref(), config)
+                gate::settings_method(method, &resident_payload, grant.as_deref(), config)
             {
                 return Some((status, Value::Object(body)));
             }
@@ -133,6 +131,14 @@ fn settings_without_gate(settings: &[(String, PyVal)]) -> Vec<(String, PyVal)> {
         .filter(|(key, _)| key != "approval_gate")
         .cloned()
         .collect()
+}
+
+/// Preserve the full daemon settings-save binding while the resident applies
+/// the approval-gate portion of the payload.
+fn resident_gate_payload(gate_payload: &Value, json_payload: &Map<String, Value>) -> Value {
+    let mut payload = gate_payload.as_object().cloned().unwrap_or_default();
+    payload.insert("settings_change".to_owned(), save_change(json_payload));
+    Value::Object(payload)
 }
 
 /// `update_guard_settings`: the previous values, or the answer to send.
@@ -199,7 +205,8 @@ pub(super) fn reset(
 /// `require_settings_write` check the config write runs with its grant.
 /// `Some(Some(answer))` is a refusal to send; `None` goes to the daemon.
 fn settings_gate(input: &Map<String, Value>, config: &ReadConfig) -> Option<Option<(u16, Value)>> {
-    let grant = match gate::require_high_risk("settings_write", input, config)? {
+    let change = Some(json!({"kind": "reset"}));
+    let grant = match gate::require_high_risk_for("settings_write", input, change, config)? {
         Gate::Refused(status, body) => return Some(Some((status, Value::Object(body)))),
         Gate::Passed(grant) => grant,
     };
@@ -472,6 +479,10 @@ fn now_seconds() -> Option<String> {
         "+00:00",
     )
 }
+
+#[path = "daemon_edge_settings_save_gate.rs"]
+mod save_gate;
+use save_gate::{save_change, save_gate_input};
 
 #[cfg(all(test, unix))]
 #[path = "daemon_edge_settings_write_tests.rs"]

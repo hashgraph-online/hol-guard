@@ -61,7 +61,7 @@ from ..runtime.extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
     ExtensionControlSnapshotUnavailableError,
 )
-from .extension_control_errors import ExtensionControlApiError
+from .extension_control_errors import ExtensionControlApiError, approval_gate_api_error
 from .extension_control_preparation_failure import preparation_unavailable
 from .extension_control_prepared import (
     MAX_CANDIDATES,
@@ -390,7 +390,7 @@ class ExtensionControlApiService:
                 session_nonce=session_nonce,
             )
         except ApprovalGateError as exc:
-            raise ExtensionControlApiError(exc.status, exc.code) from exc
+            raise approval_gate_api_error(exc, status=exc.status, code=exc.code) from exc
 
     def recover_authority(self, payload: dict[str, object], *, require_fresh_totp: bool = False) -> dict[str, object]:
         current = self._store.read_extension_control_authority_for_registry(self._registry)
@@ -555,7 +555,7 @@ class ExtensionControlApiService:
                     session_nonce=session_nonce,
                 )
             except (ApprovalGateError, ExtensionControlProofError) as exc:
-                raise ExtensionControlApiError(423, "approval_required") from exc
+                raise approval_gate_api_error(exc, status=423, code="approval_required") from exc
             self._remember_proof(mutation, proof, request_digest=digest, candidate=candidate)
             response["proof_id"] = proof.proof_id
         return response
