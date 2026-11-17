@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.harness_attribution import (
-    cursor_hook_query_extras,
     cursor_runtime_detected,
     origin_harness_env,
     resolve_environment_harness,
@@ -26,13 +25,6 @@ def test_resolve_runtime_hook_harness_maps_claude_to_cursor_in_cursor() -> None:
     env = {"CURSOR_VERSION": "2.0.0", "CURSOR_PROJECT_DIR": "/tmp/project"}
     assert resolve_runtime_hook_harness("claude-code", env=env) == "cursor"
     assert resolve_runtime_hook_harness("opencode", env=env) == "opencode"
-
-
-def test_cursor_hook_query_extras_includes_runtime_harness_and_workspace() -> None:
-    extras = cursor_hook_query_extras(
-        {"CURSOR_VERSION": "1.2.3", "CURSOR_PROJECT_DIR": "/Users/me/repo"},
-    )
-    assert extras == {"runtime-harness": "cursor", "workspace": "/Users/me/repo"}
 
 
 def test_resolve_environment_harness_matches_each_runtime_family() -> None:

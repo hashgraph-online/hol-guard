@@ -19,7 +19,7 @@ const RISKY_PROMPT_SYSTEM_MESSAGE: &str = "HOL Guard intercepted this prompt bec
 const RISKY_PROMPT_ADDITIONAL_CONTEXT: &str = "HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.";
 const PERMISSION_PASSTHROUGH_KEY: &str = "guard_permission_passthrough";
 const UNMANAGED_REASON_CODE: &str = "harness_not_managed";
-const DEFAULT_EVENT: &str = "PreToolUse";
+pub(crate) const DEFAULT_EVENT: &str = "PreToolUse";
 const EVENT_PREFIX_CHARS: usize = 4096;
 /// Stands in for `str()` of a truthy non-string event value. Only exact
 /// event names and the `Permission` prefix change a response, and no
