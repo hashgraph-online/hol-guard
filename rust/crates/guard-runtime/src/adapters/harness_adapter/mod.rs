@@ -130,6 +130,7 @@ mod simple;
 mod uninstall_apply;
 mod which;
 mod zcode;
+mod zcode_desktop_keys;
 
 #[cfg(test)]
 #[path = "tests.rs"]
