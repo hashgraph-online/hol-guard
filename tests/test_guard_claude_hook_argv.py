@@ -349,3 +349,14 @@ def test_daemon_hook_without_the_native_feature_asks_for_repair(
 
     with pytest.raises(RuntimeError, match="hol-guard repair"):
         claude_hook_entry.claude_argv("daemon", context)
+
+
+def test_an_install_from_cursor_writes_no_cursor_attribution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Claude Code and Cursor share these hooks; only the bridge, at run time,
+    # can tell which one runs a hook. An install started from a Cursor
+    # terminal once wrote runtime-harness=cursor for both.
+    monkeypatch.setenv("CURSOR_TRACE_ID", "trace")
+    monkeypatch.setenv("CURSOR_PROJECT_DIR", str(tmp_path / "cursor-project"))
+    monkeypatch.setattr(claude_hook_entry, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:4781")
+    facts = json.loads(claude_hook_entry.claude_facts(tmp_path / "guard"))
+    assert facts == {"daemon_url": "http://127.0.0.1:4781"}

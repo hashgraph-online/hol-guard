@@ -135,6 +135,7 @@ mod claude_hook_bridge_auth;
 mod claude_hook_bridge_auth_windows;
 #[cfg(all(test, unix))]
 mod claude_hook_bridge_fixture;
+mod claude_hook_bridge_harness;
 mod claude_hook_bridge_http;
 mod claude_hook_bridge_http_text;
 mod claude_hook_bridge_recovery;
@@ -810,6 +811,7 @@ mod hook_launch_scan;
 mod hook_python_identity;
 mod hook_removal_prune;
 mod hook_removal_sweep;
+mod hook_watch_posture;
 mod html_unescape;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;

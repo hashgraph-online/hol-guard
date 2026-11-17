@@ -18,6 +18,8 @@ from tests.native_runtime_stamp import stamp_native_runtime
 _REPO = Path(__file__).resolve().parents[1]
 _RUST_SOURCE = _REPO / "rust" / "crates" / "guard-runtime" / "src" / "claude_session_start.rs"
 _RUST_ARGV = _REPO / "rust" / "crates" / "guard-runtime" / "src" / "adapters" / "harness_adapter" / "claude_argv.rs"
+_RUST_BRIDGE_HARNESS = _REPO / "rust" / "crates" / "guard-runtime" / "src" / "claude_hook_bridge_harness.rs"
+_CURSOR_ENV = ("CURSOR_VERSION", "CURSOR_PROJECT_DIR", "CURSOR_TRACE_ID", "CURSOR_SESSION_ID", "CURSOR_TRANSCRIPT_PATH")
 _HOOK_FEATURE = "claude-hook-bridge-v1"
 _SESSION_START_FEATURE = "claude-session-start-v1"
 _BOTH_FEATURES = (_HOOK_FEATURE, _SESSION_START_FEATURE)
@@ -140,6 +142,12 @@ def test_rust_lane_constants_match_the_installer() -> None:
     assert rust_const("SESSION_START_MODE", _RUST_ARGV.read_text(encoding="utf-8")) == _MODE
     assert rust_const("SESSION_START_MARKER") == _SESSION_MARKER
     assert rust_const("SESSION_START_FEATURE") == _SESSION_START_FEATURE
+    # The hook bridge, not the session-start lane, decides whether Cursor runs
+    # the hook, so its markers are the ones that must match the installer's.
+    bridge = _RUST_BRIDGE_HARNESS.read_text(encoding="utf-8")
+    for key in _CURSOR_ENV:
+        assert f'"{key}"' in bridge
+        assert f'"{key}"' not in source
 
 
 @posix_only
