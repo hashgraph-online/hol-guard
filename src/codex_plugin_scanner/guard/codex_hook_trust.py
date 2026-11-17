@@ -8,8 +8,8 @@ install or update invalidates trust until the user trusts the hooks again in Cod
 
 The runtime's ``codex-hook-trust`` command hashes handlers and answers which state keys
 are stale. Install records trust and moves state, and the hook state doctor reads says
-whether Codex still trusts Guard's hooks, in the native adapter; this module only words
-the doctor warning.
+whether Codex still trusts Guard's hooks, and doctor's trust warning, in the native
+adapter; this module only asks for a handler's hash.
 """
 
 from __future__ import annotations
@@ -18,11 +18,6 @@ import json
 from collections.abc import Mapping
 
 from .mdm.runtime_request import runtime_answer
-
-CODEX_HOOK_TRUST_WARNING = (
-    "Codex has not trusted the current HOL Guard hooks, so Codex skips them. "
-    "Open Codex, run /hooks, and press t to trust them."
-)
 
 _FEATURE = "native-codex-hook-trust-v1"
 _COMMAND = "codex-hook-trust"
@@ -38,17 +33,6 @@ def codex_command_hook_hash(event_name: str, matcher: object, handler: Mapping[s
     answer = _ask({"op": "hash", "event": event_name, "matcher": _jsonable(matcher), "handler": _jsonable(handler)})
     digest = answer.get("hash") if answer is not None else None
     return digest if isinstance(digest, str) else None
-
-
-def apply_codex_hook_trust_doctor(payload: dict[str, object], hook_state: Mapping[str, object]) -> None:
-    """Warn about untrusted Guard hooks and stop doctor from calling them active."""
-
-    if not hook_state.get("hook_trust_stale"):
-        return
-    warnings = payload.get("warnings")
-    payload["warnings"] = [*(warnings if isinstance(warnings, list) else []), CODEX_HOOK_TRUST_WARNING]
-    if payload.get("setup_status") == "active":
-        payload["setup_status"] = "partial"
 
 
 def _jsonable(value: object) -> object:

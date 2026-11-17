@@ -49,7 +49,6 @@ from .codex_hook_manifest import (
 from .codex_hook_recovery import recover_hook_publication
 from .codex_hook_registration import codex_doctor_result
 from .codex_hook_self_binding import install_fields, short_path_fields
-from .codex_hook_trust import apply_codex_hook_trust_doctor
 from .codex_install_transaction import codex_install_transaction
 from .codex_remote_client import (
     codex_remote_launch_environment,
@@ -449,6 +448,5 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         )
         payload["warnings"] = warnings
         payload["setup_status"] = setup_status
-        apply_codex_hook_trust_doctor(payload, hook_state)
         payload["native_hook_state"] = hook_state
         return payload

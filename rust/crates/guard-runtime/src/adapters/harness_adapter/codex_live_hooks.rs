@@ -37,6 +37,7 @@ pub(super) const FALLBACK_REASONS: [&str; 5] = [
 ];
 const FALSE_UNINSTALLED: &str = "guard is not installed for this harness";
 const REPAIR: &str = "Run `hol-guard install codex` or `hol-guard update`";
+const TRUST_WARNING: &str = "Codex has not trusted the current HOL Guard hooks, so Codex skips them. Open Codex, run /hooks, and press t to trust them.";
 
 pub(super) const FIELDS: [(&str, &[&str]); 6] = [
     ("live", &["command"]),
@@ -480,8 +481,15 @@ fn doctor(fields: &Map<String, Value>) -> Step<Value> {
     finish.insert("warnings".to_owned(), json!(warnings));
     finish.insert("status".to_owned(), json!(status));
     finish.insert("base_status".to_owned(), json!(base));
-    let answer = super::codex::doctor_status(&finish)?;
-    Ok(json!({ "warnings": warnings, "status": answer["status"] }))
+    let mut status = super::codex::doctor_status(&finish)?["status"].clone();
+    // Codex skips hooks it has not trusted, so they are never called active.
+    if state_flag(state, "hook_trust_stale") {
+        warnings.push(TRUST_WARNING.to_owned());
+        if status == "active" {
+            status = json!("partial");
+        }
+    }
+    Ok(json!({ "warnings": warnings, "status": status }))
 }
 
 #[cfg(test)]

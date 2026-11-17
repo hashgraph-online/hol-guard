@@ -296,3 +296,31 @@ fn doctor_copy_and_status() {
     assert_eq!(answer["status"], json!("broken"));
     assert_eq!(answer["warnings"].as_array().map(Vec::len), Some(2));
 }
+
+#[test]
+fn doctor_never_calls_untrusted_hooks_active() {
+    let state = |stale: bool| json!({ "config_present": true, "codex_hooks_enabled": true, "managed_hook_installed": true, "integrity_valid": true, "protection_active": true, "hook_trust_stale": stale });
+    let ask_with = |stale: bool| {
+        ask(
+            "doctor",
+            json!({ "warnings": ["existing"], "hook_state": state(stale), "base_status": "active" }),
+        )
+    };
+    let stale = ask_with(true);
+    assert_eq!(stale["status"], json!("partial"));
+    let warnings = stale["warnings"].as_array().unwrap();
+    assert!(warnings.iter().any(|w| {
+        let w = w.as_str().unwrap();
+        w.contains("/hooks") && w.contains("press t")
+    }));
+    let trusted = ask_with(false);
+    assert_eq!(trusted["status"], json!("active"));
+    assert_eq!(trusted["warnings"], json!(["existing"]));
+    let broken =
+        json!({ "config_present": true, "codex_hooks_enabled": false, "hook_trust_stale": true });
+    let answer = ask(
+        "doctor",
+        json!({ "warnings": [], "hook_state": broken, "base_status": "active" }),
+    );
+    assert_eq!(answer["status"], json!("broken"));
+}

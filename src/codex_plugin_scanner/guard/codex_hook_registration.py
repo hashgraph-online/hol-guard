@@ -158,6 +158,7 @@ _HOOK_STATE_FLAGS = (
     "codex_hooks_enabled",
     "managed_hook_installed",
     "protection_active",
+    "hook_trust_stale",
 )
 
 
