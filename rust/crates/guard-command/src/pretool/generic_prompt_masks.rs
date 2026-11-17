@@ -63,7 +63,7 @@ pub(super) fn mask_format_options(value: &str) -> String {
     });
     let masked = OPTION
         .get_or_init(|| {
-            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\b(?P<tool>ruff|cargo|dart|deno|dotnet|terraform|tofu|biome|taplo|stylua|prettier|swift|zig|clang|(?:npm|pnpm|yarn|bun)(?:\s+run)?)[\s-]+format\b|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report|values?|methods?|functions?|helpers?|calls?|spec(?:ifier)?s?|strings|fields?|names?|sizes?|templates?|placeholders?|widths?|headers?|errors?|exceptions?|tracebacks?|lines?|columns?|rows?|entries|entry|records?|items?|labels?)\b")
+            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\b(?P<tool>ruff|cargo|dart|deno|dotnet|terraform|tofu|biome|taplo|stylua|prettier|swift|zig|clang|(?:npm|pnpm|yarn|bun)(?:[ \t]+run)?)[ \t-]+format\b|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report|values?|methods?|functions?|helpers?|calls?|spec(?:ifier)?s?|strings|fields?|names?|sizes?|templates?|placeholders?|widths?|headers?|errors?|exceptions?|tracebacks?|lines?|columns?|rows?|entries|entry|records?|items?|labels?)\b")
                 .expect("bounded format option")
         })
         .replace_all(value, |captures: &Captures| {

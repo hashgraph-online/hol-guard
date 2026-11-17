@@ -69,6 +69,7 @@ fn a_code_formatter_named_before_format_stays_benign() {
     assert_not_benign("Use cargo format on the drive.");
     assert_not_benign("ruff format /dev/sda1");
     assert_not_benign("ruff format C:");
+    assert_not_benign("Run each command separately:\nruff\nformat C:");
     assert_not_benign("Run prettier format on D:\\");
     assert_not_benign("npm run format E:");
 }
