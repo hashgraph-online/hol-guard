@@ -102,6 +102,7 @@ mod grok_hook_command;
 mod grok_hook_files;
 mod grok_hook_op;
 mod grok_install;
+mod grok_protection_checks;
 mod grok_update;
 mod guard_shim;
 mod guard_shim_text;
@@ -332,6 +333,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         return answer(mcp_servers::dispatch(op, fields));
     }
     let ctx = Ctx::parse(fields.get("context"))?;
+    if grok_protection_checks::handles(op) {
+        return answer(grok_protection_checks::dispatch(op, &ctx));
+    }
     if grok_hook_op::handles(op) {
         return answer(grok_hook_op::dispatch(op, &ctx, fields));
     }

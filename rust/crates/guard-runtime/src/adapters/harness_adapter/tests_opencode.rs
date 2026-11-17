@@ -203,11 +203,7 @@ fn uninstall_removes_a_config_guard_created() {
 #[test]
 fn protection_reports_every_missing_piece() {
     let home = Home::new();
-    let answer = home.ask(
-        "opencode",
-        "protection",
-        json!({"managed_active": false, "config_paths": []}),
-    );
+    let answer = home.ask("opencode", "protection", json!({"managed_active": false}));
     let checks: Value = serde_json::from_str(answer["checks"].as_str().unwrap()).unwrap();
     assert_eq!(checks["ready"], json!(false));
     assert_eq!(checks["warnings"].as_array().unwrap().len(), 4);

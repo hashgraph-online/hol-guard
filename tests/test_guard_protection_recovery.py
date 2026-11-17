@@ -12,7 +12,7 @@ from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard.approvals import _live_hook_verification
 from codex_plugin_scanner.guard.cli.install_commands import (
     _grok_hook_command_is_guard,
-    _grok_managed_config_is_active,
+    _grok_protection_checks,
     apply_managed_install,
     grok_hooks_protection_ready,
 )
@@ -248,24 +248,18 @@ def test_grok_hook_command_rejects_placeholder_invocations(tmp_path: Path) -> No
     assert _grok_hook_command_is_guard("true") is False
 
 
-def test_grok_managed_config_rejects_inline_commented_rule(tmp_path: Path) -> None:
-    import tomlkit
-
+def test_grok_managed_config_is_active_only_for_the_installed_permission_floor(tmp_path: Path) -> None:
+    """The native check accepts the installed config; its rejections are Rust unit tests."""
     context = _ctx(tmp_path)
     get_adapter("grok").install(context)
-    valid = grok_paths(context)["config"].read_text(encoding="utf-8")
-    assert _grok_managed_config_is_active(valid, context) is True
-    assert (
-        _grok_managed_config_is_active(
-            "# BEGIN HOL GUARD MANAGED GROK\n[permission]\n"
-            'deny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n',
-            context,
-        )
-        is False
+    config = grok_paths(context)["config"]
+    assert _grok_protection_checks(context)["managed_config_installed"] is True
+    config.write_text(
+        "# BEGIN HOL GUARD MANAGED GROK\n[permission]\n"
+        'deny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n',
+        encoding="utf-8",
     )
-    document = tomlkit.parse(valid)
-    document["permission"]["deny"] = tomlkit.array().comment("Read(**/.grok/auth/**)")
-    assert _grok_managed_config_is_active(tomlkit.dumps(document), context) is False
+    assert _grok_protection_checks(context)["managed_config_installed"] is False
 
 
 def test_live_grok_hooks_reject_placeholder_command_and_marker_only_config(
