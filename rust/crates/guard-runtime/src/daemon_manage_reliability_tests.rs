@@ -376,6 +376,32 @@ fn a_daemon_run_that_several_records_end_is_one_exit() {
 }
 
 #[test]
+fn a_failed_start_on_a_reused_pid_is_its_own_exit() {
+    let home = private_home();
+    let home = home.path();
+    event(home, NOW - 50, 301, "published", None);
+    event(home, NOW - 49, 301, "exiting", Some("signal_term"));
+    // The OS hands pid 301 to a later daemon whose start fails before it
+    // publishes; its own exit record folds into that failed start.
+    event(
+        home,
+        NOW - 30,
+        301,
+        "start_failed",
+        Some("port_unavailable"),
+    );
+    event(home, NOW - 29, 301, "exiting", Some("start_failed"));
+
+    assert_eq!(
+        report(home, json!({}))["daemon_exits"],
+        json!({"total": 2, "by_cause": {
+            "exiting:signal_term": 1,
+            "start_failed:port_unavailable": 1,
+        }})
+    );
+}
+
+#[test]
 fn other_apps_crash_reports_do_not_end_the_scan() {
     let home = private_home();
     let crashes = tempfile::tempdir().unwrap();

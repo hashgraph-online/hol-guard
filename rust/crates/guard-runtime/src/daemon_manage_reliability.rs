@@ -196,18 +196,22 @@ fn recorded_at(event: &Value) -> u64 {
 /// writes `retirement_requested` and then the daemon's own `exiting`, and
 /// several launchers can each observe the same death. The first terminal
 /// record after a run's `published` is its cause; later ones for the same
-/// pid are not counted until that pid publishes again.
+/// pid are not counted until that pid publishes again. A `start_failed` is
+/// written by a run that never published, so it starts a run of its own: a
+/// reused pid whose earlier run already ended still counts its failed start.
 fn exits(events: &[Value]) -> Value {
     let mut by_cause: BTreeMap<String, u64> = BTreeMap::new();
     let mut ended: HashSet<u64> = HashSet::new();
     for event in events {
         let name = event_name(event);
         let pid = event.get("pid").and_then(Value::as_u64);
-        if name == "published" {
+        if name == "published" || name == "start_failed" {
             if let Some(pid) = pid {
                 ended.remove(&pid);
             }
-            continue;
+            if name == "published" {
+                continue;
+            }
         }
         if !lifecycle::TERMINAL_EVENTS.contains(&name) {
             continue;
