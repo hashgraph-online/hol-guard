@@ -14,6 +14,7 @@ import pytest
 from codex_plugin_scanner.guard import native_policy_snapshot_windows_atomic as private_state
 from codex_plugin_scanner.guard import native_policy_snapshot_windows_resident as resident
 from codex_plugin_scanner.guard import native_resident_client, native_runtime
+from codex_plugin_scanner.guard import native_resident_client_pool as pool_module
 from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_windows import write_windows_ack
@@ -270,7 +271,7 @@ def test_a_pool_without_an_idle_stream_starts_no_client(
     monkeypatch.setattr(pool, "request", counted)
     monkeypatch.setattr(native_resident_client, "_CLIENT_POOLS", {(str(EXECUTABLE), str(state_dir)): pool})
     monkeypatch.setattr(native_resident_client, "native_resident_client_request", _REAL_REQUEST)
-    monkeypatch.setattr(native_resident_client, "_PersistentNativeClient", no_client)
+    monkeypatch.setattr(pool_module, "_PersistentNativeClient", no_client)
 
     with pytest.raises(NativePolicySnapshotError, match="native_windows_private_state_unavailable"):
         write_windows_ack(home, home / "native-runtime" / "direct-lane" / "ack.json", b"{}")
