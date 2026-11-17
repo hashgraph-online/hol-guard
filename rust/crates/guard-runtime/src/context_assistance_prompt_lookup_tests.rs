@@ -17,6 +17,16 @@ fn warming_now(key: &Key) -> bool {
 }
 
 #[test]
+fn prompt_threads_have_a_process_wide_cap() {
+    let permits: Vec<_> = (0..MAX_PROMPT_THREADS)
+        .map(|_| try_prompt_thread().expect("prompt thread permit"))
+        .collect();
+    assert!(try_prompt_thread().is_none());
+    drop(permits);
+    assert!(try_prompt_thread().is_some());
+}
+
+#[test]
 fn a_prompt_that_finds_cigar_starting_leaves_one_warm_up_for_the_next() {
     let home = tempfile::tempdir().unwrap();
     let project = tempfile::tempdir().unwrap();

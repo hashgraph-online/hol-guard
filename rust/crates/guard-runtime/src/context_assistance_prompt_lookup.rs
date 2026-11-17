@@ -8,7 +8,10 @@ use crate::context_assistance_service::{LaneMiss, LaneWatch, PromptLane, Service
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Condvar, Mutex, OnceLock,
+};
 use std::time::{Duration, Instant};
 
 /// How long a warm-up waits for a starting worker before giving up.
@@ -16,6 +19,34 @@ const WARM_WAIT: Duration = Duration::from_secs(60);
 /// What a prompt keeps of its wait, at most, to read the matched files
 /// itself when CIGAR is starting, busy or late.
 const READ_RESERVE: Duration = Duration::from_millis(300);
+/// CIGAR is advisory work. Cap prompt threads globally so many distinct
+/// workspaces cannot consume the daemon's thread budget.
+const MAX_PROMPT_THREADS: usize = 32;
+static PROMPT_THREADS: AtomicUsize = AtomicUsize::new(0);
+
+pub(super) struct PromptThreadPermit;
+
+impl Drop for PromptThreadPermit {
+    fn drop(&mut self) {
+        PROMPT_THREADS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+pub(super) fn try_prompt_thread() -> Option<PromptThreadPermit> {
+    let mut active = PROMPT_THREADS.load(Ordering::Acquire);
+    while active < MAX_PROMPT_THREADS {
+        match PROMPT_THREADS.compare_exchange_weak(
+            active,
+            active + 1,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => return Some(PromptThreadPermit),
+            Err(observed) => active = observed,
+        }
+    }
+    None
+}
 
 /// Why CIGAR gave a prompt no answer.
 #[derive(Debug, PartialEq, Eq)]
@@ -113,7 +144,7 @@ pub(super) fn lookup(
         }
         Err(LaneMiss::Off) => return Ok(None),
     };
-    let flight = launch(key, prompt, lane, request).ok_or(Miss::Pending)?;
+    let flight = launch(key, prompt, lane, request, None).ok_or(Miss::Pending)?;
     rendered(&flight)
 }
 
@@ -128,13 +159,17 @@ fn warm_when_ready(watch: LaneWatch, key: Key, request: Request) {
         return;
     }
     drop(waiting);
+    let Some(permit) = try_prompt_thread() else {
+        done_warming(&key);
+        return;
+    };
     let warm_key = key.clone();
     let spawned = std::thread::Builder::new()
         .name("guard-cigar-warm".into())
         .spawn(move || {
             if let Ok(lane) = watch.wait(Instant::now() + WARM_WAIT) {
                 let prompt = hashed(&request.query);
-                let _ = launch(warm_key.clone(), prompt, lane, request);
+                let _ = launch(warm_key.clone(), prompt, lane, request, Some(permit));
             }
             done_warming(&warm_key);
         });
@@ -151,7 +186,14 @@ fn done_warming(key: &Key) {
 
 /// Starts CIGAR's lookup for `request` on its own thread. `None` when
 /// another lookup for the project got there first or no thread started.
-fn launch(key: Key, prompt: u64, lane: PromptLane, request: Request) -> Option<Arc<Flight>> {
+fn launch(
+    key: Key,
+    prompt: u64,
+    lane: PromptLane,
+    request: Request,
+    permit: Option<PromptThreadPermit>,
+) -> Option<Arc<Flight>> {
+    let permit = permit.or_else(try_prompt_thread)?;
     let flight = Arc::new(Flight {
         prompt,
         lane,
@@ -170,6 +212,7 @@ fn launch(key: Key, prompt: u64, lane: PromptLane, request: Request) -> Option<A
     let spawned = std::thread::Builder::new()
         .name("guard-cigar-prompt".into())
         .spawn(move || {
+            let _permit = permit;
             let Request {
                 root,
                 app,
