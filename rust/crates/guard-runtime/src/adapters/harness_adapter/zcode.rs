@@ -11,9 +11,9 @@ use serde_json::{json, Map, Value};
 
 use super::files::{self, adapter_result, path_value, render, text, Change, Doc};
 use super::kimi::{expand_user, guard_hook_args, hook_command, utf8};
+use super::zcode_desktop_keys::{added_desktop_keys, without_added_keys, ADDED_KEYS};
 use super::{common, detection, path_answer, path_text, which, Ctx, Failure, Spec, Step};
 use crate::pyjson::PyVal;
-use crate::zcode_hook_surface::{read_payload, render_file, DESKTOP_KEYS};
 
 const CLI_DIR: [&str; 2] = [".zcode", "cli"];
 const CONFIG_FILE: &str = "config.json";
@@ -59,60 +59,6 @@ const PRETOOL_MATCHERS: [&str; 18] = [
     "web_search",
 ];
 const MALFORMED: &str = "ZCode hook settings answer is malformed";
-/// The install state's list of Desktop objects Guard added to `config.json`.
-const ADDED_KEYS: &str = "desktop_keys_added";
-
-/// The Desktop objects install will add: those the file lacks, plus those an
-/// earlier install added, so a reinstall does not forget them.
-fn added_desktop_keys(text: Option<&str>, previous: &Map<String, Value>) -> Vec<String> {
-    let mut added: Vec<String> = previous
-        .get(ADDED_KEYS)
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .filter(|key| DESKTOP_KEYS.contains(key))
-        .map(str::to_owned)
-        .collect();
-    // Install adds nothing to a file that does not exist yet.
-    let Some(Ok(Some((payload, _)))) = text.map(read_payload) else {
-        return added;
-    };
-    for key in DESKTOP_KEYS {
-        let absent = !payload.iter().any(|(name, _)| name == key);
-        if absent && !added.iter().any(|name| name == key) {
-            added.push(key.to_owned());
-        }
-    }
-    added
-}
-
-/// The uninstalled Desktop text without the objects install added, when
-/// they are still empty. Any the user has filled since are kept.
-fn without_added_keys(rendered: String, state: &Map<String, Value>) -> String {
-    let added: Vec<&str> = state
-        .get(ADDED_KEYS)
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect();
-    if added.is_empty() {
-        return rendered;
-    }
-    let Ok(Some((mut payload, lone))) = read_payload(&rendered) else {
-        return rendered;
-    };
-    let before = payload.len();
-    payload.retain(|(key, value)| {
-        !(added.contains(&key.as_str())
-            && matches!(value, PyVal::Dict(entries) if entries.is_empty()))
-    });
-    if payload.len() == before {
-        return rendered;
-    }
-    render_file(payload, lone).unwrap_or(rendered)
-}
 const SIGNAL_ONLY_WARNING: &str = "ZCode runtime was detected through process environment \
                                    signals, but no ~/.zcode/cli/config.json or plugin cache was \
                                    found. Run ZCode once so it can initialize its local config \
@@ -370,7 +316,7 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
             _ => None,
         };
         if *path == config {
-            added_keys = added_desktop_keys(current.as_deref(), &previous);
+            added_keys = added_desktop_keys(current.as_deref(), &previous, path);
         }
         let (rendered, enabled) =
             install_surface(ctx, current.as_deref(), path, &previous, &command)?;
@@ -489,14 +435,24 @@ fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
         let answer = hook_settings(request, &["text"])?;
         let rendered = match answer.get("text") {
             _ if answer.contains_key("refusal") => return Err(Failure::Refusal(MALFORMED.into())),
-            Some(Value::String(rendered)) => rendered.clone(),
-            Some(Value::Null) => continue,
+            Some(Value::String(rendered)) => Some(rendered.clone()),
+            Some(Value::Null) => None,
             _ => return Err(Failure::Refusal(MALFORMED.into())),
         };
+        // The Desktop objects install added come out even when the hooks
+        // need no change, since the state file that records them goes now.
         let rendered = if path == config_path(ctx) {
-            without_added_keys(rendered, &recorded)
+            let base = rendered.clone().unwrap_or_else(|| current.clone());
+            let cleaned = without_added_keys(base, &recorded, &path);
+            if rendered.is_none() && cleaned == current {
+                continue;
+            }
+            cleaned
         } else {
-            rendered
+            match rendered {
+                Some(rendered) => rendered,
+                None => continue,
+            }
         };
         // The authorized parent, resolved, and the final name not followed.
         let parent = absolute.parent().unwrap_or(&absolute);
