@@ -40,12 +40,16 @@ CODEX_USER_CONFIG = (
     '# The user\'s own Codex settings.\nmodel = "synthetic-model"\n\n[profiles.synthetic]\nmodel = "synthetic-other"\n'
 )
 JSON_USER_SETTINGS = '{\n  "syntheticUserSetting": "keep-me",\n  "nested": {"value": 1}\n}\n'
+# Muse refuses a settings file without a schema version, so a real Muse user's file always has one.
+MUSE_USER_SETTINGS = '{\n  "schema_version": 1,\n  "syntheticUserSetting": "keep-me",\n  "nested": {"value": 1}\n}\n'
 PROJECT_LOCAL_SETTINGS = '{\n  "permissions": {"allow": ["Bash(ls:*)"]}\n}\n'
 
 
 def _seed_for(harness: str, relative: str) -> str:
     if harness == "claude-code":
         return CLAUDE_USER_SETTINGS
+    if harness == "muse":
+        return MUSE_USER_SETTINGS
     if relative.endswith(".toml"):
         return CODEX_USER_CONFIG
     return JSON_USER_SETTINGS
