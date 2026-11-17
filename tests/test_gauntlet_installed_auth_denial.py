@@ -66,3 +66,65 @@ def test_an_explicit_secret_read_policy_denial_still_counts_as_protection(tmp_pa
     )
     assert result["failures"] == []
 
+
+@pytest.mark.parametrize("cause", ["codex_hook_launch_unauthenticated", "codex_hook_manifest_missing"])
+def test_signed_bridge_failure_receipt_cannot_score_as_attack_protection(tmp_path, monkeypatch, cause):
+    """An authenticated-bridge refusal on stderr is not a command-policy verdict."""
+    import subprocess
+
+    stdout = json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": "Request denied.",
+            }
+        }
+    )
+    stderr = json.dumps(
+        {"schema": "hol-guard.codex-bridge-failure.v1", "causes": [{"reason_code": cause}]}
+    )
+    monkeypatch.setattr(
+        subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, stdout, stderr)
+    )
+    result = replay_case(
+        ["registered-codex-hook"],
+        {"id": "synthetic-key-copy", "expect": "not-allow", "payload": {}},
+        home=tmp_path,
+        guard_home=tmp_path / ".hol-guard",
+        workspace=tmp_path,
+        repeat=2,
+    )
+    assert all(run["decision"] == "deny" for run in result["runs"])
+    assert all(run["bridge_failure_reason_code"] == cause for run in result["runs"])
+    assert any("hook infrastructure failed" in failure and cause in failure for failure in result["failures"])
+
+
+def test_unrelated_stderr_json_cannot_override_a_policy_denial(tmp_path, monkeypatch):
+    """Only the native bridge's versioned diagnostic schema is authoritative."""
+    import subprocess
+
+    response = {
+        "reason_code": "native_secret_read_denied",
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": "Protected credential path denied by policy.",
+        },
+    }
+    stderr = json.dumps(
+        {"schema": "not-a-native-bridge-failure", "causes": [{"reason_code": "codex_hook_launch_unauthenticated"}]}
+    )
+    monkeypatch.setattr(
+        subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, json.dumps(response), stderr)
+    )
+    result = replay_case(
+        ["registered-codex-hook"],
+        {"id": "synthetic-key-copy", "expect": "not-allow", "payload": {}},
+        home=tmp_path,
+        guard_home=tmp_path / ".hol-guard",
+        workspace=tmp_path,
+        repeat=2,
+    )
+    assert result["failures"] == []
+    assert all("bridge_failure_reason_code" not in run for run in result["runs"])
