@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli import doctor_reliability
+from codex_plugin_scanner.guard.cli import commands_parser_policy, doctor_reliability
 from codex_plugin_scanner.guard.cli.commands_router import run_guard_command
 from codex_plugin_scanner.guard.native_daemon_manage import record_daemon_repair
 
@@ -116,6 +116,29 @@ def test_the_text_report_lists_every_section() -> None:
         "",
         "Journal: ok; lifecycle records from 2026-11-17, recovery records from none",
     ]
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "91", "seven"])
+def test_a_day_count_outside_one_to_ninety_is_refused(value: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError):
+        _ = commands_parser_policy._reliability_days(value)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_the_day_count_bounds_are_accepted() -> None:
+    assert commands_parser_policy._reliability_days("1") == 1  # pyright: ignore[reportPrivateUsage]
+    assert commands_parser_policy._reliability_days("90") == 90  # pyright: ignore[reportPrivateUsage]
+
+
+def test_partial_counts_are_marked_partial() -> None:
+    report = {
+        "failed_launches": {"status": "log_unreadable", "total": 1, "by_code": {"spawn_failed": 1}},
+        "crash_reports": {"status": "scan_limit", "total": 0, "by_origin": {}, "by_stack": {}},
+    }
+
+    lines = doctor_reliability.render_reliability_report(report).splitlines()
+
+    assert "Failed launches: 1 (a failure log could not be read safely; counts are partial)" in lines
+    assert "Crash reports: 0 (scan_limit, partial)" in lines
 
 
 def _runtime_binary() -> Path | None:

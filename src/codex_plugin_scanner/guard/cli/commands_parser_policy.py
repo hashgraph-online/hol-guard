@@ -19,6 +19,18 @@ def _add_policy_format_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--format", dest="output_format", choices=("text", "json"), default="text")
 
 
+def _reliability_days(value: str) -> int:
+    """``--days`` for ``doctor reliability``: a whole number of days from 1 to 90."""
+
+    try:
+        days = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid day count: {value!r}") from None
+    if not 1 <= days <= 90:
+        raise argparse.ArgumentTypeError("--days must be between 1 and 90")
+    return days
+
+
 def _configure_guard_policy_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -445,7 +457,7 @@ def _configure_guard_policy_parsers(
     doctor_parser.add_argument("--perf", action="store_true", help="Include detector performance timings")
     doctor_parser.add_argument(
         "--days",
-        type=int,
+        type=_reliability_days,
         default=30,
         help="With 'doctor reliability', how many days of records to report, 1 to 90 (default 30)",
     )

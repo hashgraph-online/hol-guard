@@ -332,6 +332,98 @@ fn crash_reports_are_counted_by_origin_and_stack() {
 }
 
 #[test]
+fn a_daemon_run_that_several_records_end_is_one_exit() {
+    let home = private_home();
+    let home = home.path();
+    // A retirement: the request, then the daemon's own exit on SIGTERM.
+    event(home, NOW - 50, 201, "published", None);
+    event(
+        home,
+        NOW - 49,
+        201,
+        "retirement_requested",
+        Some("requested_retire"),
+    );
+    event(home, NOW - 48, 201, "exiting", Some("signal_term"));
+    // One death seen by two launchers.
+    event(home, NOW - 40, 202, "published", None);
+    event(
+        home,
+        NOW - 39,
+        202,
+        "death_observed",
+        Some("process_missing"),
+    );
+    event(
+        home,
+        NOW - 38,
+        202,
+        "death_observed",
+        Some("process_missing"),
+    );
+    // The same pid running again later is a second run with its own exit.
+    event(home, NOW - 30, 201, "published", None);
+    event(home, NOW - 29, 201, "exiting", Some("signal_term"));
+
+    assert_eq!(
+        report(home, json!({}))["daemon_exits"],
+        json!({"total": 3, "by_cause": {
+            "death_observed": 1,
+            "exiting:signal_term": 1,
+            "retirement_requested:requested_retire": 1,
+        }})
+    );
+}
+
+#[test]
+fn other_apps_crash_reports_do_not_end_the_scan() {
+    let home = private_home();
+    let crashes = tempfile::tempdir().unwrap();
+    let directory = crashes.path();
+    for index in 0..2_100 {
+        fs::write(directory.join(format!("OtherApp-{index:05}.ips")), "{}").unwrap();
+    }
+    crash_report(
+        directory,
+        "hol-guard-runtime-2026-11-16-101010.ips",
+        "/opt/hol-guard-runtime",
+        &["core::panicking::panic"],
+    );
+    let now = u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos(),
+    )
+    .unwrap();
+    let answer = ask(
+        home.path(),
+        "reliability",
+        json!({"now_ns": now + DAY, "crash_reports_dir": directory}),
+    );
+    assert_eq!(answer["crash_reports"]["status"], "ok");
+    assert_eq!(answer["crash_reports"]["total"], 1);
+}
+
+#[test]
+fn a_failure_log_that_cannot_be_trusted_is_not_reported_as_no_failures() {
+    let home = private_home();
+    let log = home.path().join("logs").join("runtime-failures.jsonl");
+    write_private(
+        &log,
+        &format!(
+            "{}\n",
+            json!({"code": "spawn_failed", "recorded_at_ns": NOW - 5})
+        ),
+    );
+    fs::set_permissions(&log, fs::Permissions::from_mode(0o644)).unwrap();
+
+    let launches = &report(home.path(), json!({}))["failed_launches"];
+    assert_eq!(launches["status"], "log_unreadable");
+    assert_eq!(launches["total"], 0);
+}
+
+#[test]
 fn a_recorded_repair_is_counted_and_nothing_else_is_written() {
     let home = private_home();
     assert_eq!(

@@ -18,7 +18,8 @@
 //! Each section says how far back its records reach, because the journal
 //! rings are bounded and a short ring can cover less than the window.
 
-use std::collections::BTreeMap;
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::Path;
@@ -34,13 +35,15 @@ const DEFAULT_DAYS: u64 = 30;
 const MAX_DAYS: u64 = 90;
 const NANOS_PER_DAY: u64 = 86_400 * 1_000_000_000;
 const MAX_JOURNAL_SCAN: usize = 4096;
+/// Directory entries looked at before the journal walk stops. The journal is
+/// a pruned ring, so only a damaged or foreign directory comes near this.
+const MAX_JOURNAL_ENTRIES: usize = 4 * MAX_JOURNAL_SCAN;
 const FAILURE_LOGS: [&str; 2] = ["runtime-failures.jsonl.1", "runtime-failures.jsonl"];
 const MAX_FAILURE_LOG_BYTES: u64 = 512 * 1024;
 const CRASH_REPORT_PREFIX: &str = "hol-guard-runtime";
 const CRASH_REPORT_SUFFIX: &str = ".ips";
 const MAX_CRASH_REPORTS: usize = 2000;
 const MAX_CRASH_REPORT_BYTES: u64 = 4 * 1024 * 1024;
-const MAX_LABEL_BYTES: usize = 64;
 /// Frames of the abort #7926 removed: the panic hook's own `eprintln!`
 /// panicking inside `launch`.
 const DOUBLE_PANIC_FRAMES: [&str; 2] = ["std::io::stdio::_eprint", "hol_guard_runtime::launch"];
@@ -105,19 +108,31 @@ fn journal(home: &Path, since_ns: u64, until_ns: u64) -> (Vec<Value>, Value) {
     let Ok(entries) = fs::read_dir(&directory) else {
         return (Vec::new(), json!({"status": "journal_unavailable"}));
     };
-    let mut names = Vec::new();
-    for entry in entries.flatten() {
+    // The newest MAX_JOURNAL_SCAN names (they sort by time), kept in a
+    // bounded min-heap so an oversized directory costs no more memory.
+    let mut newest: BinaryHeap<Reverse<String>> = BinaryHeap::new();
+    let mut status = "ok";
+    let mut unreadable = false;
+    for (index, entry) in entries.enumerate() {
+        if index >= MAX_JOURNAL_ENTRIES {
+            status = "journal_scan_limit";
+            break;
+        }
+        let Ok(entry) = entry else {
+            unreadable = true;
+            continue;
+        };
         let name = entry.file_name().to_string_lossy().into_owned();
-        if !name.starts_with('.') && name.ends_with(".json") {
-            names.push(name);
+        if name.starts_with('.') || !name.ends_with(".json") {
+            continue;
+        }
+        newest.push(Reverse(name));
+        if newest.len() > MAX_JOURNAL_SCAN {
+            newest.pop();
+            status = "journal_scan_limit";
         }
     }
-    let mut status = "ok";
-    if names.len() > MAX_JOURNAL_SCAN {
-        names.sort_unstable_by(|left, right| right.cmp(left));
-        names.truncate(MAX_JOURNAL_SCAN);
-        status = "journal_scan_limit";
-    }
+    let names: BTreeSet<String> = newest.into_iter().map(|Reverse(name)| name).collect();
     let mut events = Vec::new();
     let mut oldest: BTreeMap<&'static str, u64> = BTreeMap::new();
     let mut invalid = 0_u64;
@@ -141,6 +156,9 @@ fn journal(home: &Path, since_ns: u64, until_ns: u64) -> (Vec<Value>, Value) {
         }
     }
     events.sort_by_key(recorded_at);
+    if unreadable && status == "ok" {
+        status = "journal_entries_unreadable";
+    }
     if invalid > 0 && status == "ok" {
         status = "invalid_entries_omitted";
     }
@@ -173,15 +191,34 @@ fn recorded_at(event: &Value) -> u64 {
 
 /// `exiting:signal_term`, `retirement_requested:requested_retire`,
 /// `unclean_exit_detected` and so on, with a count for each.
+///
+/// One daemon run ends once, however many records say so: a retirement
+/// writes `retirement_requested` and then the daemon's own `exiting`, and
+/// several launchers can each observe the same death. The first terminal
+/// record after a run's `published` is its cause; later ones for the same
+/// pid are not counted until that pid publishes again.
 fn exits(events: &[Value]) -> Value {
     let mut by_cause: BTreeMap<String, u64> = BTreeMap::new();
+    let mut ended: HashSet<u64> = HashSet::new();
     for event in events {
-        let cause = match event_name(event) {
-            name @ ("exiting" | "retirement_requested" | "start_failed" | "shutdown_requested") => {
-                format!("{name}:{}", reason(event))
+        let name = event_name(event);
+        let pid = event.get("pid").and_then(Value::as_u64);
+        if name == "published" {
+            if let Some(pid) = pid {
+                ended.remove(&pid);
             }
-            name @ ("unclean_exit_detected" | "death_observed") => name.to_owned(),
-            _ => continue,
+            continue;
+        }
+        if !lifecycle::TERMINAL_EVENTS.contains(&name) {
+            continue;
+        }
+        // A record with no pid cannot be matched to a run, so it counts alone.
+        if pid.is_some_and(|pid| !ended.insert(pid)) {
+            continue;
+        }
+        let cause = match name {
+            "unclean_exit_detected" | "death_observed" => name.to_owned(),
+            _ => format!("{name}:{}", reason(event)),
         };
         *by_cause.entry(cause).or_default() += 1;
     }
@@ -227,13 +264,18 @@ fn failed_launches(home: &Path, since_ns: u64, until_ns: u64) -> Value {
     let directory = home.join("logs");
     let mut by_code: BTreeMap<String, u64> = BTreeMap::new();
     let mut found = false;
+    let mut unreadable = false;
     let mut invalid = 0_u64;
     for name in FAILURE_LOGS {
+        let path = directory.join(name);
         let Some(text) = crate::daemon_policy_authority::read_private_regular_text(
-            &directory.join(name),
+            &path,
             MAX_FAILURE_LOG_BYTES,
             false,
         ) else {
+            // A log that exists but is not a private regular file was
+            // rejected, which is not the same as no failures.
+            unreadable |= fs::symlink_metadata(&path).is_ok();
             continue;
         };
         found = true;
@@ -243,7 +285,10 @@ fn failed_launches(home: &Path, since_ns: u64, until_ns: u64) -> Value {
                 continue;
             };
             let at = recorded_at(&record);
-            let code = record.get("code").and_then(Value::as_str).map(label);
+            let code = record
+                .get("code")
+                .and_then(Value::as_str)
+                .map(crate::runtime_output::safe_label);
             match code {
                 Some(code) if (since_ns..=until_ns).contains(&at) => {
                     *by_code.entry(code).or_default() += 1;
@@ -254,29 +299,19 @@ fn failed_launches(home: &Path, since_ns: u64, until_ns: u64) -> Value {
         }
     }
     let total: u64 = by_code.values().sum();
+    let status = if unreadable {
+        "log_unreadable"
+    } else if found {
+        "ok"
+    } else {
+        "no_failures_recorded"
+    };
     json!({
-        "status": if found { "ok" } else { "no_failures_recorded" },
+        "status": status,
         "total": total,
         "by_code": by_code,
         "invalid_lines": invalid,
     })
-}
-
-/// A record's code cut to a short label, so a damaged line cannot put a
-/// path or a long string into the report.
-fn label(value: &str) -> String {
-    let label: String = value
-        .chars()
-        .take_while(|character| {
-            character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.' | ':')
-        })
-        .take(MAX_LABEL_BYTES)
-        .collect();
-    if label.is_empty() {
-        "unlabelled".to_owned()
-    } else {
-        label
-    }
 }
 
 /// Runtime crash reports modified inside the window. `origin` is where the
@@ -290,15 +325,23 @@ fn crash_reports(directory: &Path, since_ns: u64, until_ns: u64) -> Value {
     let mut by_stack: BTreeMap<&str, u64> = BTreeMap::new();
     let mut per_day: BTreeMap<String, u64> = BTreeMap::new();
     let mut status = "ok";
-    for (index, entry) in entries.flatten().enumerate() {
-        if index >= MAX_CRASH_REPORTS {
-            status = "scan_limit";
-            break;
-        }
+    let mut matched = 0_usize;
+    for entry in entries {
+        let Ok(entry) = entry else {
+            status = "incomplete";
+            continue;
+        };
         let name = entry.file_name().to_string_lossy().into_owned();
+        // Only Guard's own reports count toward the limit: a busy directory
+        // of other apps' reports must not end the scan early.
         if !name.starts_with(CRASH_REPORT_PREFIX) || !name.ends_with(CRASH_REPORT_SUFFIX) {
             continue;
         }
+        if matched >= MAX_CRASH_REPORTS {
+            status = "scan_limit";
+            break;
+        }
+        matched += 1;
         let Ok(metadata) = fs::symlink_metadata(entry.path()) else {
             continue;
         };

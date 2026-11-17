@@ -18,6 +18,11 @@ from typing import TextIO, cast
 from ..native_daemon_manage import daemon_reliability_report
 
 DEFAULT_DAYS = 30
+_COUNTED_CRASH_STATUSES = frozenset({"ok", "scan_limit", "incomplete"})
+_LAUNCH_NOTES = {
+    "no_failures_recorded": " (no failures recorded)",
+    "log_unreadable": " (a failure log could not be read safely; counts are partial)",
+}
 
 
 def crash_reports_directory(home_dir: Path) -> Path | None:
@@ -76,12 +81,15 @@ def render_reliability_report(report: Mapping[str, object]) -> str:
         "Failed launches",
         launches.get("total"),
         _counts(launches.get("by_code")),
-        " (no failures recorded)" if launches.get("status") == "no_failures_recorded" else "",
+        _LAUNCH_NOTES.get(str(launches.get("status")), ""),
     )
 
     crashes = _section(report, "crash_reports")
-    if crashes.get("status") in {"ok", "scan_limit"}:
-        lines.append(f"Crash reports: {crashes.get('total', 0)}")
+    if crashes.get("status") in _COUNTED_CRASH_STATUSES:
+        # A partial scan still shows what it counted, marked so it is not
+        # read as the whole directory.
+        partial = "" if crashes.get("status") == "ok" else f" ({crashes.get('status')}, partial)"
+        lines.append(f"Crash reports: {crashes.get('total', 0)}{partial}")
         for label, key in (("by origin", "by_origin"), ("by stack", "by_stack")):
             rows = _counts(crashes.get(key))
             if rows:

@@ -32,7 +32,7 @@ const MAX_LOCATION_BYTES: usize = 96;
 /// Records that give a daemon's run a known end. `death_observed` is
 /// written when a launcher finds the published daemon gone; it names no
 /// cause, but the exit is already on record.
-const TERMINAL_EVENTS: [&str; 6] = [
+pub(crate) const TERMINAL_EVENTS: [&str; 6] = [
     "death_observed",
     "exiting",
     "retirement_requested",
