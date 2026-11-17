@@ -25,6 +25,7 @@ from .routes.headless_calls import HEADLESS_CALLS
 from .routes.hook_calls import HOOK_CALLS
 from .routes.policy_sync_call import POLICY_SYNC_CALLS
 from .routes.policy_write_calls import POLICY_WRITE_CALLS
+from .routes.pulse_calls import PULSE_CALLS
 from .routes.reads import READ_CALLS
 from .routes.repair_calls import REPAIR_CALLS
 from .routes.service_calls import SERVICE_CALLS
@@ -225,6 +226,7 @@ REGISTRY: dict[str, LibraryCall] = {
     **HANDLER_CALLS,
     **SERVICE_CALLS,
     **SETTINGS_CALLS,
+    **PULSE_CALLS,
     **POLICY_SYNC_CALLS,
     **POLICY_WRITE_CALLS,
     **HEADLESS_CALLS,
