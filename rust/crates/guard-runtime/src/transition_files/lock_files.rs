@@ -4,7 +4,7 @@
 //! another account owns, and answers the open handle with its path.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use super::inspect::{resolve_lenient, sha256_hex};
 
@@ -211,7 +211,19 @@ fn lifecycle_base() -> std::io::Result<PathBuf> {
 
 /// `os.path.normcase(str(directory.resolve()))`.
 pub(super) fn configuration_identity(directory: &Path) -> String {
-    let resolved = resolve_lenient(directory).to_string_lossy().into_owned();
+    // `Path.resolve()` folds `.` and `..` that follow a missing component;
+    // nothing missing can be a link, so folding them lexically matches it.
+    let mut folded = PathBuf::new();
+    for component in resolve_lenient(directory).components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                folded.pop();
+            }
+            other => folded.push(other),
+        }
+    }
+    let resolved = folded.to_string_lossy().into_owned();
     if cfg!(windows) {
         resolved.replace('/', "\\").to_lowercase()
     } else {
