@@ -216,7 +216,13 @@ def _native_bridge_failure(stderr: str) -> str | None:
             if not isinstance(cause, dict):
                 continue
             code = cause.get("reason_code")
-            if isinstance(code, str) and 1 <= len(code) <= 128 and code[0] in letters and all(c in allowed for c in code):
+            valid = (
+                isinstance(code, str)
+                and 1 <= len(code) <= 128
+                and code[0] in letters
+                and all(char in allowed for char in code)
+            )
+            if valid:
                 return code
     return None
 
