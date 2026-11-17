@@ -7,7 +7,7 @@ use serde_json::{Map, Value};
 
 use super::path_text;
 use crate::pyjson::PyVal;
-use crate::zcode_hook_surface::{read_payload, render_file, DESKTOP_KEYS};
+use crate::zcode_hook_surface::{read_payload, render_file_over, DESKTOP_KEYS};
 
 /// The install state's list of Desktop objects Guard added to `config.json`.
 pub(super) const ADDED_KEYS: &str = "desktop_keys_added";
@@ -77,7 +77,7 @@ pub(super) fn without_added_keys(
     if payload.len() == before {
         return text;
     }
-    render_file(payload, lone).unwrap_or(text)
+    render_file_over(payload, lone, Some(&text)).unwrap_or(text)
 }
 
 #[cfg(test)]
