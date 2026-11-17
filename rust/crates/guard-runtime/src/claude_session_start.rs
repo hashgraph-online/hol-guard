@@ -290,11 +290,11 @@ pub(crate) fn fallback_process(argv: &[String]) -> Command {
     command
 }
 
-/// Hand off to the Python SessionStart command. This lane read the event
-/// from stdin, so the command gets those same bytes on its own stdin; with
-/// nothing read, it takes this process's stdin as before.
-fn hand_off(argv: &[String], event: &[u8]) -> i32 {
-    if event.is_empty() {
+/// Hand off to the Python SessionStart command with the event this lane read
+/// on its stdin, the late reader's bytes once a slow caller closes stdin, or,
+/// with neither, this process's stdin.
+fn hand_off(argv: &[String], event: &[u8], late: Option<LateEvent>) -> i32 {
+    if event.is_empty() && late.is_none() {
         return replace(argv);
     }
     let mut command = fallback_process(argv);
@@ -310,7 +310,12 @@ fn hand_off(argv: &[String], event: &[u8]) -> i32 {
         }
     };
     if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(event);
+        let event = event.to_vec();
+        std::thread::spawn(move || {
+            if let Ok(Ok(event)) = late.map_or(Ok(Ok(event)), |late| late.recv()) {
+                let _ = stdin.write_all(&event);
+            }
+        });
     }
     child
         .wait()
@@ -408,12 +413,15 @@ const EVENT_LIMIT: u64 = 64 * 1024;
 /// hook; a caller that leaves stdin open costs the hook no more than this.
 const EVENT_WAIT: Duration = Duration::from_millis(200);
 
-/// The SessionStart event on stdin, or nothing when stdin is a terminal,
-/// too slow, or unreadable.
-fn read_event() -> Vec<u8> {
+/// The reader of an event that took longer than `EVENT_WAIT`.
+type LateEvent = std::sync::mpsc::Receiver<io::Result<Vec<u8>>>;
+
+/// The SessionStart event on stdin, or nothing when stdin is a terminal or
+/// unreadable; past `EVENT_WAIT`, nothing plus the reader still holding it.
+fn read_event() -> (Vec<u8>, Option<LateEvent>) {
     use std::io::{IsTerminal, Read};
     if io::stdin().is_terminal() {
-        return Vec::new();
+        return (Vec::new(), None);
     }
     let (sender, receiver) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -421,11 +429,10 @@ fn read_event() -> Vec<u8> {
         let read = io::stdin().take(EVENT_LIMIT).read_to_end(&mut event);
         let _ = sender.send(read.map(|_| event));
     });
-    receiver
-        .recv_timeout(EVENT_WAIT)
-        .ok()
-        .and_then(Result::ok)
-        .unwrap_or_default()
+    match receiver.recv_timeout(EVENT_WAIT) {
+        Ok(read) => (read.unwrap_or_default(), None),
+        Err(_) => (Vec::new(), Some(receiver)),
+    }
 }
 
 /// The id of a session Claude Code compacted or cleared, from its
@@ -453,7 +460,7 @@ pub(crate) fn run(config_text: &str) -> i32 {
     };
     // Before the checks, so a session that hands off to Python warms too.
     // The hand-off passes the event on to the Python command.
-    let event = read_event();
+    let (event, late) = read_event();
     prewarm_resident(config_text, restarted_session(&event).as_deref());
     let home = guard_home(config_text);
     let start = |command: &[String]| {
@@ -479,7 +486,7 @@ pub(crate) fn run(config_text: &str) -> i32 {
             if let Some(home) = &home {
                 hook_bridge_fallback::note(home, "claude-code", Fallback::ContractDrift);
             }
-            hand_off(&fallback, &event)
+            hand_off(&fallback, &event, late)
         }
     }
 }
