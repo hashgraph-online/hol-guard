@@ -350,7 +350,17 @@ pub(crate) fn hook_response(config_text: &str, input: &mut impl Read) -> Option<
     };
     let bridge = Bridge {
         config: &config,
-        query: attributed_query(&config.query, &std::env::vars().collect()),
+        query: attributed_query(
+            &config.query,
+            &std::env::vars_os()
+                .map(|(key, value)| {
+                    (
+                        key.to_string_lossy().into_owned(),
+                        value.to_string_lossy().into_owned(),
+                    )
+                })
+                .collect(),
+        ),
         data,
         deadline,
     };
