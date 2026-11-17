@@ -1419,6 +1419,14 @@
    "body": "8bbfd9931b65"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Windows has no SIGTERM to wait for: a daemon is ended there by `TerminateProcess`, which no process can observe. Guard's own retirements still record `retirement_requested` before terminating, and a daemon that ends without a record is named by the next daemon as `unclean_exit_detected`, so the exit is still accounted for.",
+   "file": "rust/crates/guard-runtime/src/daemon_edge_exit_records.rs",
+   "item": "pub(super) fn record_termination(_home: PathBuf)",
+   "cfg": "not(unix)",
+   "body": "65b14e7d9154"
+  },
+  {
    "verdict": "windows-permissive",
    "note": "The lifecycle journal is private on Unix by file mode; on Windows the files inherit the Guard home's ACL, as the Python journal's files did. Nothing reads the mode back, so the record and its readers behave the same.",
    "file": "rust/crates/guard-runtime/src/daemon_edge_lifecycle.rs",
@@ -1505,6 +1513,14 @@
    "item": "fn stop_worker -- non-Unix block",
    "cfg": "not(unix)",
    "body": "32995ef46736"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Creates the `logs` directory under the Guard home without a POSIX mode; Windows has no mode bits, and the directory inherits the Guard home's ACL. Any failure falls back to the null device, as before this log existed.",
+   "file": "rust/crates/guard-runtime/src/daemon_manage_serve_stderr.rs",
+   "item": "fn create_private_directory(directory: &Path) -> Option<()>",
+   "cfg": "not(unix)",
+   "body": "e354d6f527e1"
   },
   {
    "verdict": "other-platform",

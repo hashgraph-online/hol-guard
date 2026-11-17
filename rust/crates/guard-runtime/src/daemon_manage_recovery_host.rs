@@ -272,6 +272,7 @@ impl RecoveryHost {
             creation_time,
             start_marker: Some(marker),
             owner_marker: None,
+            reason: Some("recovery_stop"),
         };
         let deadline = within(seconds(args, "remaining"));
         if retire::retire_pid(&self.caller, pid, &expected, deadline) {

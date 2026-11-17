@@ -206,7 +206,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
                 None => return Ok(url),
                 Some(port) if url_port(&url) == Some(port) => return Ok(url),
                 Some(_) => {
-                    retire::retire_all(caller, None, deadline);
+                    retire::retire_all(caller, None, "port_change", deadline);
                     if !retire::retirement_is_complete(caller) {
                         return Err(runtime(
                             "Existing Guard daemon could not be retired safely.",
@@ -222,7 +222,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         && load_authenticated_daemon_identity(&home).is_none()
         && (request.background_maintenance || !records::is_exact_tombstone(&state_path))
     {
-        retire::retire_all(caller, None, deadline);
+        retire::retire_all(caller, None, "untrusted_state", deadline);
         if !records::is_exact_tombstone(&state_path) && !retire::retirement_is_complete(caller) {
             return Err(runtime(
                 "Untrusted Guard daemon state could not be retired safely.",
@@ -252,7 +252,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
                 if progress_live {
                     return Err(still_starting(&home));
                 }
-                retire::retire_all(caller, None, deadline);
+                retire::retire_all(caller, None, "unhealthy_published", deadline);
                 if !retire::retirement_is_complete(caller) {
                     return Err(runtime(IN_PROGRESS));
                 }
@@ -269,7 +269,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
             }
             // `retire_all` never signals a launch whose receipt is open; its
             // marker stays until the window passes and a later start retires it.
-            retire::retire_all(caller, None, deadline);
+            retire::retire_all(caller, None, "stalled_start", deadline);
             if !retire::retirement_is_complete(caller) {
                 return Err(still_starting(&home));
             }
@@ -291,7 +291,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
             return Err(runtime(PREVIOUS_LAUNCH));
         }
         if host::nt() && !progress_live {
-            retire::retire_all(caller, None, deadline);
+            retire::retire_all(caller, None, "windows_pending_launch", deadline);
         }
         if !records::pending_is_resolved(&home) {
             return Err(runtime(PREVIOUS_LAUNCH));
@@ -712,7 +712,9 @@ fn retire_process(caller: &Caller, stale: &Map<String, Value>, deadline: Deadlin
     let owner = text(stale, "user").filter(|owner| !owner.is_empty());
     match marker {
         None => host::pid_is_proven_dead(pid),
-        Some(marker) => retire::retire_generation(caller, pid, marker, owner, deadline),
+        Some(marker) => {
+            retire::retire_generation(caller, pid, marker, owner, "stale_runtime", deadline)
+        }
     }
 }
 
@@ -788,7 +790,11 @@ fn launch_once(context: &Context<'_>, port: i64) -> Result<Option<String>, Failu
             Stdio::null()
         })
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(if native {
+            super::serve_stderr::daemon_stderr(home)
+        } else {
+            Stdio::null()
+        });
     // Breakaway first on Windows: the launcher's own job is closed when the
     // call returns and must not take the handed-off daemon with it. A job
     // that forbids breakaway refuses the spawn, so retry inside it.
@@ -823,11 +829,11 @@ fn launch_once(context: &Context<'_>, port: i64) -> Result<Option<String>, Failu
         // and signed progress marker, and the caller waits for its handoff.
         Ok(Handoff::StillStarting) => Err(still_starting(home)),
         Ok(Handoff::Missing) => {
-            terminate(&mut child);
+            terminate(context.caller, &mut child);
             Err(runtime(NOT_CONTAINED))
         }
         Err(failure) => {
-            terminate(&mut child);
+            terminate(context.caller, &mut child);
             Err(failure)
         }
     }
@@ -1029,9 +1035,11 @@ fn handoff_binds(
     !require_same_runtime || pending.get("runtime_fingerprint") == state.get("runtime_fingerprint")
 }
 
-/// `_terminate_spawned_guard_daemon`.
-fn terminate(child: &mut Child) {
+/// `_terminate_spawned_guard_daemon`. The child is this process's own, so
+/// its handle is its identity; the end of its launch is journaled first.
+fn terminate(caller: &Caller, child: &mut Child) {
     let pid = i64::from(child.id());
+    retire::record_retirement(caller, pid, Some("launch_abandoned"));
     let wait = |child: &mut Child| {
         let until = Instant::now() + TERMINATE_WAIT;
         while Instant::now() < until {

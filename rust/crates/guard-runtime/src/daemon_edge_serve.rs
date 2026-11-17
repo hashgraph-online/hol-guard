@@ -27,6 +27,8 @@ use super::reads::{dashboard_build_id, NativeReads, HANDSHAKE_SCHEMA};
 use super::{serve, MAX_ACTIVE_CONNECTIONS, STALLED_WRITE_TIMEOUT};
 use crate::daemon_policy_authority::{canonical_discovery_payload, hmac_sha256_raw};
 
+#[path = "daemon_edge_exit_records.rs"]
+mod exit_records;
 #[path = "daemon_edge_resident_prewarm.rs"]
 mod resident_prewarm;
 #[path = "daemon_edge_workers.rs"]
@@ -184,11 +186,12 @@ impl LaunchConfig {
 /// `_launch_nonce_is_valid`: 64 lowercase hex characters.
 /// Stops the daemon once the launcher that holds its standard input open
 /// exits, however it exits: the input then reaches end of file.
-fn exit_when_launcher_leaves() {
+fn exit_when_launcher_leaves(home: PathBuf) {
     let spawned = std::thread::Builder::new()
         .name("daemon-launcher-watch".to_owned())
-        .spawn(|| {
+        .spawn(move || {
             let _ = io::copy(&mut io::stdin().lock(), &mut io::sink());
+            exit_records::exiting(&home, "launcher_input_closed");
             std::process::exit(0);
         });
     if spawned.is_err() {
@@ -233,16 +236,22 @@ pub(crate) fn run(args: &[String]) -> i32 {
         .read_until(b'\n', &mut line)
         .is_err()
     {
+        exit_records::start_failed(Path::new(&arg_home), "launch_input_unreadable");
         return EXIT_USAGE;
     }
     let Some(config) = LaunchConfig::parse(line.trim_ascii()) else {
         eprintln!("daemon-serve: the launch configuration is invalid");
+        exit_records::start_failed(Path::new(&arg_home), "launch_config_invalid");
         return EXIT_USAGE;
     };
     if config.guard_home != arg_home || config.port != arg_port {
         eprintln!("daemon-serve: the launch configuration names another daemon");
+        exit_records::start_failed(Path::new(&arg_home), "launch_config_mismatch");
         return EXIT_USAGE;
     }
+    let home = PathBuf::from(&config.guard_home);
+    // Before any thread starts, so every later thread inherits the block.
+    exit_records::record_termination(home.clone());
     // Pin the dashboard before reporting ready: the launcher that unpacked it
     // may exit, and remove it, once this daemon's state is published.
     if let Some(dir) = config.dashboard_dir.as_deref() {
@@ -259,14 +268,15 @@ pub(crate) fn run(args: &[String]) -> i32 {
         Ok(listener) => listener,
         Err(error) => {
             eprintln!("daemon-serve: cannot listen: {error}");
+            exit_records::start_failed(&home, "listen_failed");
             return EXIT_LISTENER;
         }
     };
     super::widen_backlog(&listener);
     let Ok(port) = listener.local_addr().map(|address| address.port()) else {
+        exit_records::start_failed(&home, "listener_address_unavailable");
         return EXIT_LISTENER;
     };
-    let home = PathBuf::from(&config.guard_home);
     let pid = config
         .launcher_pid
         .filter(|pid| *pid != 0)
@@ -275,9 +285,13 @@ pub(crate) fn run(args: &[String]) -> i32 {
         Ok(secret) => secret,
         Err(error) => {
             eprintln!("daemon-serve: cannot publish daemon state: {error}");
+            exit_records::start_failed(&home, "publish_failed");
             return EXIT_STATE;
         }
     };
+    // The daemons before this one that stopped without saying why are named
+    // before this one's own start is journaled.
+    super::lifecycle::record_unclean_exits(&home);
     // Each start step is journaled, so a slow cold start names the step that spent it.
     super::lifecycle::record(&home, "published", None, None, Some(port));
     let reads = Arc::new(NativeReads::new(None));
@@ -287,7 +301,7 @@ pub(crate) fn run(args: &[String]) -> i32 {
     }
     if config.launcher_pid.is_some_and(|pid| pid != 0) {
         reads.set_launcher_pid(pid);
-        exit_when_launcher_leaves();
+        exit_when_launcher_leaves(home.clone());
     }
     reads.accept_handshake(&config.handshake(&secret));
     drop(secret);
@@ -324,18 +338,24 @@ pub(crate) fn run(args: &[String]) -> i32 {
     println!("{}", json!({"port": port, "pid": pid}));
     let _ = io::stdout().flush();
     super::lifecycle::record(&home, "ready", None, Some(&session_id), Some(port));
-    match serve(
-        &listener,
-        MAX_ACTIVE_CONNECTIONS,
-        STALLED_WRITE_TIMEOUT,
-        reads,
-    ) {
-        Ok(()) => 0,
-        Err(error) => {
-            eprintln!("daemon-serve: listener failed: {error}");
-            EXIT_LISTENER
+    exit_records::serve_recording_panic(&home, || {
+        match serve(
+            &listener,
+            MAX_ACTIVE_CONNECTIONS,
+            STALLED_WRITE_TIMEOUT,
+            reads,
+        ) {
+            Ok(()) => {
+                exit_records::exiting(&home, "listener_closed");
+                0
+            }
+            Err(error) => {
+                eprintln!("daemon-serve: listener failed: {error}");
+                exit_records::exiting(&home, "listener_failed");
+                EXIT_LISTENER
+            }
         }
-    }
+    })
 }
 
 /// Ensures the Guard home's discovery key and auth secret, then writes the
