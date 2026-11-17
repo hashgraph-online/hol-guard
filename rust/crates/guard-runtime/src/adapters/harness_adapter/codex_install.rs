@@ -234,7 +234,13 @@ pub(super) fn install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     // plan with many retained launch generations stays under the response
     // bound.
     let mut report = Map::new();
-    for key in ["shim_manifest", "backup_path", "migrated"] {
+    for key in [
+        "shim_manifest",
+        "backup_path",
+        "migrated",
+        "managed_servers",
+        "skipped_servers",
+    ] {
         report.insert(key.into(), plan.get(key).cloned().ok_or(Failure::Invalid)?);
     }
     stopped(json!({ "plan": report, "state": state }), events)
