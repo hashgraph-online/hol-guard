@@ -690,6 +690,7 @@ mod harness_contract_registry;
 mod harness_coverage;
 mod harness_coverage_command;
 mod harness_diagnostics;
+mod harness_diagnostics_report;
 #[path = "adapters/harness_hook_settings.rs"]
 mod harness_hook_settings;
 #[cfg(test)]
@@ -705,6 +706,7 @@ mod harness_protection_contract;
 #[path = "adapters/harness_settings_file.rs"]
 mod harness_settings_file;
 mod harness_setup_contract;
+mod harness_shell_command;
 #[path = "adapters/harness_shim_refresh.rs"]
 mod harness_shim_refresh;
 mod harness_version_compat;

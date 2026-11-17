@@ -423,13 +423,13 @@ class NativeHarnessAdapter(HarnessAdapter):
         raise_failure(answer)
         return json.loads(_text(answer, "manifest"))
 
-    def diagnostic_warnings(
+    def _own_warnings(
         self,
         detection: HarnessDetection,
         runtime_probe: dict[str, object] | None,
-    ) -> list[str]:
+    ) -> list[str] | None:
         if not self._spec.get("warnings_op"):
-            return super().diagnostic_warnings(detection, runtime_probe)
+            return None
         from .native_harness_steps import native_warnings
 
         return native_warnings(self, detection, runtime_probe)
