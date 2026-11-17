@@ -18,7 +18,9 @@ from dataclasses import dataclass
 _FEATURE = "native-codex-mcp-setup-v1"
 _COMMAND = "codex-mcp-setup"
 _OUTPUT_LIMIT = 64 * 1024
-# Each of up to seven host requests is bounded to 8 seconds by the native side.
+# The native session ends itself, and its Codex host, within 60 seconds in all
+# (`SESSION_LIMIT`). This deadline only backstops it: it kills the native process,
+# which cannot clean up after itself, so it must stay above that limit.
 _TIMEOUT_SECONDS = 75.0
 _NATIVE_UNAVAILABLE = "codex_setup_native_unavailable"
 

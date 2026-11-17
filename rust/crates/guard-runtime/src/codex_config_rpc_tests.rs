@@ -20,6 +20,7 @@ while IFS= read -r line; do
   id=$(printf '%s' "$line" | sed 's/.*"id":\([0-9]*\).*/\1/')
   case "$line" in
     *'"method":"initialize"'*)
+      if [ "$mode" = slow ]; then sleep 0.3; fi
       printf '{"id":%s,"result":{"userAgent":"fixture"}}\n' "$id"
       if [ "$mode" = blocked_input ]; then exec sleep 60; fi
       continue ;;
@@ -38,6 +39,9 @@ while IFS= read -r line; do
     readonly) printf '{"id":%s,"error":{"data":"configLayerReadonly"}}\n' "$id" ;;
     notifications) i=0; while [ $i -lt 3 ]; do printf '{"method":"note"}\n'; i=$((i+1)); done
       printf '{"id":%s,"result":{"accepted":true}}\n' "$id" ;;
+    slow) sleep 0.3; printf '{"id":%s,"result":{"accepted":true}}\n' "$id" ;;
+    grandchild) sleep 60 >/dev/null 2>&1 </dev/null & echo $! > grandchild.pid
+      trap '' TERM; wait ;;
     flood) i=0; while [ $i -lt 70 ]; do printf '{"method":"note"}\n'; i=$((i+1)); done ;;
     *) printf '{"id":%s,"result":{"accepted":true}}\n' "$id" ;;
   esac
@@ -263,4 +267,80 @@ fn the_message_parser_refuses_repeated_keys_constants_and_trailing_text() {
     assert!(parse(b"{\"id\":1,\"id\":2}\n").is_none());
     assert!(parse(b"{\"version\":NaN}\n").is_none());
     assert!(parse(b"{\"id\":1} trailing\n").is_none());
+}
+
+/// Whether the process still exists (a zombie that init has not reaped yet counts).
+fn process_exists(pid: i32) -> bool {
+    use nix::sys::signal::kill;
+    use nix::unistd::Pid;
+    kill(Pid::from_raw(pid), None).is_ok()
+}
+
+#[test]
+fn stopping_a_stalled_host_also_stops_what_it_started() {
+    let dir = tempfile::tempdir().expect("dir");
+    let mut rpc = open_host(dir.path(), "grandchild");
+
+    assert_eq!(read(&mut rpc), Err(TIMEOUT));
+    rpc.close();
+
+    let pid: i32 = fs::read_to_string(dir.path().join("grandchild.pid"))
+        .expect("the host started a child")
+        .trim()
+        .parse()
+        .expect("pid");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while process_exists(pid) && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!process_exists(pid), "the host's child outlived the host");
+}
+
+#[test]
+fn the_session_ends_itself_and_its_host_before_a_caller_deadline_can_kill_it() {
+    let dir = tempfile::tempdir().expect("dir");
+    let executable = write_host(dir.path(), "slow");
+    let started = Instant::now();
+    // Each reply takes 0.3 s and each request may take 5 s, so only the
+    // session limit can end this.
+    let mut rpc = ConfigRpc::open_within(
+        &executable,
+        Some(dir.path()),
+        &environment(),
+        Duration::from_secs(5),
+        Duration::from_millis(700),
+    )
+    .expect("the handshake fits in the limit");
+
+    let outcomes: Vec<_> = (0..6).map(|_| read(&mut rpc)).collect();
+
+    assert!(outcomes.contains(&Err(TIMEOUT)), "{outcomes:?}");
+    let first_timeout = outcomes.iter().position(|o| *o == Err(TIMEOUT)).unwrap();
+    assert!(outcomes[first_timeout..].iter().all(|o| *o == Err(TIMEOUT)));
+    assert!(started.elapsed() < Duration::from_secs(4));
+    rpc.close();
+    assert!(rpc.exit_code().is_some());
+}
+
+#[test]
+fn a_session_with_no_time_left_does_not_start_a_host_exchange() {
+    let dir = tempfile::tempdir().expect("dir");
+    let executable = write_host(dir.path(), "normal");
+
+    let outcome = ConfigRpc::open_within(
+        &executable,
+        Some(dir.path()),
+        &environment(),
+        Duration::from_secs(5),
+        Duration::ZERO,
+    );
+
+    assert_eq!(outcome.err(), Some(UNAVAILABLE));
+    assert!(logged_methods(dir.path()).is_empty());
+}
+
+#[test]
+fn the_session_limit_sits_below_the_callers_deadline() {
+    // The Python caller kills the op at 75 s (`runtime/codex_mcp_setup.py`).
+    assert!(SESSION_LIMIT + Duration::from_secs(10) <= Duration::from_secs(75));
 }

@@ -37,6 +37,11 @@ const MAX_JSON_DEPTH: usize = 64;
 const MAX_RECEIVED_MESSAGES: usize = 64;
 const QUEUE_SIZE: usize = 8;
 pub(crate) const DEFAULT_TIMEOUT: Duration = Duration::from_secs(8);
+/// How long one session may last in all. The caller that runs the native op
+/// bounds it with a SIGKILL deadline (Python's 75 s), and a SIGKILL cannot run
+/// `Drop`, so the host would be left running. The session ends itself, and ends
+/// the host, well before that: this is the bound the caller's deadline sits above.
+pub(crate) const SESSION_LIMIT: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(5);
 
 /// Where the setup flow reads and writes Codex's configuration.
@@ -58,6 +63,7 @@ pub(crate) struct ConfigRpc {
     closed: Arc<AtomicBool>,
     writer: Option<JoinHandle<()>>,
     timeout: Duration,
+    session_deadline: Instant,
     sequence: i64,
 }
 
@@ -70,6 +76,18 @@ impl ConfigRpc {
         environment: &[(String, String)],
         timeout: Duration,
     ) -> Result<Self, Reason> {
+        Self::open_within(executable, cwd, environment, timeout, SESSION_LIMIT)
+    }
+
+    /// `open`, with the whole session (handshake included) bounded to `limit`.
+    pub(crate) fn open_within(
+        executable: &str,
+        cwd: Option<&Path>,
+        environment: &[(String, String)],
+        timeout: Duration,
+        limit: Duration,
+    ) -> Result<Self, Reason> {
+        let session_deadline = Instant::now() + limit;
         let mut command = Command::new(executable);
         command
             .args(["app-server", "--listen", "stdio://"])
@@ -78,6 +96,13 @@ impl ConfigRpc {
             .stdout(Stdio::piped())
             // Host diagnostics can contain private configuration.
             .stderr(Stdio::null());
+        // The host leads its own process group, so stopping it also stops
+        // anything it started.
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
         for (name, value) in environment {
             command.env(name, value);
         }
@@ -101,6 +126,7 @@ impl ConfigRpc {
             closed,
             writer: None,
             timeout,
+            session_deadline,
             sequence: 0,
         };
         if rpc.handshake().is_err() {
@@ -108,6 +134,15 @@ impl ConfigRpc {
             return Err(UNAVAILABLE);
         }
         Ok(rpc)
+    }
+
+    /// What one wait may take: the per-request timeout, cut to what the
+    /// session has left. Zero when the session is over.
+    fn allowance(&self) -> Duration {
+        self.timeout.min(
+            self.session_deadline
+                .saturating_duration_since(Instant::now()),
+        )
     }
 
     fn handshake(&mut self) -> Result<(), Reason> {
@@ -127,6 +162,10 @@ impl ConfigRpc {
         if encoded.len() > MAX_MESSAGE_BYTES {
             return Err(LIMIT);
         }
+        let allowance = self.allowance();
+        if allowance.is_zero() {
+            return Err(TIMEOUT);
+        }
         // The write happens on its own thread: a host that stops reading
         // must not hold the caller past its timeout.
         let (done, outcome) = mpsc::sync_channel(1);
@@ -140,7 +179,7 @@ impl ConfigRpc {
             };
             let _ = done.send(written);
         }));
-        match outcome.recv_timeout(self.timeout) {
+        match outcome.recv_timeout(allowance) {
             Ok(true) => Ok(()),
             Ok(false) | Err(RecvTimeoutError::Disconnected) => Err(UNAVAILABLE),
             Err(RecvTimeoutError::Timeout) => Err(TIMEOUT),
@@ -152,7 +191,7 @@ impl ConfigRpc {
         self.sequence += 1;
         let request_id = self.sequence;
         self.send(&json!({"id": request_id, "method": method, "params": params}))?;
-        let deadline = Instant::now() + self.timeout;
+        let deadline = Instant::now() + self.allowance();
         for _ in 0..MAX_RECEIVED_MESSAGES {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
@@ -353,17 +392,32 @@ fn wait_for(child: &mut Child, limit: Duration) -> bool {
 fn stop(child: &mut Child, grace: Duration) {
     terminate(child);
     if !wait_for(child, grace) {
+        kill_group(child);
         let _ = child.kill();
         let _ = child.wait();
     }
 }
+
+/// SIGKILL to the host's whole process group. The group exists for as long as
+/// the host does, and the host is not yet reaped when this is called.
+#[cfg(unix)]
+fn kill_group(child: &Child) {
+    use nix::sys::signal::{kill, Signal};
+    use nix::unistd::Pid;
+    if let Ok(pid) = i32::try_from(child.id()) {
+        let _ = kill(Pid::from_raw(-pid), Signal::SIGKILL);
+    }
+}
+
+#[cfg(not(unix))]
+fn kill_group(_child: &Child) {}
 
 #[cfg(unix)]
 fn terminate(child: &mut Child) {
     use nix::sys::signal::{kill, Signal};
     use nix::unistd::Pid;
     if let Ok(pid) = i32::try_from(child.id()) {
-        let _ = kill(Pid::from_raw(pid), Signal::SIGTERM);
+        let _ = kill(Pid::from_raw(-pid), Signal::SIGTERM);
     }
 }
 

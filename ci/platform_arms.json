@@ -1,6 +1,6 @@
 {
  "schema_version": 1,
- "comment": "Every non-Unix behaviour arm in rust/crates/*/src \u2014 `#[cfg(..)]` attribute or `cfg!(..)` expression \u2014 with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
+ "comment": "Every non-Unix behaviour arm in rust/crates/*/src — `#[cfg(..)]` attribute or `cfg!(..)` expression — with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
  "arms": [
   {
    "file": "rust/crates/guard-command/src/adapters/hook/hook_adapter_paths.rs",
@@ -1145,6 +1145,14 @@
    "note": "The Codex app-server exchange runs over an AF_UNIX socket; off Unix the exchange is unavailable.",
    "cfg": "not(unix)",
    "body": "c00dd6d42c8e"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "No process group is signalled: a Windows host is ended with `Child::kill` only, so a process the host itself started can outlive it. Closing this needs a job object with kill-on-close, which `std` does not expose on stable. The Codex app-server over stdio starts no helper processes, and the session still bounds itself to its limit so `Drop` runs before the caller's SIGKILL deadline.",
+   "file": "rust/crates/guard-runtime/src/codex_config_rpc.rs",
+   "item": "fn kill_group(_child: &Child)",
+   "cfg": "not(unix)",
+   "body": "42851029dd12"
   },
   {
    "verdict": "windows-equivalent",
