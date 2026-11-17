@@ -33,6 +33,9 @@ mod failure;
 mod host;
 #[path = "daemon_manage_live_probe.rs"]
 mod live_probe;
+#[cfg(all(test, target_os = "linux"))]
+#[path = "daemon_manage_liveness_tests.rs"]
+mod liveness_tests;
 #[cfg(all(test, unix))]
 #[path = "daemon_manage_orphan_tests.rs"]
 mod orphan_tests;
