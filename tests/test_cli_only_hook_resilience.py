@@ -17,6 +17,14 @@ from codex_plugin_scanner.guard.adapters.copilot import (
 from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter
 
 CommandFactory = Callable[[HarnessContext], tuple[str, ...]]
+_BRIDGE = "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge"
+
+
+@pytest.fixture
+def runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    path = tmp_path / "hol-guard-runtime"
+    monkeypatch.setattr(f"{_BRIDGE}.native_bridge_executable", lambda *_args, **_kwargs: path)
+    return path
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -34,7 +42,7 @@ def _context(tmp_path: Path) -> HarnessContext:
 
 
 def _copilot_command(context: HarnessContext) -> tuple[str, ...]:
-    return tuple(cast(list[str], copilot_hook_fields(context, [])["workspace_argv"]))
+    return tuple(cast(list[str], copilot_hook_fields(context)["workspace_argv"]))
 
 
 def _native_command(harness: str) -> CommandFactory:
@@ -73,8 +81,9 @@ def hermes_pretool_payload(*, context: HarnessContext) -> dict[str, object]:
         ("zcode", _native_command("zcode"), 25),
     ],
 )
-def test_managed_cli_hooks_use_bounded_process_bridge(
+def test_managed_cli_hooks_run_the_native_runtime(
     tmp_path: Path,
+    runtime: Path,
     harness: str,
     factory: CommandFactory,
     timeout_seconds: int,
@@ -82,9 +91,8 @@ def test_managed_cli_hooks_use_bounded_process_bridge(
     context = _context(tmp_path)
     command = factory(context)
 
-    # Without a runtime to wrap it, Grok registers the bridge like the others.
-    assert command[1:3] == ("-I", "-c")
-    assert "bounded_cli_hook_bridge" in command[3]
+    assert command[:2] == (str(runtime), "bounded-hook-bridge")
+    assert len(command) == 3
     config = cast(dict[str, object], json.loads(command[-1]))
     assert config["harness"] == harness
     assert config["timeout_seconds"] == timeout_seconds
@@ -95,78 +103,40 @@ def test_managed_cli_hooks_use_bounded_process_bridge(
     ("harness", "factory"),
     [
         ("copilot", _copilot_command),
+        ("grok", _native_command("grok")),
         ("kimi", _native_command("kimi")),
         ("zcode", _native_command("zcode")),
     ],
 )
-def test_frozen_managed_cli_hooks_hand_off_to_the_runtime_not_a_stdlib_client(
+def test_frozen_managed_cli_hooks_run_the_durable_runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    runtime: Path,
     harness: str,
     factory: CommandFactory,
 ) -> None:
     monkeypatch.setattr("sys.frozen", True, raising=False)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
-        lambda: "/usr/bin/python3",
-    )
+    monkeypatch.setattr(f"{_BRIDGE}._trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
 
     context = _context(tmp_path)
     command = factory(context)
 
-    assert command[0] != "/usr/bin/python3"
-    assert "__guard-bounded-hook" in command
+    assert command[:2] == (str(runtime), "bounded-hook-bridge")
     assert not (context.guard_home / "managed" / "bounded-hooks" / f"{harness}.py").exists()
     config = cast(dict[str, object], json.loads(command[-1]))
     assert config["harness"] == harness
+    assert config["frozen_launcher"] is True
 
 
-def test_frozen_grok_hook_without_a_runtime_registers_the_bridge_not_the_client(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("harness", ["copilot", "grok", "kimi", "zcode"])
+def test_a_hook_install_without_a_runtime_asks_for_repair(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
 ) -> None:
-    # The bare client fails closed on every deciding hook. The bridge form looks
-    # the runtime up on each hook, so the install recovers once one appears.
-    monkeypatch.setattr("sys.frozen", True, raising=False)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
-        lambda: "/usr/bin/python3",
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.native_bridge_executable",
-        lambda *_args, **_kwargs: None,
-    )
+    monkeypatch.setattr(f"{_BRIDGE}.native_bridge_executable", lambda *_args, **_kwargs: None)
+    factory = _copilot_command if harness == "copilot" else _native_command(harness)
 
-    command = _native_command("grok")(_context(tmp_path))
-
-    assert command[0] != "/usr/bin/python3"
-    assert command[1] == "__guard-bounded-hook"
-    config = cast(dict[str, object], json.loads(command[-1]))
-    assert config["harness"] == "grok"
-
-
-def test_frozen_grok_hook_with_a_runtime_wraps_its_isolated_constants_client(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    runtime = tmp_path / "hol-guard-runtime"
-    monkeypatch.setattr("sys.frozen", True, raising=False)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
-        lambda: "/usr/bin/python3",
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.native_bridge_executable",
-        lambda *_args, **_kwargs: runtime,
-    )
-
-    command = _native_command("grok")(_context(tmp_path))
-
-    assert command[:4] == (str(runtime), "bounded-hook-bridge", "/usr/bin/python3", "-I")
-    assert Path(command[4]).name == "grok.py"
-    source = Path(command[4]).read_text(encoding="utf-8")
-    assert 'HARNESS = "grok"' in source
-    assert "daemon --serve" not in source
+    with pytest.raises(RuntimeError, match="hol-guard repair"):
+        factory(_context(tmp_path))
 
 
 @pytest.mark.parametrize(
@@ -178,6 +148,7 @@ def test_frozen_grok_hook_with_a_runtime_wraps_its_isolated_constants_client(
 )
 def test_proxy_hook_contracts_bound_children_and_fail_closed(
     tmp_path: Path,
+    runtime: Path,
     harness: str,
     factory: Callable[..., dict[str, object]],
 ) -> None:
@@ -190,8 +161,7 @@ def test_proxy_hook_contracts_bound_children_and_fail_closed(
     command_items = cast(list[object], command)
     assert all(isinstance(item, str) for item in command_items)
     command_parts = cast(list[str], command_items)
-    assert command_parts[1:3] == ["-I", "-c"]
-    assert "bounded_cli_hook_bridge" in command_parts[3]
+    assert command_parts[:2] == [str(runtime), "bounded-hook-bridge"]
     config = cast(dict[str, object], json.loads(command_parts[-1]))
     assert config["harness"] == harness
     assert config["timeout_seconds"] == 3

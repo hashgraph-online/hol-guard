@@ -20,7 +20,7 @@ pub(crate) enum LaneMiss {
 /// How long [`Service::prompt_context_chosen`] waits for a busy lock.
 const CHOSEN_WAIT: Duration = Duration::from_millis(40);
 
-fn chosen(settings: &AssistanceSettings) -> bool {
+pub(super) fn chosen(settings: &AssistanceSettings) -> bool {
     settings.requested.enabled
         && settings.effective.enabled
         && settings.verification_permitted
@@ -31,8 +31,10 @@ fn chosen(settings: &AssistanceSettings) -> bool {
 
 impl Service {
     /// Whether someone turned on project context for their AI apps. Cheap:
-    /// a busy lock is waited for a few milliseconds at most, so a prompt that
-    /// lands while another hook holds it still gets its context.
+    /// a busy lock is waited for a few milliseconds at most. When it stays
+    /// busy, the answer is the value last published under the lock, so a
+    /// prompt that lands while other hooks hold it still gets its context
+    /// and a turned-off choice still reads as off.
     pub(crate) fn prompt_context_chosen(&self) -> bool {
         let until = Instant::now() + CHOSEN_WAIT;
         loop {
@@ -40,6 +42,9 @@ impl Service {
                 Ok(state) => return !state.closed && chosen(&state.settings),
                 Err(std::sync::TryLockError::WouldBlock) if Instant::now() < until => {
                     std::thread::sleep(Duration::from_millis(2));
+                }
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    return self.chosen.load(Ordering::Acquire);
                 }
                 Err(_) => return false,
             }
@@ -50,8 +55,29 @@ impl Service {
     /// is up by the time a prompt asks. Does nothing unless project context
     /// is on, and never turns it on.
     pub(crate) fn warm_prompt_lane(&self, guard_home: &std::path::Path) {
-        if self.prompt_context_chosen() {
+        if self.prompt_may_wake() {
             self.wake(guard_home, chosen);
+        }
+    }
+
+    /// Whether a prompt should wake a resting worker now. Waits for a busy
+    /// lock no longer than [`CHOSEN_WAIT`]: a lock still held means "not
+    /// now", so the prompt goes on to its bounded wait (or skips) instead of
+    /// queueing behind whatever holds it, and a later prompt wakes the worker.
+    fn prompt_may_wake(&self) -> bool {
+        let until = Instant::now() + CHOSEN_WAIT;
+        loop {
+            match self.state.try_lock() {
+                Ok(state) => {
+                    return wake::resting(&state)
+                        && chosen(&state.settings)
+                        && state.woke.is_none_or(|at| at.elapsed() >= wake::RETRY);
+                }
+                Err(std::sync::TryLockError::WouldBlock) if Instant::now() < until => {
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+                Err(_) => return false,
+            }
         }
     }
 
@@ -62,7 +88,9 @@ impl Service {
         guard_home: &std::path::Path,
         deadline: Instant,
     ) -> Result<PromptLane, LaneMiss> {
-        self.wake(guard_home, chosen);
+        if self.prompt_may_wake() {
+            self.wake(guard_home, chosen);
+        }
         self.lane_watch().wait(deadline)
     }
 

@@ -41,6 +41,10 @@ const CONTAINMENT_HEALTH_PROBE_TIMEOUT_CEILING_MS: u64 = 15_000;
 /// where a plain composition or resolution asks for five. Clamping that to the
 /// nine-second default would report a healthy preview as a resident timeout.
 const EXTENSION_CONTROL_TIMEOUT_CEILING_MS: u64 = 15_000;
+/// Runner-authority kinds that run a bounded child (a hook canary, an
+/// interpreter or CLI probe) widen their budget up to `_MAX_BUDGET_MS` in
+/// `native_runner_authority.py`; the nine-second default would abort them.
+const RUNNER_AUTHORITY_TIMEOUT_CEILING_MS: u64 = 60_000;
 /// A Codex resume retry waits up to a minute for the app server to accept
 /// the turn and up to its busy timeout for the store; the caller adds five
 /// seconds of transport grace.
@@ -72,6 +76,7 @@ pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
         Some("contained_execute") => CONTAINED_EXECUTE_TIMEOUT_CEILING_MS,
         Some("containment_health_probe") => CONTAINMENT_HEALTH_PROBE_TIMEOUT_CEILING_MS,
         Some("extension_control") => EXTENSION_CONTROL_TIMEOUT_CEILING_MS,
+        Some("runner_authority") => RUNNER_AUTHORITY_TIMEOUT_CEILING_MS,
         Some("codex_request_resume") => CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS,
         Some("native_bash_execute") => guard_contracts::NATIVE_BASH_EXECUTE_MAX_TIMEOUT_MS + 1_000,
         Some("daemon_lifecycle_decide") => DAEMON_LIFECYCLE_TIMEOUT_CEILING_MS,

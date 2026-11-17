@@ -9,13 +9,13 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 
 use super::reads::ReadConfig;
 use crate::onefile_open_paths::{isolate_group, kill_group};
@@ -24,6 +24,10 @@ use crate::onefile_open_paths::{isolate_group, kill_group};
 const CALL_TIMEOUT: Duration = Duration::from_secs(120);
 /// The largest answer a call may print.
 const MAX_ANSWER_BYTES: u64 = 16 * 1024 * 1024;
+/// Call bytes that may wait for the resident to read them. A resident that
+/// stops reading fills this, and the next call replaces it rather than
+/// letting abandoned calls pile up in memory.
+const MAX_QUEUED_BYTES: usize = 64 * 1024 * 1024;
 
 /// Why a library call gave no value.
 #[derive(Debug, PartialEq)]
@@ -85,12 +89,25 @@ pub(in crate::daemon_edge) fn serve_args(guard_home: &str) -> [String; 4] {
 /// One `desktop library-serve` child. Each call goes in as one line carrying
 /// an `id`, and its answer comes back as one line with the same `id`, in
 /// whatever order the calls finish, so a slow call (a browser sign-in
-/// starting) never holds up the others.
+/// starting) never holds up the others. Call lines go to the process through
+/// one writer thread, so a caller hands its line over and waits only on its
+/// own deadline, never on the pipe: a burst of calls cannot hold every
+/// connection thread in a write while the process catches up.
 struct Resident {
     child: Mutex<Option<Child>>,
-    input: Mutex<ChildStdin>,
+    input: mpsc::Sender<Queued>,
+    queued_bytes: Arc<AtomicUsize>,
     pending: Arc<Mutex<Pending>>,
     next_id: AtomicU64,
+}
+
+/// One call waiting for the writer. Its deadline travels with it: the writer
+/// drops a call whose caller has already given up, and tells the process how
+/// long is left when it writes the line, not when the call was queued.
+struct Queued {
+    id: u64,
+    deadline: Instant,
+    call: Vec<u8>,
 }
 
 /// The callers waiting on a resident's answers, by call id. `None` once its
@@ -182,9 +199,9 @@ fn call_resident_once(
         }
     };
     let id = resident.next_id.fetch_add(1, Ordering::Relaxed);
-    let mut request = serde_json::to_vec(&json!({"id": id, "call": name, "args": args}))
-        .map_err(|_| CallError::Unavailable)?;
-    request.push(b'\n');
+    let call = call_body(name, &args).ok_or(CallError::Unavailable)?;
+    let size = call.len();
+    let deadline = deadline.min(Instant::now() + CALL_TIMEOUT);
     let (sender, receiver) = mpsc::channel();
     let registered = match resident
         .pending
@@ -198,16 +215,18 @@ fn call_resident_once(
         }
         None => false,
     };
-    let written = registered && {
-        let mut input = resident
-            .input
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        input
-            .write_all(&request)
-            .and_then(|()| input.flush())
-            .is_ok()
-    };
+    // A full queue means the process stopped reading: the call is refused
+    // and the process replaced, as for one that closed its input.
+    let room = registered
+        && resident
+            .queued_bytes
+            .fetch_add(size, Ordering::SeqCst)
+            .saturating_add(size)
+            <= MAX_QUEUED_BYTES;
+    let written = room && resident.input.send(Queued { id, deadline, call }).is_ok();
+    if registered && !written {
+        resident.queued_bytes.fetch_sub(size, Ordering::SeqCst);
+    }
     let answer = if written {
         receiver
             .recv_timeout(
@@ -272,6 +291,36 @@ fn start_resident(config: &ReadConfig) -> Option<Resident> {
         stop(child);
         return None;
     };
+    let (lines, queued) = mpsc::channel::<Queued>();
+    let queued_bytes = Arc::new(AtomicUsize::new(0));
+    let written_bytes = Arc::clone(&queued_bytes);
+    let writer = thread::Builder::new()
+        .name("daemon-library-writer".into())
+        .spawn(move || {
+            let mut input = input;
+            for call in queued {
+                written_bytes.fetch_sub(call.call.len(), Ordering::SeqCst);
+                let left = call.deadline.saturating_duration_since(Instant::now());
+                if left.is_zero() {
+                    continue;
+                }
+                let head = request_head(call.id, left);
+                if input
+                    .write_all(&head)
+                    .and_then(|()| input.write_all(&call.call))
+                    .and_then(|()| input.flush())
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            // Returning closes the process's input; ending early also drops
+            // the queue, so the next caller is told the process is gone.
+        });
+    if writer.is_err() {
+        stop(child);
+        return None;
+    }
     let pending: Arc<Mutex<Pending>> = Arc::new(Mutex::new(Some(HashMap::new())));
     let answers = Arc::clone(&pending);
     thread::spawn(move || {
@@ -304,10 +353,40 @@ fn start_resident(config: &ReadConfig) -> Option<Resident> {
     });
     Some(Resident {
         child: Mutex::new(Some(child)),
-        input: Mutex::new(input),
+        input: lines,
+        queued_bytes,
         pending,
         next_id: AtomicU64::new(1),
     })
+}
+
+/// One call line: `expires_in_ms` comes before the arguments so the process
+/// can drop a call its caller has stopped waiting for without decoding it.
+#[cfg(test)]
+fn request_line(id: u64, expires_in: Duration, name: &str, args: &Value) -> Option<Vec<u8>> {
+    let mut line = request_head(id, expires_in);
+    line.extend(call_body(name, args)?);
+    Some(line)
+}
+
+/// The start of a call line: its id, then how long its caller still waits,
+/// so the process can drop it unrun once that has passed.
+fn request_head(id: u64, expires_in: Duration) -> Vec<u8> {
+    format!(
+        "{{\"id\":{id},\"expires_in_ms\":{},",
+        expires_in.as_millis()
+    )
+    .into_bytes()
+}
+
+/// The rest of a call line: the call and its arguments.
+fn call_body(name: &str, args: &Value) -> Option<Vec<u8>> {
+    let mut body = b"\"call\":".to_vec();
+    serde_json::to_writer(&mut body, name).ok()?;
+    body.extend_from_slice(b",\"args\":");
+    serde_json::to_writer(&mut body, args).ok()?;
+    body.extend_from_slice(b"}\n");
+    Some(body)
 }
 
 /// The call id an answer line names.

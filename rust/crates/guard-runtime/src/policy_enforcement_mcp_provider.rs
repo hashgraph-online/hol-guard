@@ -2,8 +2,57 @@
 
 use std::collections::BTreeMap;
 
-use guard_policy_snapshot::{mcp_provider_action_choice, mcp_provider_namespace_has_deny};
-use serde_json::Value;
+use guard_policy_snapshot::{
+    mcp_provider_action_choice, mcp_provider_namespace_has_deny, observed_mcp_tool_action,
+};
+use serde_json::{Map, Value};
+
+use super::preferred_tool_name;
+
+/// The outer tool of a hook payload. Tool arguments can themselves contain
+/// `tool_name` (dispatchers are common). They are data, never the outer
+/// tool's authority selector.
+pub(super) fn outer_tool_name(payload: &Value) -> Result<Option<String>, String> {
+    let Some(record) = payload.as_object() else {
+        return Ok(None);
+    };
+    let mut envelopes: Vec<&Map<String, Value>> = vec![record];
+    for key in ["tool_call", "toolCall", "preToolUse", "pre_tool_use"] {
+        if let Some(envelope) = record.get(key).and_then(Value::as_object) {
+            envelopes.push(envelope);
+        }
+    }
+    Ok(preferred_tool_name(&envelopes)?.or_else(|| {
+        ["action", "operation"]
+            .into_iter()
+            .find_map(|key| record.get(key).and_then(Value::as_str).map(str::to_owned))
+    }))
+}
+
+/// Whether the operator's custom allow covers this exact tool. A Composio
+/// executor runs whichever provider action its arguments name, so its tool
+/// name cannot stand for those actions. A renamed or flattened connector can
+/// put a prefix before the executor's name in the last part of the tool name
+/// (`mcp__work_COMPOSIO_MULTI_EXECUTE_TOOL`), so it is looked for anywhere
+/// in that part.
+pub(super) fn operator_allows_tool(
+    actions: &BTreeMap<String, String>,
+    harness: &str,
+    tool: &str,
+) -> bool {
+    let name = tool
+        .rsplit("__")
+        .next()
+        .unwrap_or(tool)
+        .to_ascii_lowercase();
+    let executor = name.rfind("composio_").is_some_and(|start| {
+        !matches!(
+            &name[start..],
+            "composio_search_tools" | "composio_get_tool_schemas"
+        )
+    });
+    !executor && observed_mcp_tool_action(actions, harness, tool) == Some("allow")
+}
 
 pub(super) fn denied_provider_execution(
     choices: &BTreeMap<String, String>,

@@ -24,12 +24,14 @@ from .adapters.base import HarnessContext
 from .codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline, validate_regular_file
 from .codex_install_transaction import require_codex_install_owner
 from .runtime_transition import (
+    ARTIFACT_READ_FLAGS,
     RuntimeTransition,
     TransitionError,
     TransitionFile,
     TransitionInstall,
     TransitionPlan,
     assert_transition_mutation_allowed,
+    descriptor_fingerprint,
     inverse_recovery_budget,
     merge_transition_dependency,
 )
@@ -65,23 +67,11 @@ def _pin_executable(
 ) -> TransitionFile:
     _check_deadline(deadline)
     before = validate_regular_file(path, role="artifact", executable_required=True)
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags)
+    descriptor = os.open(path, ARTIFACT_READ_FLAGS)
     try:
         opened = os.fstat(descriptor)
 
-        def fingerprint(value: os.stat_result) -> tuple[int, ...]:
-            return (
-                value.st_dev,
-                value.st_ino,
-                value.st_mode,
-                value.st_uid,
-                value.st_size,
-                value.st_mtime_ns,
-                value.st_ctime_ns,
-            )
-
-        if fingerprint(before) != fingerprint(opened):
+        if descriptor_fingerprint(before) != descriptor_fingerprint(opened):
             raise TransitionError("generation_changed")
         digest = hashlib.sha256()
         count = 0
@@ -97,8 +87,8 @@ def _pin_executable(
             digest.update(chunk)
         if (
             count != opened.st_size
-            or fingerprint(opened) != fingerprint(os.fstat(descriptor))
-            or fingerprint(opened) != fingerprint(path.lstat())
+            or descriptor_fingerprint(opened) != descriptor_fingerprint(os.fstat(descriptor))
+            or descriptor_fingerprint(opened) != descriptor_fingerprint(path.lstat())
         ):
             raise TransitionError("generation_changed")
         sha256 = digest.hexdigest()

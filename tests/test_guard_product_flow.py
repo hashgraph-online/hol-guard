@@ -1038,7 +1038,6 @@ args = ["workspace-skill.js", "--changed"]
                     "PYTHONPATH": str(runtime_pythonpath),
                     "HOL_GUARD_NATIVE": "force",
                     "HOL_GUARD_NATIVE_BINARY": os.environ["HOL_GUARD_NATIVE_BINARY"],
-                    "HOL_GUARD_CODEX_HOOK_BRIDGE": os.environ["HOL_GUARD_CODEX_HOOK_BRIDGE"],
                 },
                 check=False,
                 timeout=15,

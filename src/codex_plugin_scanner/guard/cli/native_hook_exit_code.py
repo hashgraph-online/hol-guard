@@ -7,7 +7,12 @@ Every verdict-bearing emit path, including structured JSON responses, uses
 - opencode/superagent: blocking verdicts exit 1.
 - codex/claude-code/copilot/pi/omp: pre-execution and approval verdicts travel
   in JSON and exit 0; blocking observation events exit 1.
-- grok/zcode: preserve the adapter's event-aware or recording-mode contract.
+- grok: blocking verdicts exit 2 unless the Guard home records protection off.
+- zcode: a review-tier PreToolUse exits 0 so ZCode opens its own prompt;
+  other blocking verdicts exit 2.
+
+The native runtime answers these codes itself; this module serves the
+outage path, where no resident is left to ask.
 
 Missing event context never assumes that the host will consume an envelope.
 An action this build does not recognise is normalized to the review tier before
@@ -17,6 +22,10 @@ the process on the allow path.
 
 from __future__ import annotations
 
+import os
+import sys
+from pathlib import Path
+
 from ..action_lattice import normalize_guard_action
 
 _BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
@@ -24,6 +33,7 @@ _RC_BLOCK_IS_ONE = frozenset({"opencode", "superagent"})
 _RC_BLOCK_IS_TWO = frozenset({"cursor", "devin", "kimi", "hermes"})
 _RC_BLOCK_IS_ZERO_ENVELOPE = frozenset({"codex", "claude-code", "copilot", "pi", "omp", "muse"})
 _PREEMPTIVE_EVENTS = frozenset({"PreToolUse", "UserPromptSubmit", "PermissionRequest"})
+_ZCODE_ASK_ACTIONS = frozenset({"review", "require-reapproval"})
 
 
 def native_hook_verdict_exit_code(
@@ -46,12 +56,8 @@ def native_hook_verdict_exit_code(
     policy_action = normalize_guard_action(policy_action)
     blocking = policy_action in _BLOCKING_ACTIONS
     if harness == "grok":
-        from ..adapters.grok_hooks import grok_hook_process_exit
-
-        return grok_hook_process_exit(policy_action)
+        return 2 if blocking and not _grok_recording_only() else 0
     if harness == "zcode":
-        from ..adapters._modules.zcode.zcode_hooks import zcode_hook_process_exit
-
         return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name)
     if harness in _RC_BLOCK_IS_TWO:
         return 2 if blocking else 0
@@ -65,4 +71,39 @@ def native_hook_verdict_exit_code(
     return 1 if blocking else 0
 
 
-__all__ = ["native_hook_verdict_exit_code"]
+def zcode_hook_process_exit(*, policy_action: str, event_name: str | None = None) -> int:
+    """The exit code ZCode expects: exit 2 discards stdout, so a review-tier
+    PreToolUse exits 0 and its ``ask`` envelope opens ZCode's own prompt."""
+
+    compact = (event_name or "PreToolUse").replace("_", "").replace("-", "").lower()
+    normalized = normalize_guard_action(policy_action)
+    if compact == "pretooluse" and normalized in _ZCODE_ASK_ACTIONS:
+        return 0
+    return 2 if normalized in _BLOCKING_ACTIONS else 0
+
+
+def _grok_recording_only() -> bool:
+    """Whether the Guard home this hook names has protection turned off."""
+
+    home_value = None
+    if "--guard-home" in sys.argv:
+        index = sys.argv.index("--guard-home")
+        if index + 1 < len(sys.argv):
+            home_value = sys.argv[index + 1]
+    home_value = home_value or os.environ.get("HOL_GUARD_HOME")
+    if not home_value:
+        return False
+    from ..config import load_guard_config
+    from ..config_file_io import ConfigFileTrustError
+    from ..protection_posture import protection_is_off
+    from ..store import GuardStore
+
+    try:
+        config = load_guard_config(GuardStore(Path(home_value)).guard_home)
+    except ConfigFileTrustError:
+        # A config Guard cannot read keeps protection on.
+        return False
+    return protection_is_off(posture=config.protection_posture, mode=config.mode)
+
+
+__all__ = ["native_hook_verdict_exit_code", "zcode_hook_process_exit"]

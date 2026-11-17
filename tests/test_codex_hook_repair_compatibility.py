@@ -41,7 +41,7 @@ def test_repair_keeps_an_open_codex_session_authenticated(
     monkeypatch.setattr(codex_adapter, "_post_tool_hook_timeout_seconds", lambda _context: 35)
     CodexHarnessAdapter().install(context)
     old_bridge_command = codex_adapter._hook_command_parts(context)
-    old_config_json = old_bridge_command[3]
+    old_config_json = old_bridge_command[-1]
     old_config = json.loads(old_config_json)
 
     monkeypatch.setattr(codex_adapter, "_post_tool_hook_timeout_seconds", lambda _context: 65)

@@ -21,10 +21,29 @@ fn facts(bridge: Option<&str>, frozen: bool) -> String {
         "package_root": "/src",
         "daemon_url": "http://127.0.0.1:4781",
         "query_extras": [["harness", "claude-code"]],
-        "recovery_home": ["/g/bin/hol-guard", "daemon", "start"],
-        "recovery_context": ["/g/bin/hol-guard", "daemon", "start", "--home"],
+        "recovery_launcher": frozen.then_some("/g/bin/hol-guard-core"),
     })
     .to_string()
+}
+
+pub(super) const RUNTIME: &str = "/g/hol-guard-runtime";
+
+#[test]
+fn install_without_a_native_runtime_asks_for_repair() {
+    let home = Home::new();
+    for frozen in [false, true] {
+        let answer = run(
+            &home,
+            "prepare_install",
+            json!({"shim": shim()}),
+            &facts(None, frozen),
+        );
+        assert_eq!(
+            answer["runtime_error"],
+            crate::harness_adapter::claude_argv::RUNTIME_MISSING,
+            "{frozen}"
+        );
+    }
 }
 
 fn ask(home: &Home, op: &str, fields: &Map<String, Value>) -> Value {
@@ -55,13 +74,33 @@ fn settings(home: &Home) -> std::path::PathBuf {
 }
 
 fn installed(home: &Home, bridge: Option<&str>) -> Value {
+    installed_as(home, bridge, false)
+}
+
+fn installed_as(home: &Home, bridge: Option<&str>, frozen: bool) -> Value {
     let answer = run(
         home,
         "prepare_install",
         json!({"shim": shim()}),
-        &facts(bridge, false),
+        &facts(bridge, frozen),
     );
     serde_json::from_str(&after(&answer["files"][0])).unwrap()
+}
+
+fn pre_tool_config(payload: &Value) -> Value {
+    let args = &payload["hooks"]["PreToolUse"][0]["hooks"][0]["args"];
+    serde_json::from_str(args[2].as_str().unwrap()).unwrap()
+}
+
+#[test]
+fn a_frozen_bridge_recovers_its_daemon_through_the_frozen_launcher() {
+    let home = Home::new();
+    let payload = installed_as(&home, Some("/rt/hol-guard-runtime"), true);
+    let recovery = pre_tool_config(&payload)["recovery_command"].clone();
+    assert_eq!(recovery[0], "/g/bin/hol-guard-core");
+    assert_eq!(recovery[1], "--_hol-guard-codex-daemon-recover");
+    let binding: Value = serde_json::from_str(recovery[2].as_str().unwrap()).unwrap();
+    assert!(binding["guard_home"].is_string() && binding["home_dir"].is_string());
 }
 
 #[test]
@@ -101,7 +140,12 @@ fn install_writes_session_start_and_every_runtime_group() {
     )
     .unwrap();
     assert_eq!(config["fallback_daemon_url"], "http://127.0.0.1:4781");
-    assert_eq!(config["recovery_command"][1], "daemon");
+    let recovery = config["recovery_command"].as_array().unwrap();
+    assert_eq!(recovery[..3], ["/usr/bin/python3", "-I", "-c"]);
+    assert!(recovery[3]
+        .as_str()
+        .unwrap()
+        .contains("schedule_guard_daemon_recovery"));
     assert!(config["query"]
         .as_str()
         .unwrap()
@@ -122,11 +166,11 @@ fn install_keeps_user_entries_and_replaces_stale_guard_ones() {
         },
     });
     fs::write(settings(&home), before.to_string()).unwrap();
-    let payload = installed(&home, None);
+    let payload = installed(&home, Some(RUNTIME));
     assert_eq!(payload["theme"], "dark");
     let pre = payload["hooks"]["PreToolUse"].as_array().unwrap();
     assert_eq!(pre[0]["hooks"], json!([user]));
-    assert_eq!(pre[1]["hooks"][0]["command"], "/usr/bin/python3");
+    assert_eq!(pre[1]["hooks"][0]["command"], RUNTIME);
     assert!(payload["hooks"].get("PermissionDenied").is_none());
 }
 
@@ -153,7 +197,6 @@ fn frozen_builds_launch_the_stable_cli() {
     let argv = |which: &str| run(&home, "argv", json!({"which": which}), &frozen)["argv"].clone();
     assert_eq!(argv("hook")[0], "/g/bin/hol-guard");
     assert_eq!(argv("hook")[1], "hook");
-    assert_eq!(argv("daemon")[1], "__guard-claude-hook");
     let session = argv("session_start");
     assert_eq!(session[1], "__guard-claude-hook");
     assert_eq!(session[2], "HOL_GUARD_CLAUDE_SESSION_START_HOOK");
@@ -185,7 +228,7 @@ fn source_checkout_argv_imports_from_the_package_root() {
 #[test]
 fn uninstall_prunes_guard_entries_only() {
     let home = Home::new();
-    let payload = installed(&home, None);
+    let payload = installed(&home, Some(RUNTIME));
     let mut payload = payload.as_object().unwrap().clone();
     payload["hooks"]["Stop"]
         .as_array_mut()
@@ -216,7 +259,7 @@ fn diagnostics_mark_an_active_setup_without_hooks_broken() {
         .as_str()
         .unwrap()
         .contains("(PreToolUse, PermissionRequest)"));
-    let payload = installed(&home, None);
+    let payload = installed(&home, Some(RUNTIME));
     fs::create_dir_all(settings(&home).parent().unwrap()).unwrap();
     fs::write(settings(&home), payload.to_string()).unwrap();
     let answer = ask(&home, "diagnostics", fields.as_object().unwrap());
@@ -435,7 +478,7 @@ fn install_notes_name_the_settings_file_and_the_rollback() {
         &home,
         "prepare_install",
         json!({"shim": shim()}),
-        &facts(None, false),
+        &facts(Some(RUNTIME), false),
     );
     let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
     // Compare decoded strings: JSON text would escape Windows backslashes.

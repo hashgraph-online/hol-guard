@@ -25,7 +25,7 @@ def test_guard_codex_install_rejects_ambiguous_foreign_direct_hook(tmp_path: Pat
         guard_home=tmp_path / "guard-home",
     )
     config_path = CodexHarnessAdapter._hook_config_path(context)
-    foreign_command = shlex.join(codex_adapter._local_hook_command_parts(context))
+    foreign_command = shlex.join(codex_adapter._current_launch(context)["fallback"])
     foreign_group = {
         "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
         "hooks": [

@@ -381,10 +381,11 @@ def test_install_exports_guard_managed_openclaw_overlay(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
-        lambda: None,
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.native_bridge_executable",
+        lambda *_args, **_kwargs: runtime,
     )
     context = _ctx(tmp_path)
     _write(
@@ -402,7 +403,7 @@ def test_install_exports_guard_managed_openclaw_overlay(
     assert overlay_path.exists() is True
     assert pretool_path.exists() is True
     bridge_config = json.loads(pretool["command"][-1])
-    assert pretool["command"][1] == "__guard-bounded-hook"
+    assert pretool["command"][:2] == [str(runtime), "bounded-hook-bridge"]
     assert bridge_config["cli_args"][-1] == "--json"
     assert bridge_config["cli_args"][bridge_config["cli_args"].index("--home") + 1] == str(context.home_dir)
     assert bridge_config["timeout_seconds"] == 3

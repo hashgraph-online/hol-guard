@@ -57,10 +57,11 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    runtime = tmp_path / "hol-guard-runtime"
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
-        lambda: None,
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.native_bridge_executable",
+        lambda *_args, **_kwargs: runtime,
     )
     _write(
         tmp_path / ".hermes" / "config.yaml",
@@ -90,7 +91,7 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(
     assert overlay_path.exists() is True
     assert pretool_path.exists() is True
     bridge_config = json.loads(pretool_payload["command"][-1])
-    assert pretool_payload["command"][1] == "__guard-bounded-hook"
+    assert pretool_payload["command"][:2] == [str(runtime), "bounded-hook-bridge"]
     assert bridge_config["cli_args"][-1] == "--json"
     assert bridge_config["harness"] == "hermes"
     assert bridge_config["timeout_seconds"] == 3

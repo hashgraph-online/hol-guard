@@ -5,8 +5,8 @@
 //! `_socket_is_live` and the tracked-process handling in
 //! `_start_direct_app_server` before they moved here).
 //!
-//! Python starts processes: it runs `codex remote-control start`, starts a
-//! direct app-server and records its pid. The resident reads that pid back,
+//! `prepare` (in `codex_remote_prepare`) runs the launch sequence; the
+//! client starts the processes it names. The resident reads the pid back,
 //! checks the process is the server listening on the socket and stops a stale
 //! one. The resident runs as the launching user, so its uid is the one the
 //! socket must belong to and the one allowed to signal the server.
@@ -48,8 +48,8 @@ const MAX_WAIT_SECONDS: f64 = 5.0;
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 #[cfg(unix)]
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(200);
-/// Written beside the socket by Python when it starts a direct app-server.
-const PID_FILE: &str = "hol-guard-app-server.pid";
+/// Written beside the socket when a direct app-server starts.
+pub(super) const PID_FILE: &str = "hol-guard-app-server.pid";
 const MAX_PID_FILE_BYTES: u64 = 64;
 #[cfg(unix)]
 const STOP_TIMEOUT: Duration = Duration::from_secs(1);
@@ -64,6 +64,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         Some("plan") if map.len() == 3 => plan(map),
         Some("wait") if map.len() == 3 => wait(map),
         Some("reclaim") if map.len() == 3 => reclaim(map),
+        Some("prepare") => super::codex_remote_prepare::prepare(map),
         _ => Err(ERR_INVALID),
     }
 }
@@ -127,7 +128,7 @@ fn wait(map: &Map<String, Value>) -> KindResult {
 }
 
 /// Polls every 50 milliseconds, for at most five seconds.
-fn wait_ready(socket: &Path, seconds: f64) -> bool {
+pub(super) fn wait_ready(socket: &Path, seconds: f64) -> bool {
     let deadline = Instant::now() + Duration::from_secs_f64(seconds.min(MAX_WAIT_SECONDS));
     while Instant::now() < deadline {
         if ready(socket) {
@@ -149,7 +150,7 @@ fn reclaim(map: &Map<String, Value>) -> KindResult {
 }
 
 #[cfg(unix)]
-fn reclaim_state(socket: &str, seconds: f64) -> &'static str {
+pub(super) fn reclaim_state(socket: &str, seconds: f64) -> &'static str {
     use nix::errno::Errno;
     use nix::sys::signal::{kill, Signal};
     use nix::unistd::Pid;
@@ -186,7 +187,7 @@ fn reclaim_state(socket: &str, seconds: f64) -> &'static str {
 }
 
 #[cfg(not(unix))]
-fn reclaim_state(_socket: &str, _seconds: f64) -> &'static str {
+pub(super) fn reclaim_state(_socket: &str, _seconds: f64) -> &'static str {
     let _ = (PID_FILE, MAX_PID_FILE_BYTES);
     "busy"
 }

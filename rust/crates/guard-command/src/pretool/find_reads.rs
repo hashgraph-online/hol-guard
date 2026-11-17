@@ -77,7 +77,17 @@ pub(super) fn safe_find_listing_arguments(
                                 selects_ordinary_names,
                             ))))
         })
-        && safe_expression(expression)
+        && safe_expression(expression, &|reference| reference_file(reference, context))
+}
+
+/// Whether `find -newer FILE` may compare against `FILE`. The test reads
+/// only that file's modification time, never its bytes, so a file a plain
+/// read could open clears it. A missing file, a home dot-directory, a
+/// credential store and a path outside the reads Guard proves keep the
+/// review.
+fn reference_file(reference: &str, context: super::PathContext<'_>) -> bool {
+    !reference.starts_with('-')
+        && bounded_read_target(reference, context.home_dir, context.cwd, false)
 }
 
 /// `-maxdepth 0` or `1` bounds `find` to the root and its own entries, the
@@ -306,10 +316,12 @@ pub(super) fn prints_names_only(arguments: &[String]) -> bool {
         .iter()
         .position(|argument| argument.starts_with('-') || matches!(argument.as_str(), "!" | "("))
         .unwrap_or(arguments.len());
-    roots_end > 0 && safe_expression(&arguments[roots_end..])
+    roots_end > 0 && safe_expression(&arguments[roots_end..], &|_| false)
 }
 
-fn safe_expression(expression: &[String]) -> bool {
+/// `reference` answers whether a `-newer` operand is a file the walk may
+/// compare against; a caller that has no paths to check refuses every one.
+fn safe_expression(expression: &[String], reference: &dyn Fn(&str) -> bool) -> bool {
     let mut depth = 0_usize;
     let mut index = 0;
     while index < expression.len() {
@@ -327,7 +339,14 @@ fn safe_expression(expression: &[String]) -> bool {
             | "-empty" => {}
             // Age and size tests compare each entry's own metadata with a
             // number written in the command, so they only narrow which names
-            // are printed. `-newer FILE` is left out: it reads another path.
+            // are printed. `-newer FILE` reads another path's modification
+            // time, so that path must pass `reference` first.
+            "-newer" => {
+                if !expression.get(index).is_some_and(|file| reference(file)) {
+                    return false;
+                }
+                index += 1;
+            }
             "-mtime" | "-mmin" | "-atime" | "-amin" | "-ctime" | "-cmin" | "-size" => {
                 let Some(value) = expression.get(index) else {
                     return false;

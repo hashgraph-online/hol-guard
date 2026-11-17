@@ -1,6 +1,10 @@
 //! Opening the signed Codex hook records: authenticate the text against the
 //! key and the expected context, then apply each kind's own checks.
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
+use sha2::{Digest, Sha256};
+
 use super::*;
 
 pub(super) type Opened = Result<(Map<String, Value>, String), &'static str>;
@@ -17,7 +21,7 @@ pub(super) fn authenticated(
     let verification = local_authority_integrity_op::verify(
         &Value::Object(payload.clone()),
         &authentication,
-        Some(&secret.key),
+        Some(secret.key.as_slice()),
         Some(&secret.key_id),
         kind.purpose(),
     );
@@ -168,4 +172,45 @@ pub(super) fn open_request(
         return Err("expired");
     }
     Ok((payload, signed_at.unwrap_or_default()))
+}
+
+pub(super) fn text(value: Option<&Value>) -> Option<&str> {
+    value.and_then(Value::as_str)
+}
+
+pub(super) fn is_int(value: Option<&Value>) -> bool {
+    value.is_some_and(|value| value.is_i64() || value.is_u64())
+}
+
+/// A finite JSON number; booleans are not numbers here as they are in Python.
+pub(super) fn real(value: Option<&Value>) -> Option<f64> {
+    value
+        .and_then(Value::as_f64)
+        .filter(|number| number.is_finite())
+}
+
+pub(super) fn keys_are(object: &Map<String, Value>, keys: &[&str]) -> bool {
+    object.len() == keys.len() && keys.iter().all(|key| object.contains_key(*key))
+}
+
+pub(super) fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+/// A snapshot field: null, or base64 of at most the snapshot limit.
+pub(super) fn decode(value: Option<&Value>) -> Result<Option<Vec<u8>>, &'static str> {
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(text)) => {
+            if text.len() > 4 * MAX_SNAPSHOT.div_ceil(3) {
+                return Err("snapshot_invalid");
+            }
+            let bytes = STANDARD.decode(text).map_err(|_| "snapshot_invalid")?;
+            if bytes.len() > MAX_SNAPSHOT {
+                return Err("snapshot_too_large");
+            }
+            Ok(Some(bytes))
+        }
+        Some(_) => Err("snapshot_invalid"),
+    }
 }

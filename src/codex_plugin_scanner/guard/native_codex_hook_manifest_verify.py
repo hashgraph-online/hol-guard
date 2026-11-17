@@ -2,8 +2,8 @@
 
 The resident decides whether the authenticated Codex hook manifest still
 describes the live installation; this module ships what the caller
-authenticated plus the path, package-root, command-split and private-group
-spellings only this interpreter can produce. An unavailable resident reports
+authenticated plus the path, package-root and 8.3 short-name spellings only
+this interpreter can produce. An unavailable resident reports
 the installation as unverified, never as valid.
 """
 
@@ -17,8 +17,9 @@ from pathlib import Path
 from uuid import uuid4
 
 from . import codex_hook_file_integrity as integrity
+from .codex_hook_command_line import hook_commands_use_windows_syntax, short_token_long_paths
 from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
-from .codex_hook_file_integrity import CodexHookIntegrityError, active_hook_validation_deadline, split_hook_command
+from .codex_hook_file_integrity import CodexHookIntegrityError, active_hook_validation_deadline
 from .native_context import _resolve_existing_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_store_policy import _payload
@@ -30,10 +31,6 @@ _RESULT_SCHEMA = "guard-codex-hook-manifest-verify-result.v1"
 _MAX_REQUEST_BYTES = 2 * 1024 * 1024
 # The resident stats and hashes a dozen packaged files and the interpreter.
 _TIMEOUT_SECONDS = 10.0
-# Each round answers every private-group question the previous one asked, so
-# a second round settles the walk; a third covers files that changed between
-# the two.
-_MAX_ROUNDS = 3
 # The resident's JSON parser refuses a value nested past 32 levels with the
 # frame at 0. A live hook group sits under the request object, ``hooks`` and
 # its event's list, so its deepest value may sit 29 levels down, counting the
@@ -69,28 +66,16 @@ def native_codex_hook_manifest_verify(
     if not ensure_resident_prerequisite(home):
         return _unavailable_state()
     wire = _request(hooks, manifest, expected, failure)
-    answers: list[dict[str, object]] = []
-    for _ in range(_MAX_ROUNDS):
-        wire["request_id"] = f"codex-hook-manifest-verify-{uuid4().hex}"
-        wire["private_groups"] = answers
-        payload = _ask(wire, home)
-        if payload is None:
-            return _unavailable_state()
-        questions = payload.get("private_group_questions")
-        state = payload.get("state")
-        if not isinstance(questions, list) or not isinstance(state, dict) or set(state) != set(_unavailable_state()):
-            return _unavailable_state()
-        if not questions:
-            return dict(state)
-        answered = {(item["owner_uid"], item["group_gid"]) for item in answers}
-        for question in questions:
-            owner_uid = question.get("owner_uid") if isinstance(question, dict) else None
-            group_gid = question.get("group_gid") if isinstance(question, dict) else None
-            if not isinstance(owner_uid, int) or not isinstance(group_gid, int) or (owner_uid, group_gid) in answered:
-                return _unavailable_state()
-            private = integrity._owner_is_only_group_member(owner_uid, group_gid)
-            answers.append({"owner_uid": owner_uid, "group_gid": group_gid, "private": private is True})
-    return _unavailable_state()
+    wire["request_id"] = f"codex-hook-manifest-verify-{uuid4().hex}"
+    payload = _ask(wire, home)
+    if payload is None:
+        return _unavailable_state()
+    state = payload.get("state")
+    if payload.get("private_group_questions") != [] or not isinstance(state, dict):
+        return _unavailable_state()
+    if set(state) != set(_unavailable_state()):
+        return _unavailable_state()
+    return dict(state)
 
 
 def _request(
@@ -111,7 +96,8 @@ def _request(
         "expected": None,
         "canonical_paths": {},
         "installed_python_package_files": [],
-        "command_argvs": {},
+        "windows": False,
+        "long_paths": {},
         "private_groups": [],
     }
     if failure is None and manifest is not None and expected is not None:
@@ -158,14 +144,21 @@ def _interpreter_spellings(manifest: Mapping[str, object]) -> dict[str, object]:
             pass
         if integrity._is_installed_python_package_file(Path(spelling)):
             installed.append(spelling)
-    argvs: dict[str, list[str] | None] = {}
+    commands: list[str] = []
     events = manifest.get("events")
     for binding in events if isinstance(events, list) else ():
         handler = binding.get("handler") if isinstance(binding, dict) else None
         command = handler.get("command") if isinstance(handler, dict) else None
-        if isinstance(command, str) and command not in argvs:
-            argvs[command] = split_hook_command(command)
-    return {"canonical_paths": canonical, "installed_python_package_files": installed, "command_argvs": argvs}
+        if isinstance(command, str):
+            commands.append(command)
+    # The resident splits each handler command; only this host can look up an 8.3 name's long form.
+    windows = hook_commands_use_windows_syntax()
+    return {
+        "canonical_paths": canonical,
+        "installed_python_package_files": installed,
+        "windows": windows,
+        "long_paths": short_token_long_paths(commands) if windows else {},
+    }
 
 
 def _hooks_wire(hooks: object) -> dict[str, object] | None:

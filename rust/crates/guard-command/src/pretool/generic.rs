@@ -77,7 +77,6 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
-use super::evaluate_pre_tool_with_execution_context;
 use extract::extract_generic_signals;
 use result::{generic_action, generic_error_result, generic_result};
 use std::time::Instant;
@@ -270,6 +269,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
         deadline,
         crate::pretool::PathContext {
             literal_words: &[],
+            guard_home: None,
             home_dir,
             cwd,
             cdpath_unset: false,
@@ -300,8 +300,12 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
     let _cursor = super::cursor_session_outputs::scope(harness, context.cwd);
-    let mut context =
-        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
+    // The session is rebuilt from the execution environment; the Guard home
+    // the hook reported is not part of it, so it is carried across.
+    let mut context = super::PathContext {
+        guard_home: context.guard_home,
+        ..super::PathContext::for_session(context.home_dir, context.cwd, execution_environment)
+    };
     let (projected_payload, cline_payload);
     let mut payload = payload;
     let within;
@@ -444,8 +448,10 @@ fn evaluate_envelope(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     project_redirects: bool,
 ) -> PreToolResultV1 {
-    let context =
-        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
+    let context = super::PathContext {
+        guard_home: context.guard_home,
+        ..super::PathContext::for_session(context.home_dir, context.cwd, execution_environment)
+    };
     let super::PathContext { home_dir, cwd, .. } = context;
     let yield_payload = (harness == "omp")
         .then(|| omp::yield_signal_payload(payload))
@@ -866,7 +872,7 @@ fn evaluate_envelope(
         .as_deref()
         .filter(|_| !search_scope_proven && !apply_patch_proven)
         .map(|command| {
-            evaluate_pre_tool_with_execution_context(
+            super::evaluate_pre_tool_with_reported_guard_home(
                 &CommandModelRequestV1 {
                     command: command.to_owned(),
                     dialect: tools::command_dialect(signals.tool_name.as_deref()).to_owned(),
@@ -877,6 +883,7 @@ fn evaluate_envelope(
                 cwd,
                 deadline,
                 execution_environment,
+                context.guard_home,
             )
         });
     // Parsed benign commands may contain credential words as search patterns.

@@ -1316,7 +1316,6 @@ dependencies = [
     { name = "rich" },
     { name = "sigstore" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
-    { name = "tomlkit" },
     { name = "typing-extensions" },
 ]
 
@@ -1331,6 +1330,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "tomlkit" },
 ]
 mdm-build = [
     { name = "pyinstaller" },
@@ -1348,6 +1348,7 @@ ci-test = [
     { name = "pytest-rerunfailures" },
     { name = "pytest-xdist" },
     { name = "ruff" },
+    { name = "tomlkit" },
 ]
 cisco-mcp = [
     { name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11.4'" },
@@ -1376,7 +1377,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.15" },
     { name = "sigstore", specifier = ">=4.5,<5" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
-    { name = "tomlkit", specifier = ">=0.13.3,<1" },
+    { name = "tomlkit", marker = "extra == 'dev'", specifier = ">=0.13.3,<1" },
     { name = "twine", marker = "extra == 'publish'", specifier = ">=6.2.0" },
     { name = "typing-extensions", specifier = ">=4.15.0" },
 ]
@@ -1391,6 +1392,7 @@ ci-test = [
     { name = "pytest-rerunfailures", specifier = ">=14.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "ruff", specifier = ">=0.15.15" },
+    { name = "tomlkit", specifier = ">=0.13.3,<1" },
 ]
 cisco-mcp = [{ name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11.4'", specifier = "==4.8.1" }]
 dev = [{ name = "mutmut", specifier = ">=3.4,<4" }]

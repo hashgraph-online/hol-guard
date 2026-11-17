@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_resident_client as clients
+from codex_plugin_scanner.guard import native_resident_client_pool as pool_module
 from codex_plugin_scanner.guard import native_resident_revival as revival
 from codex_plugin_scanner.guard import native_resident_stream as streams
 from tests.test_native_policy_snapshot_direct_lane import _publisher
@@ -24,7 +25,7 @@ def _setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         executable=executable, state_dir=tmp_path / "native-runtime", environment={}
     )
     monkeypatch.setattr(clients, "_CLIENT_POOLS", {pool._hold_key: pool})
-    monkeypatch.setattr(clients, "_PersistentNativeClient", _unexpected)
+    monkeypatch.setattr(pool_module, "_PersistentNativeClient", _unexpected)
     monkeypatch.setattr(clients, "_track_resident", _unexpected)
     monkeypatch.setattr(pool._condition, "wait", _unexpected)
     monkeypatch.setattr(streams.subprocess, "Popen", _unexpected)
@@ -80,8 +81,8 @@ def test_idle_misses_do_not_change_registry_or_restart_hold(tmp_path: Path, monk
         client._process = SimpleNamespace(poll=lambda: 1)
         pool._idle.append(client)
     registry = dict(clients._CLIENT_POOLS)
-    monkeypatch.setattr(clients, "arm_restart_hold", _unexpected)
-    monkeypatch.setattr(clients, "clear_restart_hold", _unexpected)
+    monkeypatch.setattr(pool_module, "arm_restart_hold", _unexpected)
+    monkeypatch.setattr(pool_module, "clear_restart_hold", _unexpected)
     revival.arm_restart_hold(pool._hold_key)
     try:
         assert clients.native_resident_client_request_if_idle(**kwargs) is None

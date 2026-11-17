@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use super::Home;
+use super::{dispatch, Home};
 
 const MARKER: &str = "# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n";
 
@@ -109,7 +109,7 @@ fn hook_install_never_overwrites_a_user_hook() {
 }
 
 #[test]
-fn hook_install_replaces_legacy_workers_and_asks_for_the_canary() {
+fn hook_install_replaces_legacy_workers_and_runs_the_canary() {
     let home = Home::new();
     let workers = managed(&home).join("hook-workers");
     write(&workers.join("PreToolUse.py"), MARKER);
@@ -124,11 +124,14 @@ fn hook_install_replaces_legacy_workers_and_asks_for_the_canary() {
         .unwrap();
     assert_eq!(worker, workers.join("PreToolUse.json").to_str().unwrap());
     assert!(Path::new(worker).is_file());
-    let canary = &answer["probe"]["canary"];
-    let launcher = hook_root(&home).join("PreToolUse");
-    assert_eq!(canary["argv"], json!([launcher]));
-    let input: Value = serde_json::from_str(canary["input"].as_str().unwrap()).unwrap();
-    assert_eq!(input["hookName"], "PreToolUse");
+    // The launcher ran and its run comes back for the confirmation to judge;
+    // the fixture's runtime is an empty file, so it cannot answer.
+    let canary = answer["probe"]["canary"].as_object().unwrap();
+    assert_eq!(
+        canary.keys().collect::<Vec<_>>(),
+        ["error", "returncode", "stdout"]
+    );
+    assert_ne!(canary["returncode"], json!(0));
 }
 
 #[test]
@@ -393,4 +396,34 @@ fn the_cli_version_comes_from_its_output() {
     );
     assert_eq!(probe["probe"]["cli_version"], "4.5.6");
     assert_eq!(probe["probe"]["hosts"], json!(["cli"]));
+}
+
+#[test]
+fn the_hook_spec_names_the_guard_hook_command_and_its_budget() {
+    let home = Home::new();
+    let spec = home.ask("cline", "hook_spec", json!({}));
+    assert_eq!(
+        spec["cli_args"],
+        json!([
+            "guard",
+            "hook",
+            "--guard-home",
+            home.guard(),
+            "--harness",
+            "cline"
+        ])
+    );
+    assert_eq!(spec["timeout_seconds"], 8);
+}
+
+#[test]
+fn the_hook_spec_names_a_home_other_than_the_users() {
+    let home = Home::new();
+    let mut context = home.context(json!({"PATH": ""}));
+    context["user_home"] = json!(home.root.join("someone-else"));
+    let spec =
+        dispatch(&json!({"harness": "cline", "op": "hook_spec", "context": context})).unwrap();
+    let args = spec["cli_args"].as_array().unwrap();
+    assert_eq!(args[args.len() - 2], "--home");
+    assert_eq!(args[args.len() - 1], json!(home.home()));
 }

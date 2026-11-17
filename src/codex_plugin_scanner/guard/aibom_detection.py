@@ -153,7 +153,20 @@ def native_adapter_detection_with_warnings(
 ) -> tuple[tuple[GuardArtifact, ...], tuple[str, ...], tuple[str, ...]]:
     """Run a native adapter-detection kind and return artifacts, found paths and warnings."""
 
-    payload = _native(kind, request)
+    return detection_from_payload(_native(kind, request))
+
+
+def native_adapter_detection_payload(kind: str, request: Mapping[str, Any]) -> dict[str, Any]:
+    """The raw answer of a native adapter-detection kind, for a caller that may be asked again."""
+
+    return _native(kind, request)
+
+
+def detection_from_payload(
+    payload: Mapping[str, Any],
+) -> tuple[tuple[GuardArtifact, ...], tuple[str, ...], tuple[str, ...]]:
+    """Artifacts, found paths and warnings from a native adapter-detection answer."""
+
     found_paths = payload.get("found_paths")
     if not isinstance(found_paths, list) or not all(isinstance(path, str) for path in found_paths):
         raise NativeAibomError("native_runner_authority_result_invalid")

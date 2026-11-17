@@ -24,7 +24,7 @@ from .hook_fail_closed import (
 )
 from .hook_native_exact_action import review_evidence_parts
 from .hook_native_package_review import native_package_review_response
-from .hook_native_review_binding import native_review_policy_binding, native_review_settle
+from .hook_native_review_binding import admit_accepted_call, native_review_policy_binding, native_review_settle
 from .hook_native_saved_approval import native_exact_command_block_response, native_saved_decision_response
 from .hook_request_parsing import native_review_launch_target as _native_review_launch_target
 from .hook_request_parsing import native_review_tool_name as _native_review_tool_name
@@ -109,9 +109,9 @@ def pause_native_pre_tool_for_approval(
         workspace=workspace,
     )
     if saved is not None:
-        return saved
+        return admit_accepted_call(store, harness=harness, payload=payload, response=saved)
     if custom is not None:
-        return custom
+        return admit_accepted_call(store, harness=harness, payload=payload, response=custom)
     # The Keep blocked check, a claimed once-approval and the approve-once
     # spend run in one resident call.
     reuse = native_review_settle(
@@ -146,7 +146,8 @@ def pause_native_pre_tool_for_approval(
         allowed["decision"] = "allow"
         allowed["minimum_action"] = "allow"
         allowed["policy_action"] = "allow"
-        return render_accepted_allow(harness, allowed, guard_home=guard_home, deadline=deadline)
+        accepted = render_accepted_allow(harness, allowed, guard_home=guard_home, deadline=deadline)
+        return admit_accepted_call(store, harness=harness, payload=payload, response=accepted)
     settled = native_package_review_response(
         store,
         harness=harness,
@@ -158,7 +159,7 @@ def pause_native_pre_tool_for_approval(
         deadline=deadline,
     )
     if settled is not None:
-        return settled
+        return admit_accepted_call(store, harness=harness, payload=payload, response=settled)
     from ..blocked_request_mode import asks_for_approval
     from ..config import load_guard_config
 

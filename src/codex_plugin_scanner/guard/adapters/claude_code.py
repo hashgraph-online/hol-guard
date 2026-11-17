@@ -26,6 +26,9 @@ from .native_hook_bridge import native_hook_bridge_executable
 
 _HARNESS = "claude-code"
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
+_STALE_DAEMON_HOOK = (
+    "This HOL Guard hook predates the native runtime, so Guard blocked the call. Run `hol-guard repair`."
+)
 CLAUDE_GUARD_SESSION_START_HOOK_MARKER = "HOL_GUARD_CLAUDE_SESSION_START_HOOK"
 NATIVE_CLAUDE_HOOK_FEATURE = "claude-hook-bridge-v1"
 NATIVE_CLAUDE_SESSION_START_FEATURE = "claude-session-start-v1"
@@ -50,21 +53,10 @@ def _native_bridge_executable(guard_home: Path) -> Path | None:
     return native_hook_bridge_executable(NATIVE_CLAUDE_HOOK_FEATURE, guard_home=guard_home)
 
 
-def _recovery(guard_home: Path, home_dir: Path) -> list[str]:
-    from ..codex_hook_launch_runtime import isolated_daemon_start_command
-    from ..frozen_runtime_commands import frozen_daemon_recovery_command, is_frozen_guard_runtime
-
-    if is_frozen_guard_runtime():
-        # A frozen desktop core cannot run the Python ``-I -c`` bootstrap.
-        return list(frozen_daemon_recovery_command(guard_home, home_dir))
-    package_root = Path(__file__).resolve().parents[3]
-    return list(isolated_daemon_start_command(sys.executable, package_root, guard_home, home_dir))
-
-
 def _facts(context: HarnessContext) -> str:
     """What this process knows about the runtimes and CLI the hooks launch."""
     from ..runtime.harness_attribution import cursor_hook_query_extras
-    from ..stable_guard_cli import guard_cli_launcher
+    from ..stable_guard_cli import guard_cli_launcher, resolve_frozen_guard_cli
 
     bridge = _native_bridge_executable(context.guard_home)
     session = native_hook_bridge_executable(NATIVE_CLAUDE_SESSION_START_FEATURE, guard_home=context.guard_home)
@@ -88,8 +80,7 @@ def _facts(context: HarnessContext) -> str:
             "package_root": str(Path(__file__).resolve().parents[3]),
             "daemon_url": load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home),
             "query_extras": [[str(key), str(value)] for key, value in cursor_hook_query_extras().items()],
-            "recovery_home": None if bridge is None else _recovery(guard_home, Path.home()),
-            "recovery_context": None if bridge is None else _recovery(guard_home, context.home_dir),
+            "recovery_launcher": resolve_frozen_guard_cli() if frozen else None,
         }
     )
 
@@ -140,20 +131,18 @@ def _run_session_start_from_argv(argv: Sequence[str]) -> int:
 
 
 def run_frozen_claude_hook(argv: Sequence[str]) -> int:
-    """Dispatch ``<marker> <args...>`` to the daemon bridge or the SessionStart refresh."""
+    """Dispatch ``<marker> <args...>`` to the SessionStart refresh.
+
+    A daemon hook command written by an older frozen build has no Python
+    launcher left to run it: Claude Code blocks the call on exit code 2 and
+    shows the repair hint, and SessionStart or repair rewrites the command.
+    """
     if not argv:
         raise SystemExit("claude_frozen_hook expects a hook marker")
     marker, rest = argv[0], list(argv[1:])
     if marker == CLAUDE_GUARD_DAEMON_HOOK_MARKER:
-        from .claude_daemon_hook_bridge import _bridge_config_from_argv, main
-
-        config = _bridge_config_from_argv(["claude_daemon_hook_bridge", *rest])
-        return main(
-            state_path=config["state_path"],
-            fallback_daemon_url=config["fallback_daemon_url"],
-            fallback_command=config["fallback_command"],
-            query=config["query"],
-        )
+        sys.stderr.write(_STALE_DAEMON_HOOK + "\n")
+        return 2
     if marker == CLAUDE_GUARD_SESSION_START_HOOK_MARKER:
         return _run_session_start_from_argv(rest)
     raise SystemExit("claude_frozen_hook received an unknown hook marker")

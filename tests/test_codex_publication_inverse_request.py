@@ -133,7 +133,7 @@ def test_mac_valid_request_cannot_change_live_inverse_or_replay_expired_review(i
     secret = load_hook_secret(context.guard_home)
     value["authentication"] = sign_local_authority_payload(
         value,
-        key=secret.key,
+        key_home=str(secret.guard_home),
         key_id=secret.key_id,
         signed_at=plan.operation_id,
         purpose="codex-authority-repair-request" if change == "purpose" else "codex-publication-inverse-request",

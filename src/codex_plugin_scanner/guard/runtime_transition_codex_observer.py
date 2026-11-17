@@ -15,19 +15,24 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from .adapters.codex import _CODEX_GUARD_TOOL_MATCHER, _payload_has_hooks_feature_enabled
-from .codex_config import tomllib
-from .codex_hook_bridge_runtime import bridge_config_from_argv, trusted_hook_launch
-from .codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline, split_hook_command
-from .codex_hook_integrity import hook_manifest_path, load_authenticated_hook_manifest
-from .codex_hook_launch_runtime import desktop_hook_proxy_context, run_isolated_hook_process
+from . import codex_hook_command_line as _command_line
+from . import codex_hook_runtime_trust
+from .codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline
+from .codex_hook_integrity import hook_manifest_path, manifest_refusal
+from .codex_hook_launch_runtime import (
+    desktop_hook_proxy_context,
+    isolated_hook_environment,
+    private_hook_runtime_cwd,
+    run_isolated_hook_process,
+)
 from .codex_hook_recovery import _snapshot
 from .codex_hook_runtime_trust import TrustedCodexHookLaunch
 from .codex_install_transaction import require_codex_install_owner
 from .native_daemon_peer import DaemonArtifactBinding
 from .native_runtime import NativeRuntimeIdentity
+from .native_transition_files import publication
 from .runtime.command_activity_correlation import (
     derive_proven_request_correlation,
     load_existing_installation_correlation_key,
@@ -81,6 +86,69 @@ def _desktop_hook_proxy_context() -> dict[str, str]:
     """Carry the allow-listed Desktop proxy selectors into the hook probe."""
 
     return desktop_hook_proxy_context()
+
+
+_BINDING_TEXT = ("manifest_path", "config_sha256", "manifest_sha256")
+
+
+def _installed_binding(
+    guard_home: Path, config_path: Path, artifact_binding: DaemonArtifactBinding | None
+) -> dict[str, Any]:
+    """Have the native runtime authenticate the one installed pre-tool launch.
+
+    The runtime authenticates the manifest, checks the live config holds its
+    Guard group once, splits the registered command and authenticates the
+    launch its bridge config names. A Windows command can name 8.3 short
+    paths; the answer then lists them and the request is asked again with
+    their long forms.
+    """
+
+    frozen = None
+    if artifact_binding is not None:
+        executable = str(artifact_binding.executable)
+        frozen = {
+            "executable": executable,
+            "artifact": {
+                "executable": executable,
+                "sha256": artifact_binding.executable_sha256,
+                "package_version": artifact_binding.package_version,
+            },
+        }
+    request: dict[str, object] = {
+        "config": str(config_path),
+        "windows": _command_line.hook_commands_use_windows_syntax(),
+        "long_paths": {},
+        "runtime_path": str(Path(codex_hook_runtime_trust.__file__)),
+        "frozen": frozen,
+    }
+    for _ in range(2):
+        try:
+            answer = publication("observer_binding", guard_home, **request)
+        except CodexHookIntegrityError as exc:
+            if exc.message == exc.reason:
+                # The runtime names a manifest refusal by its reason alone.
+                raise manifest_refusal(exc.reason) from exc
+            raise
+        except OSError as exc:
+            raise TransitionError("admission_hook_binding_invalid") from exc
+        if not isinstance(answer, dict):
+            raise TransitionError("native_transition_invalid")
+        expand = answer.get("expand")
+        if isinstance(expand, list):
+            request["long_paths"] = {str(name): _command_line._long_path(str(name)) or "" for name in expand}
+            continue
+        argv, environment = answer.get("argv"), answer.get("environment")
+        if (
+            not isinstance(argv, list)
+            or not all(isinstance(item, str) for item in argv)
+            or not isinstance(environment, dict)
+            or not all(isinstance(key, str) and isinstance(value, str) for key, value in environment.items())
+            or not isinstance(answer.get("modern_channel"), bool)
+            or not all(isinstance(answer.get(key), str) for key in _BINDING_TEXT)
+        ):
+            raise TransitionError("native_transition_invalid")
+        return answer
+    raise TransitionError("admission_hook_binding_invalid")
 
 
 def observe_configured_codex_hook(
@@ -149,75 +217,20 @@ def _observe_configured_codex_hook(
     check_deadline()
     if before_config is None or before_manifest is None:
         raise TransitionError("admission_hook_authority_missing")
-    try:
-        manifest = load_authenticated_hook_manifest(guard_home, config_path)
-        config = tomllib.loads(before_config.decode("utf-8"))
-        if not _payload_has_hooks_feature_enabled(config):
-            raise ValueError("hooks disabled")
-        events = manifest.get("events")
-        if not isinstance(events, list):
-            raise ValueError("events missing")
-        bindings = [entry for entry in events if isinstance(entry, dict) and entry.get("event") == "PreToolUse"]
-        if len(bindings) != 1:
-            raise ValueError("ambiguous pre-tool binding")
-        binding = bindings[0]
-        group, handler = binding.get("group"), binding.get("handler")
-        if (
-            not isinstance(group, dict)
-            or not isinstance(handler, dict)
-            or group.get("matcher") != _CODEX_GUARD_TOOL_MATCHER
-            or group.get("hooks") != [handler]
-            or binding.get("handler_index") != 0
-            or handler.get("type") != "command"
-        ):
-            raise ValueError("unsupported installed hook")
-        hooks = config.get("hooks")
-        configured = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
-        if not isinstance(configured, list) or configured.count(group) != 1:
-            raise ValueError("configured binding mismatch")
-        command = handler.get("command")
-        argv = split_hook_command(command) if isinstance(command, str) else None
-        if argv is None or len(argv) < 3 or argv != binding.get("argv"):
-            raise ValueError("configured argv mismatch")
-        environment = handler.get("env", {})
-        if not isinstance(environment, dict) or not all(
-            isinstance(key, str) and isinstance(value, str) for key, value in environment.items()
-        ):
-            raise ValueError("configured environment invalid")
-        packaged = manifest.get("packaged_files")
-        if not isinstance(packaged, list):
-            raise ValueError("installed observation channel unavailable")
-        roles = {entry.get("role") for entry in packaged if isinstance(entry, dict)}
-        modern_channel = {"hook_probe", "native_receipt"} <= roles
-        if not modern_channel and roles & {"hook_probe", "native_receipt"}:
-            raise ValueError("installed observation channel unavailable")
-        bridge_config = bridge_config_from_argv([argv[-2], argv[-1]], timeout_grace_seconds=0)
-        if Path(bridge_config["manifest_path"]).resolve() != manifest_path.resolve():
-            raise ValueError("foreign hook authority")
-        if artifact_binding is None:
-            trusted = trusted_hook_launch(
-                manifest_path=bridge_config["manifest_path"],
-                state_path=bridge_config["state_path"],
-                fallback_command=bridge_config["fallback_command"],
-                start_command=bridge_config["start_command"],
-                config_json=bridge_config["config_json"],
-                deadline_monotonic=deadline_monotonic,
-            )
-        else:
-            from .frozen_codex_runtime import _validate_frozen_codex_hook_launch
-
-            trusted = _validate_frozen_codex_hook_launch(
-                manifest_path=bridge_config["manifest_path"],
-                state_path=bridge_config["state_path"],
-                fallback_command=bridge_config["fallback_command"],
-                start_command=bridge_config["start_command"],
-                config_json=bridge_config["config_json"],
-                expected_artifact=artifact_binding,
-            )
-        if not isinstance(trusted, TrustedCodexHookLaunch):
-            raise ValueError("installed launch context invalid")
-    except (ValueError, OSError, SystemExit) as exc:
-        raise TransitionError("admission_hook_binding_invalid") from exc
+    binding = _installed_binding(guard_home, config_path, artifact_binding)
+    if (
+        binding["config_sha256"] != hashlib.sha256(before_config).hexdigest()
+        or binding["manifest_sha256"] != hashlib.sha256(before_manifest).hexdigest()
+    ):
+        raise TransitionError("admission_hook_binding_changed")
+    argv: list[str] = binding["argv"]
+    environment: dict[str, str] = binding["environment"]
+    modern_channel: bool = binding["modern_channel"]
+    trusted = TrustedCodexHookLaunch(
+        cwd=private_hook_runtime_cwd(Path(binding["manifest_path"])),
+        environment=isolated_hook_environment(),
+        deadline_monotonic=deadline_monotonic,
+    )
     check_deadline()
     legacy_key = None
     if not modern_channel:

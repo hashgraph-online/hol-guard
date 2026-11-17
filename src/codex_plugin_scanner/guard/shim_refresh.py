@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .shims import HarnessContextLike, _build_python_shim
+from .shims import HarnessContextLike, prepare_guard_shim
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -49,6 +49,12 @@ class _RefreshContext:
         self.workspace_dir = workspace_dir
         self.guard_home = guard_home
         self.home_override_explicit = home_override_explicit
+
+
+def _rendered_shim(harness: str, context: HarnessContextLike, launcher_name: str) -> str:
+    """The POSIX launcher an install would write now, read the way ``read_text`` reads it."""
+    after = prepare_guard_shim(harness, context, launcher_name=launcher_name).files[0].after
+    return (after or b"").decode("utf-8").replace("\r\n", "\n")
 
 
 def _ask(request: dict[str, object], guard_home: Path) -> dict[str, object]:
@@ -213,8 +219,7 @@ def refresh_stale_harness_shims(
                 workspace_dir,
                 home_override_explicit=home_value is not None,
             )
-            workspace_args = ["--workspace", str(workspace_dir)] if workspace_dir is not None else []
-            expected = _build_python_shim(harness, context, workspace_args)
+            expected = _rendered_shim(harness, context, canonical_launcher)
             if current == expected and not legacy_name:
                 unchanged.append(shim_name)
                 continue

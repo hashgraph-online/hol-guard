@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 
 use super::cline::{managed_root, paths, runtime, state_text, write_file};
 use super::cline_hooks::managed;
+use super::cline_run;
 use super::{path_text, Ctx, Failure, Step};
 
 const MARKER: &str = "HOL_GUARD_MANAGED_CLINE_PLUGIN_V1";
@@ -140,8 +141,8 @@ pub(super) fn install(ctx: &Ctx, facts: &Map<String, Value>) -> Step<Value> {
     }))
 }
 
-/// `{"node_check": path}` once the recorded index is the checked root's, or
-/// the verdict that stops the probe first.
+/// The `node --check` verdict once the recorded index is the checked root's,
+/// or the verdict that stops the probe first.
 fn syntax_probe(ctx: &Ctx) -> Value {
     let Some(recorded) = load_state(ctx)
         .get("index_path")
@@ -157,7 +158,7 @@ fn syntax_probe(ctx: &Ctx) -> Value {
     if recorded != index {
         return json!({"result": {"ok": false, "reason": "plugin_state_path_mismatch"}});
     }
-    json!({ "node_check": index })
+    json!({ "result": cline_run::node_check(ctx, &index) })
 }
 
 fn now() -> f64 {

@@ -13,7 +13,6 @@ from __future__ import annotations
 import base64
 import json
 import os
-import shutil
 import sys
 from collections.abc import Mapping
 from dataclasses import replace
@@ -53,7 +52,14 @@ NATIVE_HARNESSES: tuple[tuple[str, tuple[str, ...], str], ...] = (
 
 #: Ops that render a Pi-family extension, so they carry this process's facts.
 _EXTENSION_OPS = frozenset(
-    {"prepare_install", "prepare_uninstall", "extension_source", "extension_current", "legacy_omp_verified"}
+    {
+        "prepare_install",
+        "prepare_uninstall",
+        "apply_uninstall",
+        "extension_source",
+        "extension_current",
+        "legacy_omp_verified",
+    }
 )
 
 
@@ -96,11 +102,11 @@ def wire_context(context: HarnessContext) -> dict[str, object]:
         "home": str(context.home_dir),
         "workspace": None if context.workspace_dir is None else str(context.workspace_dir),
         "guard_home": str(context.guard_home),
-        "home_override_explicit": context.home_override_explicit,
+        "home_override_explicit": bool(getattr(context, "home_override_explicit", False)),
         "cwd": cwd,
         "user_home": str(Path.home()),
         "env": _environment(),
-        "executable_overrides": dict(context.executable_overrides),
+        "executable_overrides": dict(getattr(context, "executable_overrides", {}) or {}),
     }
 
 
@@ -120,19 +126,24 @@ def ask(
         request["harness"] = harness
     answer = native_runner_authority(_KIND, request, timeout_seconds=timeout_seconds)
     if len(answer) == 1:
-        if "refusal" in answer:
-            raise ValueError(str(answer["refusal"]))
-        if "os_error" in answer:
-            raise OSError(str(answer["os_error"]))
-        if "not_found" in answer:
-            raise FileNotFoundError(str(answer["not_found"]))
-        if "runtime_error" in answer:
-            raise RuntimeError(str(answer["runtime_error"]))
-        if "integrity" in answer:
-            from ..codex_hook_recovery import _error
-
-            raise _error(str(answer["integrity"]))
+        raise_failure(answer)
     return answer
+
+
+def raise_failure(answer: dict[str, Any]) -> None:
+    """Raise the error a one-key failure answer names; return for any other answer."""
+    if "refusal" in answer:
+        raise ValueError(str(answer["refusal"]))
+    if "os_error" in answer:
+        raise OSError(str(answer["os_error"]))
+    if "not_found" in answer:
+        raise FileNotFoundError(str(answer["not_found"]))
+    if "runtime_error" in answer:
+        raise RuntimeError(str(answer["runtime_error"]))
+    if "integrity" in answer:
+        from ..codex_hook_recovery import _error
+
+        raise _error(str(answer["integrity"]))
 
 
 def _text(answer: dict[str, Any], key: str) -> str:
@@ -193,9 +204,8 @@ class NativeHarnessAdapter(HarnessAdapter):
         return detection_from(self.harness, context, answer)
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
-        if not self._spec.get("trusted_launcher"):
-            return super().launch_command(context, passthrough_args)
-        return [str(part) for part in self._ask("launch_command", context, args=passthrough_args)["argv"]]
+        op = "launch_command" if self._spec.get("trusted_launcher") else "default_launch"
+        return [str(part) for part in self._ask(op, context, args=passthrough_args)["argv"]]
 
     def preview_launch_commands(self, context: HarnessContext, passthrough_args: list[str]) -> tuple[list[str], ...]:
         if not self._spec.get("trusted_launcher"):
@@ -250,7 +260,7 @@ class NativeHarnessAdapter(HarnessAdapter):
         }
         return native_runner_authority(_KIND, request)
 
-    def _hook_argv(self, context: HarnessContext, hook_files: list[Any] | None = None) -> list[str]:
+    def _hook_argv(self, context: HarnessContext) -> list[str]:
         from .bounded_cli_hook_bridge import bounded_cli_hook_command
 
         spec = self._ask("hook_spec", context)
@@ -262,12 +272,11 @@ class NativeHarnessAdapter(HarnessAdapter):
                 cli_args=[str(part) for part in spec["cli_args"]],
                 harness=self.harness,
                 timeout_seconds=int(spec["timeout_seconds"]),
-                prepared_files=hook_files,
             )
         )
 
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
-        from ..runtime_transition import TransitionError, TransitionFile
+        from ..runtime_transition import TransitionError
         from ..shims import prepare_guard_shim
 
         mode = self._spec.get("install")
@@ -277,15 +286,19 @@ class NativeHarnessAdapter(HarnessAdapter):
         if mode == "shim":
             manifest = {"harness": self.harness, "active": True, "config_path": shim.manifest["shim_path"]}
             return PreparedHarnessInstall(shim.files, {**manifest, **shim.manifest})
-        hook_files: list[TransitionFile] = []
         fields: dict[str, object] = {"shim": json.dumps(shim.manifest)}
         if self._spec.get("hook") is not None:
-            fields["hook_argv"] = self._hook_argv(context, hook_files)
+            fields["hook_argv"] = self._hook_argv(context)
         if self._spec.get("retired_hooks"):
             fields["retired_commands"] = self._retired_hooks(context, fields["hook_argv"])
         answer = self._ask("prepare_install", context, **fields)
         files = planned_files(answer)
-        return PreparedHarnessInstall((*shim.files, *hook_files, *files), json.loads(_text(answer, "manifest")))
+        return PreparedHarnessInstall((*shim.files, *files), json.loads(_text(answer, "manifest")))
+
+    def current_hook_command(self, context: HarnessContext) -> str:
+        """The hook command an install would write now, as the harness config spells it."""
+
+        return _text(self._ask("hook_candidates", context, hook_argv=self._hook_argv(context)), "hook_command")
 
     def _retired_hooks(self, context: HarnessContext, hook_argv: object) -> list[str]:
         """Generated hook clients the config names whose client is gone; the CLI's validator decides."""
@@ -313,38 +326,15 @@ class NativeHarnessAdapter(HarnessAdapter):
         return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
-        from ...safe_output import write_text_atomic_no_follow
-        from ..codex_hook_integrity import atomic_write_text
-        from ..shims import remove_guard_shim
+        from .. import native_transition_files
+        from ..runtime_transition import assert_transition_mutation_allowed
 
-        if self._spec.get("install") == "shim":
-            shim = remove_guard_shim(self.harness, context)
-            return {"harness": self.harness, "active": False, "config_path": shim["shim_path"], **shim}
-        # Ask for the plan first, so a refusal leaves the launcher in place.
-        plan = self._ask("prepare_uninstall", context)
-        shim = remove_guard_shim(
-            self.harness, context, legacy_launcher_names=self.legacy_launcher_names, **self._shim_names()
-        )
-        for write in plan["writes"]:
-            target = Path(write["path"])
-            if write.get("parents"):
-                target.parent.mkdir(parents=True, exist_ok=True)
-            if write.get("raw"):
-                target.write_bytes(write["text"].encode("utf-8"))
-            elif write.get("no_follow"):
-                write_text_atomic_no_follow(target, write["text"])
-            elif write.get("mode") is None:
-                target.write_text(write["text"], encoding="utf-8")
-            else:
-                atomic_write_text(target, write["text"], mode=write["mode"])
-        for copy in plan.get("copies", ()):
-            shutil.copy2(copy["from"], copy["to"])
-            Path(copy["from"]).unlink(missing_ok=True)
-        removed: list[str] = []
-        for value in plan["deletes"]:
-            Path(value).unlink(missing_ok=True)
-            removed.append(value)
-        answer = self._ask("finish_uninstall", context, shim=json.dumps(shim), finish=plan["finish"], removed=removed)
+        assert_transition_mutation_allowed(context.guard_home)
+        # The runtime prepares the plan, removes the launchers and applies the
+        # plan; the managed writes it made come back for the journal.
+        answer = self._ask("apply_uninstall", context)
+        native_transition_files._replay(answer.pop("events", None), None, None)
+        raise_failure(answer)
         return json.loads(_text(answer, "manifest"))
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:

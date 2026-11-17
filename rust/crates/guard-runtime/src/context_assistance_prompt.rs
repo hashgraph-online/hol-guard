@@ -1,11 +1,9 @@
 //! Adds the project code a typed prompt is about to the hook's answer, when
-//! someone turned on CIGAR project context for their AI apps.
-//!
-//! The prompt hook answers in time whatever happens here: the walk and the
-//! lookup share what is left of the hook's budget, the lookup runs on its own
-//! thread, a repeat of the same prompt joins the lookup already running, a
-//! prompt CIGAR cannot answer yet gets the matched files, and anything failed
-//! or off adds nothing.
+//! someone turned on CIGAR project context for their AI apps. The prompt hook
+//! answers in time whatever happens here: the walk and the lookup share what
+//! is left of the hook's budget, the lookup runs on its own thread, a repeat
+//! of the same prompt joins the lookup already running, a prompt CIGAR cannot
+//! answer yet gets the matched files, and anything failed or off adds nothing.
 //! Only an allowed prompt gets context, and only for harnesses that show
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
@@ -15,7 +13,7 @@ use crate::context_assistance_prompt_words::{marked_terms, spellings};
 use crate::context_assistance_savings as savings;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
-use lookup::{lookup, Miss, Request};
+use lookup::{anchored, lookup, truncated, Miss, Request};
 use names::held_names;
 use seen::{Session, Span};
 use serde_json::Value;
@@ -24,6 +22,8 @@ use std::time::{Duration, Instant};
 
 #[path = "context_assistance_prompt_changes.rs"]
 mod changes;
+#[path = "context_assistance_prompt_chores.rs"]
+mod chores;
 #[path = "context_assistance_prompt_excerpts.rs"]
 mod excerpts;
 use excerpts::render;
@@ -157,11 +157,12 @@ fn prompt_cwd(envelope: &GuardHookEnvelopeV2) -> Option<&str> {
         .or_else(|| raw.pointer("/workspaceRoots/0").and_then(Value::as_str))
 }
 
-/// The prompt's text: top-level `prompt`, or Cline's `userPromptSubmit.prompt`.
+/// A typed prompt's text (`prompt` or Cline's `userPromptSubmit.prompt`); none if the app wrote it.
 fn prompt_text(raw: &Value) -> Option<&str> {
     (raw.get("prompt"))
         .or_else(|| raw.pointer("/userPromptSubmit/prompt"))
         .and_then(Value::as_str)
+        .filter(|prompt| !crate::context_assistance_prompt_generated::by_app(prompt))
 }
 
 /// Watch answers some apps' prompts without a context slot; one is opened
@@ -267,6 +268,10 @@ fn attach(
     if let Some(changed) = &changed {
         add_context(response, &changed.text);
     }
+    let chores_by = Instant::now() + left() / 3;
+    if chores::added(response, &root, prompt, &context_on, chores_by) && changed.is_none() {
+        return;
+    }
     let Some(budget) = left().checked_sub(MIN_WAIT) else {
         return;
     };
@@ -324,6 +329,12 @@ fn attach(
         add_context(response, &context.text);
         return;
     }
+    // With nothing mapped, excerpts ranked on plain words alone ("keep
+    // going", "so is it fixed?") are a guess: mostly a README or changelog.
+    // They need the prompt to name a file, a quoted phrase or code by name.
+    if !anchored(prompt) {
+        return;
+    }
     // An excerpt holding only the quoted text is still about the request.
     words.extend(quoted);
     let request = Request {
@@ -359,8 +370,7 @@ fn attach(
     add_context(response, &context.text);
 }
 
-/// What a prompt gets: CIGAR's answer, or Guard's own read when CIGAR is
-/// starting, busy or late.
+/// What a prompt gets: CIGAR's answer, or Guard's own read when CIGAR is starting, busy or late.
 fn answered(
     lookup: Result<Option<Rendered>, Miss>,
     own_read: impl FnOnce() -> Option<Rendered>,
@@ -441,14 +451,6 @@ fn waiting_time(budget_ms: Option<u64>) -> Duration {
             .saturating_sub(HOOK_MARGIN)
             .min(MAX_WAIT)
     })
-}
-
-fn truncated(text: &str, max_bytes: usize) -> String {
-    let mut end = text.len().min(max_bytes);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    text[..end].to_owned()
 }
 
 fn add_context(response: &mut Value, context: &str) {
