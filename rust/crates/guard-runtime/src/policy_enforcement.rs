@@ -199,7 +199,7 @@ pub(crate) fn apply_pre_tool_policy_with_inspection(
         && !facts.sensitive_target;
     let mut operator_allowed_mcp_tool = false;
     if result.action.action_type == PreToolActionTypeV1::McpTool {
-        let tool = policy_enforcement_mcp_provider::outer_tool_name(payload)?;
+        let tool = policy_enforcement_mcp_provider::mcp_tool_name(payload, &harness)?;
         if let Some(tool) = tool {
             let composio_name = tool
                 .rsplit("__")
