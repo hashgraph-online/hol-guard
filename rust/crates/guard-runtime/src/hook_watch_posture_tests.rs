@@ -16,6 +16,17 @@ fn private_file(path: &Path, bytes: &[u8]) {
 }
 
 fn sidecar(generation: u64, digest: &str, postures: &[(&str, &str)]) -> Sidecar {
+    sidecar_ending(generation, digest, postures, &[], None)
+}
+
+/// A signed sidecar whose Watch ends at the given epoch microseconds.
+fn sidecar_ending(
+    generation: u64,
+    digest: &str,
+    postures: &[(&str, &str)],
+    harness_ends: &[(&str, u64)],
+    watch_ends: Option<u64>,
+) -> Sidecar {
     let harness_postures: BTreeMap<String, String> = postures
         .iter()
         .map(|(harness, posture)| ((*harness).to_owned(), (*posture).to_owned()))
@@ -25,6 +36,11 @@ fn sidecar(generation: u64, digest: &str, postures: &[(&str, &str)]) -> Sidecar 
         generation,
         policy_digest: digest.to_owned(),
         harness_postures,
+        harness_watch_ends_at_us: harness_ends
+            .iter()
+            .map(|(harness, at)| ((*harness).to_owned(), *at))
+            .collect(),
+        watch_ends_at_us: watch_ends,
         mac: String::new(),
     };
     let mut message = SIDECAR_DOMAIN.to_vec();
@@ -39,6 +55,8 @@ fn sidecar_json(sidecar: &Sidecar) -> Vec<u8> {
         "generation": sidecar.generation,
         "policy_digest": sidecar.policy_digest,
         "harness_postures": sidecar.harness_postures,
+        "harness_watch_ends_at_us": sidecar.harness_watch_ends_at_us,
+        "watch_ends_at_us": sidecar.watch_ends_at_us,
         "mac": sidecar.mac,
     }))
     .unwrap()
@@ -98,22 +116,24 @@ fn write_posture_state(home: &Path, snapshot: &PolicySnapshotV3, sidecar: Option
 #[test]
 fn the_signed_body_matches_what_the_python_publisher_signs() {
     // json.dumps(..., separators=(",", ":"), sort_keys=True) and
-    // hmac.new(key, b"hol-guard/harness-postures/v1\0" + body, sha256).
-    let sidecar = sidecar(
+    // hmac.new(key, b"hol-guard/harness-postures/v2\0" + body, sha256).
+    let sidecar = sidecar_ending(
         5,
         &"ab".repeat(32),
         &[("cursor", "protected"), ("claude-code", "watch")],
+        &[("claude-code", 1_700_000_000_000_000)],
+        None,
     );
     assert_eq!(
         sidecar_body(&sidecar).unwrap(),
         format!(
-            "{{\"generation\":5,\"harness_postures\":{{\"claude-code\":\"watch\",\"cursor\":\"protected\"}},\"policy_digest\":\"{}\"}}",
+            "{{\"generation\":5,\"harness_postures\":{{\"claude-code\":\"watch\",\"cursor\":\"protected\"}},\"harness_watch_ends_at_us\":{{\"claude-code\":1700000000000000}},\"policy_digest\":\"{}\",\"watch_ends_at_us\":null}}",
             "ab".repeat(32)
         )
     );
     assert_eq!(
         sidecar.mac,
-        "0f2764370e191ddaa576f457b59595f179625a1c269c105c4943afc0bbde2957"
+        "af2270c9f72257c94c25e662eb36cefd84c2a6f99f47c297a455eded10fb0423"
     );
 }
 
@@ -169,11 +189,11 @@ fn a_watch_snapshot_without_its_signed_overrides_proves_nothing() {
 
 #[test]
 fn the_empty_override_map_is_signed_as_the_python_publisher_signs_it() {
-    let none = sidecar(5, &"ab".repeat(32), &[]);
+    let none = sidecar_ending(5, &"ab".repeat(32), &[], &[], Some(1_700_000_000_000_000));
     assert_eq!(
         sidecar_body(&none).unwrap(),
         format!(
-            "{{\"generation\":5,\"harness_postures\":{{}},\"policy_digest\":\"{}\"}}",
+            "{{\"generation\":5,\"harness_postures\":{{}},\"harness_watch_ends_at_us\":{{}},\"policy_digest\":\"{}\",\"watch_ends_at_us\":1700000000000000}}",
             "ab".repeat(32)
         )
     );
@@ -229,9 +249,88 @@ fn an_unsignable_override_proves_nothing() {
                 .iter()
                 .map(|(harness, posture)| ((*harness).to_owned(), (*posture).to_owned()))
                 .collect(),
+            harness_watch_ends_at_us: BTreeMap::new(),
+            watch_ends_at_us: None,
             mac: "0".repeat(64),
         };
         assert!(sidecar_body(&unsignable).is_none());
-        assert!(!watch_for(&snapshot, &unsignable, "claude-code", &KEY));
+        assert!(!watch_for(&snapshot, &unsignable, "claude-code", &KEY, 0));
     }
+}
+
+#[test]
+fn a_watch_whose_signed_revert_deadline_has_passed_proves_nothing() {
+    // The daemon reverts Watch at its deadline and cannot while it is down,
+    // so the bridge ends Watch at the same instant.
+    let probe = test_root("watch-deadline-probe");
+    let enforcing = snapshot_in_mode(&probe, "enforce");
+    let at = 1_700_000_000_000_000;
+    let override_ending = sidecar_ending(
+        enforcing.generation,
+        &enforcing.policy_digest,
+        &[("claude-code", "watch"), ("codex", "watch")],
+        &[("claude-code", at)],
+        None,
+    );
+    assert!(watch_for(&enforcing, &override_ending, "claude-code", &KEY, at - 1));
+    assert!(!watch_for(&enforcing, &override_ending, "claude-code", &KEY, at));
+    // A Watch override with no revert date is one the daemon never ends.
+    assert!(watch_for(&enforcing, &override_ending, "codex", &KEY, u64::MAX));
+
+    let observing = snapshot_in_mode(&probe, "observe");
+    let global_ending = sidecar_ending(
+        observing.generation,
+        &observing.policy_digest,
+        &[],
+        &[],
+        Some(at),
+    );
+    assert!(watch_for(&observing, &global_ending, "cursor", &KEY, at - 1));
+    assert!(!watch_for(&observing, &global_ending, "cursor", &KEY, at));
+
+    // The live clock: a deadline in the past ends Watch on disk too.
+    let past = sidecar_ending(
+        enforcing.generation,
+        &enforcing.policy_digest,
+        &[("claude-code", "watch")],
+        &[("claude-code", 1)],
+        None,
+    );
+    let home = guard_home("deadline-past", &enforcing, Some(&sidecar_json(&past)));
+    assert!(!harness_in_watch(&home, "claude-code"));
+}
+
+#[test]
+fn a_moved_deadline_cannot_be_forged_under_the_old_mac() {
+    let probe = test_root("watch-deadline-forged-probe");
+    let snapshot = snapshot_in_mode(&probe, "enforce");
+    let mut signed = sidecar_ending(
+        snapshot.generation,
+        &snapshot.policy_digest,
+        &[("claude-code", "watch")],
+        &[("claude-code", 1)],
+        None,
+    );
+    signed.harness_watch_ends_at_us.insert("claude-code".to_owned(), u64::MAX);
+    assert!(!watch_for(&snapshot, &signed, "claude-code", &KEY, 2));
+    signed.harness_watch_ends_at_us.clear();
+    assert!(!watch_for(&snapshot, &signed, "claude-code", &KEY, 2));
+}
+
+#[test]
+fn a_sidecar_of_the_previous_format_proves_nothing() {
+    // Written before Watch deadlines were signed: no deadline fields, so the
+    // bridge keeps denying until the daemon publishes again.
+    let probe = test_root("watch-v1-probe");
+    let snapshot = snapshot_in_mode(&probe, "observe");
+    let v1 = serde_json::to_vec(&json!({
+        "schema": "guard-harness-postures.v1",
+        "generation": snapshot.generation,
+        "policy_digest": snapshot.policy_digest,
+        "harness_postures": {},
+        "mac": "0".repeat(64),
+    }))
+    .unwrap();
+    let home = guard_home("v1", &snapshot, Some(&v1));
+    assert!(!harness_in_watch(&home, "claude-code"));
 }
