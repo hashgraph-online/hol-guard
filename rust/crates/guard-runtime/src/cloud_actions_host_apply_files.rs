@@ -120,7 +120,7 @@ pub(super) fn absolute(path: &Path) -> PathBuf {
 fn absent(error: &io::Error) -> bool {
     matches!(
         error.kind(),
-        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory | io::ErrorKind::FilesystemLoop
+        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
     )
 }
 

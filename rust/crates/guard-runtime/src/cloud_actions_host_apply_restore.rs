@@ -6,8 +6,8 @@ use std::path::Path;
 use serde_json::Value;
 
 use super::files::{
-    changed_since_preview, file_mode, remove_if_present, sha256_hex, strerror, Failure, Ops,
-    WriteError,
+    changed_since_preview, file_mode, refuse_link, remove_if_present, sha256_hex, strerror,
+    Failure, Ops, WriteError,
 };
 use super::records::{
     backups_dir, discard_backup, latest_backup, read_copy, restore_mode, Backup, ABSENT,
