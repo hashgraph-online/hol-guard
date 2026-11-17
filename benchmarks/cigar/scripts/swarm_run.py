@@ -36,8 +36,9 @@ JOINED = "Three separate pieces of work are needed in this project. Do all three
 
 
 def snapshot(project):
-    """Content hash of every changed or new file, so a session's own edits can be told apart."""
-    names = R.git(project, "ls-files", "-m", "-o", "--exclude-standard").split()
+    """Content hash of every tracked and untracked file, so a session's own edits show up even if
+    the agent staged or committed them."""
+    names = R.git(project, "ls-files", "-c", "-o", "--exclude-standard").split()
     return {n: hashlib.sha1((project / n).read_bytes()).hexdigest() for n in names if (project / n).is_file()}
 
 
