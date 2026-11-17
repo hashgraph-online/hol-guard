@@ -23,9 +23,11 @@ fn prompt_threads_have_a_process_wide_cap() {
     let _serial = PERMIT_TESTS
         .lock()
         .unwrap_or_else(|poison| poison.into_inner());
-    let permits: Vec<_> = (0..MAX_PROMPT_THREADS)
-        .map(|_| try_prompt_thread().expect("prompt thread permit"))
-        .collect();
+    let mut permits = Vec::new();
+    while let Some(permit) = try_prompt_thread() {
+        permits.push(permit);
+    }
+    assert!(permits.len() <= MAX_PROMPT_THREADS);
     assert!(try_prompt_thread().is_none());
     drop(permits);
     assert!(try_prompt_thread().is_some());

@@ -171,7 +171,9 @@ fn warm_when_ready(watch: LaneWatch, key: Key, request: Request, permit: PromptT
         .spawn(move || {
             if let Ok(lane) = watch.wait(Instant::now() + WARM_WAIT) {
                 let prompt = hashed(&request.query);
-                let _ = launch(warm_key.clone(), prompt, lane, request, permit);
+                if let Some(flight) = launch(warm_key.clone(), prompt, lane, request, permit) {
+                    let _ = wait_for(&flight, Instant::now() + WARM_WAIT);
+                }
             }
             done_warming(&warm_key);
         });
@@ -213,7 +215,7 @@ fn launch(
     let spawned = std::thread::Builder::new()
         .name("guard-cigar-prompt".into())
         .spawn(move || {
-            let _permit = permit;
+            let permit = permit;
             let Request {
                 root,
                 app,
@@ -233,6 +235,7 @@ fn launch(
             if let Ok(mut done) = worker.done.lock() {
                 *done = Some(picked);
             }
+            drop(permit);
             worker.ready.notify_all();
             if let Ok(mut running) = flights().lock() {
                 if running
