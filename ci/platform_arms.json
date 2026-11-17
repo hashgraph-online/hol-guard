@@ -1,6 +1,6 @@
 {
  "schema_version": 1,
- "comment": "Every non-Unix behaviour arm in rust/crates/*/src — `#[cfg(..)]` attribute or `cfg!(..)` expression — with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
+ "comment": "Every non-Unix behaviour arm in rust/crates/*/src \u2014 `#[cfg(..)]` attribute or `cfg!(..)` expression \u2014 with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
  "arms": [
   {
    "file": "rust/crates/guard-command/src/adapters/hook/hook_adapter_paths.rs",
@@ -1091,12 +1091,12 @@
    "body": "414921ce24d3"
   },
   {
-   "file": "rust/crates/guard-runtime/src/claude_session_start.rs",
-   "item": "fn hand_off(argv: &[String]) -> i32",
    "verdict": "windows-equivalent",
-   "note": "Spawns the fallback and returns its exit code because Windows has no `exec`. The shim stays resident as the parent for the child's lifetime.",
+   "note": "Spawns the fallback on the same stdio and returns its exit code because Windows has no `exec`. Used only when no SessionStart event was read; with one, both platforms run the same child that gets the event on stdin.",
+   "file": "rust/crates/guard-runtime/src/claude_session_start.rs",
+   "item": "fn replace(argv: &[String]) -> i32",
    "cfg": "not(unix)",
-   "body": "a4eef17b5531"
+   "body": "7ba0c4e1be96"
   },
   {
    "verdict": "other-platform",
