@@ -45,7 +45,7 @@ def _record_managed_install(
                 context,
                 command=command,
                 target=harness,
-                manifest=json.loads(json.dumps(manifest, default=lambda _: None)),
+                manifest=json.dumps(manifest, default=lambda _: None),
                 workspace=workspace,
                 now=now,
                 source=store.guard_source,

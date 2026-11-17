@@ -389,7 +389,9 @@ class NativeHarnessAdapter(HarnessAdapter):
         answer = self._ask(
             "apply_install",
             context,
-            timeout_seconds=self._spec.get("install_timeout"),
+            # The plan and its publish run in this one call, so it gets the
+            # budget the separate `transition_files` publish had, or more.
+            timeout_seconds=self._spec.get("install_timeout") or native_transition_files.PUBLISH_TIMEOUT_SECONDS,
             **self._shim_names(),
             interpreter=shim_interpreter(),
             shell_profile=shell_profile_facts(context),
@@ -416,7 +418,12 @@ class NativeHarnessAdapter(HarnessAdapter):
         assert_transition_mutation_allowed(context.guard_home)
         # The runtime prepares the plan, removes the launchers and applies the
         # plan; the managed writes it made come back for the journal.
-        answer = self._ask("apply_uninstall", context, **options)
+        answer = self._ask(
+            "apply_uninstall",
+            context,
+            timeout_seconds=native_transition_files.PUBLISH_TIMEOUT_SECONDS,
+            **options,
+        )
         native_transition_files._replay(answer.pop("events", None), None, None)
         raise_failure(answer)
         return json.loads(_text(answer, "manifest"))

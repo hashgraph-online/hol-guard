@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     from .runtime_transition import TransitionFile
 
 _TIMEOUT_SECONDS = 60.0
+# The budget a harness install or uninstall that publishes files gets.
+PUBLISH_TIMEOUT_SECONDS = _TIMEOUT_SECONDS
 _INVALID = "native_transition_invalid"
 # Three of the resident reaper's 50 ms passes over the leases.
 _RELEASE_GRACE_SECONDS = 0.15

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -39,8 +40,9 @@ def test_installer_ownership_extends_through_store_proof_publication(
 
     def native_record(op, _context, **fields):
         assert op == "managed_install_record" and fields["target"] == "codex"
-        # The runtime binds the protection proof itself inside this op.
-        assert isinstance(fields["manifest"], dict)
+        # The runtime binds the protection proof itself inside this op. The
+        # manifest travels as `json.dumps` text so the row keeps its key order.
+        assert isinstance(json.loads(fields["manifest"]), dict)
         result = subprocess.run(
             [sys.executable, "-c", PROBE, str(context.guard_home)],
             env={**os.environ, "HOME": str(home), "USERPROFILE": str(home)},

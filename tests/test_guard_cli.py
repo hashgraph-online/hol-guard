@@ -3101,7 +3101,11 @@ args = ["workspace-skill.js", "--changed"]
 
         assert rc == 0
         assert output["managed_install"]["harness"] == "claude-code"
-        assert store.get_managed_install("claude-code") is not None
+        row = store.get_managed_install("claude-code")
+        assert row is not None
+        # The row keeps the manifest's own key order with the bound proof last,
+        # as `json.dumps({**manifest, "protection_artifact_proof": ...})` wrote it.
+        assert list(row["manifest"])[-1] == "protection_artifact_proof"
         assert store.get_managed_install("claude") is None
 
     def test_guard_install_omp_alias_dry_run_returns_omp_setup_plan(self, tmp_path, capsys):

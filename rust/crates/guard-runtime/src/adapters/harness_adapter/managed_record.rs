@@ -11,7 +11,7 @@
 //! that harness's adapter ran, so a later failure keeps the rows already
 //! written, and `managed_install_guidance` once at the end when any row was
 //! recorded. Fields: `command` (`install` or `uninstall`), `target` (the
-//! canonical harness), `manifest`, `workspace` (text or null), `now` and
+//! canonical harness), `manifest` (its `json.dumps` text), `workspace` (text or null), `now` and
 //! `source` (`GuardStore.guard_source`). The row answers with `manifest_json`
 //! undecoded.
 
@@ -24,11 +24,13 @@ use serde_json::{json, Map, Value};
 use super::files::render;
 use super::proof::bind;
 use super::{Ctx, Failure, Step};
-use crate::guard_store_json::dumps_default;
 use crate::guard_store_op::MAX_BUSY_TIMEOUT_MS;
+use crate::hook_env_stamp::set_member;
 use crate::hook_evidence_store_gate::hold_storage_gate;
 use crate::hook_evidence_store_timeout::sqlite_timeout_ms;
 use crate::local_store_read::STORE_FILE_NAME;
+use crate::opencode_plugin_render::dumps;
+use crate::pyjson::{self, PyVal};
 
 const GUIDANCE_SCHEMA: &str = "agent-safety-guidance.v1";
 
@@ -104,20 +106,25 @@ pub(crate) fn record(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         Some(Value::String(path)) => Value::from(path.as_str()),
         Some(_) => return Err(Failure::Invalid),
     };
-    let mut manifest = fields
-        .get("manifest")
-        .and_then(Value::as_object)
-        .ok_or(Failure::Invalid)?
-        .clone();
+    // The manifest arrives as `json.dumps(manifest)` text so the row keeps
+    // the key order Python wrote; a parsed `Map` would sort it.
+    let manifest_text = text(fields, "manifest")?;
+    let mut ordered = pyjson::parse(manifest_text).map_err(|_| Failure::Invalid)?;
+    let PyVal::Dict(entries) = &mut ordered else {
+        return Err(Failure::Invalid);
+    };
     if active {
-        let proof: Value =
-            serde_json::from_str(&render(&bind(ctx, &manifest)?)?).map_err(|_| Failure::Invalid)?;
-        manifest.insert("protection_artifact_proof".to_owned(), proof);
+        let manifest: Map<String, Value> =
+            serde_json::from_str(manifest_text).map_err(|_| Failure::Invalid)?;
+        // `{**manifest, "protection_artifact_proof": json.loads(proof)}`.
+        let proof =
+            pyjson::parse(&render(&bind(ctx, &manifest)?)?).map_err(|_| Failure::Invalid)?;
+        set_member(entries, "protection_artifact_proof", proof);
     }
     if transition_pending(&ctx.guard_home) {
         return Err(Failure::Refusal("pending_transition".to_owned()));
     }
-    let manifest_json = dumps_default(&Value::Object(manifest)).ok_or(Failure::Invalid)?;
+    let manifest_json = dumps(&ordered);
     store_call(
         ctx,
         source,
