@@ -12,6 +12,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_package_authority as package_authority
 from codex_plugin_scanner.guard import native_resident_client as pools
+from codex_plugin_scanner.guard import native_resident_client_pool as pool_module
 from codex_plugin_scanner.guard import native_resident_stream as streams
 from codex_plugin_scanner.guard import native_resident_transport as transport
 
@@ -42,7 +43,7 @@ def test_package_intent_capacity_wait_uses_the_earlier_deadline(
     pool = pools._PersistentNativeClientPool(executable=runtime, state_dir=home / "native-runtime", environment={})
     pool._clients = {
         streams._PersistentNativeClient(executable=runtime, state_dir=home / "native-runtime", environment={})
-        for _ in range(pools._MAX_PERSISTENT_CLIENTS)
+        for _ in range(pool_module._MAX_PERSISTENT_CLIENTS)
     }
     status = SimpleNamespace(
         available=True,
