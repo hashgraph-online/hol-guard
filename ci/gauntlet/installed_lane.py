@@ -26,6 +26,7 @@ from .installed_registration import (
     stop_daemon,
 )
 from .installed_replay import argv_for_event, registered_argv, replay_harness
+from .installed_restore import restore_pass
 from .installed_runtime import InstalledRuntime, InstalledRuntimeError, resolve_runtime
 from .installed_startup import startup_timeline
 from .installed_store import age_home, assess_aged
@@ -225,6 +226,7 @@ def run_lane(
     require_frozen: bool,
     aged_store: bool,
     output: Path,
+    uninstall_restore: bool = False,
     work_root: Path | None = None,
 ) -> dict[str, Any]:
     """Run the whole lane and return its evidence."""
@@ -269,6 +271,16 @@ def run_lane(
             replayable = [harness for harness in harnesses if contract["harnesses"][harness].get("replay")]
             evidence["aged_store"] = aged_pass(runtime, replayable or harnesses, contract, root=root)
             failures.extend(evidence["aged_store"]["failures"])
+        if uninstall_restore:
+            # Removing Guard must hand the user's own settings back unchanged.
+            evidence["uninstall_restore"] = restore_pass(
+                runtime,
+                harnesses,
+                contract,
+                home=build_home(root, "home-restore"),
+                workspace=build_workspace(root / "restore"),
+            )
+            failures.extend(evidence["uninstall_restore"]["failures"])
     except GateBlockedError as blocked:
         evidence["gate_blocked"] = str(blocked)
         evidence["accepted"] = False

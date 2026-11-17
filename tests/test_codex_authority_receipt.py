@@ -100,11 +100,8 @@ def test_signed_receipt_does_not_authenticate_inconsistent_manifest(
     installed,
     failure,
 ):
-    from codex_plugin_scanner.guard.codex_hook_integrity import (
-        canonical_manifest_bytes,
-        load_hook_secret,
-        sign_hook_manifest,
-    )
+    from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, load_hook_secret
+    from tests.codex_hook_integrity_fixtures import sign_hook_manifest
 
     context, config, manifest = installed
     original = manifest.read_bytes()
@@ -132,7 +129,8 @@ def test_replaced_key_refuses_the_receipt_and_preserves_it(
     installed,
     tmp_path,
 ):
-    from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path, load_or_create_hook_secret
+    from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
+    from tests.codex_hook_integrity_fixtures import load_or_create_hook_secret
 
     context, config, manifest = installed
     other_home = tmp_path / "other-generated-installation"
@@ -325,11 +323,8 @@ def test_frozen_retained_repair_pins_both_physical_executables(tmp_path, monkeyp
 
 
 def _replace_generated_receipt(context, config, payload):
-    from codex_plugin_scanner.guard.codex_hook_integrity import (
-        canonical_manifest_bytes,
-        load_hook_secret,
-        sign_hook_manifest,
-    )
+    from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, load_hook_secret
+    from tests.codex_hook_integrity_fixtures import sign_hook_manifest
 
     payload.pop("authentication")
     signed = sign_hook_manifest(payload, load_hook_secret(context.guard_home))

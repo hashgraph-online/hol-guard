@@ -36,6 +36,10 @@ use super::zcode_hook_settings::{
 /// of the full managed command.
 const STATUS_MESSAGE: &str = "HOL Guard runtime policy enforcement";
 
+/// Objects the Desktop surface must carry; install adds an empty one when
+/// the file has none.
+pub(crate) const DESKTOP_KEYS: [&str; 2] = ["mcp", "plugins"];
+
 pub(crate) fn dispatch(args: &Value) -> KindResult {
     let map = args_object(args)?;
     let op = map.get("op").and_then(Value::as_str).ok_or(ERR_INVALID)?;
@@ -85,7 +89,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         };
         (payload, lone) = read;
         if desktop {
-            for key in ["mcp", "plugins"] {
+            for key in DESKTOP_KEYS {
                 if !matches!(lookup(&payload, key), Some(PyVal::Dict(_))) {
                     set_key(&mut payload, key, PyVal::Dict(Dict::new()));
                 }
@@ -112,7 +116,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
 /// else on is refused. The flag says whether a lone surrogate escape was
 /// mapped, so only a mapped one is refused when rendered and a genuine
 /// character in that range still round-trips.
-fn read_payload(text: &str) -> Result<Option<(Dict, bool)>, &'static str> {
+pub(crate) fn read_payload(text: &str) -> Result<Option<(Dict, bool)>, &'static str> {
     match pyjson::parse_mapping_lone_surrogates(text) {
         Ok(SurrogateMapped {
             value: PyVal::Dict(entries),

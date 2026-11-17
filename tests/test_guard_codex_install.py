@@ -26,16 +26,16 @@ from codex_plugin_scanner.guard.codex_hook_file_integrity import (
     describe_regular_file,
     validate_regular_file,
 )
-from codex_plugin_scanner.guard.codex_hook_integrity import (
-    hook_secret_path,
-    load_or_create_hook_secret,
-    sign_hook_manifest,
-    write_hook_manifest,
-)
+from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
 from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 from tests import codex_hook_publication_helpers as publication_helpers
+from tests.codex_hook_integrity_fixtures import (
+    load_or_create_hook_secret,
+    sign_hook_manifest,
+    write_hook_manifest,
+)
 from tests.native_runtime_stamp import stamp_native_runtime
 from tests.transition_fault_support import interrupt_publication_at
 

@@ -502,6 +502,20 @@ pub(super) fn run() -> Result<(), String> {
         {
             managed_resident::client_stream(std::path::Path::new(state_dir))
         }
+        [command, flag, state_dir, retire_flag, hold_flag, guard_home]
+            if command == "resident-stop"
+                && flag == "--state-dir"
+                && retire_flag == "--retire-clients"
+                && hold_flag == "--hold-install-lock" =>
+        {
+            // Held until the stop returns: an install that holds its lease
+            // finishes first, and none can take one while the resident goes.
+            let _install = crate::transition_files::hold_install_lock(
+                std::path::Path::new(guard_home),
+                std::time::Duration::from_secs(1),
+            )?;
+            managed_resident::stop_managed(std::path::Path::new(state_dir), true)
+        }
         [command, flag, state_dir, retire_flag]
             if command == "resident-stop"
                 && flag == "--state-dir"

@@ -79,7 +79,20 @@ pub(super) fn try_lock(file: &mut fs::File) -> std::io::Result<bool> {
 /// `opencode_config_busy` when it stays busy and the lock file's refusal
 /// reason when the file cannot be opened safely.
 pub(crate) fn hold_opencode_lock(home_dir: &Path, wait: Duration) -> Result<fs::File, String> {
-    let (mut file, _) = opencode_lock(home_dir).map_err(|refusal| refusal.0)?;
+    let (file, _) = opencode_lock(home_dir).map_err(|refusal| refusal.0)?;
+    hold(file, wait, "opencode_config_busy")
+}
+
+/// The Guard home's installation lock held by the caller's own handle, so a
+/// resident stop neither interrupts an install that holds its lease nor lets
+/// one start until the stop is done. Answers
+/// `native_resident_install_in_progress` when an install keeps it past `wait`.
+pub(crate) fn hold_install_lock(guard_home: &Path, wait: Duration) -> Result<fs::File, String> {
+    let (file, _) = install_lock(guard_home).map_err(|refusal| refusal.0)?;
+    hold(file, wait, "native_resident_install_in_progress")
+}
+
+fn hold(mut file: fs::File, wait: Duration, busy: &str) -> Result<fs::File, String> {
     let deadline = std::time::Instant::now() + wait;
     loop {
         match try_lock(&mut file) {
@@ -87,7 +100,7 @@ pub(crate) fn hold_opencode_lock(home_dir: &Path, wait: Duration) -> Result<fs::
             Ok(false) if std::time::Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(25));
             }
-            Ok(false) => return Err("opencode_config_busy".into()),
+            Ok(false) => return Err(busy.to_owned()),
             Err(error) => return Err(Refusal::lifecycle("lock", &error).0),
         }
     }

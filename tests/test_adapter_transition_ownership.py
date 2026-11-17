@@ -38,9 +38,8 @@ def test_direct_adapter_cannot_write_during_pending_transition(tmp_path: Path):
 
 @pytest.mark.parametrize("operation", ["create_key", "write_manifest", "remove_manifest", "remove_key"])
 def test_direct_codex_authority_writer_cannot_mutate_pending_inverse(tmp_path: Path, operation: str):
-    from codex_plugin_scanner.guard.codex_hook_integrity import (
-        hook_manifest_path,
-        hook_secret_path,
+    from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path, hook_secret_path
+    from tests.codex_hook_integrity_fixtures import (
         load_or_create_hook_secret,
         remove_hook_manifest,
         remove_hook_secret_if_unused,

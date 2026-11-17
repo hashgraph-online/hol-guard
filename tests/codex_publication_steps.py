@@ -47,9 +47,9 @@ def stepwise_publish_hooks(
     """``publish_hooks``, one native record op at a time."""
     from codex_plugin_scanner.guard import codex_hook_recovery as recovery
     from codex_plugin_scanner.guard import native_transition_files
-    from codex_plugin_scanner.guard.codex_hook_integrity import remove_hook_secret_if_unused
     from codex_plugin_scanner.guard.codex_hook_rollback import rollback_file_identity
     from codex_plugin_scanner.guard.runtime_transition import TransitionError
+    from tests.codex_hook_integrity_fixtures import remove_hook_secret_if_unused
 
     home, config = context.guard_home, Path(str(request["config"]))
     config_change = files[int(request["config_index"])]
@@ -132,11 +132,12 @@ def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, o
     from codex_plugin_scanner.guard import codex_harness_client as codex
     from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
     from codex_plugin_scanner.guard.codex_hook_file_integrity import _python_package_roots
-    from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, remove_hook_secret_if_unused
+    from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes
     from codex_plugin_scanner.guard.codex_hook_recovery import _owned
     from codex_plugin_scanner.guard.harness.base import PreparedHarnessInstall
     from codex_plugin_scanner.guard.native_transition_files import publication as publication_op
     from codex_plugin_scanner.guard.runtime_transition import assert_transition_mutation_allowed
+    from tests.codex_hook_integrity_fixtures import remove_hook_secret_if_unused
     from tests.codex_hook_publication_helpers import _spec_payload
 
     assert_transition_mutation_allowed(context.guard_home)

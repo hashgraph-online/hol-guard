@@ -2579,6 +2579,22 @@
    "body": "5bf21e38ad03"
   },
   {
+   "verdict": "windows-permissive",
+   "note": "The launch-failure record leaves out the parent pid off Unix, where the standard library has no parent-pid call. The record is a diagnostic only; nothing is allowed or refused on it.",
+   "file": "rust/crates/guard-runtime/src/runtime_output.rs",
+   "item": "fn parent_pid() -> Option<u32>",
+   "cfg": "not(unix)",
+   "body": "119d5d1ff5cc"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Path-based opens under the Guard home, which inherits its ACL; the directory and the log are refused when they are symlinks, and a rename never replaces one. Windows has no openat; the record is a diagnostic and writes nothing Guard reads back.",
+   "file": "rust/crates/guard-runtime/src/runtime_output_directory.rs",
+   "item": "mod imp",
+   "cfg": "not(unix)",
+   "body": "4f17010d9edc"
+  },
+  {
    "verdict": "posix-primitive",
    "note": "Fsyncing a directory to make a rename or create durable is a POSIX primitive with no Windows counterpart, and the Python `fsync_directory` this replaces is a no-op there too; the record file itself is synced before it is published.",
    "file": "rust/crates/guard-runtime/src/runtime_transition_record.rs",

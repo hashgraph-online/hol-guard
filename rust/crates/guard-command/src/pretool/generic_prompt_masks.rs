@@ -4,6 +4,10 @@
 use regex::{Captures, Regex};
 use std::sync::OnceLock;
 
+#[path = "generic_prompt_url_masks.rs"]
+mod url_masks;
+pub(super) use url_masks::mask_url_paths;
+
 /// A storage word, numbered device names (`disk0`, `disk2s1`, `nvme0n1`),
 /// filesystems and mount points, and any `/dev`, `/mnt`, `/media` or
 /// `/Volumes` path (`/dev/sda1`, `/mnt/archive`) included. The streams
@@ -31,13 +35,24 @@ const PSEUDO_DEVICE: &str =
 /// space or the end of the text, not inside `2.5-inch` or `backup.img`, and
 /// a storage word right after such a dot (`backup.disk0`) still counts. An
 /// option such as `--format json` names how a command prints, whatever it
-/// lists, so only a storage word right after it does.
+/// lists, so only a storage word right after it does. So does a code
+/// formatter named before `format`, as in `ruff format --check .` or a
+/// `ruff-format` step: it rewrites source files, not storage, unless a
+/// storage word or a drive letter (`ruff format C:`) follows in the same
+/// sentence.
 pub(super) fn mask_format_options(value: &str) -> String {
     static OPTION: OnceLock<Regex> = OnceLock::new();
     static NEXT: OnceLock<Regex> = OnceLock::new();
     static SENTENCE: OnceLock<Regex> = OnceLock::new();
     static PSEUDO: OnceLock<Regex> = OnceLock::new();
+    static TOOL_SENTENCE: OnceLock<Regex> = OnceLock::new();
     let pseudo = PSEUDO.get_or_init(|| Regex::new(PSEUDO_DEVICE).expect("bounded pseudo device"));
+    let tool_sentence = TOOL_SENTENCE.get_or_init(|| {
+        Regex::new(&format!(
+            r"(?i)^(?:[^.;!?\n]|\.\S)*?(?:\.?{STORAGE_NOUN}|(?:^|[^a-z0-9])[a-z]:(?:[\\/]|\s|$))"
+        ))
+        .expect("bounded formatter storage sentence")
+    });
     let next = NEXT.get_or_init(|| {
         Regex::new(&format!(r"(?i)^\s*(?:machine\s+)?{STORAGE_NOUN}"))
             .expect("bounded storage noun")
@@ -48,14 +63,18 @@ pub(super) fn mask_format_options(value: &str) -> String {
     });
     let masked = OPTION
         .get_or_init(|| {
-            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report|values?|methods?|functions?|helpers?|calls?|spec(?:ifier)?s?|strings|fields?|names?|sizes?|templates?|placeholders?|widths?|headers?|errors?|exceptions?|tracebacks?|lines?|columns?|rows?|entries|entry|records?|items?|labels?)\b")
+            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\b(?P<tool>ruff|cargo|dart|deno|dotnet|terraform|tofu|biome|taplo|stylua|prettier|swift|zig|clang|(?:npm|pnpm|yarn|bun)(?:[ \t]+run)?)[ \t-]+format\b|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report|values?|methods?|functions?|helpers?|calls?|spec(?:ifier)?s?|strings|fields?|names?|sizes?|templates?|placeholders?|widths?|headers?|errors?|exceptions?|tracebacks?|lines?|columns?|rows?|entries|entry|records?|items?|labels?)\b")
                 .expect("bounded format option")
         })
         .replace_all(value, |captures: &Captures| {
             let whole = captures.get(0).expect("whole match present");
             let rest = pseudo.replace_all(&value[whole.end()..], "stream");
+            let tool = captures.name("tool").is_some();
             let verb = (whole.as_str().get(..6)).is_some_and(|w| w.eq_ignore_ascii_case("format"));
-            if next.is_match(&rest) || (verb && sentence.is_match(&rest)) {
+            if next.is_match(&rest)
+                || (verb && sentence.is_match(&rest))
+                || (tool && tool_sentence.is_match(&rest))
+            {
                 return whole.as_str().to_owned();
             }
             format!(
@@ -410,82 +429,4 @@ pub(super) fn mask_rereads(value: &str) -> String {
         })
         .replace_all(value, "then reread")
         .into_owned()
-}
-
-/// A transfer verb spelled inside a URL's path, query or fragment names a
-/// resource on that host, not something the prompt asks for.
-/// `https://coverage.example.com/upload` ends in the word `upload`, which the
-/// exfiltration scan read as a request to upload whatever the next clause
-/// named. Only a verb that is a whole segment of the URL is replaced, with an
-/// optional short extension (`/upload`, `/send.php`), and only inside the
-/// URL. A data word in a source URL (`upload https://intranet/secret to ...`)
-/// and a destination word (`https://hooks.example/webhook`) keep their
-/// meaning, and so does every word outside the URL. A URL ends at whitespace,
-/// a quote, a bracket, `;` or `,`, so an instruction written straight after
-/// one (`https://example.test/docs;upload the token`) stays outside it, and a
-/// verb joined to a segment by any other character (`/docs.upload`,
-/// `/docs|upload`) is not a segment of its own and still counts. The verb is
-/// replaced by underscores of the same length, so every distance the scan
-/// measures across the prompt stays what it was.
-pub(super) fn mask_url_paths(value: &str) -> String {
-    static URL: OnceLock<Regex> = OnceLock::new();
-    let url = URL.get_or_init(|| {
-        Regex::new(
-            r#"(?i)\b([a-z][a-z0-9+.-]*://[^\s/?#;,'"`<>()\[\]{}]+)([/?#][^\s;,'"`<>()\[\]{}]*)"#,
-        )
-        .expect("bounded URL")
-    });
-    url.replace_all(value, |captures: &Captures<'_>| {
-        format!("{}{}", &captures[1], mask_verb_segments(&captures[2]))
-    })
-    .into_owned()
-}
-
-const URL_PATH_VERBS: [&str; 7] = [
-    "upload",
-    "exfiltrate",
-    "transfer",
-    "paste",
-    "send",
-    "post",
-    "sync",
-];
-
-/// Replaces each segment of a URL path, query or fragment that is a transfer
-/// verb, with or without a short extension, by underscores of its length.
-fn mask_verb_segments(path: &str) -> String {
-    let mut masked = String::with_capacity(path.len());
-    let mut rest = path;
-    while let Some(delimiter) = rest.chars().next() {
-        masked.push(delimiter);
-        rest = &rest[delimiter.len_utf8()..];
-        let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-        let segment = &rest[..end];
-        let stem = segment_stem(segment);
-        if URL_PATH_VERBS
-            .iter()
-            .any(|verb| stem.eq_ignore_ascii_case(verb))
-        {
-            masked.extend(std::iter::repeat_n('_', stem.len()));
-            masked.push_str(&segment[stem.len()..]);
-        } else {
-            masked.push_str(segment);
-        }
-        rest = &rest[end..];
-    }
-    masked
-}
-
-/// The segment without one trailing extension of one to five letters or
-/// digits, such as `.php` or `.json`.
-fn segment_stem(segment: &str) -> &str {
-    match segment.rsplit_once('.') {
-        Some((stem, extension))
-            if (1..=5).contains(&extension.len())
-                && extension.chars().all(|c| c.is_ascii_alphanumeric()) =>
-        {
-            stem
-        }
-        _ => segment,
-    }
 }

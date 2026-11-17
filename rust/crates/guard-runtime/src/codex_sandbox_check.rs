@@ -47,7 +47,7 @@ pub(crate) fn run(args: &[String]) -> i32 {
     if confirmed {
         return 0;
     }
-    eprintln!("{MESSAGE}");
+    crate::runtime_output::stderr_line(format_args!("{MESSAGE}"));
     REFUSED
 }
 
