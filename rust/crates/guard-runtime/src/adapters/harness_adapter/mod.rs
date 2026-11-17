@@ -116,6 +116,7 @@ mod hook_render;
 mod install_apply;
 mod isolated_python;
 mod kimi;
+mod live_hook_verification;
 mod managed_record;
 mod managed_servers;
 mod mcp_servers;
@@ -335,6 +336,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     let ctx = Ctx::parse(fields.get("context"))?;
     if grok_protection_checks::handles(op) {
         return answer(grok_protection_checks::dispatch(op, &ctx));
+    }
+    if live_hook_verification::handles(op) {
+        return answer(live_hook_verification::dispatch(&ctx, fields));
     }
     if grok_hook_op::handles(op) {
         return answer(grok_hook_op::dispatch(op, &ctx, fields));

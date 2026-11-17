@@ -332,10 +332,8 @@ def _live_budget() -> tuple[float, bool]:
     return max(timeout, _LIVE_STATE_MIN_SECONDS), timeout <= 0
 
 
-def live_hook_ask(op: str, context: HarnessContext) -> dict[str, Any]:
-    """Ask a live hook state op: the runtime reads the config and hooks files,
-    authenticates and verifies the hook manifest, and decides which managed
-    events Guard owns."""
+def live_hook_fields(context: HarnessContext) -> tuple[dict[str, Any], float]:
+    """The facts a live hook state op needs, and the time it may take."""
     from .codex_hook_file_integrity import _python_package_roots
 
     timeout, spent = _live_budget()
@@ -344,6 +342,14 @@ def live_hook_ask(op: str, context: HarnessContext) -> dict[str, Any]:
         "package_roots": [str(root) for root in _python_package_roots()],
         "budget_spent": spent,
     }
+    return request, timeout
+
+
+def live_hook_ask(op: str, context: HarnessContext) -> dict[str, Any]:
+    """Ask a live hook state op: the runtime reads the config and hooks files,
+    authenticates and verifies the hook manifest, and decides which managed
+    events Guard owns."""
+    request, timeout = live_hook_fields(context)
     return dict(ask(op, context, harness="codex", timeout_seconds=timeout, **request))
 
 
