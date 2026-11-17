@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Map, Value};
 
 use super::codex::{config_path, hooks_path};
-use super::codex_incident_read::{read_hook_files, status, HookRead};
+use super::codex_incident_read::{read_hook_files, status as fields_of, HookRead};
 use super::codex_live_state::verified_state;
 use super::codex_spec::with_spec;
 use super::{caller, Ctx, Step};
@@ -207,7 +207,7 @@ fn status_fields(
     exception_class: Value,
     managed: Map<String, Value>,
 ) -> Map<String, Value> {
-    status(&[
+    fields_of(&[
         ("manifest_integrity", json!(status)),
         ("reason_code", json!(reason)),
         ("integrity_probe_exception_class", exception_class),
