@@ -47,6 +47,10 @@ fn printf_escapes_are_decoded_before_ssn_boundary_check() {
     for command in [
         r"echo '123\05545\0556789'",
         r"echo '123\x2d45\x2d6789'",
+        // printf processes escapes in the format string, not in a normal
+        // %s argument. Reviewing these would be a new false positive.
+        r"printf '%s\n' '123\05545\0556789'",
+        r"printf '%s\n' '123\x2d45\x2d6789'",
         r"printf '123\05545\0550000'",
         r"printf '123\x2d45\x2d0000'",
         r"printf '\0123-45-6789'",
