@@ -25,8 +25,14 @@ fn issuable(area: &str, group: &str, serial: &str) -> bool {
     area_ok && group != "00" && serial != "0000"
 }
 
-fn attached_to_word(byte: u8) -> bool {
+// Keep the original asymmetric boundaries: a period before the candidate
+// can be part of a version, but trailing sentence punctuation is harmless.
+fn attached_before(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-' | b'/' | b':')
+}
+
+fn attached_after(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'/' | b':')
 }
 
 // Quoted parentheses are printed punctuation, not shell control operators.
@@ -78,8 +84,8 @@ pub(super) fn echoes_ssn(command: &str) -> bool {
     let bytes = trimmed.as_bytes();
     SSN.captures_iter(trimmed).any(|found| {
         let span = found.get(0).expect("SSN capture");
-        (span.start() == 0 || !attached_to_word(bytes[span.start() - 1]))
-            && (span.end() == bytes.len() || !attached_to_word(bytes[span.end()]))
+        (span.start() == 0 || !attached_before(bytes[span.start() - 1]))
+            && (span.end() == bytes.len() || !attached_after(bytes[span.end()]))
             && issuable(&found[1], &found[2], &found[3])
     })
 }
