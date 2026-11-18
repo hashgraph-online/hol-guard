@@ -230,7 +230,15 @@ pub(super) fn without_plain_awk(shell: &str) -> String {
             continue;
         }
         at_command = false;
-        let base = piece.rsplit('/').next().unwrap_or_default();
+        // The shell removes quotes and backslashes before awk sees a word, so
+        // `"awk"`, `'-f'` and `\-f` are read the way awk receives them.
+        let decoded = |word: &str| -> String {
+            word.chars()
+                .filter(|character| !matches!(character, '\'' | '"' | '\\'))
+                .collect()
+        };
+        let program = decoded(piece);
+        let base = program.rsplit('/').next().unwrap_or_default();
         if !matches!(base, "awk" | "gawk" | "mawk" | "nawk") {
             out.push(piece.clone());
             index += 1;
@@ -253,11 +261,13 @@ pub(super) fn without_plain_awk(shell: &str) -> String {
             if *operator {
                 return true;
             }
-            let flagged = word.starts_with('-');
-            if flagged {
-                return word.starts_with("-F") || word.starts_with("-v");
+            let option = decoded(word);
+            if option.starts_with('-') {
+                return option.starts_with("-F") || option.starts_with("-v");
             }
-            let lowered = word.to_ascii_lowercase();
+            // Quotes that split a name (`'sys'"tem"`) are gone by the time awk
+            // reads the program, so the names are looked for in that text.
+            let lowered = option.to_ascii_lowercase();
             !["system", "getline", "popen", "|", "`", "$(", "@", "${"]
                 .iter()
                 .any(|bad| lowered.contains(bad))

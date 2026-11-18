@@ -131,6 +131,7 @@ fn a_plain_awk_inside_a_substitution_is_read_like_one_outside_it() {
     for command in [
         "actual=$(shasum -a 256 server.js | awk '{print $1}')",
         "x=$(echo a | awk '{print $1}')",
+        "x=$(echo a | \"awk\" '{print $1}')",
         "echo \"$(echo a | awk -F: '{print $2}')\"",
         "for entry in 'server.js 64'; do set -- $entry; actual=$(shasum -a 256 \"$1\" | awk '{print $1}'); test \"$actual\" = \"$2\"; done",
         "for f in package.json README.md; do actual=$(shasum -a 256 \"$f\" | awk '{print $1}'); test -n \"$actual\"; done",
@@ -161,6 +162,14 @@ fn an_awk_that_can_run_a_program_inside_a_substitution_stays_refused() {
         "x=$(echo a | awk '{\"date\" | getline d; print d}')",
         "x=$(echo a | awk -f prog.awk)",
         "x=$(echo a | gawk -e '@load \"x\"')",
+        // The shell removes these quotes and backslashes before awk reads
+        // the option, so each is still a program file.
+        "x=$(echo a | awk \\-f prog.awk)",
+        "x=$(echo a | awk '-f' prog.awk)",
+        "x=$(echo a | \"awk\" \"-f\" prog.awk)",
+        "x=$(echo a | mawk -f prog.awk)",
+        "x=$(echo a | nawk -f prog.awk)",
+        "x=$(echo a | awk '{sys'\"tem(\\$1)}\")",
     ] {
         let result = evaluate_in(&binding, command, home.path(), &project);
         assert_ne!(result.minimum_action, "allow", "{command}");

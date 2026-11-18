@@ -161,6 +161,8 @@ const INTERPRETERS: &[&str] = &[
     "osascript",
     "awk",
     "gawk",
+    "mawk",
+    "nawk",
     "watch",
     "parallel",
     "su",
