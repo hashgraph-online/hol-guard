@@ -19,14 +19,18 @@ use crate::daemon_edge::standalone::write_signed_record;
 
 const PREVIOUS_LAUNCH: &str = "previous Guard daemon launch";
 
-struct Running(Child);
+pub(super) struct Running(Child);
 
 impl Running {
-    fn pid(&self) -> u32 {
+    pub(super) fn spawn(command: &mut Command) -> Self {
+        Self(command.process_group(0).spawn().unwrap())
+    }
+
+    pub(super) fn pid(&self) -> u32 {
         self.0.id()
     }
 
-    fn exited(&mut self) -> bool {
+    pub(super) fn exited(&mut self) -> bool {
         self.0.try_wait().unwrap().is_some()
     }
 }
@@ -43,13 +47,13 @@ impl Drop for Running {
     }
 }
 
-fn private_home() -> tempfile::TempDir {
+pub(super) fn private_home() -> tempfile::TempDir {
     let home = tempfile::tempdir().unwrap();
     fs::set_permissions(home.path(), fs::Permissions::from_mode(0o700)).unwrap();
     home
 }
 
-fn free_port() -> u16 {
+pub(super) fn free_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
         .local_addr()
@@ -85,7 +89,7 @@ fn dead_pid() -> i64 {
 }
 
 /// The signed receipt a launch leaves when its child exits before handoff.
-fn abandoned_receipt(home: &Path) {
+pub(super) fn abandoned_receipt(home: &Path) {
     let nonce = "ab".repeat(32);
     let mut pending = Map::new();
     pending.insert("state_kind".into(), "daemon_launch_pending".into());
