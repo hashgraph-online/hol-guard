@@ -85,7 +85,7 @@
   ],
   "saferAlternatives": [
     "No model is called and data stays in the local SQLite file. Semantic search is off by default; if MONOMEM_EMBEDDINGS is turned on and MONOMEM_EMBED_URL points at a remote host, note and search text are sent there.",
-    "Monomem 1.6 registers seven tools by default (memory_save, _search, _read, _list, _archive, _replace, _catch_up); the rest need MONOMEM_TOOLS. The 1.5 names (state_write, catch_up, ...) still answer for one release and keep their defaults here.",
+    "Monomem 1.6 registers seven tools by default (memory_save, _search, _read, _list, _archive, _replace, _catch_up); the rest need MONOMEM_TOOLS. The 1.5 names still answer for one release and keep their defaults, except memory_history (now review).",
     "This stdio launch runs as the local operator with no key. Writes are stamped written_by \"stdio\", or \"stdio:<app>\" when the config sets MONOMEM_CLIENT: a name from the config file, not proof. Per-app keys apply only to the HTTP server, not here.",
     "Over stdio, memory_held, memory_trust and memory_rollback are not offered and approving a task is refused, unless MONOMEM_STDIO_ADMIN_TOOLS=1.",
     "Under the default MONOMEM_LINT policy, known secret formats are refused and injection-like text is held for review; bare high-entropy strings are stored with a warning. MONOMEM_LINT=warn stores all of these, so this holds only by default.",
