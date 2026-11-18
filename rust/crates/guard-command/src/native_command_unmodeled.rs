@@ -59,6 +59,8 @@ mod functions;
 mod heredoc;
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
+#[path = "native_command_unmodeled_loop.rs"]
+mod loops;
 #[path = "native_command_unmodeled_operands.rs"]
 mod operands;
 #[path = "native_command_unmodeled_redirections.rs"]
@@ -159,6 +161,8 @@ const INTERPRETERS: &[&str] = &[
     "osascript",
     "awk",
     "gawk",
+    "mawk",
+    "nawk",
     "watch",
     "parallel",
     "su",
@@ -842,8 +846,9 @@ fn reviewable_structure(
             let looked = without_lookups(&command.normalized_text);
             bounded_substitutions(&looked)
                 .or_else(|| {
-                    reviewable_substitutions(&looked)
-                        .filter(|bounded| plain_sequence(&bounded.text))
+                    reviewable_substitutions(&looked).filter(|bounded| {
+                        plain_sequence(&bounded.text) || loops::launcher_free_loop(&bounded.text)
+                    })
                 })
                 .is_some_and(|bounded| {
                     let text = bounded.text;

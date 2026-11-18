@@ -42,7 +42,7 @@ const LOOKUPS: &[&str] = &["command", "which", "type", "whence", "where", "hash"
 
 /// Launchers the unmodeled reader does not list as interpreters. Each runs
 /// the program named by a later word.
-const LAUNCHERS: &[&str] = &[
+pub(super) const LAUNCHERS: &[&str] = &[
     "pkexec",
     "runuser",
     "unshare",
@@ -528,7 +528,14 @@ fn receiving_program(
         // assignment hands the value straight to the program the rest of this
         // command names and `env NAME=` and `make NAME=` are settings whatever
         // program receives them.
-        return (flow == ValueFlow::Assignments && words.is_empty() && !followed).then_some(None);
+        //
+        // A loop body's `do` opens a command position of its own, so `for f
+        // in a; do actual=$(...); ...; done` keeps the value exactly as the
+        // same assignment after a `;` does. Without this, the keyword read as
+        // the program receiving the output, and a checksum loop over its own
+        // variable blocked with no approval left to give.
+        let command_position = words.iter().all(|word| word == "do");
+        return (flow == ValueFlow::Assignments && command_position && !followed).then_some(None);
     }
     let receiver = words
         .iter()
@@ -576,6 +583,28 @@ fn closing_parenthesis(chars: &[char], start: usize) -> Option<usize> {
 /// closing `)` does not read comments, so a `)` inside one ends the text early
 /// and the words after it would never reach this list.
 fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
+    // `$(shasum -a 256 a.js | awk '{print $1}')` is the everyday way to keep
+    // one field of a program's output. An `awk` whose program only filters and
+    // prints starts nothing, and the reader outside a substitution already
+    // reads it as `true`; reading the same program here keeps its braces and
+    // `$1` from refusing the substitution, which left a block with no approval
+    // to give. A program that names `system`, `getline` or a pipe keeps its
+    // words and is refused below as before.
+    let unawked;
+    // The rewrite drops every word of the awk command, so it runs only on a
+    // text with no nested substitution: `awk -vX="$(gh pr list)"` would
+    // otherwise lose the program its option value starts.
+    let nested = inner.contains("$(") || inner.contains(['`', '<', '>']);
+    let inner = if !nested
+        && named_words(inner)
+            .iter()
+            .any(|name| matches!(name.as_str(), "awk" | "gawk" | "mawk" | "nawk"))
+    {
+        unawked = super::without_plain_awk(inner);
+        unawked.as_str()
+    } else {
+        inner
+    };
     if inner.contains(['`', '<', '>', '(', ')', '\n', '#'])
         || inner.contains("$(")
         || !expansions_are_names(inner)
