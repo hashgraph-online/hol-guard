@@ -310,6 +310,23 @@ fn a_read_after_a_cd_chunk_is_proved_where_the_cd_left_the_shell() {
             result.decision
         );
     }
+    // A subshell, or a second `cd` that fails, leaves the shell where the
+    // first `cd` put it, not where the command started.
+    let other = space.root.join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(other.join("notes.txt"), "plain\n").unwrap();
+    let other = shell_word(&other);
+    for command in [
+        format!("cd {repository} && ls; (cd {other} && ls); cat notes.txt"),
+        format!("cd {repository} && ls; cd {other} && ls; cat notes.txt"),
+    ] {
+        let result = decide(&space, &space.root, &command);
+        assert_ne!(
+            result.reason_code, "native_exact_safe_command",
+            "{command}: {}",
+            result.decision
+        );
+    }
     let notes = shell_word(&space.root.join("notes.txt"));
     let command = format!("cd {repository} && ls; cat {notes}");
     let result = decide(&space, &space.root, &command);

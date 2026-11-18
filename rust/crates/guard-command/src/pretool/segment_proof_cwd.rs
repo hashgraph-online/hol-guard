@@ -159,8 +159,9 @@ pub(in crate::pretool) fn verified_leading_cd_target(
 /// earlier group was a subshell. `||` does not start that `cd`: it skips the
 /// `cd` when the step before it succeeds, and a later `&&` read would then
 /// run in a directory this proof did not verify. A read after `;` or `||`
-/// runs where the last `cd` left the shell when that `cd` worked, and where the
-/// command started when it failed or ran in a subshell, so it is proved in both.
+/// runs in whichever directory a `cd` that worked last left the shell in: a
+/// failed `cd` or a closed subshell leaves the one before it. So the read is
+/// proved where the command started and in every directory a `cd` entered.
 pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
     model: &CanonicalCommandV1,
     allow_git_helper_context: bool,
@@ -169,7 +170,7 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
     if model.segments.len() < 2 || model.confidence != "exact" {
         return false;
     }
-    let mut left: Option<String> = None;
+    let mut entered: Vec<String> = Vec::new();
     let mut index = 0usize;
     while index < model.segments.len() {
         if index > 0 && !reaches_segment(model, index) {
@@ -180,23 +181,24 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
             else {
                 return false;
             };
-            left = Some(cwd);
+            entered.push(cwd);
             continue;
         }
-        let there = left.as_deref().map(|cwd| PathContext {
-            cwd: Some(cwd),
-            ..context
-        });
+        let proved = |cwd: &str| {
+            let there = PathContext {
+                cwd: Some(cwd),
+                ..context
+            };
+            read_in_context(model, index, allow_git_helper_context, there)
+        };
         if !read_in_context(model, index, allow_git_helper_context, context)
-            || there.is_some_and(|there| {
-                !read_in_context(model, index, allow_git_helper_context, there)
-            })
+            || !entered.iter().all(|cwd| proved(cwd))
         {
             return false;
         }
         index += 1;
     }
-    left.is_some()
+    !entered.is_empty()
 }
 
 /// `&&` or `;` may start an absolute `cd`. A read that is not a `cd` may also
