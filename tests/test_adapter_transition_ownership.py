@@ -173,7 +173,7 @@ def test_frozen_copilot_preparation_plans_no_helper_and_publishes_nothing(
     del native_adapter_state_integrity_runtime
     from codex_plugin_scanner.guard.harness import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.harness.registry import get_adapter
-    from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
+    from tests.python_oracles.native_adapter_state_integrity import native_adapter_state_integrity
 
     ctx = HarnessContext(
         home_dir=tmp_path,
@@ -205,7 +205,7 @@ def test_copilot_prepared_generation_matches_normal_install(
 ):
     del native_adapter_state_integrity_runtime
     from codex_plugin_scanner.guard.harness.registry import get_adapter
-    from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
+    from tests.python_oracles.native_adapter_state_integrity import native_adapter_state_integrity
 
     ctx = HarnessContext(
         home_dir=tmp_path,

@@ -222,6 +222,7 @@ mod ci_workflow_writes;
 mod data_heredocs;
 mod install_script_writes;
 mod literal_secrets;
+mod literal_ssn_echo;
 mod lockfile_install;
 mod omp_file_url;
 mod omp_hashline_writes;
@@ -392,8 +393,8 @@ pub(crate) fn removes_a_root(command: &str) -> bool {
 
 /// Floors no extension permission can settle: Guard self-protection, secret
 /// exfiltration, a spelled-out key, token or password, a glob that could name
-/// a secret file, and Git configuration that runs a program Guard cannot
-/// read. An unproven model has no segments to screen, so it is a floor itself
+/// a secret file, a printed Social Security number, and Git configuration
+/// that runs a program Guard cannot read. An unproven model has no segments to screen, so it is a floor itself
 /// rather than passing every screen.
 pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
     model.confidence != "exact"
@@ -416,6 +417,8 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
         // A spelled-out key, token or password is in the transcript and the
         // shell history the moment the command runs, whatever the program.
         || literal_secrets::holds_literal_secret(&model.normalized_text)
+        // So is a printed Social Security number.
+        || literal_ssn_echo::echoes_ssn(&model.normalized_text)
 }
 
 /// A Git alias, hook or config value can carry a program the parser never
@@ -898,6 +901,9 @@ fn exact_safe_command_with_context(
     if !safe_scalar::bounded_total_sleep(model)
         || !chain_temporary::absent_reads_bounded(model, context)
     {
+        return false;
+    }
+    if crate::shell_secret_read_stdin_search::lone_home_dotpath_search(model, context.home_dir) {
         return false;
     }
     // `$((PATH=10))` assigns as it expands, so a later step could run a
@@ -1577,5 +1583,7 @@ mod tests_fanout_reads;
 mod tests_filter_file_reads;
 #[cfg(test)]
 mod tests_listing_find_probes;
+#[cfg(test)]
+mod tests_listing_find_toolchain;
 #[cfg(test)]
 mod tests_path_word_reads;

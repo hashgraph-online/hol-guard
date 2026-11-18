@@ -64,8 +64,11 @@ def test_catalog_appends_every_supply_chain_case_offline():
 
 def test_catalog_rejects_package_cases_without_a_named_verdict():
     data = json.loads(CATALOG.read_text(encoding="utf-8"))
-    rogue = {**next(s for s in data["scenarios"] if s["id"] == POSTINSTALL_CASE), "id": "supply-chain-unnamed"}
-    data["scenarios"].append(rogue)
+    # Replace rather than append: the live catalog may already be at its size bound.
+    # This test must reach the missing-package-verdict validator without relaxing
+    # the catalog inventory limit or introducing a duplicate scenario.
+    source = next(i for i, row in enumerate(data["scenarios"]) if row["id"] == POSTINSTALL_CASE)
+    data["scenarios"][source] = {**data["scenarios"][source], "id": "supply-chain-unnamed"}
     with pytest.raises(ValueError, match="package evaluator verdict"):
         load_catalog_data(data)
 

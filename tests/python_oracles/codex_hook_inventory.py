@@ -7,11 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
-from .codex_hook_identity import (
+from codex_plugin_scanner.guard.native_codex_hook_identity import (
+    CODEX_HOOK_INVENTORY_FEATURE,
+    native_codex_hook_identity,
+)
+from tests.python_oracles.codex_hook_identity import (
     CodexHookDefinitionTooDeepError,
     CodexHookIdentityUnavailableError,
 )
-from .native_codex_hook_identity import CODEX_HOOK_INVENTORY_FEATURE, native_codex_hook_identity
 
 CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE = "codex_hook_inventory_unmanaged_executable"
 CODEX_HOOK_INVENTORY_UNSUPPORTED_EVENT = "codex_hook_inventory_unsupported_event_shape"

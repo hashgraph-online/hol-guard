@@ -9,8 +9,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_adapter_lifecycle
-from codex_plugin_scanner.guard.codex_hook_identity import CodexHookGroupQuestion, canonical_codex_hook_group_identities
-from codex_plugin_scanner.guard.codex_hook_inventory import enumerate_codex_hooks
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import (
     _consumer_approval_context_token,
@@ -24,6 +22,8 @@ from tests import codex_publication_steps
 from tests.codex_hook_paths_support import hook_manifest_path, hook_secret_path
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.codex_toml_support import dump_toml, read_toml_payload
+from tests.python_oracles.codex_hook_identity import CodexHookGroupQuestion, canonical_codex_hook_group_identities
+from tests.python_oracles.codex_hook_inventory import enumerate_codex_hooks
 from tests.transition_fault_support import interrupt_publication_at
 
 
