@@ -66,6 +66,22 @@ const RG_VALUE_OPTIONS: &[&str] = &[
     "--type-not",
 ];
 
+/// A quoted or escaped '<' is argument text, not input redirection.
+/// Respect shell structure and mask comments before reading the operators.
+pub(crate) fn has_input_redirect_syntax(command: &str) -> bool {
+    let visible = crate::shell_structure::mask_shell_comments(command);
+    let chars: Vec<char> = visible.chars().collect();
+    let mut state = crate::shell_structure::ShellScanState::new();
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] == '<' && state.is_top_level() {
+            return true;
+        }
+        index = state.advance(&chars, index).max(index + 1);
+    }
+    false
+}
+
 /// Whether this `grep`/`rg` call's only word is a path into a hidden entry
 /// of the home directory.
 pub(crate) fn lone_search_pattern_names_home_dotpath(
