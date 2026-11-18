@@ -226,6 +226,15 @@ fn read_prefix_before_a_verified_cd_keeps_the_cd_compound_decision() {
         format!("pwd && cd {repository} && git log -1 --format=%h | head -1"),
         format!("ls {root}; cd {repository} && git status"),
         format!("sleep 1; cd {repository} && git status --short | head -5"),
+        // A `||` fallback in the prefix only picks which proven read runs;
+        // the `;` still starts the `cd` whatever the prefix returned.
+        format!("ls {root}/missing 2>/dev/null || echo none; cd {repository} && git status"),
+        format!(
+            "lsof -iTCP:3000 -sTCP:LISTEN 2>/dev/null | head -3; echo \"---\"; \
+             ls {root}/missing 2>/dev/null || echo \"none\"; echo \"---\"; \
+             cd {repository} && git check-ignore README.md && echo ignored || echo tracked"
+        ),
+        format!("ls {root}/missing || echo none && cd {repository} && ls app"),
     ] {
         let result = decide(&space, &space.root, &command);
         assert_eq!(
@@ -251,6 +260,11 @@ fn only_a_proven_read_prefix_before_a_single_cd_is_set_aside() {
         format!("ls {root} && cd {repository} && git status && cd {root} && ls"),
         format!("ls {root} || cd {repository} && git status"),
         format!("ls {root} | cd {repository} && git status"),
+        // `a && b || cd <dir> && git status` groups as `(a && b || cd <dir>)
+        // && git status`, so the read runs in the starting folder whenever
+        // the prefix succeeds.
+        format!("ls {root} && pwd || cd {repository} && git status"),
+        format!("cat {home}/.ssh/id_ed25519 || echo none; cd {repository} && git status"),
         format!("echo $((PATH=10)); cd {repository} && ls ."),
         format!("echo $((PATH=10)) && cd {repository} && ls ."),
         format!("echo $((PATH=10)); ls {root}"),

@@ -541,7 +541,8 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
 /// state the rest reads. `ls /tmp/a && cd /tmp/a/app && git status` and
 /// `sleep 30; cd /tmp/a/app && git status` then get the same decision as
 /// `cd /tmp/a/app && git status`: after `;` the `cd` runs whatever the prefix
-/// returned, and the rest still runs only once it succeeded. The prefix keeps its
+/// returned, and the rest still runs only once it succeeded. A fallback such as
+/// `ls /tmp/a/x || echo none; cd /tmp/a/app && git status` is the same. The prefix keeps its
 /// own proof against the original directory; Git segments stay out of it so
 /// the Git execution floor always sees every Git read with its directory.
 pub(in crate::pretool) fn after_read_prefix(
@@ -568,8 +569,15 @@ pub(in crate::pretool) fn after_read_prefix(
             .skip(pair[0].span.end)
             .take(length)
             .collect();
+        // A `||` inside the prefix only picks which proven read runs. Right
+        // before the `cd` it would group as `(<prefix> || cd <dir>) && <rest>`
+        // and run the rest in the starting folder, and a `|` there runs the
+        // `cd` in a subshell.
         let last = index + 2 == start + 1;
-        if (last && separator.trim() == "|") || !matches!(separator.trim(), "&&" | "|" | ";") {
+        let separator = separator.trim();
+        if (last && matches!(separator, "|" | "||"))
+            || !matches!(separator, "&&" | "|" | ";" | "||")
+        {
             return None;
         }
     }
