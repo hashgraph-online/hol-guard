@@ -91,6 +91,22 @@ fn unproven(caller: &Caller, pid: i64) -> Option<&'static str> {
     }
 }
 
+/// `unproven`, read again within `deadline` while the start marker or the
+/// command line cannot be read, so a daemon of Guard's own whose identity
+/// was unreadable for a moment is not taken for a leftover. A proven
+/// mismatch is final at once.
+fn settled_proof(caller: &Caller, pid: i64, deadline: Deadline) -> Option<&'static str> {
+    let mut unreadable = None;
+    let proof = settled(deadline, || match unproven(caller, pid) {
+        Some(reason) if reason.starts_with("unreadable_") => {
+            unreadable = Some(reason);
+            None
+        }
+        proof => Some(proof),
+    });
+    proof.unwrap_or(unreadable)
+}
+
 /// The running inventory split into the leftovers Guard must leave alone,
 /// and whether it also names a daemon Guard could prove and retire.
 fn classify(caller: &Caller, deadline: Deadline) -> Option<(Vec<Leftover>, bool)> {
@@ -100,7 +116,7 @@ fn classify(caller: &Caller, deadline: Deadline) -> Option<(Vec<Leftover>, bool)
         if host::pid_is_proven_dead(pid) {
             continue;
         }
-        match unproven(caller, pid) {
+        match settled_proof(caller, pid, deadline) {
             Some(reason) => leftovers.push(Leftover { pid, port, reason }),
             None => provable = true,
         }

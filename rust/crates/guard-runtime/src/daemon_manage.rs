@@ -175,7 +175,9 @@ fn answer(request: &Request, raw: &Map<String, Value>) -> Result<Value, String> 
         "retire" => Ok(
             json!({"retired": retire::retire_all(&caller, request.keep_port, "requested_retire", deadline)}),
         ),
-        "retirement_complete" => Ok(json!({"complete": retire::retirement_is_complete(&caller)})),
+        "retirement_complete" => {
+            Ok(json!({"complete": retire::retirement_is_complete(&caller, deadline)}))
+        }
         "posture" => Ok(json!({"posture": recover::posture(&caller.guard_home)})),
         "repair_locator" => Ok(repair_locator(&caller, deadline)),
         "reliability" => Ok(reliability::report(&caller, &request.args)),

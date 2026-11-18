@@ -336,7 +336,11 @@ fn resolve_handed_off(caller: &Caller, pending: Option<&Map<String, Value>>) -> 
 }
 
 /// `_resolve_abandoned_guard_daemon_pending_launch`.
-pub(super) fn resolve_abandoned(caller: &Caller, pending: Option<&Map<String, Value>>) -> bool {
+pub(super) fn resolve_abandoned(
+    caller: &Caller,
+    pending: Option<&Map<String, Value>>,
+    deadline: Deadline,
+) -> bool {
     if resolve_handed_off(caller, pending) {
         return true;
     }
@@ -345,7 +349,7 @@ pub(super) fn resolve_abandoned(caller: &Caller, pending: Option<&Map<String, Va
     };
     // A daemon of this home that Guard can prove is its own may still be the
     // launch's; one it cannot prove is never signalled and holds nothing.
-    if leftovers::only_unproven(caller, Deadline(None)).is_none() {
+    if leftovers::only_unproven(caller, deadline).is_none() {
         return false;
     }
     let Some(pid) = int(pending, "pid") else {
@@ -473,7 +477,7 @@ pub(super) fn retire_all(
         let confirmed = settled() && (inventory.is_empty() || settled());
         if confirmed && keep_port.is_none() {
             records::reconcile_invalid(home);
-            resolve_abandoned(caller, pending.as_ref());
+            resolve_abandoned(caller, pending.as_ref(), deadline);
         }
     }
     reap_orphaned_workers(caller, deadline);
@@ -504,7 +508,7 @@ pub(super) fn reap_orphaned_workers(caller: &Caller, deadline: Deadline) {
 }
 
 /// `guard_daemon_retirement_is_complete`.
-pub(super) fn retirement_is_complete(caller: &Caller) -> bool {
+pub(super) fn retirement_is_complete(caller: &Caller, deadline: Deadline) -> bool {
     let home = caller.guard_home.as_path();
     if let Some(state) = load_authenticated_daemon_state(home) {
         let Some(pid) = int(&state, "pid").filter(|pid| *pid > 0) else {
@@ -520,11 +524,11 @@ pub(super) fn retirement_is_complete(caller: &Caller) -> bool {
         }
     }
     if !records::pending_is_resolved(home)
-        && !resolve_abandoned(caller, records::load_pending(home).as_ref())
+        && !resolve_abandoned(caller, records::load_pending(home).as_ref(), deadline)
     {
         return false;
     }
-    leftovers::only_unproven(caller, Deadline(None)).is_some()
+    leftovers::only_unproven(caller, deadline).is_some()
 }
 
 /// `_guard_daemon_pid_command_identity` for a state pid that is running.

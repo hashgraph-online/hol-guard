@@ -24,7 +24,7 @@ pub(super) fn release_abandoned_receipt(
 ) {
     if retire::pending_is_abandoned(pending)
         && !records::pending_is_resolved(home)
-        && !retire::resolve_abandoned(caller, pending)
+        && !retire::resolve_abandoned(caller, pending, deadline)
     {
         retire::retire_all(caller, None, "abandoned_receipt", deadline);
     }

@@ -201,7 +201,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
                 Some(port) if url_port(&url) == Some(port) => return Ok(url),
                 Some(_) => {
                     retire::retire_all(caller, None, "port_change", deadline);
-                    if !retire::retirement_is_complete(caller) {
+                    if !retire::retirement_is_complete(caller, deadline) {
                         return Err(runtime(
                             "Existing Guard daemon could not be retired safely.",
                         ));
@@ -217,7 +217,9 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         && (request.background_maintenance || !records::is_exact_tombstone(&state_path))
     {
         retire::retire_all(caller, None, "untrusted_state", deadline);
-        if !records::is_exact_tombstone(&state_path) && !retire::retirement_is_complete(caller) {
+        if !records::is_exact_tombstone(&state_path)
+            && !retire::retirement_is_complete(caller, deadline)
+        {
             return Err(runtime(
                 "Untrusted Guard daemon state could not be retired safely.",
             ));
@@ -247,7 +249,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
                     return Err(still_starting(&home));
                 }
                 retire::retire_all(caller, None, "unhealthy_published", deadline);
-                if !retire::retirement_is_complete(caller) {
+                if !retire::retirement_is_complete(caller, deadline) {
                     return Err(runtime(IN_PROGRESS));
                 }
             }
@@ -264,7 +266,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
             // `retire_all` never signals a launch whose receipt is open; its
             // marker stays until the window passes and a later start retires it.
             retire::retire_all(caller, None, "stalled_start", deadline);
-            if !retire::retirement_is_complete(caller) {
+            if !retire::retirement_is_complete(caller, deadline) {
                 return Err(still_starting(&home));
             }
             clear_progress(&home);
@@ -280,7 +282,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         }
         if records::is_generation_bound(pending.as_ref())
             && !records::pending_is_resolved(&home)
-            && !retire::resolve_abandoned(caller, pending.as_ref())
+            && !retire::resolve_abandoned(caller, pending.as_ref(), deadline)
         {
             return Err(runtime(PREVIOUS_LAUNCH));
         }
