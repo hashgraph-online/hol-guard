@@ -158,13 +158,11 @@ mod zcode_desktop_keys;
 pub(crate) use codex_repair_verify::{verify_captured, Verdict};
 
 #[cfg(test)]
-#[path = "tests.rs"]
-mod tests;
-
-#[cfg(test)]
 #[path = "codex_owners_tests.rs"]
 mod codex_owners_tests;
-
+#[cfg(test)]
+#[path = "tests.rs"]
+mod tests;
 #[cfg(test)]
 #[path = "tests_mcp_launch.rs"]
 mod tests_mcp_launch;
