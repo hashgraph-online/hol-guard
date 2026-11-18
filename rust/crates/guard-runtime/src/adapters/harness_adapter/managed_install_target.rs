@@ -18,7 +18,9 @@ use serde_json::{json, Map, Value};
 
 use super::describe::{Hook, Install};
 use super::files::{render, text, Doc};
-use super::{answer, install_apply, route, shims_apply, uninstall_apply, Ctx, Failure, Spec, Step};
+use super::{
+    answer, codex, install_apply, route, shims_apply, uninstall_apply, Ctx, Failure, Spec, Step,
+};
 use crate::pyjson::{self, PyVal};
 use crate::transition_files::{OwnedFailure, Owner};
 
@@ -205,6 +207,9 @@ pub(super) fn install(
     owner: &mut Owner,
     surface: Option<&str>,
 ) -> Owned<String> {
+    if spec.harness == "codex" {
+        return codex::codex_managed::install(spec, ctx, request, owner);
+    }
     match spec.install {
         Install::Delegated => Err(INVALID),
         Install::Shim => shim_install(spec, ctx, request, owner),
@@ -244,6 +249,9 @@ pub(super) fn uninstall(
     owner: &mut Owner,
     surface: Option<&str>,
 ) -> Owned<String> {
+    if spec.harness == "codex" {
+        return codex::codex_managed::uninstall(spec, ctx, request, owner);
+    }
     let mut fields = Map::new();
     attach_facts(spec, request, &mut fields);
     if let Some(surface) = surface {

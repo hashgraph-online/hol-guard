@@ -15,6 +15,7 @@
 //! owning transaction's journal. One fact stays with the asking interpreter:
 //! which directories are its own package roots (`package_roots`).
 
+mod config_scope;
 mod digest_cache;
 mod inspect;
 mod journal;
@@ -99,6 +100,7 @@ use serde_json::{json, Map, Value};
 
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
+pub(crate) use config_scope::{within as within_config_scope, HeldDirectory};
 pub(crate) use inspect::resolve_lenient;
 pub(crate) use lease::{hold_install_lock, hold_opencode_lock};
 pub(crate) use output::{managed_write, remove_no_follow, write_no_follow};

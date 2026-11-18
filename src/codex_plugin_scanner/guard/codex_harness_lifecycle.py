@@ -31,11 +31,8 @@ from .codex_harness_client import (
     _hook_manifest_spec,
     _launch_fields,
     _plan_file,
-    _raise_publication_error,
-    _reply_text,
     codex_paths,
 )
-from .codex_hook_integrity import hook_paths
 from .codex_hook_manifest import (
     PreparedCodexHookPublication,
     load_hook_manifest_baseline,
@@ -53,7 +50,6 @@ from .harness.base import HarnessContext, PreparedHarnessInstall
 from .harness.native_harness import NativeHarnessAdapter
 from .models import GuardArtifact, HarnessDetection
 from .native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
-from .native_owned import codex_install_transaction
 from .shims import shim_interpreter
 
 _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON = "codex_authoritative_hook_unavailable"
@@ -74,10 +70,6 @@ def _require_codex_authoritative_shell_hook(context: HarnessContext) -> None:
         "PreToolUse and PermissionRequest hooks are missing or disabled. Run `hol-guard install codex` "
         "or `hol-guard update` to repair the native-hook enforcement boundary."
     )
-
-
-def _located(path: Path) -> Path:
-    return path.parent.resolve(strict=False) / path.name
 
 
 def _wire_artifact(artifact: GuardArtifact) -> dict[str, object]:
@@ -307,105 +299,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         # The backups an install writes before its authenticated generation.
         backups = frozenset(Path(str(path)) for path in answer["backups"])
         return _CodexInstallPlan(prepared, publication, backups, shim_manifest, fields)
-
-    def install(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
-        from .runtime_transition import assert_transition_mutation_allowed
-
-        with codex_install_transaction(
-            context.guard_home,
-            self._target_config_path(context),
-            actor="install",
-            check_pending=True,
-            recover=True,
-        ):
-            assert_transition_mutation_allowed(context.guard_home)
-            return self._install_owned(context)
-
-    def _install_owned(self, context: HarnessContext) -> dict[str, object]:
-        """Publish the prepared plan in the runtime's ``install`` op: the
-        authenticated generation and its backups under the hook publication
-        journal, then, once committed, the retirements and launchers planned
-        beside them. When those fail they restore themselves and the op
-        withdraws the committed generation too, so legacy hooks never run
-        beside their migration."""
-        from .codex_hook_recovery import _owned
-        from .runtime_transition import TransitionError, assert_transition_mutation_allowed
-
-        assert_transition_mutation_allowed(context.guard_home)
-        spec = _hook_manifest_spec(context)
-        if self._hook_config_path(context) != self._target_config_path(context):
-            raise RuntimeError("Codex hook authentication currently requires one canonical global config target.")
-        # A source that is not a readable regular file refuses before the journal opens.
-        _check_sources(context, self._config_hook_pairs(context))
-        request, detection = self._plan_request(context, enroll=True)
-        request["operation_id"] = _owned(context.guard_home)
-        answer = _ask_install_plan(context, request, spec.guard_home, op="install")
-        shim_manifest, fields = _plan_report(answer["plan"], detection)
-        hook_state = json.loads(_reply_text(answer, "state"))
-        if not isinstance(hook_state, dict):
-            raise TransitionError("native_transition_invalid")
-        _require_codex_authoritative_shell_hook(context)
-        from .codex_harness_client import _install_manifest
-
-        return _install_manifest(
-            context,
-            "install",
-            shim_manifest,
-            manifest_path=str(hook_state["manifest_path"]),
-            integrity=str(hook_state["integrity_status"]),
-            **fields,
-        )
-
-    def uninstall(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
-        from .runtime_transition import assert_transition_mutation_allowed
-
-        with codex_install_transaction(
-            context.guard_home,
-            self._target_config_path(context),
-            actor="uninstall",
-            check_pending=True,
-            recover=True,
-        ):
-            assert_transition_mutation_allowed(context.guard_home)
-            return self._uninstall_owned(context)
-
-    def _uninstall_owned(self, context: HarnessContext) -> dict[str, object]:
-        """Uninstall in the runtime's ``uninstall`` op: every file it restores or
-        deletes is captured and compared before any of them changes, the
-        receipt and manifest removals are journaled as they are written, and
-        the hook key goes once no manifest uses it."""
-        from .codex_hook_integrity import hook_key_refusal
-        from .native_transition_files import _budget, _package_roots, _replay
-
-        hook_config_path = self._hook_config_path(context)
-        identity_files = hook_paths(context.guard_home, hook_config_path)
-        owned = _manifest_bindings(load_hook_manifest_baseline(_hook_manifest_spec(context)))
-        request: dict[str, Any] = {
-            "owned": json.dumps(list(owned), separators=(",", ":")),
-            "authority_files": [
-                str(_located(identity_files.receipt)),
-                str(_located(identity_files.manifest)),
-            ],
-            "home": os.path.abspath(context.guard_home),
-            "launch": _launch_fields(context),
-            "package_roots": _package_roots(),
-            "budget": _budget(),
-            "package_root": str(codex_hook_self_binding.install_package_root()),
-        }
-        answer = _codex("uninstall", context, **request)
-        _replay(answer.get("events"), None, None)
-        _raise_publication_error(answer)
-        if "key_error" in answer:
-            raise hook_key_refusal(str(answer["key_error"]))
-        from .codex_harness_client import _install_manifest
-
-        return _install_manifest(
-            context,
-            "uninstall",
-            json.loads(str(answer["manifest"])),
-            hooks_path=str(self._hooks_path(context)),
-            backup_path=str(self._backup_path(context)),
-        )
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         payload = super().diagnostics(context)

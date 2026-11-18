@@ -68,7 +68,7 @@ def _apply_python_adapter(
 
 
 def _python_held(adapter: HarnessAdapter, *, active: bool) -> bool:
-    """Whether the adapter's install reads state only this process holds: Codex's own, and Paseo's delegation."""
+    """Whether the adapter's install reads state only this process holds: Paseo's delegation."""
 
     if not isinstance(adapter, NativeHarnessAdapter):
         return True

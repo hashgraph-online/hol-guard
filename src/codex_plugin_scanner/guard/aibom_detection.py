@@ -261,6 +261,28 @@ def portable_workspace_skills(harness: str, workspace_dir: Path | None) -> list[
     )
 
 
+def portable_codex_skills(home_dir: Path, workspace_dir: Path | None) -> dict[str, object]:
+    """The skill walks a Codex detection takes from this process: the shared workspace skills, the project
+    skills and the global skills, each None where the runtime's own walk answers."""
+
+    needs = _needs_portable_walk()
+    return {
+        "workspace_skills": portable_workspace_skills("codex", workspace_dir),
+        "project_skills": (
+            _portable_skill_artifacts(
+                "codex", scope_dir=workspace_dir, skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS, scope="project"
+            )
+            if needs and workspace_dir is not None
+            else None
+        ),
+        "global_skills": (
+            _portable_skill_artifacts("codex", scope_dir=home_dir, skill_roots=_CODEX_HOME_SKILL_ROOTS, scope="global")
+            if needs
+            else None
+        ),
+    }
+
+
 def _workspace_request(harness: str, workspace_dir: Path) -> dict[str, object]:
     request: dict[str, object] = {"harness": harness, "workspace_dir": anchor_to_process_directory(workspace_dir)}
     skills = portable_workspace_skills(harness, workspace_dir)

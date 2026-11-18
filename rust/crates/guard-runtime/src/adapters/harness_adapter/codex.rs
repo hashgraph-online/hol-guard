@@ -405,3 +405,8 @@ pub(super) fn doctor_status(fields: &Map<String, Value>) -> Step<Value> {
     };
     Ok(json!({ "status": status }))
 }
+
+#[path = "codex_detection.rs"]
+pub(super) mod codex_detection;
+#[path = "codex_managed.rs"]
+pub(super) mod codex_managed;

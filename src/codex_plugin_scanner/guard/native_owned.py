@@ -227,17 +227,24 @@ def owner_request(guard_home: Path, *, actor: str, deadline_seconds: float = 5.0
     """The fields a native install op needs to run as, or to become, the owner of ``guard_home``.
 
     The owner this thread already holds is named by its token, so the op journals under it; otherwise the op
-    takes the locks itself and journals its own begin and commit.
+    takes the locks itself and journals its own begin and commit. ``held_dirs`` names the configuration
+    directories this thread already holds, so the op shares those locks instead of waiting on them.
     """
+    held = [
+        {"identity": identity, "lease": lease}
+        for (identity, pid, thread), lease in (_HELD_TARGETS.get() or {}).items()
+        if pid == os.getpid() and thread == threading.get_ident()
+    ]
     owner = _OWNER.get()
     if owner is not None and _bound(owner, guard_home):
-        return {"owner": owner.token, "client_pid": owner.pid, "thread": owner.thread_id}
+        return {"owner": owner.token, "client_pid": owner.pid, "thread": owner.thread_id, "held_dirs": held}
     return {
         "client_pid": os.getpid(),
         "thread": threading.get_ident(),
         "actor": actor,
         "process_identity": _process_identity,
         "deadline_ms": int(deadline_seconds * 1000),
+        "held_dirs": held,
     }
 
 

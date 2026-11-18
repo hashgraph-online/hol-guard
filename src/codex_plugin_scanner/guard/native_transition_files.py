@@ -58,7 +58,13 @@ def _exception(fault: object) -> BaseException:
     message, os_message = fault.get("message"), fault.get("os")
     runtime = fault.get("runtime")
     if isinstance(runtime, str):
-        return RuntimeError(runtime)
+        error = RuntimeError(runtime)
+        if "cause" in fault:
+            error.__cause__ = _exception(fault["cause"])
+        return error
+    rollback = fault.get("rollback")
+    if isinstance(rollback, Mapping):
+        return _rollback_exception(rollback)
     adapter = fault.get("adapter")
     if isinstance(adapter, Mapping):
         return _adapter_exception(adapter)
@@ -73,6 +79,19 @@ def _exception(fault: object) -> BaseException:
             return OSError(number, os_message)
         return OSError(os_message)
     return TransitionError(_INVALID)
+
+
+def _rollback_exception(failed: Mapping[str, object]) -> BaseException:
+    """The failure of a publication whose rollback failed too, chained to the failure it followed."""
+    failure, rollback = _exception(failed.get("failure")), _exception(failed.get("rollback"))
+    error = RuntimeError(
+        f"Codex hook transaction failed and rollback could not be completed: {type(rollback).__name__}: {rollback}"
+    )
+    add_note = getattr(error, "add_note", None)
+    if callable(add_note):
+        add_note(f"rollback error: {rollback!r}")
+    error.__cause__ = failure
+    return error
 
 
 def _adapter_exception(adapter: Mapping[str, object]) -> BaseException:

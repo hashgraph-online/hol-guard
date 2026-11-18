@@ -83,6 +83,15 @@ impl Owner {
         self.record(&[marker]);
     }
 
+    /// The transaction's id, which a publication it runs names as its owner.
+    pub(crate) fn operation_id(&self) -> &str {
+        &self.operation_id
+    }
+
+    pub(super) fn guard_home(&self) -> &Path {
+        &self.guard_home
+    }
+
     pub(super) fn dropped(&self) -> u64 {
         self.dropped
     }
@@ -118,7 +127,7 @@ fn random_hex() -> Result<String, Failure> {
 }
 
 /// `assert_transition_mutation_allowed`.
-fn pending(home: &Path) -> bool {
+pub(super) fn pending(home: &Path) -> bool {
     fs::symlink_metadata(home.join("managed").join("runtime-transition.json")).is_ok()
 }
 

@@ -53,10 +53,16 @@ def install_facts(
         from .extension_runtime import extension_runtime
 
         facts["runtime"] = extension_runtime()
+    harness_facts: dict[str, object] = {}
     if "claude-code" in harnesses:
         from ..claude_hook_entry import claude_facts
 
-        facts["facts"] = {"claude-code": claude_facts(context.guard_home)}
+        harness_facts["claude-code"] = claude_facts(context.guard_home)
+    if "codex" in harnesses:
+        from ..codex_harness_client import codex_install_facts
+
+        harness_facts["codex"] = codex_install_facts(context)
+    facts["facts"] = harness_facts
     return facts
 
 

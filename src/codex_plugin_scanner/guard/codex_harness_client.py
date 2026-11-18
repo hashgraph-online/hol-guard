@@ -151,20 +151,38 @@ def _post_tool_hook_timeout_seconds(context: HarnessContext) -> int:
     )
 
 
-def _launch_fields(context: HarnessContext, *, home_is_current: bool | None = None) -> dict[str, object]:
-    """What the runtime cannot see of this launch: the home mode and Guard home,
-    and the hook's manifest path and timeout. It derives the argv, the native
-    runtime, the interpreter, the package paths and the manifest spec from
-    these and the caller stamp."""
+def _launch_facts(context: HarnessContext, *, home_is_current: bool | None = None) -> dict[str, object]:
+    """The facts about this launch only this process knows: the home mode and Guard home, the workspace
+    mode and the hook timeout. The runtime derives the argv, the native runtime, the interpreter, the package
+    paths, the manifest path and the manifest spec from these and the caller stamp."""
 
     current = _home_is_current(context) if home_is_current is None else home_is_current
-    guard_home = _runtime_guard_home(context, home_is_current=current)
     return {
         "home_is_current": current,
-        "runtime_guard_home": str(guard_home),
+        "runtime_guard_home": str(_runtime_guard_home(context, home_is_current=current)),
         "workspace_explicit": context.workspace_override_explicit,
-        "manifest_path": str(hook_manifest_file(guard_home, codex_paths(context).config)),
         "long_timeout": _post_tool_hook_timeout_seconds(context),
+    }
+
+
+def _launch_fields(context: HarnessContext, *, home_is_current: bool | None = None) -> dict[str, object]:
+    """What the runtime cannot see of this launch, with the manifest path the hook reads."""
+
+    fields = _launch_facts(context, home_is_current=home_is_current)
+    guard_home = Path(str(fields["runtime_guard_home"]))
+    return {**fields, "manifest_path": str(hook_manifest_file(guard_home, codex_paths(context).config))}
+
+
+def codex_install_facts(context: HarnessContext) -> dict[str, object]:
+    """What the runtime's Codex install and uninstall cannot read: this launch, the installed package's root and
+    the skill walks a host without the unix file-descriptor walk must run here."""
+    from . import codex_hook_self_binding
+    from .aibom_detection import portable_codex_skills
+
+    return {
+        "launch": _launch_facts(context),
+        "package_root": str(codex_hook_self_binding.install_package_root()),
+        **portable_codex_skills(context.home_dir, context.workspace_dir),
     }
 
 
