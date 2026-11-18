@@ -339,12 +339,25 @@ pub(super) fn workspace_file_url(url: &str, cwd: Option<&str>) -> bool {
             && !text.split('/').any(|step| step == ".." || step == ".")
     };
     let page = path.ends_with(".html") || path.ends_with(".htm");
-    page && plain(path)
-        && plain(cwd)
-        && cwd.matches('/').count() >= 2
-        && path
+    // Lexical containment cannot prove what a file:// open will read:
+    // a workspace symlink may point at a file outside the workspace.
+    if !page
+        || !plain(path)
+        || !plain(cwd)
+        || cwd == "/"
+        || !path
             .strip_prefix(cwd)
             .is_some_and(|rest| rest.len() > 1 && rest.starts_with('/'))
+    {
+        return false;
+    }
+    // Resolve the actual target (including symlinked intermediate directories)
+    // and fail closed if the page or workspace cannot be verified. A directory
+    // directly beneath / is a valid workspace; / itself is not.
+    let (Ok(root), Ok(target)) = (std::fs::canonicalize(cwd), std::fs::canonicalize(path)) else {
+        return false;
+    };
+    root != std::path::Path::new("/") && target.starts_with(&root) && target.is_file()
 }
 
 /// An `http(s)` URL whose host is the loopback interface, with no userinfo.
