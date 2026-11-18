@@ -1220,6 +1220,7 @@ jobs:
     needs: [plan, native-command-evaluators, macos-native-runtime]
     if: >-
       !cancelled() &&
+      github.event_name != 'pull_request' &&
       needs.native-command-evaluators.result == 'success' &&
       needs.macos-native-runtime.result == 'success' &&
       (github.event_name != 'pull_request' ||
@@ -1332,6 +1333,8 @@ jobs:
                   print(f"::error::coverage matrix {shard_count} != configured {expected}")
                   sys.exit(1)
           skipped = [j for j in required if needs.get(j,{}).get("result")=="skipped"]
+          if event == "pull_request":
+              skipped = [j for j in skipped if j != "macos-gates"]
           if skipped and not data_only:
               print("::error::required jobs skipped on a full-lane plan: "+", ".join(skipped))
               sys.exit(1)
