@@ -106,7 +106,11 @@ function HarnessSetupPanel(props) {
           if (!active) {
             setLeftoverRemoved(true);
           }
-          props.onLeftoverRemoved?.();
+          props.onLeftoverRemoved?.("removed");
+        }
+        if (action === "install" && options.dryRun !== true) {
+          setLeftoverRemoved(false);
+          props.onLeftoverRemoved?.("installed");
         }
         if (action !== "verify" && options.dryRun !== true) {
           await refreshAfterMutation();
@@ -778,8 +782,16 @@ function AppDetailWorkspace(props) {
   const [cleanedLeftoverHarnesses, setCleanedLeftoverHarnesses] = reactExports.useState(() => /* @__PURE__ */ new Set());
   const detectedSetupWarnings = harnessDetection.kind === "ready" ? harnessDetection.items.find((item) => item.harness === props.harness)?.warnings ?? [] : [];
   const setupWarnings = cleanedLeftoverHarnesses.has(props.harness) ? [] : detectedSetupWarnings;
-  const handleLeftoverRemoved = reactExports.useCallback(() => {
-    setCleanedLeftoverHarnesses((current) => new Set(current).add(props.harness));
+  const handleLeftoverRemoved = reactExports.useCallback((change = "removed") => {
+    setCleanedLeftoverHarnesses((current) => {
+      const next = new Set(current);
+      if (change === "installed") {
+        next.delete(props.harness);
+      } else {
+        next.add(props.harness);
+      }
+      return next;
+    });
   }, [props.harness]);
   const versionCompatibility = reactExports.useMemo(
     () => versionCompatibilityFor(harnessDetection, props.harness),

@@ -416,7 +416,9 @@ function testDisconnectWaitsForApprovalSettingsBeforeConfirm(): void {
     "incomplete cleanup must keep the leftover warning visible",
   );
   assert(
-    harnessSetupPanel.includes("props.onLeftoverRemoved?.();") && harnessSetupPanel.includes("!cleanupIncomplete"),
+    harnessSetupPanel.includes('props.onLeftoverRemoved?.("removed");')
+      && harnessSetupPanel.includes('props.onLeftoverRemoved?.("installed");')
+      && harnessSetupPanel.includes("!cleanupIncomplete"),
     "every completed disconnect must refresh workspace detection unless config cleanup is incomplete",
   );
 }

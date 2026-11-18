@@ -222,8 +222,16 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
     ? harnessDetection.items.find((item) => item.harness === props.harness)?.warnings ?? []
     : [];
   const setupWarnings = cleanedLeftoverHarnesses.has(props.harness) ? [] : detectedSetupWarnings;
-  const handleLeftoverRemoved = useCallback(() => {
-    setCleanedLeftoverHarnesses((current) => new Set(current).add(props.harness));
+  const handleLeftoverRemoved = useCallback((change: "removed" | "installed" = "removed") => {
+    setCleanedLeftoverHarnesses((current) => {
+      const next = new Set(current);
+      if (change === "installed") {
+        next.delete(props.harness);
+      } else {
+        next.add(props.harness);
+      }
+      return next;
+    });
   }, [props.harness]);
   const versionCompatibility = useMemo(
     () => versionCompatibilityFor(harnessDetection, props.harness),
@@ -566,7 +574,7 @@ function AppOverviewTab(props: {
   pendingItems: GuardApprovalRequest[];
   protection: PackageManagerProtection | undefined;
   setupWarnings: string[];
-  onLeftoverRemoved: () => void;
+  onLeftoverRemoved: (change?: "removed" | "installed") => void;
   versionCompatibility: HarnessVersionCompatibility | null;
   onOpenRequest: (requestId: string) => void;
   onManagedInstallChanged?: () => Promise<void>;
@@ -837,7 +845,7 @@ function FirstRunGuide(props: {
   install: GuardManagedInstall | undefined;
   status: "active" | "needs_setup" | "observed" | "unknown";
   setupWarnings: string[];
-  onLeftoverRemoved: () => void;
+  onLeftoverRemoved: (change?: "removed" | "installed") => void;
   onManagedInstallChanged?: () => Promise<void>;
 }) {
   const displayName = harnessDisplayName(props.harness);
@@ -1271,7 +1279,7 @@ function AppSettingsTab(props: {
   status: "active" | "needs_setup" | "observed" | "unknown";
   install: GuardManagedInstall | undefined;
   setupWarnings: string[];
-  onLeftoverRemoved: () => void;
+  onLeftoverRemoved: (change?: "removed" | "installed") => void;
   harnessPolicies: GuardPolicyDecision[];
   onClearAppPolicies?: (harness: string) => Promise<void>;
   onClearPolicy?: (policy: GuardPolicyDecision) => Promise<void>;

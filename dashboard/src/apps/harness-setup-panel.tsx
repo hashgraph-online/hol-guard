@@ -38,12 +38,14 @@ type HarnessSetupState =
   | { kind: "success"; action: GuardHarnessAction; result: GuardHarnessActionResult }
   | { kind: "error"; action: GuardHarnessAction; message: string; confirmationPhrase?: string; confirmCommand?: string };
 
+type LeftoverStateChange = "removed" | "installed";
+
 export function HarnessSetupPanel(props: {
   harness: string;
   install: GuardManagedInstall | undefined;
   status: "active" | "needs_setup" | "observed" | "unknown";
   setupWarnings?: string[];
-  onLeftoverRemoved?: () => void;
+  onLeftoverRemoved?: (change?: LeftoverStateChange) => void;
   onManagedInstallChanged?: () => Promise<void>;
 }) {
   const [setupState, setSetupState] = useState<HarnessSetupState>({ kind: "idle" });
@@ -132,7 +134,11 @@ export function HarnessSetupPanel(props: {
           if (!active) {
             setLeftoverRemoved(true);
           }
-          props.onLeftoverRemoved?.();
+          props.onLeftoverRemoved?.("removed");
+        }
+        if (action === "install" && options.dryRun !== true) {
+          setLeftoverRemoved(false);
+          props.onLeftoverRemoved?.("installed");
         }
         if (action !== "verify" && options.dryRun !== true) {
           await refreshAfterMutation();
