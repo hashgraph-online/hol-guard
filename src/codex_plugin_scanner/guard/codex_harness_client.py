@@ -14,7 +14,7 @@ from __future__ import annotations
 import base64
 import json
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -100,26 +100,6 @@ def guard_proxy_server_names(servers: Mapping[str, object]) -> frozenset[str]:
     if not isinstance(names, list) or not all(isinstance(name, str) and name in named for name in names):
         raise NativeRunnerAuthorityError("Codex install plan answer is malformed")
     return frozenset(names)
-
-
-def _publish_hooks(
-    context: HarnessContext, request: Mapping[str, Any], files: Sequence[TransitionFile]
-) -> dict[str, Any]:
-    """One ``publish_hooks`` request, its journal records replayed."""
-    from .native_transition_files import _replay
-
-    answer = dict(ask("publish_hooks", context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request))
-    _replay(answer.get("events"), files, None)
-    return answer
-
-
-def _publication_fault(fault: object) -> BaseException:
-    """The exception a ``publish_hooks`` fault names."""
-    from .native_transition_files import _exception
-
-    if isinstance(fault, Mapping) and isinstance(fault.get("runtime"), str):
-        return RuntimeError(fault["runtime"])
-    return _exception(fault)
 
 
 def _hook_workspace_dir(context: HarnessContext) -> Path | None:
@@ -220,10 +200,6 @@ def _hook_command_parts_for_home_mode(context: HarnessContext, *, home_is_curren
     return tuple(str(part) for part in answer["argv"])
 
 
-def _current_launch(context: HarnessContext) -> dict[str, Any]:
-    return _launch(context, home_is_current=_home_is_current(context))
-
-
 def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
     return _hook_command_parts_for_home_mode(context, home_is_current=_home_is_current(context))
 
@@ -272,28 +248,6 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
     )
 
 
-def _legacy_fields(context: HarnessContext) -> dict[str, Any]:
-    """What an exact current bridge entry is matched against for legacy re-adoption,
-    as the runtime builds it from this launch."""
-    legacy = _codex("detect_legacy", context, launch=_launch_fields(context)).get("legacy")
-    if not isinstance(legacy, dict):
-        raise ValueError("Harness adapter answer is malformed")
-    return legacy
-
-
-def _check_sources(
-    context: HarnessContext,
-    pairs: Sequence[tuple[Path, Path]],
-    captured: Mapping[Path, bytes | None] | None = None,
-) -> None:
-    """Refuse a config or hooks source that is not a readable regular file or
-    does not parse strictly; captured bytes are checked as they were captured."""
-    fields: dict[str, object] = {"pairs": [[str(config), str(hooks)] for config, hooks in pairs]}
-    if captured is not None:
-        fields["contents"] = {str(path): _b64(data) for path, data in captured.items()}
-    _codex("check_sources", context, **fields)
-
-
 def _plan_file(item: Mapping[str, Any]) -> TransitionFile:
     """One file an ``install_plan`` answer plans."""
     from .runtime_transition import TransitionFile
@@ -309,57 +263,6 @@ def _plan_file(item: Mapping[str, Any]) -> TransitionFile:
         artifact_identity=cast("dict[str, object] | None", item.get("artifact_identity")),
         invocation_identity=cast("dict[str, object] | None", item.get("invocation_identity")),
     )
-
-
-def _ask_install_plan(
-    context: HarnessContext, request: dict[str, Any], enroll_home: Path | None, op: str = "install_plan"
-) -> dict[str, Any]:
-    """One ``install_plan`` (or whole ``install``) answer.
-
-    An enrolling plan may create the hook key, so it runs under the key's
-    ordinary writer, as the generation always has. The runtime names the
-    failure the answer ends in; this only raises it."""
-    from .codex_hook_file_integrity import check_hook_validation_deadline
-    from .codex_hook_integrity import _ordinary_hook_writer, hook_secret_file
-    from .native_transition_files import _budget, _package_roots, _replay
-
-    request["package_roots"] = _package_roots()
-    request["budget"] = _budget()
-    check_hook_validation_deadline()
-    if enroll_home is None:
-        answer = ask(op, context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
-    else:
-        with _ordinary_hook_writer(enroll_home, hook_secret_file(enroll_home), actor="codex.authority-key"):
-            answer = ask(op, context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
-    if isinstance(answer.get("reply"), Mapping):
-        raise RuntimeError(f"{op} did not settle its replies")
-    check_hook_validation_deadline()
-    _replay(answer.get("events"), None, None)
-    _raise_publication_error(answer)
-    return answer
-
-
-def _raise_publication_error(answer: Mapping[str, object]) -> None:
-    """Raise the failure the runtime names in ``raise``, chained to its rollback's when that failed too."""
-    raised = answer.get("raise")
-    if not isinstance(raised, Mapping):
-        return
-    cause = raised.get("cause")
-    if isinstance(raised.get("runtime"), str):
-        raise RuntimeError(raised["runtime"]) from _publication_fault(cause)
-    failure = _publication_fault(raised.get("fault"))
-    rollback = raised.get("rollback")
-    if rollback is None:
-        raise failure
-    rollback_error = _publication_fault(rollback)
-    error = RuntimeError(
-        "Codex hook transaction failed and rollback could not be completed: "
-        f"{type(rollback_error).__name__}: {rollback_error}"
-    )
-    add_note = getattr(error, "add_note", None)
-    if callable(add_note):
-        add_note(f"rollback error: {rollback_error!r}")
-    raise error from failure
 
 
 def _live_budget() -> tuple[float, bool]:
@@ -477,21 +380,3 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     if not isinstance(state, dict):
         raise ValueError("Harness adapter answer is malformed")
     return state
-
-
-def _install_manifest(
-    context: HarnessContext, kind: str, shim_manifest: Mapping[str, object], **fields: object
-) -> dict[str, object]:
-    paths = codex_paths(context)
-    fields.setdefault("hooks_path", str(paths.hooks))
-    answer = _codex(
-        "manifest",
-        context,
-        kind=kind,
-        shim=json.dumps(shim_manifest),
-        config_path=str(paths.config),
-        hook_config_path=str(paths.config),
-        workspace_explicit=context.workspace_override_explicit,
-        **fields,
-    )
-    return json.loads(_reply_text(answer, "manifest"))

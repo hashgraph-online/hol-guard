@@ -25,6 +25,7 @@ import pytest
 from codex_plugin_scanner.guard.codex_hook_manifest import PreparedCodexHookPublication
 from codex_plugin_scanner.guard.harness.base import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
+from tests import codex_install_flow_support as flow
 
 
 def _decoded(value: object) -> bytes | None:
@@ -199,7 +200,7 @@ def plan_install(adapter: Any, context: HarnessContext, *, enroll: bool) -> _Pla
     }
     prepared = PreparedHarnessInstall(
         files,
-        codex._install_manifest(
+        flow.install_manifest(
             context,
             "prepare",
             shim_manifest,
@@ -213,9 +214,8 @@ def plan_install(adapter: Any, context: HarnessContext, *, enroll: bool) -> _Pla
 
 
 def _ask_plan(context: HarnessContext, request: dict[str, Any], enroll_home: Path | None) -> dict[str, Any]:
-    from codex_plugin_scanner.guard import codex_harness_client as codex
 
-    return codex._ask_install_plan(context, request, enroll_home)
+    return flow.ask_install_plan(context, request, enroll_home)
 
 
 def stepwise_install(self: Any, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
@@ -255,7 +255,7 @@ def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, o
 
     assert_transition_mutation_allowed(context.guard_home)
     spec = codex._hook_manifest_spec(context)
-    codex._check_sources(context, tuple((source.config, source.hooks) for source in codex.codex_paths(context).sources))
+    flow.check_sources(context, tuple((source.config, source.hooks) for source in codex.codex_paths(context).sources))
     config = os.path.abspath(spec.config_path.expanduser())
     target = publication_op("target", context.guard_home, config=config)
     assert isinstance(target, dict)
@@ -279,8 +279,8 @@ def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, o
         "receipt_index": files.index(publication.receipt_change),
         "after_manifest": base64.b64encode(canonical_manifest_bytes(publication.manifest) + b"\n").decode(),
     }
-    answer = codex._publish_hooks(context, request, files)
-    codex._raise_publication_error(answer)
+    answer = flow.publish_hooks(context, request, files)
+    flow.raise_publication_error(answer)
     hook_state = json.loads(str(answer["state"]))
     published = {change.path for change in publication.files} | planned.backups
     remaining = tuple(change for change in planned.prepared.files if change.path not in published)
@@ -298,7 +298,7 @@ def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, o
             ) from error
         raise
     codex_lifecycle._require_codex_authoritative_shell_hook(context)
-    return codex._install_manifest(
+    return flow.install_manifest(
         context,
         "install",
         planned.shim_manifest,
@@ -310,19 +310,18 @@ def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, o
 
 def use_stepwise_publication(monkeypatch: pytest.MonkeyPatch) -> None:
     """Publish this test's hook generations one step at a time."""
-    from codex_plugin_scanner.guard import codex_harness_client as codex
     from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 
-    monkeypatch.setattr(codex, "_publish_hooks", stepwise_publish_hooks)
+    monkeypatch.setattr(flow, "publish_hooks", stepwise_publish_hooks)
     monkeypatch.setattr(codex_lifecycle.CodexHarnessAdapter, "install", stepwise_install)
 
 
 # The same switch for a child process script.
 STEPWISE_HOOKS = r"""
-from codex_plugin_scanner.guard import codex_harness_client as _stepwise_codex
+from tests import codex_install_flow_support as _stepwise_flow
 from codex_plugin_scanner.guard import codex_harness_lifecycle as _stepwise_codex_lifecycle
 from tests.codex_publication_steps import stepwise_publish_hooks as _stepwise_publish_hooks
 from tests.codex_publication_steps import stepwise_install as _stepwise_install
-_stepwise_codex._publish_hooks = _stepwise_publish_hooks
+_stepwise_flow.publish_hooks = _stepwise_publish_hooks
 _stepwise_codex_lifecycle.CodexHarnessAdapter.install = _stepwise_install
 """

@@ -1070,17 +1070,6 @@
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. Launch, detect, diagnostics and the runtime hook-state readers stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
-        "id": "adapter-codex-client-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/codex_harness_client.py",
-        "symbols": [
-          "_install_manifest"
-        ],
-        "entry_points": [],
-        "reason": "The Codex install, uninstall and repair manifest request, sent to the native harness_adapter runner-authority kind.",
-        "evidence": "Only CodexHarnessAdapter install, prepare_install and uninstall call it, and those are excluded install, uninstall and repair paths. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
         "id": "runtime-policy-admin-payloads",
         "category": "cli_only",
         "path": "src/codex_plugin_scanner/guard/cli/commands_support_runtime_policy.py",

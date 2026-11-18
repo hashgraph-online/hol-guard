@@ -18,7 +18,7 @@ except ModuleNotFoundError:
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
-from codex_plugin_scanner.guard.codex_harness_client import _current_launch, codex_paths
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import (
     CodexHookIntegrityError,
@@ -36,6 +36,7 @@ from tests.codex_hook_integrity_fixtures import (
     write_hook_manifest,
 )
 from tests.codex_hook_paths_support import hook_manifest_path, hook_secret_path
+from tests.codex_install_flow_support import current_launch
 from tests.codex_toml_support import dump_toml
 from tests.native_runtime_stamp import stamp_native_runtime
 from tests.transition_fault_support import interrupt_publication_at
@@ -203,7 +204,7 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
 def test_guard_codex_native_hook_state_requires_authenticated_manifest(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir / ".hol-guard")
-    direct_argv = list(_current_launch(context)["fallback"])
+    direct_argv = list(current_launch(context)["fallback"])
     bridge_config = json.dumps({"fallback_command": direct_argv}, separators=(",", ":"))
     forged_commands = [
         _registered_hook_command(context),
