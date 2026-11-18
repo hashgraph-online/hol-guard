@@ -4,6 +4,10 @@ use super::echoes_ssn;
 fn a_bare_print_of_an_ssn_is_reviewed() {
     for command in [
         "echo 123-45-6789",
+        "echo 'SSN (123-45-6789)'",
+        "echo \"SSN (123-45-6789)\"",
+        "echo 000-12-3456 123-45-6789",
+        "printf '%s\\n' 'case (123-45-6789)'",
         "echo \"SSN: 123-45-6789\"",
         "printf '%s\\n' 123-45-6789",
         "echo 'customer 078-05-1120 on file'",
@@ -28,6 +32,8 @@ fn other_numbers_and_shapes_pass() {
         "echo build/123-45-6789",
         "echo 1.123-45-6789",
         "echo 123-45-6789 | ./redact",
+        "echo \"$(printf 123-45-6789)\"",
+        "echo 'SSN (000-12-3456)'",
         "echo 123-45-6789 > sample.txt",
         "echo $(cat id) 123-45-6789",
         "echo ok; echo 123-45-6789",
