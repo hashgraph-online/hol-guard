@@ -117,6 +117,7 @@ pub(super) const RESERVED: &[&str] = &[
     "undefined",
     "var",
     "void",
+    "wait",
     "yield",
     "Bun",
     "Deno",
