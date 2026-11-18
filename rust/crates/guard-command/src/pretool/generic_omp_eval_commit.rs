@@ -439,7 +439,7 @@ fn bounded_grep_selector(pattern: &str) -> bool {
     !pattern.is_empty()
         && pattern.len() <= 128
         && pattern.bytes().all(|c| {
-            c.is_ascii_alphanumeric() || matches!(c, b' ' | b'_' | b'-' | b'/' | b'.' | b':' )
+            c.is_ascii_alphanumeric() || matches!(c, b' ' | b'_' | b'-' | b'/' | b'.' | b':')
         })
 }
 
