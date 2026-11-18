@@ -265,3 +265,38 @@ fn wide_globs_refuse_parent_steps_and_links() {
         assert_decision(&cwd, &layout.home, &command, false);
     }
 }
+
+/// A test directory with thousands of files, as large web projects keep in
+/// `__tests__`. Each file the glob names is proven as a root of its own, and
+/// one evaluation remembers every one of those proofs. Remembering them in a
+/// list searched from the front made the decision quadratic in the number of
+/// files: these two searches took 12 and 32 seconds in a debug build, the
+/// hook ran out of time, and the agent got an error with no way to approve.
+#[test]
+fn thousands_of_globbed_files_are_decided_within_the_hook_budget() {
+    let layout = layout("sibling-glob-search-thousands");
+    let cwd = layout.org.join("app-portal");
+    let sibling = format!("{}/service-api", layout.org.display());
+    for index in 0..4900 {
+        write(
+            layout
+                .org
+                .join(format!("service-api/__tests__/case-{index}.test.ts")),
+            "export {};\n",
+        );
+    }
+    let started = std::time::Instant::now();
+    for command in [
+        format!("grep -l PGlite {sibling}/__tests__/*.ts"),
+        format!("grep -rln PGlite {sibling}/__tests__/*.ts | head -4"),
+    ] {
+        assert_decision(&cwd, &layout.home, &command, true);
+    }
+    // About six seconds in a debug build with the memo keyed by hash, and
+    // forty-four with the list.
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(20),
+        "deciding the wide globs took {:?}",
+        started.elapsed()
+    );
+}
