@@ -129,6 +129,21 @@ def test_codex_stream_reads_command_status_and_exit_code(tmp_path):
     assert [(call["tool"], call["is_error"]) for call in transcript["calls"]] == [("bash", True)]
 
 
+def test_codex_recoverable_error_does_not_fail_a_completed_turn(tmp_path):
+    item = {"id": "i1", "type": "command_execution", "command": "ls", "status": "completed", "exit_code": 0}
+    retry = {"type": "error", "message": "Reconnecting... 1/5"}
+    completed = write_stream(
+        tmp_path / "completed.jsonl",
+        [retry, {"type": "item.started", "item": item}, {"type": "item.completed", "item": item}, {"type": "turn.completed"}],
+    )
+    transcript = read_transcript("codex", completed)
+    assert (transcript["terminal"], transcript["failed"]) == (True, False)
+    failed = write_stream(tmp_path / "failed.jsonl", [retry, {"type": "turn.failed", "error": {"message": "x"}}])
+    assert (read_transcript("codex", failed)["terminal"], read_transcript("codex", failed)["failed"]) == (True, True)
+    abandoned = write_stream(tmp_path / "abandoned.jsonl", [retry])
+    assert read_transcript("codex", abandoned)["terminal"] is False
+
+
 def test_cursor_stream_ignores_sibling_keys_and_marks_rejections(tmp_path):
     wrapper = {"hookAdditionalContexts": [], "startedAtMs": 1, "shellToolCall": {"args": {"command": "cp .env x"}}}
     rejected = {**wrapper, "shellToolCall": {**wrapper["shellToolCall"], "result": {"rejected": {"reason": "hook"}}}}
