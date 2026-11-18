@@ -128,15 +128,22 @@ fn host_message(stream: &mut UnixStream, message: &Value) -> std::io::Result<()>
     stream.write_all(&frame)
 }
 
+/// Every connection a client opens, until the host is dropped. A test may
+/// read more than once, and a client that hangs up only ends its own
+/// exchange: closing the listener after the first one would refuse the next
+/// read before it ever reached the identity checks.
 fn serve(
     listener: &UnixListener,
     stop: &AtomicBool,
     requests: &Mutex<Vec<Value>>,
     handler: &(dyn Fn(&Value) -> Value + Send + Sync),
 ) -> std::io::Result<()> {
-    let mut stream = loop {
+    loop {
         match listener.accept() {
-            Ok((stream, _)) => break stream,
+            // The client ending the connection is how every exchange finishes.
+            Ok((stream, _)) => {
+                let _ = exchange(stream, requests, handler);
+            }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 if stop.load(Ordering::SeqCst) {
                     return Ok(());
@@ -145,7 +152,14 @@ fn serve(
             }
             Err(error) => return Err(error),
         }
-    };
+    }
+}
+
+fn exchange(
+    mut stream: UnixStream,
+    requests: &Mutex<Vec<Value>>,
+    handler: &(dyn Fn(&Value) -> Value + Send + Sync),
+) -> std::io::Result<()> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(Duration::from_secs(2)))?;
     let mut headers = Vec::new();
@@ -196,7 +210,6 @@ pub(super) fn host(handler: impl Fn(&Value) -> Value + Send + Sync + 'static) ->
     let thread = {
         let (requests, stop) = (requests.clone(), stop.clone());
         std::thread::spawn(move || {
-            // The client ending the connection is how every exchange finishes.
             let _ = serve(&listener, &stop, &requests, &handler);
         })
     };
