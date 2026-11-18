@@ -199,7 +199,8 @@ fn shell_pieces(text: &str) -> Option<Vec<(String, bool)>> {
 }
 
 /// Whether the shell expands something in `word`: a `$` outside single
-/// quotes that no backslash escapes.
+/// quotes, or a brace or glob character outside any quotes, that no
+/// backslash escapes.
 fn expands(word: &str) -> bool {
     let mut single = false;
     let mut double = false;
@@ -214,6 +215,10 @@ fn expands(word: &str) -> bool {
             '"' if !single => double = !double,
             '\\' if !single => escaped = true,
             '$' if !single => return true,
+            // Brace expansion and globbing rewrite unquoted words, so
+            // `{-f,prog.awk}` or a file named `-f` matched by `*` reach awk
+            // as an option.
+            '{' | '*' | '?' | '[' if !single && !double => return true,
             _ => {}
         }
     }

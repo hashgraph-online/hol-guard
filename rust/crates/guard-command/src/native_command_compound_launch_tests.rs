@@ -175,6 +175,10 @@ fn an_awk_that_can_run_a_program_inside_a_substitution_stays_refused() {
         "x=$(echo a | awk $\"-f\" prog.awk)",
         "x=$(echo a | awk $opt prog.awk)",
         "x=$(echo a | awk \"$prog\")",
+        "x=$(echo a | awk {-f,prog.awk})",
+        "x=$(echo a | awk -* prog.awk)",
+        "x=$(echo a | awk ?f prog.awk)",
+        "x=$(echo a | awk [-]f prog.awk)",
     ] {
         let result = evaluate_in(&binding, command, home.path(), &project);
         assert_ne!(result.minimum_action, "allow", "{command}");
