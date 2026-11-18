@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import sys
 from copy import deepcopy
 from dataclasses import replace
@@ -11,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from ci.gauntlet import host_process
+from ci.gauntlet import host_process, host_shims
 from ci.gauntlet.case_helpers import _fixture_replacements
 from ci.gauntlet.contained_core import PROOF_SCHEMA, _sandbox_refused, contained_calls, request_proofs
 from ci.gauntlet.evidence import assess_case, reconcile
@@ -95,6 +96,32 @@ def test_agent_path_keeps_candidate_hol_guard_after_the_shim(tmp_path, monkeypat
         str(tmp_path / "system/bin"),
     ]
     assert sorted(os.listdir(entries[0])) == ["python", "python3"]
+
+
+def test_agent_path_drops_the_host_guard_package_shims(tmp_path, monkeypatch, trusted):
+    """A host Guard's Bun shim must not stand in front of the SDK's `#!/usr/bin/env bun` launcher."""
+    if os.name != "posix":
+        pytest.skip("the shim is POSIX-only")
+    _executable(tmp_path / "host/.hol-guard/package-shims/bin/bun")
+    _executable(tmp_path / "system/bin/bun")
+    monkeypatch.setenv(
+        "PATH", os.pathsep.join([str(tmp_path / "host/.hol-guard/package-shims/bin"), str(tmp_path / "system/bin")])
+    )
+    # The candidate interpreter's directory leads PATH; keep a host Bun out of it.
+    _executable(tmp_path / "candidate/bin/python3")
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "candidate/bin/python3"))
+    environment = clean_environment(tmp_path / "home", tmp_path / "agent/pi", "canary")
+    entries = environment["PATH"].split(os.pathsep)
+    assert str(tmp_path / "host/.hol-guard/package-shims/bin") not in entries
+    assert shutil.which("bun", path=environment["PATH"]) == str(tmp_path / "system/bin/bun")
+
+
+def test_shim_filter_ignores_case_and_leaves_no_empty_path_entry(monkeypatch):
+    monkeypatch.setattr(host_shims.os.path, "normcase", str.lower)
+    assert host_shims.without_package_shims(os.pathsep.join(["/h/PACKAGE-SHIMS/BIN", "/usr/bin"])) == "/usr/bin"
+    assert host_shims.without_package_shims("/h/.hol-guard/package-shims/bin") == ""
+    assert host_shims.prepend_path("/candidate", "") == "/candidate"
+    assert host_shims.prepend_path("/candidate", "/usr/bin") == "/candidate" + os.pathsep + "/usr/bin"
 
 
 def test_request_proofs_bind_only_this_workspace_call_and_schema(fixture, tmp_path):

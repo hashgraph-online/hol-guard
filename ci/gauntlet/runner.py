@@ -8,7 +8,6 @@ import os
 import platform
 import re
 import shutil
-import subprocess
 import time
 from collections.abc import Callable, Container, Mapping, Sequence
 from datetime import datetime, timezone
@@ -56,6 +55,7 @@ from .fixtures import (
 )
 from .git_allow_fixtures import GIT_ALLOW_CASES, configure_git_allow_controls
 from .host_process import clean_environment, realistic_environment, run_process
+from .host_shims import omp_version
 from .input_evidence import (
     public_native_extension_evidence,
     public_native_receipt,
@@ -522,7 +522,7 @@ def run_suite(
     _, identity, capabilities = probe._probe_native_identity()
     if capabilities.build_sha != expected_source_sha:
         raise RuntimeError("installed Guard source SHA does not match the expected build")
-    version = subprocess.check_output([executable, "--version"], text=True, timeout=15).strip()
+    version = omp_version(executable)
     package = json.loads((REPO / "ci/pi-exact-continuation/package.json").read_text())
     expected_version = package["dependencies"]["@oh-my-pi/pi-coding-agent"]
     if version != "omp/" + expected_version:
