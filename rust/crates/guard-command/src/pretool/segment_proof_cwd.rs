@@ -158,10 +158,9 @@ pub(in crate::pretool) fn verified_leading_cd_target(
 /// A later `cd` is absolute, so it names the same directory whether or not an
 /// earlier group was a subshell. `||` does not start that `cd`: it skips the
 /// `cd` when the step before it succeeds, and a later `&&` read would then
-/// run in a directory this proof did not verify. A read after a `)` is
-/// outside the subshell, so it is proved in the directory the command started
-/// in. A read after a brace group stays with the `cd`, because `{ ...; }`
-/// does not restore the directory and the `;` before `}` is not the join.
+/// run in a directory this proof did not verify. A read after `;` or `||`
+/// runs where the last `cd` left the shell when that `cd` worked, and where the
+/// command started when it failed or ran in a subshell, so it is proved in both.
 pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
     model: &CanonicalCommandV1,
     allow_git_helper_context: bool,
@@ -170,25 +169,34 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
     if model.segments.len() < 2 || model.confidence != "exact" {
         return false;
     }
-    let mut saw_directory = false;
+    let mut left: Option<String> = None;
     let mut index = 0usize;
     while index < model.segments.len() {
         if index > 0 && !reaches_segment(model, index) {
             return false;
         }
         if model.segments[index].executable.as_deref() == Some("cd") {
-            if !take_cd_chunk(model, allow_git_helper_context, context, &mut index) {
+            let Some(cwd) = take_cd_chunk(model, allow_git_helper_context, context, &mut index)
+            else {
                 return false;
-            }
-            saw_directory = true;
+            };
+            left = Some(cwd);
             continue;
         }
-        if !read_in_context(model, index, allow_git_helper_context, context) {
+        let there = left.as_deref().map(|cwd| PathContext {
+            cwd: Some(cwd),
+            ..context
+        });
+        if !read_in_context(model, index, allow_git_helper_context, context)
+            || there.is_some_and(|there| {
+                !read_in_context(model, index, allow_git_helper_context, there)
+            })
+        {
             return false;
         }
         index += 1;
     }
-    saw_directory
+    left.is_some()
 }
 
 /// `&&` or `;` may start an absolute `cd`. A read that is not a `cd` may also
@@ -209,24 +217,22 @@ fn take_cd_chunk(
     allow_git_helper_context: bool,
     context: PathContext<'_>,
     index: &mut usize,
-) -> bool {
+) -> Option<String> {
     let cd = &model.segments[*index];
     if !cd.environment_names.is_empty()
         || cd.pipeline_index != 0
         || !directory_targets::drive_targets_quoted(cd)
         || !directory_targets::home_targets_unquoted(cd)
     {
-        return false;
+        return None;
     }
     let [target] = cd.arguments.as_slice() else {
-        return false;
+        return None;
     };
     if *index > 0 && !std::path::Path::new(target).is_absolute() {
-        return false;
+        return None;
     }
-    let Some(cwd) = safe_reads::verified_cwd_target(target, context) else {
-        return false;
-    };
+    let cwd = safe_reads::verified_cwd_target(target, context)?;
     let proved = PathContext {
         cwd: Some(&cwd),
         ..context
@@ -244,12 +250,12 @@ fn take_cd_chunk(
             break;
         }
         if !read_in_context(model, *index, allow_git_helper_context, proved) {
-            return false;
+            return None;
         }
         reads += 1;
         *index += 1;
     }
-    reads > 0
+    (reads > 0).then_some(cwd)
 }
 
 fn read_in_context(

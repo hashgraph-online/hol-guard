@@ -279,6 +279,47 @@ fn only_a_proven_read_prefix_before_a_single_cd_is_set_aside() {
     }
 }
 
+/// After `;` or `||` a read runs in the `cd` destination when the `cd`
+/// worked, so a name that is harmless where the command started is not
+/// proof for the file of the same name in the destination.
+#[cfg(unix)]
+#[test]
+fn a_read_after_a_cd_chunk_is_proved_where_the_cd_left_the_shell() {
+    let (space, _cleanup) = workspace("chunk-fallback");
+    let repository = shell_word(&space.repository);
+    std::fs::create_dir_all(space.home.join(".ssh")).unwrap();
+    std::fs::write(space.home.join(".ssh/id_ed25519"), "fixture\n").unwrap();
+    // The same name is a plain file where the command starts and a link to a
+    // key in the folder the `cd` enters.
+    std::fs::write(space.root.join("notes.txt"), "plain\n").unwrap();
+    std::os::unix::fs::symlink(
+        space.home.join(".ssh/id_ed25519"),
+        space.repository.join("notes.txt"),
+    )
+    .unwrap();
+    for command in [
+        format!("cd {repository} && ls; cat notes.txt"),
+        format!("cd {repository} && ls || cat notes.txt"),
+        format!("cd {repository} && git status; cat notes.txt"),
+        format!("cd {repository} && git status || cat notes.txt"),
+    ] {
+        let result = decide(&space, &space.root, &command);
+        assert_ne!(
+            result.reason_code, "native_exact_safe_command",
+            "{command}: {}",
+            result.decision
+        );
+    }
+    let notes = shell_word(&space.root.join("notes.txt"));
+    let command = format!("cd {repository} && ls; cat {notes}");
+    let result = decide(&space, &space.root, &command);
+    assert_eq!(
+        result.decision, "allow",
+        "{command}: {}",
+        result.reason_code
+    );
+}
+
 /// Local Git reads before the `cd` write nothing the reads after it could
 /// pick up, so the floor judges the command from the `cd` onward.
 #[test]
