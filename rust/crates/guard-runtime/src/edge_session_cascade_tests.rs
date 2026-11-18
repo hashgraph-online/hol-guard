@@ -204,7 +204,10 @@ fn a_full_session_table_never_evicts_the_session_being_observed() {
     assert_eq!(tracker.sessions.len(), super::MAX_SESSIONS);
     call(&mut tracker, "new", bash("ls"), true, at);
     assert_eq!(tracker.sessions.len(), super::MAX_SESSIONS);
-    assert!(!tracker.sessions.contains_key("o1"), "the oldest other session goes");
+    assert!(
+        !tracker.sessions.contains_key("o1"),
+        "the oldest other session goes"
+    );
 }
 
 #[test]
@@ -223,7 +226,11 @@ fn a_changed_description_or_timeout_does_not_hide_a_loop() {
         Some(Stop::Loop)
     );
     assert_ne!(
-        digest("Bash", serde_json::json!({"command": "npm test", "run_in_background": true})).0,
+        digest(
+            "Bash",
+            serde_json::json!({"command": "npm test", "run_in_background": true})
+        )
+        .0,
         bash("npm test").0,
         "a field that changes how the command runs still counts"
     );
@@ -235,14 +242,23 @@ fn a_batched_call_counts_every_subagent_it_starts() {
         let tasks: Vec<_> = (0..size)
             .map(|n| serde_json::json!({"id": format!("{prompt}{n}"), "assignment": "look"}))
             .collect();
-        digest("task", serde_json::json!({"agent": "explore", "tasks": tasks}))
+        digest(
+            "task",
+            serde_json::json!({"agent": "explore", "tasks": tasks}),
+        )
     };
     assert_eq!(batch("a", 3).1, Kind::Subagent(3));
-    assert_eq!(digest("task", serde_json::json!({"tasks": []})).1, Kind::Subagent(1));
+    assert_eq!(
+        digest("task", serde_json::json!({"tasks": []})).1,
+        Kind::Subagent(1)
+    );
     let mut tracker = Tracker::default();
     let now = Instant::now();
     for step in 0..4 {
-        assert_eq!(call(&mut tracker, "s", batch(&format!("b{step}"), 2), true, now), None);
+        assert_eq!(
+            call(&mut tracker, "s", batch(&format!("b{step}"), 2), true, now),
+            None
+        );
     }
     assert_eq!(
         call(&mut tracker, "s", batch("b4", 2), true, now),
