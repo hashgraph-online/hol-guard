@@ -160,11 +160,16 @@ fn watch_releases_infrastructure_denials_but_not_real_security_denials() {
         let home = home_with_daemon(&format!("pi-bridge-watch-{label}"), port);
         crate::hook_watch_posture::tests::sign_postures(&home.home, "observe", &[("pi", "watch")]);
         let response = reply(&home_config(&home, "pi"), PRE_TOOL, soon());
-        let body = response.map(|(_, body)| serde_json::from_str::<Value>(&body).unwrap());
-        assert_eq!(
-            body.as_ref().map(|value| value["observe_mode"] == true),
-            Some(continues)
-        );
+        if continues {
+            let (status, body) = response.expect("Watch infrastructure response");
+            let body: Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(status, 200);
+            assert_eq!(body["decision"], "allow");
+            assert_eq!(body["observe_mode"], true);
+            assert_eq!(body["reason_code"], "watch_monitor_unavailable");
+        } else {
+            assert_eq!(response, Some((200, answer.to_owned())));
+        }
         assert!(daemon.join().unwrap().is_some());
     }
 }

@@ -154,3 +154,21 @@ fn display_name_cannot_break_generated_javascript() {
     assert!(rendered.contains("\\`"));
     assert!(rendered.contains("\\${process.env.PWN}"));
 }
+
+#[test]
+fn watch_output_findings_are_record_only_and_monitor_failures_are_visible() {
+    let rendered = source(&case_args("active_omp_posix"));
+    assert!(rendered.contains("guardWatchPostureActive() && response.decision === \"deny\""));
+    assert!(rendered.contains("'output_secret_match', 'sensitive_path', 'model_output_action'"));
+    let monitor = rendered
+        .find("response.observe_mode === true && response.reason_code === 'watch_monitor_unavailable'")
+        .expect("monitor fallback handler");
+    let deny = monitor
+        + rendered[monitor..]
+            .find("if (response.decision === \"deny\")")
+            .expect("generic denial handler");
+    assert!(
+        monitor < deny,
+        "monitor fallback must be handled before generic denial"
+    );
+}
