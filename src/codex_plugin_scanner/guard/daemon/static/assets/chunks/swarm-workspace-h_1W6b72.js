@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/agent-map-BvyIXHxm.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/swarm-handoff-BIqKreGh.js","assets/chunks/composer-CNzAy0CP.js","assets/chunks/inspector-lJua1sWc.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/agent-map-BK0yp5x2.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/work-DPWaZlHI.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/chunks/composer-BwkPqmZl.js","assets/chunks/inspector-DsFN0L8S.js"])))=>i.map(i=>d[i]);
 import { f as fetchWithGuardAuth, r as reactExports, a as fetchContextAssistance, l as listContextWorkspaces, j as jsxRuntimeExports, H as HiMiniPlus, b as HiMiniCommandLine, c as HiMiniFolder, d as HiMiniCircleStack, e as HiMiniSquares2X2, g as HiMiniComputerDesktop, h as HiMiniMagnifyingGlass, i as HiMiniListBullet, k as HiMiniArrowPath, m as loadWorkspaceModule, n as browserSessionStorage, _ as __vitePreload } from "../guard-dashboard.js";
 import { w as workspaceForSwarmAgent, u as usesPromptContext } from "./swarm-handoff-BIqKreGh.js";
 const UNKNOWN_PROJECT = "@unknown";
@@ -80,6 +80,7 @@ const timestamp = (v) => count(v) && v <= 864e13;
 const failure = () => new Error("Guard returned agent information this version of Swarm cannot read. Update Guard and try again.");
 function parseAgent(value) {
   if (!object(value) || !text(value.id, 128) || !value.id || !text(value.harness, 128) || !text(value.label, 160) || !["managed", "observed"].includes(String(value.origin)) || !AGENT_STATES.includes(value.state) || !optionalText(value.workspace) || !optionalText(value.task) || !optionalText(value.model) || !optionalText(value.activity) || !(value.pid === null || count(value.pid)) || !timestamp(value.started_at_ms) || !timestamp(value.updated_at_ms) || !text(value.detail) || !object(value.controls) || ![value.revision, value.queued, value.context_calls, value.input_tokens, value.output_tokens].every(count) || !["message", "steer", "interrupt", "stop"].every((key) => typeof value.controls[key] === "boolean")) throw failure();
+  if (value.blocked !== void 0 && !(Array.isArray(value.blocked) && value.blocked.length <= 32 && value.blocked.every((p) => text(p, 256)))) throw failure();
   if (value.origin === "observed" && Object.values(value.controls).some(Boolean)) throw failure();
   return value;
 }
@@ -107,7 +108,7 @@ async function request(path, init, signal) {
       swarm_request_limit: "This Swarm service has reached its action limit. Finish active work before restarting Guard.",
       swarm_unknown_run: "This managed session is no longer available. Refresh Swarm.",
       swarm_action_unavailable: "This action is no longer available for the agent. Refresh its status.",
-      swarm_launch_invalid: "Check the project, task, and model. One of the launch fields is invalid.",
+      swarm_launch_invalid: "Check the project, work, model, and blocked paths. Only Claude Code can be kept out of folders.",
       swarm_action_invalid: "The instruction is invalid or too large. Shorten it and try again."
     };
     if (response.status === 400 && object(body) && typeof body.error === "string" && known[body.error]) throw new RejectedAction(known[body.error]);
@@ -227,9 +228,9 @@ function useSwarm() {
   return { snapshot, loading, error, stale: error !== null, context, refresh: refreshNow, acceptAgent };
 }
 const load = (id, loader) => loadWorkspaceModule(loader, { moduleId: id, storage: browserSessionStorage() });
-const AgentMap = reactExports.lazy(() => load("swarm-agent-map", () => __vitePreload(() => import("./agent-map-BvyIXHxm.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0)).then((module) => ({ default: module.AgentMap })));
-const AgentComposer = reactExports.lazy(() => load("swarm-composer", () => __vitePreload(() => import("./composer-CNzAy0CP.js"), true ? __vite__mapDeps([4,1,2,3]) : void 0)).then((module) => ({ default: module.AgentComposer })));
-const AgentInspector = reactExports.lazy(() => load("swarm-inspector", () => __vitePreload(() => import("./inspector-lJua1sWc.js"), true ? __vite__mapDeps([5,1,2,3]) : void 0)).then((module) => ({ default: module.AgentInspector })));
+const AgentMap = reactExports.lazy(() => load("swarm-agent-map", () => __vitePreload(() => import("./agent-map-BK0yp5x2.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0)).then((module) => ({ default: module.AgentMap })));
+const AgentComposer = reactExports.lazy(() => load("swarm-composer", () => __vitePreload(() => import("./composer-BwkPqmZl.js"), true ? __vite__mapDeps([5,1,2,3,4]) : void 0)).then((module) => ({ default: module.AgentComposer })));
+const AgentInspector = reactExports.lazy(() => load("swarm-inspector", () => __vitePreload(() => import("./inspector-DsFN0L8S.js"), true ? __vite__mapDeps([6,1,2,4]) : void 0)).then((module) => ({ default: module.AgentInspector })));
 function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
   const { snapshot, loading, error, stale, context, refresh, acceptAgent } = useSwarm();
   const [selected, setSelected] = reactExports.useState(() => new URLSearchParams(window.location.search).get("agent"));

@@ -8,7 +8,8 @@
 //!
 //! - the manifest is the private file this Guard home's config names, and
 //!   its MAC verifies under this home's hook key;
-//! - one authenticated generation registers exactly this argv;
+//! - one authenticated generation registers exactly this argv (a frozen
+//!   bundle's generation: this command and config, run by its runtime copy);
 //! - the config's start and fallback commands are the ones that generation
 //!   recorded, and every file it recorded is still the same file.
 //!
@@ -177,10 +178,10 @@ fn select_generation<'a>(
             continue;
         };
         let expected = [bridge, current[1], current[2]];
-        if !registers(candidate, &expected)? {
+        let Some(registered) = registered(candidate, &expected)? else {
             continue;
-        }
-        if index == 0 || allowed.iter().any(|hash| hash == &argv_sha256(&expected)) {
+        };
+        if index == 0 || allowed.iter().any(|hash| hash == &argv_sha256(&registered)) {
             if candidate.get("installation_id") != manifest.get("installation_id")
                 || candidate.get("context") != manifest.get("context")
             {
@@ -197,22 +198,59 @@ fn select_generation<'a>(
     Err(UNAUTHENTICATED)
 }
 
-/// Whether every event of `generation` registers `expected`.
-fn registers(generation: &Map<String, Value>, expected: &[&str; 3]) -> Checked<bool> {
+/// The argv every event of `generation` registers, when each one runs
+/// `expected`.
+///
+/// A frozen Guard records its bundle as the `bridge` file while its events
+/// run the verified native runtime copied out of that bundle. There only
+/// the command and the config identify the bridge, as the frozen launch
+/// contract checks; the copy's own path is not part of the manifest.
+fn registered<'a>(
+    generation: &'a Map<String, Value>,
+    expected: &[&str; 3],
+) -> Checked<Option<[&'a str; 3]>> {
     let events = generation
         .get("events")
         .and_then(Value::as_array)
         .filter(|events| !events.is_empty())
         .ok_or(UNAUTHENTICATED)?;
-    let mut all = true;
+    let frozen = is_frozen(generation, expected[0]);
+    let mut found: Option<[&'a str; 3]> = None;
     for event in events {
         let argv = event
             .get("argv")
             .and_then(Value::as_array)
             .ok_or(UNAUTHENTICATED)?;
-        all &= bridge_argv(argv) == expected.as_slice();
+        let Ok(argv) = <&[Value; 3]>::try_from(bridge_argv(argv)) else {
+            return Ok(None);
+        };
+        let [Some(runtime), Some(command), Some(config)] = argv.each_ref().map(Value::as_str)
+        else {
+            return Ok(None);
+        };
+        let runs = if frozen {
+            !runtime.is_empty() && [command, config] == expected[1..]
+        } else {
+            [runtime, command, config] == *expected
+        };
+        let argv = [runtime, command, config];
+        if !runs || found.is_some_and(|first| first != argv) {
+            return Ok(None);
+        }
+        found = Some(argv);
     }
-    Ok(all)
+    Ok(found)
+}
+
+/// Whether `generation` is a frozen layout: its bridge file is the
+/// interpreter executable itself.
+fn is_frozen(generation: &Map<String, Value>, bridge: &str) -> bool {
+    generation
+        .get("interpreter")
+        .and_then(|interpreter| interpreter.get("target"))
+        .and_then(|target| target.get("path"))
+        .and_then(Value::as_str)
+        == Some(bridge)
 }
 
 /// `python_bridge_argv`: the legacy Python argv inside a native prefix.

@@ -1,6 +1,7 @@
 import { HiMiniCircleStack, HiMiniCommandLine, HiMiniFolder, HiMiniArrowUpRight } from "react-icons/hi2";
 import type { ContextWorkspaceScope } from "../context-assistance/workspaces-api";
 import { contextFor, projectsFor, stateLabel } from "./model";
+import { goalOf } from "./work";
 import type { Agent } from "./types";
 
 export type AgentMapProps = { agents: Agent[]; selected: string | null; onSelect: (id: string) => void;
@@ -16,12 +17,13 @@ export function AgentMap({ agents, selected, onSelect, context, mode }: AgentMap
       <div className="swarm-node-grid">{project.agents.map((agent) => {
         const cigar = contextFor(agent, context.enabled, context.scopes);
         return <button type="button" className={`swarm-node ${selected === agent.id ? "is-selected" : ""}`} key={agent.id}
-          aria-pressed={selected === agent.id} aria-label={`${agent.label}: ${agent.task ?? "Observed app"}, ${stateLabel[agent.state]}`}
+          aria-pressed={selected === agent.id} aria-label={`${agent.label}: ${goalOf(agent.task) ?? "Observed app"}, ${stateLabel[agent.state]}`}
           aria-describedby={agent.activity ? `swarm-latest-${agent.id}` : undefined}
           onClick={() => onSelect(agent.id)}>
           <div className="swarm-node-top"><span className={`swarm-agent-icon swarm-agent-icon--${agent.harness}`}><HiMiniCommandLine aria-hidden="true" /></span>
             <strong>{agent.label}</strong><span className={`swarm-status swarm-status--${agent.state}`}><i aria-hidden="true" />{stateLabel[agent.state]}</span></div>
-          <p className="swarm-task">{agent.task ?? "Work is happening in its app"}</p>
+          <p className="swarm-task">{goalOf(agent.task) ?? "Work is happening in its app"}</p>
+          {agent.blocked?.length ? <p className="swarm-access">File tools can’t open {agent.blocked.length} {agent.blocked.length === 1 ? "path" : "paths"}</p> : null}
           {agent.activity ? <p id={`swarm-latest-${agent.id}`} className="swarm-latest" title={agent.activity}><HiMiniCommandLine aria-hidden="true" /><span>{agent.activity}</span></p> : null}
           <div className="swarm-node-foot"><span className={cigar.available ? "swarm-context-ready" : ""}><HiMiniCircleStack aria-hidden="true" />{cigar.label}{agent.context_calls > 0 ? ` · ${agent.context_calls} past calls` : ""}</span>
             <span>{agent.origin === "managed" ? "Managed" : "Observed"}<HiMiniArrowUpRight aria-hidden="true" /></span></div>

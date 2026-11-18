@@ -206,3 +206,85 @@ fn a_retained_generation_needs_its_compatibility_hash() {
     write_signed(&install, &unsigned);
     assert_eq!(registration_failure(&older), None);
 }
+
+/// The frozen bundle's layout: every recorded file, the bridge included, is
+/// the bundle executable, while each event runs the native runtime copied
+/// out of it under the Guard home.
+fn frozen(install: &Install) -> (Value, String) {
+    let mut unsigned = install.unsigned.clone();
+    let bundle = unsigned["interpreter"]["target"].clone();
+    let mut bridge = bundle.clone();
+    bridge["role"] = json!("bridge");
+    unsigned["packaged_files"] = json!([bridge]);
+    let copy = install
+        .guard
+        .join("native-runtime")
+        .join("digest")
+        .join("hol-guard-runtime");
+    executable(&copy, "runtime");
+    let config = install.config.to_string();
+    unsigned["events"] = json!([
+        {"argv": [copy.to_str(), "codex-hook-bridge", config]},
+        {"argv": [copy.to_str(), "codex-hook-bridge", config]},
+    ]);
+    (unsigned, copy.to_str().expect("utf-8").to_owned())
+}
+
+#[test]
+fn a_frozen_bundle_registration_authenticates() {
+    let install = install();
+    let (unsigned, _) = frozen(&install);
+    write_signed(&install, &unsigned);
+    assert_eq!(registration_failure(&install.config.to_string()), None);
+}
+
+#[test]
+fn a_frozen_bundle_still_refuses_a_rewritten_config() {
+    let install = install();
+    let (unsigned, _) = frozen(&install);
+    write_signed(&install, &unsigned);
+    let mut config = install.config.clone();
+    config["query"] = json!("guard-home=elsewhere");
+    assert_eq!(
+        registration_failure(&config.to_string()).as_deref(),
+        Some("codex_hook_launch_unauthenticated")
+    );
+}
+
+#[test]
+fn a_frozen_retained_generation_needs_the_hash_of_what_it_registered() {
+    let install = install();
+    let (current, copy) = frozen(&install);
+    let mut config = install.config.clone();
+    config["query"] = json!("guard-home=older");
+    let older = config.to_string();
+    let mut retained = current.clone();
+    retained["events"] = json!([{"argv": [copy, "codex-hook-bridge", older]}]);
+    let mut unsigned = current.clone();
+    unsigned["retained_bridge_generations"] = json!([retained]);
+    write_signed(&install, &unsigned);
+    assert_eq!(
+        registration_failure(&older).as_deref(),
+        Some("codex_hook_launch_unauthenticated")
+    );
+    let argv = json!([copy, "codex-hook-bridge", older]);
+    let hash = hex::encode(Sha256::digest(argv.to_string().as_bytes()));
+    unsigned["compatible_bridge_argv_sha256"] = json!([hash]);
+    write_signed(&install, &unsigned);
+    assert_eq!(registration_failure(&older), None);
+}
+
+#[test]
+fn a_package_install_still_binds_the_runtime_path() {
+    let install = install();
+    let mut unsigned = install.unsigned.clone();
+    let moved = install.guard.join("elsewhere").join("hol-guard-runtime");
+    executable(&moved, "runtime");
+    let config = install.config.to_string();
+    unsigned["events"] = json!([{"argv": [moved.to_str(), "codex-hook-bridge", config]}]);
+    write_signed(&install, &unsigned);
+    assert_eq!(
+        registration_failure(&install.config.to_string()).as_deref(),
+        Some("codex_hook_launch_unauthenticated")
+    );
+}

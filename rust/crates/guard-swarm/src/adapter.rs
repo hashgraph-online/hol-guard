@@ -13,6 +13,8 @@ pub(crate) fn configure(
     harness: &str,
     session: Option<&str>,
     model: Option<&str>,
+    workspace: &str,
+    blocked: &[String],
 ) {
     if harness == "codex" {
         command.arg("exec");
@@ -32,6 +34,44 @@ pub(crate) fn configure(
         if let Some(model) = model {
             command.args(["--model", model]);
         }
+        if !blocked.is_empty() {
+            command
+                .arg("--disallowedTools")
+                .args(deny_rules(workspace, blocked));
+        }
+    }
+}
+
+/// Claude Code permission rules that keep its file tools out of each path.
+/// `Read` rules cover Read, Grep and Glob; `Edit` rules cover every file
+/// writer. Paths are project-relative and checked by `valid_blocked`; each rule
+/// is anchored to the project root (`//abs/path`) so it still matches after the
+/// session changes directory.
+fn deny_rules(workspace: &str, blocked: &[String]) -> Vec<String> {
+    let root = rule_root(workspace);
+    let mut rules = Vec::new();
+    for path in blocked {
+        let path = path.trim_end_matches('/');
+        for tool in ["Read", "Edit"] {
+            rules.push(format!("{tool}(/{root}/{path})"));
+            if !path.ends_with("**") {
+                rules.push(format!("{tool}(/{root}/{path}/**)"));
+            }
+        }
+    }
+    rules
+}
+
+/// The project path in Claude Code's rule form: forward slashes, and a Windows
+/// drive written as `/c`, with no trailing slash.
+pub(crate) fn rule_root(workspace: &str) -> String {
+    let path = workspace.replace('\\', "/");
+    let path = path.trim_end_matches('/');
+    match path.as_bytes() {
+        [drive, b':', ..] if drive.is_ascii_alphabetic() => {
+            format!("/{}{}", drive.to_ascii_lowercase() as char, &path[2..])
+        }
+        _ => path.to_owned(),
     }
 }
 
@@ -275,13 +315,20 @@ mod tests {
     #[test]
     fn commands_use_exact_resume_ids_and_never_disable_protection() {
         let mut command = Command::new("codex");
-        configure(&mut command, "codex", Some("session-1"), None);
+        configure(&mut command, "codex", Some("session-1"), None, "/work", &[]);
         assert_eq!(
             command.get_args().collect::<Vec<_>>(),
             ["exec", "resume", "session-1", "--json", "-"]
         );
         let mut command = Command::new("claude");
-        configure(&mut command, "claude-code", None, Some("sonnet"));
+        configure(
+            &mut command,
+            "claude-code",
+            None,
+            Some("sonnet"),
+            "/work",
+            &[],
+        );
         assert_eq!(
             command.get_args().collect::<Vec<_>>(),
             [
@@ -293,6 +340,45 @@ mod tests {
                 "sonnet"
             ]
         );
+    }
+    #[test]
+    fn blocked_paths_become_claude_deny_rules_for_reading_and_editing() {
+        let mut command = Command::new("claude");
+        let blocked = ["private/".to_owned(), "**/.env.*".to_owned()];
+        configure(
+            &mut command,
+            "claude-code",
+            Some("s-1"),
+            None,
+            "/work/",
+            &blocked,
+        );
+        let args: Vec<_> = command.get_args().map(|a| a.to_str().unwrap()).collect();
+        let deny = args.iter().position(|a| *a == "--disallowedTools").unwrap();
+        assert_eq!(
+            args[deny + 1..],
+            [
+                "Read(//work/private)",
+                "Read(//work/private/**)",
+                "Edit(//work/private)",
+                "Edit(//work/private/**)",
+                "Read(//work/**/.env.*)",
+                "Read(//work/**/.env.*/**)",
+                "Edit(//work/**/.env.*)",
+                "Edit(//work/**/.env.*/**)",
+            ]
+        );
+        // Codex has no such control; a Codex launch with paths is refused.
+        let mut command = Command::new("codex");
+        configure(&mut command, "codex", None, None, "/work", &blocked);
+        assert!(!command.get_args().any(|a| a == "--disallowedTools"));
+    }
+
+    #[test]
+    fn deny_rules_name_the_project_root_on_every_platform() {
+        assert_eq!(rule_root("/home/me/proj/"), "/home/me/proj");
+        assert_eq!(rule_root(r"C:\Users\me\proj"), "/c/Users/me/proj");
+        assert_eq!(deny_rules(r"D:\w", &["a".to_owned()])[0], "Read(//d/w/a)");
     }
     #[test]
     fn only_completed_context_tools_are_usage_and_thinking_is_private() {
