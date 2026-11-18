@@ -70,6 +70,34 @@ fn printf_escapes_are_decoded_before_ssn_boundary_check() {
 }
 
 #[test]
+fn printf_substitutions_and_percent_b_octal_keep_the_ssn_review_floor() {
+    for command in [
+        r"printf '%s-%s-%s\n' 123 45 6789",
+        r"printf -- '%s-%s-%s\n' 123 45 6789",
+        r"printf 'SSN: %s\n' 123-45-6789",
+        r"printf '%b\n' '123\005545\00556789'",
+        r"printf -- '%b\n' '123\005545\00556789'",
+        r"printf '%s\n' '123-45-6789\x30'",
+    ] {
+        assert!(
+            echoes_ssn(command),
+            "{command} prints an issuable SSN and must be reviewed"
+        );
+    }
+    for command in [
+        r"printf '%s\n' '123\x2d45\x2d6789'",
+        r"printf '%s\n' '123\05545\0556789'",
+        r"printf 'literal %%s\n' '123-45-6789'",
+        r"printf '%b\n' '123\005545\00550000'",
+    ] {
+        assert!(
+            !echoes_ssn(command),
+            "{command} does not print an issuable SSN"
+        );
+    }
+}
+
+#[test]
 fn other_numbers_and_shapes_pass() {
     for command in [
         "echo 000-12-3456",
