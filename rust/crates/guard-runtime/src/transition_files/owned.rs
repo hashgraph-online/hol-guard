@@ -37,9 +37,16 @@ pub(crate) struct Owner {
     guard_home: PathBuf,
     target: PathBuf,
     dropped: u64,
+    /// Identities of the lifecycle directories this owner took exclusively.
+    exclusive: Vec<String>,
 }
 
 impl Owner {
+    /// Whether this owner already holds the lifecycle lock of `identity`.
+    pub(super) fn holds(&self, identity: &str) -> bool {
+        self.exclusive.iter().any(|held| held == identity)
+    }
+
     /// Append mutation identities in order. A journal that cannot be written
     /// is counted, never allowed to replace the transaction's own error.
     pub(super) fn record(&mut self, mutations: &[Value]) {
@@ -181,8 +188,10 @@ pub(super) fn begin(spec: &Spec<'_>, budget: &Budget) -> Result<(Locks, Owner), 
         .collect();
     exclusive.sort();
     exclusive.dedup_by(|a, b| a.0 == b.0);
-    for (_, directory) in exclusive {
+    let mut taken = Vec::new();
+    for (identity, directory) in exclusive {
         locks.push(lock_directory(directory, Limit::Grace, None)?);
+        taken.push(identity);
     }
     for (_, directory) in directories {
         let held = lock_directory(directory, Limit::Until(spec.deadline), Some(spec.deadline))?;
@@ -199,6 +208,7 @@ pub(super) fn begin(spec: &Spec<'_>, budget: &Budget) -> Result<(Locks, Owner), 
         guard_home: home,
         target: spec.target.to_path_buf(),
         dropped: 0,
+        exclusive: taken,
     };
     owner.mark("begin");
     if let Err(failure) = admit(&mut owner, spec, budget) {

@@ -68,6 +68,10 @@ pub(crate) fn within<T>(
         if seen.contains(&identity) {
             continue;
         }
+        if owner.holds(&identity) {
+            seen.push(identity);
+            continue;
+        }
         match held.iter().find(|held| held.identity == identity) {
             Some(known) => {
                 if !lease::held(&known.lease) {
