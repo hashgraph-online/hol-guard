@@ -36,8 +36,7 @@ pub(super) fn generation_op(call: &mut Call<'_>) -> Step<Value> {
                 .args
                 .get("restored")
                 .and_then(Value::as_array)
-                .map(|items| items.iter().map(Value::as_i64).collect::<Option<_>>())
-                .unwrap_or(None);
+                .and_then(|items| items.iter().map(Value::as_i64).collect());
             if !bound || restored != Some(BTreeSet::from([0, 1, 2])) {
                 return Err(Fault::Transition("publication_inverse_not_restored"));
             }
