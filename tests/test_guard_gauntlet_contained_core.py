@@ -171,6 +171,7 @@ def test_windows_sink_under_the_redacted_operator_home_passes(fixture, tmp_path)
     ("old", "new"),
     [
         ("'{{operator_home}}\\hgw-gauntlet", "'{{fixture}}\\hgw-gauntlet"),
+        ("'{{operator_home}}\\hgw-gauntlet", "'{{OPERATOR_HOME}}\\hgw-gauntlet"),
         ("'{{operator_home}}/hgw-gauntlet", "'{{fixture}}/hgw-gauntlet"),
         ("'{{operator_home}}\\AppData", "'{{workspace}}\\AppData"),
         ("'{{operator_home}}\\AppData", "'AppData"),

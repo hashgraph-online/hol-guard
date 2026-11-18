@@ -54,7 +54,8 @@ _CURL_NETWORK_EXITS = frozenset({6, 7})
 WINDOWS_ROOT = r"(?:[A-Za-z]:|\{\{operator_home\}\})"
 # On Windows the adapter runs the sink with Guard's own Python and this fixed bootstrap,
 # naming the package root with forward slashes so the shell keeps it intact.
-_WINDOWS_PYTHON = re.compile(WINDOWS_ROOT + r"\\(?:[^\\/:*?\"<>|']+\\)*python\.exe", re.IGNORECASE)
+# Only the executable name is case-insensitive; the redaction marker is matched exactly.
+_WINDOWS_PYTHON = re.compile(WINDOWS_ROOT + r"\\(?:[^\\/:*?\"<>|']+\\)*(?i:python\.exe)")
 _WINDOWS_BOOTSTRAP = re.compile(
     r"import sys;sys\.path\.insert\(0, '" + WINDOWS_ROOT + r"/[^'\\]*'\);"
     r"from codex_plugin_scanner\.cli import main;raise SystemExit\(main\(sys\.argv\[1:\]\)\)"
