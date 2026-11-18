@@ -1,4 +1,5 @@
 use super::echoes_ssn;
+// Regression coverage for printf escape decoding and shell-boundary handling.
 
 #[test]
 fn a_bare_print_of_an_ssn_is_reviewed() {
