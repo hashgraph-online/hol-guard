@@ -24,6 +24,7 @@ from ..hook_review.hook_request_parsing import runtime_hook_event_name
 from ..hook_review.hook_worker import HookWorker
 from ..hook_review.hook_worker_structured import withhold_structured_destination, withholds_structured_destination
 from ..native_hook_render import native_cli_hook_emit, native_hermes_bridge
+from ..native_payload_facts import native_hook_event
 from ..resident_evidence_client import ResidentEvidenceClient
 from ..runtime_health.diagnostics import DaemonDiagnostics
 from ..store import GuardStore
@@ -169,10 +170,10 @@ def try_native_hook_authority(
         _record_native_hook_exception(
             guard_home,
             harness=harness,
-            event_name=runtime_hook_event_name(payload),
+            event_name=native_hook_event(payload, guard_home) or runtime_hook_event_name(payload),
         )
         _log_worker_exception(error, harness=harness)
-        event_name = runtime_hook_event_name(payload)
+        event_name = native_hook_event(payload, guard_home) or runtime_hook_event_name(payload)
         response = availability_harness_response(
             harness=harness,
             event_name=event_name,
@@ -324,7 +325,7 @@ def route_native_hook(
     fallback, and the answer is the one the daemon gives the same request.
     """
 
-    event_name = runtime_hook_event_name(payload)
+    event_name = native_hook_event(payload, context.guard_home) or runtime_hook_event_name(payload)
     deadline: float | None = None
     try:
         deadline = _cli_review_deadline(payload)

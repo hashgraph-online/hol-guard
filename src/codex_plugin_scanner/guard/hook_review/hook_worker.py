@@ -38,6 +38,7 @@ from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_adapter import hook_adapter_memo
 from ..native_hook_edge import review_raw_hook_native
+from ..native_payload_facts import native_hook_event
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
 from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as acked_snapshot_binding_for_store
 from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS, TRANSIENT_PUBLICATION_ERRORS
@@ -463,7 +464,7 @@ class HookWorker(HookWorkerNativeMixin):
         return None
 
     def _hook_event_name(self, payload: Mapping[str, object]) -> str:
-        return runtime_hook_event_name(payload)
+        return native_hook_event(payload, self.store.guard_home) or runtime_hook_event_name(payload)
 
 
 __all__ = [

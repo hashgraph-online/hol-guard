@@ -23,47 +23,7 @@ const DIRECTORY_TRUST_UNAVAILABLE: &str = "native_directory_trust_unavailable";
 /// `runtime_hook_event_name`: the hook's event, normalized to the four the
 /// daemon tells apart, or as the hook spelled it.
 pub(super) fn runtime_event(payload: &Map<String, Value>) -> String {
-    for key in [
-        "event",
-        "eventName",
-        "hook_event_name",
-        "hookEventName",
-        "hook_name",
-        "hookName",
-    ] {
-        let Some(raw) = payload.get(key).and_then(Value::as_str).map(py_strip) else {
-            continue;
-        };
-        if raw.is_empty() {
-            continue;
-        }
-        let compact: String = raw
-            .to_lowercase()
-            .chars()
-            .filter(|character| *character != '_' && *character != '-')
-            .collect();
-        return match compact.as_str() {
-            "pretool"
-            | "pretooluse"
-            | "pretoolcall"
-            | "beforeshellexecution"
-            | "beforereadfile"
-            | "beforewritefile"
-            | "beforemcpexecution" => "PreToolUse",
-            "posttool"
-            | "posttooluse"
-            | "posttoolcall"
-            | "aftershellexecution"
-            | "afterreadfile"
-            | "afterwritefile"
-            | "aftermcpexecution" => "PostToolUse",
-            "permissionrequest" | "permissionrequestv2" => "PermissionRequest",
-            "prompt" | "userpromptsubmit" | "userpromptsubmitted" => "UserPromptSubmit",
-            _ => raw,
-        }
-        .to_owned();
-    }
-    "PreToolUse".to_owned()
+    crate::hook_payload_facts_op::runtime_event(payload)
 }
 
 /// The event name a fail-safe answer carries: `hook_event_name`, else

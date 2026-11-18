@@ -1,0 +1,45 @@
+"""Resident-owned projections of incoming hook payloads.
+
+The Python control plane uses this bridge only to obtain facts the Rust
+resident already normalizes. It does not classify or reinterpret the reply.
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Mapping
+from pathlib import Path
+
+from .native_execution import _resident_request
+
+_FEATURE = "hook-payload-facts-v1"
+_REQUEST_SCHEMA = "guard-hook-payload-facts-request.v1"
+_RESULT_SCHEMA = "guard-hook-payload-facts-result.v1"
+
+
+def native_hook_event(payload: Mapping[str, object], guard_home: Path) -> str | None:
+    """Return the resident-normalized event, or ``None`` on native absence."""
+
+    wire = {
+        "schema": _REQUEST_SCHEMA,
+        "request_id": f"hook-payload-facts-{uuid.uuid4().hex}",
+        "payload": dict(payload),
+    }
+    try:
+        response = _resident_request(
+            operation="hook_payload_facts",
+            request=wire,
+            guard_home=guard_home,
+            timeout_seconds=1.0,
+            required_feature=_FEATURE,
+            response_schema=_RESULT_SCHEMA,
+            record_success=False,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None
+    result = response.get("result") if isinstance(response, Mapping) else None
+    event = result.get("event_name") if isinstance(result, Mapping) else None
+    return event if isinstance(event, str) and event else None
+
+
+__all__ = ["native_hook_event"]
