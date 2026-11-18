@@ -75,7 +75,9 @@ fn plain_root_anchored_diff_pathspec(arguments: &[String], index: usize, value: 
             if verb == "diff" && rev == "HEAD" && separator == "--")
         && !path.is_empty()
         && path.len() <= 512
-        && path.split('/').all(|part| !part.is_empty() && part != "." && part != "..")
+        && path
+            .split('/')
+            .all(|part| !part.is_empty() && part != "." && part != "..")
         && path
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-' | b'/'))
@@ -485,13 +487,23 @@ mod tests {
             ":(top)src/./sum.js",
         ] {
             let arguments = words(&["diff", "HEAD", "--", bad]);
-            assert!(!plain_root_anchored_diff_pathspec(&arguments, 3, bad), "{bad}");
+            assert!(
+                !plain_root_anchored_diff_pathspec(&arguments, 3, bad),
+                "{bad}"
+            );
         }
         for arguments in [
             words(&["show", "HEAD", "--", ":(top)src/sum.js"]),
             words(&["diff", "HEAD", "--", ":(top)src/sum.js", "other"]),
             words(&["diff", "--cached", "--", ":(top)src/sum.js"]),
-            words(&["-c", "core.pager=cat", "diff", "HEAD", "--", ":(top)src/sum.js"]),
+            words(&[
+                "-c",
+                "core.pager=cat",
+                "diff",
+                "HEAD",
+                "--",
+                ":(top)src/sum.js",
+            ]),
         ] {
             assert!(!plain_root_anchored_diff_pathspec(
                 &arguments,
@@ -500,7 +512,6 @@ mod tests {
             ));
         }
     }
-
 
     /// Git takes any unambiguous prefix of a long option, so a read that
     /// disables both helpers in full can turn one back on in an abbreviation
