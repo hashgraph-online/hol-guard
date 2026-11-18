@@ -87,12 +87,20 @@ def test_a_second_new_daemon_fails_the_parallel_starts() -> None:
 
 
 def _judged_mixed(
-    errors: list[str], new_publishers: list[int], retired: list[int], *, current: bool = True
+    errors: list[str],
+    new_publishers: list[int],
+    retired: list[int],
+    *,
+    current: bool = True,
+    overlapped: bool = True,
+    journal: str = "ok",
 ) -> list[str]:
     from scripts import guard_daemon_chaos_starts as starts
 
     result = chaos.ScenarioResult(name="mixed-runtime-starts")
-    starts.judge_mixed_starts(result, errors, 10, new_publishers, retired, current=current)
+    starts.judge_mixed_starts(
+        result, errors, 10, new_publishers, retired, current=current, overlapped=overlapped, journal=journal
+    )
     return result.failures
 
 
@@ -118,6 +126,34 @@ def test_a_refused_start_or_an_older_survivor_fails_the_mixed_starts() -> None:
     assert _judged_mixed([], [41], [], current=False) == [
         "the daemon serving the home does not carry the current runtime's identity"
     ]
+
+
+def test_mixed_starts_that_never_met_the_older_launch_fail() -> None:
+    assert _judged_mixed([], [41, 42], [41], overlapped=False) == [
+        "no current-runtime start overlapped the older runtime's held launch"
+    ]
+
+
+def test_an_unreadable_journal_fails_the_mixed_starts_instead_of_counting_no_retirements() -> None:
+    for status in ("journal_unavailable", "invalid_entries_omitted", "journal_path_unsafe"):
+        assert _judged_mixed([], [41], [], journal=status) == [
+            f"the lifecycle journal could not be read in full ({status}), so retirements are unproven"
+        ]
+
+
+def test_retirements_count_only_the_new_publishers_records() -> None:
+    from scripts import guard_daemon_chaos_starts as starts
+
+    events: list[dict[str, object]] = [
+        {"event": "published", "pid": 41},
+        {"event": "retirement_requested", "pid": 41},
+        {"event": "retirement_requested", "pid": 7},
+        {"event": "retirement_requested", "pid": "41"},
+        {"event": "published", "pid": 42},
+        {"event": "published", "pid": 41},
+    ]
+    assert starts._published(events) == [41, 42]
+    assert starts._retirements(events, [41, 42]) == [41]
 
 
 def test_only_this_homes_resident_is_the_one_to_kill(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

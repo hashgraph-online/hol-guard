@@ -38,6 +38,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from codex_plugin_scanner.guard.native_daemon_manage import _lifecycle_events as lifecycle_snapshot
 from codex_plugin_scanner.guard.native_daemon_manage import (
     current_guard_daemon_runtime_fingerprint,
     ensure_guard_daemon,
@@ -126,12 +127,7 @@ def _process_tree(root_pid: int) -> list[int]:
 def _publishers(guard_home: Path) -> list[int]:
     """Pids that recorded ``published``, oldest first."""
 
-    pids: list[int] = []
-    for event in load_daemon_lifecycle_events(guard_home, limit=chaos.LIFECYCLE_EVENT_LIMIT):
-        pid = event.get("pid")
-        if event.get("event") == "published" and isinstance(pid, int) and pid not in pids:
-            pids.append(pid)
-    return pids
+    return _published(load_daemon_lifecycle_events(guard_home, limit=chaos.LIFECYCLE_EVENT_LIMIT))
 
 
 def _start(guard_home: Path, home: Path) -> str:
@@ -329,13 +325,30 @@ def _parallel_starts(result: chaos.ScenarioResult, guard_home: Path, home: Path,
     check_serving(result, guard_home, query, stopped={initial_pid}, agreed=answers[0] if answers else None)
 
 
-def _retirements(guard_home: Path, pids: list[int]) -> list[int]:
-    """Each ``retirement_requested`` record for one of ``pids``, by pid."""
+def _journal(guard_home: Path) -> tuple[list[dict[str, object]], str]:
+    """One read of the lifecycle journal and its status: ``ok`` only when every record was read."""
+
+    return lifecycle_snapshot(guard_home, limit=chaos.LIFECYCLE_EVENT_LIMIT, incident=False)
+
+
+def _published(events: list[dict[str, object]]) -> list[int]:
+    """Pids that recorded ``published`` in ``events``, oldest first."""
+
+    pids: list[int] = []
+    for event in events:
+        pid = event.get("pid")
+        if event.get("event") == "published" and isinstance(pid, int) and pid not in pids:
+            pids.append(pid)
+    return pids
+
+
+def _retirements(events: list[dict[str, object]], pids: list[int]) -> list[int]:
+    """Each ``retirement_requested`` record in ``events`` for one of ``pids``, by pid."""
 
     return [
-        event["pid"]
-        for event in load_daemon_lifecycle_events(guard_home, limit=chaos.LIFECYCLE_EVENT_LIMIT)
-        if event.get("event") == "retirement_requested" and event.get("pid") in pids
+        pid
+        for event in events
+        if event.get("event") == "retirement_requested" and isinstance(pid := event.get("pid"), int) and pid in pids
     ]
 
 
@@ -368,12 +381,30 @@ def _mixed_runtime_starts(
     before = set(_publishers(guard_home))
     started = time.monotonic()
     starts = [_runtime_start(guard_home, home, older)]
-    # The older runtime launches first, so a current starter finds its daemon and the two identities meet.
-    if _launched_daemon(guard_home, {initial_pid}) is None:
-        result.failures.append(f"the older runtime's start launched no daemon within {RECEIPT_WAIT_SECONDS}s")
-    for index in range(1, MIXED_STARTERS):
-        starts.append(_runtime_start(guard_home, home, older if index % 2 == 0 else ""))
-        time.sleep(STARTER_SPACING_SECONDS)
+    # The older runtime launches first. Its daemon is held mid-handoff, with its launch receipt in force, while the
+    # other starters arrive, so a current starter must meet the older launch rather than find it already published.
+    older_daemon = _launched_daemon(guard_home, {initial_pid})
+    overlapped = False
+    try:
+        if older_daemon is None:
+            result.failures.append(f"the older runtime's start launched no daemon within {RECEIPT_WAIT_SECONDS}s")
+        else:
+            os.kill(older_daemon, signal.SIGSTOP)
+            if not _wait_for(lambda: _receipt(guard_home) is not None, RECEIPT_WAIT_SECONDS):
+                result.failures.append(
+                    f"the older runtime's start wrote no launch receipt within {RECEIPT_WAIT_SECONDS}s"
+                )
+        for index in range(1, MIXED_STARTERS):
+            starts.append(_runtime_start(guard_home, home, older if index % 2 == 0 else ""))
+            time.sleep(STARTER_SPACING_SECONDS)
+        # A current starter still waiting while the older daemon is frozen has entered the handoff with it.
+        overlapped = older_daemon is not None and any(
+            start.poll() is None for index, start in enumerate(starts) if index % 2 == 1
+        )
+    finally:
+        if older_daemon is not None:
+            with contextlib.suppress(OSError):
+                os.kill(older_daemon, signal.SIGCONT)
 
     def current_serves() -> bool:
         state = load_authenticated_daemon_state(guard_home)
@@ -401,15 +432,18 @@ def _mixed_runtime_starts(
             errors.append((stderr.strip().splitlines() or [f"exit {start.returncode}"])[-1][:MAX_ERROR_CHARS])
     result.seconds_to_serve_again = round(time.monotonic() - started, 2)
     result.recoveries = len(answers)
-    new_publishers = [pid for pid in _publishers(guard_home) if pid not in before]
+    events, journal = _journal(guard_home)
+    new_publishers = [pid for pid in _published(events) if pid not in before]
     state = load_authenticated_daemon_state(guard_home)
     judge_mixed_starts(
         result,
         errors,
         len(starts),
         new_publishers,
-        _retirements(guard_home, new_publishers),
+        _retirements(events, new_publishers),
         current=state is not None and state.get("runtime_fingerprint") == current,
+        overlapped=overlapped,
+        journal=journal,
     )
     check_serving(result, guard_home, query, stopped={initial_pid}, agreed=None)
 
@@ -422,9 +456,21 @@ def judge_mixed_starts(
     retired: list[int],
     *,
     current: bool,
+    overlapped: bool = True,
+    journal: str = "ok",
 ) -> None:
-    """Every start served; only the older runtime's first daemon may be retired, once; the current runtime serves."""
+    """Every start served; only the older runtime's first daemon may be retired, once; the current runtime serves.
 
+    The verdict also needs a current starter that met the older launch mid-handoff, and a journal read in full:
+    a journal that could not be read proves no retirement count.
+    """
+
+    if journal != "ok":
+        result.failures.append(
+            f"the lifecycle journal could not be read in full ({journal}), so retirements are unproven"
+        )
+    if not overlapped:
+        result.failures.append("no current-runtime start overlapped the older runtime's held launch")
     if errors:
         result.failures.append(f"{len(errors)} of {starters} starts failed: {errors[0]}")
     if len(new_publishers) > 2:
