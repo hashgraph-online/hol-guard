@@ -530,6 +530,9 @@ pub(super) fn convert(
         // A spelled-out key, token or password is already in the transcript,
         // and the sandbox still lets the command write it into the workspace.
         || model.is_some_and(|model| super::literal_secrets::holds_literal_secret(&model.normalized_text))
+        // A printed Social Security number lands in the transcript whether
+        // or not the sandbox runs the print.
+        || model.is_some_and(|model| super::literal_ssn_echo::echoes_ssn(&model.normalized_text))
         // The sandbox writes anywhere in the workspace, so a hook overwritten
         // with a do-nothing script, or renamed away, stays switched off once
         // the contained run ends.
