@@ -120,7 +120,11 @@ fn diff_reads_are_judged_as_the_diff_they_print() {
     let texts: Vec<&str> = commands.iter().map(|(text, _)| text.as_str()).collect();
     assert_eq!(
         texts,
-        [STATUS, "git diff HEAD", "git diff HEAD -- ':(top)src/sum.js'"]
+        [
+            STATUS,
+            "git diff HEAD",
+            "git diff HEAD -- ':(top)src/sum.js'"
+        ]
     );
 }
 
@@ -129,10 +133,8 @@ fn show_pathspec_is_root_anchored_with_or_without_an_explicit_repository() {
     // OMP resolves show('README.md') from the repository root even if the
     // agent starts in packages/app. A cwd-relative path would read the wrong
     // file in that case; Git's :(top) pathspec preserves the root target.
-    let default_repo = commands(
-        "const d=await commit.draft(); return await d.show('README.md');",
-    )
-    .unwrap();
+    let default_repo =
+        commands("const d=await commit.draft(); return await d.show('README.md');").unwrap();
     assert_eq!(
         default_repo.last(),
         Some(&("git diff HEAD -- ':(top)README.md'".to_owned(), None))
