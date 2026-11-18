@@ -959,7 +959,7 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
     del native_adapter_state_integrity_runtime
     from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
-    from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
+    from tests.python_oracles.native_adapter_state_integrity import native_adapter_state_integrity
 
     runtime, plan, _, _ = transition
     workspace = runtime.home.parent / "workspace" if workspace_enabled else None
@@ -1028,7 +1028,7 @@ def test_changed_copilot_authority_prevents_any_transition_mutation(
     del native_adapter_state_integrity_runtime
     from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
-    from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
+    from tests.python_oracles.native_adapter_state_integrity import native_adapter_state_integrity
 
     runtime, plan, bindings, pointer = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from ..native_rich_command_model import request, string_tuple
+from codex_plugin_scanner.guard.native_rich_command_model import request, string_tuple
 
 
 def executable_name(value: str | None) -> str | None:

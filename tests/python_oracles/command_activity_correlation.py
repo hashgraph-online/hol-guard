@@ -14,9 +14,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Final, cast
 
-from ..private_file_io import read_private_regular_bytes
-from .command_activity_contract import CorrelationHandle, CorrelationKind
-from .command_activity_privacy import (
+from codex_plugin_scanner.guard.private_file_io import read_private_regular_bytes
+from codex_plugin_scanner.guard.runtime.command_activity_contract import CorrelationHandle, CorrelationKind
+from tests.python_oracles.command_activity_privacy import (
     InstallationCorrelationKey,
     StrongHarnessIdentifier,
     derive_correlation_handle,

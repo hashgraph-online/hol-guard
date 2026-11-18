@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 
-from .mdm.runtime_request import runtime_answer
+from codex_plugin_scanner.guard.mdm.runtime_request import runtime_answer
 
 _FEATURE = "native-codex-hook-trust-v1"
 _COMMAND = "codex-hook-trust"
