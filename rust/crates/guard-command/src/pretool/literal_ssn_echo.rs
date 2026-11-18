@@ -165,37 +165,84 @@ fn render_printf(format: &str, args: &[String]) -> String {
             while chars.peek().is_some_and(|c| "-+ #0".contains(*c)) {
                 flags.push(chars.next().expect("peeked printf flag"));
             }
-            let mut width_text = String::new();
-            while chars.peek().is_some_and(char::is_ascii_digit) {
-                width_text.push(chars.next().expect("peeked printf width"));
-            }
-            let width = width_text.parse::<usize>().unwrap_or(0).min(1024);
-            let precision = if chars.peek() == Some(&'.') {
+            // Bash consumes a separate operand for dynamic width/precision.
+            let width = if chars.peek() == Some(&'*') {
                 chars.next();
+                let raw = args.get(next_arg).map(String::as_str).unwrap_or("0");
+                next_arg += 1;
+                let value = raw.parse::<i64>().unwrap_or(0).clamp(-1024, 1024);
+                if value < 0 {
+                    flags.push('-');
+                }
+                value.unsigned_abs() as usize
+            } else {
                 let mut digits = String::new();
                 while chars.peek().is_some_and(char::is_ascii_digit) {
-                    digits.push(chars.next().expect("peeked precision"));
+                    digits.push(chars.next().expect("peeked printf width"));
                 }
-                Some(digits.parse::<usize>().unwrap_or(0).min(1024))
+                digits.parse::<usize>().unwrap_or(0).min(1024)
+            };
+            let precision = if chars.peek() == Some(&'.') {
+                chars.next();
+                if chars.peek() == Some(&'*') {
+                    chars.next();
+                    let raw = args.get(next_arg).map(String::as_str).unwrap_or("-1");
+                    next_arg += 1;
+                    raw.parse::<i64>()
+                        .ok()
+                        .filter(|n| *n >= 0)
+                        .map(|n| (n as usize).min(1024))
+                } else {
+                    let mut digits = String::new();
+                    while chars.peek().is_some_and(char::is_ascii_digit) {
+                        digits.push(chars.next().expect("peeked precision"));
+                    }
+                    Some(digits.parse::<usize>().unwrap_or(0).min(1024))
+                }
             } else {
                 None
             };
+            while chars.peek().is_some_and(|c| "hlLqjzt".contains(*c)) {
+                chars.next();
+            }
             let Some(spec) = chars.next() else {
                 printed.push('%');
                 break;
             };
             let operand = args.get(next_arg).map(String::as_str).unwrap_or("");
             next_arg += 1;
-            let numeric = matches!(spec, 'd' | 'i' | 'u');
+            let numeric = matches!(spec, 'd' | 'i' | 'u' | 'x' | 'X' | 'o');
             let mut rendered = match spec {
                 's' => operand.to_string(),
                 'b' => decode_printf_escapes(operand, true),
                 'd' | 'i' | 'u' => printf_decimal(operand),
+                'x' | 'X' | 'o' => {
+                    let decimal = printf_decimal(operand);
+                    if let Ok(value) = decimal.parse::<u128>() {
+                        match spec {
+                            'x' => format!("{value:x}"),
+                            'X' => format!("{value:X}"),
+                            'o' => format!("{value:o}"),
+                            _ => unreachable!("numeric conversion"),
+                        }
+                    } else {
+                        operand.to_string()
+                    }
+                }
                 'c' => operand.chars().take(1).collect(),
                 // For unsupported conversions, conservatively include the
                 // operand: the SSN protection must not be evaded by syntax.
                 _ => operand.to_string(),
             };
+            if flags.contains('#') {
+                if spec == 'x' && rendered != "0" {
+                    rendered = format!("0x{rendered}");
+                } else if spec == 'X' && rendered != "0" {
+                    rendered = format!("0X{rendered}");
+                } else if spec == 'o' && !rendered.starts_with('0') {
+                    rendered = format!("0{rendered}");
+                }
+            }
             if let Some(limit) = precision {
                 if spec == 's' || spec == 'b' {
                     rendered = rendered.chars().take(limit).collect();
