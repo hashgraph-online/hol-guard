@@ -5,6 +5,7 @@
  "retired_source_paths": [
   "src/codex_plugin_scanner/guard/evidence_drains/hook_direct_evidence_drain.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_direct_counters.py",
+  "src/codex_plugin_scanner/guard/evidence_drains/hook_evidence_dispatch.py",
   "src/codex_plugin_scanner/guard/runtime/restricted_archive_deadline.py",
   "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
   "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",
@@ -141,6 +142,13 @@
    "old_node": "tests/test_hook_direct_counters.py::test_harness_slots_match_the_direct_harnesses",
    "replacement_nodes": [
     "rust/crates/guard-runtime/src/hook_direct_counters_tests.rs::every_harness_name_has_its_own_slot"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_evidence_dispatch.py::test_evidence_is_submitted_in_the_order_the_hooks_left_it",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/hook_evidence_writer_tests.rs::a_receipt_handoff_returns_before_the_store_has_written_it"
    ],
    "status": "native_behavior_ported_requires_ci"
   },

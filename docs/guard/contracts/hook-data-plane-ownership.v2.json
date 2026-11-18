@@ -562,7 +562,7 @@
     "src/codex_plugin_scanner/guard/resident_evidence_client.py",
     "src/codex_plugin_scanner/guard/resident_evidence_drain.py",
     "src/codex_plugin_scanner/guard/resident_evidence_fallback.py",
-    "src/codex_plugin_scanner/guard/evidence_drains/hook_evidence_dispatch.py",
+    "src/codex_plugin_scanner/guard/resident_evidence_dispatch.py",
     "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_evidence_drain.py",
     "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_package_evidence_drain.py",
     "src/codex_plugin_scanner/guard/store.py",

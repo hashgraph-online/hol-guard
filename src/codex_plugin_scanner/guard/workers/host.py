@@ -258,9 +258,9 @@ class WorkerHost:
         ends with its request, so this host owns it now.
         """
 
-        from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
         from ..hook_review.hook_worker import HookWorker
         from ..resident_evidence_client import ResidentEvidenceClient
+        from ..resident_evidence_dispatch import ResidentEvidenceDispatch
 
         try:
             # Direct answers are bound only while their evidence has a writer,
@@ -269,7 +269,7 @@ class WorkerHost:
                 store=self.store,
                 home_dir=self.home_dir,
                 activity_writer=ResidentEvidenceClient(store=self.store),
-                evidence_dispatch=HookEvidenceDispatch(),
+                evidence_dispatch=ResidentEvidenceDispatch(),
                 capture_writer=None,
                 wait_for_native_policy=False,
             )

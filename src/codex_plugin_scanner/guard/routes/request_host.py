@@ -228,19 +228,19 @@ def _replay_server_class() -> type:
 
         @cached_property
         def hook_worker(self) -> Any:
-            from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
             from ..hook_review.hook_worker import HookWorker
             from ..resident_evidence_client import ResidentEvidenceClient
+            from ..resident_evidence_dispatch import ResidentEvidenceDispatch
             from ..resident_route_counters import bind_route_counter_sink
 
             self.runtime_hook_evidence_writer = ResidentEvidenceClient(store=self.store)
-            self.runtime_hook_evidence_dispatch = HookEvidenceDispatch()
+            self.runtime_resident_evidence_dispatch = ResidentEvidenceDispatch()
             worker = HookWorker(
                 store=self.store,
                 workspace=self.workspace_dir,
                 home_dir=self.home_dir,
                 activity_writer=self.runtime_hook_evidence_writer,
-                evidence_dispatch=self.runtime_hook_evidence_dispatch,
+                evidence_dispatch=self.runtime_resident_evidence_dispatch,
                 capture_writer=None,
             )
             bind_route_counter_sink(worker, self.diagnostics)

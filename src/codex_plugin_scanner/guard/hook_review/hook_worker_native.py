@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
-from ..evidence_drains.hook_evidence_dispatch import run_hook_evidence
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
@@ -18,6 +17,7 @@ from ..native_resident_client import (
 )
 from ..native_resident_revival import native_unavailable_reason
 from ..native_runtime import NativeRuntimeStatus
+from ..resident_evidence_dispatch import run_resident_evidence
 from .hook_availability_policy import availability_harness_response
 from .hook_fail_closed import render_recording_only_pre_tool
 from .hook_native_review_approval import (
@@ -119,7 +119,7 @@ def _record_native_pre_activity(
         # The hook has its verdict; the activity row records it. The writer
         # lives in the resident, so submitting here would spend a round trip
         # in front of the response rather than behind it.
-        run_hook_evidence(
+        run_resident_evidence(
             host,
             lambda: submit(
                 harness=harness,
@@ -197,7 +197,7 @@ def _record_unavailable_native(
         writer = host.activity_writer
         submit = getattr(writer, "submit_command_activity", None)
         if callable(submit):
-            run_hook_evidence(
+            run_resident_evidence(
                 host,
                 lambda: submit(
                     harness=harness,
@@ -394,7 +394,7 @@ class HookWorkerNativeMixin:
         if accepted_receipt is not None and callable(submit) and edge.get("receipt_recorded") is not True:
             # Ordered in front of this hook's activity row, which links to the
             # receipt by its decision id. An edge that queued it says so.
-            run_hook_evidence(self, lambda receipt=accepted_receipt: submit(receipt=receipt))
+            run_resident_evidence(self, lambda receipt=accepted_receipt: submit(receipt=receipt))
         if accepted_receipt is not None and capture_receipts is not None and native_harness == "codex":
             capture_receipts.append(accepted_receipt)
         if native_event == "UserPromptSubmit":

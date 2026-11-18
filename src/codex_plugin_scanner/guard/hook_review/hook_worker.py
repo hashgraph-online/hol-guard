@@ -34,7 +34,6 @@ from typing import TYPE_CHECKING, Protocol, cast, final
 
 from ..codex_hook_launch_runtime import hook_processes_contained
 from ..config import load_guard_config
-from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch, run_hook_evidence
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_adapter import hook_adapter_memo
@@ -44,6 +43,7 @@ from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as a
 from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS, TRANSIENT_PUBLICATION_ERRORS
 from ..native_runtime import NativeRuntimeStatus, native_runtime_status
 from ..native_runtime_status_share import share_verified_runtime_status
+from ..resident_evidence_dispatch import ResidentEvidenceDispatch, run_resident_evidence
 from ..resident_route_counters import RouteCounterLog
 from ..runtime.extension_control_runtime import current_extension_control_binding_digest
 from .hook_request_parsing import (
@@ -109,7 +109,7 @@ class HookWorker(HookWorkerNativeMixin):
         workspace: Path | None = None,
         home_dir: Path | None = None,
         activity_writer: CommandActivityWriter | None = None,
-        evidence_dispatch: HookEvidenceDispatch | None = None,
+        evidence_dispatch: ResidentEvidenceDispatch | None = None,
         capture_writer: CodexBindingCaptureWriter | None = None,
         wait_for_native_policy: bool = True,
         publish_native_policy: bool = True,
@@ -454,7 +454,7 @@ class HookWorker(HookWorkerNativeMixin):
                     succeeded=succeeded,
                 )
 
-        run_hook_evidence(self, record)
+        run_resident_evidence(self, record)
 
     def _runtime_harness(self, params: Mapping[str, list[str]]) -> str | None:
         values = params.get("runtime-harness", [])
