@@ -52,6 +52,6 @@
   ],
   "saferAlternatives": [
     "Keep the contribution off until a local administrator enables it; plimsoll needs only read access to the repository it is asked about.",
-    "Ask plimsoll about a disposable clone of the repository instead of the working checkout when the repository holds content the agent should not read."
+    "Point plimsoll only at repositories an agent may read in full, including their Git history; for a repository that holds restricted files or history, keep the contribution off."
   ]
 }
