@@ -270,3 +270,25 @@ fn the_hook_reviews_a_printed_ssn_and_a_lone_home_dotpath_search() {
         assert_eq!(run(command).minimum_action, "allow", "{command}");
     }
 }
+
+#[test]
+fn printf_render_budget_fails_closed_on_repeated_formats() {
+    // The command remains below the input-size bound, but a repeated format
+    // would otherwise allocate more than 64 KiB of reconstructed output.
+    let literal = "x".repeat(16_000);
+    let at_safe_size = format!("printf '{}%s' a b c", literal);
+    assert!(
+        !echoes_ssn(&at_safe_size),
+        "bounded ordinary output below the budget is still allowed"
+    );
+
+    let beyond_budget = format!("printf '{}%s' a b c d e", literal);
+    assert!(
+        echoes_ssn(&beyond_budget),
+        "an oversized reconstruction must review instead of allocating"
+    );
+
+    // A sensitive value before the output cap remains a non-allow.
+    let early_ssn = format!("printf '123-45-6789 {}%s' a b c d e", literal);
+    assert!(echoes_ssn(&early_ssn));
+}
