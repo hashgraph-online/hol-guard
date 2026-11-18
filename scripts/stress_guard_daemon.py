@@ -345,7 +345,10 @@ def run_stress(
     if max_hook_latency_ms <= 0:
         raise ValueError("max_hook_latency_ms must be positive")
 
-    with tempfile.TemporaryDirectory(prefix="hol-guard-daemon-stress-") as temporary:
+    # A worker the cleanup just stopped can still land one last file in the
+    # home while the directory is removed. That is a cleanup diagnostic, and
+    # like the others it must not replace the measured result.
+    with tempfile.TemporaryDirectory(prefix="hol-guard-daemon-stress-", ignore_cleanup_errors=True) as temporary:
         root = Path(temporary)
         store, execution, guard_home = _prepare_stress_execution(root, receipt_count)
         try:
