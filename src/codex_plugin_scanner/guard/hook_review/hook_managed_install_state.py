@@ -42,9 +42,10 @@ def _store_revision(store: Any) -> int | None:
     if not callable(reader):
         return None
     try:
-        return int(reader())
+        revision = reader()
     except Exception:
         return None
+    return revision if isinstance(revision, int) else None
 
 
 def _remembered_protected(key: tuple[str, str], store: Any) -> bool:
