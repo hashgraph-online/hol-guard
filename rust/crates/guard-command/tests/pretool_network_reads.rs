@@ -272,6 +272,20 @@ fn a_home_tilde_kubeconfig_setting_reads_like_the_spelled_out_path() {
         let result = decide(&space, command);
         assert_ne!(result.decision, "allow", "{command}");
     }
+    // The shell keeps HOME for ~//tmp/..., while Path::join would discard
+    // HOME for an absolute remainder. The harmless decoy must never license
+    // an executable plugin config at a different location.
+    let decoy = space.home.parent().unwrap().join("shadow-kubeconfig.yaml");
+    std::fs::write(&decoy, INERT_KUBECONFIG).unwrap();
+    let real = space
+        .home
+        .join(decoy.to_str().unwrap().trim_start_matches('/'));
+    std::fs::create_dir_all(real.parent().unwrap()).unwrap();
+    std::fs::write(&real, PLUGIN_KUBECONFIG).unwrap();
+    let command = format!("KUBECONFIG=~/{} kubectl get pods", decoy.display());
+    let result = decide(&space, &command);
+    assert_ne!(result.decision, "allow", "{command}: {}", result.reason_code);
+
     // When the shell's HOME is some other directory, `~` names that one.
     let home = space.home.to_str();
     let cwd = space.cwd.to_str();

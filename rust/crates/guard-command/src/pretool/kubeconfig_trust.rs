@@ -75,6 +75,8 @@ pub(super) fn trusted_home_kubeconfig_setting(
     if cfg!(windows)
         || !context.shell_home_matches
         || rest.is_empty()
+        // `~//absolute` is still below shell HOME; Path::join would replace HOME.
+        || rest.starts_with('/')
         || rest.contains(['~', '\'', '"', '\\', ' ', '\t'])
     {
         return false;
