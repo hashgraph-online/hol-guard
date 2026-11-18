@@ -152,7 +152,27 @@ fn pattern_is_quoted(text: &str, pattern: &str) -> bool {
         }
         index = state.advance(&chars, index).max(index + 1);
     }
-    literal_match
+    if literal_match {
+        return true;
+    }
+    // Shell quote removal can join a literal home marker with an unquoted
+    // suffix: grep '$HOME'/.config/example. Its canonical pattern contains
+    // "$HOME/.config/example", but those bytes are not contiguous in source.
+    // Only accept the precise single-quoted marker followed by the full
+    // suffix. An unquoted occurrence of the complete pattern is rejected
+    // above, so an option value cannot shield a real expanding pattern.
+    let split = if let Some(suffix) = pattern.strip_prefix("$HOME") {
+        Some(("$HOME", suffix))
+    } else if let Some(suffix) = pattern.strip_prefix("${HOME}") {
+        Some(("${HOME}", suffix))
+    } else if let Some(suffix) = pattern.strip_prefix('~') {
+        Some(("~", suffix))
+    } else {
+        None
+    };
+    split.is_some_and(|(marker, suffix)| {
+        visible.contains(&format!("'{marker}'{suffix}"))
+    })
 }
 
 /// A quoted or escaped '<' is argument text, not input redirection.
