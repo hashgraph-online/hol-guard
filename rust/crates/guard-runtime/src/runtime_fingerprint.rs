@@ -144,13 +144,22 @@ pub(crate) fn installed_fingerprint(
         }
     }
     let (fingerprint, complete) = content_fingerprint(root, version, &paths);
-    if !complete {
+    if !complete || !unchanged_since(root, version, &paths, &tree_sig) {
         return None;
     }
     if let Some(cache) = cache {
         cache.store(&tree_sig, &fingerprint);
     }
     Some(fingerprint)
+}
+
+/// Whether the tree still has the signature taken before its content was
+/// read. A module replaced between the two passes would otherwise pair one
+/// tree's signature with another tree's digest in the cache.
+fn unchanged_since(root: &Path, version: &str, paths: &[PathBuf], tree_sig: &str) -> bool {
+    let (paths_now, listed) = identity_paths(root);
+    let (signature, signed) = tree_signature(root, version, &paths_now);
+    listed && signed && paths_now == paths && signature == tree_sig
 }
 
 fn invalid() -> String {
@@ -164,16 +173,24 @@ fn answer(
     cache: Option<&CacheFile>,
 ) -> Value {
     let (paths, listed) = identity_paths(source_root);
-    let (tree_sig, _) = tree_signature(source_root, version, &paths);
-    let cached = cached.or_else(|| cache.and_then(CacheFile::load));
+    let (tree_sig, signed) = tree_signature(source_root, version, &paths);
+    // A short listing or signature describes less than the digest would, so
+    // it neither selects nor keys a cached digest; the answer stays best
+    // effort.
+    let whole = listed && signed;
+    let cached = cached
+        .or_else(|| cache.and_then(CacheFile::load))
+        .filter(|_| whole);
     let reused =
         cached.filter(|cached| cached.tree_sig == tree_sig && is_sha256_hex(&cached.fingerprint));
     let (fingerprint, reused) = match reused {
         Some(cached) => (cached.fingerprint, true),
         None => {
             let (fingerprint, complete) = content_fingerprint(source_root, version, &paths);
-            if let (Some(cache), true) = (cache, listed && complete) {
-                cache.store(&tree_sig, &fingerprint);
+            if let (Some(cache), true) = (cache, whole && complete) {
+                if unchanged_since(source_root, version, &paths, &tree_sig) {
+                    cache.store(&tree_sig, &fingerprint);
+                }
             }
             (fingerprint, false)
         }
@@ -189,7 +206,7 @@ pub(super) fn is_sha256_hex(value: &str) -> bool {
 }
 
 /// The files that make up the runtime's identity, sorted by path, and
-/// whether every directory of the listing was read.
+/// whether every directory and probed path of the listing could be read.
 ///
 /// A static asset that is also a `*.py` file is listed twice, as the walk
 /// that defined this identity listed it.
@@ -202,19 +219,46 @@ fn identity_paths(source_root: &Path) -> (Vec<PathBuf>, bool) {
         }
     });
     let manifest = package.join("_native").join("runtime-manifest.json");
-    if manifest.is_file() {
-        paths.push(manifest);
+    match target_metadata(&manifest) {
+        Ok(Some(metadata)) if metadata.is_file() => paths.push(manifest),
+        Ok(_) => {}
+        Err(()) => complete = false,
     }
     let assets = package.join("guard").join("daemon").join("static");
-    if assets.is_dir() {
-        complete &= walk(&assets, &mut |path| {
-            if path.is_file() {
-                paths.push(path.to_path_buf());
-            }
-        });
+    match target_metadata(&assets) {
+        Ok(Some(metadata)) if metadata.is_dir() => {
+            let mut hidden = false;
+            let listed = walk(&assets, &mut |path| match target_metadata(path) {
+                Ok(Some(metadata)) if metadata.is_file() => paths.push(path.to_path_buf()),
+                Ok(_) => {}
+                Err(()) => hidden = true,
+            });
+            complete &= listed && !hidden;
+        }
+        Ok(_) => {}
+        Err(()) => complete = false,
     }
     paths.sort_by_cached_key(|path| sort_key(path));
     (paths, complete)
+}
+
+/// The metadata of what `path` names, following links. `None` when nothing
+/// is there (a missing path or a dangling link); an error that hides whether
+/// something is there, such as a directory that cannot be searched, is
+/// `Err`, so the listing is not taken as whole.
+fn target_metadata(path: &Path) -> Result<Option<fs::Metadata>, ()> {
+    match fs::metadata(path) {
+        Ok(metadata) => Ok(Some(metadata)),
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+            ) =>
+        {
+            Ok(None)
+        }
+        Err(_) => Err(()),
+    }
 }
 
 /// Every entry below `root`, descending into real directories only: a
