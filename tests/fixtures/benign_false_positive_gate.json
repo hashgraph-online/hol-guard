@@ -28280,6 +28280,22 @@
       "expect": "allow"
     },
     {
+      "id": "ls-absent-file-in-sibling-repo-hidden-folder",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/Code/ignore-rules/web-console/.vscode/launch.json 2>/dev/null || echo \"no launch config\""
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "neg-home-rg-sibling-env-example-negation",
       "fix_area": "negative",
       "harnesses": [

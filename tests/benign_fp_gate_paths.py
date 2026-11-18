@@ -209,6 +209,8 @@ PROBES_FOR_ABSENCE = frozenset(
         # whole case, since an absent name under the workspace is what the
         # missing-read screen admits without a review.
         "cat-missing-name-inside-the-worktree",
+        # A missing launch config probed inside a sibling repository's hidden editor folder.
+        "ls-absent-file-in-sibling-repo-hidden-folder",
         # A recursive read whose root is not there: the walk opens nothing,
         # which is exactly the shape these cases measure. Building the root
         # would turn them into ordinary recursive reads of a populated tree,
