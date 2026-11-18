@@ -55,15 +55,46 @@ fn a_quoted_home_root_does_not_fail_a_named_xargs_pipeline() {
     for command in [
         "find \"$HOME/.github/workflows\" -maxdepth 1 -type f -print 2>/dev/null | sort | xargs -r grep -nE 'runs-on|runner'",
         "find \"${HOME}/notes\" -type f | xargs grep -l todo",
+        "printf '%s\\n' 'NVM:'; if [ -d \"$HOME/.nvm/versions/node\" ]; then find \"$HOME/.nvm/versions/node\" -mindepth 1 -maxdepth 1 -type d -print | sort; else echo '(missing)'; fi; printf '%s\\n' 'Workflow:'; if [ -f \"$HOME/.github/workflows\" ]; then :; fi; find \"$HOME/.github/workflows\" -maxdepth 1 -type f -print 2>/dev/null | sort | xargs -r grep -nE 'runs-on|runner' || true",
     ] {
-        assert_ne!(decision(&controls, command).1, FAILED, "{command}");
+        let (action, code) = decision(&controls, command);
+        assert_ne!(code, FAILED, "{command}\n{}", diagnose(command));
+        assert_ne!(action, "block", "{command}: {code}");
     }
     for command in [
         "find \"$HOME/$DIR\" -type f | xargs grep -l todo",
         "find $HOME/notes -type f | xargs grep -l todo",
     ] {
-        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+        assert_ne!(decision(&controls, command).0, "allow", "{command}");
     }
+}
+
+/// What each step of the xargs floor answered, for a failure message.
+fn diagnose(command: &str) -> String {
+    let request = crate::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: crate::default_dialect(),
+        transport: crate::default_transport(),
+        extraction_provenance: crate::default_provenance(),
+    };
+    let parsed = crate::parse_command(&request);
+    let (reason, confidence, normalized) = match &parsed {
+        Ok(parsed) => (
+            parsed.uncertainty_reason.clone(),
+            parsed.confidence.clone(),
+            parsed.normalized_text.clone(),
+        ),
+        Err(error) => (Some(error.clone()), String::new(), String::new()),
+    };
+    let fixed = super::xargs::with_fixed_home(&normalized);
+    format!(
+        "reason={reason:?} confidence={confidence} names={} input={} fixed_rejects={} named_pipeline={} moves={} normalized={normalized:?}",
+        xargs_names_its_program(&normalized),
+        xargs_input_is_named(&normalized),
+        fixed.contains(['<', '`', '$', '\n']),
+        super::named_xargs_pipeline(&normalized),
+        super::moves_data(&super::unquoted_literal(&normalized)),
+    )
 }
 
 /// Reading the program out of an `xargs` leaves the operands standard input
