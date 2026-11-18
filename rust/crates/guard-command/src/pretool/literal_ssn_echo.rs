@@ -92,36 +92,130 @@ fn decode_printf_escapes(text: &str, percent_b: bool) -> String {
 // Unlike concatenating operands with spaces, substitutions can form a number.
 // Preserve literal backslashes in %s operands; only %b expands their escapes.
 // Repeating the format handles extra operands, as Bash printf does.
+// Bash printf interprets leading zero numbers as octal and 0x as hex.
+// Use a bounded conversion so width/flag spellings cannot evade SSN review.
+fn printf_decimal(raw: &str) -> String {
+    let (negative, unsigned) = if let Some(tail) = raw.strip_prefix('-') {
+        (true, tail)
+    } else {
+        (false, raw.strip_prefix('+').unwrap_or(raw))
+    };
+    let (base, digits) = if let Some(hex) = unsigned.strip_prefix("0x").or_else(|| unsigned.strip_prefix("0X")) {
+        (16, hex)
+    } else if unsigned.len() > 1 && unsigned.starts_with('0') {
+        (8, &unsigned[1..])
+    } else {
+        (10, unsigned)
+    };
+    match u128::from_str_radix(digits, base) {
+        Ok(value) if negative => format!("-{value}"),
+        Ok(value) => value.to_string(),
+        Err(_) => raw.to_string(),
+    }
+}
+
+// Scan the RAW format. An escape-decoded percent sign is literal output,
+// not the beginning of a conversion (e.g. \045%s).
 fn render_printf(format: &str, args: &[String]) -> String {
-    let format = decode_printf_escapes(format, false);
     let mut printed = String::new();
     let mut next_arg = 0;
     loop {
         let previous_arg = next_arg;
-        let mut chars = format.chars();
+        let mut chars = format.chars().peekable();
         while let Some(ch) = chars.next() {
+            if ch == '\\' {
+                let mut escape = String::from("\\");
+                let Some(next) = chars.next() else {
+                    printed.push('\\');
+                    break;
+                };
+                escape.push(next);
+                let extra = if next == 'x' { 2 } else if ('0'..='7').contains(&next) { 2 } else { 0 };
+                for _ in 0..extra {
+                    let valid = if next == 'x' {
+                        chars.peek().is_some_and(char::is_ascii_hexdigit)
+                    } else {
+                        chars.peek().is_some_and(|c| ('0'..='7').contains(c))
+                    };
+                    if !valid {
+                        break;
+                    }
+                    escape.push(chars.next().expect("peeked escape digit"));
+                }
+                printed.push_str(&decode_printf_escapes(&escape, false));
+                continue;
+            }
             if ch != '%' {
                 printed.push(ch);
                 continue;
             }
-            match chars.next() {
-                Some('%') => printed.push('%'),
-                Some(spec @ ('s' | 'b' | 'd' | 'i')) => {
-                    let operand = args.get(next_arg).map(String::as_str).unwrap_or("");
-                    next_arg += 1;
-                    if spec == 'b' {
-                        printed.push_str(&decode_printf_escapes(operand, true));
-                    } else {
-                        printed.push_str(operand);
-                    }
-                }
-                Some(other) => {
-                    // Do not invent the output of unsupported conversions.
-                    printed.push('%');
-                    printed.push(other);
-                }
-                None => printed.push('%'),
+            if chars.peek() == Some(&'%') {
+                chars.next();
+                printed.push('%');
+                continue;
             }
+            let mut flags = String::new();
+            while chars.peek().is_some_and(|c| "-+ #0".contains(*c)) {
+                flags.push(chars.next().expect("peeked printf flag"));
+            }
+            let mut width_text = String::new();
+            while chars.peek().is_some_and(char::is_ascii_digit) {
+                width_text.push(chars.next().expect("peeked printf width"));
+            }
+            let width = width_text.parse::<usize>().unwrap_or(0).min(1024);
+            let precision = if chars.peek() == Some(&'.') {
+                chars.next();
+                let mut digits = String::new();
+                while chars.peek().is_some_and(char::is_ascii_digit) {
+                    digits.push(chars.next().expect("peeked precision"));
+                }
+                Some(digits.parse::<usize>().unwrap_or(0).min(1024))
+            } else {
+                None
+            };
+            let Some(spec) = chars.next() else {
+                printed.push('%');
+                break;
+            };
+            let operand = args.get(next_arg).map(String::as_str).unwrap_or("");
+            next_arg += 1;
+            let numeric = matches!(spec, 'd' | 'i' | 'u');
+            let mut rendered = match spec {
+                's' => operand.to_string(),
+                'b' => decode_printf_escapes(operand, true),
+                'd' | 'i' | 'u' => printf_decimal(operand),
+                'c' => operand.chars().take(1).collect(),
+                // For unsupported conversions, conservatively include the
+                // operand: the SSN protection must not be evaded by syntax.
+                _ => operand.to_string(),
+            };
+            if let Some(limit) = precision {
+                if spec == 's' || spec == 'b' {
+                    rendered = rendered.chars().take(limit).collect();
+                } else if numeric {
+                    let (sign, digits) = if let Some(digits) = rendered.strip_prefix('-') {
+                        ("-", digits)
+                    } else {
+                        ("", rendered.as_str())
+                    };
+                    rendered = format!("{sign}{}{digits}", "0".repeat(limit.saturating_sub(digits.len())));
+                }
+            }
+            let pad = width.saturating_sub(rendered.chars().count());
+            if pad > 0 {
+                if flags.contains('-') {
+                    rendered.push_str(&" ".repeat(pad));
+                } else if numeric && flags.contains('0') && precision.is_none() {
+                    if let Some(rest) = rendered.strip_prefix('-') {
+                        rendered = format!("-{}{rest}", "0".repeat(pad));
+                    } else {
+                        rendered = format!("{}{rendered}", "0".repeat(pad));
+                    }
+                } else {
+                    rendered = format!("{}{rendered}", " ".repeat(pad));
+                }
+            }
+            printed.push_str(&rendered);
         }
         if next_arg >= args.len() || next_arg == previous_arg {
             break;
