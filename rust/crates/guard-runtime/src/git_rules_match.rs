@@ -11,6 +11,8 @@
 
 use guard_command::command_model::{parse_shell_command, CommandSegment};
 
+use crate::git_rules_state::{Dir, Hooks, State};
+
 /// How deep nested shells, wrappers and inline scripts are followed.
 const MAX_DEPTH: usize = 4;
 
@@ -19,16 +21,6 @@ const MAX_DEPTH: usize = 4;
 pub(crate) struct Breaks {
     pub(crate) hook_bypass: bool,
     pub(crate) stage_all: bool,
-}
-
-/// The shell state that carries from one segment to the next.
-#[derive(Debug, Default, Clone, Copy)]
-struct State {
-    /// A `cd` moved the shell away from the folder the agent started in, so
-    /// `.` no longer names the whole tree.
-    moved: bool,
-    /// An exported variable already switched the hooks off.
-    hooks_off: bool,
 }
 
 pub(crate) fn breaks(command: &str) -> Breaks {
@@ -54,7 +46,7 @@ fn scan(text: &str, depth: usize, state: &mut State, found: &mut Breaks) {
         segment_breaks(segment, depth, state, found);
     }
     for embedded in &model.embedded_commands {
-        scan(&embedded.text, depth + 1, &mut state.clone(), found);
+        scan(&embedded.text, depth + 1, &mut { *state }, found);
     }
 }
 
@@ -66,41 +58,57 @@ fn segment_breaks(segment: &CommandSegment, depth: usize, state: &mut State, fou
         let inner = segment.text.trim();
         let inner = inner.strip_prefix('(').unwrap_or(inner);
         let inner = inner.strip_suffix(')').unwrap_or(inner);
-        scan(inner, depth + 1, &mut state.clone(), found);
+        scan(inner, depth + 1, &mut { *state }, found);
         return;
     }
-    let assignments: Vec<&str> = segment
+    // The words before the program: assignments, and an `env` the command
+    // model left in place inside a compound command.
+    let program = base_name(executable);
+    let leading: Vec<&str> = segment
         .tokens
         .iter()
-        .take_while(|token| assignment(token).is_some())
         .map(String::as_str)
+        .take_while(|token| *token != executable && base_name(token) != program)
         .collect();
-    let hooks_off = state.hooks_off || assignments.iter().any(|token| disarms_hooks(token));
+    let (hooks, _) = state.hooks.prefix(&leading);
     let mut argv: Vec<&str> = vec![executable];
     argv.extend(segment.arguments.iter().map(String::as_str));
-    run(&argv, hooks_off, depth, state, found);
+    run(&argv, hooks, depth, state, found);
 }
 
-/// One program run with `argv`, looking through wrappers to the program
-/// they start.
-fn run(argv: &[&str], hooks_off: bool, depth: usize, state: &mut State, found: &mut Breaks) {
+/// One program run with `argv` and the hook switches `hooks` in its
+/// environment, looking through wrappers to the program they start.
+fn run(argv: &[&str], hooks: Hooks, depth: usize, state: &mut State, found: &mut Breaks) {
     let Some((program, rest)) = argv.split_first() else {
         return;
     };
+    // A child shell or script starts from this command's environment.
+    let child = State { hooks, ..*state };
     match base_name(program).as_str() {
-        "git" => git(rest, hooks_off, state, found),
-        "cd" | "pushd" | "popd" => {
-            state.moved = !rest.iter().any(|target| target.contains("--show-toplevel"));
-        }
-        "export" | "declare" | "typeset" => {
-            if rest.iter().any(|token| disarms_hooks(token)) {
-                state.hooks_off = true;
+        "git" => git(rest, hooks, state, found),
+        name @ ("cd" | "pushd" | "popd") => state.change_directory(name, rest),
+        name @ ("export" | "declare" | "typeset" | "unset") => state.environment(name, rest),
+        "env" => {
+            let words: Vec<&str> = std::iter::once("env").chain(rest.iter().copied()).collect();
+            let (hooks, read) = hooks.prefix(&words);
+            if depth < MAX_DEPTH {
+                run(&words[read..], hooks, depth + 1, state, found);
             }
         }
-        "eval" => scan(&rest.join(" "), depth + 1, state, found),
+        "eval" => {
+            // `eval` runs in this shell: its folder and exports carry on,
+            // while switches set only for the `eval` itself do not.
+            let mut inner = child;
+            scan(&rest.join(" "), depth + 1, &mut inner, found);
+            state.dir = inner.dir;
+            state.previous = inner.previous;
+            if hooks == state.hooks {
+                state.hooks = inner.hooks;
+            }
+        }
         "sh" | "bash" | "zsh" | "dash" | "ksh" => {
             if let Some(script) = flag_value(rest, &["-c", "-lc", "-ec", "-ic"]) {
-                scan(script, depth + 1, &mut state.clone(), found);
+                scan(script, depth + 1, &mut { child }, found);
             }
         }
         name if INLINE_RUNTIMES
@@ -108,14 +116,17 @@ fn run(argv: &[&str], hooks_off: bool, depth: usize, state: &mut State, found: &
             .any(|runtime| name.starts_with(runtime)) =>
         {
             if let Some(code) = flag_value(rest, &["-c", "-e", "--eval", "-p", "--print"]) {
-                for call in crate::git_rules_inline::process_calls(code) {
+                let hash_comments = !["node", "bun", "deno"]
+                    .iter()
+                    .any(|runtime| name.starts_with(runtime));
+                for call in crate::git_rules_inline::process_calls(code, hash_comments) {
                     match call {
                         crate::git_rules_inline::Call::Shell(text) => {
-                            scan(&text, depth + 1, &mut state.clone(), found)
+                            scan(&text, depth + 1, &mut { child }, found)
                         }
                         crate::git_rules_inline::Call::Argv(words) => {
                             let words: Vec<&str> = words.iter().map(String::as_str).collect();
-                            run(&words, false, depth + 1, &mut state.clone(), found);
+                            run(&words, hooks, depth + 1, &mut { child }, found);
                         }
                     }
                 }
@@ -124,7 +135,7 @@ fn run(argv: &[&str], hooks_off: bool, depth: usize, state: &mut State, found: &
         name => {
             if let Some(inner) = wrapped(name, rest) {
                 if depth < MAX_DEPTH {
-                    run(inner, hooks_off, depth + 1, state, found);
+                    run(inner, hooks, depth + 1, state, found);
                 }
             }
         }
@@ -164,15 +175,17 @@ fn wrapped<'a>(name: &str, rest: &'a [&'a str]) -> Option<&'a [&'a str]> {
 }
 
 /// Git's own options before the subcommand, and the subcommand's rules.
-fn git(args: &[&str], hooks_off: bool, state: &State, found: &mut Breaks) {
+fn git(args: &[&str], hooks: Hooks, state: &State, found: &mut Breaks) {
     let mut config_disarms = false;
-    let mut moved = state.moved;
+    let mut dir = state.dir;
     let mut index = 0;
     while let Some(word) = args.get(index) {
         let next = args.get(index + 1).copied();
         match *word {
             "-C" => {
-                moved = moved || next.is_some_and(|dir| !names_root(dir));
+                if let Some(target) = next.filter(|target| !names_root(target)) {
+                    dir = dir.enter(target);
+                }
                 index += 2;
             }
             "-c" => {
@@ -193,7 +206,17 @@ fn git(args: &[&str], hooks_off: bool, state: &State, found: &mut Breaks) {
         return;
     };
     let rest = &args[index + 1..];
-    if HOOK_RUNNING.contains(subcommand) && (hooks_off || config_disarms) {
+    let moved = dir != Dir::Root;
+    // A commit preview runs no hook and stages nothing.
+    if *subcommand == "commit"
+        && rest
+            .iter()
+            .take_while(|word| **word != "--")
+            .any(|word| *word == "--dry-run")
+    {
+        return;
+    }
+    if HOOK_RUNNING.contains(subcommand) && (hooks.off() || config_disarms) {
         found.hook_bypass = true;
     }
     match *subcommand {
@@ -207,12 +230,7 @@ fn git(args: &[&str], hooks_off: bool, state: &State, found: &mut Breaks) {
                 found.stage_all = true;
             }
         }
-        "config" => {
-            let values: Vec<&&str> = rest.iter().filter(|word| !word.starts_with('-')).collect();
-            if let [key, value, ..] = values.as_slice() {
-                found.hook_bypass |= disarming_hooks_path(key, value);
-            }
-        }
+        "config" => found.hook_bypass |= config_disarms_hooks(rest),
         "push" | "merge" | "am" | "rebase" | "cherry-pick" | "revert" | "pull" => {
             if rest
                 .iter()
@@ -384,37 +402,63 @@ fn names_root(dir: &str) -> bool {
         || dir.starts_with('/')
 }
 
+/// `git config [options] [set] core.hooksPath <value>`: the options that
+/// take a value are skipped with it, and a read or an unset never matches.
+fn config_disarms_hooks(rest: &[&str]) -> bool {
+    const VALUED: &[&str] = &[
+        "-f",
+        "--file",
+        "--blob",
+        "--type",
+        "--default",
+        "--comment",
+        "--value",
+    ];
+    const NOT_A_WRITE: &[&str] = &[
+        "--get",
+        "--get-all",
+        "--get-regexp",
+        "--get-urlmatch",
+        "--unset",
+        "--unset-all",
+        "-l",
+        "--list",
+        "-e",
+        "--edit",
+        "--remove-section",
+        "--rename-section",
+        "get",
+        "list",
+        "unset",
+        "edit",
+        "remove-section",
+        "rename-section",
+    ];
+    let mut words = Vec::new();
+    let mut index = 0;
+    while let Some(word) = rest.get(index) {
+        index += 1;
+        if NOT_A_WRITE.contains(word) {
+            return false;
+        }
+        if VALUED.contains(word) {
+            index += 1;
+        } else if !word.starts_with('-') {
+            words.push(*word);
+        }
+    }
+    if words.first() == Some(&"set") {
+        words.remove(0);
+    }
+    matches!(words.as_slice(), [key, value, ..] if disarming_hooks_path(key, value))
+}
+
 fn disarming_hooks_path(key: &str, value: &str) -> bool {
     key.eq_ignore_ascii_case("core.hooksPath")
         && matches!(
             value.trim().trim_matches(|c| c == '"' || c == '\''),
             "" | "/dev/null" | "NUL" | "nul" | "/nonexistent" | "/var/empty"
         )
-}
-
-/// An environment assignment that switches a hook manager off.
-fn disarms_hooks(token: &str) -> bool {
-    let Some((name, value)) = assignment(token) else {
-        return false;
-    };
-    let value = value.trim_matches(|c| c == '"' || c == '\'');
-    match name {
-        "HUSKY" | "LEFTHOOK" => value == "0",
-        "HUSKY_SKIP_HOOKS" | "OVERCOMMIT_DISABLE" => {
-            matches!(value, "1" | "true" | "TRUE" | "yes")
-        }
-        // pre-commit skips the hook ids it lists.
-        "SKIP" => !value.is_empty(),
-        _ => false,
-    }
-}
-
-fn assignment(token: &str) -> Option<(&str, &str)> {
-    let (name, value) = token.split_once('=')?;
-    let valid = !name.is_empty()
-        && !name.starts_with(|c: char| c.is_ascii_digit())
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
-    valid.then_some((name, value))
 }
 
 fn flag_value<'a>(rest: &[&'a str], flags: &[&str]) -> Option<&'a str> {

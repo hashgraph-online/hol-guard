@@ -27,6 +27,17 @@ const HOOK_BYPASSES: &[&str] = &[
     "(cd app && HUSKY=0 git commit -m wip)",
     "eval \"git commit --no-verify -m wip\"",
     "node -e \"require('child_process').execSync('git commit -n -m wip')\"",
+    "git status && env HUSKY=0 git commit -m wip",
+    "git status && env -u PAGER SKIP=lint git commit -m wip",
+    "nohup env HUSKY=0 git commit -m wip",
+    "HUSKY=0 python3 -c 'import subprocess; subprocess.run([\"git\",\"commit\",\"-m\",\"wip\"])'",
+    "HUSKY=0 python3 -c 'import os; os.system(\"git commit -m wip\")'",
+    "HUSKY=0 sh -c 'git commit -m wip'",
+    "HUSKY=0 eval git commit -m wip",
+    "git config --file .git/config core.hooksPath /dev/null",
+    "git config set core.hooksPath /dev/null",
+    "git config --local core.hooksPath ''",
+    "export SKIP=lint; export HUSKY=1; git commit -m wip",
 ];
 
 const WHOLE_TREE_STAGES: &[&str] = &[
@@ -38,6 +49,12 @@ const WHOLE_TREE_STAGES: &[&str] = &[
     "git status --short && git add . ':!docs/generated'",
     "python3 -c 'import subprocess; subprocess.run([\"git\", \"add\", \"-A\"])' && cd app && git commit -m prep",
     "git commit -m \"sync drivetrain constants\" .",
+    "cd . && git add .",
+    "cd sub && cd .. && git add .",
+    "cd app/src && cd ../.. && git add -- .",
+    "cd app && cd - && git add .",
+    "pushd app && popd && git add .",
+    "cd app && git -C .. add .",
     "pnpm exec prettier --write \"static/**\" ; git add --all ; git commit -m 'rebuild'",
     "git status && git add -A && git commit -m 'squash WIP'",
     "git diff --stat && git add -- ':(top)' && git diff --cached --stat",
@@ -82,6 +99,20 @@ const QUIET: &[&str] = &[
     "git status --short",
     "git log --oneline -n 5",
     "git commit -m wip",
+    "export HUSKY=0; export HUSKY=1; git commit -m wip",
+    "export HUSKY=0; unset HUSKY; git commit -m wip",
+    "env -i git commit -m wip",
+    "git commit --dry-run -a",
+    "git commit --dry-run .",
+    "HUSKY=0 git commit --dry-run -m wip",
+    "python3 -c \"# os.system('git add -A')\nprint(1)\"",
+    "node -e \"// execSync('git add -A')\nconsole.log(1)\"",
+    "node -e \"/* execSync('git add -A') */ console.log(1)\"",
+    "git config --unset core.hooksPath",
+    "git config --get core.hooksPath",
+    "git config --file .git/config core.hooksPath .githooks",
+    "cd app/src && cd .. && git add .",
+    "pushd app && git add .",
 ];
 
 #[test]
@@ -111,19 +142,28 @@ fn ordinary_git_work_breaks_no_rule() {
 #[test]
 fn inline_code_reads_only_process_calls() {
     assert_eq!(
-        process_calls("import os; os.system('git add .')"),
+        process_calls("import os; os.system('git add .')", true),
         vec![Call::Shell("git add .".into())]
     );
     assert_eq!(
-        process_calls("subprocess.run(['git', cmd, '.'])"),
+        process_calls("subprocess.run(['git', cmd, '.'])", true),
         vec![Call::Argv(vec!["git".into(), "$VAR".into(), ".".into()])]
     );
     assert_eq!(
-        process_calls("spawnSync('git', ['add', '-A'])"),
+        process_calls("spawnSync('git', ['add', '-A'])", true),
         vec![Call::Argv(vec!["git".into(), "add".into(), "-A".into()])]
     );
-    assert!(process_calls("print('os.system(\"git add .\")')").is_empty());
-    assert!(process_calls("runner = 1; rerun('x')").is_empty());
+    assert!(process_calls("print('os.system(\"git add .\")')", true).is_empty());
+    assert!(process_calls("runner = 1; rerun('x')", true).is_empty());
+    // A first argument that opens with a curly quote is not a literal, and
+    // reading it must not split a multi-byte character.
+    assert!(process_calls("os.system(\u{201c}git add .\u{201d})", true).is_empty());
+    assert!(process_calls("run(\u{e9}x, 'git add .')", false).is_empty());
+    // `#` starts a comment in Python, not in JavaScript; `//` the reverse.
+    assert!(process_calls("# os.system('git add .')", true).is_empty());
+    assert_eq!(process_calls("# x\nos.system('git add .')", true).len(), 1);
+    assert!(process_calls("// execSync('git add .')", false).is_empty());
+    assert_eq!(process_calls("a = 4 // 2; os.system('git add .')", true).len(), 1);
 }
 
 fn result(minimum_action: &str) -> PreToolResultV1 {

@@ -34,7 +34,10 @@ const PROCESS_CALLS: &[&str] = &[
 /// Inline code longer than this is not read.
 const MAX_CODE: usize = 16_384;
 
-pub(crate) fn process_calls(code: &str) -> Vec<Call> {
+/// The process calls in `code`. `hash_comments` says the language starts a
+/// line comment with `#` (Python, Ruby, Perl); otherwise `//` and `/* */`
+/// are comments (JavaScript).
+pub(crate) fn process_calls(code: &str, hash_comments: bool) -> Vec<Call> {
     let mut calls = Vec::new();
     if code.len() > MAX_CODE {
         return calls;
@@ -46,6 +49,16 @@ pub(crate) fn process_calls(code: &str) -> Vec<Call> {
         if byte == b'"' || byte == b'\'' || byte == b'`' {
             // Skip string literals so a name inside one is not a call.
             index = literal(code, index).map_or(bytes.len(), |(_, end)| end);
+            continue;
+        }
+        // Skip comments, which run nothing.
+        let next = bytes.get(index + 1).copied();
+        if (hash_comments && byte == b'#') || (!hash_comments && byte == b'/' && next == Some(b'/')) {
+            index = code[index..].find('\n').map_or(bytes.len(), |end| index + end);
+            continue;
+        }
+        if !hash_comments && byte == b'/' && next == Some(b'*') {
+            index = code[index + 2..].find("*/").map_or(bytes.len(), |end| index + 2 + end + 2);
             continue;
         }
         if !is_word(byte) || (index > 0 && is_word(bytes[index - 1])) {
@@ -136,7 +149,7 @@ fn list(code: &str, mut at: usize, close: u8) -> Option<Vec<String>> {
 /// Python prefixes (`f"..."`, `r"..."`) are read as the quote that follows.
 fn literal(code: &str, at: usize) -> Option<(String, usize)> {
     let bytes = code.as_bytes();
-    let quote = *bytes.get(at)?;
+    let quote = *bytes.get(at).filter(|byte| matches!(byte, b'"' | b'\'' | b'`'))?;
     let triple = bytes.get(at + 1) == Some(&quote) && bytes.get(at + 2) == Some(&quote);
     let mut index = at + if triple { 3 } else { 1 };
     let mut text = String::new();
