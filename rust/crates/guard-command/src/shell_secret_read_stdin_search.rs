@@ -100,20 +100,26 @@ pub(crate) fn lone_home_dotpath_search(
     model.segments.iter().any(|segment| {
         segment.pipeline_index == 0
             && !has_input_redirect_syntax(&segment.text)
-            && !quotes_home_word(&segment.text)
             && segment.executable.as_deref().is_some_and(|executable| {
                 let name = executable.rsplit(['/', '\\']).next().unwrap_or(executable);
-                lone_search_pattern_names_home_dotpath(name, &segment.arguments, home)
+                let Some(pattern) = lone_pattern(name, &segment.arguments) else {
+                    return false;
+                };
+                !pattern_is_quoted(&segment.text, pattern)
+                    && lone_search_pattern_names_home_dotpath(name, &segment.arguments, home)
             })
     })
 }
 
-/// The shell expands `~` and `$HOME` only unquoted; quoted, they are the
-/// literal text a search looks for.
-fn quotes_home_word(text: &str) -> bool {
-    ["'~", "\"~", "'$HOME", "'${HOME"]
-        .iter()
-        .any(|quoted| text.contains(quoted))
+/// The search pattern itself is literal text when quoted or escaped. Quotes
+/// in unrelated option values do not change the shell meaning of the pattern.
+fn pattern_is_quoted(text: &str, pattern: &str) -> bool {
+    text.match_indices(pattern).any(|(index, _)| {
+        let before = text[..index].chars().next_back();
+        let after = text[index + pattern.len()..].chars().next();
+        matches!((before, after), (Some('\''), Some('\'')) | (Some('"'), Some('"')))
+            || before == Some('\\')
+    })
 }
 
 /// A quoted or escaped '<' is argument text, not input redirection.
