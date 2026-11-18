@@ -145,11 +145,9 @@ class CodexHookRepairAuthorization:
             self.plan.guard_home,
             requirement=LifecycleGateRequirement(CODEX_AUTHORITY_REPAIR_ACTION, self.approved_subject),
         ).resolve(strict=False)
-        if expected_home != self.authority_home:
-            raise TransitionError("approval_authority_mismatch")
-        # The runtime holds the claim: it must be this grant's, for this subject
-        # (still the one the plan derives), owner and deadline, and for the one
-        # publication named here.
+        # The runtime judges the owner, then the authority home, then the claim:
+        # it must be this grant's, for this subject (still the one the plan
+        # derives), owner and deadline, and for the one publication named here.
         publication_record(
             "repair_claim_check",
             self.plan.guard_home,
@@ -160,6 +158,8 @@ class CodexHookRepairAuthorization:
             owner_pid=self.owner_pid,
             current_owner_operation_id=owner.operation_id,
             current_owner_pid=owner.pid,
+            authority_home=str(self.authority_home),
+            current_authority_home=str(expected_home),
             deadline=self.deadline_monotonic,
             publication=None if publication is None else publication.publication_monotonic,
         )

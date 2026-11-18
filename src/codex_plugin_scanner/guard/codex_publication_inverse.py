@@ -7,7 +7,6 @@ installer grant nor a serialized native assertion can retire this journal.
 from __future__ import annotations
 
 import base64
-import hashlib
 import os
 import threading
 import time
@@ -16,10 +15,10 @@ from typing import TYPE_CHECKING
 
 from . import native_transition_files
 from .codex_hook_file_integrity import hook_validation_deadline
-from .codex_hook_recovery import _load_record, _record_path, _remove_record
+from .codex_hook_recovery import _load_record, _remove_record
 from .codex_hook_rollback import rollback_file_identity
 from .codex_publication_inverse_authorization import CodexPublicationInverseAuthorization
-from .codex_publication_inverse_plan import _journal_bytes, native_runtime_wire, workspace_wire
+from .codex_publication_inverse_plan import native_runtime_wire, workspace_wire
 from .runtime_transition import RuntimeTransition, TransitionError, inverse_recovery_budget
 from .runtime_transition_admission import verified_admission_payload
 
@@ -63,14 +62,13 @@ class PendingCodexPublicationInverse:
                 authorization.deadline_monotonic,
             ),
         ):
-            journal = _record_path(plan.guard_home)
-            if (
-                rollback_file_identity(journal) != self._journal_identity
-                or hashlib.sha256(_journal_bytes(journal)).hexdigest() != self._journal_sha256
-                or _load_record(plan.guard_home, live_config_conflict=True) != self._record
-                or rollback_file_identity(journal) != self._journal_identity
-            ):
-                raise TransitionError("publication_inverse_journal_changed")
+            native_transition_files.publication(
+                "inverse_journal",
+                plan.guard_home,
+                journal_identity=list(self._journal_identity),
+                journal_sha256=self._journal_sha256,
+                record=self._record,
+            )
             predecessor = plan.changes[1].after
             assert predecessor is not None
             native_transition_files.publication(

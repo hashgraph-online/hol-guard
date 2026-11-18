@@ -278,6 +278,7 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_inverse_dependencies" => super::publication_repair_files::inverse(call),
         "publication_inverse_prior" => super::publication_inverse_plan::prior_op(call),
         "publication_inverse_plan" => super::publication_inverse_plan::plan_op(call),
+        "publication_inverse_journal" => super::publication_inverse_plan::journal_op(call),
         "publication_inverse_check" => super::publication_inverse_plan::check_op(call),
         "publication_inverse_prepare" => super::publication_inverse_prepare::prepare(call),
         "publication_inverse_verify" => super::publication_inverse_pinned::verify(call),

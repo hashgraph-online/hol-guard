@@ -21,11 +21,10 @@ from .codex_hook_file_integrity import (
     hook_validation_deadline,
 )
 from .codex_hook_manifest import CodexHookManifestSpec, transition_file
-from .codex_hook_recovery import _MAX_RECORD, _encode
+from .codex_hook_recovery import _encode
 from .native_owned import require_codex_install_owner
 from .native_runtime import NativeRuntimeIdentity
 from .native_transition_files import publication
-from .private_file_io import read_private_regular_bytes
 from .runtime_transition import (
     TransitionError,
     TransitionFile,
@@ -34,15 +33,6 @@ from .runtime_transition import (
 )
 
 PUBLICATION_INVERSE_ACTION = "apps.repair.codex-publication-inverse"
-
-
-def _journal_bytes(path: Path) -> bytes:
-    check_hook_validation_deadline()
-    raw = read_private_regular_bytes(path, max_bytes=_MAX_RECORD, require_private_parent=True)
-    check_hook_validation_deadline()
-    if raw is None:
-        raise TransitionError("publication_inverse_journal_missing")
-    return raw
 
 
 def _inverse_budget():
