@@ -402,7 +402,7 @@ pub(crate) fn lone_home_dotpath_search(
     let home = context.home_dir.map(std::path::Path::new);
     model.segments.iter().any(|segment| {
         segment.pipeline_index == 0
-            && !segment.text.contains('<')
+            && !crate::shell_secret_read_stdin_search::has_input_redirect_syntax(&segment.text)
             && segment.executable.as_deref().is_some_and(|executable| {
                 crate::shell_secret_read_stdin_search::lone_search_pattern_names_home_dotpath(
                     executable_basename(executable),
