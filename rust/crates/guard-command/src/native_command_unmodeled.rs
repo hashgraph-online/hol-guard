@@ -839,7 +839,8 @@ fn reviewable_structure(
         // Any other substitution is read as the words it prints when every
         // command it runs is named in its text (see `substitution`).
         Some("command_substitution_not_yet_supported") => {
-            let looked = without_lookups(&command.normalized_text);
+            let looked =
+                substitution::without_escaped_backticks(&without_lookups(&command.normalized_text));
             bounded_substitutions(&looked)
                 .or_else(|| {
                     reviewable_substitutions(&looked).filter(|bounded| {

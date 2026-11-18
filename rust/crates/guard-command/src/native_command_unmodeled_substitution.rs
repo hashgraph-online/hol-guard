@@ -88,6 +88,46 @@ pub(super) fn reviewable_substitutions(text: &str) -> Option<BoundedSubstitution
     scan(text, ValueFlow::Assignments)
 }
 
+/// The text with each escaped backtick read as the plain character it is.
+///
+/// `\`` substitutes nothing, quoted or not: `grep -F "| \`$file\` |"` looks
+/// for a Markdown code span. Refusing every backtick blocked that search with
+/// no approval left to give. Inside single quotes a backslash is literal and
+/// so is the backtick after it, so it is read the same way there. An
+/// unescaped backtick is left in place for the callers to refuse.
+pub(super) fn without_escaped_backticks(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let (mut single, mut double) = (false, false);
+    let mut chars = text.chars();
+    while let Some(character) = chars.next() {
+        if single {
+            single = character != '\'';
+            out.push(if character == '`' { 'x' } else { character });
+            continue;
+        }
+        match character {
+            '\\' => {
+                out.push('\\');
+                match chars.next() {
+                    Some('`') => out.push('x'),
+                    Some(next) => out.push(next),
+                    None => {}
+                }
+            }
+            '\'' if !double => {
+                single = true;
+                out.push(character);
+            }
+            '"' => {
+                double = !double;
+                out.push(character);
+            }
+            _ => out.push(character),
+        }
+    }
+    out
+}
+
 fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
     let folded = super::heredoc::fold_printed_heredocs(text);
     let text = folded.as_str();

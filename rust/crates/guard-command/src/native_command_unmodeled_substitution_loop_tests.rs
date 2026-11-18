@@ -61,6 +61,7 @@ fn a_loop_that_keeps_a_value_and_runs_no_interpreter_reaches_review() {
         r#"while read -r f; do n=$(printf '%s' "$f" | wc -c); echo "$f $n"; done < /dev/null"#,
         r#"if [ -f VERSION ]; then v=$(cat VERSION); printf '%s\n' "$v"; fi"#,
         "set -e\nfor entry in 'a 1' 'b 2'; do\n  set -- $entry\n  actual=$(shasum -a 256 \"$1\" | awk '{print $1}')\n  test \"$actual\" = \"$2\"\ndone",
+        "set -eu\nfor file in a.js b.tgz; do\n  path=\"$HOME/Downloads/w/$file\"\n  hash=$(shasum -a 256 \"$path\" | awk '{print $1}')\n  grep -F \"| \\`$file\\` | \\`$hash\\` |\" docs/notes.md >/dev/null\ndone\nprintf 'ok\\n'",
     ] {
         let (action, code) = decision(&controls, command);
         assert_ne!(code, FAILED, "{command}");
@@ -80,4 +81,23 @@ fn a_loop_that_hands_a_kept_value_to_an_interpreter_keeps_the_failure() {
     ] {
         assert_eq!(decision(&controls, command).1, FAILED, "{command}");
     }
+}
+
+#[test]
+fn only_an_escaped_backtick_is_read_as_a_plain_character() {
+    use super::substitution::without_escaped_backticks;
+    assert_eq!(
+        without_escaped_backticks(r#"grep -F "\`x\`" f"#),
+        r#"grep -F "\xx\x" f"#
+    );
+    assert_eq!(without_escaped_backticks("echo '`id`'"), "echo 'xidx'");
+    // An escaped backslash leaves the backtick after it a substitution.
+    assert_eq!(without_escaped_backticks(r"echo \\`id`"), r"echo \\`id`");
+    assert_eq!(
+        without_escaped_backticks("v=$(cat f); echo `id`"),
+        "v=$(cat f); echo `id`"
+    );
+    let controls = controls(github("enabled", None), false);
+    let command = "for f in a; do v=$(cat f); echo \"`$v`\"; done";
+    assert_eq!(decision(&controls, command).1, FAILED, "{command}");
 }
