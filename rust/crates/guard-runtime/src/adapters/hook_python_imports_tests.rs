@@ -8,9 +8,11 @@
 use std::path::{Path, PathBuf};
 
 /// Every `from codex_plugin_scanner.<module> import <name>` in `source`,
-/// including ones split over a Rust string continuation.
+/// including ones split over a Rust string continuation or over two
+/// `"...".to_owned()` pieces.
 fn imports(source: &str) -> Vec<(String, String)> {
     const PREFIX: &str = "from codex_plugin_scanner.";
+    let not_ident = |c: char| !(c.is_ascii_alphanumeric() || c == '_');
     let mut found = Vec::new();
     let mut rest = source;
     while let Some(start) = rest.find(PREFIX) {
@@ -19,7 +21,10 @@ fn imports(source: &str) -> Vec<(String, String)> {
             break;
         };
         let module = rest[..split].to_owned();
-        let after = rest[split + " import".len()..].trim_start_matches(['\\', ' ', '\n', '\r']);
+        let mut after = rest[split + " import".len()..].trim_start_matches(not_ident);
+        if let Some(next) = after.strip_prefix("to_owned") {
+            after = next.trim_start_matches(not_ident);
+        }
         let name: String = after
             .chars()
             .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
@@ -79,10 +84,35 @@ fn cursor_daemon_recovery_imports_a_defined_function() {
 }
 
 #[test]
+fn opencode_plugin_fallback_imports_a_defined_function() {
+    assert_resolves(
+        "opencode_plugin_render.rs",
+        include_str!("opencode_plugin_render.rs"),
+    );
+}
+
+#[test]
+fn pi_windows_fallback_imports_a_defined_function() {
+    assert_resolves(
+        "pi_extension.rs",
+        include_str!("harness_adapter/pi_extension.rs"),
+    );
+}
+
+#[test]
 fn import_reader_follows_a_string_continuation() {
     let source = "\"x;from codex_plugin_scanner.guard.mod_a import \\\n             run_it;\"";
     assert_eq!(
         imports(source),
         vec![("guard.mod_a".to_owned(), "run_it".to_owned())]
+    );
+}
+
+#[test]
+fn import_reader_joins_two_string_pieces() {
+    let source = "\"from codex_plugin_scanner.guard.mod_b import \".to_owned(),\n        \"run_that;\".to_owned(),";
+    assert_eq!(
+        imports(source),
+        vec![("guard.mod_b".to_owned(), "run_that".to_owned())]
     );
 }
