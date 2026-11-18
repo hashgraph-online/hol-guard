@@ -120,17 +120,18 @@ fn pattern_is_quoted(text: &str, pattern: &str) -> bool {
     if !tilde && !pattern.starts_with('$') {
         return false;
     }
-    // Every spelling of the word must be quoted: an identical quoted option
-    // value elsewhere in the command must not exempt an unquoted pattern.
-    let mut seen = false;
+    // A quoted option may contain the same bytes as an unquoted search
+    // pattern. An unquoted occurrence always keeps the review floor.
+    let mut quoted_match = false;
     for (index, _) in text.match_indices(pattern) {
-        seen = true;
         let before = text[..index].chars().next_back();
-        if !(before == Some('\\') || before == Some('\'') || (tilde && before == Some('"'))) {
+        let literal = before == Some('\\') || before == Some('\'') || (tilde && before == Some('"'));
+        if !literal {
             return false;
         }
+        quoted_match = true;
     }
-    seen
+    quoted_match
 }
 
 /// A quoted or escaped '<' is argument text, not input redirection.
