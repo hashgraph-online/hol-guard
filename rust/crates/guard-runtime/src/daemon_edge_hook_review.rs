@@ -20,8 +20,9 @@ use super::{authorize_token, hook_scheduler, json_response, refusals, NativeRead
 use crate::claude_hook_bridge_render::py_strip;
 use crate::pyjson::PyVal;
 use admission::{
-    client_key, exec_workdir, expires_at, lane, payload_reference, reply_event, runtime_event,
-    take_hint, truthy, Directories, Rejection, MAX_PAYLOAD_REFERENCE_BYTES,
+    client_key, exec_workdir, expires_at, lane, missing_workdir, payload_reference, reply_event,
+    runtime_event, take_hint, truthy, Directories, Rejection, MAX_PAYLOAD_REFERENCE_BYTES,
+    MISSING_WORKDIR_CODE,
 };
 
 #[path = "daemon_edge_hook_admission.rs"]
@@ -425,23 +426,22 @@ impl Hook<'_> {
         let capacity_harness = counters::capacity_harness(&reply_harness);
 
         let (workdir_named, workdir) = exec_workdir(&payload);
+        let payload_cwd = payload
+            .get("cwd")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let query_workspace = self.raw_param("workspace");
+        let named = [
+            workdir.clone(),
+            payload_cwd.clone(),
+            query_workspace.clone(),
+        ];
         let directories = self.settle(&[
             ("home", self.param("home"), None),
             ("guard-home", guard_home_query, None),
             ("exec-workdir", workdir, Some("exec-workdir")),
-            (
-                "workspace-payload",
-                payload
-                    .get("cwd")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                Some("hook-workspace"),
-            ),
-            (
-                "workspace-query",
-                self.raw_param("workspace"),
-                Some("hook-workspace"),
-            ),
+            ("workspace-payload", payload_cwd, Some("hook-workspace")),
+            ("workspace-query", query_workspace, Some("hook-workspace")),
         ]);
         let settled = (|| {
             let home_dir = directories.require("home")?;
@@ -462,14 +462,19 @@ impl Hook<'_> {
             };
             Ok((home_dir, guard_home, workspace))
         })();
+        let mut missing = None;
         let (home_dir, guard_home, workspace, rejection) = match settled {
             Ok((home_dir, guard_home, workspace)) => (home_dir, guard_home, workspace, None),
-            Err(rejection) => (
-                Some(self.home()),
-                Some(self.config.guard_home.clone()),
-                None,
-                Some(rejection.to_value()),
-            ),
+            Err(rejection) => {
+                let named = named.each_ref().map(Option::as_deref);
+                missing = missing_workdir(&event, &rejection, &named);
+                (
+                    Some(self.home()),
+                    Some(self.config.guard_home.clone()),
+                    None,
+                    Some(rejection.to_value()),
+                )
+            }
         };
 
         if let Some(rejection) = &rejection {
@@ -479,6 +484,11 @@ impl Hook<'_> {
         let managed_harness = self.managed_harness();
         if self.unmanaged(&managed_harness, arrived) {
             return envelope("unmanaged", &managed_harness, &[]);
+        }
+        // A command whose working directory does not exist cannot run; say so
+        // now rather than send it for approval with no workspace.
+        if let Some(reason) = missing {
+            return fail(&reason, MISSING_WORKDIR_CODE);
         }
         // A referenced payload is read only where Guard's own writer could
         // have put it, and reserves the most a reference may carry.
