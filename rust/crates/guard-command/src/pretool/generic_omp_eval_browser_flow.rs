@@ -73,7 +73,7 @@ impl Parser {
         match self.peek()?.clone() {
             Token::Ident(word) if word == "page" && self.in_run && self.run_page => {
                 self.page_call()
-            },
+            }
             Token::Ident(word) if word == "fetch" => self.fetch_call(),
             Token::Ident(word) if self.responses.contains(&word) => {
                 self.pos += 1;

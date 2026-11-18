@@ -180,12 +180,8 @@ impl Parser {
                 self.pos = timer_pause(&self.tokens, self.pos)?;
                 Some(())
             }
-            "await" if self.in_run && self.run_page && self.peek_ident("page") => {
-                self.page_call()
-            },
-            "await" if self.in_run && self.run_wait && self.peek_ident("wait") => {
-                self.wait_call()
-            },
+            "await" if self.in_run && self.run_page && self.peek_ident("page") => self.page_call(),
+            "await" if self.in_run && self.run_wait && self.peek_ident("wait") => self.wait_call(),
             "await" => self.tab_call(),
             "for" => self.for_loop(),
             "try" => self.try_block(),
