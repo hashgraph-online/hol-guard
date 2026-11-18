@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import time
 from pathlib import Path
+from types import SimpleNamespace
 
 from codex_plugin_scanner.guard import native_runtime, native_transport_error
 from codex_plugin_scanner.guard.native_runtime import (
@@ -37,25 +37,38 @@ def test_native_error_prefers_rust_transport_validation(monkeypatch) -> None:
     calls: list[tuple[object, tuple[str, ...], str, float, int]] = []
     candidate = ROOT / "runtime"
 
-    monkeypatch.setattr(native_runtime, "_runtime_candidates", lambda: (candidate,))
-    monkeypatch.setattr(native_runtime, "_validate_binary", lambda path: object())
+    monkeypatch.setattr(
+        native_runtime,
+        "native_runtime_status",
+        lambda: SimpleNamespace(available=True, compatible=True, identity=SimpleNamespace(path=candidate)),
+    )
 
     def run(path, args, *, input_text, timeout_seconds, output_limit, **kwargs):
         calls.append((path, args, input_text, timeout_seconds, output_limit))
         return '{"error":"native_overloaded"}'
 
     monkeypatch.setattr(native_runtime, "_run_native_process", run)
-    deadline = time.monotonic() + 0.05
-    assert native_transport_error.native_error(
-        {"error": "native_overloaded", "retryable": True}, deadline_monotonic=deadline
-    ) == "native_overloaded"
+    assert native_transport_error.native_error({"error": "native_overloaded", "retryable": True}) == (
+        "native_overloaded"
+    )
     assert calls[0][:3] == (
         candidate,
         ("native-error-code", "--stdin"),
         '{"error":"native_overloaded","retryable":true}',
     )
     assert calls[0][4] == 16 * 1024
-    assert 0 < calls[0][3] <= 0.05
+    assert calls[0][3] == 0.25
+
+
+def test_native_error_keeps_deadline_bound_calls_in_process(monkeypatch) -> None:
+    calls: list[object] = []
+    monkeypatch.setattr(native_transport_error.time, "monotonic", lambda: 1.0)
+    monkeypatch.setattr(native_runtime, "_run_native_process", lambda *args, **kwargs: calls.append(args))
+
+    assert native_transport_error.native_error(
+        {"error": "native_overloaded", "retryable": True}, deadline_monotonic=1.05
+    ) == "native_overloaded"
+    assert calls == []
 
 
 def test_native_runtime_fixtures_use_the_platform_temp_directory() -> None:

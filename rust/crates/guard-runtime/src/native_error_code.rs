@@ -14,6 +14,9 @@ pub(crate) fn is_command(command: &str) -> bool {
 
 pub(crate) fn run(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let value: serde_json::Value = crate::resident_protocol::strict_json_value(bytes)?;
+    if !value.is_object() {
+        return Err("native_request_invalid_json".to_owned());
+    }
     let envelope: ErrorEnvelope =
         serde_json::from_value(value).map_err(|_| "native_request_invalid_json".to_owned())?;
     let known = guard_contracts::NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
@@ -44,6 +47,10 @@ mod tests {
         );
         assert_eq!(
             run(br#"{"error":"native_overloaded","extra":1}"#).unwrap_err(),
+            "native_request_invalid_json"
+        );
+        assert_eq!(
+            run(br#"["native_overloaded",true]"#).unwrap_err(),
             "native_request_invalid_json"
         );
     }
