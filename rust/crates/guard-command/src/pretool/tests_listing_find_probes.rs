@@ -11,9 +11,9 @@ fn request(command: &str) -> CommandModelRequestV1 {
     }
 }
 
-struct Fixture {
-    home: String,
-    workspace: String,
+pub(super) struct Fixture {
+    pub(super) home: String,
+    pub(super) workspace: String,
 }
 
 fn write(root: &std::path::Path, file: &str) {
@@ -24,7 +24,7 @@ fn write(root: &std::path::Path, file: &str) {
 
 static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-fn fixture() -> Fixture {
+pub(super) fn fixture() -> Fixture {
     // Keep the fixture outside $TMPDIR, which canonicalizes under /private/var.
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/pretool-listing-find")
@@ -75,7 +75,7 @@ fn fixture() -> Fixture {
     }
 }
 
-fn allowed_in(fixture: &Fixture, cwd: &str, command: &str) -> bool {
+pub(super) fn allowed_in(fixture: &Fixture, cwd: &str, command: &str) -> bool {
     evaluate_pre_tool_with_context(&request(command), Some(&fixture.home), Some(cwd))
         .is_ok_and(|decision| decision.minimum_action == "allow")
 }
@@ -523,46 +523,5 @@ fn powershell_recurse_prefixes_take_the_recursive_proof_on_windows() {
     }
     for command in ["ls -la bad", "ls -rec src", "ls -Force bad", "ls docs"] {
         assert!(windows(command), "{command}");
-    }
-}
-
-/// A Node toolchain's version directories are what an agent lists before it
-/// picks a runtime. `-printf` with name directives prints what `-print`
-/// does, and a `-path` test inside a conjunction only narrows what `-type d`
-/// already bounds, so neither should turn the inventory into a review.
-#[test]
-fn toolchain_inventory_under_a_home_dot_directory_takes_name_formats() {
-    let fixture = fixture();
-    let home = std::path::Path::new(&fixture.home);
-    for directory in [
-        ".nvm/versions/node/v25.2.1/lib/node_modules/inert-pkg",
-        ".nvm/versions/node/v24.0.0/bin",
-    ] {
-        std::fs::create_dir_all(home.join(directory)).unwrap();
-    }
-    let node = format!("{}/.nvm/versions/node", fixture.home);
-    let ws = fixture.workspace.as_str();
-    for command in [
-        format!("find \"{node}\" -mindepth 1 -maxdepth 1 -type d -printf '%f\\n'"),
-        format!("find \"{node}\" -mindepth 1 -maxdepth 1 -type d -printf '%f\\n' | sort -V"),
-        format!(
-            "find \"{node}\" -path '*/lib/node_modules/*' -mindepth 1 -maxdepth 4 -type d -print"
-        ),
-        format!("find \"{node}\" -type d -wholename '*/lib/*'"),
-    ] {
-        assert!(allowed_in(&fixture, ws, &command), "{command}");
-    }
-    for command in [
-        // `-path` bounds nothing on its own: every entry under a matching
-        // directory, files included, is printed.
-        format!("find \"{node}\" -path '*/lib/*' -print"),
-        // A print before the bounding test prints the whole walk.
-        format!("find \"{node}\" -printf '%f\\n' -type d"),
-        format!("find \"{node}\" -type d -printf '%l\\n'"),
-        format!("find \"{node}\" -type d -printf '%u %f\\n'"),
-        // Alternation widens the output back to the whole tree.
-        format!("find \"{node}\" -path '*/lib' -prune -o -print"),
-    ] {
-        assert!(!allowed_in(&fixture, ws, &command), "{command}");
     }
 }
