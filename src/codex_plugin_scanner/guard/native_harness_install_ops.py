@@ -8,9 +8,7 @@ command layer), so this module never reaches into the install transaction.
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Mapping
-from pathlib import Path
 from typing import Any
 
 from .harness_context import HarnessContext, PreparedHarnessInstall
@@ -19,18 +17,11 @@ from .native_harness_ops import delegated_targets, launcher_name_of
 from .native_harness_steps import planned_files
 
 
-def _redirected(guard_home: Path, home_dir: Path) -> bool:
-    """Whether a link redirects ``guard_home``; the user's own home may be a link, so only what lies below it counts."""
-    try:
-        below = guard_home.relative_to(home_dir)
-    except ValueError:
-        return os.path.realpath(guard_home) != os.path.abspath(guard_home)
-    current = home_dir
-    for part in below.parts:
-        current = current / part
-        if current.is_symlink():
-            return True
-    return False
+def _redirected(context: HarnessContext) -> bool:
+    """Whether the runtime finds a link redirecting the Guard home."""
+    from .native_harness_client import ask
+
+    return ask("guard_home_redirected", context)["redirected"] is True
 
 
 def preflight_management(harness: str, context: HarnessContext, *, operation: str) -> None:
@@ -96,11 +87,7 @@ def _mutation(
     from .runtime_transition import assert_transition_mutation_allowed
 
     assert_transition_mutation_allowed(context.guard_home)
-    if (
-        op == "adapter_install"
-        and _description(harness).get("install") == "delegated"
-        and not _redirected(context.guard_home, context.home_dir)
-    ):
+    if op == "adapter_install" and _description(harness).get("install") == "delegated" and not _redirected(context):
         # A delegated install records its provider rows; the runtime opens an existing store and never creates one.
         # A redirected Guard home is left for the runtime to refuse before anything is created beneath the link.
         from .cli.native_managed_install import ensure_store

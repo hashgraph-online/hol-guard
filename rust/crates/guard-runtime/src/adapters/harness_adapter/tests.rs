@@ -33,6 +33,9 @@ mod detect_merged_family;
 mod firewall_family;
 #[path = "tests_grok_zcode.rs"]
 mod grok_zcode;
+#[cfg(unix)]
+#[path = "guard_home_redirect_tests.rs"]
+mod guard_home_redirect_family;
 #[path = "tests_hermes.rs"]
 mod hermes_family;
 #[path = "tests_hook_config.rs"]

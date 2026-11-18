@@ -40,6 +40,8 @@ use crate::transition_files::{
 
 #[path = "detected_harnesses.rs"]
 mod detected_harnesses;
+#[path = "guard_home_redirect.rs"]
+mod guard_home_redirect;
 
 /// The longest a request may wait for the locks, as the owned ops cap it.
 const MAX_WAIT: Duration = Duration::from_secs(600);
@@ -258,6 +260,7 @@ pub(super) fn route(op: &str, ctx: &Ctx, fields: &Map<String, Value>) -> Option<
         "profile_install" => standalone_install::profile(ctx, fields),
         "cursor_hooks_install" => standalone_install::cursor_hooks(ctx, fields),
         "detected_harnesses" => answer(detected_harnesses::run(ctx, fields)),
+        "guard_home_redirected" => answer(guard_home_redirect::run(ctx)),
         "detect_all" => answer(detect_merged::all(ctx, fields)),
         "workspace_skills_scan" => answer(skills_scan::dispatch(ctx, fields)),
         _ => return None,
