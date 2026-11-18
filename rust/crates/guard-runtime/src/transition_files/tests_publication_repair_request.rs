@@ -184,8 +184,8 @@ fn a_file_that_would_not_read_back_as_reviewed_is_not_normalized() {
     for (key, value) in [
         ("no_follow", json!(null)),
         ("expected_digest", json!(null)),
-        // `e30L` decodes to `{}` but is not how `{}` is written.
-        ("after", json!("e30L")),
+        // `e31=` decodes to `{}` but is not how `{}` is written (`e30=`).
+        ("after", json!("e31=")),
         ("path", json!("relative/file")),
         ("path", json!(outside)),
     ] {

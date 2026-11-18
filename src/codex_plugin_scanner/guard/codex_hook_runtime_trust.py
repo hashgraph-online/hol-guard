@@ -110,7 +110,7 @@ def _succeeded(result: BoundedHookProcessResult) -> bool:
     )
 
 
-def _checked(op: str, **fields: object) -> dict[str, object]:
+def _checked(op: str, **fields: Any) -> dict[str, object]:
     try:
         return _native(op, **fields)
     except CodexHookIntegrityError as exc:

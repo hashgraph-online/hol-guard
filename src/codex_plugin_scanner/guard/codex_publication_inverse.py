@@ -250,14 +250,17 @@ def verify_and_retire_codex_publication_inverse(
             bound=plan.native_runtime is not None and plan.verification_workspace is not None,
             restored=pending._restored,
         )
+        native_runtime, workspace = plan.native_runtime, plan.verification_workspace
+        if native_runtime is None or workspace is None:
+            raise TransitionError("publication_inverse_not_restored")
         started = time.monotonic()
         proof = observe_configured_codex_hook(
             operation_id=plan.operation_id,
             artifact_generation=generation,
-            expected_runtime=plan.native_runtime,
+            expected_runtime=native_runtime,
             guard_home=plan.guard_home,
             config_path=plan.config_path,
-            workspace=plan.verification_workspace,
+            workspace=workspace,
             deadline_monotonic=authorization.deadline_monotonic,
             receipt_store=receipt_store,
         )

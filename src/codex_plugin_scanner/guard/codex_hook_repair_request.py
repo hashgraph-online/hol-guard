@@ -128,6 +128,9 @@ def _read(path: Path, home: Path, expected_sha256: str, deadline: float) -> byte
     return base64.b64decode(raw)
 
 
+_FRAME_TOO_LARGE = "native_runner_authority_request_too_large"
+
+
 def write_codex_hook_repair_request(
     path: Path,
     plan: RepairPlan,
@@ -159,13 +162,22 @@ def write_codex_hook_repair_request(
     except AuthorityRecordRefusedError as exc:
         raise TransitionError(f"authority_repair_request_{exc.reason}") from exc
     _compare(plan, deadline_monotonic)
+    from .native_runner_authority import NativeRunnerAuthorityRefusalError
+
     with inverse_recovery_budget(deadline_monotonic):
-        digest = publication(
-            "request_create",
-            plan.guard_home,
-            path=str(path),
-            encoded=base64.b64encode(encoded).decode("ascii"),
-        )
+        try:
+            digest = publication(
+                "request_create",
+                plan.guard_home,
+                path=str(path),
+                encoded=base64.b64encode(encoded).decode("ascii"),
+            )
+        except NativeRunnerAuthorityRefusalError as exc:
+            # A record too big to cross to the runtime is the capacity refusal,
+            # raised before any file is created or changed.
+            if str(exc) == _FRAME_TOO_LARGE:
+                raise TransitionError("authority_repair_request_too_large") from exc
+            raise
     if not isinstance(digest, str):
         raise TransitionError("authority_repair_request_changed")
     _compare(plan, deadline_monotonic)
