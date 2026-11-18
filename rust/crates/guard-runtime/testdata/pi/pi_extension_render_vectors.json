@@ -37,8 +37,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 169522,
-   "sha256": "f245d9c7cdf7c2babb9c50565f6a12012210f46c687a193544c7018a69738853"
+   "chars": 169810,
+   "sha256": "b952546c84f255c62a804d0004bcab49ebe2973a27ea2cb7b7bf4e96977ce756"
   },
   {
    "name": "active_pi_posix",
@@ -171,8 +171,8 @@
     "contained_sink_command": [],
     "contained_request_root": ""
    },
-   "chars": 169435,
-   "sha256": "de15c19d006f84e0cbbc49df5862381515bfe2c30e47cbeda0aaf70834b2a07d"
+   "chars": 169723,
+   "sha256": "bf99b562350ca78e40b11fc85991c0ea3a941cf3b43188826c5d6ab6697aee88"
   },
   {
    "name": "previous_pi_windows",
@@ -306,8 +306,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 169561,
-   "sha256": "00d69bf42154913786dd074743348a5e24b1df0ce5df7a3bea3b80ed70c0b1a1"
+   "chars": 169849,
+   "sha256": "136de7140c2c0c44a3fe0f9e90fe5b5c02008e688a4f3d4b7b828cfdc739c99c"
   },
   {
    "name": "active_pi_default_home_fixture_name",
