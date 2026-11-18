@@ -12,9 +12,8 @@
 //! sets one. A command that breaks a rule the user set is raised to that
 //! rule's action, with Allow once and Always allow on the review like any
 //! other. Watch mode records the would-be decision as a warning. A sandbox
-//! route the user's posture chose does not stop either effect, so a rule the
-//! user set to review holds that command for review. A command the floor
-//! itself sends to the sandbox stays contained, and a block stays a block.
+//! route does not stop either effect, so a rule the user set to review holds
+//! a command that would otherwise run in the sandbox. A block stays a block.
 
 use guard_contracts::{GuardHookEnvelopeV2, PreToolActionTypeV1, PreToolResultV1};
 
@@ -144,16 +143,13 @@ fn raise(mut result: PreToolResultV1, rule: &Rule, observe: bool) -> PreToolResu
         }
         return result;
     }
-    // A command the floor itself sends to the sandbox stays there: a review
-    // in its place would let an approval run it uncontained.
+    // A sandbox lets the command run, and running it is the harm here: the
+    // commit still lands and the hooks still do not run. The route can come
+    // from the floor or from the user's posture alone, as when a package
+    // script beside the git step is contained under a review floor. Approving
+    // the review settles it the way any saved grant settles a sandbox route.
     let sandbox = ActionFloor::SandboxRequired;
-    if minimum == sandbox && configured < ActionFloor::Block {
-        return result;
-    }
-    // A sandbox route from the user's posture alone lets the command run, and
-    // running it is the harm here, as when a package script beside the git
-    // step is contained under a review floor. The rule holds it for review.
-    let sandboxed = policy == sandbox && configured < ActionFloor::Block;
+    let sandboxed = (minimum == sandbox || policy == sandbox) && configured < ActionFloor::Block;
     if minimum >= configured && !sandboxed {
         return result;
     }

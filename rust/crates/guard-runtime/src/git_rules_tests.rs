@@ -232,13 +232,13 @@ fn a_set_rule_raises_an_allowed_command_to_its_action() {
 }
 
 #[test]
-fn a_floor_sandbox_stays_contained_under_a_set_rule() {
-    // A review in its place would let an approval run it uncontained.
+fn a_sandbox_route_does_not_stand_in_for_a_set_rule() {
+    // The sandbox still lets the commit land with its hooks off.
     for configured in ["review", "require-reapproval"] {
         let raised = raise(result("sandbox-required"), &rule(configured), false);
-        assert_eq!(raised.minimum_action, "sandbox-required");
-        assert_eq!(raised.policy_action, "sandbox-required");
-        assert_eq!(raised.reason_code, "native_test");
+        assert_eq!(raised.minimum_action, configured);
+        assert_eq!(raised.decision, "deny");
+        assert_eq!(raised.reason_code, STAGE_ALL);
     }
 }
 
