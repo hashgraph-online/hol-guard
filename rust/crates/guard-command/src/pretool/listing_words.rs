@@ -66,6 +66,7 @@ pub(super) fn quoted_words(text: &str) -> Option<Vec<Word>> {
             None if character == '\\' => return None,
             None if character.is_whitespace() => words.extend(current.take()),
             None => {
+                let started = current.is_some();
                 let word = current.get_or_insert_with(|| Word {
                     value: String::new(),
                     unquoted_glob: false,
@@ -73,8 +74,15 @@ pub(super) fn quoted_words(text: &str) -> Option<Vec<Word>> {
                     unquoted_expansion: false,
                 });
                 // A brace list is expanded too: `.env{,.local}` becomes two
-                // words, the second of them a file operand.
-                word.unquoted_glob |= matches!(character, '*' | '?' | '[' | '{');
+                // words, the second of them a file operand. zsh reads
+                // parentheses in a word as a pattern group, so
+                // `"app/"(x)"/[id]"` is a glob there even with the class
+                // quoted. With `EXTENDED_GLOB` it also reads `^` as "not",
+                // `#` as repetition and a `~` after the start of a word as
+                // "except", so `"site/"^"[id]"` names every other entry.
+                word.unquoted_glob |=
+                    matches!(character, '*' | '?' | '[' | '{' | '(' | ')' | '^' | '#')
+                        || (character == '~' && started);
                 word.unquoted_expansion |= matches!(character, '$' | '`');
                 word.value.push(character);
             }

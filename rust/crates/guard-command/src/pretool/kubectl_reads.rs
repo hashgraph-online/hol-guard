@@ -380,9 +380,10 @@ pub(super) fn trusted_kubeconfig_prefix(
             [setting, executable, arguments @ ..]
                 if executable == "kubectl"
                     && arguments == segment.arguments.as_slice()
-                    && setting
-                        .strip_prefix("KUBECONFIG=")
-                        .is_some_and(|path| trust::trusted_kubeconfig(path, context))
+                    && setting.strip_prefix("KUBECONFIG=").is_some_and(|path| {
+                        trust::trusted_kubeconfig(path, context)
+                            || trust::trusted_home_kubeconfig_setting(&segment.text, path, context)
+                    })
         )
 }
 
