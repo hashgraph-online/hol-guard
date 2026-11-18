@@ -65,7 +65,7 @@ def test_sync_uploads_exact_primary_hermes_content_after_legacy_ack(
 ) -> None:
     import urllib.error
 
-    from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
     from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
     home = tmp_path / "home"
@@ -83,7 +83,7 @@ def test_sync_uploads_exact_primary_hermes_content_after_legacy_ack(
     monkeypatch.setattr(
         aibom_cli,
         "detect_all",
-        lambda _context: (get_adapter("hermes").detect(context),),
+        lambda _context: (harness_ops.detect("hermes", context),),
     )
     requests: list[SimpleNamespace] = []
 
@@ -1319,7 +1319,7 @@ def test_sync_reports_rejected_snapshots_instead_of_synced(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard import native_harness_ops as harness_ops
     from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
     home = tmp_path / "home"
@@ -1329,7 +1329,7 @@ def test_sync_reports_rejected_snapshots_instead_of_synced(
     store = GuardStore(context.guard_home)
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
     monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "0")
-    monkeypatch.setattr(aibom_cli, "detect_all", lambda _context: (get_adapter("hermes").detect(context),))
+    monkeypatch.setattr(aibom_cli, "detect_all", lambda _context: (harness_ops.detect("hermes", context),))
     requests: list[SimpleNamespace] = []
 
     def guard_sync_request(_auth_context, *, request_url, method, data, extra_headers):

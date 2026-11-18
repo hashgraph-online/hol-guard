@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_owned import (
     codex_configuration_lock,
     codex_install_transaction,
     codex_lifecycle_locks,
 )
+from tests import harness_ops_support as harness_support
 
 
 def test_core_publication_transaction_shares_configuration_exclusion(tmp_path):
@@ -55,7 +55,7 @@ def test_competing_lifecycle_call_is_rejected_before_discovery(tmp_path, competi
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
 
     def competing():
-        return getattr(CodexHarnessAdapter(), competing_operation)(context)
+        return getattr(harness_support, competing_operation)("codex", context)
 
     with (
         codex_lifecycle_locks(context),

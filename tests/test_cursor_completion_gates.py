@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.cli.install_commands import (
     build_harness_verification,
 )
-from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -85,4 +85,4 @@ def test_cursor_contract_documents_unsupported_state() -> None:
     assert "unavailable" in text
     assert "unsupported" in text
     assert "must not offer a no-op repair" in text
-    assert get_adapter("cursor").harness == "cursor"
+    assert harness_ops.canonical_harness("cursor") == "cursor"

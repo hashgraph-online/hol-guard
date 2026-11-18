@@ -261,9 +261,13 @@
    "id": "harness_adapter_registry_and_installation",
    "class": "python_control",
    "paths": [
-    "src/codex_plugin_scanner/guard/harness/*.py"
+    "src/codex_plugin_scanner/guard/native_harness_client.py",
+    "src/codex_plugin_scanner/guard/native_harness_ops.py",
+    "src/codex_plugin_scanner/guard/native_codex_ops.py",
+    "src/codex_plugin_scanner/guard/native_harness_install_ops.py",
+    "src/codex_plugin_scanner/guard/harness_context.py"
    ],
-   "current": "harness registry, detection, installation, and adapter control surfaces; transport and semantic subsets are classified below",
+   "current": "plain functions that send one harness op to the native runtime; registry, detection, installation, and adapter control surfaces run in Rust, and transport and semantic subsets are classified below",
    "target": "control-plane registration and installation only"
   },
   {
@@ -271,6 +275,7 @@
    "class": "python_transport",
    "paths": [
     "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
+    "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
     "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
     "src/codex_plugin_scanner/guard/native_hook_bridge.py",
     "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
@@ -283,7 +288,6 @@
    "id": "harness_semantic_normalization",
    "class": "python_semantic",
    "paths": [
-    "src/codex_plugin_scanner/guard/codex_harness_lifecycle.py",
     "src/codex_plugin_scanner/guard/setup_contracts.py"
    ],
    "current": "transport-only harness envelope forwarding; Rust owns event, tool, action, and payload normalization",
@@ -691,7 +695,10 @@
   "rust/**",
   "rust/crates/*/src/approval*.rs",
   "rust/crates/guard-runtime/src/resident_protocol.rs",
-  "src/codex_plugin_scanner/guard/harness/*.py",
+  "src/codex_plugin_scanner/guard/native_harness_*.py",
+  "src/codex_plugin_scanner/guard/native_codex_ops.py",
+  "src/codex_plugin_scanner/guard/harness_context.py",
+  "src/codex_plugin_scanner/guard/bounded_cli_hook_*.py",
   "src/codex_plugin_scanner/guard/hook_review/*hook*.py",
   "src/codex_plugin_scanner/guard/evidence_drains/*hook*.py",
   "src/codex_plugin_scanner/guard/routes/request_handler.py",

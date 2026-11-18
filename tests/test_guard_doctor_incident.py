@@ -18,8 +18,8 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli.commands_router import run_guard_command
 from codex_plugin_scanner.guard.cli.doctor_incident import run_codex_incident_export
 from codex_plugin_scanner.guard.codex_harness_client import codex_paths
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.codex_hook_paths_support import hook_manifest_path
 
 
@@ -64,7 +64,7 @@ def test_incident_export_is_independent_of_guard_store(tmp_path: Path, monkeypat
 
 def test_incident_export_reports_authenticated_config_without_loaded_claim(tmp_path: Path) -> None:
     context = _context(tmp_path)
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
 
     report = codex_incident_report(context)
 
@@ -218,7 +218,7 @@ def test_incident_cli_reports_selected_workspace_hooks_without_authenticating_th
 
 def test_incident_export_does_not_expose_identity_from_tampered_manifest(tmp_path: Path) -> None:
     context = _context(tmp_path)
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     manifest_path = hook_manifest_path(context.guard_home, codex_paths(context).config)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["package_version"] = "forged-version"

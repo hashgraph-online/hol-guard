@@ -10,8 +10,8 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
-from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_adapter_lifecycle
 from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.codex_toml_support import dump_toml, read_toml_payload
 from tests.python_oracles.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_MALFORMED_GROUP,
@@ -261,8 +261,8 @@ def test_disabled_unmanaged_entry_and_metadata_only_event_are_preserved_without_
         + "\n",
     )
 
-    codex_adapter_lifecycle.CodexHarnessAdapter().install(
-        HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
+    harness_support.install(
+        "codex", HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
     )
 
     installed = read_toml_payload(home_dir / ".codex" / "config.toml")

@@ -16,11 +16,12 @@ import tomllib
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import codex_install_flow_support as flow
 from tests import codex_plan_segments as segments
+from tests import harness_ops_support as harness_support
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.codex_toml_support import dump_toml, read_toml_payload
 from tests.conftest import guard_commands_module
@@ -131,7 +132,7 @@ def test_codex_launch_fails_closed_without_authoritative_native_hooks(tmp_path):
     context.workspace_dir.mkdir(parents=True)
 
     with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
-        CodexHarnessAdapter().preview_launch_commands(context, ["Fix it."])
+        harness_ops.preview_launch_commands("codex", context, ["Fix it."])
 
 
 def test_codex_launch_fails_closed_when_native_hooks_are_disabled_after_install(tmp_path, capsys):
@@ -150,7 +151,7 @@ def test_codex_launch_fails_closed_when_native_hooks_are_disabled_after_install(
     )
 
     with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
-        CodexHarnessAdapter().launch_command(context, ["Fix it."])
+        harness_ops.launch_command("codex", context, ["Fix it."])
 
 
 @pytest.mark.parametrize("tamper_target", ("matcher", "command"))
@@ -182,7 +183,7 @@ def test_codex_launch_fails_closed_when_authoritative_hook_is_tampered(
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
 
     with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
-        CodexHarnessAdapter().preview_launch_commands(context, ["Fix it."])
+        harness_ops.preview_launch_commands("codex", context, ["Fix it."])
 
 
 def test_codex_launch_rejects_hook_bound_to_opposite_home_mode(
@@ -220,7 +221,7 @@ def test_codex_launch_rejects_hook_bound_to_opposite_home_mode(
     config_path.write_text(dump_toml(payload), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
-        CodexHarnessAdapter().preview_launch_commands(context, ["Fix it."])
+        harness_ops.preview_launch_commands("codex", context, ["Fix it."])
 
 
 def test_codex_install_fails_closed_if_native_hook_reconciliation_is_unavailable(
@@ -259,7 +260,7 @@ def test_codex_install_fails_closed_if_native_hook_reconciliation_is_unavailable
         home_override_explicit=True,
     )
     with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
-        CodexHarnessAdapter().install(context)
+        harness_support.install("codex", context)
 
     assert (home_dir / "bin" / "guard-codex").exists() is False
 

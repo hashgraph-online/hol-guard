@@ -51,17 +51,16 @@ def main() -> int:
     )
     cli.require_high_risk = lambda *_args, **_kwargs: None  # Disabled generated fixture gate only.
 
-    class Adapter:
-        def prepare_install(self, _context):
-            return PreparedHarnessInstall(
-                (TransitionFile(binding, binding.read_bytes(), b"candidate binding generation"),),
-                {"harness": "codex", "generation": "candidate", "managed_hook_config_path": str(binding)},
-            )
+    def prepare_install(_harness, _context):
+        return PreparedHarnessInstall(
+            (TransitionFile(binding, binding.read_bytes(), b"candidate binding generation"),),
+            {"harness": "codex", "generation": "candidate", "managed_hook_config_path": str(binding)},
+        )
 
     def prepare(request, **kwargs):
         from codex_plugin_scanner.guard import runtime_transition_prepare
 
-        runtime_transition_prepare.get_adapter = lambda _harness: Adapter()
+        runtime_transition_prepare.prepare_install = prepare_install
         return prepare_runtime_transition(request, **kwargs)
 
     cli.prepare_runtime_transition = prepare

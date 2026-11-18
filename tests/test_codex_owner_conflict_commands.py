@@ -8,8 +8,8 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.codex_harness_client import codex_paths
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.codex_hook_paths_support import hook_manifest_path
 from tests.codex_install_flow_support import current_launch
 from tests.codex_toml_support import dump_toml
@@ -47,7 +47,7 @@ def test_guard_codex_install_rejects_ambiguous_foreign_direct_hook(tmp_path: Pat
 
     original_config = config_path.read_bytes()
     with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
-        CodexHarnessAdapter().install(context)
+        harness_support.install("codex", context)
     assert config_path.read_bytes() == original_config
     assert not hook_manifest_path(context.guard_home, config_path).exists()
 

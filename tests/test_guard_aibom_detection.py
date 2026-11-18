@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import aibom_detection
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.aibom_detection import (
     INVENTORY_ITEM_KINDS,
     NativeAibomError,
@@ -15,7 +16,6 @@ from codex_plugin_scanner.guard.aibom_detection import (
     extend_detection_with_workspace_aibom,
 )
 from codex_plugin_scanner.guard.consumer.service import artifact_hash, diff_artifact
-from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import (
     inventory_snapshot_from_detection,
@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.inventory_contract import (
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+from tests import harness_ops_support as harness_support
 
 
 def test_inventory_item_kinds_align_with_portal_contract() -> None:
@@ -302,8 +303,8 @@ def test_hermes_and_openclaw_inventory_snapshots_include_workspace_agents_md(tmp
         guard_home=tmp_path / ".hol-guard",
     )
 
-    for adapter in (get_adapter("hermes"), get_adapter("openclaw")):
-        snapshot = adapter.inventory_snapshot(context, generated_at="2026-06-10T00:00:00Z")
+    for harness in ("hermes", "openclaw"):
+        snapshot = harness_support.inventory_snapshot(harness, context, generated_at="2026-06-10T00:00:00Z")
         overlay_items = [item for item in snapshot.items if item.item_kind == "overlay"]
         assert any(item.metadata.get("instructionRole") == "agents_md" for item in overlay_items)
 
@@ -427,7 +428,7 @@ def test_extend_detection_does_not_replace_colliding_mcp_server_with_claude_md(
     )
 
     context = HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=tmp_path / ".hol-guard")
-    detection = get_adapter("claude-code").detect(context)
+    detection = harness_ops.detect("claude-code", context)
     artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
 
     assert artifacts["claude-code:project:mcp:instruction:claude-md"].artifact_type == "mcp_server"
@@ -444,7 +445,7 @@ def test_extend_detection_prefers_workspace_root_claude_md_on_legacy_id_collisio
     colliding_rule.write_text("# colliding rule\n", encoding="utf-8")
 
     context = HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=tmp_path / ".hol-guard")
-    detection = get_adapter("claude-code").detect(context)
+    detection = harness_ops.detect("claude-code", context)
     artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
 
     assert artifacts["claude-code:project:instruction:claude-md"].config_path == str(root_claude_md)
@@ -478,7 +479,7 @@ def test_cursor_detect_extends_workspace_aibom(tmp_path: Path) -> None:
     (workspace / "AGENTS.md").write_text("policy\n", encoding="utf-8")
     context = HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=tmp_path / ".hol-guard")
 
-    detection = get_adapter("cursor").detect(context)
+    detection = harness_ops.detect("cursor", context)
     extended = extend_detection_with_workspace_aibom(
         detection,
         home_dir=context.home_dir,
@@ -550,10 +551,7 @@ def test_workspace_skills_excluded_for_hermes_inventory_snapshot(tmp_path: Path)
         workspace_dir=workspace,
         guard_home=tmp_path / ".guard",
     )
-    snapshot = get_adapter("hermes").inventory_snapshot(
-        context,
-        generated_at="2026-01-01T00:00:00Z",
-    )
+    snapshot = harness_support.inventory_snapshot("hermes", context, generated_at="2026-01-01T00:00:00Z")
     skill_names = {
         item.metadata.get("skill_name") or item.display_name for item in snapshot.items if item.item_kind == "skill"
     }

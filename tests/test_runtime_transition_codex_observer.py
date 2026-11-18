@@ -7,13 +7,13 @@ import uuid
 import pytest
 
 from codex_plugin_scanner.guard import runtime_transition_codex_observer as observer
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.native_process_stop_scope import native_process_stop_scope
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import harness_ops_support as harness_support
 from tests.codex_hook_paths_support import hook_manifest_path
 
 
@@ -25,7 +25,7 @@ def installed_context(tmp_path):
         home_dir=home, workspace_dir=None, guard_home=tmp_path / "guard", home_override_explicit=True
     )
     store = GuardStore(context.guard_home)
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     return context, workspace, store
 
 

@@ -8,10 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_harness_client import ask
 from codex_plugin_scanner.guard.setup_contracts import setup_contract_for
+from tests import harness_ops_support as harness_support
 from tests.paseo_test_support import paseo_providers, receipt_path
 from tests.test_paseo_adapter import configure
 from tests.test_paseo_adapter import context as context
@@ -48,7 +49,7 @@ def test_nonexistent_guard_root_cannot_hide_a_symlinked_ancestor(
     redirected = replace(context, guard_home=ancestor / "state" / "guard")
     configure(redirected, {"pi": {"enabled": True}})
     with pytest.raises(ValueError, match="symlink"):
-        get_adapter("paseo").install(redirected)
+        harness_support.install("paseo", redirected)
     assert list(outside.iterdir()) == []
     assert not (context.home_dir / ".pi").exists()
 
@@ -71,18 +72,18 @@ def test_failed_repair_keeps_receipt_but_detects_changed_artifacts(
 ) -> None:
     """Keeping an old receipt cannot hide artifact drift caused by a failed repair."""
     configure(context, {"pi": {"enabled": True}})
-    adapter = get_adapter("paseo")
-    adapter.install(context)
+    harness_support.install("paseo", context)
     original = receipt_path(context).read_bytes()
 
     (context.home_dir / ".pi/agent/extensions/hol-guard.ts").write_text("changed", encoding="utf-8")
-    pi = get_adapter("pi")
-    monkeypatch.setattr(pi, "resolved_executable", lambda _context: None)
+    monkeypatch.setattr(
+        harness_ops, "resolved_executable", lambda harness, _context: None if harness == "pi" else sys.executable
+    )
     with pytest.raises(ValueError, match="No supported, enabled"):
-        adapter.install(context)
-    monkeypatch.setattr(pi, "resolved_executable", lambda _context: sys.executable)
+        harness_support.install("paseo", context)
+    monkeypatch.setattr(harness_ops, "resolved_executable", lambda _harness, _context: sys.executable)
     assert receipt_path(context).read_bytes() == original
-    assert adapter.diagnostics(context)["setup_status"] == "broken"
+    assert harness_ops.diagnostics("paseo", context)["setup_status"] == "broken"
 
 
 def test_paseo_setup_contract_has_no_composite_browser_fallback() -> None:

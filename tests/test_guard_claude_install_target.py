@@ -6,7 +6,6 @@ from typing import cast
 from rich.console import Console
 
 from codex_plugin_scanner.guard.cli import install_commands, render
-from codex_plugin_scanner.guard.harness import native_harness
 from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
@@ -27,7 +26,7 @@ def test_dry_run_plan_carries_the_native_claude_target(tmp_path, monkeypatch):
         calls.append((op, harness))
         return {"scope": "user", "settings_path": "/synthetic/.claude/settings.json"}
 
-    monkeypatch.setattr(native_harness, "ask", fake_ask)
+    monkeypatch.setattr(install_commands, "native_ask", fake_ask)
     plan = install_commands.build_harness_setup_plan("connect", "claude-code", _context(tmp_path), dry_run=True)
 
     assert calls == [("install_target", "claude-code")]
@@ -38,7 +37,7 @@ def test_an_unavailable_native_target_is_shown_not_guessed(tmp_path, monkeypatch
     def fake_ask(op, context, *, harness=None, **fields):
         raise OSError("native runtime unavailable")
 
-    monkeypatch.setattr(native_harness, "ask", fake_ask)
+    monkeypatch.setattr(install_commands, "native_ask", fake_ask)
     plan = install_commands.build_harness_setup_plan("connect", "claude-code", _context(tmp_path), dry_run=True)
 
     assert plan["settings_target"] == {"unavailable": True, "reason": "native runtime unavailable"}
