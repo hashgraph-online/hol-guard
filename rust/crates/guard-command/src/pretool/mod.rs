@@ -391,11 +391,6 @@ pub(crate) fn removes_a_root(command: &str) -> bool {
     root_removal::removes_a_root(&normalized_haystack(command))
 }
 
-/// Floors no extension permission can settle: Guard self-protection, secret
-/// exfiltration, a spelled-out key, token or password, a glob that could name
-/// a secret file, and Git configuration that runs a program Guard cannot
-/// read. An unproven model has no segments to screen, so it is a floor itself
-/// rather than passing every screen.
 /// `grep ~/.secrets/key.txt` names no file: the path is the pattern and the
 /// search reads stdin, so no search proof ever sees the read it meant. The
 /// shape is no search an agent needs, so nothing vouches for it and no Allow
@@ -418,6 +413,11 @@ pub(crate) fn lone_home_dotpath_search(
     })
 }
 
+/// Floors no extension permission can settle: Guard self-protection, secret
+/// exfiltration, a spelled-out key, token or password, a glob that could name
+/// a secret file, and Git configuration that runs a program Guard cannot
+/// read. An unproven model has no segments to screen, so it is a floor itself
+/// rather than passing every screen.
 pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
     model.confidence != "exact"
         || model.segments.is_empty()
