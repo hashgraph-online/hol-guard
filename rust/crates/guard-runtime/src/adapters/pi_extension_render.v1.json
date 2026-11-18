@@ -3631,7 +3631,7 @@
 "    if (!readiness.ready) {",
 "      if (!guardWatchPostureActive()) {",
 "        ctx.ui.notify(\"HOL Guard could not prepare protection for this prompt. Retry the prompt to reconnect (\"",
-"          + readiness.reasonCode + \" ).\", \"warning\");",
+"          + readiness.reasonCode + \").\", \"warning\");",
 "        return { action: \"handled\", handled: true };",
 "      }",
 "      ctx.ui.notify(\"HOL Guard could not prepare protection for this prompt (\"",
