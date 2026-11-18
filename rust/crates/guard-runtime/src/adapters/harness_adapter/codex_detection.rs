@@ -98,7 +98,7 @@ fn merge_workspace(ctx: &Ctx, workspace: &Path, detection: &mut Detection) -> St
             })
         })
         .collect();
-    let mut request = json!({
+    let request = json!({
         "harness": "codex",
         "workspace_dir": anchored(ctx, workspace),
         "existing": existing,
@@ -131,7 +131,7 @@ fn merge_workspace(ctx: &Ctx, workspace: &Path, detection: &mut Detection) -> St
 /// `extend_codex_runtime_inventory`: the home and workspace skills replace
 /// every detected skill.
 fn replace_skills(ctx: &Ctx, detection: &mut Detection) -> Step<()> {
-    let mut request = json!({
+    let request = json!({
         "harness": "codex",
         "home_dir": anchored(ctx, &ctx.home),
         "workspace_dir": ctx.workspace.as_deref().map(|workspace| anchored(ctx, workspace)),
