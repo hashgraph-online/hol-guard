@@ -328,7 +328,7 @@ fn start_and_serve(home: &Path, config: &LaunchConfig) -> i32 {
     if config.workers {
         // Guard-owned hooks and launchers are brought in line with this
         // runtime before the daemon reports ready, as its start always did,
-        // unless the reconcile outlasts `RECONCILE_READY_WAIT`.
+        // unless the reconcile outlasts its ready wait.
         let reconcile = workers::reconcile_beside(&reads, config.user_home.clone(), home.clone());
         let registration = workers::Registration {
             session_id: session_id.clone(),
@@ -339,19 +339,7 @@ fn start_and_serve(home: &Path, config: &LaunchConfig) -> i32 {
         };
         workers::start(&reads, registration.clone());
         super::lifecycle::record(&home, "workers_started", None, None, None);
-        // A reconcile held past its budget keeps running, and the daemon
-        // reports ready without it rather than leave every hook waiting.
-        let pending =
-            reconcile.and_then(|reconcile| reconcile.wait_until(workers::RECONCILE_READY_WAIT));
-        if pending.is_some() {
-            super::lifecycle::record(
-                &home,
-                "reconcile_deferred",
-                Some("ready_wait_elapsed"),
-                None,
-                None,
-            );
-        }
+        let pending = workers::settle_before_ready(reconcile, &home);
         if let Some(timeout) = idle_timeout(config.idle_timeout_seconds) {
             workers::exit_when_idle(&reads, &registration, timeout, pending);
         }

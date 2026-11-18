@@ -105,7 +105,12 @@ const HOST_READY_WAIT: Duration = seconds(15);
 /// from when the reconcile began, before it reports ready anyway. A reconcile
 /// normally takes a few seconds; one held by its library call could keep the
 /// daemon from answering hooks for that call's whole timeout.
-pub(super) const RECONCILE_READY_WAIT: Duration = seconds(30);
+const RECONCILE_READY_WAIT: Duration = seconds(30);
+/// How long the reconcile's library call waits for its answer. It stays under
+/// the library's own call timeout, so a reconcile that gives up leaves the
+/// shared resident running: by then the daemon may be serving hooks through
+/// that same process.
+const RECONCILE_CALL_WAIT: Duration = seconds(110);
 
 /// What the heartbeat records for this daemon.
 #[derive(Clone)]
@@ -214,11 +219,14 @@ pub(super) fn next_wait(job: &Job, answer: Option<Value>) -> Duration {
 /// Refreshes the artifacts Guard already manages for the active runtime
 /// (`reconcile_runtime_artifacts`). A failure leaves them for the next start.
 pub(super) fn reconcile_artifacts(reads: &NativeReads, user_home: Option<&str>) {
-    let _ = pass(
-        reads,
-        "worker.reconcile_artifacts",
-        json!({ "home": user_home }),
-    );
+    let Some(config) = reads.config() else {
+        return;
+    };
+    let (call, args) = ("worker.reconcile_artifacts", json!({ "home": user_home }));
+    if ticks::native(reads, &config, call, &args).is_some() {
+        return;
+    }
+    let _ = library::call_resident_within(&config, call, args, RECONCILE_CALL_WAIT);
 }
 
 /// A reconcile running on its own thread. The thread signals `done` once the
@@ -278,6 +286,25 @@ pub(super) fn reconcile_beside(
             None
         }
     }
+}
+
+/// Waits on a reconcile started by `reconcile_beside`, up to
+/// `RECONCILE_READY_WAIT` from its start. One still running then keeps
+/// running: it is journaled as `reconcile_deferred` and returned, so the
+/// daemon reports ready rather than leave every hook waiting on it.
+pub(super) fn settle_before_ready(
+    reconcile: Option<Reconcile>,
+    guard_home: &std::path::Path,
+) -> Option<Reconcile> {
+    let pending = reconcile?.wait_until(RECONCILE_READY_WAIT)?;
+    super::super::lifecycle::record(
+        guard_home,
+        "reconcile_deferred",
+        Some("ready_wait_elapsed"),
+        None,
+        None,
+    );
+    Some(pending)
 }
 
 fn reconciled(reads: &NativeReads, user_home: Option<&str>, guard_home: &std::path::Path) {

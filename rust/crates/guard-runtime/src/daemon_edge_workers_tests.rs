@@ -135,3 +135,9 @@ fn a_reconcile_thread_that_ends_without_a_signal_counts_as_finished() {
     drop(done);
     assert!(reconcile.wait_until(RECONCILE_READY_WAIT).is_none());
 }
+
+#[test]
+fn the_reconcile_call_gives_up_before_the_library_would_stop_its_resident() {
+    assert!(RECONCILE_CALL_WAIT < Duration::from_secs(120));
+    assert!(RECONCILE_CALL_WAIT > RECONCILE_READY_WAIT);
+}
