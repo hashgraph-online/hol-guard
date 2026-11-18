@@ -842,8 +842,9 @@ fn reviewable_structure(
             let looked = without_lookups(&command.normalized_text);
             bounded_substitutions(&looked)
                 .or_else(|| {
-                    reviewable_substitutions(&looked)
-                        .filter(|bounded| plain_sequence(&bounded.text))
+                    reviewable_substitutions(&looked).filter(|bounded| {
+                        plain_sequence(&bounded.text) || interpreter_free_loop(&bounded.text)
+                    })
                 })
                 .is_some_and(|bounded| {
                     let text = bounded.text;
@@ -982,6 +983,34 @@ fn plain_sequence(text: &str) -> bool {
         )
     });
     !construct
+}
+
+/// Whether a text that fails `plain_sequence` only because of a `for`,
+/// `while` or `until` loop names no program that runs text of its own.
+///
+/// `for f in a.js b.js; do actual=$(shasum -a 256 "$f" | awk '{print $1}');
+/// test "$actual" = x; done` keeps a checksum in a value and compares it, and
+/// every program the loop runs is named. It reached an evaluation failure, a
+/// block with no approval left to give, because any loop around a kept value
+/// was refused. The danger that refusal guards against is a kept value reaching
+/// a program that runs it as code, as in `x=$(curl -s URL); for f in a; do
+/// node -e '...' "$f"; done`, so a loop is read here only when no word of
+/// the text names an interpreter, a launcher, `eval`, `source` or `.`. Case
+/// arms, `select`, functions and coprocesses keep the refusal. The floor this
+/// opens never goes below review.
+fn interpreter_free_loop(text: &str) -> bool {
+    let literal = unquoted_literal(text);
+    let other_construct = command_words(&literal).any(|word| {
+        let keyword = word.split(['<', '>']).next().unwrap_or(word);
+        matches!(
+            keyword,
+            "case" | "esac" | "select" | "function" | "coproc" | "."
+        )
+    });
+    !other_construct
+        && !named_words(text)
+            .iter()
+            .any(|name| INTERPRETERS.contains(&name.as_str()))
 }
 
 /// Every word the shell could read as a program name or keyword token, with
