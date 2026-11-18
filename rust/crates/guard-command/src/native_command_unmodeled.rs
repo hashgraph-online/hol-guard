@@ -1393,7 +1393,8 @@ fn glues_a_word(character: char) -> bool {
 }
 
 fn synthesizes_program(literal: &str, sourced: bool) -> bool {
-    let masked = mask_double_quoted_separators(&without_case_labels(literal));
+    let plain = expansion::without_literal_subscripts(literal);
+    let masked = mask_double_quoted_separators(&without_case_labels(&plain));
     let mut words = command_words(&masked).filter(|word| !is_assignment(word));
     words.any(|word| {
         !matches!(

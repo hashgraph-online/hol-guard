@@ -64,6 +64,37 @@ fn inert_body(body: &str) -> bool {
     !word.contains(['$', '`'])
 }
 
+/// The text with each literal subscript, `${PIPESTATUS[0]}` or
+/// `${#ITEMS[@]}`, read as the plain `${NAME}` it selects from. The word
+/// scans split at braces, so the subscript alone would look like a command
+/// word built from a pattern; the plain spelling reads exactly as it did.
+pub(super) fn without_literal_subscripts(text: &str) -> String {
+    let mut kept = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find("${") {
+        kept.push_str(&rest[..at + 2]);
+        let body = &rest[at + 2..];
+        let Some(close) = body.find('}') else {
+            rest = body;
+            break;
+        };
+        let inner = &body[..close];
+        let named = inner.strip_prefix('#').unwrap_or(inner);
+        let end = named
+            .find(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
+            .unwrap_or(named.len());
+        if end > 0 && literal_subscript(&named[end..]) {
+            kept.push_str(&inner[..inner.len() - named.len() + end]);
+        } else {
+            kept.push_str(inner);
+        }
+        kept.push('}');
+        rest = &body[close + 1..];
+    }
+    kept.push_str(rest);
+    kept
+}
+
 /// `[0]`, `[12]`, `[@]` or `[*]` and nothing after it. A subscript is read
 /// as arithmetic, which expands any name it holds and can run code through
 /// that name's value, so only digits and the two whole-array forms count:

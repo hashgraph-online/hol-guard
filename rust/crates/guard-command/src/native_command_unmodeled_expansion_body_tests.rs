@@ -62,3 +62,24 @@ fn evaluating_forms_are_not_inert() {
         assert!(!expansions_are_inert(text), "{text}");
     }
 }
+
+#[test]
+fn a_literal_subscript_reads_as_the_plain_name() {
+    use super::without_literal_subscripts;
+    assert_eq!(
+        without_literal_subscripts("test ${PIPESTATUS[0]} -eq 0 || true"),
+        "test ${PIPESTATUS} -eq 0 || true"
+    );
+    assert_eq!(
+        without_literal_subscripts("echo ${#ITEMS[@]} ${ITEMS[*]} ${X}"),
+        "echo ${#ITEMS} ${ITEMS} ${X}"
+    );
+    for kept in [
+        "${ARRAY[$(id)]}",
+        "${ARRAY[1+I]}",
+        "${ARRAY[0]/a/b}",
+        "${OPEN",
+    ] {
+        assert_eq!(without_literal_subscripts(kept), kept);
+    }
+}
