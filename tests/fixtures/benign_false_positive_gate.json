@@ -31819,6 +31819,24 @@
       "expect": "allow"
     },
     {
+      "id": "search-file-excluding-home-path-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor",
+        "muse"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -v '~/.secrets/key.txt' src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-echo-ssn",
       "fix_area": "shell",
       "harnesses": [
