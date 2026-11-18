@@ -912,15 +912,25 @@ def home_bun_bin(home: Path) -> Path | None:
     return directory if (directory / "bun").is_file() else None
 
 
+def without_package_shims(path: str) -> str:
+    """``path`` without the host Guard's package-shim directories.
+
+    A shim is a script that hands the launch to the host's own Guard runtime.
+    A case is judged by the Guard the fixture installed, so a host shim in
+    front of Bun, npm or pip would put the host's Guard in the way of the
+    case's own launches and of every package command the agent runs.
+    """
+    entries = path.split(os.pathsep)
+    return os.pathsep.join(entry for entry in entries if Path(entry).parts[-2:] != ("package-shims", "bin"))
+
+
 def _host_bun() -> str | None:
     """The host's Bun, skipping a Guard package shim that stands in front of it.
 
-    A shim is a script that hands the launch to Guard's own runtime, so a copy
-    of it would plant Guard's launcher, not Bun, where the case runs Bun.
+    A copy of a shim would plant Guard's launcher, not Bun, where the case
+    runs Bun.
     """
-    entries = os.environ.get("PATH", "").split(os.pathsep)
-    search = [entry for entry in entries if Path(entry).parts[-2:] != ("package-shims", "bin")]
-    return shutil.which("bun", path=os.pathsep.join(search))
+    return shutil.which("bun", path=without_package_shims(os.environ.get("PATH", "")))
 
 
 def add_home_bun_runtime(home: Path, scenario_id: str | None) -> None:

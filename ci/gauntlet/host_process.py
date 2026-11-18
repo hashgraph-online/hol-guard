@@ -11,7 +11,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from .evidence import TRANSCRIPT_LIMIT
-from .workspace_runner_fixtures import home_bun_bin
+from .workspace_runner_fixtures import home_bun_bin, without_package_shims
 
 # Set by a ``--jobs`` case worker so its parent can reap agent sessions that the
 # worker could not reap itself (for example after a forced kill).
@@ -77,7 +77,11 @@ def python_shim(directory: Path, search_path: str) -> str | None:
 def clean_environment(home: Path, agent_dir: Path, canary: str) -> dict[str, str]:
     """The model/host receives no inherited provider, cloud or GitHub credential."""
     environment = {key: os.environ[key] for key in ("PATH", "SYSTEMROOT", "WINDIR") if key in os.environ}
-    environment["PATH"] = str(Path(sys.executable).parent) + os.pathsep + environment.get("PATH", "")
+    # The SDK's `omp` launcher is `#!/usr/bin/env bun`: a host Guard's Bun shim
+    # would review the agent launch itself, prompt included, before the case
+    # Guard sees anything.
+    host_path = without_package_shims(environment.get("PATH", ""))
+    environment["PATH"] = str(Path(sys.executable).parent) + os.pathsep + host_path
     if shim := python_shim(agent_dir.parent / "python-bin", environment["PATH"]):
         environment["PATH"] = shim + os.pathsep + environment["PATH"]
     if os.name == "nt":
