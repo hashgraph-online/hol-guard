@@ -107,6 +107,21 @@ fn grok_repeated_install_does_not_back_up_its_own_hooks() {
 }
 
 #[test]
+fn grok_uninstall_refuses_to_claim_cleanup_without_ownership_state() {
+    let home = Home::new();
+    let config = home.home().join(".grok/config.toml");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "[permission]\ndeny = [\"user-rule\"]\n").unwrap();
+
+    let answer = home.ask("grok", "prepare_uninstall", json!({}));
+
+    assert_eq!(
+        answer["refusal"],
+        "Cannot remove Guard settings from .grok/config.toml because ownership records are missing; reinstall Guard or review the file manually."
+    );
+}
+
+#[test]
 fn zcode_install_writes_the_desktop_surface_only_until_the_cli_migrates() {
     let home = Home::new();
     let answer = home.ask(

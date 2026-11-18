@@ -772,11 +772,11 @@ function TabButton({ tabKey, label, icon: Icon, isActive, tabRefs, onSelect }) {
 }
 function AppDetailWorkspace(props) {
   const harnessDetection = useHarnessDetection();
-  const [cleanedLeftoverHarness, setCleanedLeftoverHarness] = reactExports.useState(null);
+  const [cleanedLeftoverHarnesses, setCleanedLeftoverHarnesses] = reactExports.useState(() => /* @__PURE__ */ new Set());
   const detectedSetupWarnings = harnessDetection.kind === "ready" ? harnessDetection.items.find((item) => item.harness === props.harness)?.warnings ?? [] : [];
-  const setupWarnings = cleanedLeftoverHarness === props.harness ? [] : detectedSetupWarnings;
+  const setupWarnings = cleanedLeftoverHarnesses.has(props.harness) ? [] : detectedSetupWarnings;
   const handleLeftoverRemoved = reactExports.useCallback(() => {
-    setCleanedLeftoverHarness(props.harness);
+    setCleanedLeftoverHarnesses((current) => new Set(current).add(props.harness));
   }, [props.harness]);
   const versionCompatibility = reactExports.useMemo(
     () => versionCompatibilityFor(harnessDetection, props.harness),

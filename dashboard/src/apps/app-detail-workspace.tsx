@@ -217,13 +217,13 @@ function TabButton({ tabKey, label, icon: Icon, isActive, tabRefs, onSelect }: T
 
 export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
   const harnessDetection = useHarnessDetection();
-  const [cleanedLeftoverHarness, setCleanedLeftoverHarness] = useState<string | null>(null);
+  const [cleanedLeftoverHarnesses, setCleanedLeftoverHarnesses] = useState<ReadonlySet<string>>(() => new Set());
   const detectedSetupWarnings = harnessDetection.kind === "ready"
     ? harnessDetection.items.find((item) => item.harness === props.harness)?.warnings ?? []
     : [];
-  const setupWarnings = cleanedLeftoverHarness === props.harness ? [] : detectedSetupWarnings;
+  const setupWarnings = cleanedLeftoverHarnesses.has(props.harness) ? [] : detectedSetupWarnings;
   const handleLeftoverRemoved = useCallback(() => {
-    setCleanedLeftoverHarness(props.harness);
+    setCleanedLeftoverHarnesses((current) => new Set(current).add(props.harness));
   }, [props.harness]);
   const versionCompatibility = useMemo(
     () => versionCompatibilityFor(harnessDetection, props.harness),
