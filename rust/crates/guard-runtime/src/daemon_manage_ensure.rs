@@ -24,6 +24,7 @@ use crate::daemon_policy_authority::{
 };
 
 use super::host::{self, Caller};
+use super::leftovers;
 use super::orphans;
 use super::records::{self, int, text};
 use super::retire::{self, Deadline};
@@ -295,7 +296,8 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         retire::reap_orphaned_workers(caller, deadline);
     }
     orphans::retire_unadopted(caller, deadline);
-    let ports = candidate_ports(context);
+    let ports = leftovers::free_ports(caller, candidate_ports(context), deadline)
+        .map_err(|message| runtime(&message))?;
     for port in &ports {
         if deadline.passed() {
             break;
