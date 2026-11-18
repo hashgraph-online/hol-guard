@@ -153,6 +153,13 @@ DOCTL_STUB_PYTHON = (
 
 
 VENV = ".venv"
+# A lane may name the installed interpreter fixture environments are built
+# from. The Windows ARM64 lane runs Guard in an emulated x64 Python, which
+# cannot start inside Guard's AppContainer, so its environments use the
+# machine's native all-users Python instead.
+FIXTURE_BASE_PYTHON = "GUARD_GAUNTLET_FIXTURE_BASE_PYTHON"
+
+
 def base_interpreter() -> Path:
     """The real interpreter a ``uv venv`` links its own ``bin/python`` to.
 
@@ -160,7 +167,7 @@ def base_interpreter() -> Path:
     installed interpreter; the stand-ins below only look like the ones a
     developer works in if they point at a real one.
     """
-    base = getattr(sys, "_base_executable", None) or sys.executable
+    base = os.environ.get(FIXTURE_BASE_PYTHON) or getattr(sys, "_base_executable", None) or sys.executable
     return Path(base).resolve()
 
 
@@ -407,7 +414,7 @@ def add_worktree_venv(worktree: Path) -> None:
         _link(venv / "bin" / name, base)
     _write(venv / "bin/pytest", venv_pytest_stub(venv), 0o755)
     write_windows_launcher(venv / "bin", "pytest", VENV_PYTEST_STUB_PYTHON)
-    _copy_windows_interpreter(venv)
+    _copy_windows_interpreter(venv, base)
     packages = venv / (
         "Lib/site-packages"
         if os.name == "nt"
@@ -416,18 +423,17 @@ def add_worktree_venv(worktree: Path) -> None:
     _write(packages / "pytest.py", venv_pytest_module(venv))
 
 
-def _copy_windows_interpreter(venv: Path) -> None:
+def _copy_windows_interpreter(venv: Path, base: Path) -> None:
     """Copy the launcher ``python -m venv`` gives a Windows environment.
 
     It reads the ``pyvenv.cfg`` above its directory and starts the base
     interpreter that file names, so the environment holds an interpreter of its
-    own, which Guard's Windows contained pytest runs inside its copy.
+    own, which Guard's Windows contained pytest runs inside its copy. The
+    launcher comes from that base install, so both run on the same machine type.
     """
     if os.name != "nt":
         return
-    import venv as venv_module
-
-    launcher = Path(venv_module.__file__).parent / "scripts" / "nt" / "python.exe"
+    launcher = base.parent / "Lib" / "venv" / "scripts" / "nt" / "python.exe"
     if launcher.is_file():
         (venv / "bin").mkdir(parents=True, exist_ok=True)
         shutil.copyfile(launcher, venv / "bin" / "python.exe")
