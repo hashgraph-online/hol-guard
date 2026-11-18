@@ -241,3 +241,7 @@ fn py_repr(text: &str) -> String {
 #[cfg(test)]
 #[path = "cursor_hook_script_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "hook_python_imports_tests.rs"]
+mod python_imports_tests;

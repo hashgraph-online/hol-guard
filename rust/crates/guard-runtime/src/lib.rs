@@ -373,9 +373,6 @@ mod cursor_hook_rebind;
 mod cursor_hook_rebind_tests;
 #[path = "adapters/cursor_hook_script.rs"]
 mod cursor_hook_script;
-#[cfg(test)]
-#[path = "adapters/hook_python_imports_tests.rs"]
-mod hook_python_imports_tests;
 #[path = "adapters/cursor_hook_state.rs"]
 mod cursor_hook_state;
 #[cfg(test)]
