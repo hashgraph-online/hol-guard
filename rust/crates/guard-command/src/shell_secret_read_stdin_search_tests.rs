@@ -41,6 +41,10 @@ fn lone_home_dotpath_pattern_is_not_a_search() {
         "rg -r x /home/agent/.secrets/key.txt",
         "rg -M 80 /home/agent/.secrets/key.txt",
         "rg -d 2 /home/agent/.secrets/key.txt",
+        "rg --color never /home/agent/.secrets/key.txt",
+        "rg --maxdepth 1 /home/agent/.secrets/key.txt",
+        "rg --color=never /home/agent/.secrets/key.txt",
+        "rg --maxdepth=1 /home/agent/.secrets/key.txt",
         "rg --threads 1 /home/agent/.secrets/key.txt",
         "rg --max-columns 80 /home/agent/.secrets/key.txt",
     ] {
