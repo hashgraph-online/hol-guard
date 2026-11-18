@@ -136,7 +136,7 @@ impl Fixture {
 const LONG: Duration = Duration::from_secs(30);
 
 fn refused(outcome: Step<(Vec<Value>, Vec<String>)>) -> String {
-    reason(outcome.err().expect("the observation must be refused"))
+    reason(outcome.expect_err("the observation must be refused"))
 }
 
 #[test]

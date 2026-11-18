@@ -64,7 +64,12 @@ fn the_default_socket_of_the_callers_home_is_reachable() {
 fn a_recorded_codex_home_or_socket_overrides_the_default() {
     let home = short_dir();
     let elsewhere = home.path().join("alt");
-    let _listener = listen(&default_socket(&elsewhere));
+    // A recorded Codex home replaces `~/.codex`, it does not sit under it.
+    let _listener = listen(
+        &elsewhere
+            .join("app-server-control")
+            .join("app-server-control.sock"),
+    );
     let explicit = home.path().join("ctl").join("s.sock");
     let _explicit_listener = listen(&explicit);
     let thread = json!("thread-safe-0001");

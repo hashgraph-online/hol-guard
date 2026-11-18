@@ -320,7 +320,7 @@ fn paired_path_redirects_cannot_authorize_another_context() {
             }
             let command = bridge(&runtime, &hook);
             assert!(
-                recognizes(&ctx, &command, None) == !frozen,
+                recognizes(&ctx, &command, None) != frozen,
                 "{option} frozen={frozen}"
             );
             assert!(

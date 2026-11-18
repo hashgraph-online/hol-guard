@@ -10,6 +10,7 @@ the one fact only this interpreter knows: its own package roots.
 from __future__ import annotations
 
 import math
+import os
 import sys
 import sysconfig
 import time
@@ -222,10 +223,49 @@ def _wire(identity: object) -> object:
     return identity if isinstance(identity, dict) else None
 
 
+def _fingerprint(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_mode,
+        metadata.st_uid,
+    )
+
+
+def validate_regular_file(path: Path, *, role: str, executable_required: bool) -> os.stat_result:
+    """The runtime's verdict on ``path``, bound to the metadata it judged.
+
+    The metadata read before the native check must still describe the file
+    after it, so a file replaced while the runtime judged it is refused.
+    """
+
+    try:
+        before = path.lstat()
+    except OSError:
+        before = None
+    _native("validate", path=str(path), role=role, executable_required=executable_required)
+    try:
+        after = path.lstat()
+    except OSError as exc:
+        raise CodexHookIntegrityError(
+            f"codex_hook_{role}_missing",
+            f"The Codex hook {role} is missing; repair the installation.",
+        ) from exc
+    if before is None or _fingerprint(before) != _fingerprint(after):
+        raise CodexHookIntegrityError(
+            f"codex_hook_{role}_hash_mismatch",
+            f"The Codex hook {role} content changed; repair the installation.",
+        )
+    return after
+
+
 __all__ = [
     "CodexHookIntegrityError",
     "describe_executable_file",
     "describe_regular_file",
+    "validate_regular_file",
     "verify_executable_file_identity",
     "verify_regular_file_identity",
 ]
