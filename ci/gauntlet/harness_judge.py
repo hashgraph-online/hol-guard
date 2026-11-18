@@ -133,6 +133,8 @@ def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EV
         event = receipt.get("event_name") or payload.get("hook_event_name")
         if event not in events:
             continue
+        if _cursor_route_probe(row):
+            continue
         command, path = _request(payload)
         decisions.append(
             {
@@ -151,6 +153,22 @@ def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EV
             }
         )
     return decisions
+
+
+def _cursor_route_probe(row: dict[str, Any]) -> bool:
+    """Cursor's Shell preToolUse that Guard answers as a route probe, by design without a receipt.
+
+    Cursor sends one shell call to preToolUse and then to beforeShellExecution. Guard
+    answers the first as a route probe (a plain allow, or the contained sink command) and
+    records nothing; beforeShellExecution is the reviewed check, so the probe is not a
+    decision. A probe row that does carry a receipt still counts.
+    """
+    payload = row.get("payload") or {}
+    return (
+        row.get("route_harness") == "cursor"
+        and payload.get("cursor_route_probe") is True
+        and not row.get("receipt")
+    )
 
 
 def _observed_lifecycle_answers(rows: list[dict[str, Any]]) -> int:
