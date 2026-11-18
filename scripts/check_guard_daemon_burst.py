@@ -42,6 +42,7 @@ SHED_CODES = (
     "daemon_hook_deadline_exhausted",
     "daemon_hook_queue_bytes",
     "native_hook_worker_unavailable",
+    "native_review_deadline_exceeded",
 )
 HOOK_BODY = json.dumps(
     {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "echo burst"}}
