@@ -33,6 +33,10 @@ fn printf_escapes_are_decoded_before_ssn_boundary_check() {
         r"printf 'SSN:\n123-45-6789\n'",
         r"printf '123\05545\0556789'",
         r"printf '123\x2d45\x2d6789'",
+        r"printf '123\u002d45\u002d6789'",
+        r"printf '123\U0000002d45\U0000002d6789'",
+        r"printf '%b\n' '123\u002d45\u002d6789'",
+        r"printf '%b\n' '123\U0000002d45\U0000002d6789'",
         r"printf '\a123-45-6789'",
         r"printf '\b123-45-6789'",
         r"printf '\f123-45-6789'",
@@ -55,6 +59,8 @@ fn printf_escapes_are_decoded_before_ssn_boundary_check() {
         // %s argument. Reviewing these would be a new false positive.
         r"printf '%s\n' '123\05545\0556789'",
         r"printf '%s\n' '123\x2d45\x2d6789'",
+        r"printf '%s\n' '123\u002d45\u002d6789'",
+        r"printf '%s\n' '123\U0000002d45\U0000002d6789'",
         r"printf -- '%s\n' '123\05545\0556789'",
         r"printf -- '123\05545\0550000'",
         r"printf '123\05545\0550000'",
@@ -86,6 +92,8 @@ fn printf_substitutions_and_percent_b_octal_keep_the_ssn_review_floor() {
     }
     for command in [
         r"printf '%s\n' '123\x2d45\x2d6789'",
+        r"printf '%s\n' '123\u002d45\u002d6789'",
+        r"printf '%s\n' '123\U0000002d45\U0000002d6789'",
         r"printf '%s\n' '123\05545\0556789'",
         r"printf 'literal %%s\n' '123-45-6789'",
         r"printf '%b\n' '123\005545\00550000'",
