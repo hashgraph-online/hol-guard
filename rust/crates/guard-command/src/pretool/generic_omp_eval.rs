@@ -26,6 +26,8 @@ use serde_json::{json, Map, Value};
 
 #[path = "generic_omp_eval_browser.rs"]
 mod browser;
+#[path = "generic_omp_eval_commit.rs"]
+mod commit;
 #[path = "generic_omp_eval_parser.rs"]
 mod parser;
 #[path = "generic_omp_eval_pure.rs"]
@@ -180,7 +182,9 @@ pub(super) fn evaluate(
             None => return None,
         }
     } else {
-        parse_program(code)?
+        // Oh My Pi's `commit` prelude has its own grammar; a program the tool
+        // grammar reads stays with it.
+        parse_program(code).or_else(|| commit::parse_commit_program(code))?
     };
     let mut evaluated = Vec::with_capacity(calls.len());
     let mut saw_unmodeled_call = false;
