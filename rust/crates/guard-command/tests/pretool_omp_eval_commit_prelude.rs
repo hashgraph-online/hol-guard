@@ -116,3 +116,54 @@ fn reading_the_commit_prelude_docs_is_allowed() {
         assert_eq!(result.minimum_action, "allow", "{code}");
     }
 }
+
+/// The git command extension judges a draft as the Git write it runs. When
+/// the user allows the extension's `add` and `commit` permissions, a draft is
+/// allowed as `git add -A && git commit` through `bash` is, even with a hook
+/// Git would start. With the packaged defaults the hook keeps the extension's
+/// own review, with its reason, rather than the review for an unknown program.
+#[test]
+fn a_commit_draft_follows_the_git_extension() {
+    use crate::git_helper_fixture::{evaluate_with_node, local_admin_controls};
+    let hooked = session("omp-eval-commit-extension");
+    executable_hook(&hooked.primary.join(".git/hooks/pre-commit"));
+    std::fs::write(hooked.primary.join("notes.md"), "draft\n").unwrap();
+    let allowed = local_admin_controls(vec![
+        json!({"target_kind": "extension", "target_id": "command.git", "state": "enabled"}),
+        json!({"target_kind": "permission", "target_id": "command.git.permission.add", "state": "enabled"}),
+        json!({"target_kind": "permission", "target_id": "command.git.permission.commit", "state": "enabled"}),
+    ]);
+    let bash = evaluate_with_node(
+        "omp",
+        "PreToolUse",
+        &json!({"tool_name": "bash", "tool_input": {"command": "git add -A && git commit -m 'Add notes'"}}),
+        Some(&allowed),
+        &hooked.home,
+        hooked.primary.to_str(),
+    );
+    assert_eq!(bash.minimum_action, "allow");
+    for code in AGENT_PROGRAMS {
+        let draft = evaluate_with_node(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "eval", "tool_input": {"language": "js", "code": code}}),
+            Some(&allowed),
+            &hooked.home,
+            hooked.primary.to_str(),
+        );
+        assert_eq!(draft.minimum_action, "allow", "{code}");
+        let reviewed = eval(&hooked, code);
+        assert_eq!(
+            (
+                reviewed.minimum_action.as_str(),
+                reviewed.reason_code.as_str()
+            ),
+            ("review", "native_command_review_required"),
+            "{code}"
+        );
+        assert_eq!(
+            reviewed.action.action_type,
+            guard_contracts::PreToolActionTypeV1::Command
+        );
+    }
+}

@@ -15,6 +15,7 @@ pub(in crate::pretool) mod cursor_project_reads;
 #[path = "env_prefix_projection.rs"]
 mod env_prefix_projection;
 pub use env_prefix_projection::bindable_setting;
+pub use omp::omp_eval_commit_drafts;
 #[path = "generic_cline_view.rs"]
 mod cline_view;
 #[path = "generic_extract.rs"]

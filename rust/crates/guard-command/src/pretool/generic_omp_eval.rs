@@ -243,6 +243,9 @@ pub(super) fn evaluate(
     if saw_unmodeled_call {
         return None;
     }
+    if let Some(verdict) = draft_only_verdict(&evaluated, context) {
+        return verdict;
+    }
     let mut ran_shell = false;
     for (call, result) in evaluated {
         ran_shell |= matches!(call.tool.as_str(), "bash" | "commit");
@@ -258,8 +261,8 @@ pub(super) fn evaluate(
             // of several calls keeps the fall-through: no single verdict
             // speaks for it. Containment is the inner call's own hook to
             // arrange, so a sandbox verdict keeps the fall-through too.
-            // A `commit` draft is judged as a stand-in command, whose own
-            // review would bind an approval to text the program never runs.
+            // A `commit` draft beside other calls has no single verdict
+            // either; a program of drafts alone was answered above.
             return (calls.len() == 1
                 && call.tool != "commit"
                 && matches!(result.minimum_action.as_str(), "review" | "block"))
@@ -277,6 +280,100 @@ pub(super) fn evaluate(
         "native_omp_eval_bounded_tools",
         "The Rust authority parsed this eval as literal Oh My Pi tool calls and proved each one allowed, or contained, on its own.",
     ))
+}
+
+/// The verdict for a program made only of `commit` drafts, when Git's own
+/// rules do not allow every draft. The command extensions judge each draft as
+/// the Git write it runs, so the program carries the strongest of those
+/// verdicts and its reason, as a direct `git commit` would, not the review for
+/// an unknown program. Its approval is bound to the drafts' repositories, not
+/// to the program text, by [`omp_eval_commit_drafts`]. `None` leaves the
+/// ordinary path to answer, and `Some(None)` sends the program to the
+/// unknown-program review: a sensitive target, or a containment verdict the
+/// harness process cannot take.
+fn draft_only_verdict(
+    evaluated: &[(&Call, PreToolResultV1)],
+    context: &OmpContext<'_>,
+) -> Option<Option<PreToolResultV1>> {
+    if evaluated.is_empty() || evaluated.iter().any(|(call, _)| call.tool != "commit") {
+        return None;
+    }
+    let (_, strongest) = evaluated
+        .iter()
+        .max_by_key(|(_, result)| verdict_rank(&result.minimum_action))?;
+    if strongest.minimum_action == "allow" {
+        return None;
+    }
+    if evaluated
+        .iter()
+        .any(|(_, result)| result.action.sensitive_target)
+        || !matches!(
+            strongest.minimum_action.as_str(),
+            "review" | "require-reapproval" | "block"
+        )
+    {
+        return Some(None);
+    }
+    let mut verdict = strongest.clone();
+    verdict.action = generic_action(
+        context.harness,
+        context.event,
+        PreToolActionTypeV1::Command,
+        PreToolOperationV1::Execute,
+        true,
+        false,
+    );
+    Some(Some(verdict))
+}
+
+fn verdict_rank(action: &str) -> u8 {
+    match action {
+        "allow" => 0,
+        "warn" => 1,
+        "review" => 2,
+        "require-reapproval" => 3,
+        "sandbox-required" => 4,
+        _ => 5,
+    }
+}
+
+/// The repositories an Oh My Pi eval commits to, when the program is nothing
+/// but literal `commit` drafts: `""` for the session's repository, else the
+/// `repo` option as written. A draft's subject, body and file selection are
+/// literal text Git stores and runs nothing, so an approval for such a program
+/// is bound to these repositories and holds for the next draft there.
+/// `None` for any other tool or program.
+pub fn omp_eval_commit_drafts(
+    harness: &str,
+    tool_name: &str,
+    tool_input: &Value,
+) -> Option<Vec<String>> {
+    if harness != "omp" || tool_name != "eval" {
+        return None;
+    }
+    let input = tool_input.as_object()?;
+    let modeled = input.iter().all(|(key, value)| match key.as_str() {
+        "code" | "language" => value.is_string(),
+        "title" => value.is_string() || value.is_null(),
+        "reset" => value.is_boolean() || value.is_null(),
+        "timeout" => value.is_number() || value.is_null(),
+        _ => false,
+    });
+    if !modeled || input.get("language")?.as_str()? != "js" {
+        return None;
+    }
+    let calls = parse_program(input.get("code")?.as_str()?)?;
+    if calls.is_empty() || calls.iter().any(|call| call.tool != "commit") {
+        return None;
+    }
+    calls
+        .iter()
+        .map(|call| match call.args.as_slice() {
+            [] => Some(String::new()),
+            [(key, Lit::Str(repo))] if key == "cwd" => Some(repo.clone()),
+            _ => None,
+        })
+        .collect()
 }
 
 /// What stops an `sh()` call outright. The eval shell bridge raises no hook
