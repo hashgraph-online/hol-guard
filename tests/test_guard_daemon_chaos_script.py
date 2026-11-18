@@ -156,6 +156,27 @@ def test_retirements_count_only_the_new_publishers_records() -> None:
     assert starts._retirements(events, [41, 42]) == [41]
 
 
+class _Starter:
+    def __init__(self, returncode: int | None) -> None:
+        self.returncode = returncode
+
+    def poll(self) -> int | None:
+        return self.returncode
+
+
+def test_a_starter_counts_as_meeting_the_held_launch_only_once_it_is_inside_ensure(tmp_path: Path) -> None:
+    from scripts import guard_daemon_chaos_starts as starts
+
+    entered = tmp_path / "1.entered"
+    importing = tmp_path / "3.entered"
+    entered.touch()
+    # Still running but never reached ensure: it may only be importing, so it proves nothing.
+    assert starts._waiting_in_ensure([(_Starter(None), importing)]) is False
+    # Reached ensure, then finished: it did not wait on the held launch.
+    assert starts._waiting_in_ensure([(_Starter(0), entered)]) is False
+    assert starts._waiting_in_ensure([(_Starter(None), importing), (_Starter(None), entered)]) is True
+
+
 def test_only_this_homes_resident_is_the_one_to_kill(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from scripts import guard_daemon_chaos_runtime as runtime_faults
 

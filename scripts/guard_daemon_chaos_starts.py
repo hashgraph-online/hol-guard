@@ -35,8 +35,9 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Protocol
 
 from codex_plugin_scanner.guard.native_daemon_manage import _lifecycle_events as lifecycle_snapshot
 from codex_plugin_scanner.guard.native_daemon_manage import (
@@ -63,6 +64,7 @@ MAX_ERROR_CHARS = 240
 _CHILD_START = """
 import sys
 from pathlib import Path
+from typing import Protocol
 from codex_plugin_scanner.guard.native_daemon_manage import ensure_guard_daemon
 ensure_guard_daemon(Path(sys.argv[1]), home_dir=Path(sys.argv[2]), background_maintenance=False)
 """
@@ -72,9 +74,12 @@ ensure_guard_daemon(Path(sys.argv[1]), home_dir=Path(sys.argv[2]), background_ma
 _CHILD_RUNTIME_START = """
 import sys
 from pathlib import Path
+from typing import Protocol
 from codex_plugin_scanner.guard import native_daemon_manage
 if sys.argv[3]:
     native_daemon_manage._runtime_fingerprint_cache = sys.argv[3]
+if sys.argv[5]:
+    Path(sys.argv[5]).touch()
 url = native_daemon_manage.ensure_guard_daemon(
     Path(sys.argv[1]), home_dir=Path(sys.argv[2]), start_timeout=float(sys.argv[4]), background_maintenance=False
 )
@@ -342,6 +347,16 @@ def _published(events: list[dict[str, object]]) -> list[int]:
     return pids
 
 
+class _Polled(Protocol):
+    def poll(self) -> int | None: ...
+
+
+def _waiting_in_ensure(starters: Sequence[tuple[_Polled, Path]]) -> bool:
+    """Whether a starter that got past start-up into ``ensure`` (its marker exists) is still running."""
+
+    return any(marker.exists() and start.poll() is None for start, marker in starters)
+
+
 def _retirements(events: list[dict[str, object]], pids: list[int]) -> list[int]:
     """Each ``retirement_requested`` record in ``events`` for one of ``pids``, by pid."""
 
@@ -352,7 +367,11 @@ def _retirements(events: list[dict[str, object]], pids: list[int]) -> list[int]:
     ]
 
 
-def _runtime_start(guard_home: Path, home: Path, fingerprint: str) -> subprocess.Popen[str]:
+def _runtime_start(
+    guard_home: Path, home: Path, fingerprint: str, entered: Path | None = None
+) -> subprocess.Popen[str]:
+    """Start ``ensure`` in a child; the child touches ``entered``, when given, just before it calls ``ensure``."""
+
     return subprocess.Popen(
         (
             sys.executable,
@@ -362,6 +381,7 @@ def _runtime_start(guard_home: Path, home: Path, fingerprint: str) -> subprocess
             str(home),
             fingerprint,
             str(START_TIMEOUT_SECONDS),
+            str(entered) if entered is not None else "",
         ),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
@@ -394,13 +414,26 @@ def _mixed_runtime_starts(
                 result.failures.append(
                     f"the older runtime's start wrote no launch receipt within {RECEIPT_WAIT_SECONDS}s"
                 )
+        markers = home / ".chaos-current-starters"
+        markers.mkdir(exist_ok=True)
+        current_starts: list[tuple[subprocess.Popen[str], Path]] = []
         for index in range(1, MIXED_STARTERS):
-            starts.append(_runtime_start(guard_home, home, older if index % 2 == 0 else ""))
+            if index % 2 == 1:
+                entered = markers / f"{index}.entered"
+                starts.append(_runtime_start(guard_home, home, "", entered))
+                current_starts.append((starts[-1], entered))
+            else:
+                starts.append(_runtime_start(guard_home, home, older))
             time.sleep(STARTER_SPACING_SECONDS)
-        # A current starter still waiting while the older daemon is frozen has entered the handoff with it.
-        overlapped = older_daemon is not None and any(
-            start.poll() is None for index, start in enumerate(starts) if index % 2 == 1
-        )
+        if older_daemon is not None:
+            # Keep the older daemon frozen until every current starter is past interpreter start-up and inside
+            # ensure, then a little longer. One still running after that is waiting on the held launch.
+            _wait_for(
+                lambda: all(marker.exists() or start.poll() is not None for start, marker in current_starts),
+                RECEIPT_WAIT_SECONDS,
+            )
+            time.sleep(chaos.SETTLE_SECONDS)
+            overlapped = _waiting_in_ensure(current_starts)
     finally:
         if older_daemon is not None:
             with contextlib.suppress(OSError):
