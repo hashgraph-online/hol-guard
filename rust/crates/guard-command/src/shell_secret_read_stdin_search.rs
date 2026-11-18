@@ -40,29 +40,45 @@ const RG_VALUE_OPTIONS: &[&str] = &[
     "-A",
     "-B",
     "-C",
+    "-d",
+    "-E",
     "-g",
     "-j",
     "-m",
+    "-M",
+    "-r",
     "-t",
     "-T",
-    "-E",
     "--after-context",
     "--before-context",
+    "--colors",
     "--context",
+    "--context-separator",
+    "--dfa-size-limit",
     "--encoding",
     "--engine",
+    "--field-context-separator",
+    "--field-match-separator",
     "--glob",
+    "--hostname-bin",
+    "--hyperlink-format",
     "--iglob",
     "--ignore-file",
+    "--max-columns",
     "--max-count",
     "--max-depth",
     "--max-filesize",
+    "--path-separator",
     "--pre",
     "--pre-glob",
+    "--regex-size-limit",
     "--replace",
     "--sort",
     "--sortr",
+    "--threads",
     "--type",
+    "--type-add",
+    "--type-clear",
     "--type-not",
 ];
 
@@ -188,7 +204,7 @@ fn rg_short(arg: &str) -> Option<GrepShort<'_>> {
         let remaining = &flags[index + flag.len_utf8()..];
         match flag {
             'e' | 'f' => return Some(GrepShort::ExplicitPattern),
-            'A' | 'B' | 'C' | 'g' | 'j' | 'm' | 't' | 'T' | 'E' => {
+            'A' | 'B' | 'C' | 'd' | 'E' | 'g' | 'j' | 'm' | 'M' | 'r' | 't' | 'T' => {
                 return Some(GrepShort::Value(remaining.is_empty()));
             }
             _ => {}
