@@ -390,7 +390,7 @@ class TestPiInstall:
         tool_call = source.split('  pi.on("tool_call", async (event, ctx) => {', 1)[1].split(
             '  pi.on("message_end"', 1
         )[0]
-        assert "guardWatchPostureActive()" not in tool_call
+        assert "if (!guardWatchPostureActive())" in tool_call
         assert "Running without containment (Watch)." not in tool_call
         assert "if (response.observe_mode === true) return undefined;" in tool_call
         tool_result = source.split('  pi.on("tool_result", async (event, ctx) => {', 1)[1]
