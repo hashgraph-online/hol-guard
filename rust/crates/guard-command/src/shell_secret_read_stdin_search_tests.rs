@@ -123,6 +123,10 @@ fn a_whole_command_floors_only_an_unfed_lone_dotpath_search() {
         "cd /tmp && fgrep /home/agent/.secrets/key.txt",
         "grep '/home/agent/.config/a<b'",
         "grep \"$HOME/.ssh/id_rsa\"",
+        // Empty quotes immediately before $HOME do not prevent expansion.
+        "grep ''$HOME/.ssh/id_rsa",
+        "rg ''$HOME/.ssh/id_rsa",
+        "grep $HOME/.ssh/id_rsa #'$HOME/.ssh/id_rsa",
         "rg '/home/agent/.ssh/id_rsa'",
     ] {
         assert!(
@@ -141,6 +145,9 @@ fn a_whole_command_floors_only_an_unfed_lone_dotpath_search() {
         "rg '~/.ssh/id_rsa'",
         "grep \"~/.ssh/id_rsa\"",
         "rg '$HOME/.aws/credentials'",
+        r"grep \$HOME/.aws/credentials",
+        r#"grep "\$HOME/.aws/credentials""#,
+        r"rg \~/.ssh/id_rsa",
     ] {
         assert!(
             !crate::shell_secret_read_stdin_search::lone_home_dotpath_search(

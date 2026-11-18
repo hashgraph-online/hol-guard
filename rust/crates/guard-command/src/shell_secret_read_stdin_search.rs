@@ -120,19 +120,39 @@ fn pattern_is_quoted(text: &str, pattern: &str) -> bool {
     if !tilde && !pattern.starts_with('$') {
         return false;
     }
-    // A quoted option may contain the same bytes as an unquoted search
-    // pattern. An unquoted occurrence always keeps the review floor.
-    let mut quoted_match = false;
-    for (index, _) in text.match_indices(pattern) {
-        let before = text[..index].chars().next_back();
-        let literal =
-            before == Some('\\') || before == Some('\'') || (tilde && before == Some('"'));
-        if !literal {
-            return false;
+    // A quote immediately before a match is not proof of quoting:
+    // grep ''$HOME/.ssh/id_rsa expands HOME after the empty quotes.
+    // Scan actual shell quote/escape state, ignoring comment text.
+    let visible = crate::shell_structure::mask_shell_comments(text);
+    let chars: Vec<char> = visible.chars().collect();
+    let target: Vec<char> = pattern.chars().collect();
+    let mut state = crate::shell_structure::ShellScanState::new();
+    let mut index = 0;
+    let mut literal_match = false;
+    while index < chars.len() {
+        let quote = state.snapshot().0;
+        // A backslash escapes the next home marker outside single quotes,
+        // including inside double quotes. The scan consumes both characters.
+        if chars[index] == '\\'
+            && quote != Some('\'')
+            && chars
+                .get(index + 1..)
+                .is_some_and(|rest| rest.starts_with(&target))
+        {
+            literal_match = true;
         }
-        quoted_match = true;
+        if chars[index..].starts_with(&target) {
+            // Tilde remains literal in either quote style. HOME expands
+            // inside double quotes, but not inside single quotes.
+            let literal = quote == Some('\'') || (tilde && quote == Some('"'));
+            if !literal {
+                return false;
+            }
+            literal_match = true;
+        }
+        index = state.advance(&chars, index).max(index + 1);
     }
-    quoted_match
+    literal_match
 }
 
 /// A quoted or escaped '<' is argument text, not input redirection.
