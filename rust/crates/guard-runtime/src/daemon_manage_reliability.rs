@@ -61,7 +61,13 @@ pub(super) fn report(caller: &Caller, args: &Map<String, Value>) -> Value {
         .unwrap_or_else(now_ns);
     let since_ns = now_ns.saturating_sub(days * NANOS_PER_DAY);
     let home = caller.guard_home.as_path();
-    let (events, journal_status) = journal(home, since_ns, now_ns);
+    let (history, journal_status) = journal(home);
+    let window = since_ns..=now_ns;
+    let events: Vec<Value> = history
+        .iter()
+        .filter(|event| window.contains(&recorded_at(event)))
+        .cloned()
+        .collect();
     let crash_reports = args
         .get("crash_reports_dir")
         .and_then(Value::as_str)
@@ -80,7 +86,7 @@ pub(super) fn report(caller: &Caller, args: &Map<String, Value>) -> Value {
         "schema": "hol-guard-daemon-reliability.v1",
         "window": {"days": days, "since_ns": since_ns, "until_ns": now_ns},
         "journal": journal_status,
-        "daemon_exits": exits(&events),
+        "daemon_exits": exits(&history, since_ns, now_ns),
         "ready_per_day": per_day(&events, |event| event_name(event) == "ready"),
         "repairs": repairs(&events),
         "recovery_requests": recovery_requests(&events),
@@ -98,9 +104,10 @@ fn now_ns() -> u64 {
         .unwrap_or(0)
 }
 
-/// Every valid journal record inside the window, oldest first, and how far
-/// back each ring reaches.
-fn journal(home: &Path, since_ns: u64, until_ns: u64) -> (Vec<Value>, Value) {
+/// Every valid retained journal record, oldest first, and how far back each
+/// ring reaches. Callers apply the report window themselves: exit counting
+/// needs the records just before it to know which runs had already ended.
+fn journal(home: &Path) -> (Vec<Value>, Value) {
     let directory = home.join(lifecycle::DIRECTORY);
     if lifecycle::is_symlink(&directory) {
         return (Vec::new(), json!({"status": "journal_path_unsafe"}));
@@ -151,9 +158,7 @@ fn journal(home: &Path, since_ns: u64, until_ns: u64) -> (Vec<Value>, Value) {
             .entry(ring)
             .and_modify(|current| *current = (*current).min(at))
             .or_insert(at);
-        if (since_ns..=until_ns).contains(&at) {
-            events.push(event);
-        }
+        events.push(event);
     }
     events.sort_by_key(recorded_at);
     if unreadable && status == "ok" {
@@ -199,7 +204,11 @@ fn recorded_at(event: &Value) -> u64 {
 /// pid are not counted until that pid publishes again. A `start_failed` is
 /// written by a run that never published, so it starts a run of its own: a
 /// reused pid whose earlier run already ended still counts its failed start.
-fn exits(events: &[Value]) -> Value {
+///
+/// Runs are matched over the whole retained history, and only a cause
+/// recorded inside the window is counted: a run retired just before the
+/// window whose own `exiting` lands just inside it ended before the window.
+fn exits(events: &[Value], since_ns: u64, until_ns: u64) -> Value {
     let mut by_cause: BTreeMap<String, u64> = BTreeMap::new();
     let mut ended: HashSet<u64> = HashSet::new();
     for event in events {
@@ -218,6 +227,9 @@ fn exits(events: &[Value]) -> Value {
         }
         // A record with no pid cannot be matched to a run, so it counts alone.
         if pid.is_some_and(|pid| !ended.insert(pid)) {
+            continue;
+        }
+        if !(since_ns..=until_ns).contains(&recorded_at(event)) {
             continue;
         }
         let cause = match name {
@@ -347,6 +359,7 @@ fn crash_reports(directory: &Path, since_ns: u64, until_ns: u64) -> Value {
         }
         matched += 1;
         let Ok(metadata) = fs::symlink_metadata(entry.path()) else {
+            status = "incomplete";
             continue;
         };
         let modified = metadata
@@ -475,3 +488,7 @@ pub(super) fn record_repair(caller: &Caller) -> Value {
 #[cfg(all(test, unix))]
 #[path = "daemon_manage_reliability_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "daemon_manage_reliability_window_tests.rs"]
+mod window_tests;

@@ -7,9 +7,9 @@ use serde_json::{json, Value};
 
 const DAY: u64 = 86_400 * 1_000_000_000;
 /// 2026-11-17T00:00:00Z.
-const NOW: u64 = 1_794_873_600 * 1_000_000_000;
+pub(super) const NOW: u64 = 1_794_873_600 * 1_000_000_000;
 
-fn private_home() -> tempfile::TempDir {
+pub(super) fn private_home() -> tempfile::TempDir {
     let home = tempfile::tempdir().unwrap();
     fs::set_permissions(home.path(), fs::Permissions::from_mode(0o700)).unwrap();
     home
@@ -22,7 +22,7 @@ fn write_private(path: &Path, text: &str) {
     fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
 }
 
-fn event(home: &Path, at: u64, pid: u32, name: &str, reason: Option<&str>) {
+pub(super) fn event(home: &Path, at: u64, pid: u32, name: &str, reason: Option<&str>) {
     let mut record = json!({"event": name, "pid": pid, "recorded_at_ns": at, "version": 1});
     if let Some(reason) = reason {
         record["reason"] = json!(reason);
@@ -52,7 +52,7 @@ fn ask(home: &Path, op: &str, args: Value) -> Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
-fn report(home: &Path, args: Value) -> Value {
+pub(super) fn report(home: &Path, args: Value) -> Value {
     let mut args = args;
     args["now_ns"] = json!(NOW);
     ask(home, "reliability", args)
