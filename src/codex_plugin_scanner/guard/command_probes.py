@@ -81,4 +81,4 @@ def _run_command_probe(
         return {"command": command, "ok": False, "return_code": None, "stdout": "", "stderr": "probe unavailable"}
 
 
-__all__ = ["command_probes_enabled", "without_command_probes", "_run_command_probe"]
+__all__ = ["_run_command_probe", "command_probes_enabled", "without_command_probes"]
