@@ -240,9 +240,7 @@ fn hook_launcher_code(import_roots: &[String]) -> String {
         "sys.stderr.flush() if _windows_job is not None else None;".to_owned(),
         "from pathlib import Path;".to_owned(),
         "import codex_plugin_scanner;".to_owned(),
-        "from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text;"
-            .to_owned(),
-        "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import run_bounded_cli_hook;"
+        "from codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge import main_from_argv;"
             .to_owned(),
         format!("argv=json.loads(os.environ['{HOOK_ARGV_ENV}']);"),
         "guard_index=argv.index('--guard-home');".to_owned(),
@@ -252,8 +250,7 @@ fn hook_launcher_code(import_roots: &[String]) -> String {
         format!(
             "'guard_home':guard_home,'cli_args':argv,'harness':'opencode','timeout_seconds':{HOOK_TIMEOUT_SECONDS}}};"
         ),
-        "raise SystemExit(run_bounded_cli_hook(config,input_text=stamp_hook_input_text(sys.stdin.read(1000001))))"
-            .to_owned(),
+        "raise SystemExit(main_from_argv([json.dumps(config)]))".to_owned(),
     ]
     .concat()
 }
