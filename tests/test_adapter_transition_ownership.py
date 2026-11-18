@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.codex_install_transaction import require_codex_install_owner
 from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
 from codex_plugin_scanner.guard.harness.registry import list_adapters
+from codex_plugin_scanner.guard.native_owned import require_codex_install_owner
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from tests.native_bounded_runtime import use_bounded_runtime
 
@@ -38,13 +38,13 @@ def test_direct_adapter_cannot_write_during_pending_transition(tmp_path: Path):
 
 @pytest.mark.parametrize("operation", ["create_key", "write_manifest", "remove_manifest", "remove_key"])
 def test_direct_codex_authority_writer_cannot_mutate_pending_inverse(tmp_path: Path, operation: str):
-    from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path, hook_secret_path
     from tests.codex_hook_integrity_fixtures import (
         load_or_create_hook_secret,
         remove_hook_manifest,
         remove_hook_secret_if_unused,
         write_hook_manifest,
     )
+    from tests.codex_hook_paths_support import hook_manifest_path, hook_secret_path
 
     ctx = context(tmp_path)
     config = tmp_path / "codex-hooks.json"
@@ -371,7 +371,7 @@ def test_adapter_owner_covers_body_and_preserves_surface_arguments(tmp_path: Pat
                     """
 import sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 home = Path(sys.argv[1])
 try:
     with codex_install_transaction(home, home / "managed", actor="competitor",

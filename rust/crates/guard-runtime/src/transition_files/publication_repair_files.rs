@@ -20,7 +20,9 @@ use super::publication_generation::{identity_dependency, package_roots};
 use super::{Fault, Step};
 use crate::codex_hook_key;
 use crate::codex_hook_launch_trust::{self, Refusal, LAUNCH_INVALID};
+use crate::codex_hook_manifest_auth::authenticate_text;
 use crate::codex_hook_manifest_build::bridge_argv_sha256;
+use crate::codex_hook_manifest_refusal::refusal as manifest_refusal;
 
 type Object = Map<String, Value>;
 
@@ -59,10 +61,23 @@ impl Purpose {
     }
 }
 
-fn manifest_arg<'a>(call: &Call<'a>) -> Step<&'a Object> {
+/// The authenticated manifest a request names: `manifest_text`, captured
+/// bytes this runtime authenticates under its own key, or `manifest`, one a
+/// caller already authenticated.
+fn manifest_arg(call: &Call<'_>) -> Step<Object> {
+    if let Some(text) = call.args.get("manifest_text") {
+        let text = text.as_str().ok_or(Fault::Transition("files_invalid"))?;
+        let home = call.home()?;
+        let home = home.to_str().ok_or(Fault::Transition("files_invalid"))?;
+        return authenticate_text(home, text, None, None).map_err(|reason| {
+            let (code, message) = manifest_refusal(reason);
+            Fault::Integrity(code, message)
+        });
+    }
     call.args
         .get("manifest")
         .and_then(Value::as_object)
+        .cloned()
         .ok_or(Fault::Transition("files_invalid"))
 }
 
@@ -81,7 +96,7 @@ pub(super) fn inverse(call: &mut Call<'_>) -> Step<Value> {
     let roots = roots(call)?;
     let key = identity_dependency(call, &codex_hook_key::key_path(&home))?;
     let mut files = vec![as_object(key)?];
-    pin_generations(call, &mut files, manifest, &roots, None, INVERSE)?;
+    pin_generations(call, &mut files, &manifest, &roots, None, INVERSE)?;
     Ok(json!({ "files": files }))
 }
 
@@ -142,7 +157,7 @@ pub(super) fn files(call: &mut Call<'_>) -> Step<Value> {
     pin_generations(
         call,
         &mut files,
-        manifest,
+        &manifest,
         &roots,
         Some(&manifest_slot),
         REPAIR,
@@ -159,7 +174,7 @@ fn as_object(value: Value) -> Step<Object> {
 
 /// One dependency per path; a second pin of one artifact merges, and a pin
 /// of the manifest the caller writes is a conflict.
-fn add(files: &mut Vec<Object>, dependency: Object, written: Option<&Path>) -> Step<()> {
+pub(super) fn add(files: &mut Vec<Object>, dependency: Object, written: Option<&Path>) -> Step<()> {
     let path = dependency.get("path").cloned();
     let slot = written.map(|written| written.to_string_lossy().into_owned());
     if slot.is_some() && path.as_ref().and_then(Value::as_str) == slot.as_deref() {
@@ -266,7 +281,7 @@ fn artifacts(generation: &Object, roots: &[PathBuf], purpose: Purpose) -> Step<V
 
 /// `TransitionFile.artifact_dependency`: the exact artifact pinned by its
 /// digest, without journaling its bytes.
-fn artifact(identity: &Object, invocation: Option<&Object>) -> Step<Object> {
+pub(super) fn artifact(identity: &Object, invocation: Option<&Object>) -> Step<Object> {
     let invalid = Fault::Transition("artifact_dependency_invalid");
     let path = identity.get("path").and_then(Value::as_str);
     let mode = identity

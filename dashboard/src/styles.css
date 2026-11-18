@@ -578,6 +578,24 @@ a:focus-visible {
   block-size: 55%;
 }
 
+/* An MCP app Guard has no logo for shows its first letter on its tint. */
+.guard-extension-mark[data-kind="letter"] {
+  font-weight: 600;
+  line-height: 1;
+}
+
+.guard-extension-mark[data-kind="letter"][data-size="sm"] {
+  font-size: 0.6875rem;
+}
+
+.guard-extension-mark[data-kind="letter"][data-size="md"] {
+  font-size: 1.0625rem;
+}
+
+.guard-extension-mark[data-kind="letter"][data-size="lg"] {
+  font-size: 1.375rem;
+}
+
 .guard-extension-mark img {
   inline-size: 62%;
   block-size: 62%;

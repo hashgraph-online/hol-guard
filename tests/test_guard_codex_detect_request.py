@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import os
 from pathlib import Path
 from typing import cast
 
@@ -53,14 +54,14 @@ def test_detect_sends_scoped_sources_and_inline_captures(tmp_path: Path, monkeyp
     assert request["harness"] == "codex"
     assert request["authenticated_bindings"] == []
     assert "contents" not in request
-    sources = request["sources"]
-    assert [(entry["config_scope"], entry["hooks_scope"], entry["authenticated"]) for entry in sources] == [
-        ("global", "global", True),
-        ("project", "project", False),
+    pairs = cast("list[dict[str, str]]", request["pairs"])
+    assert [(entry["scope"], entry["config"], entry["hooks"]) for entry in pairs] == [
+        ("global", str(home / ".codex" / "config.toml"), str(home / ".codex" / "hooks.json")),
+        ("project", str(work / ".codex" / "config.toml"), str(work / ".codex" / "hooks.json")),
     ]
-    assert sources[0]["config_path"] == str(home / ".codex" / "config.toml")
-    assert sources[1]["hooks_path"] == str(work / ".codex" / "hooks.json")
-    assert all("config_legacy" not in entry and "hooks_legacy" not in entry for entry in sources)
+    assert request["authenticated_config"] == str(home / ".codex" / "config.toml")
+    assert request["cwd"] == os.getcwd()
+    assert not {"sources", "restore"} & set(request)
     legacy = cast("dict[str, object]", request["legacy"])
     assert set(legacy) == {"expected", "argv", "legacy_argv", "statuses", "windows", "long_paths"}
     assert legacy["long_paths"] == {}
@@ -112,16 +113,17 @@ def test_detect_without_a_capture_leaves_the_reading_to_the_runtime(tmp_path: Pa
     assert "contents" not in sent[0]
 
 
-def test_detect_asks_for_results_spelled_the_way_the_context_did(tmp_path: Path, monkeypatch) -> None:
+def test_detect_sends_the_context_spelling_and_the_process_directory(tmp_path: Path, monkeypatch) -> None:
     sent: list[dict[str, object]] = []
     monkeypatch.chdir(tmp_path)
-    anchored = str(tmp_path / "rel" / ".codex" / "config.toml")
     _stub_detection(monkeypatch, sent)
     context = HarnessContext(home_dir=Path("rel"), workspace_dir=Path("work"), guard_home=tmp_path / "guard")
 
     codex_lifecycle.CodexHarnessAdapter().detect(context)
 
     relative = str(Path("rel") / ".codex" / "config.toml")
-    sources = cast("list[dict[str, str]]", sent[0]["sources"])
-    assert sources[0]["config_path"] == anchored
-    assert [anchored, relative] in cast("list[list[str]]", sent[0]["restore"])
+    pairs = cast("list[dict[str, str]]", sent[0]["pairs"])
+    assert pairs[0]["config"] == relative
+    assert sent[0]["authenticated_config"] == relative
+    # The runtime anchors the sources to this directory and restores the spelling.
+    assert sent[0]["cwd"] == os.getcwd()

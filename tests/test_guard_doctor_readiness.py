@@ -293,6 +293,9 @@ def test_passive_probe_scope_resets_after_nested_scope_and_exception(monkeypatch
 
     def run(kind, request, **_kwargs):
         assert kind == "command_probe"
+        if request.get("probes") is False:
+            # The runtime's record for a probe that did not run.
+            return {"command": request["command"], "ok": None, "skipped": True}
         calls.append(request["command"])
         return {"command": request["command"], "ok": True, "return_code": 0, "stdout": "probe", "stderr": ""}
 

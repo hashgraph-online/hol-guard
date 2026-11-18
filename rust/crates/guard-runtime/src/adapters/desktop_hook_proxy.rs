@@ -208,6 +208,19 @@ fn verify(map: &Map<String, Value>, macos: bool, runner: &mut impl Runner) -> Ki
     Ok(json!({ "config": config, "core": core }))
 }
 
+/// `verified_desktop_proxy_launch`: the config and Core path of a stored
+/// launch [`verify`] trusts, or `None`.
+pub(crate) fn verified_launch(
+    args: &[String],
+    macos: bool,
+    runner: &mut impl Runner,
+) -> Option<(String, String)> {
+    let request = json!({ "op": "verify", "args": args });
+    let answer = verify(request.as_object()?, macos, runner).ok()?;
+    let text = |key: &str| answer.get(key).and_then(Value::as_str).map(str::to_owned);
+    Some((text("config")?, text("core")?))
+}
+
 /// The launch when `proxy` and `core` are trusted executables beside each
 /// other in one bundle and all three verify with one team.
 fn verified(proxy: &Path, core: &Path, runner: &mut impl Runner) -> Option<Launch> {

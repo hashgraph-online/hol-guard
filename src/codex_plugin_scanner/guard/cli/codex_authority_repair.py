@@ -25,7 +25,6 @@ from ..codex_hook_repair import (
 )
 from ..codex_hook_repair_native import inspect_codex_repair_native_runtime
 from ..codex_hook_repair_request import load_codex_hook_repair_request, write_codex_hook_repair_request
-from ..codex_install_transaction import codex_install_transaction
 from ..codex_publication_inverse import publish_codex_publication_inverse, verify_and_retire_codex_publication_inverse
 from ..codex_publication_inverse_authorization import authorize_codex_publication_inverse
 from ..codex_publication_inverse_plan import (
@@ -36,6 +35,7 @@ from ..codex_publication_inverse_plan import (
 )
 from ..harness.base import HarnessContext
 from ..harness.registry import get_adapter
+from ..native_owned import codex_install_transaction
 from ..runtime_transition import TransitionError, assert_transition_mutation_allowed, inverse_recovery_budget
 from ..sqlite_tuning import sqlite_operation_deadline
 from ..store import GuardStore

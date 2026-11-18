@@ -20,9 +20,9 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from .codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline, validate_regular_file
-from .codex_install_transaction import require_codex_install_owner
 from .harness.base import HarnessContext
 from .harness.registry import get_adapter
+from .native_owned import require_codex_install_owner
 from .runtime_transition import (
     ARTIFACT_READ_FLAGS,
     RuntimeTransition,

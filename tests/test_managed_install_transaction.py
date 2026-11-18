@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.harness.base import HarnessContext
 PROBE = r"""
 import sys, time
 from pathlib import Path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 home = Path(sys.argv[1])
 try:
     with codex_install_transaction(home, home / "managed", actor="competing-installer",

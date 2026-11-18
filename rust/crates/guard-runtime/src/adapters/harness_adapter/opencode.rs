@@ -47,7 +47,8 @@ pub(crate) fn dispatch(
         "finish_uninstall" => finish_uninstall(ctx, fields),
         "runtime_probe" => Ok(runtime_probe(spec, ctx)),
         "plugin_refresh" => super::opencode_checks::plugin_refresh(ctx, fields),
-        "protection" => super::opencode_checks::protection(ctx, fields),
+        "protection" => super::opencode_checks::protection(spec, ctx, fields),
+        "update_refresh" => super::opencode_update::update_refresh(spec, ctx, fields),
         "refresh_apply" => {
             let _config = super::install_apply::opencode_lock(spec, ctx)?;
             super::opencode_checks::refresh_apply(ctx)
@@ -266,7 +267,7 @@ pub(super) fn command_available(spec: &Spec, ctx: &Ctx) -> bool {
 
 /// `detect`: every readable, non-empty config as written. Python adds the
 /// MCP skill firewall facts when the answer says `firewall`.
-fn detect(spec: &Spec, ctx: &Ctx) -> Step<Value> {
+pub(super) fn detect(spec: &Spec, ctx: &Ctx) -> Step<Value> {
     let configs: Vec<(PathBuf, &str, String)> = config_paths(ctx)
         .into_iter()
         .filter_map(|path| {

@@ -1,15 +1,27 @@
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
-use super::super::Failure;
-use super::check_sources;
+use super::super::{Failure, Step};
+use super::{check, check_sources};
 
-fn run(sources: Value) -> Result<Value, String> {
-    let mut fields = Map::new();
-    fields.insert("sources".into(), sources);
-    check_sources(&fields).map_err(|failure| match failure {
+fn outcome(result: Step<Value>) -> Result<Value, String> {
+    result.map_err(|failure| match failure {
         Failure::Runtime(message) => message,
         _ => "invalid".to_owned(),
     })
+}
+
+fn run(sources: Value) -> Result<Value, String> {
+    let Value::Array(sources) = sources else {
+        panic!("sources are an array");
+    };
+    outcome(check(&sources))
+}
+
+fn run_pairs(fields: Value) -> Result<Value, String> {
+    let Value::Object(fields) = fields else {
+        panic!("fields are an object");
+    };
+    outcome(check_sources(&fields))
 }
 
 fn encoded(data: &[u8]) -> String {
@@ -91,4 +103,59 @@ fn a_linked_source_refuses_as_non_file() {
 fn an_unknown_kind_is_invalid() {
     let sources = json!([{"path": "/x", "label": "l", "kind": "yaml", "data": null}]);
     assert_eq!(run(sources), Err("invalid".to_owned()));
+}
+
+#[test]
+fn pairs_read_each_file_from_disk_with_its_label() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config.toml");
+    std::fs::write(&config, "model = \"x\"\n").unwrap();
+    let hooks = dir.path().join("hooks.json");
+    std::fs::write(&hooks, "{\"a\": 1, \"a\": 2}").unwrap();
+    let message = run_pairs(json!({"pairs": [[config, hooks]]})).unwrap_err();
+    assert!(
+        message.contains("duplicate key 'a' in Codex hooks file at"),
+        "{message}"
+    );
+    std::fs::write(&hooks, "{}").unwrap();
+    assert_eq!(
+        run_pairs(json!({"pairs": [[config, hooks]]})),
+        Ok(json!({"checked": 2}))
+    );
+}
+
+#[test]
+fn pairs_check_captured_bytes_not_the_disk() {
+    let pairs = json!([["/h/config.toml", "/h/hooks.json"]]);
+    let captured = json!({
+        "/h/config.toml": encoded(b"model = \"x\"\n"),
+        "/h/hooks.json": null,
+    });
+    assert_eq!(
+        run_pairs(json!({"pairs": pairs, "contents": captured})),
+        Ok(json!({"checked": 2}))
+    );
+    let malformed = json!({"/h/config.toml": encoded(b"a = "), "/h/hooks.json": null});
+    let message = run_pairs(json!({"pairs": pairs, "contents": malformed})).unwrap_err();
+    assert!(
+        message.starts_with("codex_hook_inventory_source_malformed: "),
+        "{message}"
+    );
+    assert!(
+        message.contains("Codex config file at /h/config.toml"),
+        "{message}"
+    );
+}
+
+#[test]
+fn malformed_pair_requests_are_invalid() {
+    for fields in [
+        json!({}),
+        json!({"pairs": [["/h/config.toml"]]}),
+        json!({"pairs": [["/h/config.toml", 3]]}),
+        json!({"pairs": [["/h/config.toml", "/h/hooks.json"]], "contents": []}),
+        json!({"pairs": [["/h/config.toml", "/h/hooks.json"]], "contents": {"/h/config.toml": null}}),
+    ] {
+        assert_eq!(run_pairs(fields), Err("invalid".to_owned()));
+    }
 }

@@ -132,13 +132,13 @@ def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, o
     from codex_plugin_scanner.guard import codex_harness_client as codex
     from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
     from codex_plugin_scanner.guard.codex_hook_file_integrity import _python_package_roots
-    from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes
-    from codex_plugin_scanner.guard.codex_hook_manifest import _spec_payload
     from codex_plugin_scanner.guard.codex_hook_recovery import _owned
     from codex_plugin_scanner.guard.harness.base import PreparedHarnessInstall
     from codex_plugin_scanner.guard.native_transition_files import publication as publication_op
     from codex_plugin_scanner.guard.runtime_transition import assert_transition_mutation_allowed
     from tests.codex_hook_integrity_fixtures import remove_hook_secret_if_unused
+    from tests.codex_hook_paths_support import canonical_manifest_bytes
+    from tests.codex_hook_publication_helpers import _spec_payload
 
     assert_transition_mutation_allowed(context.guard_home)
     spec = codex._hook_manifest_spec(context)

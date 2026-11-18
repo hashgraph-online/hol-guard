@@ -16,28 +16,17 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 
-from .bounded_cli_hook_failure import failure_payload
 from .bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_COMMAND,
     NATIVE_BOUNDED_HOOK_FEATURE,
     NATIVE_MUSE_HOOK_FEATURE,
 )
+from .hook_failure_bridge import RUNTIME_MISSING
 
-RUNTIME_MISSING = "HOL Guard's native runtime is missing, so Guard blocked this hook. Run `hol-guard repair`."
 _TRAILING_MANAGED_MARKERS = frozenset({"HOL_GUARD_MANAGED_ZCODE"})
-_BOUNDED_HOOK_SCRIPT_DIR = ("managed", "bounded-hooks")
 # The native bridge answers within the hook deadline; this only bounds a
 # runtime that stopped answering.
 _NATIVE_EXIT_GRACE_SECONDS = 2.0
-
-
-def bounded_hook_script_path(guard_home: Path, harness: str) -> Path | None:
-    """The managed hook client path older installs wrote, so it can be recognised and removed."""
-
-    stem = harness.strip().lower().replace("_", "-")
-    if not stem or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789-" for character in stem):
-        return None
-    return guard_home.joinpath(*_BOUNDED_HOOK_SCRIPT_DIR, f"{stem}.py")
 
 
 def _config_argv(argv: Sequence[str]) -> dict[str, object] | None:
@@ -52,12 +41,11 @@ def _config_argv(argv: Sequence[str]) -> dict[str, object] | None:
     return config if isinstance(config, dict) else None
 
 
-def _refuse(harness: str) -> int:
-    payload, returncode = failure_payload(
-        harness=harness, event_name="PreToolUse", reason=RUNTIME_MISSING, recording_only=False
-    )
-    _ = sys.stdout.write(json.dumps(payload, ensure_ascii=True, separators=(",", ":")) + "\n")
-    return returncode
+def _refuse(_harness: str) -> int:
+    """Block a hook the native runtime cannot answer; stderr names the repair."""
+
+    print(RUNTIME_MISSING, file=sys.stderr)
+    return 2
 
 
 def main_from_argv(argv: Sequence[str]) -> int:
@@ -110,6 +98,5 @@ __all__ = [
     "NATIVE_BOUNDED_HOOK_COMMAND",
     "NATIVE_BOUNDED_HOOK_FEATURE",
     "RUNTIME_MISSING",
-    "bounded_hook_script_path",
     "main_from_argv",
 ]

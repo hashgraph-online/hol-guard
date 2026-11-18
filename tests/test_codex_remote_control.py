@@ -40,7 +40,7 @@ def test_guarded_codex_launch_candidates_are_side_effect_free(tmp_path, monkeypa
         passthrough_args=["Fix it."],
     )
 
-    socket_path = codex_remote_control.default_codex_control_socket(tmp_path / "home")
+    socket_path = _socket(tmp_path / "home")
     assert candidates == (
         ["/usr/bin/codex", "--remote", f"unix://{socket_path}", "Fix it."],
         ["/usr/bin/codex", "Fix it."],
@@ -267,7 +267,15 @@ def test_a_trusted_live_socket_is_ready() -> None:
 
 
 def test_launch_preparation_selects_only_among_previewed_argv(tmp_path: Path, monkeypatch) -> None:
-    answers = iter([{}, {"tails": [["--remote", "unix:///x.sock", "fix"], ["fix"]]}])
+    remote = {
+        "prepare": True,
+        "prefix": ["codex"],
+        "socket": "/x.sock",
+        "plain": ["codex", "fix"],
+        "remote": ["codex", "--remote", "unix:///x.sock", "fix"],
+        "candidates": [["codex", "--remote", "unix:///x.sock", "fix"], ["codex", "fix"]],
+    }
+    answers = iter([{}, remote])
     monkeypatch.setattr(codex_remote_control, "_ask", lambda *_args, **_kwargs: next(answers))
     monkeypatch.setattr(codex_remote_control, "_prepare_remote", lambda *_args, **_kwargs: True)
     home = tmp_path / "home"
@@ -281,3 +289,11 @@ def test_launch_preparation_selects_only_among_previewed_argv(tmp_path: Path, mo
 
     assert previewed == (["codex", "fix"],)
     assert prepared == ["codex", "fix"]
+
+
+def test_a_refused_launch_plan_raises_the_resident_refusal(tmp_path: Path, monkeypatch) -> None:
+    refusal = "Codex launch preparation requires a canonical executable prefix."
+    monkeypatch.setattr(codex_remote_control, "_ask", lambda *_args, **_kwargs: {"refusal": refusal})
+
+    with pytest.raises(ValueError, match="canonical executable prefix"):
+        codex_remote_control.guarded_codex_launch_command(executable="", home_dir=tmp_path, passthrough_args=[])

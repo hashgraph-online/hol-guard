@@ -1,6 +1,7 @@
 """Composed enrolled Codex plans restore every prepared file generation."""
 
 import json
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -9,8 +10,8 @@ import pytest
 from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
 from codex_plugin_scanner.guard.codex_hook_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests.codex_toml_support import parse_toml_object
 
 from .test_codex_publication_preparation import _context, _tree
 from .test_frozen_codex_runtime import frozen_codex_contract  # noqa: F401 -- shared pytest fixture
@@ -124,7 +125,7 @@ def test_frozen_preparation_pins_shared_executable_once_with_invocation(tmp_path
     executable = tmp_path / "frozen-core"
     executable.write_bytes(b"isolated frozen executable identity")
     executable.chmod(0o700)
-    monkeypatch.setattr(adapter.sys, "executable", str(executable))
+    monkeypatch.setattr(sys, "executable", str(executable))
     context = _context(tmp_path, monkeypatch)
     harness = adapter_lifecycle.CodexHarnessAdapter()
     harness.install(context)

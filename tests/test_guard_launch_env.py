@@ -18,7 +18,6 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands_support_hook_payload as guard_hook_payload_module
-from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.consumer.service import diff_artifact
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
@@ -26,6 +25,7 @@ from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
 from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import codex_hook_publication_helpers as publication_helpers
+from tests.codex_toml_support import read_toml_payload
 from tests.conftest import guard_commands_module
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode", "native_prompt_runtime")

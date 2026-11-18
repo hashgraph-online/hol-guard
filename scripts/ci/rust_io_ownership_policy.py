@@ -289,7 +289,6 @@ _PRESENTATION_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/contained_sink_command.py",
         "src/codex_plugin_scanner/guard/approval_scope_support.py",
         "src/codex_plugin_scanner/guard/approvals.py",
-        "src/codex_plugin_scanner/guard/codex_app_server.py",
         "src/codex_plugin_scanner/guard/continuation_runtime.py",
         "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
         "src/codex_plugin_scanner/guard/edge_events.py",

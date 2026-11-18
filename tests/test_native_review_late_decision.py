@@ -41,6 +41,12 @@ def _worker(tmp_path: Any, monkeypatch: Any, action: str) -> HookWorker:
         lambda _host, _payload, *, reason_code, **_k: {"unavailable": reason_code},
     )
     monkeypatch.setattr(worker, "_apply_structured_unavailable_overlay", lambda response, **_k: response)
+    # The posture question is its own resident call; with no runtime to spawn
+    # inside this test's 0.2 s budget it would spend the deadline under test.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.hook_review.hook_worker_native_review.native_recording_only_for_binding",
+        lambda *_a, **_k: False,
+    )
     return worker
 
 

@@ -33,7 +33,7 @@ def _manifest(answer: dict[str, Any]) -> dict[str, object]:
 def _install_hooks(context: HarnessContext, op: str) -> dict[str, object]:
     """Publish the plan, then require the hooks Cursor now reads to be Guard's."""
     from .. import native_transition_files
-    from ..codex_install_transaction import require_codex_install_owner
+    from ..native_owned import require_codex_install_owner
     from ..runtime_transition import assert_transition_mutation_allowed
 
     require_codex_install_owner(context.guard_home)
@@ -53,7 +53,7 @@ def _install_hooks(context: HarnessContext, op: str) -> dict[str, object]:
 
 def install_cursor_hooks(context: HarnessContext, *, actor: str = "cursor-hooks") -> dict[str, object]:
     """Install only Cursor's native hooks and the script they run."""
-    from ..codex_install_transaction import codex_install_transaction
+    from ..native_owned import codex_install_transaction
 
     with codex_install_transaction(context.guard_home, context.guard_home / "managed", actor=actor):
         return _install_hooks(context, "hooks_install")
@@ -85,14 +85,6 @@ def cursor_runtime_hooks_verified(context: HarnessContext) -> bool | None:
     return verified if isinstance(verified, bool) else None
 
 
-def cursor_cli_detected(context: HarnessContext) -> bool:
-    return _cursor_ask("cli_detected", context)["value"] is True
-
-
-def cursor_cli_shim_installed(context: HarnessContext) -> bool:
-    return _cursor_ask("cli_shim_installed", context)["value"] is True
-
-
 def run_frozen_cursor_hook(argv: Sequence[str]) -> int:
     """Execute the installed Cursor hook script from a frozen Guard binary."""
     import runpy
@@ -120,8 +112,6 @@ def run_frozen_cursor_hook(argv: Sequence[str]) -> int:
 
 
 __all__ = [
-    "cursor_cli_detected",
-    "cursor_cli_shim_installed",
     "cursor_native_hook_state",
     "cursor_runtime_hooks_verified",
     "install_cursor_hooks",

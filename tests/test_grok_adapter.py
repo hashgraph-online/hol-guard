@@ -6,11 +6,9 @@ import argparse
 import io
 import json
 import re
-import sys
 from contextlib import redirect_stderr
 from pathlib import Path
 
-from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter
 from codex_plugin_scanner.guard.harness.registry import get_adapter
@@ -92,9 +90,9 @@ class TestGrokInstallUninstall:
         assert "Read(**/.grok/auth/**)" in managed_text
         assert "Read(~/" not in managed_text
         assert "[[hooks.PreToolUse]]" in managed_text and "[[hooks.SessionStart]]" in managed_text
-        from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_command
+        from codex_plugin_scanner.guard.cli.native_install_checks import _grok_hook_command_is_guard
 
-        assert is_grok_hook_command(pretool_entries[0]["hooks"][0]["command"], ctx)
+        assert _grok_hook_command_is_guard(pretool_entries[0]["hooks"][0]["command"], ctx)
         assert "[compat.claude]" in managed_text
         assert "[compat.cursor]" in managed_text
         assert managed_text.count("hooks = false") >= 2
@@ -136,26 +134,6 @@ class TestGrokHookPayload:
 
 
 class TestGrokHookResponses:
-    def test_an_unknown_action_exits_blocking(self, monkeypatch) -> None:
-        monkeypatch.delenv("HOL_GUARD_HOME", raising=False)
-        monkeypatch.setattr(sys, "argv", ["hol-guard"])
-        for action in ("quarantine-required", "", "ask", None, 7):
-            assert native_hook_verdict_exit_code("grok", action) == 2, action
-        assert native_hook_verdict_exit_code("grok", "allow") == 0
-        assert native_hook_verdict_exit_code("grok", "warn") == 0
-
-    def test_an_unreadable_config_keeps_the_block(self, monkeypatch, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard import config
-        from codex_plugin_scanner.guard.config_file_io import ConfigFileTrustError
-
-        def untrusted(_guard_home: Path) -> None:
-            raise ConfigFileTrustError("config_untrusted")
-
-        monkeypatch.setenv("HOL_GUARD_HOME", str(tmp_path / ".hol-guard"))
-        monkeypatch.setattr(sys, "argv", ["hol-guard"])
-        monkeypatch.setattr(config, "load_guard_config", untrusted)
-        assert native_hook_verdict_exit_code("grok", "block") == 2
-
     def test_prompt_hook_preserves_native_policy_block(self, tmp_path: Path, native_hook_force: Path) -> None:
         import json as _json
 

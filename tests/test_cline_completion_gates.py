@@ -15,9 +15,9 @@ from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard.cli.commands_support_interaction import _apps_disconnect_confirm_command
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_verification
 from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.contract_registry import harness_names
 from codex_plugin_scanner.guard.harness.contracts import contract_for
 from codex_plugin_scanner.guard.harness.registry import get_adapter
-from codex_plugin_scanner.guard.product_model import SUPPORTED_HARNESS_VALUES
 from tests.cline_test_support import plugin_source as _plugin_source
 from tests.cline_test_support import plugin_state as cline_plugin_state
 from tests.cline_worker_config import worker_config as _worker_config
@@ -101,7 +101,7 @@ def test_cline_is_in_static_supported_contracts() -> None:
     assert contract_for("cline-cli") is contract
     assert contract_for("cline-vscode") is contract
     assert contract.surface_capabilities == ("auto", "hooks", "plugin", "cli", "all")
-    assert "cline" in SUPPORTED_HARNESS_VALUES
+    assert "cline" in harness_names()
 
 
 def test_apps_parser_accepts_every_cline_transport_surface() -> None:

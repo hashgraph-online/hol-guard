@@ -59,6 +59,8 @@ fn ask(home: &Home, op: &str, fields: &Map<String, Value>) -> Value {
         // The calling process is stamped into the context, not the request.
         if key == "caller" {
             request["context"]["caller"] = value.clone();
+        } else if key == "env" {
+            request["context"]["env"] = value.clone();
         } else {
             request[key] = value.clone();
         }
@@ -361,6 +363,20 @@ fn install_target_names_the_user_file_and_never_a_project_file() {
             "--guard-home",
             home.guard()
         ])
+    );
+    // The same command as the shell that will run it, so the caller shows it as is.
+    let words: Vec<String> = answer["rollback"]["command"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|word| {
+            super::super::claude_install_target::shell_word(word.as_str().unwrap(), cfg!(windows))
+        })
+        .collect();
+    assert_eq!(answer["rollback"]["command_text"], json!(words.join(" ")));
+    assert_eq!(
+        answer["rollback"]["shell"],
+        json!(if cfg!(windows) { "powershell" } else { "sh" })
     );
     assert_eq!(answer["hook_overrides"], json!([]));
     assert!(!workspace.exists());

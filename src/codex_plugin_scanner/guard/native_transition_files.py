@@ -2,8 +2,8 @@
 
 The resident compares, writes and publishes transition files; see
 ``rust/crates/guard-runtime/src/transition_files``. Each identity record the
-resident hands back goes to the resident's journal append, in order, for the
-install transaction this process owns. Whether a POSIX group is private to its
+resident hands back goes to the owner's journal (``native_owned``), in order,
+for the install transaction this process owns. Whether a POSIX group is private to its
 owner is answered from this process's account database when the resident asks.
 """
 
@@ -21,8 +21,6 @@ _TIMEOUT_SECONDS = 60.0
 # The budget a harness install or uninstall that publishes files gets.
 PUBLISH_TIMEOUT_SECONDS = _TIMEOUT_SECONDS
 _INVALID = "native_transition_invalid"
-# Three of the resident reaper's 50 ms passes over the leases.
-_RELEASE_GRACE_SECONDS = 0.15
 
 
 def _remaining_ms(deadline: float | None) -> int | None:
@@ -57,6 +55,9 @@ def _exception(fault: object) -> BaseException:
         return TransitionError(_INVALID)
     transition, integrity = fault.get("transition"), fault.get("integrity")
     message, os_message = fault.get("message"), fault.get("os")
+    runtime = fault.get("runtime")
+    if isinstance(runtime, str):
+        return RuntimeError(runtime)
     if isinstance(transition, str):
         detail = fault.get("detail")
         return TransitionError(transition, detail) if isinstance(detail, str) else TransitionError(transition)
@@ -75,7 +76,7 @@ def _replay(
     files: Sequence[TransitionFile] | None,
     on_write: Callable[[TransitionFile], None] | None,
 ) -> None:
-    from .codex_install_transaction import record_codex_mutation_identities
+    from .native_owned import record_codex_mutation_identities
     from .runtime_transition import TransitionError
 
     if not isinstance(events, list):
@@ -102,11 +103,13 @@ def _ask(
     *,
     files: Sequence[TransitionFile] | None = None,
     on_write: Callable[[TransitionFile], None] | None = None,
+    timeout_seconds: float = _TIMEOUT_SECONDS,
+    context: bool = True,
 ) -> Mapping[str, object]:
     from .native_runner_authority import native_runner_authority
 
-    request = {**request, **transition_context()}
-    answer = native_runner_authority("transition_files", request, timeout_seconds=_TIMEOUT_SECONDS)
+    request = {**request, **transition_context()} if context else request
+    answer = native_runner_authority("transition_files", request, timeout_seconds=timeout_seconds)
     return _settle(answer, files, on_write)
 
 
@@ -142,13 +145,104 @@ def _settle(
     return answer
 
 
-def publication(op: str, home: Path, **fields: object) -> object:
+def publication(op: str, home: Path, *, timeout_seconds: float = _TIMEOUT_SECONDS, **fields: object) -> object:
     """One ``publication_*`` op on the home's Codex publication record."""
 
     import os
 
     request: dict[str, object] = {"op": f"publication_{op}", "home": os.path.abspath(home), **fields}
-    return _ask(request).get("value")
+    return _ask(request, timeout_seconds=timeout_seconds).get("value")
+
+
+def require_deadline(deadline: float) -> None:
+    """``deadline_exceeded`` unless ``deadline`` is a finite number still ahead of now."""
+
+    _ask({"op": "publication_deadline", "deadline": deadline, "now": time.monotonic()}, context=False)
+
+
+def request_policy(stage: str, **fields: object) -> Mapping[str, object]:
+    """The review artifact's lifetime policy: ``stamp``, ``plan`` or ``window``.
+
+    The runtime decides; ``plan`` and ``window`` raise ``TransitionError`` on refusal.
+    """
+
+    value = _ask({"op": "publication_request_policy", "stage": stage, **fields}, context=False).get("value")
+    return value if isinstance(value, Mapping) else {}
+
+
+def runtime_compare(stage: str, **fields: object) -> None:
+    """One comparison of a native-runtime inspection; the runtime raises on a mismatch.
+
+    ``stage`` is ``probe``, ``capabilities``, ``version`` or ``generation``.
+    """
+
+    _ask({"op": "publication_runtime_compare", "stage": stage, **fields}, context=False)
+
+
+def artifact_generation(kind: str, subject: str, *, bound: bool, restored: Sequence[int] | None = None) -> str:
+    """The generation a ``repair`` or ``inverse`` is verified under.
+
+    ``bound`` says the plan carries its runtime and workspace; an inverse also
+    sends the indexes it ``restored``. The runtime refuses what is not ready.
+    """
+
+    request: dict[str, object] = {
+        "op": "publication_artifact_generation",
+        "kind": kind,
+        "subject": subject,
+        "bound": bound,
+    }
+    if restored is not None:
+        request["restored"] = list(restored)
+    value = _ask(request, context=False).get("value")
+    if not isinstance(value, str):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return value
+
+
+def register_inverse(grant_id: str, deadline: float) -> tuple[str, ...]:
+    """Admit the pending inverse of a grant; the grant ids the runtime purged as expired.
+
+    The runtime refuses a grant already pending and a registry at capacity.
+    """
+
+    request: dict[str, object] = {
+        "op": "publication_inverse_register",
+        "grant_id": grant_id,
+        "deadline": deadline,
+        "now": time.monotonic(),
+    }
+    value = _ask(request, context=False).get("value")
+    purged = value.get("purged") if isinstance(value, Mapping) else None
+    if not isinstance(purged, list) or not all(isinstance(item, str) for item in purged):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return tuple(purged)
+
+
+def authorize_plan(kind: str, expires_at: str, deadline: float) -> Mapping[str, object]:
+    """The forward ``deadline`` and grant retirement the runtime allows an authorization.
+
+    The clocks go as facts; ``kind`` is ``repair`` or ``inverse``.
+    """
+
+    request: dict[str, object] = {
+        "op": "publication_authorize",
+        "kind": kind,
+        "expires_at": expires_at,
+        "deadline": deadline,
+        "now": time.monotonic(),
+        "wall": time.time(),
+    }
+    value = _ask(request, context=False).get("value")
+    if not isinstance(value, Mapping):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return value
 
 
 def merge_dependency(previous: dict[str, object], change: dict[str, object]) -> Mapping[str, object]:
@@ -189,83 +283,14 @@ def publish_files(
     _ask(request, files=files, on_write=on_write)
 
 
-def append_journal(guard_home: Path, owner: dict[str, object], mutations: list[dict[str, object]]) -> int:
-    """Append mutation identities to the Codex journal; answers the dropped-event count."""
-    from .native_runner_authority import native_runner_authority
-
-    request = {"op": "journal", "guard_home": str(guard_home), "owner": owner, "mutations": mutations}
-    answer = native_runner_authority("transition_files", request, timeout_seconds=_TIMEOUT_SECONDS)
-    dropped = answer.get("dropped_events")
-    if answer.get("ok") is not True or not isinstance(dropped, int) or isinstance(dropped, bool):
-        raise RuntimeError(_INVALID)
-    return dropped
-
-
-def _lease_request(request: dict[str, object]) -> dict[str, object]:
-    from .native_runner_authority import native_runner_authority
-
-    answer = native_runner_authority("transition_files", request, timeout_seconds=_TIMEOUT_SECONDS)
-    if not isinstance(answer, dict):
-        raise RuntimeError(_INVALID)
-    return answer
-
-
-def acquire_lease(lock: dict[str, object], *, wait: bool, deadline: float | None) -> str:
-    """Have the resident take one Codex lock for this process; answers the lease.
-
-    A busy lock is retried until ``deadline`` when ``wait`` is set. Without
-    ``wait`` it is retried for ``_RELEASE_GRACE_SECONDS``, the time the resident
-    takes to notice an owner that exited, then raises ``BlockingIOError``. A
-    refusal raises the resident's reason as a ``RuntimeError`` and a busy lock
-    past the deadline raises ``TimeoutError``.
-    """
-    import os
-
-    request: dict[str, object] = {"op": "lease_acquire", **lock, "client_pid": os.getpid()}
-    grace = time.monotonic() + _RELEASE_GRACE_SECONDS
-    while True:
-        answer = _lease_request(request)
-        lease = answer.get("lease")
-        if answer.get("ok") is True and isinstance(lease, str):
-            return lease
-        error = answer.get("error")
-        if isinstance(error, str):
-            raise RuntimeError(error)
-        if answer.get("busy") is not True:
-            raise RuntimeError(_INVALID)
-        if not wait:
-            if time.monotonic() >= grace:
-                raise BlockingIOError(lock.get("lock"))
-            time.sleep(0.025)
-            continue
-        remaining = None if deadline is None else deadline - time.monotonic()
-        if remaining is not None and remaining <= 0:
-            raise TimeoutError("lock deadline exceeded")
-        time.sleep(0.025 if remaining is None else min(0.025, remaining))
-
-
-def release_lease(lease: str) -> None:
-    """Release a lease; best effort.
-
-    It runs in ``finally`` blocks, so a failure here must not replace the
-    operation's own error, and the resident reaps a dead client's lease.
-    """
-    try:
-        _lease_request({"op": "lease_release", "lease": lease})
-    except Exception:  # never mask the first error
-        return
-
-
-def lease_held(lease: str) -> bool:
-    return _lease_request({"op": "lease_check", "lease": lease}).get("held") is True
-
-
 __all__ = [
-    "acquire_lease",
-    "append_journal",
+    "artifact_generation",
+    "authorize_plan",
     "compare_files",
-    "lease_held",
     "publish_files",
-    "release_lease",
+    "register_inverse",
+    "request_policy",
+    "require_deadline",
+    "runtime_compare",
     "write_file",
 ]

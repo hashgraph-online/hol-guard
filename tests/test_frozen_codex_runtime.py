@@ -17,7 +17,6 @@ from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_hook_runtime_trust, frozen_codex_runtime, native_caller
 from codex_plugin_scanner.guard import native_daemon_manage as daemon_api
-from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.frozen_runtime_commands import (
     frozen_daemon_recovery_command,
@@ -27,6 +26,7 @@ from codex_plugin_scanner.guard.frozen_runtime_commands import (
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 from tests.codex_legacy_roles import without_package_roles
+from tests.codex_toml_support import read_toml_payload
 from tests.native_runtime_stamp import stamp_native_runtime
 
 
@@ -259,7 +259,6 @@ def test_frozen_codex_contract_binds_commands_and_roles_to_one_executable(
     assert {path for _role, path in package_paths} == {executable_target}
     assert {role for role, _path in package_paths} == {
         "bridge",
-        "bridge_runtime",
         "hook_probe",
         "native_receipt",
         "daemon_entrypoint",

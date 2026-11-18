@@ -154,6 +154,20 @@ def _no_fleet_runtime_probe(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _ungated_background_loops(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run background loops as if no runtime ledger answered.
+
+    The ledger outlives a test's process state, so a test that runs a loop
+    twice would otherwise see the second run held back. Its own tests install
+    a ledger of their own.
+    """
+    from codex_plugin_scanner.guard.runtime_health import background_loop_gate
+
+    monkeypatch.setattr(background_loop_gate, "_ask", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(background_loop_gate, "_settled", set())
+
+
+@pytest.fixture(autouse=True)
 def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep reused native answers from crossing tests that stub native replies."""
     from codex_plugin_scanner.guard.catalog_delivery import installed_bundle, object_native

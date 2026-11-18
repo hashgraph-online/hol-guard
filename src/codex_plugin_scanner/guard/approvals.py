@@ -53,7 +53,6 @@ from .local_dashboard_session import (
     build_local_dashboard_session_token,
 )
 from .local_supply_chain import build_local_supply_chain_posture
-from .managed_install_proof import verify_managed_install_proof
 from .memory_decision_outbox import enqueue_memory_decision_event
 from .models import (
     GuardArtifact,
@@ -1056,39 +1055,36 @@ def _live_hook_verification(
     managed_installs: Sequence[Mapping[str, object]],
     store: GuardStore,
 ) -> dict[str, bool]:
+    """Whether each active install's live hooks still intercept Guard's boundary.
+
+    The runtime decides which proof settles each harness; this only names the
+    installs, and the Codex launch facts when one is active."""
+    from .codex_harness_client import live_hook_fields
+    from .harness.native_harness import ask
+
     context = HarnessContext(
         home_dir=Path.home().resolve(),
         workspace_dir=None,
         guard_home=store.guard_home,
     )
-    verified: dict[str, bool] = {}
-    for install in managed_installs:
-        harness = install.get("harness")
-        if not isinstance(harness, str) or install.get("active") is not True:
-            continue
-        try:
-            if harness == "codex":
-                from .codex_hook_health import codex_runtime_hooks_verified
-
-                verified[harness] = codex_runtime_hooks_verified(context)
-                continue
-            if harness == "cursor":
-                from .harness.cursor_client import cursor_runtime_hooks_verified
-
-                proven = cursor_runtime_hooks_verified(context)
-                if proven is None:
-                    continue
-                verified[harness] = proven
-                continue
-            if harness == "grok":
-                from .cli.native_install_checks import grok_runtime_hooks_verified
-
-                verified[harness] = grok_runtime_hooks_verified(context)
-                continue
-            verified[harness] = verify_managed_install_proof(install.get("manifest"), context) is True
-        except (ImportError, OSError, RuntimeError, TypeError, ValueError):
-            continue
-    return verified
+    installs = [
+        {"harness": harness, "active": install.get("active") is True, "manifest": install.get("manifest")}
+        for install in managed_installs
+        if isinstance(harness := install.get("harness"), str)
+    ]
+    fields: dict[str, Any] = {"managed_installs": installs}
+    timeout = 20.0
+    try:
+        if any(install["harness"] == "codex" and install["active"] for install in installs):
+            fields["codex"], codex_timeout = live_hook_fields(context)
+            timeout += codex_timeout
+        answer = ask("live_hook_verification", context, harness=None, timeout_seconds=timeout, **fields)
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError):
+        return {}
+    verified = answer.get("verified")
+    if not isinstance(verified, Mapping):
+        return {}
+    return {harness: proven for harness, proven in verified.items() if isinstance(proven, bool)}
 
 
 def _canonical_managed_installs_for_health(

@@ -42,8 +42,8 @@ def _stale_companion(tmp_path: Path):
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file mode contract")
 def test_refresh_preserves_jsonc_comments_and_existing_mode(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli.update_opencode import refresh_opencode_proxy_launchers
     from codex_plugin_scanner.guard.runtime.jsonc import loads_jsonc
+    from tests.opencode_test_support import refresh_opencode_proxy_launchers
 
     ctx, config, payload = _stale_companion(tmp_path)
     text = config.read_text(encoding="utf-8")
@@ -65,7 +65,7 @@ def test_refresh_preserves_jsonc_comments_and_existing_mode(tmp_path: Path) -> N
 
 
 def test_invalid_workspace_config_does_not_block_valid_global_refresh(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli.update_opencode import refresh_opencode_proxy_launchers
+    from tests.opencode_test_support import refresh_opencode_proxy_launchers
 
     ctx, config, _ = _stale_companion(tmp_path)
     other = config.with_name("opencode.jsonc")
@@ -79,7 +79,7 @@ def test_invalid_workspace_config_does_not_block_valid_global_refresh(tmp_path: 
 
 
 def test_refresh_skips_changed_transport(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli.update_opencode import refresh_opencode_proxy_launchers
+    from tests.opencode_test_support import refresh_opencode_proxy_launchers
 
     ctx, config, payload = _stale_companion(tmp_path)
     payload["mcp"]["test"]["type"] = "remote"
@@ -161,7 +161,7 @@ def test_refresh_companion_launcher_preserves_permissions_and_binding(
     mismatched_binding: bool,
     frozen_runtime: bool,
 ) -> None:
-    from codex_plugin_scanner.guard.cli.update_opencode import refresh_opencode_proxy_launchers
+    from tests.opencode_test_support import refresh_opencode_proxy_launchers
 
     ctx = _ctx(tmp_path)
     config = ctx.home_dir / ".config" / "opencode" / "opencode.json"

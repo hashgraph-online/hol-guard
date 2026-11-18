@@ -259,6 +259,26 @@ pub(super) fn run() -> Result<(), String> {
             let response = cloud_actions_host_config::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if codex_app_server_target_op::is_command(command) && flag == "--stdin" => {
+            let response = codex_app_server_target_op::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if codex_hook_paths_op::is_command(command) && flag == "--stdin" => {
+            let response = codex_hook_paths_op::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if workspace_skills_scan_op::is_command(command) && flag == "--stdin" => {
+            let response = workspace_skills_scan_op::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if hook_exit_code_op::is_command(command) && flag == "--stdin" => {
+            let response = hook_exit_code_op::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if codex_mcp_setup::is_command(command) && flag == "--stdin" => {
+            let response = codex_mcp_setup::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if local_skill_index::is_command(command) && flag == "--stdin" => {
             let response = local_skill_index::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -298,6 +318,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = daemon_manage::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if hook_launch_cli::is_command(command) && flag == "--stdin" => {
+            let response = hook_launch_cli::run_command(io::stdin())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if posix_processes::is_command(command) && flag == "--stdin" => {
             let response = posix_processes::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -334,6 +358,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if proxy_credentials::is_command(command) && flag == "--stdin" => {
             let response = proxy_credentials::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if background_loop_gate::is_command(command) && flag == "--stdin" => {
+            let response = background_loop_gate::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if native_install_verdict::is_command(command) && flag == "--stdin" => {

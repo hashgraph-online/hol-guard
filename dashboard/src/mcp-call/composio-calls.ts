@@ -147,7 +147,7 @@ function multiExecute({ harness, input }: ComposioContext): McpCallBody {
   const thought = textOf(input?.thought, 300);
   const first = all[0];
   return {
-    headline: `${harness} wants to run ${actionCountPhrase(count)} in ${where}`,
+    headline: `${harness} wants to ${batchPhrase(first, count, where)}`,
     title: batchTitle(first, count, apps),
     aside: `Composio carries out ${count === 1 ? "this action" : "these actions"} in your connected ${accountPhrase(apps)}, using the inputs below.`,
     effect,
@@ -158,15 +158,32 @@ function multiExecute({ harness, input }: ComposioContext): McpCallBody {
     effectApps,
     quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
     code: null,
-    queueTitle: `Composio · ${first?.action ?? "Run actions"}${count > 1 ? ` and ${count - 1} more` : ""}`,
-    queueDetail: apps.length > 0 ? joinList(apps) : null,
+    // The row leads with the app people know (Gmail), not the service in between.
+    queueTitle: `${apps.length === 1 ? apps[0] : "Composio"} · ${first?.action ?? "Run actions"}${count > 1 ? ` and ${count - 1} more` : ""}`,
+    queueDetail: batchQueueDetail(first, apps),
   };
 }
 
-function actionCountPhrase(count: number): string {
-  if (count === 1) return "an action";
-  if (count === 0) return "some actions";
-  return `${count} actions`;
+/** One app: the first step's main detail. Several apps: their names. None: nothing. */
+function batchQueueDetail(first: McpStep | undefined, apps: string[]): string | null {
+  if (apps.length === 1) return firstDetail(first);
+  if (apps.length > 1) return joinList(apps);
+  return null;
+}
+
+/** "send email in Gmail" for one action, "take 3 actions in Gmail and Slack" for several. */
+function batchPhrase(first: McpStep | undefined, count: number, where: string): string {
+  if (count === 1 && first !== undefined && first.app !== null) {
+    return `${first.action.charAt(0).toLowerCase()}${first.action.slice(1)} in ${first.app}`;
+  }
+  if (count === 1) return `take an action in ${where}`;
+  return `take ${count === 0 ? "some" : count} actions in ${where}`;
+}
+
+/** The first detail of an action, such as who an email goes to, for the list row. */
+function firstDetail(step: McpStep | undefined): string | null {
+  const value = step?.details[0]?.value;
+  return value !== undefined && value.length > 0 ? value : null;
 }
 
 function accountPhrase(apps: string[]): string {

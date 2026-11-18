@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-import glob as globlib
+import os
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from ..codex_install_transaction import codex_install_transaction
 from ..harness.base import HarnessAdapter, HarnessContext
-from ..harness.contracts import contract_for
+from ..harness.native_harness import ask as native_ask
 from ..harness.registry import get_adapter, list_adapters
 from ..managed_install_proof import verify_managed_install_proof
-from ..native_mcp_tool_evidence import NativeMcpToolEvidenceError, native_skill_firewall_metadata_patch
-from ..native_runner_authority import NativeRunnerAuthorityError
+from ..native_owned import codex_install_transaction
 from ..runtime.fleet_posture_common import DIAGNOSTICS_STATE_KEY, parse_timestamp
-from ..runtime.skill_protection import detect_skill_content_risk
 from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore
 from .claude_settings_target import claude_settings_target
@@ -28,11 +25,7 @@ from .cursor_actions import (
 from .install_targets import _resolve_targets
 from .managed_install_payload import managed_install_payload as _managed_install_payload
 from .managed_install_record import _native_install_ask, _record_managed_install
-from .native_install_checks import _grok_event_has_command_hook as _grok_event_has_command_hook
 from .native_install_checks import _grok_hook_command_is_guard as _grok_hook_command_is_guard
-from .native_install_checks import _grok_managed_config_is_active as _grok_managed_config_is_active
-from .native_install_checks import _grok_pretool_is_catchall as _grok_pretool_is_catchall
-from .native_install_checks import _grok_prompt_hook_is_observe as _grok_prompt_hook_is_observe
 from .native_install_checks import _grok_protection_checks as _grok_protection_checks
 from .native_install_checks import _opencode_protection_checks as _opencode_protection_checks
 from .native_install_checks import grok_hooks_protection_ready as grok_hooks_protection_ready
@@ -63,7 +56,7 @@ def _apply_adapter_management(
 
     if surface is None:
         if adapter.harness == "cursor":
-            selected_surface = cursor_install_surface(None)
+            selected_surface = cursor_install_surface(None, context)
             return (
                 adapter.install(context, surface=selected_surface)
                 if active
@@ -75,7 +68,7 @@ def _apply_adapter_management(
     if surface not in setup_contract.surface_capabilities:
         raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
     if adapter.harness == "cursor":
-        selected_surface = cursor_install_surface(surface)
+        selected_surface = cursor_install_surface(surface, context)
         return (
             adapter.install(context, surface=selected_surface)
             if active
@@ -150,7 +143,7 @@ def _apply_managed_install_owned(
             action=command,
             surface=surface,
             context=context,
-            protected_surfaces=cursor_protected_surfaces(managed_installs) if active else (),
+            protected_surfaces=cursor_protected_surfaces(managed_installs, context) if active else (),
         )
     return payload
 
@@ -296,6 +289,7 @@ def build_harness_verification(
                 adapter.harness,
                 store,
                 detection,
+                context,
             ),
         )
     return payload
@@ -331,15 +325,13 @@ def _safe_setup_detection(
             "command_available": diagnostics.get("command_available", False),
             "config_paths": diagnostics.get("config_paths", []),
         }
-    protection_contract = contract_for(adapter.harness)
-    config_paths = protection_contract.config_paths if protection_contract is not None else ()
     managed_active = bool(managed and managed.get("active"))
     checked_status = _fleet_checked_setup_status(adapter.harness, managed, store) if use_fleet_check else None
     return {
         "installed": checked_status == "active" or (checked_status is None and managed_active),
         "needs_repair": checked_status == "broken" or (managed_active and checked_status in {"partial", "not_found"}),
         "command_available": adapter.resolved_executable(context) is not None,
-        "config_paths": _existing_contract_config_paths(config_paths, context),
+        "config_paths": _existing_contract_config_paths(adapter.harness, context),
     }
 
 
@@ -377,29 +369,45 @@ def _fleet_checked_setup_status(
     return status if status in {"active", "broken", "partial", "not_found"} else None
 
 
-def _existing_contract_config_paths(config_paths: tuple[str, ...], context: HarnessContext) -> list[str]:
-    existing: list[str] = []
-    for config_path in config_paths:
-        for candidate in _contract_config_path_candidates(config_path, context):
-            if candidate.exists():
-                existing.append(str(candidate))
-    return sorted(dict.fromkeys(existing))
+def _existing_contract_config_paths(harness: str, context: HarnessContext) -> list[str]:
+    """The contract's config paths that exist; the runtime expands and matches them."""
+    answer = native_ask("existing_contract_config_paths", context, harness=harness)
+    paths = answer.get("config_paths")
+    return [path for path in paths if isinstance(path, str)] if isinstance(paths, list) else []
 
 
-def _contract_config_path_candidates(config_path: str, context: HarnessContext) -> tuple[Path, ...]:
-    expanded_path = _expand_contract_config_path(config_path, context)
-    if globlib.has_magic(str(expanded_path)):
-        return tuple(sorted(Path(path) for path in globlib.glob(str(expanded_path))))
-    return (expanded_path,)
+_SKILLS_FEATURE = "native-workspace-skills-scan-v1"
+_SKILLS_COMMAND = "workspace-skills-scan"
+_SKILLS_TIMEOUT_SECONDS = 60.0
+_SKILLS_OUTPUT_LIMIT = 8 * 1024 * 1024
 
 
-def _expand_contract_config_path(config_path: str, context: HarnessContext) -> Path:
-    path = Path(config_path)
-    if path.parts and path.parts[0] == "~":
-        return context.home_dir.joinpath(*path.parts[1:])
-    if path.is_absolute():
-        return path
-    return context.home_dir / path
+def _skills_answer(request: dict[str, object]) -> dict[str, object] | None:
+    from ..mdm.runtime_request import runtime_answer
+
+    return runtime_answer(
+        _SKILLS_FEATURE,
+        _SKILLS_COMMAND,
+        request,
+        output_limit=_SKILLS_OUTPUT_LIMIT,
+        timeout_seconds=_SKILLS_TIMEOUT_SECONDS,
+    )
+
+
+def _skills_unavailable() -> list[dict[str, object]]:
+    # The install is already applied: a runtime that does not answer leaves the
+    # skills unscanned, reported as such, never as clean.
+    return [
+        {
+            "skill_path": ".",
+            "identity_hash": None,
+            "status": "unscanned",
+            "risk_count": None,
+            "severities": [],
+            "signal_ids": [],
+            "scan_error": "native_workspace_skills_scan_unavailable",
+        }
+    ]
 
 
 def scan_workspace_skills(
@@ -407,98 +415,34 @@ def scan_workspace_skills(
     store: GuardStore,
     now: str,
 ) -> list[dict[str, object]]:
-    """Scan SKILL.md files in workspace and return risk summaries for any findings."""
-    results: list[dict[str, object]] = []
-    skills_dirs = [
-        workspace_dir / ".codex" / "skills",
-        workspace_dir / ".agents" / "skills",
-        workspace_dir / "skills",
-    ]
-    for skills_dir in skills_dirs:
-        if not skills_dir.is_dir():
-            continue
-        for skill_path in sorted(skills_dir.rglob("SKILL.md")):
-            try:
-                content = skill_path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            try:
-                patch = native_skill_firewall_metadata_patch(
-                    name=skill_path.parent.name,
-                    config_path=str(skill_path),
-                    skill_content=content,
-                    guard_home=store.guard_home,
-                )
-                if patch is None:
-                    continue
-                skill_metadata = patch.get("mcp_skill_identity")
-                firewall = patch.get("mcpSkillFirewall")
-                if not isinstance(skill_metadata, dict) or not isinstance(firewall, dict):
-                    raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_result_invalid")
-            except NativeMcpToolEvidenceError as error:
-                # Same fail-closed answer the refused risk scan below gives: the
-                # install is already applied, so a skill the resident would not
-                # describe is reported unscanned rather than aborting it. No
-                # identity and no firewall metadata is persisted for it.
-                results.append(
-                    {
-                        "skill_path": str(skill_path.relative_to(workspace_dir)),
-                        "identity_hash": None,
-                        "status": "unscanned",
-                        "risk_count": None,
-                        "severities": [],
-                        "signal_ids": [],
-                        "scan_error": str(error),
-                    }
-                )
-                continue
-            identity_hash = skill_metadata["identity_hash"]
-            artifact_id = f"skill-path:{skill_path}"
-            stored = store.get_snapshot("skill_scan", artifact_id)
-            stored_hash = stored.get("identity_hash") if stored else None
-            if stored_hash == identity_hash:
-                continue
-            try:
-                signals = detect_skill_content_risk(content, guard_home=store.guard_home)
-            except NativeRunnerAuthorityError as error:
-                # The install is already applied. Report the skill as unscanned and
-                # leave no snapshot, so the next install scans it again.
-                results.append(
-                    {
-                        "skill_path": str(skill_path.relative_to(workspace_dir)),
-                        "identity_hash": identity_hash,
-                        "status": "unscanned",
-                        "risk_count": None,
-                        "severities": [],
-                        "signal_ids": [],
-                        "scan_error": str(error),
-                    }
-                )
-                continue
-            store.save_snapshot(
-                "skill_scan",
-                artifact_id,
-                {
-                    "identity_hash": identity_hash,
-                    "skill_path": str(skill_path),
-                    "mcp_skill_identity": skill_metadata,
-                    "mcpSkillFirewall": firewall,
-                },
-                identity_hash,
-                now,
-            )
-            if signals:
-                results.append(
-                    {
-                        "skill_path": str(skill_path.relative_to(workspace_dir)),
-                        "identity_hash": identity_hash,
-                        "status": "scanned",
-                        "risk_count": len(signals),
-                        "severities": sorted({s.severity for s in signals}),
-                        "signal_ids": [s.signal_id for s in signals],
-                    }
-                )
-    return results
+    """Scan SKILL.md files in workspace and return risk summaries for any findings.
+
+    The runtime finds, describes and scans the skills; this holds the snapshot
+    store: it tells the runtime what it stored for each skill and saves the
+    identity the runtime reports for those that changed."""
+    workspace = os.path.abspath(workspace_dir)
+    listing = _skills_answer({"op": "list", "workspace_dir": workspace})
+    skills = listing.get("skills") if listing is not None else None
+    if not isinstance(skills, list) or not all(isinstance(path, str) for path in skills):
+        return _skills_unavailable()
+    if not skills:
+        return []
+    stored: dict[str, str] = {}
+    for path in skills:
+        snapshot = store.get_snapshot("skill_scan", f"skill-path:{path}")
+        stored_hash = snapshot.get("identity_hash") if snapshot else None
+        if isinstance(stored_hash, str):
+            stored[path] = stored_hash
+    answer = _skills_answer({"op": "scan", "workspace_dir": workspace, "stored": stored})
+    results = answer.get("results") if answer is not None else None
+    snapshots = answer.get("snapshots") if answer is not None else None
+    if not isinstance(results, list) or not isinstance(snapshots, list):
+        return _skills_unavailable()
+    for row in snapshots:
+        if not isinstance(row, dict):
+            return _skills_unavailable()
+        store.save_snapshot("skill_scan", row["artifact_id"], row["payload"], row["identity_hash"], now)
+    return [dict(result) for result in results if isinstance(result, dict)]
 
 
 __all__ = [

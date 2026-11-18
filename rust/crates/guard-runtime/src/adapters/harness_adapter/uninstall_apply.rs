@@ -31,7 +31,7 @@ fn fault(fault: Fault) -> Failure {
         Fault::Integrity(code, _) if code == "codex_hook_transaction_target_not_regular" => {
             Failure::Integrity("codex_hook_transaction_target_not_regular")
         }
-        Fault::Integrity(_, message) => Failure::Runtime(message),
+        Fault::Integrity(_, message) | Fault::Runtime(message) => Failure::Runtime(message),
         Fault::Transition(_) | Fault::Refused(..) => Failure::Invalid,
     }
 }

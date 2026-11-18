@@ -1,7 +1,9 @@
 """Read-only preparation of an exact inverse for unresolved Codex publication.
 
 A plan conveys no mutation or lifecycle authority. Authentication of the old
-journal is necessary but cannot authorize overwriting the current config.
+journal is necessary but cannot authorize overwriting the current config. The
+runtime does the whole preparation and every check; this sends the facts of
+this process, keeps the answer as the plan, and settles each reply.
 """
 
 from __future__ import annotations
@@ -9,76 +11,44 @@ from __future__ import annotations
 import hashlib
 import os
 import uuid
-from collections.abc import Mapping
 from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .codex_hook_file_integrity import (
-    CodexHookIntegrityError,
     active_hook_validation_deadline,
     check_hook_validation_deadline,
     hook_validation_deadline,
-    validate_regular_file,
 )
-from .codex_hook_integrity import (
-    authenticate_hook_manifest_text,
-)
-from .codex_hook_manifest import CodexHookManifestSpec, _verify_hook_manifest, transition_file
-from .codex_hook_recovery import (
-    _MAX_RECORD,
-    _decode,
-    _encode,
-    _load_record,
-    _record_authentication_targets,
-    _record_path,
-    _snapshot,
-)
-from .codex_hook_rollback import rollback_file_identity
-from .codex_hook_sources import parse_toml_object
-from .codex_install_transaction import require_codex_install_owner
+from .codex_hook_manifest import CodexHookManifestSpec, transition_file
+from .codex_hook_recovery import _encode
+from .native_owned import require_codex_install_owner
 from .native_runtime import NativeRuntimeIdentity
 from .native_transition_files import publication
-from .private_file_io import read_private_regular_bytes
 from .runtime_transition import (
-    RuntimeTransition,
     TransitionError,
     TransitionFile,
     assert_transition_mutation_allowed,
     inverse_recovery_budget,
-    merge_transition_dependency,
 )
 
 PUBLICATION_INVERSE_ACTION = "apps.repair.codex-publication-inverse"
 
 
-def _journal_bytes(path: Path) -> bytes:
-    check_hook_validation_deadline()
-    raw = read_private_regular_bytes(path, max_bytes=_MAX_RECORD, require_private_parent=True)
-    check_hook_validation_deadline()
-    if raw is None:
-        raise TransitionError("publication_inverse_journal_missing")
-    return raw
-
-
-def _predecessor_dependencies(home: Path, manifest_bytes: bytes) -> tuple[TransitionFile, ...]:
-    # Artifact dependency construction validates eagerly, so the original
-    # deadline must cover construction as well as the later comparison.
+def _inverse_budget():
+    """The deadline of the validation in progress, carried to the runtime."""
     deadline = active_hook_validation_deadline()
-    with inverse_recovery_budget(deadline) if deadline is not None else nullcontext():
-        return _capture_predecessor_dependencies(home, manifest_bytes)
+    return inverse_recovery_budget(deadline) if deadline is not None else nullcontext()
 
 
-def _capture_predecessor_dependencies(home: Path, manifest_bytes: bytes) -> tuple[TransitionFile, ...]:
-    authenticated = authenticate_hook_manifest_text(home, manifest_bytes.decode("utf-8"))
-    check_hook_validation_deadline()
-    answer = publication("inverse_dependencies", home, manifest=authenticated)
-    pinned = answer.get("files") if isinstance(answer, dict) else None
-    if not isinstance(pinned, list) or not all(isinstance(item, dict) for item in pinned):
-        raise TransitionError("native_transition_invalid")
-    dependencies = tuple(transition_file(item) for item in pinned)
-    RuntimeTransition._compare({"files": [item.payload() for item in dependencies]}, "before")
-    return dependencies
+def workspace_wire(workspace: Path | None) -> str | None:
+    return None if workspace is None else str(workspace)
+
+
+def native_runtime_wire(native: NativeRuntimeIdentity | None) -> dict[str, object] | None:
+    if native is None:
+        return None
+    return {"path": str(native.path), "size": native.size, "mtime_ns": native.mtime_ns, "sha256": native.sha256}
 
 
 def _reviewable_prior_inverse(home: Path, record: dict[str, object]) -> str | None:
@@ -132,14 +102,7 @@ class PreparedCodexPublicationInverse:
             files=[change.payload() for change in self.changes],
             file_identities=[list(identity) if identity is not None else None for identity in self.change_identities],
             dependencies=[change.payload() for change in self.dependencies],
-            native_runtime=None
-            if self.native_runtime is None
-            else {
-                "path": str(self.native_runtime.path),
-                "size": self.native_runtime.size,
-                "mtime_ns": self.native_runtime.mtime_ns,
-                "sha256": self.native_runtime.sha256,
-            },
+            native_runtime=native_runtime_wire(self.native_runtime),
             verification_workspace=None if self.verification_workspace is None else str(self.verification_workspace),
         )
         payload = answer.get("payload") if isinstance(answer, dict) else None
@@ -180,78 +143,22 @@ class PreparedCodexPublicationInverse:
         require_codex_install_owner(self.guard_home)
         assert_transition_mutation_allowed(self.guard_home)
         check_hook_validation_deadline()
-        captured = publication(
-            "inverse_check",
-            self.guard_home,
-            config=os.path.abspath(self.config_path),
-            interrupted_operation_id=self.interrupted_operation_id,
-            resumed_inverse_operation_id=self.resumed_inverse_operation_id,
-            journal_sha256=self.journal_sha256,
-            journal_identity=list(self.journal_identity),
-            files=[_change_shape(change) for change in self.changes],
-            file_identities=[list(identity) if identity is not None else None for identity in self.change_identities],
-        )
-        predecessor = _decode(captured)
-        if predecessor is None:
-            raise TransitionError("publication_inverse_predecessor_authority_missing")
-        expected = _predecessor_dependencies(self.guard_home, predecessor)
-        if self.native_runtime is not None or self.verification_workspace is not None:
-            expected = _with_native_dependency(expected, self.native_runtime, self.verification_workspace)
-        if [item.payload() for item in self.dependencies] != [item.payload() for item in expected]:
-            raise TransitionError("publication_inverse_dependencies_invalid")
-        deadline = active_hook_validation_deadline()
-        with inverse_recovery_budget(deadline) if deadline is not None else nullcontext():
-            RuntimeTransition._compare({"files": [item.payload() for item in self.dependencies]}, "before")
+        with _inverse_budget():
+            publication(
+                "inverse_verify",
+                self.guard_home,
+                config=os.path.abspath(self.config_path),
+                interrupted_operation_id=self.interrupted_operation_id,
+                resumed_inverse_operation_id=self.resumed_inverse_operation_id,
+                journal_sha256=self.journal_sha256,
+                journal_identity=list(self.journal_identity),
+                files=[_change_shape(change) for change in self.changes],
+                file_identities=[list(item) if item is not None else None for item in self.change_identities],
+                dependencies=[item.payload() for item in self.dependencies],
+                native_runtime=native_runtime_wire(self.native_runtime),
+                verification_workspace=workspace_wire(self.verification_workspace),
+            )
         check_hook_validation_deadline()
-
-
-def _with_native_dependency(
-    dependencies: tuple[TransitionFile, ...],
-    native: NativeRuntimeIdentity | None,
-    workspace: Path | None,
-) -> tuple[TransitionFile, ...]:
-    deadline = active_hook_validation_deadline()
-    with inverse_recovery_budget(deadline) if deadline is not None else nullcontext():
-        return _capture_native_dependency(dependencies, native, workspace)
-
-
-def _capture_native_dependency(
-    dependencies: tuple[TransitionFile, ...],
-    native: NativeRuntimeIdentity | None,
-    workspace: Path | None,
-) -> tuple[TransitionFile, ...]:
-    if (
-        native is None
-        or workspace is None
-        or not workspace.is_absolute()
-        or workspace.resolve(strict=False) != workspace
-        or not workspace.is_dir()
-        or not native.path.is_absolute()
-        or native.path.resolve(strict=False) != native.path
-        or type(native.size) is not int
-        or native.size <= 0
-        or type(native.mtime_ns) is not int
-        or len(native.sha256) != 64
-        or any(char not in "0123456789abcdef" for char in native.sha256)
-    ):
-        raise TransitionError("publication_inverse_native_binding_invalid")
-    metadata = validate_regular_file(native.path, role="artifact", executable_required=True)
-    if metadata.st_mtime_ns != native.mtime_ns or metadata.st_size != native.size:
-        raise TransitionError("native_runtime_generation_changed")
-    item = TransitionFile.artifact_dependency(
-        {
-            "path": str(native.path),
-            "size": native.size,
-            "sha256": native.sha256,
-            "mode": metadata.st_mode & 0o777,
-            "owner_uid": metadata.st_uid,
-            "role": "artifact",
-        }
-    )
-    merged = {value.path: value for value in dependencies}
-    previous = merged.get(item.path)
-    merged[item.path] = item if previous is None else merge_transition_dependency(previous, item)
-    return tuple(merged.values())
 
 
 def bind_codex_publication_inverse_verification(
@@ -266,12 +173,35 @@ def bind_codex_publication_inverse_verification(
         raise TransitionError("publication_inverse_native_binding_already_prepared")
     with inverse_recovery_budget(deadline_monotonic), hook_validation_deadline(deadline_monotonic):
         plan.compare_before()
-        dependencies = _with_native_dependency(plan.dependencies, expected_runtime, workspace)
+        answer = publication(
+            "inverse_bind",
+            plan.guard_home,
+            dependencies=[item.payload() for item in plan.dependencies],
+            native_runtime=native_runtime_wire(expected_runtime),
+            verification_workspace=str(workspace),
+        )
         bound = replace(
-            plan, dependencies=dependencies, native_runtime=expected_runtime, verification_workspace=workspace
+            plan,
+            dependencies=_transition_files(answer.get("files") if isinstance(answer, dict) else None),
+            native_runtime=expected_runtime,
+            verification_workspace=workspace,
         )
         bound.compare_before()
     return bound
+
+
+def _transition_files(value: object) -> tuple[TransitionFile, ...]:
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise TransitionError("native_transition_invalid")
+    return tuple(transition_file(item) for item in value)
+
+
+def _identity(value: object) -> tuple[int, int, int, int, int] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list) or len(value) != 5 or not all(type(item) is int for item in value):
+        raise TransitionError("native_transition_invalid")
+    return (value[0], value[1], value[2], value[3], value[4])
 
 
 def prepare_authenticated_hook_publication_inverse(spec: CodexHookManifestSpec) -> PreparedCodexPublicationInverse:
@@ -280,64 +210,52 @@ def prepare_authenticated_hook_publication_inverse(spec: CodexHookManifestSpec) 
     A foreign config can be reviewed, but a competing authority generation is
     never adopted into this inverse. Completed and unprotected publications
     require their own reviewed recovery policy, not this protected inverse.
+    The runtime reads the journal, authenticates it under its own key,
+    captures and checks every participant, verifies the predecessor manifest,
+    pins its dependencies and checks the plan. This sends the facts of this
+    process and keeps the answer.
     """
+    from .harness.base import HarnessContext
+    from .harness.native_harness import wire_context
+
     home = spec.guard_home.resolve(strict=False)
     require_codex_install_owner(home)
     assert_transition_mutation_allowed(home)
     check_hook_validation_deadline()
-    journal = _record_path(home)
-    journal_identity = rollback_file_identity(journal)
-    if journal_identity is None:
-        raise TransitionError("publication_inverse_journal_missing")
-    raw = _journal_bytes(journal)
-    record = _load_record(home, live_config_conflict=True)
-    if record["phase"] not in {"prepared", "config_conflict"} or "repair_plan" in record:
-        raise TransitionError("publication_inverse_phase_invalid")
-    resumed_operation = _reviewable_prior_inverse(home, record)
-    config = spec.config_path.parent.resolve(strict=False) / spec.config_path.name
-    if record["config_path"] != os.path.abspath(config):
-        raise TransitionError("publication_inverse_target_mismatch")
-    manifest, receipt = _record_authentication_targets(home, record)
-    before_config, before_manifest = _decode(record.get("before_config")), _decode(record.get("before_manifest"))
-    before_receipt = _decode(record.get("before_receipt"))
-    if before_config is None or before_manifest is None or before_receipt is None:
-        raise TransitionError("publication_inverse_predecessor_authority_missing")
-    changes, identities = [], []
-    for target, previous, before_key, after_key in (
-        (config, before_config, "before_config", "after_config"),
-        (manifest, before_manifest, "before_manifest", "after_manifest"),
-        (receipt, before_receipt, "before_receipt", "after_receipt"),
-    ):
-        identity = rollback_file_identity(target)
-        current = _snapshot(target)
-        if rollback_file_identity(target) != identity:
-            raise TransitionError("publication_inverse_generation_changed")
-        if target != config and current not in (_decode(record.get(before_key)), _decode(record.get(after_key))):
-            raise TransitionError("publication_inverse_authority_generation_changed")
-        mode = 0o600 if identity is None else target.stat().st_mode & 0o777
-        changes.append(TransitionFile(target, current, previous, before_mode=mode, no_follow=True))
-        identities.append(identity)
-    parsed = parse_toml_object(before_config, path=config, label="previous Codex config")
-    features = parsed.get("features")
-    if isinstance(features, Mapping) and features.get("hooks") is False:
-        raise TransitionError("publication_inverse_predecessor_hooks_disabled")
-    state = _verify_hook_manifest(spec, hooks=parsed.get("hooks"), captured_text=before_manifest.decode("utf-8"))
-    if state.get("integrity_status") != "valid":
-        raise CodexHookIntegrityError(str(state["integrity_reason"]), str(state["integrity_message"]))
-    dependencies = _predecessor_dependencies(home, before_manifest)
-    if _journal_bytes(journal) != raw or rollback_file_identity(journal) != journal_identity:
-        raise TransitionError("publication_inverse_journal_changed")
-    prepared = PreparedCodexPublicationInverse(
+    context = HarnessContext(home_dir=spec.home_dir, workspace_dir=spec.workspace_dir, guard_home=spec.guard_home)
+    operation_id = str(uuid.uuid4())
+    answer = publication(
+        "inverse_prepare",
         home,
-        config,
-        str(uuid.uuid4()),
-        str(record["operation_id"]),
-        hashlib.sha256(raw).hexdigest(),
-        journal_identity,
-        tuple(changes),
-        tuple(identities),
-        dependencies,
-        resumed_inverse_operation_id=resumed_operation,
+        config=os.path.abspath(spec.config_path),
+        operation_id=operation_id,
+        spec=spec.payload(),
+        context=wire_context(context),
     )
-    prepared.compare_before()
-    return prepared
+    prepared: dict[str, object] = answer if isinstance(answer, dict) else {}
+    guard_home, config = prepared.get("guard_home"), prepared.get("config")
+    interrupted, journal_sha256 = prepared.get("interrupted_operation_id"), prepared.get("journal_sha256")
+    resumed, identities = prepared.get("resumed_inverse_operation_id"), prepared.get("change_identities")
+    journal_identity = _identity(prepared.get("journal_identity"))
+    if (
+        not isinstance(guard_home, str)
+        or not isinstance(config, str)
+        or not isinstance(interrupted, str)
+        or not isinstance(journal_sha256, str)
+        or not (resumed is None or isinstance(resumed, str))
+        or not isinstance(identities, list)
+        or journal_identity is None
+    ):
+        raise TransitionError("native_transition_invalid")
+    return PreparedCodexPublicationInverse(
+        Path(guard_home),
+        Path(config),
+        operation_id,
+        interrupted,
+        journal_sha256,
+        journal_identity,
+        _transition_files(prepared.get("changes")),
+        tuple(_identity(item) for item in identities),
+        _transition_files(prepared.get("dependencies")),
+        resumed_inverse_operation_id=resumed,
+    )

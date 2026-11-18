@@ -39,7 +39,7 @@ use serde_json::Value;
 
 use super::auth::{authorize, authorize_origin, authorize_token, session_allows};
 use super::http::{parse_request, take_request, Request};
-#[cfg(test)]
+#[cfg(all(test, unix))]
 use super::http::{HEAD_PEEK_WINDOW, MAX_BODY_BYTES};
 
 pub(super) const HANDSHAKE_SCHEMA: &str = "guard-daemon-edge-handshake.v1";

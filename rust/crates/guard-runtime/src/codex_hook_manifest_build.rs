@@ -28,13 +28,7 @@ const PURPOSE: &str = "codex-managed-hook-manifest";
 const ALGORITHM: &str = "hmac-sha256";
 const MAX_GENERATIONS: usize = 8;
 const BRIDGE_COMMAND: &str = "codex-hook-bridge";
-const TRANSPORT_ROLES: [&str; 5] = [
-    "bridge",
-    "bridge_runtime",
-    "launch_runtime",
-    "runtime_trust",
-    "windows_job",
-];
+const TRANSPORT_ROLES: [&str; 4] = ["bridge", "launch_runtime", "runtime_trust", "windows_job"];
 const LEGACY_FIELDS: [&str; 3] = [
     "authentication",
     "retained_bridge_generations",

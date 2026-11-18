@@ -15,21 +15,65 @@ from pathlib import Path
 from typing import Any
 
 from codex_plugin_scanner.guard import codex_harness_client as adapter
-from codex_plugin_scanner.guard.codex_config import _Wire, dump_toml
-from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, hook_secret_path
+from codex_plugin_scanner.guard.codex_config import _Wire
 from codex_plugin_scanner.guard.codex_hook_manifest import (
     CodexHookManifestSpec,
     PreparedCodexHookPublication,
     check_hook_validation_deadline,
-    generation_request,
 )
 from codex_plugin_scanner.guard.codex_hook_self_binding import (
     ask_hook_owners,
     install_fields,
     short_path_fields,
 )
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
+from tests.codex_hook_paths_support import canonical_manifest_bytes, hook_secret_path
+from tests.codex_toml_support import dump_toml
+
+
+def _spec_payload(spec: CodexHookManifestSpec) -> dict[str, object]:
+    def spelled(path: Path) -> str:
+        return str(path.expanduser())
+
+    return {
+        "guard_home": spelled(spec.guard_home),
+        "home_dir": spelled(spec.home_dir),
+        "runtime_guard_home": spelled(spec.runtime_guard_home),
+        "workspace_dir": spelled(spec.workspace_dir) if spec.workspace_dir is not None else None,
+        "config_path": spelled(spec.config_path),
+        "interpreter_path": str(spec.interpreter_path.expanduser().absolute()),
+        "package_version": spec.package_version,
+        "packaged_file_paths": [[role, spelled(path)] for role, path in spec.packaged_file_paths],
+        "fallback_argv": list(spec.fallback_argv),
+        "daemon_start_argv": list(spec.daemon_start_argv),
+        "event_bindings": [dict(binding) for binding in spec.event_bindings],
+    }
+
+
+def generation_request(
+    spec: CodexHookManifestSpec,
+    *,
+    previous_manifest: Mapping[str, object] | None,
+    create_key: bool,
+) -> dict[str, object]:
+    """The ``publication_generation`` request for ``spec``, without its rendered config."""
+    import os
+
+    def spelled(path: Path) -> str:
+        return os.path.abspath(path.expanduser())
+
+    return {
+        "config": spelled(spec.config_path),
+        "guard_home": spelled(spec.guard_home),
+        "home_dir": spelled(spec.home_dir),
+        "runtime_guard_home": spelled(spec.runtime_guard_home),
+        "workspace_dir": spelled(spec.workspace_dir) if spec.workspace_dir is not None else None,
+        "workspace_rebinding_allowed": spec.workspace_rebinding_allowed,
+        "spec": _spec_payload(spec),
+        "previous_manifest": None if previous_manifest is None else dict(previous_manifest),
+        "create_key": create_key,
+    }
 
 
 def prepare_authenticated_hook_publication(
@@ -165,7 +209,6 @@ def write_authenticated_hook_config_owned(
     commits, or runs the durable inverse.
     """
     from codex_plugin_scanner.guard.codex_hook_file_integrity import _python_package_roots
-    from codex_plugin_scanner.guard.codex_hook_manifest import _spec_payload
     from codex_plugin_scanner.guard.codex_hook_recovery import _owned
     from codex_plugin_scanner.guard.native_transition_files import publication as publication_op
     from codex_plugin_scanner.guard.runtime_transition import TransitionError

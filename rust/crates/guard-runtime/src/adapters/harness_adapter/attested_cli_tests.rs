@@ -3,7 +3,9 @@ use std::fs;
 use serde_json::json;
 
 use super::super::Ctx;
-use super::{attested, scoped_probe_dir, REINSTALL};
+#[cfg(unix)]
+use super::scoped_probe_dir;
+use super::{attested, REINSTALL};
 use crate::pyjson::PyVal;
 
 fn ctx(home: &std::path::Path, caller: serde_json::Value) -> Ctx {

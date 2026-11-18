@@ -20,7 +20,6 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 
 use crate::codex_hook_bridge::{decode_config_argument, BRIDGE_COMMAND};
 use crate::codex_hook_bridge_trust_files::{canonical, verify_executable_in, verify_regular_in};
@@ -31,9 +30,8 @@ use crate::hook_process_spawn::{isolated_daemon_start_command, isolated_guard_cl
 pub(crate) const LAUNCH_INVALID: &str = "codex_hook_launch_invalid";
 const SCHEMA_VERSION: i64 = 2;
 const STATE_FILE: &str = "daemon-state.json";
-const REQUIRED_ROLES: [&str; 8] = [
+const REQUIRED_ROLES: [&str; 7] = [
     "bridge",
-    "bridge_runtime",
     "daemon_entrypoint",
     "daemon_manager",
     "fallback_entrypoint",
@@ -92,12 +90,7 @@ fn spelled(path: &Path) -> String {
 
 /// `hook_manifest_path`: the manifest a config target owns in a Guard home.
 fn manifest_for(home: &Path, target: &Path) -> PathBuf {
-    let digest = hex::encode(Sha256::digest(
-        canonical(target).as_os_str().as_encoded_bytes(),
-    ));
-    home.join("managed")
-        .join("codex")
-        .join(format!("hooks-{}.manifest.json", &digest[..24]))
+    crate::codex_hook_paths_op::manifest_path(home, target)
 }
 
 /// One launch request: its managed paths, this home's authenticated
@@ -354,11 +347,6 @@ fn verify_transport(
     let trust = Value::from(spelled(&canonical(runtime_path)));
     for (role, expected, what) in [
         (
-            "bridge_runtime",
-            beside("codex_hook_bridge_runtime.py"),
-            "bridge runtime",
-        ),
-        (
             "launch_runtime",
             beside("codex_hook_launch_runtime.py"),
             "launch runtime",
@@ -375,13 +363,7 @@ fn verify_transport(
         }
     }
     let transport = mapping(manifest.get("transport"), "transport")?;
-    for role in [
-        "bridge",
-        "bridge_runtime",
-        "launch_runtime",
-        "runtime_trust",
-        "windows_job",
-    ] {
+    for role in ["bridge", "launch_runtime", "runtime_trust", "windows_job"] {
         if transport.get(role).and_then(Value::as_object) != Some(packaged_role(packaged, role)?) {
             return Err(invalid("transport identity is invalid"));
         }

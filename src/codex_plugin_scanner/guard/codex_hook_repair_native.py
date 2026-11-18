@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import json
-import math
 import time
 
 from . import native_runtime as native
 from .codex_hook_file_integrity import hook_validation_deadline
 from .codex_hook_launch_runtime import run_isolated_hook_process
 from .native_runtime import NativeRuntimeIdentity
+from .native_transition_files import require_deadline, runtime_compare
 from .runtime_transition import TransitionError, inverse_recovery_budget
 from .runtime_transition_prepare import _pin_executable
 
@@ -23,19 +23,11 @@ def inspect_codex_repair_native_runtime(*, deadline_monotonic: float) -> NativeR
     within the parent's original deadline and process containment.
     """
 
-    def check_deadline() -> None:
-        if (
-            isinstance(deadline_monotonic, bool)
-            or not math.isfinite(deadline_monotonic)
-            or time.monotonic() >= deadline_monotonic
-        ):
-            raise TransitionError("deadline_exceeded")
-
-    check_deadline()
+    require_deadline(deadline_monotonic)
     mode = native.native_mode()
     with inverse_recovery_budget(deadline_monotonic), hook_validation_deadline(deadline_monotonic):
         for candidate in native._runtime_candidates():
-            check_deadline()
+            require_deadline(deadline_monotonic)
             if not candidate.exists() and not candidate.is_symlink():
                 continue
             path = candidate.expanduser()
@@ -51,7 +43,7 @@ def inspect_codex_repair_native_runtime(*, deadline_monotonic: float) -> NativeR
             manifest = None
             if native._is_bundled_candidate(path):
                 manifest, reason = native._manifest_for_bundled_identity(identity)
-                check_deadline()
+                require_deadline(deadline_monotonic)
                 if reason is not None:
                     raise TransitionError(reason)
             result = run_isolated_hook_process(
@@ -62,37 +54,54 @@ def inspect_codex_repair_native_runtime(*, deadline_monotonic: float) -> NativeR
                 output_limit=64 * 1024,
                 deadline_monotonic=min(deadline_monotonic, time.monotonic() + 1.0),
             )
-            check_deadline()
-            if result.returncode != 0 or result.timed_out or result.containment_failed or result.output_limit_exceeded:
-                raise TransitionError("authority_repair_native_inspection_failed")
+            require_deadline(deadline_monotonic)
+            runtime_compare(
+                "probe",
+                returncode=result.returncode,
+                timed_out=result.timed_out,
+                containment_failed=result.containment_failed,
+                output_limit_exceeded=result.output_limit_exceeded,
+            )
             try:
                 capabilities = native._decode_capabilities(json.loads(result.stdout))
             except (json.JSONDecodeError, RecursionError) as exc:
                 raise TransitionError("authority_repair_native_inspection_failed") from exc
-            if capabilities is None or capabilities.protocol_version != native._NATIVE_PROTOCOL_VERSION:
-                raise TransitionError("native_protocol_mismatch")
-            if manifest is not None and (
-                capabilities.runtime_version != manifest.package_version
-                or capabilities.rule_digest != manifest.rule_digest
-                or capabilities.build_sha != manifest.source_sha
-            ):
-                raise TransitionError("native_manifest_capabilities_mismatch")
+            runtime_compare(
+                "capabilities",
+                capabilities=None
+                if capabilities is None
+                else {
+                    "protocol_version": capabilities.protocol_version,
+                    "runtime_version": capabilities.runtime_version,
+                    "rule_digest": capabilities.rule_digest,
+                    "build_sha": capabilities.build_sha,
+                },
+                protocol=native._NATIVE_PROTOCOL_VERSION,
+                manifest=None
+                if manifest is None
+                else {
+                    "package_version": manifest.package_version,
+                    "rule_digest": manifest.rule_digest,
+                    "source_sha": manifest.source_sha,
+                },
+            )
+            assert capabilities is not None  # the runtime refused a missing one
             version = native._python_package_version()
-            check_deadline()
-            if mode == "auto" and version is not None and capabilities.runtime_version != version:
-                raise TransitionError("native_version_mismatch")
+            require_deadline(deadline_monotonic)
+            runtime_compare(
+                "version",
+                mode=mode,
+                version=version,
+                runtime_version=capabilities.runtime_version,
+            )
             # A replaced runtime cannot vouch for itself, so a changed
             # generation is refused before the runtime is asked to re-pin it.
             try:
                 current = path.stat()
-            except OSError as exc:
-                raise TransitionError("native_runtime_generation_changed") from exc
-            if (current.st_size, current.st_mtime_ns, current.st_ino) != (
-                metadata.st_size,
-                metadata.st_mtime_ns,
-                metadata.st_ino,
-            ):
-                raise TransitionError("native_runtime_generation_changed")
+                after: list[int] | None = [current.st_size, current.st_mtime_ns, current.st_ino]
+            except OSError:
+                after = None
+            runtime_compare("generation", before=[metadata.st_size, metadata.st_mtime_ns, metadata.st_ino], after=after)
             _pin_executable(
                 path,
                 deadline=deadline_monotonic,
@@ -102,6 +111,6 @@ def inspect_codex_repair_native_runtime(*, deadline_monotonic: float) -> NativeR
                     "sha256": identity.sha256,
                 },
             )
-            check_deadline()
+            require_deadline(deadline_monotonic)
             return identity
     raise TransitionError("authority_repair_native_unavailable")

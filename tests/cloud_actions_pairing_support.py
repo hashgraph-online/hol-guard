@@ -123,3 +123,9 @@ def guard_home_for(home: Path) -> Path:
     from codex_plugin_scanner.guard.config import resolve_guard_home_for_user_home
 
     return resolve_guard_home_for_user_home(home)
+
+
+def backups_dir(guard_home: Path, ai_tool: str) -> Path:
+    """Where Guard's native runtime keeps the copies it takes before a settings write."""
+
+    return guard_home / "cloud-actions" / "settings-backups" / ai_tool

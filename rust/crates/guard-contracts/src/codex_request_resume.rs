@@ -2,7 +2,7 @@
 //! Codex browser-approval resume record.
 //!
 //! The caller names the approval request, the call (`seed`, `status`,
-//! `retry` or `defer`) and its clock. The resident reads the approval, operation and
+//! `retry`, `defer`, `defer_live` or `capabilities`) and its clock. The resident reads the approval, operation and
 //! resume rows from `guard.db`, decides the next resume state, sends the
 //! continuation to the Codex thread for a retry and records the outcome.
 
@@ -32,8 +32,11 @@ pub struct CodexRequestResumeRequestV1 {
     /// `seed` writes the record from the queued operation, `status` seeds a
     /// missing record and reads it, `retry` sends the continuation
     /// and `defer` hands the decision to a Codex hook that is still waiting.
+    /// `defer_live` first proves such a hook is waiting and does nothing when
+    /// none is. `capabilities` reports whether the Codex control socket is
+    /// reachable and the latest recorded attempt.
     pub call: String,
-    /// The resolution handed to a waiting hook; only read by `defer`.
+    /// The resolution handed to a waiting hook; only read by `defer` and `defer_live`.
     #[serde(default)]
     pub action: Option<String>,
     /// Send again although a continuation was already sent.
@@ -55,6 +58,10 @@ pub struct CodexRequestResumeRequestV1 {
     /// The caller's working directory, for a relative socket path.
     #[serde(default)]
     pub cwd: Option<String>,
+    /// The caller's `CODEX_HOME`, when it set one: where `capabilities` looks
+    /// for the default Codex control socket.
+    #[serde(default)]
+    pub codex_home: Option<String>,
     /// How long a retry waits for Codex to accept the continuation.
     pub timeout_ms: u64,
 }
@@ -70,7 +77,8 @@ pub struct CodexRequestResumeResultV1 {
     pub status: String,
     /// `ok`, or one of the `native_codex_request_resume_*` failure codes.
     pub code: String,
-    /// `{"resume": <record or null>}`, or `{"error": "not_found" |
+    /// `{"resume": <record or null>}`, `{"latest_attempt": <record or null>,
+    /// "app_server_socket_available": bool}` for `capabilities`, or `{"error": "not_found" |
     /// "not_resolved" | "resume_not_supported"}` when a retry cannot run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<serde_json::Value>,

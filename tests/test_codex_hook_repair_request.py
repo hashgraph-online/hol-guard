@@ -8,9 +8,10 @@ import time
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_repair_request as requests
-from codex_plugin_scanner.guard.codex_hook_integrity import canonical_manifest_bytes, load_hook_secret
+from codex_plugin_scanner.guard.codex_hook_integrity import load_hook_secret
 from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests.codex_hook_paths_support import canonical_manifest_bytes
 
 from .test_codex_hook_recovery import installed  # noqa: F401 -- shared fixture
 from .test_codex_hook_repair_authorization import prepared_repair  # noqa: F401 -- shared fixture
@@ -56,6 +57,11 @@ def _resign(plan, path, payload, *, purpose="codex-authority-repair-request"):
     return hashlib.sha256(raw).hexdigest()
 
 
+# The runtime's review window and the slack its read-back may differ by.
+_REVIEW_SECONDS = 300.0
+_REVIEW_TIMESTAMP_SLACK_SECONDS = 1e-6
+
+
 def test_binary_timestamp_round_trip_stays_inside_the_review_window(captured, monkeypatch):
     _context, _config, _manifest, plan, path = captured
     _write(plan, path)
@@ -65,10 +71,10 @@ def test_binary_timestamp_round_trip_stays_inside_the_review_window(captured, mo
     found = None
     for step in range(200_000):
         created = rng.random() * magnitudes[step % len(magnitudes)]
-        expires = created + requests._REVIEW_SECONDS
+        expires = created + _REVIEW_SECONDS
         loaded_created, loaded_expires = json.loads(json.dumps([created, expires], separators=(",", ":")))
         window = loaded_expires - loaded_created
-        if requests._REVIEW_SECONDS < window <= requests._REVIEW_SECONDS + requests._REVIEW_TIMESTAMP_SLACK_SECONDS:
+        if _REVIEW_SECONDS < window <= _REVIEW_SECONDS + _REVIEW_TIMESTAMP_SLACK_SECONDS:
             found = (loaded_created, loaded_expires)
             break
     assert found is not None
@@ -76,9 +82,7 @@ def test_binary_timestamp_round_trip_stays_inside_the_review_window(captured, mo
     digest = _resign(plan, path, payload)
     stored = json.loads(path.read_bytes())
     stored_window = stored["expires_monotonic"] - stored["created_monotonic"]
-    assert (
-        requests._REVIEW_SECONDS < stored_window <= requests._REVIEW_SECONDS + requests._REVIEW_TIMESTAMP_SLACK_SECONDS
-    )
+    assert _REVIEW_SECONDS < stored_window <= _REVIEW_SECONDS + _REVIEW_TIMESTAMP_SLACK_SECONDS
     monkeypatch.setattr(requests.time, "monotonic", lambda: found[0] + 1.0)
     loaded = _load(plan, path, digest)
     assert loaded.payload() == plan.payload()
@@ -247,7 +251,7 @@ def test_nonfinite_unsigned_body_is_a_typed_authentication_failure(captured):
 
 def test_request_capacity_failure_does_not_create_or_modify_authority(captured, monkeypatch):
     _context, _config, manifest, plan, path = captured
-    monkeypatch.setattr(requests, "_MAX_REQUEST", 1)
+    monkeypatch.setattr(requests, "seal_authority_record", lambda *_args, **_kwargs: b"x" * (8 * 1024 * 1024 + 1))
     with pytest.raises(TransitionError, match="request_too_large"):
         _write(plan, path)
     assert not path.exists()

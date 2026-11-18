@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness import muse_hook_render
+from codex_plugin_scanner.guard.harness import hook_failure_bridge, muse_hook_render
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.harness.muse_hook_render import muse_bridge_response
 from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter, ask
@@ -104,12 +104,6 @@ class TestMuseAdapterIdentity:
         assert contract is not None
         events = {row.event for row in contract.capability_events}
         assert {"PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse", "SessionStart", "Stop"} <= events
-
-    def test_environment_attribution(self) -> None:
-        from codex_plugin_scanner.guard.runtime.harness_attribution import resolve_environment_harness
-
-        assert resolve_environment_harness({"MUSE_SESSION_ID": "session-1"}) == "muse"
-        assert resolve_environment_harness({"MUSE_THREAD_ID": "thread-1"}) == "muse"
 
 
 class TestMuseDetect:
@@ -379,12 +373,38 @@ class TestMuseHookRender:
             guard_home=tmp_path / "guard-home",
         ) == ("", "HOL Guard blocked this action.", 2)
 
+    @pytest.mark.parametrize(
+        ("event_name", "expected"),
+        [
+            ("PreToolUse", ("", hook_failure_bridge.RUNTIME_MISSING, 2)),
+            ("PermissionRequest", ("", hook_failure_bridge.RUNTIME_MISSING, 2)),
+            ("UserPromptSubmit", ("", hook_failure_bridge.RUNTIME_MISSING, 2)),
+            ("PostToolUse", ("", "", 0)),
+            ("SessionStart", ("", "", 0)),
+            ("Stop", ("", "", 0)),
+        ],
+    )
+    def test_the_outage_table_applies_with_both_native_calls_unavailable(
+        self,
+        event_name: str,
+        expected: tuple[str, str, int],
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """No render and no ``hook_failure`` answer: the same table runs in this process."""
 
-class TestMuseApprovalResume:
-    def test_exit_code_uses_zero_envelope_for_pretool(self) -> None:
-        from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
+        from codex_plugin_scanner.guard import native_runner_authority as authority
 
-        assert native_hook_verdict_exit_code("muse", "block", "PreToolUse") == 0
-        assert native_hook_verdict_exit_code("muse", "block", "UserPromptSubmit") == 0
-        assert native_hook_verdict_exit_code("muse", "block", "PostToolUse") == 1
-        assert native_hook_verdict_exit_code("muse", "allow", "PreToolUse") == 0
+        def unavailable(*_args: object, **_kwargs: object) -> None:
+            raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+        monkeypatch.setattr(muse_hook_render, "native_muse_bridge", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+        assert (
+            muse_bridge_response(
+                {"policy_action": "allow", "reason": "ok"},
+                event_name=event_name,
+                guard_home=tmp_path / "guard-home",
+            )
+            == expected
+        )

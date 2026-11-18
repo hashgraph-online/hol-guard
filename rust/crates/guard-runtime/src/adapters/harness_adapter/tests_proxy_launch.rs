@@ -4,7 +4,9 @@ use serde_json::{json, Value};
 use tempfile::TempDir;
 
 use super::super::Ctx;
-use super::{bridge, launcher_env, proxy_guard_home, python_launch, relay_launch, RELAY_FEATURE};
+#[cfg(unix)]
+use super::launcher_env;
+use super::{bridge, proxy_guard_home, python_launch, relay_launch, RELAY_FEATURE};
 
 fn strings(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()

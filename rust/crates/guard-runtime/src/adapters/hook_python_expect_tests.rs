@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use super::{expectation, probe_dir, Facts};
+#[cfg(unix)]
+use super::probe_dir;
+use super::{expectation, Facts};
 
 fn touch(path: &Path) {
     fs::create_dir_all(path.parent().unwrap()).unwrap();

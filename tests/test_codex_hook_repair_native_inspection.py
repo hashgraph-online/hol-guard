@@ -25,6 +25,24 @@ class _BundledView:
         return True
 
 
+class _SelectedView(_BundledView):
+    """``native_runtime`` with only ``selected`` offered for inspection.
+
+    The resident that answers the runtime's deadline and comparison ops keeps
+    running the original binary, so a test can make the inspected file change
+    or lose its execute bit without taking the resident away.
+    """
+
+    def __init__(self, selected: object) -> None:
+        self._selected = selected
+
+    def _runtime_candidates(self) -> tuple[object, ...]:
+        return (self._selected,)
+
+    def _is_bundled_candidate(self, _path: object) -> bool:
+        return False
+
+
 def test_actual_native_inspection_is_read_only(native_hook_force, tmp_path):
     before = _tree(tmp_path)
     metadata = native_hook_force.stat()
@@ -69,7 +87,7 @@ def test_inspection_never_restores_a_missing_execute_bit(native_hook_force, tmp_
     comparison = tmp_path / "non-executable-native"
     comparison.write_bytes(native_hook_force.read_bytes())
     comparison.chmod(0o400)
-    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(comparison))
+    monkeypatch.setattr(inspection, "native", _SelectedView(comparison))
     before = _tree(tmp_path)
     with pytest.raises(CodexHookIntegrityError):
         inspection.inspect_codex_repair_native_runtime(deadline_monotonic=time.monotonic() + 5)
@@ -80,8 +98,8 @@ def test_probe_receives_original_short_parent_and_detects_changed_binary(native_
     comparison = tmp_path / "native-comparison"
     comparison.write_bytes(native_hook_force.read_bytes())
     comparison.chmod(0o700)
-    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(comparison))
-    # Start the copy's resident first, so the short parent covers only the inspection.
+    monkeypatch.setattr(inspection, "native", _SelectedView(comparison))
+    # Start the resident first, so the short parent covers only the inspection.
     native_runner_authority("transition_files", {"op": "lease_check", "lease": "warm"})
     real_probe = inspection.run_isolated_hook_process
     parent = time.monotonic() + 5
@@ -90,8 +108,7 @@ def test_probe_receives_original_short_parent_and_detects_changed_binary(native_
     def changed_after_probe(*args, **kwargs):
         deadlines.append(kwargs["deadline_monotonic"])
         result = real_probe(*args, **kwargs)
-        # The resident may be running this binary, so publish a new inode
-        # rather than writing into the busy one.
+        # Publish a new inode rather than writing into the inspected file.
         replacement = tmp_path / "native-replacement"
         replacement.write_bytes(b"foreign native fixture generation")
         replacement.chmod(0o700)

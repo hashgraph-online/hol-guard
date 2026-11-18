@@ -49,12 +49,16 @@ def prepare_user_config_text(
     existing_text: str, hook_command: str, *, previous_state: dict[str, object]
 ) -> tuple[str, dict[str, object]]:
     """Drive the native Grok user-config merge the way the adapter install does."""
-    from codex_plugin_scanner.guard.cli.grok_hook_validation import is_missing_grok_hook_command
+    from codex_plugin_scanner.guard.cli.native_install_checks import _grok_hook_check
     from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
     read: dict[str, object] = {"existing_text": existing_text, "previous_state": previous_state}
     commands = native_runner_authority("grok_user_config", {**read, "mode": "candidates"})["commands"]
-    retired = [command for command in commands if is_missing_grok_hook_command(command, hook_command)]
+    retired = [
+        command
+        for command in commands
+        if _grok_hook_check("grok_hook_missing", None, command=command, replacement=hook_command)["valid"]
+    ]
     answer = native_runner_authority(
         "grok_user_config", {**read, "hook_command": hook_command, "mode": "merge", "retired_commands": retired}
     )

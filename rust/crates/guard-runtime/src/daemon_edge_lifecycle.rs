@@ -6,7 +6,7 @@
 //! events keep their own short ring (`*.recovery.json`). They no longer push
 //! the daemon's own start, exit and retirement history out of the journal.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -14,7 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Map, Value};
 
-const DIRECTORY: &str = "daemon-lifecycle";
+pub(crate) const DIRECTORY: &str = "daemon-lifecycle";
 const RECOVERY_PREFIX: &str = "recovery_";
 const RECOVERY_SUFFIX: &str = ".recovery.json";
 /// Daemon starts, exits and retirements: weeks of history, not days.
@@ -32,7 +32,7 @@ const MAX_LOCATION_BYTES: usize = 96;
 /// Records that give a daemon's run a known end. `death_observed` is
 /// written when a launcher finds the published daemon gone; it names no
 /// cause, but the exit is already on record.
-const TERMINAL_EVENTS: [&str; 6] = [
+pub(crate) const TERMINAL_EVENTS: [&str; 6] = [
     "death_observed",
     "exiting",
     "retirement_requested",
@@ -41,22 +41,25 @@ const TERMINAL_EVENTS: [&str; 6] = [
     "unclean_exit_detected",
 ];
 /// Records only a daemon that published its state writes.
-const STARTED_EVENTS: [&str; 5] = [
+const STARTED_EVENTS: [&str; 6] = [
     "published",
     "workers_started",
     "hook_worker_warming",
     "ready",
     "reconciled",
+    "reconcile_deferred",
 ];
 /// Records also written to `logs/daemon.log`, where people look first.
-const LOGGED_EVENTS: [&str; 7] = [
+const LOGGED_EVENTS: [&str; 9] = [
     "published",
     "ready",
+    "reconcile_deferred",
     "exiting",
     "start_failed",
     "retirement_requested",
     "shutdown_requested",
     "unclean_exit_detected",
+    "repair_requested",
 ];
 
 /// The optional fields of one record.
@@ -153,8 +156,12 @@ fn unexplained_predecessors(guard_home: &Path, own_pid: u32) -> Vec<u32> {
         .collect();
     names.sort_unstable_by(|left, right| right.cmp(left));
     names.truncate(MAX_PREDECESSOR_SCAN);
-    // Newest first: a terminal record seen before a pid's start ends that run.
+    // Newest first, back to the pid's `published`: a terminal record anywhere
+    // in that run ends it. A daemon stopped while it starts can journal its
+    // exit before a later start step (`ready` is written after the ready
+    // line), so the newest record alone does not say whether the run ended.
     let mut runs: HashMap<u32, (bool, bool)> = HashMap::new();
+    let mut published: HashSet<u32> = HashSet::new();
     let mut order = Vec::new();
     for name in &names {
         let Some(event) = read_event(&directory.join(name)) else {
@@ -176,13 +183,16 @@ fn unexplained_predecessors(guard_home: &Path, own_pid: u32) -> Vec<u32> {
             order.push(pid);
             (false, false)
         });
-        if *started {
+        if published.contains(&pid) {
             continue;
         }
         if TERMINAL_EVENTS.contains(&kind) {
             *ended = true;
         } else if STARTED_EVENTS.contains(&kind) {
             *started = true;
+            if kind == "published" {
+                published.insert(pid);
+            }
         }
     }
     order
@@ -389,7 +399,7 @@ pub(crate) fn load_events(
     )
 }
 
-fn read_event(path: &Path) -> Option<Value> {
+pub(crate) fn read_event(path: &Path) -> Option<Value> {
     let raw =
         crate::daemon_policy_authority::read_private_regular_text(path, MAX_EVENT_BYTES, false)?;
     let value: Value = serde_json::from_str(&raw).ok()?;
@@ -457,7 +467,7 @@ fn safe_session_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
-fn is_symlink(path: &Path) -> bool {
+pub(crate) fn is_symlink(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink())
 }
 

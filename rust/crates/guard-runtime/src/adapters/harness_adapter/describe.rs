@@ -471,7 +471,6 @@ impl Spec {
                 _ => json!([]),
             },
             "trusted_launcher": self.harness == "grok",
-            "retired_hooks": self.harness == "grok",
             // Paseo and the Pi family add to the generic doctor report.
             "diagnostics": matches!(self.harness, "paseo" | "pi" | "omp" | "claude-code" | "hermes"),
             // The Pi family renders an extension that runs this Guard process.

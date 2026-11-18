@@ -3,19 +3,9 @@ import type { GuardApprovalRequest } from "../guard-types";
 import { LoggedActionPanel } from "../logged-action-panel";
 import { plainMcpReason } from "./explain-mcp-call";
 import type { McpCallExplanation, McpFact } from "./mcp-call-types";
-import { ConnectorMark, ConsequenceNote, EffectPill, FactList, StepRow } from "./mcp-call-parts";
-import { unique } from "./mcp-input";
-
-/**
- * Where the call acts: the one app its actions name when there is just one
- * (Gmail through Composio), else the connector it goes through. Actions
- * left out of the card may name other apps, so then it is the connector.
- */
-function actingApp(explanation: McpCallExplanation): string {
-  if ((explanation.hiddenSteps ?? 0) > 0) return explanation.connector;
-  const apps = unique(explanation.steps.map((step) => step.app).filter((app): app is string => app !== null));
-  return apps.length === 1 ? apps[0] : explanation.connector;
-}
+import { McpAppMark } from "./mcp-app-mark";
+import { actingApp, mcpMarkName } from "./mcp-brand";
+import { ConsequenceNote, EffectPill, FactList, StepRow } from "./mcp-call-parts";
 
 /** A lone action is already in the heading, so its row appears only when it has details to show. */
 function showsSteps(explanation: McpCallExplanation): boolean {
@@ -43,7 +33,7 @@ export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest;
   return (
     <section aria-label="What the agent is asking to do" className="mt-5 rounded-2xl border border-slate-200 bg-white">
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:p-5">
-        <ConnectorMark name={explanation.builtIn === true ? (explanation.requester ?? app) : app} />
+        <McpAppMark name={mcpMarkName(explanation)} size="md" />
         <div className="min-w-0">
           <h3 className="text-base font-semibold leading-snug text-brand-dark">{explanation.title}</h3>
           <p className="mt-0.5 break-words text-sm text-brand-dark/70">{subtitleOf(explanation, app)}</p>

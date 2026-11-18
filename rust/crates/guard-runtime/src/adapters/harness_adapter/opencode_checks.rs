@@ -19,7 +19,7 @@ use super::opencode::{
     read_config, wire_payload, COMPANION_PREFIX, PROXY,
 };
 use super::opencode_servers::MODULE_PREFIX;
-use super::{caller, path_text, proxy_launch, Ctx, Failure, Step};
+use super::{caller, path_text, proxy_launch, Ctx, Failure, Spec, Step};
 use crate::copilot_detect::universal_newlines;
 use crate::pyjson::{self, PyVal};
 
@@ -121,17 +121,18 @@ fn config_uses_proxy(ctx: &Ctx, path: &Path) -> bool {
     })
 }
 
-/// `_opencode_protection_checks`, given the store's managed flag and the
-/// detection's config paths.
-pub(super) fn protection(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+/// `_opencode_protection_checks`, given the store's managed flag. The
+/// loaded config paths are this adapter's own detection.
+pub(super) fn protection(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let active = fields
         .get("managed_active")
         .and_then(Value::as_bool)
         .ok_or(Failure::Invalid)?;
-    let detected = fields
-        .get("config_paths")
-        .and_then(Value::as_array)
-        .ok_or(Failure::Invalid)?;
+    let mut detection = super::opencode::detect(spec, ctx)?;
+    let detected = match detection["config_paths"].take() {
+        Value::Array(paths) => paths,
+        _ => return Err(Failure::Invalid),
+    };
     let config = managed_config_path(ctx);
     let shim = ctx.guard_home.join("bin").join("guard-opencode");
     let plugin = global_plugin(ctx);

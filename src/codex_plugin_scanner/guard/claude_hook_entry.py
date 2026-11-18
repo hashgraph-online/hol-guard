@@ -67,7 +67,7 @@ def claude_hook_command(context: HarnessContext) -> str:
 
 
 def _refresh_owned(adapter: NativeHarnessAdapter, context: HarnessContext) -> None:
-    from .harness.base import _owned_adapter_mutation
+    from .native_owned import owned_adapter_mutation
 
     # The native SessionStart lane hands off to this refresh whenever its
     # recorded runtime build differs from the installed one, which is true
@@ -76,7 +76,7 @@ def _refresh_owned(adapter: NativeHarnessAdapter, context: HarnessContext) -> No
     def refresh_runtime_hook_urls(adapter: NativeHarnessAdapter, context: HarnessContext) -> None:
         adapter.run_op("refresh", context)
 
-    _owned_adapter_mutation(refresh_runtime_hook_urls)(adapter, context)
+    owned_adapter_mutation(refresh_runtime_hook_urls)(adapter, context)
 
 
 def refresh_claude_hooks(*, home_dir: Path, workspace_dir: Path | None, guard_home: Path) -> None:

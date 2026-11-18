@@ -11,7 +11,7 @@ from codex_plugin_scanner.guard import codex_hook_repair as repair
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_manifest import CODEX_AUTHORITY_REPAIR_ACTION
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 

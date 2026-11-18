@@ -13,7 +13,9 @@ use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
-use super::codex_remote_launch::{reclaim_state, wait_ready, PID_FILE};
+#[cfg(unix)]
+use super::codex_remote_launch::PID_FILE;
+use super::codex_remote_launch::{reclaim_state, wait_ready};
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 
 const KEYS: [&str; 7] = [

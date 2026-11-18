@@ -626,6 +626,8 @@ pub(crate) mod claude_prompt_text;
 pub(crate) mod contained;
 #[path = "hook_direct_cursor.rs"]
 pub(crate) mod cursor;
+#[path = "hook_direct_cursor_route.rs"]
+pub(crate) mod cursor_route;
 #[path = "hook_direct_defer.rs"]
 mod defer;
 pub(crate) use defer::HookDirectDefer;

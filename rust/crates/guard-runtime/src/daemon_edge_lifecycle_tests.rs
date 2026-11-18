@@ -160,3 +160,38 @@ fn a_starting_daemon_names_each_predecessor_that_vanished() {
     assert_eq!(unclean[0]["reason"], "no_exit_record");
     assert_eq!(unclean[0]["by_pid"], std::process::id());
 }
+
+#[cfg(unix)]
+#[test]
+fn an_exit_journaled_before_a_later_start_step_still_ends_the_run() {
+    let home = tempfile::tempdir().unwrap();
+    let mut stopped = std::process::Command::new("/usr/bin/true").spawn().unwrap();
+    let stopped_pid = stopped.id();
+    stopped.wait().unwrap();
+    let mut reused = std::process::Command::new("/usr/bin/true").spawn().unwrap();
+    let reused_pid = reused.id();
+    reused.wait().unwrap();
+    let reason = Details {
+        reason: Some("signal_term"),
+        ..Details::default()
+    };
+    // SIGTERM lands between the ready line and the `ready` record.
+    record_details(home.path(), stopped_pid, "published", &Details::default());
+    record_details(home.path(), stopped_pid, "exiting", &reason);
+    record_details(home.path(), stopped_pid, "ready", &Details::default());
+    // An earlier run's exit does not end a later run of the same pid.
+    record_details(home.path(), reused_pid, "published", &Details::default());
+    record_details(home.path(), reused_pid, "exiting", &reason);
+    record_details(home.path(), reused_pid, "published", &Details::default());
+    record_details(home.path(), reused_pid, "ready", &Details::default());
+
+    record_unclean_exits(home.path());
+
+    let (events, _) = load_events(home.path(), 50, false);
+    let unclean: Vec<&Value> = events
+        .iter()
+        .filter(|event| event["event"] == "unclean_exit_detected")
+        .collect();
+    assert_eq!(unclean.len(), 1, "{events:?}");
+    assert_eq!(unclean[0]["pid"], reused_pid);
+}

@@ -61,10 +61,10 @@ def test_nested_and_legacy_validation_scopes_cannot_renew_original_budget(tmp_pa
                 files.hook_validation_deadline(nested),
             ):
                 clock[0] = 11.0
-                files.canonical_path(path)
+                files.check_hook_validation_deadline()
             clock[0] = 5.0
     clock[0] = 11.0
-    assert files.canonical_path(path) == str(path.resolve())
+    assert files.check_hook_validation_deadline() is None
 
 
 def test_expiry_after_manifest_read_does_not_read_authority_key(tmp_path, monkeypatch):
@@ -97,7 +97,7 @@ def test_validation_deadline_does_not_leak_into_another_thread(tmp_path, monkeyp
 
     def other_validator():
         try:
-            results.append(files.canonical_path(path))
+            results.append(files.check_hook_validation_deadline())
         except Exception as error:
             results.append(error)
 
@@ -106,7 +106,7 @@ def test_validation_deadline_does_not_leak_into_another_thread(tmp_path, monkeyp
         thread.start()
         thread.join(timeout=1)
         assert not thread.is_alive()
-    assert results == [str(path.resolve())]
+    assert results == [None]
 
 
 @pytest.mark.parametrize("deadline", [float("nan"), float("inf"), True])
@@ -137,7 +137,7 @@ def test_expired_authenticated_context_cannot_start_a_child_with_fresh_budget(tm
     def forbidden(*args, **kwargs):
         raise AssertionError("expired authenticated context launched a child")
 
-    monkeypatch.setattr(launches, "_spawn_hook_process", forbidden)
+    monkeypatch.setattr(launches, "_exchange", forbidden)
     context = trust.TrustedCodexHookLaunch(tmp_path, {}, deadline_monotonic=4)
     assert not context.run_start(("fixture",), timeout_seconds=99)
     assert context.run_fallback(("fixture",), data="{}", timeout_seconds=99) is None

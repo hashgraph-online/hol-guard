@@ -43,7 +43,8 @@ class HarnessEventCapability:
     These fields describe what an adapter declares it can do.  Deployment
     health and proof level stay on the row as separate values, and default to
     ``unverified``/``not_run`` so a source declaration cannot be mistaken for
-    an observed live block.
+    an observed live block. The native runtime validates every row it hands
+    over; nothing is checked here.
     """
 
     harness: str
@@ -76,66 +77,6 @@ class HarnessEventCapability:
     denied_witness_reference: str | None = None
     allowed_witness_reference: str | None = None
     compatibility_verified: bool = False
-
-    def __post_init__(self) -> None:
-        """Reject malformed source declarations before they reach JSON."""
-
-        required_text = {
-            "harness": self.harness,
-            "adapter": self.adapter,
-            "host_version_scope": self.host_version_scope,
-            "os_arch": self.os_arch,
-            "event": self.event,
-            "transport": self.transport,
-            "mode": self.mode,
-            "error_behavior": self.error_behavior,
-            "mandatory_compatibility": self.mandatory_compatibility,
-            "source_reference": self.source_reference,
-        }
-        for field, value in required_text.items():
-            if not isinstance(value, str) or not value.strip():
-                raise ValueError(f"{field} must be a non-empty string")
-        if self.local_hosted not in {"local", "hosted", "unknown"}:
-            raise ValueError(f"unsupported local_hosted value: {self.local_hosted!r}")
-        if self.deployment_health not in {"unverified", "healthy", "degraded", "unavailable", "unknown"}:
-            raise ValueError(f"unsupported deployment_health value: {self.deployment_health!r}")
-        if self.evidence_level not in {
-            "not_run",
-            "source_review",
-            "unit_test",
-            "synthetic_canary",
-            "live_block",
-            "independent_review",
-        }:
-            raise ValueError(f"unsupported evidence_level value: {self.evidence_level!r}")
-        if not isinstance(self.compatibility_verified, bool):
-            raise ValueError("compatibility_verified must be a bool")
-        if not isinstance(self.declared_actions, tuple) or any(
-            not isinstance(action, str) or not action.strip() for action in self.declared_actions
-        ):
-            raise ValueError("declared_actions must be a tuple of non-empty strings")
-        unsupported_actions = set(self.declared_actions) - CAPABILITY_DECLARED_ACTIONS
-        if unsupported_actions:
-            raise ValueError(f"unsupported declared action(s): {sorted(unsupported_actions)!r}")
-        if not isinstance(self.known_blind_spots, tuple) or any(
-            not isinstance(blind_spot, str) or not blind_spot.strip() for blind_spot in self.known_blind_spots
-        ):
-            raise ValueError("known_blind_spots must be a tuple of non-empty strings")
-        if self.evidence_level == "not_run" and any(
-            value is not None
-            for value in (
-                self.observed_at,
-                self.expires_at,
-                self.evidence_reference,
-                self.evidence_build,
-                self.evidence_host_version_scope,
-                self.evidence_os_arch,
-                self.denied_witness_reference,
-                self.allowed_witness_reference,
-                self.compatibility_verified if self.compatibility_verified else None,
-            )
-        ):
-            raise ValueError("not_run evidence cannot carry an observation timestamp or proof reference")
 
     def to_dict(self) -> dict[str, object]:
         """Serialize one row using the stable machine report keys."""

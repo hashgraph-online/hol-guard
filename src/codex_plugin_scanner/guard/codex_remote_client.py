@@ -23,14 +23,6 @@ _PREPARE_BUDGET_SECONDS = 3 * _REMOTE_CONTROL_READY_TIMEOUT_SECONDS + 4.0
 _MAX_PREPARE_STEPS = 3
 
 
-def codex_home_for_user(home_dir: Path) -> Path:
-    return home_dir / ".codex"
-
-
-def default_codex_control_socket(home_dir: Path) -> Path:
-    return codex_home_for_user(home_dir) / "app-server-control" / "app-server-control.sock"
-
-
 def guarded_codex_launch_command(
     *,
     executable: str,
@@ -40,40 +32,34 @@ def guarded_codex_launch_command(
 ) -> list[str]:
     """Return a remote TUI command when Codex app-server control is available."""
 
-    return guarded_codex_launch_command_from_prefix(
-        executable_prefix=(executable,),
+    return guarded_codex_launch_command_from_prefixes(
+        executable_prefixes=((executable,),),
         home_dir=home_dir,
         passthrough_args=passthrough_args,
         environ=environ,
     )
 
 
-def guarded_codex_launch_command_from_prefix(
+def guarded_codex_launch_command_from_prefixes(
     *,
-    executable_prefix: Sequence[str],
+    executable_prefixes: Sequence[Sequence[str]],
     home_dir: Path,
     passthrough_args: list[str],
     environ: Mapping[str, str] | None = None,
 ) -> list[str]:
-    """Prepare Codex using an already authorized canonical launch prefix.
+    """Prepare Codex using the one already authorized canonical launch prefix the candidates share.
 
     Script-backed Codex launchers may require a verified interpreter and
     launcher path. Keeping the complete prefix prevents remote-control or
     app-server setup from resolving an attacker-swapped PATH entry or symlink.
     """
 
-    prefix = list(executable_prefix)
-    if not prefix or any(not isinstance(part, str) or not part for part in prefix):
-        raise ValueError("Codex launch preparation requires a canonical executable prefix.")
-    plain_command = [*prefix, *passthrough_args]
-    socket_path = default_codex_control_socket(home_dir)
-    tails = _launch_tails(passthrough_args, socket_path)
-    if len(tails) < 2:
-        return plain_command
-    environment = dict(os.environ if environ is None else environ)
-    if not _prepare_remote(prefix, home_dir, socket_path, environment):
-        return plain_command
-    return [*prefix, *tails[0]]
+    plan = _launch_plan(executable_prefixes, home_dir, passthrough_args)
+    if plan.get("prepare") is True and _prepare_remote(
+        plan, home_dir, dict(os.environ if environ is None else environ)
+    ):
+        return list(plan["remote"])
+    return _plain(plan, executable_prefixes, passthrough_args)
 
 
 def guarded_codex_launch_command_candidates(
@@ -90,12 +76,11 @@ def guarded_codex_launch_command_candidates(
     does not; incompatible subcommands have only the ordinary form.
     """
 
-    tails = _launch_tails(passthrough_args, default_codex_control_socket(home_dir))
-    return tuple([executable, *tail] for tail in tails)
-
-
-def codex_remote_launch_environment(home_dir: Path) -> dict[str, str]:
-    return {"CODEX_HOME": str(codex_home_for_user(home_dir))}
+    plan = _launch_plan(((executable,),), home_dir, passthrough_args)
+    candidates = plan.get("candidates")
+    if isinstance(candidates, list) and candidates and all(_argv(candidate) for candidate in candidates):
+        return tuple(list(candidate) for candidate in candidates)
+    return ([executable, *passthrough_args],)
 
 
 def _ask(op: str, fields: Mapping[str, object], budget: float | None = None) -> dict[str, Any]:
@@ -107,28 +92,44 @@ def _ask(op: str, fields: Mapping[str, object], budget: float | None = None) -> 
         return {}
 
 
-def _launch_tails(passthrough_args: list[str], socket_path: Path) -> list[list[str]]:
-    """The argv tails after the executable, remote TUI first; only the plain one on a bad answer."""
+def _launch_plan(prefixes: Sequence[Sequence[str]], home_dir: Path, passthrough_args: list[str]) -> Mapping[str, Any]:
+    """The resident's launch plan: the one authorized prefix, the control socket, and the
+    ordinary and remote commands. A refusal raises; a resident that cannot answer yields
+    no plan, which leaves the ordinary launch."""
 
-    return [list(tail) for tail in _planned_tails(tuple(passthrough_args), str(socket_path))]
+    return _planned(tuple(tuple(prefix) for prefix in prefixes), str(home_dir), tuple(passthrough_args))
 
 
 @functools.lru_cache(maxsize=32)
-def _planned_tails(passthrough_args: tuple[str, ...], socket: str) -> tuple[tuple[str, ...], ...]:
+def _planned(
+    prefixes: tuple[tuple[str, ...], ...], home_dir: str, passthrough_args: tuple[str, ...]
+) -> Mapping[str, Any]:
     """One answer per launch, so preparation selects only among the previewed argv."""
 
-    tails = _ask("plan", {"args": list(passthrough_args), "socket": socket}).get("tails")
-    if isinstance(tails, list) and tails and all(isinstance(tail, list) for tail in tails):
-        return tuple(tuple(str(arg) for arg in tail) for tail in tails)
-    return (passthrough_args,)
+    plan = _ask(
+        "launch",
+        {"prefixes": [list(prefix) for prefix in prefixes], "home_dir": home_dir, "args": list(passthrough_args)},
+    )
+    if isinstance(plan.get("refusal"), str):
+        raise ValueError(plan["refusal"])
+    return plan
 
 
-def _prepare_remote(prefix: Sequence[str], home_dir: Path, socket_path: Path, environment: dict[str, str]) -> bool:
+def _plain(plan: Mapping[str, Any], prefixes: Sequence[Sequence[str]], passthrough_args: list[str]) -> list[str]:
+    """The ordinary command: the plan's, or the single prefix's when the resident gave none."""
+
+    if _argv(plan.get("plain")):
+        return list(plan["plain"])
+    return [*next((prefix for prefix in prefixes if prefix), ()), *passthrough_args]
+
+
+def _prepare_remote(plan: Mapping[str, Any], home_dir: Path, environment: dict[str, str]) -> bool:
     """Run each process the resident's launch sequence names; True when the remote TUI can connect."""
 
+    prefix = list(plan["prefix"])
     request: dict[str, object] = {
         "home_dir": str(home_dir),
-        "socket": str(socket_path),
+        "socket": str(plan["socket"]),
         "seconds": _REMOTE_CONTROL_READY_TIMEOUT_SECONDS,
         "stage": "start",
     }

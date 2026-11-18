@@ -49,6 +49,8 @@ mod records;
 mod recover;
 #[path = "daemon_manage_recovery_host.rs"]
 pub(crate) mod recovery_host;
+#[path = "daemon_manage_reliability.rs"]
+mod reliability;
 #[path = "daemon_manage_retire.rs"]
 mod retire;
 #[path = "daemon_manage_serve_stderr.rs"]
@@ -171,6 +173,8 @@ fn answer(request: &Request, raw: &Map<String, Value>) -> Result<Value, String> 
         "retirement_complete" => Ok(json!({"complete": retire::retirement_is_complete(&caller)})),
         "posture" => Ok(json!({"posture": recover::posture(&caller.guard_home)})),
         "repair_locator" => Ok(repair_locator(&caller, deadline)),
+        "reliability" => Ok(reliability::report(&caller, &request.args)),
+        "record_repair" => Ok(reliability::record_repair(&caller)),
         "ensure" | "recover" | "schedule_recovery" | "schedule_ensure" => {
             let ensure = ensure_of(request);
             let failure_kind = request.failure_kind.as_deref().unwrap_or("");

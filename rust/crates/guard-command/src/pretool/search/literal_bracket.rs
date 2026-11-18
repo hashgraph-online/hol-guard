@@ -69,10 +69,22 @@ pub(super) fn inert_bracket_class(value: &str, context: ReadContext<'_>) -> bool
     value.contains('[')
         && !value.contains(['*', '?', '!'])
         && !super::super::glob_class::bracket_fallback_unsafe(value)
-        && super::glob_expand::expand_glob_matches(value, context)
-            .is_some_and(|matches| matches.is_empty())
-        && super::glob_expand::expand_glob_matches_folded(value, context)
-            .is_some_and(|matches| matches.is_empty())
+        && (quoted_word(value, context)
+            || (super::glob_expand::expand_glob_matches(value, context)
+                .is_some_and(|matches| matches.is_empty())
+                && super::glob_expand::expand_glob_matches_folded(value, context)
+                    .is_some_and(|matches| matches.is_empty())))
+}
+
+/// Whether the shell hands `value` over exactly as typed because every
+/// bracket in it sat inside quotes. No shell globs a quoted word, so
+/// `"app/(marketing)/blog/[slug]/page.tsx"` names that route file even though
+/// the expansion matchers refuse the parentheses, which zsh would read as a
+/// pattern group in an unquoted word. A word starting with `~` is left to
+/// the expansion proof: quoted, the tilde is not expanded, so the word names
+/// a directory called `~` rather than the home path the screens resolve.
+fn quoted_word(value: &str, context: ReadContext<'_>) -> bool {
+    !value.starts_with('~') && context.literal_words.iter().any(|word| word == value)
 }
 
 fn literal_bracket_walk(value: &str, context: ReadContext<'_>) -> bool {
