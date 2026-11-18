@@ -41,6 +41,7 @@ const RG_VALUE_OPTIONS: &[&str] = &[
     "-B",
     "-C",
     "-g",
+    "-j",
     "-m",
     "-t",
     "-T",
@@ -127,6 +128,27 @@ fn grep_short(arg: &str) -> Option<GrepShort<'_>> {
     None
 }
 
+// Ripgrep clusters boolean short flags with -e/-f and arity-bearing flags.
+// The latter own the rest of the cluster, so a later letter is a value,
+// not another option. Do not treat an explicit pattern as a lone stdin search.
+fn rg_short(arg: &str) -> Option<GrepShort<'_>> {
+    let flags = arg.strip_prefix('-')?;
+    if flags.is_empty() || flags.starts_with('-') {
+        return None;
+    }
+    for (index, flag) in flags.char_indices() {
+        let remaining = &flags[index + flag.len_utf8()..];
+        match flag {
+            'e' | 'f' => return Some(GrepShort::ExplicitPattern),
+            'A' | 'B' | 'C' | 'g' | 'j' | 'm' | 't' | 'T' | 'E' => {
+                return Some(GrepShort::Value(remaining.is_empty()));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 fn lone_pattern<'a>(command: &str, args: &'a [String]) -> Option<&'a str> {
     let grep_like = GREP_FAMILY.contains(&command);
     if !grep_like && command != "rg" {
@@ -190,6 +212,16 @@ fn lone_pattern<'a>(command: &str, args: &'a [String]) -> Option<&'a str> {
                     GrepShort::Directory(Some(_)) => {}
                     GrepShort::Directory(None) => directory_value_pending = true,
                     GrepShort::Value(needs_next) => skip_value = needs_next,
+                }
+                continue;
+            }
+        }
+        if command == "rg" {
+            if let Some(option) = rg_short(arg) {
+                match option {
+                    GrepShort::ExplicitPattern => return None,
+                    GrepShort::Value(needs_next) => skip_value = needs_next,
+                    _ => {}
                 }
                 continue;
             }
