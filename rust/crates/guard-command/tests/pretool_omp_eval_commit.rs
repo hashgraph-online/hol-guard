@@ -66,7 +66,11 @@ fn a_commit_draft_outside_the_grammar_keeps_the_unknown_program_review() {
         "const mod = await import('xd://eval/commit'); print(Object.keys(mod));",
     ] {
         let result = eval(&session, code);
-        assert_ne!(result.minimum_action, "allow", "{code}: {result:?}");
+        assert_eq!(result.minimum_action, "review", "{code}: {result:?}");
+        assert_eq!(
+            result.reason_code, "native_pre_tool_unknown_review",
+            "{code}: {result:?}"
+        );
     }
 }
 

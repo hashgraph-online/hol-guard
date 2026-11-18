@@ -135,12 +135,17 @@ impl Parser {
             return None;
         }
         self.eat_ident("of")?;
-        match self.literal(0)? {
-            Value::Array(items) if items.iter().all(Value::is_string) => {}
+        // The body runs once per item, so each run counts toward the call
+        // budget. An empty list runs nothing this grammar needs to answer for.
+        let runs = match self.literal(0)? {
+            Value::Array(items) if !items.is_empty() && items.iter().all(Value::is_string) => {
+                items.len()
+            }
             _ => return None,
-        }
+        };
         self.eat(')')?;
         let fresh = self.loop_names.insert(name.clone());
+        let before = self.calls.len();
         let body = if self.at('{') {
             self.pos += 1;
             loop {
@@ -158,6 +163,10 @@ impl Parser {
         };
         if fresh {
             self.loop_names.remove(&name);
+        }
+        let per_run = self.calls.len() - before;
+        if before + per_run.checked_mul(runs)? > MAX_CALLS {
+            return None;
         }
         body
     }
@@ -233,7 +242,7 @@ impl Parser {
                 {
                     return None;
                 }
-                if !options.get("agents").is_none_or(agents_literal) {
+                if !options.get("agents").is_none_or(strings_literal) {
                     return None;
                 }
                 match options.get("repo") {
@@ -261,7 +270,7 @@ impl Parser {
         };
         match method.as_str() {
             "take" | "drop" => {
-                let path_ok = args.first().is_none_or(paths_literal);
+                let path_ok = args.first().is_none_or(strings_literal);
                 (args.len() <= 2
                     && path_ok
                     && options_ok(args.get(1), &["units", "grep", "silent"]))
@@ -270,16 +279,31 @@ impl Parser {
             }
             "only" => {
                 (args.len() <= 2
-                    && args.first().is_some_and(paths_literal)
+                    && args.first().is_some_and(strings_literal)
                     && options_ok(args.get(1), &["silent"]))
                 .then_some(())?;
                 self.push(repo.as_deref(), "git status --short")
             }
+            // Both print file content, so they are judged as the diff they
+            // read: a configured textconv or external diff program and the
+            // content screens apply exactly as they do to a direct `git diff`.
             "show" | "diff" => {
-                let path_ok = method == "show" && args.first().is_some_and(Value::is_string);
-                let rest = if path_ok { &args[1..] } else { &args[..] };
+                let path = match (method.as_str(), args.first()) {
+                    ("show", Some(Value::String(path))) if plain_path(path) => Some(path.clone()),
+                    ("show", _) => return None,
+                    _ => None,
+                };
+                let rest = if path.is_some() {
+                    &args[1..]
+                } else {
+                    &args[..]
+                };
                 (rest.len() <= 1 && options_ok(rest.first(), &["silent"])).then_some(())?;
-                self.push(repo.as_deref(), "git status --short")
+                let command = match path {
+                    Some(path) => format!("git diff HEAD -- {path}"),
+                    None => "git diff HEAD".to_owned(),
+                };
+                self.push(repo.as_deref(), &command)
             }
             "commit" => {
                 let subject = args.first()?.as_str()?;
@@ -397,15 +421,9 @@ impl Parser {
     }
 }
 
-fn agents_literal(value: &Value) -> bool {
-    match value {
-        Value::String(_) => true,
-        Value::Array(items) => items.iter().all(Value::is_string),
-        _ => false,
-    }
-}
-
-fn paths_literal(value: &Value) -> bool {
+/// A string or a list of strings, the shape `agents`, `take`, `drop` and
+/// `only` accept.
+fn strings_literal(value: &Value) -> bool {
     match value {
         Value::String(_) => true,
         Value::Array(items) => items.iter().all(Value::is_string),
@@ -423,6 +441,32 @@ fn repository_literal(repo: &str) -> bool {
         && !repo.contains(['\\', '$'])
         && repo.trim() == repo
         && !repo.chars().any(char::is_control)
+        && !climbs_after_descending(repo)
+}
+
+/// `scratch/../project`: the prelude normalizes the text before it opens the
+/// repository, while the filesystem walks through `scratch`, so the two can
+/// name different directories. Leading `..` climbs read the same both ways.
+fn climbs_after_descending(path: &str) -> bool {
+    let mut descended = false;
+    path.split('/').any(|part| match part {
+        "" | "." => false,
+        ".." => descended,
+        _ => {
+            descended = true;
+            false
+        }
+    })
+}
+
+/// A relative path made of plain name characters, safe to write unquoted.
+fn plain_path(path: &str) -> bool {
+    !path.is_empty()
+        && !path.starts_with(['-', '/'])
+        && path
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '/'))
+        && !path.split('/').any(|part| part == "..")
 }
 
 /// Parse a program built only from the `commit` prelude and its
@@ -430,6 +474,11 @@ fn repository_literal(repo: &str) -> bool {
 /// token falls outside that grammar.
 pub(super) fn parse_commit_program(code: &str) -> Option<Vec<Call>> {
     if code.len() > MAX_CODE_BYTES {
+        return None;
+    }
+    // The subject and body never reach the projected `git commit`, so text
+    // holding a literal secret keeps the unknown-program review.
+    if crate::pretool::literal_secrets::holds_literal_secret(code) {
         return None;
     }
     let lexed = tokenize_lines(code)?;

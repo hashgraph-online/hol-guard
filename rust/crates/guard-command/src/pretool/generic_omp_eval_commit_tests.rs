@@ -97,7 +97,38 @@ fn programs_outside_the_grammar_are_rejected() {
         "const d = await commit.draft(); return await d.commit('x'); await d.take('y');",
         "",
         "   ",
+        // Text normalized before the repository opens can name another one.
+        "const d = await commit.draft({ repo: 'scratch/../project' }); await d.commit('x');",
+        // `show` needs a plain relative path inside the draft.
+        "const d = await commit.draft(); return await d.show();",
+        "const d = await commit.draft(); return await d.show('../outside.txt');",
+        "const d = await commit.draft(); return await d.show('-p');",
+        // An empty loop and one that outruns the call budget.
+        "const d = await commit.draft(); for (const p of []) await d.take(p);",
+        "const d = await commit.draft(); for (const p of ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y']) await d.take(p);",
     ] {
         assert_eq!(commands(code), None, "{code}");
     }
+}
+
+#[test]
+fn diff_reads_are_judged_as_the_diff_they_print() {
+    let commands = commands(
+        "const d = await commit.draft(); print(await d.diff()); return await d.show('src/sum.js');",
+    )
+    .unwrap();
+    let texts: Vec<&str> = commands.iter().map(|(text, _)| text.as_str()).collect();
+    assert_eq!(
+        texts,
+        [STATUS, "git diff HEAD", "git diff HEAD -- src/sum.js"]
+    );
+}
+
+#[test]
+fn a_loop_counts_one_call_per_item() {
+    let commands = commands(
+        "const d = await commit.draft(); for (const p of ['a.js', 'b.js', 'c.js']) await d.take(p);",
+    )
+    .unwrap();
+    assert_eq!(commands.len(), 2);
 }
