@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
-from codex_plugin_scanner.guard import native_runtime
+from codex_plugin_scanner.guard import native_runtime, native_transport_error
 from codex_plugin_scanner.guard.native_runtime import (
     _INTEGRITY_FAILURE_REASONS,
     _native_error,
@@ -44,18 +45,17 @@ def test_native_error_prefers_rust_transport_validation(monkeypatch) -> None:
         return '{"error":"native_overloaded"}'
 
     monkeypatch.setattr(native_runtime, "_run_native_process", run)
-    assert native_runtime._native_error({"error": "native_overloaded", "retryable": True}) == (
-        "native_overloaded"
+    deadline = time.monotonic() + 0.05
+    assert native_transport_error.native_error(
+        {"error": "native_overloaded", "retryable": True}, deadline_monotonic=deadline
+    ) == "native_overloaded"
+    assert calls[0][:3] == (
+        candidate,
+        ("native-error-code", "--stdin"),
+        '{"error":"native_overloaded","retryable":true}',
     )
-    assert calls == [
-        (
-            candidate,
-            ("native-error-code", "--stdin"),
-            '{"error":"native_overloaded","retryable":true}',
-            0.25,
-            16 * 1024,
-        )
-    ]
+    assert calls[0][4] == 16 * 1024
+    assert 0 < calls[0][3] <= 0.05
 
 
 def test_native_runtime_fixtures_use_the_platform_temp_directory() -> None:

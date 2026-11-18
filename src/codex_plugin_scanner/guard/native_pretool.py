@@ -306,7 +306,7 @@ def review_pre_tool_native(
             payload = json.loads(output)
         except (UnicodeDecodeError, json.JSONDecodeError):
             payload = None
-        if _native_error(payload) == "native_overloaded":
+        if _native_error(payload, deadline_monotonic=deadline_monotonic) == "native_overloaded":
             if record_health:
                 native_record_overload(status.identity.sha256, guard_home)
             return record_native_hook_result("native_fail_safe", None)

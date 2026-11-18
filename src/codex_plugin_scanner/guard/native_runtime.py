@@ -52,6 +52,8 @@ from .native_runtime_values import (
     warn_legacy_hook_fast_path_once,
 )
 from .native_runtime_values import _NATIVE_RUNTIME_EXPORTS as __all__  # noqa: F401, N811
+from .native_transport_error import native_error as _native_error  # noqa: F401
+from .native_transport_error import native_error_code  # noqa: F401
 
 _NATIVE_PROTOCOL_VERSION = 1
 _NATIVE_BINARY_ENV = "HOL_GUARD_NATIVE_BINARY"
@@ -300,44 +302,6 @@ def _run_native_process(
     if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
         return None
     return result.stdout
-
-
-def native_error_code(payload: object) -> str | None:
-    """Ask the Rust runtime to validate a native transport error envelope."""
-
-    try:
-        encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-    except (TypeError, ValueError):
-        return None
-    for candidate in _runtime_candidates():
-        if _validate_binary(candidate) is None:
-            continue
-        output = _run_native_process(
-            candidate,
-            ("native-error-code", "--stdin"),
-            input_text=encoded,
-            timeout_seconds=0.25,
-            output_limit=16 * 1024,
-        )
-        if output is None:
-            return None
-        try:
-            value = json.loads(output)
-        except json.JSONDecodeError:
-            return None
-        return value.get("error") if isinstance(value, dict) and isinstance(value.get("error"), str) else None
-    return None
-
-
-def _native_error(payload: object) -> str | None:
-    """Decode a native error through Rust, retaining the no-runtime fallback."""
-
-    native = native_error_code(payload)
-    if native is not None:
-        return native
-    from .native_response_decoder import native_error
-
-    return native_error(payload)
 
 
 # Successful probes are cached per binary identity. Failures are not cached:
