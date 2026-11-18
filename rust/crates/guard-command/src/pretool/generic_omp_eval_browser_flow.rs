@@ -71,7 +71,9 @@ impl Parser {
     /// loopback `fetch`, a response body read, or a tab call.
     pub(super) fn awaited_value(&mut self) -> Option<()> {
         match self.peek()?.clone() {
-            Token::Ident(word) if word == "page" && self.in_run => self.page_call(),
+            Token::Ident(word) if word == "page" && self.in_run && self.run_page => {
+                self.page_call()
+            },
             Token::Ident(word) if word == "fetch" => self.fetch_call(),
             Token::Ident(word) if self.responses.contains(&word) => {
                 self.pos += 1;
@@ -253,8 +255,12 @@ impl Parser {
         self.punct('=')?;
         self.punct('>')?;
         self.in_run = true;
+        self.run_page = named.contains("page");
+        self.run_wait = named.contains("wait");
         self.block()?;
         self.in_run = false;
+        self.run_page = false;
+        self.run_wait = false;
         Some(())
     }
 
