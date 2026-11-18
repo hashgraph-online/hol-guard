@@ -528,7 +528,14 @@ fn receiving_program(
         // assignment hands the value straight to the program the rest of this
         // command names and `env NAME=` and `make NAME=` are settings whatever
         // program receives them.
-        return (flow == ValueFlow::Assignments && words.is_empty() && !followed).then_some(None);
+        //
+        // A loop body's `do` opens a command position of its own, so `for f
+        // in a; do actual=$(...); ...; done` keeps the value exactly as the
+        // same assignment after a `;` does. Without this, the keyword read as
+        // the program receiving the output, and a checksum loop over its own
+        // variable blocked with no approval left to give.
+        let command_position = words.iter().all(|word| word == "do");
+        return (flow == ValueFlow::Assignments && command_position && !followed).then_some(None);
     }
     let receiver = words
         .iter()
