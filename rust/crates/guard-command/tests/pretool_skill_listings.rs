@@ -187,6 +187,9 @@ fn listing_a_missing_path_in_a_sibling_checkout_proceeds() {
             // A checkout without workflows is probed by the `.github` name.
             "ls ../project-wt/.github/workflows/ 2>/dev/null",
             "ls ../project-wt/.github",
+            // Any other hidden name of the checkout is probed under the
+            // screens a listing of it would get.
+            "ls ../project-wt/.githubx/missing",
         ] {
             assert_eq!(
                 action(&home, harness, command),
@@ -203,7 +206,7 @@ fn listing_a_missing_path_in_a_sibling_checkout_proceeds() {
         "ls ../../.ssh/missing",
         "ls ../../.codex/missing",
         "ls ../project-wt/.github/.env-missing",
-        "ls ../project-wt/.githubx/missing",
+        "ls ../project-wt/.agents/missing",
         "ls ~/../missing",
     ] {
         assert_ne!(action(&home, "zcode", command), "allow", "{command}");
