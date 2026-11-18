@@ -38,6 +38,7 @@ if str(_REPO_ROOT) not in sys.path:
 from scripts import stress_guard_daemon as stress  # noqa: E402
 
 SHED_CODES = (
+    # Capacity and deadline fail-safes are expected under an intentional burst.
     "daemon_hook_queue_capacity",
     "daemon_hook_deadline_exhausted",
     "daemon_hook_queue_bytes",
