@@ -422,19 +422,23 @@ fn write_input(mut stream: std::process::ChildStdin, input: Vec<u8>) -> JoinHand
 
 /// `_truncate_decoded_output` (`codex_hook_launch_runtime.py:55-61`):
 /// keep the decoded UTF-8 within `limit` bytes after replacement decoding.
-#[allow(dead_code)]
 fn truncate_decoded(value: String, limit: usize) -> String {
     let encoded = value.as_bytes();
     if encoded.len() <= limit {
         return value;
     }
-    // Re-encode-bound: decode only the prefix that fits, ignoring the cut.
-    String::from_utf8_lossy(&encoded[..limit]).into_owned()
+    // Python decodes the cut prefix with `errors="ignore"`: a character split
+    // by the cut is dropped, never replaced (U+FFFD would add bytes past the bound).
+    let prefix = &encoded[..limit];
+    let valid = match std::str::from_utf8(prefix) {
+        Ok(text) => text.len(),
+        Err(error) => error.valid_up_to(),
+    };
+    String::from_utf8_lossy(&prefix[..valid]).into_owned()
 }
 
 /// `_decode_combined_output` (`codex_hook_launch_runtime.py:64-75`): decode
 /// both streams preserving their shared byte bound (stdout consumes first).
-#[allow(dead_code)]
 fn decode_combined_output(stdout: &[u8], stderr: &[u8], output_limit: usize) -> (String, String) {
     let remaining = output_limit;
     let stdout_str = truncate_decoded(String::from_utf8_lossy(stdout).into_owned(), remaining);
@@ -1036,6 +1040,28 @@ mod tests {
         assert!(cmd[3].contains("codex_plugin_scanner.cli"));
         assert_eq!(cmd[4], "guard");
         assert_eq!(cmd[5], "check");
+    }
+}
+
+#[cfg(test)]
+mod decode_bound_tests {
+    use super::*;
+
+    #[test]
+    fn invalid_bytes_never_push_the_decoded_output_past_the_bound() {
+        let stdout = vec![0xff_u8; 800];
+        let stderr = vec![b'e'; 800];
+        let (out, err) = decode_combined_output(&stdout, &stderr, 1024);
+        assert!(out.len() + err.len() <= 1024);
+        assert_eq!(out.len(), 1023);
+        assert_eq!(err, "e");
+    }
+
+    #[test]
+    fn a_character_split_by_the_cut_is_dropped_not_replaced() {
+        assert_eq!(truncate_decoded("aé".to_owned(), 2), "a");
+        assert_eq!(truncate_decoded("aé".to_owned(), 3), "aé");
+        assert_eq!(truncate_decoded("abc".to_owned(), 0), "");
     }
 }
 
