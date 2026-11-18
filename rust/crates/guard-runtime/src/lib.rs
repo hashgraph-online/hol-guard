@@ -462,6 +462,7 @@ mod edge_exact_command_spelling;
 mod edge_git_push;
 mod edge_receipt;
 mod edge_review_evidence;
+mod edge_session_cascade;
 mod edge_structured;
 mod encrypted_secret_store;
 mod evaluation_contract;
