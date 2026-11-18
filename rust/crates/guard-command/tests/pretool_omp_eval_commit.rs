@@ -83,3 +83,55 @@ fn a_commit_beside_a_destructive_shell_call_is_not_allowed() {
     );
     assert_ne!(result.minimum_action, "allow", "{result:?}");
 }
+
+#[test]
+fn show_in_a_nested_directory_matches_the_root_anchored_git_diff() {
+    let session = session("omp-eval-root-pathspec");
+    let nested = session.worktree.join("src");
+    std::fs::create_dir_all(&nested).unwrap();
+    let direct = evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &json!({"tool_name": "bash", "tool_input": {
+            "command": "git diff HEAD -- ':(top)tracked.txt'"
+        }}),
+        Some(&default_controls()),
+        None,
+        session.home.to_str(),
+        nested.to_str(),
+    );
+    let projected = evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &json!({"tool_name": "eval", "tool_input": {
+            "language": "js",
+            "code": "const d = await commit.draft(); return await d.show('tracked.txt');",
+            "title": "Show project change",
+            "timeout": 300
+        }}),
+        Some(&default_controls()),
+        None,
+        session.home.to_str(),
+        nested.to_str(),
+    );
+    assert_eq!(direct.minimum_action, "allow", "{direct:?}");
+    assert_eq!(projected.minimum_action, direct.minimum_action, "{projected:?}");
+
+    for path in [".env", "../.ssh/id_rsa", "src/**"] {
+        let code = format!(
+            "const d = await commit.draft(); return await d.show('{path}');"
+        );
+        let result = evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "eval", "tool_input": {
+                "language": "js", "code": code, "title": "Show project change", "timeout": 300
+            }}),
+            Some(&default_controls()),
+            None,
+            session.home.to_str(),
+            nested.to_str(),
+        );
+        assert_ne!(result.minimum_action, "allow", "{path}: {result:?}");
+    }
+}
