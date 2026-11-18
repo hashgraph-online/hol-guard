@@ -290,6 +290,8 @@ def build_fixture(root: Path) -> BenignFixture:
     pnpm_monorepo(home / "Code" / "acme-platform")
     _git(home / "Code" / "acme-platform", "init", "--quiet", "--initial-branch=main", home=home)
     _write(home / "Code" / "acme-platform" / ".gitignore", "node_modules/\n")
+    # A one-off script the project keeps as a dotfile beside its code.
+    _write(home / "Code" / "acme-platform" / ".repair-stage.py", "def main():\n    return 0\n")
     _git(home / "Code" / "acme-platform", "add", "-A", home=home)
     _git(home / "Code" / "acme-platform", "commit", "--quiet", "-m", "platform base", home=home)
     _write(home / "acme-plain" / "README.txt", "Plain notes directory.\n")
