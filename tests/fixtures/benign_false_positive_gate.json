@@ -7470,6 +7470,36 @@
       "expect": "not_allow"
     },
     {
+      "id": "omp-eval-commit-show-root-anchored-tracked-path",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); return await d.show('tracked.txt');",
+        "language": "js",
+        "title": "Inspect tracked diff"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-eval-commit-show-sensitive-dotenv-keeps-review",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); return await d.show('.env');",
+        "language": "js",
+        "title": "Inspect sensitive diff"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "omp-eval-commit-with-shell",
       "fix_area": "omp",
       "harnesses": [
