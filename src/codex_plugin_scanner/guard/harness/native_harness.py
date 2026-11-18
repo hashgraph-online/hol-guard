@@ -214,12 +214,6 @@ class NativeHarnessAdapter(HarnessAdapter):
 
             fields["facts"] = claude_facts(context.guard_home)
             answer = self._owned_ask(op, context, **fields)
-        if answer == {"reply": {"workspace_skills": None}} and "workspace_skills" not in fields:
-            # Only a Windows walk in this process finds the workspace skills.
-            from ..aibom_detection import portable_workspace_skills
-
-            fields["workspace_skills"] = portable_workspace_skills(self.harness, context.workspace_dir)
-            answer = self._owned_ask(op, context, **fields)
         return answer
 
     def _owned_ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:

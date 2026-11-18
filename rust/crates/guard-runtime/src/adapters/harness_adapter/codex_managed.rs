@@ -10,8 +10,8 @@
 //!
 //! The caller's process supplies only what it alone knows, in the request's
 //! `facts.codex`: `launch` (`home_is_current`, `runtime_guard_home`,
-//! `workspace_explicit`, `long_timeout`), `package_root`, and the Windows skill
-//! walks `detection` reads. `held_dirs` names the configuration directories
+//! `workspace_explicit`, `long_timeout`), and `package_root`.
+//! `held_dirs` names the configuration directories
 //! its process already holds, each `{identity, lease}`.
 
 use std::path::{Path, PathBuf};
@@ -328,8 +328,7 @@ fn install_owned(
         found_paths,
         warnings: _,
         sourced: _,
-    } = codex_detection::detect(ctx, &facts.launch, &owned, Some(&contents), facts.codex)
-        .map_err(stopped)?;
+    } = codex_detection::detect(ctx, &facts.launch, &owned, Some(&contents)).map_err(stopped)?;
     let mut fields = plan_fields(
         request, facts, &previous, &owned, contents, &artifacts, true,
     )?;

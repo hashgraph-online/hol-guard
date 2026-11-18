@@ -32,13 +32,7 @@ pub(super) fn detect(spec: &Spec, ctx: &Ctx, request: &Map<String, Value>) -> St
         found_paths,
         warnings,
         sourced,
-    } = codex_detection::detect(
-        ctx,
-        &facts.launch,
-        &bindings(previous.as_ref()),
-        None,
-        facts.codex,
-    )?;
+    } = codex_detection::detect(ctx, &facts.launch, &bindings(previous.as_ref()), None)?;
     let available = common(spec, "command_available", ctx)?
         .get("available")
         .and_then(Value::as_bool)

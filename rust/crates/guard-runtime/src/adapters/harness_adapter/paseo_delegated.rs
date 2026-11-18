@@ -9,8 +9,8 @@
 //! transaction's recovery.
 //!
 //! The request carries `delegates` (which provider runtimes this host has),
-//! `now` and `source` for the rows, and the per-provider `facts` and
-//! `workspace_skills` every other install takes. Paseo installs for the daemon
+//! `now` and `source` for the rows, and the per-provider `facts`
+//! every other install takes. Paseo installs for the daemon
 //! user, so each provider installs without the caller's workspace.
 
 use std::path::Path;

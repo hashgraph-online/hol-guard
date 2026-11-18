@@ -714,35 +714,7 @@ def test_malformed_merge_plans_are_refused(tmp_path: Path, monkeypatch: pytest.M
             extend_detection_with_workspace_aibom(_detection(), home_dir=tmp_path, workspace_dir=tmp_path)
 
 
-def test_portable_walk_ships_finished_skills_to_native(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Hosts the resident cannot walk (Windows) send Python-built skill artifacts."""
-
-    workspace = tmp_path / "work"
-    home = tmp_path / "home"
-    (workspace / ".agents" / "skills" / "proj").mkdir(parents=True)
-    (workspace / ".agents" / "skills" / "proj" / "SKILL.md").write_text("# proj\n", encoding="utf-8")
-    (home / ".codex" / "skills" / "glob").mkdir(parents=True)
-    (home / ".codex" / "skills" / "glob" / "SKILL.md").write_text("# glob\n", encoding="utf-8")
-    monkeypatch.setattr(aibom_detection, "_needs_portable_walk", lambda: True)
-    calls = _recording_native(monkeypatch, {"artifacts": []})
-
-    discover_shared_workspace_aibom_artifacts("codex", home_dir=home, workspace_dir=workspace)
-    discover_codex_skill_artifacts("codex", home_dir=home, workspace_dir=workspace)
-    discover_shared_workspace_aibom_artifacts("hermes", home_dir=home, workspace_dir=workspace)
-
-    workspace_request = calls[0][1]
-    (project,) = workspace_request["skills"]
-    assert project["artifact_id"] == "codex:project:skill:.agents/skills:proj"
-    assert project["source_scope"] == "project"
-    assert project["config_path"] == str(workspace.resolve() / ".agents" / "skills" / "proj" / "SKILL.md")
-    codex_request = calls[1][1]
-    assert [item["name"] for item in codex_request["project_skills"]] == ["proj"]
-    assert [item["name"] for item in codex_request["global_skills"]] == ["glob"]
-    assert "skills" not in calls[2][1]
-
-
-def test_native_walk_is_used_when_the_host_supports_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(aibom_detection, "_needs_portable_walk", lambda: False)
+def test_native_walk_serves_every_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _recording_native(monkeypatch, {"artifacts": []})
 
     discover_shared_workspace_aibom_artifacts("codex", home_dir=tmp_path, workspace_dir=tmp_path)

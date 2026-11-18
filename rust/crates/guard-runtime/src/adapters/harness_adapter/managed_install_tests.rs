@@ -31,7 +31,6 @@ fn owned(extra: Value) -> Value {
         "frozen": null,
         "runtime": null,
         "facts": {},
-        "workspace_skills": {},
         "now": "2026-11-18T00:00:00+00:00",
         "source": "test",
         "workspace": null,

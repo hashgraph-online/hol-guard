@@ -11,24 +11,20 @@ def detected_harnesses(context: HarnessContext) -> list[str]:
     """The harnesses a detection finds installed, runnable or configured on this host.
 
     The runtime detects every harness and extends it with the shared workspace AIBOM artifacts; this process
-    supplies the Codex facts only it knows and the Windows workspace skill walks.
+    supplies the Codex facts only it knows.
     """
-    from ..aibom_detection import _AIBOM_DISCOVERY_TIMEOUT_SECONDS, NativeAibomError, portable_workspace_skills
+    from ..aibom_detection import _AIBOM_DISCOVERY_TIMEOUT_SECONDS, NativeAibomError
     from ..codex_harness_client import codex_native_request, raise_untrusted
     from ..native_runner_authority import NativeRunnerAuthorityError
     from .native_harness import ask, describe
 
-    skills = {
-        str(adapter.get("harness")): portable_workspace_skills(str(adapter.get("harness")), context.workspace_dir)
-        for adapter in describe()["adapters"]
-        if isinstance(adapter, dict)
-    }
-    fields: dict[str, Any] = {"workspace_skills": skills, **codex_native_request(context)}
+    harnesses = [str(adapter.get("harness")) for adapter in describe()["adapters"] if isinstance(adapter, dict)]
+    fields: dict[str, Any] = codex_native_request(context)
     try:
         answer = ask(
             "detected_harnesses",
             context,
-            timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS * len(skills),
+            timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS * len(harnesses),
             **fields,
         )
     except NativeRunnerAuthorityError as error:

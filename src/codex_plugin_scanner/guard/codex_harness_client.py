@@ -177,15 +177,12 @@ def raise_untrusted(untrusted: object) -> None:
 
 
 def codex_install_facts(context: HarnessContext) -> dict[str, object]:
-    """What the runtime's Codex install and uninstall cannot read: this launch, the installed package's root and
-    the skill walks a host without the unix file-descriptor walk must run here."""
+    """What the runtime's Codex install and uninstall cannot read: this launch and the installed package's root."""
     from . import codex_hook_self_binding
-    from .aibom_detection import portable_codex_skills
 
     return {
         "launch": _launch_facts(context),
         "package_root": str(codex_hook_self_binding.install_package_root()),
-        **portable_codex_skills(context.home_dir, context.workspace_dir),
     }
 
 

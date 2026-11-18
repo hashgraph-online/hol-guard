@@ -5,9 +5,8 @@
 //! shared workspace AIBOM artifacts when its spec asks for it. A harness counts
 //! as detected when it is installed, its command is available, or it found
 //! config paths or artifacts. The caller's process supplies only the Codex
-//! facts its `detect` takes (`facts.codex`, `transition`) and, in
-//! `workspace_skills` (harness to skills), the Windows skill walks the
-//! workspace plan reads.
+//! facts its `detect` takes (`facts.codex`, `transition`); the workspace skills
+//! are walked here on every platform.
 
 use serde_json::{json, Map, Value};
 
@@ -33,12 +32,7 @@ fn found(answer: &Value, extra: &Value) -> bool {
 }
 
 /// `extend_detection_with_workspace_aibom`'s plan for one harness's answer.
-fn workspace_plan(
-    ctx: &Ctx,
-    harness: &str,
-    answer: &Value,
-    fields: &Map<String, Value>,
-) -> Step<Value> {
+fn workspace_plan(ctx: &Ctx, harness: &str, answer: &Value) -> Step<Value> {
     let Some(workspace) = ctx.workspace.as_deref() else {
         return Ok(Value::Null);
     };
@@ -60,15 +54,9 @@ fn workspace_plan(
             })
         })
         .collect();
-    let skills = fields
-        .get("workspace_skills")
-        .and_then(|skills| skills.get(harness))
-        .cloned()
-        .unwrap_or(Value::Null);
     workspace_merge_plan(&json!({
         "harness": harness,
         "workspace_dir": path_text(&ctx.absolute(workspace)),
-        "skills": skills,
         "existing": existing,
     }))
     .map_err(|_| Failure::Invalid)
@@ -83,7 +71,7 @@ pub(super) fn run(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         if answer.get("untrusted").is_some() {
             return Ok(answer);
         }
-        let extra = workspace_plan(ctx, spec.harness, &answer, fields)?;
+        let extra = workspace_plan(ctx, spec.harness, &answer)?;
         if found(&answer, &extra) {
             detected.push(spec.harness);
         }

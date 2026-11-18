@@ -2,15 +2,13 @@
 
 The ``harness_adapter`` install ops run the whole install or uninstall inside the native runtime, so they are
 told up front what a step would otherwise have asked this process for: the launcher interpreter, the shell
-profile, the transition budget, the frozen-runtime flag, the Pi extension runtime, the Claude daemon facts and
-the Windows workspace skills.
+profile, the transition budget, the frozen-runtime flag, the Pi extension runtime, and the Claude daemon facts.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
-from pathlib import Path
+from collections.abc import Sequence
 from typing import cast
 
 from .base import HarnessContext
@@ -20,18 +18,13 @@ def _facts(
     context: HarnessContext,
     harnesses: Sequence[str],
     *,
-    workspaces: Mapping[str, Path | None] | None = None,
     uninstall: bool = False,
 ) -> dict[str, object]:
     """The process facts a native install op takes for ``harnesses``.
 
     A removal renders no hook, so it asks the Guard daemon nothing: ``uninstall`` leaves out the daemon facts.
-
-    ``workspaces`` names the workspace each harness installs into when it is not the context's own, as an update
-    repair reinstalls from the install record's workspace.
     """
     from .. import native_transition_files
-    from ..aibom_detection import portable_workspace_skills
     from ..frozen_runtime_commands import is_frozen_guard_runtime
     from ..shims import shell_profile_facts, shim_interpreter
     from .native_harness import describe
@@ -46,12 +39,6 @@ def _facts(
         "frozen": is_frozen_guard_runtime(),
         "runtime": None,
         "facts": {},
-        "workspace_skills": {
-            harness: portable_workspace_skills(
-                harness, context.workspace_dir if workspaces is None else workspaces.get(harness)
-            )
-            for harness in harnesses
-        },
     }
     if any(descriptions.get(harness, {}).get("extension") for harness in harnesses):
         from .extension_runtime import extension_runtime
@@ -74,7 +61,6 @@ def install_facts(
     context: HarnessContext,
     harnesses: Sequence[str],
     *,
-    workspaces: Mapping[str, Path | None] | None = None,
     uninstall: bool = False,
 ) -> dict[str, object]:
     """The process facts a native install op takes for ``harnesses``, and for the providers a harness delegates to.
@@ -96,15 +82,14 @@ def install_facts(
         if descriptions.get(harness, {}).get("install") == "delegated"
         for name in descriptions[harness].get("delegates", ())
     ]
-    facts = _facts(context, harnesses, workspaces=workspaces, uninstall=uninstall)
+    facts = _facts(context, harnesses, uninstall=uninstall)
     if not delegates:
         return facts
     native = _native_context(context)
     providers = _facts(native, [name for name in delegates if name not in harnesses], uninstall=uninstall)
-    for group in ("workspace_skills", "facts"):
-        merged: dict[str, object] = dict(cast("dict[str, object]", providers[group]))
-        merged.update(cast("dict[str, object]", facts[group]))
-        facts[group] = merged
+    merged: dict[str, object] = dict(cast("dict[str, object]", providers["facts"]))
+    merged.update(cast("dict[str, object]", facts["facts"]))
+    facts["facts"] = merged
     facts["runtime"] = facts["runtime"] or providers["runtime"]
     facts["delegates"] = {name: get_adapter(name).resolved_executable(native) is not None for name in delegates}
     facts["now"] = datetime.now(timezone.utc).isoformat()

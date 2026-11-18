@@ -11,8 +11,8 @@
 //!
 //! The request fields every target shares come from the caller's process:
 //! `interpreter`, `shell_profile`, `transition`, `frozen`, `runtime`, and the
-//! per-harness `facts` and `workspace_skills` maps the adapter would
-//! otherwise have asked for with a reply.
+//! per-harness `facts` map the adapter would otherwise have asked for with
+//! a reply.
 
 use serde_json::{json, Map, Value};
 
@@ -100,10 +100,6 @@ fn attach_facts(spec: &Spec, request: &Map<String, Value>, fields: &mut Map<Stri
     if let Some(facts) = per_harness("facts") {
         fields.insert("facts".into(), facts);
     }
-    fields.insert(
-        "workspace_skills".into(),
-        per_harness("workspace_skills").unwrap_or(Value::Null),
-    );
     if spec.extension() {
         fields.insert(
             "runtime".into(),

@@ -9,8 +9,7 @@ exceptions its callers use.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
-from pathlib import Path
+from collections.abc import Sequence
 from typing import Any
 
 from ..harness.base import HarnessContext
@@ -74,7 +73,6 @@ def ask_managed(
     harnesses: Sequence[str],
     *,
     actor: str,
-    workspaces: Mapping[str, Path | None] | None = None,
     **fields: object,
 ) -> dict[str, Any]:
     """One install op of the native runtime, naming a hook-ownership failure as the harness's spec words it."""
@@ -84,7 +82,6 @@ def ask_managed(
         **install_facts(
             context,
             harnesses,
-            workspaces=workspaces,
             uninstall=op == "adapter_uninstall" or fields.get("command") == "uninstall",
         ),
         **fields,

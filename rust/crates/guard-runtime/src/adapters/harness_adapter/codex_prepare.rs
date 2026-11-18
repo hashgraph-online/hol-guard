@@ -72,8 +72,7 @@ fn prepared(spec: &Spec, ctx: &Ctx, request: &Map<String, Value>) -> Owned<Value
         artifacts,
         found_paths,
         ..
-    } = codex_detection::detect(ctx, &facts.launch, &owned, Some(&contents), facts.codex)
-        .map_err(stopped)?;
+    } = codex_detection::detect(ctx, &facts.launch, &owned, Some(&contents)).map_err(stopped)?;
     let fields = plan_fields(
         request, &facts, &previous, &owned, contents, &artifacts, false,
     )?;

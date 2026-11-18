@@ -4,9 +4,8 @@
 //! The filesystem half is the `codex_detect` runner kind. This adds what
 //! Python chained around it: the strict source check of a captured
 //! generation, the legacy-adoption block, the workspace AIBOM merge plan and
-//! the Codex skill inventory that replaces the detected skills. The facts
-//! only the asking process holds (the Windows skill walks) arrive in the
-//! request's `facts.codex`.
+//! the Codex skill inventory that replaces the detected skills. Both walk
+//! the skills natively on every platform.
 
 use std::path::Path;
 
@@ -86,12 +85,7 @@ fn anchored(ctx: &Ctx, path: &Path) -> String {
 
 /// `_merge_plan` applied: the workspace's shared artifacts replace or join
 /// the detected ones.
-fn merge_workspace(
-    ctx: &Ctx,
-    facts: &Map<String, Value>,
-    workspace: &Path,
-    detection: &mut Detection,
-) -> Step<()> {
+fn merge_workspace(ctx: &Ctx, workspace: &Path, detection: &mut Detection) -> Step<()> {
     let existing: Vec<Value> = detection
         .artifacts
         .iter()
@@ -109,12 +103,6 @@ fn merge_workspace(
         "workspace_dir": anchored(ctx, workspace),
         "existing": existing,
     });
-    if let Some(skills) = facts
-        .get("workspace_skills")
-        .filter(|skills| !skills.is_null())
-    {
-        request["skills"] = skills.clone();
-    }
     let plan = crate::aibom_op::workspace_merge_plan(&request).map_err(native)?;
     let extra = plan
         .get("extra_count")
@@ -142,18 +130,13 @@ fn merge_workspace(
 
 /// `extend_codex_runtime_inventory`: the home and workspace skills replace
 /// every detected skill.
-fn replace_skills(ctx: &Ctx, facts: &Map<String, Value>, detection: &mut Detection) -> Step<()> {
+fn replace_skills(ctx: &Ctx, detection: &mut Detection) -> Step<()> {
     let mut request = json!({
         "harness": "codex",
         "home_dir": anchored(ctx, &ctx.home),
         "workspace_dir": ctx.workspace.as_deref().map(|workspace| anchored(ctx, workspace)),
         "user_home": path_text(&ctx.user_home),
     });
-    for key in ["project_skills", "global_skills"] {
-        if let Some(skills) = facts.get(key).filter(|skills| !skills.is_null()) {
-            request[key] = skills.clone();
-        }
-    }
     let skills = crate::aibom_op::codex_skills(&request).map_err(native)?;
     let mut merged: Vec<Value> = detection
         .artifacts
@@ -183,7 +166,6 @@ pub(crate) fn detect(
     launch: &Map<String, Value>,
     bindings: &[Value],
     contents: Option<&Map<String, Value>>,
-    facts: &Map<String, Value>,
 ) -> Step<Detection> {
     let located = paths(ctx);
     let pairs = located["pairs"].as_array().ok_or(Failure::Invalid)?;
@@ -227,8 +209,8 @@ pub(crate) fn detect(
         },
     };
     if let Some(workspace) = &ctx.workspace {
-        merge_workspace(ctx, facts, workspace, &mut detection)?;
+        merge_workspace(ctx, workspace, &mut detection)?;
     }
-    replace_skills(ctx, facts, &mut detection)?;
+    replace_skills(ctx, &mut detection)?;
     Ok(detection)
 }
