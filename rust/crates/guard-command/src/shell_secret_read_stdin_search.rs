@@ -27,15 +27,42 @@ use std::path::Path;
 const GREP_FAMILY: &[&str] = &["grep", "egrep", "fgrep"];
 const PATTERN_OPTIONS: &[&str] = &["-e", "--regexp", "-f", "--file"];
 const GREP_VALUE_OPTIONS: &[&str] = &[
-    "--after-context", "--before-context", "--context", "--devices",
-    "--exclude", "--exclude-dir", "--include", "--max-count",
+    "--after-context",
+    "--before-context",
+    "--context",
+    "--devices",
+    "--exclude",
+    "--exclude-dir",
+    "--include",
+    "--max-count",
 ];
 const RG_VALUE_OPTIONS: &[&str] = &[
-    "-A", "-B", "-C", "-g", "-m", "-t", "-T", "-E",
-    "--after-context", "--before-context", "--context", "--encoding",
-    "--engine", "--glob", "--iglob", "--ignore-file", "--max-count",
-    "--max-depth", "--max-filesize", "--pre", "--pre-glob", "--replace",
-    "--sort", "--sortr", "--type", "--type-not",
+    "-A",
+    "-B",
+    "-C",
+    "-g",
+    "-m",
+    "-t",
+    "-T",
+    "-E",
+    "--after-context",
+    "--before-context",
+    "--context",
+    "--encoding",
+    "--engine",
+    "--glob",
+    "--iglob",
+    "--ignore-file",
+    "--max-count",
+    "--max-depth",
+    "--max-filesize",
+    "--pre",
+    "--pre-glob",
+    "--replace",
+    "--sort",
+    "--sortr",
+    "--type",
+    "--type-not",
 ];
 
 /// Whether this `grep`/`rg` call's only word is a path into a hidden entry
@@ -86,9 +113,11 @@ fn grep_short(arg: &str) -> Option<GrepShort<'_>> {
         match flag {
             'r' | 'R' => return Some(GrepShort::Recursive),
             'e' | 'f' => return Some(GrepShort::ExplicitPattern),
-            'd' => return Some(GrepShort::Directory(
-                (!remaining.is_empty()).then_some(remaining),
-            )),
+            'd' => {
+                return Some(GrepShort::Directory(
+                    (!remaining.is_empty()).then_some(remaining),
+                ))
+            }
             'A' | 'B' | 'C' | 'D' | 'm' => {
                 return Some(GrepShort::Value(remaining.is_empty()));
             }
