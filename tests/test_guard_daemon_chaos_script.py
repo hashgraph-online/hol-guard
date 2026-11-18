@@ -84,3 +84,27 @@ def test_starters_answered_with_different_daemons_fail() -> None:
 def test_a_second_new_daemon_fails_the_parallel_starts() -> None:
     assert _judged(["http://127.0.0.1:1"], [], [42, 43]) == ["2 new daemons published themselves, expected exactly one"]
     assert _judged(["http://127.0.0.1:1"], [], []) == ["0 new daemons published themselves, expected exactly one"]
+
+
+def test_only_this_homes_resident_is_the_one_to_kill(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from scripts import guard_daemon_chaos_runtime as runtime_faults
+
+    guard_home = tmp_path / "guard"
+    (guard_home / "native-runtime").mkdir(parents=True)
+    other = tmp_path / "other" / "native-runtime"
+    other.mkdir(parents=True)
+    link = tmp_path / "link"
+    link.symlink_to(guard_home)
+    runtime = "/opt/hol-guard-runtime"
+    processes = [
+        (11, [runtime, "serve-managed", "--state-dir", str(guard_home / "native-runtime"), "--generation", "1"]),
+        (12, [runtime, "serve-managed", "--state-dir", str(link / "native-runtime")]),
+        (13, [runtime, "serve-managed", "--state-dir", str(other)]),
+        (14, [runtime, "supervise-managed", "--state-dir", str(guard_home / "native-runtime")]),
+        (15, [runtime, "resident-client-stream", "--stdin", str(guard_home / "native-runtime")]),
+        (16, [runtime, "serve-managed", "--state-dir"]),
+        (17, [runtime]),
+    ]
+    monkeypatch.setattr(chaos, "_processes", lambda: processes)
+
+    assert runtime_faults._resident_pids(guard_home) == [11, 12]

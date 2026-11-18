@@ -54,6 +54,7 @@ from codex_plugin_scanner.guard.native_daemon_manage import (  # noqa: E402
     recover_guard_daemon_after_hook_failure,
 )
 from scripts import check_guard_daemon_burst as burst  # noqa: E402
+from scripts import guard_daemon_chaos_runtime as runtime_faults  # noqa: E402
 from scripts import guard_daemon_chaos_starts as starts  # noqa: E402
 from scripts import stress_guard_daemon as stress  # noqa: E402
 
@@ -452,8 +453,7 @@ def run_chaos(runtime: Path, *, max_recovery_seconds: float) -> ChaosResult:
         _run_fault(
             "sigkill-during-burst",
             _sigkill,
-            # Whichever comes first names the exit: a launcher that finds the
-            # daemon gone, or the next daemon finding a predecessor with no record.
+            # The launcher finding the daemon gone, or the next daemon finding no record: whichever is first.
             ("death_observed", "unclean_exit_detected"),
             max_recovery_seconds=max_recovery_seconds,
         ),
@@ -468,6 +468,7 @@ def run_chaos(runtime: Path, *, max_recovery_seconds: float) -> ChaosResult:
     )
     result.scenarios.append(run_closed_stderr_launch(runtime))
     result.scenarios.extend(starts.run_start_scenarios())
+    result.scenarios.extend(runtime_faults.run_runtime_scenarios(max_recovery_seconds=max_recovery_seconds))
     return result
 
 
@@ -479,8 +480,7 @@ def main() -> int:
     args = parser.parse_args()
     if args.runtime is None:
         parser.error("--runtime or HOL_GUARD_NATIVE_BINARY is required")
-    # The fault scenarios start and recover daemons through the environment's
-    # runtime, so pin it to the one under test.
+    # Scenarios start and recover daemons through the environment's runtime: pin the one under test.
     args.runtime = args.runtime.resolve(strict=True)
     os.environ["HOL_GUARD_NATIVE_BINARY"] = str(args.runtime)
     result = run_chaos(args.runtime, max_recovery_seconds=args.max_recovery_seconds)
