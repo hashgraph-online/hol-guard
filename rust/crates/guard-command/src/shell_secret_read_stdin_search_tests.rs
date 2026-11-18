@@ -116,6 +116,10 @@ fn a_whole_command_floors_only_an_unfed_lone_dotpath_search() {
     for command in [
         "grep /home/agent/.secrets/key.txt",
         "rg ~/.secrets/key.txt",
+        // The option's quoted value must never settle an unquoted secret
+        // pattern even when the bytes are identical.
+        "rg --glob='~/.ssh/id_rsa' ~/.ssh/id_rsa",
+        "rg ~/.ssh/id_rsa --glob='~/.ssh/id_rsa'",
         "cd /tmp && fgrep /home/agent/.secrets/key.txt",
         "grep '/home/agent/.config/a<b'",
         "grep \"$HOME/.ssh/id_rsa\"",
