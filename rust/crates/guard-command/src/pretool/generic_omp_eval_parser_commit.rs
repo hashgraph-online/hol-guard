@@ -89,6 +89,7 @@ impl Parser {
             ("commit", [Value::String(subject), options]) => {
                 !subject.trim().is_empty() && commit_options(options)
             }
+            ("commit", [Value::Object(options)]) => subject_in_options(options),
             _ => false,
         };
         valid.then_some(())
@@ -191,6 +192,22 @@ fn object_keys(value: &Value, allowed: &[&str]) -> bool {
                 _ => false,
             }
     })
+}
+
+/// `commit({subject, body, ...})`: the subject passed inside the options
+/// instead of first. Oh My Pi rejects a subject that is not a non-empty string
+/// before Git runs, so the call commits nothing, but the eval is still judged
+/// as the draft's commit. The keys are the ones `commit(subject, options)`
+/// takes, plus `subject`; `amend` keeps its review.
+fn subject_in_options(options: &Map<String, Value>) -> bool {
+    let subject = options.get("subject");
+    let rest: Map<String, Value> = options
+        .iter()
+        .filter(|(key, _)| key.as_str() != "subject")
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    subject.is_none_or(|subject| subject.as_str().is_some_and(|text| !text.trim().is_empty()))
+        && commit_options(&Value::Object(rest))
 }
 
 /// `commit(subject, options)`: a body as a string or lines, `fixes`,
