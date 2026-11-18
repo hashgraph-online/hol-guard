@@ -14,9 +14,8 @@ use regex::Regex;
 
 // Do not consume neighboring bytes in the regex: adjacent candidates,
 // including an invalid SSN followed by a valid one, need separate checks.
-static SSN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"([0-9]{3})-([0-9]{2})-([0-9]{4})").expect("ssn pattern")
-});
+static SSN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"([0-9]{3})-([0-9]{2})-([0-9]{4})").expect("ssn pattern"));
 
 const PRINTERS: [&str; 2] = ["echo", "printf"];
 
