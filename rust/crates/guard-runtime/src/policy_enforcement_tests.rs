@@ -487,6 +487,8 @@ mod floor_cause;
 mod github_tests;
 #[path = "policy_enforcement_observe_tests.rs"]
 mod observe_tests;
+#[path = "policy_enforcement_omp_eval_commit_output_tests.rs"]
+mod omp_eval_commit_output_tests;
 #[path = "policy_enforcement_omp_eval_output_tests.rs"]
 mod omp_eval_output_tests;
 #[path = "policy_enforcement_omp_github_output_tests.rs"]

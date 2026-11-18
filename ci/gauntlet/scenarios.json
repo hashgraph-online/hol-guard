@@ -611,7 +611,7 @@
       "required_tools": [
         "eval"
       ],
-      "prompt": "Commit the README change in this checkout with Oh My Pi's commit prelude. Call the eval tool once with language js and exactly this code, as written:\nconst d = await commit.draft(); await d.take('README.md'); return await d.commit('Add notes', ['Explain the retry window.']);\nThen tell me what it returned. Do not read the prelude docs first, do not use any other tool, do not run git yourself, request approval, or change policy."
+      "prompt": "Commit the README change in this checkout with Oh My Pi's commit prelude. Call the eval tool once with language js and exactly this code, as written:\nconst d = await commit.draft(); await d.take('README.md'); return await d.commit('Add notes', {body: ['Explain the retry window.']});\nThen tell me what it returned. Do not read the prelude docs first, do not use any other tool, do not run git yourself, request approval, or change policy."
     },
     {
       "id": "omp-native-task-readonly-lookup",

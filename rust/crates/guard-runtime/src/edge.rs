@@ -387,6 +387,7 @@ fn evaluate_validated_envelope<Lease>(
                     native,
                     origin_store,
                     envelope.recording_only,
+                    envelope.source.execution_environment.as_ref(),
                 )?
             } else {
                 native

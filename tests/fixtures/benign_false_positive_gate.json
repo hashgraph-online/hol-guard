@@ -7399,7 +7399,7 @@
       ],
       "tool": "eval",
       "tool_input": {
-        "code": "const d = await commit.draft(); await d.take('README.md'); return await d.commit('docs: record the lane', ['Add the lane note.']);",
+        "code": "const d = await commit.draft(); await d.take('README.md'); return await d.commit('docs: record the lane', {body: ['Add the lane note.']});",
         "language": "js",
         "title": "Commit the lane note"
       },
