@@ -21353,6 +21353,70 @@
       "expect": "allow"
     },
     {
+      "id": "working-directory-binding-before-multiline-commit",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "P=$PWD; ls $P\ngit status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "pipe-status-literal-index-check",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md; test ${PIPESTATUS[0]} -eq 0 || true"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "subshell-group-descriptor-copy-before-close",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la && (cat package.json 2>/dev/null || true) && (npm test 2>&1 || npm test 2>&1)"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "toolchain-inventory-guarded-listing-steps",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printf '%s\\n' 'NVM:'; if [ -d \"$HOME/.nvm/versions/node\" ]; then find \"$HOME/.nvm/versions/node\" -mindepth 1 -maxdepth 1 -type d -print | sort; else echo '(missing)'; fi; printf '%s\\n' 'Workflow:'; if [ -f \"$HOME/.github/workflows\" ]; then :; fi; find \"$HOME/.github/workflows\" -maxdepth 1 -type f -print 2>/dev/null | sort | xargs -r grep -nE 'runs-on|runner' || true"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
       "id": "session-sibling-cd-vite-build",
       "fix_area": "shell",
       "harnesses": [
