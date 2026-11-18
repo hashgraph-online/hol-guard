@@ -246,6 +246,8 @@ mod codex_proxy;
 mod codex_remote_launch;
 #[path = "adapters/codex_remote_prepare.rs"]
 mod codex_remote_prepare;
+#[path = "adapters/codex_remote_run.rs"]
+mod codex_remote_run;
 mod codex_request_resume_busy;
 mod codex_request_resume_capabilities;
 mod codex_request_resume_live;

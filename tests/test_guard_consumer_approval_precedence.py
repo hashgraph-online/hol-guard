@@ -41,6 +41,16 @@ pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
 
 @pytest.fixture(autouse=True)
+def _ordinary_codex_launch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The runtime starts no app-server: the launch stays the ordinary command."""
+    ask = codex_remote_control._ask  # pyright: ignore[reportPrivateUsage]
+
+    def without_remote(op: str, fields: dict[str, object], budget: float | None = None) -> dict[str, object]:
+        return {} if op == "run" else ask(op, fields, budget)
+
+    monkeypatch.setattr(codex_remote_control, "_ask", without_remote)
+
+
 def _stable_guard_run_launch_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep consumer precedence tests independent from real harness startup."""
 
@@ -614,7 +624,7 @@ def test_codex_postclaim_setup_uses_authorized_canonical_prefix_after_symlink_sw
         "get_adapter",
         lambda _harness: SwapAtAuthorizedSetupAdapter(),
     )
-    monkeypatch.setattr(codex_remote_control, "_prepare_remote", lambda *_args, **_kwargs: False)
+    _ordinary_codex_launch(monkeypatch)
 
     result = wrapper_run.guard_run(
         "codex",
@@ -669,7 +679,7 @@ def test_no_saved_codex_setup_uses_previewed_canonical_prefix_after_symlink_swap
         "get_adapter",
         lambda _harness: SwapAtAuthorizedSetupAdapter(),
     )
-    monkeypatch.setattr(codex_remote_control, "_prepare_remote", lambda *_args, **_kwargs: False)
+    _ordinary_codex_launch(monkeypatch)
 
     result = wrapper_run.guard_run(
         "codex",

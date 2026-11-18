@@ -771,6 +771,14 @@
    "body": "138b229d2cb2"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Only the Unix arm of `codex_remote_run::spawn` is ever asked to start a detached app-server: `codex_remote_prepare::direct` answers the ordinary launch on Windows before it names a `spawn` step, because Windows has no Unix control socket for the server. The arm therefore fails closed with `Unsupported`, which `spawn` turns into the ordinary launch. `codex_remote_prepare_tests` pins that Windows answer.",
+   "file": "rust/crates/guard-contained-process/src/detached.rs",
+   "item": "pub fn spawn_detached( _program: &Path, _args: &[OsString], _env: &[(OsString, OsString)], ) -> io::Result<u32>",
+   "cfg": "not(unix)",
+   "body": "80d6235dedfa"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows has a handle-bound process kernel in its own arm; elsewhere `Unsupported` fails closed rather than running a child unbounded.",
    "file": "rust/crates/guard-contained-process/src/lib.rs",
