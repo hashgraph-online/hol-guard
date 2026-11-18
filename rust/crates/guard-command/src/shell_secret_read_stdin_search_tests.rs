@@ -28,6 +28,12 @@ fn lone_home_dotpath_pattern_is_not_a_search() {
         "grep -i $HOME/.aws/credentials",
         "rg -- /home/agent/.netrc",
         "grep -A 3 /home/agent/.secrets/key.txt",
+        "grep -T /home/agent/.secrets/key.txt",
+        "grep -d skip /home/agent/.ssh/id_rsa",
+        "grep -d read /home/agent/.ssh/id_rsa",
+        "grep -id skip /home/agent/.ssh/id_rsa",
+        "grep --directories=skip /home/agent/.ssh/id_rsa",
+        "rg --encoding utf-8 /home/agent/.secrets/key.txt",
     ] {
         assert!(
             names_dotpath(command),
@@ -47,6 +53,9 @@ fn ordinary_searches_still_pass() {
         "rg /home/agent/.secrets/key.txt src",
         "grep /home/agent/.secrets/key.txt notes.txt",
         "grep -e /home/agent/.secrets/key.txt",
+        "grep -ie /home/agent/.ssh/id_rsa",
+        "grep -i -e /home/agent/.ssh/id_rsa",
+        "grep --directories=recurse /home/agent/.ssh/id_rsa",
         "grep -f patterns.txt",
         "rg --files /home/agent/.ssh",
         "grep private_key",
