@@ -5,8 +5,10 @@ import QRCode from "react-qr-code";
 import {
   PulseConnectStep,
   PulseQrPanel,
+  focusWithoutScrolling,
   pulseAgentKeyHint,
   pulseApprovalSettingsSummary,
+  pulseCooldownFromSeconds,
 } from "./pulse-connect-step";
 import { PULSE_SITE_URL } from "./pulse-setup-modal";
 import { buildTotpQrImageOptions } from "./totp-enrollment-qr-panel";
@@ -66,7 +68,8 @@ function stepTwoKeepsTheKeyFieldFirstAndTheSettingsCollapsed(): void {
   const markup = stepMarkup("");
   assert(markup.indexOf('type="password"') > -1 && markup.indexOf("YID agent key") > -1,
     "PULSE-QR-2: the agent key field stays on the step");
-  assert(/<input[^>]*type="password"[^>]*autofocus=""/.test(markup), "PULSE-QR-2: the key field takes focus when the step opens");
+  assert(!/autofocus/i.test(markup),
+    "PULSE-QR-2: focus comes from an effect that does not scroll, never from the autofocus attribute that would");
   const details = markup.slice(markup.indexOf("<details"), markup.indexOf("</details>"));
   assert(details.includes("Approval settings") && details.includes("Face scan") && details.includes("Cooldown"),
     "PULSE-QR-2: face scan and cooldown sit in the collapsed settings row");
@@ -105,8 +108,26 @@ function theCollapsedRowShowsTheCurrentChoices(): void {
     "PULSE-QR-4: the one hour choice shows on the closed row");
 }
 
+function focusingTheKeyFieldNeverScrollsTheQrCodeOutOfView(): void {
+  const calls: Array<FocusOptions | undefined> = [];
+  focusWithoutScrolling({ focus: (options) => calls.push(options) });
+  assert(calls.length === 1 && calls[0]?.preventScroll === true, "PULSE-QR-5: the key field is focused with preventScroll");
+  focusWithoutScrolling(null);
+  assert(calls.length === 1, "PULSE-QR-5: no field yet, nothing to focus");
+}
+
+function theCooldownSelectMapsBackToTheThreeChoices(): void {
+  assert(pulseCooldownFromSeconds(0) === 0, "PULSE-QR-6: 0 means every action");
+  assert(pulseCooldownFromSeconds(900) === 900, "PULSE-QR-6: 900 means 15 minutes");
+  assert(pulseCooldownFromSeconds(3600) === 3600, "PULSE-QR-6: 3600 means 1 hour");
+  assert(pulseCooldownFromSeconds(42) === 0 && pulseCooldownFromSeconds(Number.NaN) === 0,
+    "PULSE-QR-6: an unknown value falls back to no cooldown");
+}
+
 theQrCodeEncodesOnlyTheYidAppPage();
 stepTwoKeepsTheKeyFieldFirstAndTheSettingsCollapsed();
 theAgentKeyHintOnlyAppearsForAKeyThatDoesNotLookRight();
 theCollapsedRowShowsTheCurrentChoices();
+focusingTheKeyFieldNeverScrollsTheQrCodeOutOfView();
+theCooldownSelectMapsBackToTheThreeChoices();
 console.log("pulse-connect-step tests passed");

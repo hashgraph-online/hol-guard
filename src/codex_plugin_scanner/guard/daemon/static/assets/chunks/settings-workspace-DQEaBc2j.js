@@ -2343,6 +2343,14 @@ function Field(props) {
     props.hint ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: props.hint }) : null
   ] });
 }
+function pulseCooldownFromSeconds(seconds) {
+  if (seconds === 900) return 900;
+  if (seconds === 3600) return 3600;
+  return 0;
+}
+function focusWithoutScrolling(element) {
+  element?.focus({ preventScroll: true });
+}
 function pulseAgentKeyHint(value) {
   const key2 = value.trim();
   if (key2.length === 0 || key2.startsWith("yak_")) return null;
@@ -2379,6 +2387,10 @@ function PulseQrPanel() {
 const STEP_CHIP = "flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue";
 function PulseConnectStep(props) {
   const keyHint = pulseAgentKeyHint(props.agentKey);
+  const keyInput = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    focusWithoutScrolling(keyInput.current);
+  }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 p-6 lg:grid-cols-[240px_minmax(0,1fr)]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(PulseQrPanel, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
@@ -2403,10 +2415,10 @@ function PulseConnectStep(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "YID agent key", hint: keyHint ?? "Hidden as you type. Guard stores it in its secret store.", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         "input",
         {
+          ref: keyInput,
           type: "password",
           autoComplete: "off",
           spellCheck: false,
-          autoFocus: true,
           placeholder: "yak_…",
           value: props.agentKey,
           onChange: (event) => props.onAgentKeyChange(event.target.value),
@@ -2442,10 +2454,7 @@ function PulseConnectStep(props) {
             "select",
             {
               value: String(props.cooldown),
-              onChange: (event) => {
-                const seconds = Number(event.target.value);
-                props.onCooldownChange(seconds === 900 ? 900 : seconds === 3600 ? 3600 : 0);
-              },
+              onChange: (event) => props.onCooldownChange(pulseCooldownFromSeconds(Number(event.target.value))),
               className: PULSE_INPUT_CLASS,
               children: [0, 900, 3600].map((seconds) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: seconds, children: pulseCooldownLabel(seconds) }, seconds))
             }

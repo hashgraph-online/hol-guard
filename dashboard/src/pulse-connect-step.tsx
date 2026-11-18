@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import QRCode from "react-qr-code";
 import { ActionButton } from "./approval-center-primitives";
 import { PULSE_FACE_SCAN_OPTIONS, type PulseMinTier } from "./pulse-approval";
@@ -11,6 +12,21 @@ import {
 import { buildTotpQrImageOptions } from "./totp-enrollment-qr-panel";
 
 export type PulseCooldown = 0 | 900 | 3600;
+
+/** The cooldown a select value stands for; anything unknown means no cooldown. */
+export function pulseCooldownFromSeconds(seconds: number): PulseCooldown {
+  if (seconds === 900) return 900;
+  if (seconds === 3600) return 3600;
+  return 0;
+}
+
+/**
+ * Focus the key field without scrolling to it. In a short window the field sits below the QR code,
+ * and a scroll to reveal it would carry the code out of view before the user can scan it.
+ */
+export function focusWithoutScrolling(element: { focus: (options?: FocusOptions) => void } | null): void {
+  element?.focus({ preventScroll: true });
+}
 
 /** Agent keys start with `yak_`. A hint, not a gate: Guard's refusal is the source of truth. */
 export function pulseAgentKeyHint(value: string): string | null {
@@ -75,6 +91,10 @@ export function PulseConnectStep(props: {
   onBack: () => void;
 }) {
   const keyHint = pulseAgentKeyHint(props.agentKey);
+  const keyInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    focusWithoutScrolling(keyInput.current);
+  }, []);
   return (
     <div className="grid gap-6 p-6 lg:grid-cols-[240px_minmax(0,1fr)]">
       <PulseQrPanel />
@@ -98,10 +118,10 @@ export function PulseConnectStep(props: {
         </ol>
         <Field label="YID agent key" hint={keyHint ?? "Hidden as you type. Guard stores it in its secret store."}>
           <input
+            ref={keyInput}
             type="password"
             autoComplete="off"
             spellCheck={false}
-            autoFocus
             placeholder="yak_…"
             value={props.agentKey}
             onChange={(event) => props.onAgentKeyChange(event.target.value)}
@@ -134,10 +154,7 @@ export function PulseConnectStep(props: {
             <Field label="Cooldown" hint="A cooldown only covers the same kind of action and scope from the same session. Guard changes always ask again.">
               <select
                 value={String(props.cooldown)}
-                onChange={(event) => {
-                  const seconds = Number(event.target.value);
-                  props.onCooldownChange(seconds === 900 ? 900 : seconds === 3600 ? 3600 : 0);
-                }}
+                onChange={(event) => props.onCooldownChange(pulseCooldownFromSeconds(Number(event.target.value)))}
                 className={PULSE_INPUT_CLASS}
               >
                 {([0, 900, 3600] as const).map((seconds) => (
