@@ -126,6 +126,8 @@ fn a_whole_command_floors_only_an_unfed_lone_dotpath_search() {
         // Empty quotes immediately before $HOME do not prevent expansion.
         "grep ''$HOME/.ssh/id_rsa",
         "rg ''$HOME/.ssh/id_rsa",
+        // Empty quotes do not prevent the later expansion.
+        "grep ''$HOME/.config/example",
         "grep $HOME/.ssh/id_rsa #'$HOME/.ssh/id_rsa",
         "rg '/home/agent/.ssh/id_rsa'",
     ] {
@@ -145,6 +147,11 @@ fn a_whole_command_floors_only_an_unfed_lone_dotpath_search() {
         "rg '~/.ssh/id_rsa'",
         "grep \"~/.ssh/id_rsa\"",
         "rg '$HOME/.aws/credentials'",
+        // A quoted HOME marker joined to an unquoted path suffix is still literal.
+        "grep '$HOME'/.config/example",
+        "rg '$HOME'/.ssh/id_rsa",
+        "grep '${HOME}'/.aws/credentials",
+        "rg '~'/.ssh/id_rsa",
         r"grep \$HOME/.aws/credentials",
         r#"grep "\$HOME/.aws/credentials""#,
         r"rg \~/.ssh/id_rsa",
