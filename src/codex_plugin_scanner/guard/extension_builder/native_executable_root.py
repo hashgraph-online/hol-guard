@@ -339,7 +339,7 @@ def _remove_idle_kept(directory: Path, keep: str) -> None:
                 shutil.rmtree(entry.path, ignore_errors=True)
 
 
-def _kept(raw: bytes) -> _Copy | None:
+def _kept(raw: bytes, sha256: str | None) -> _Copy | None:
     """The copy kept in a private Guard-home folder for later processes, holding exactly `raw`.
 
     Only a Guard home's private folder holds one; without an open Guard home
@@ -347,7 +347,9 @@ def _kept(raw: bytes) -> _Copy | None:
     replaced, and the new copy is written under a private name and renamed into
     place, so no process ever runs a partly written copy.
     """
-    name = _KEPT_PREFIX + hashlib.sha256(raw).hexdigest()
+    # The name only finds the copy; its bytes are still compared with `raw` before any run.
+    named = sha256 is not None and len(sha256) == 64 and all(c in "0123456789abcdef" for c in sha256)
+    name = _KEPT_PREFIX + (sha256 if named else hashlib.sha256(raw).hexdigest())
     for private_root in tuple(_private_roots):
         if (directory := _private_root_directory(private_root)) is None:
             continue
@@ -405,12 +407,16 @@ atexit.register(release_copies)
 
 
 @contextmanager
-def verified_executable(raw: bytes) -> Generator[Path]:
-    """Yield a private copy holding exactly the verified bytes."""
+def verified_executable(raw: bytes, sha256: str | None = None) -> Generator[Path]:
+    """Yield a private copy holding exactly the verified bytes.
+
+    `sha256`, when the caller already checked `raw` against it, names a Guard
+    home's kept copy without hashing the bytes again.
+    """
     global _current
     with _copies_lock:
         if _current is None or not _holds_exactly(_current, raw):
-            replacement = _kept(raw) or _materialize(raw)
+            replacement = _kept(raw, sha256) or _materialize(raw)
             if _current is not None:
                 _retired.append(_current)
             _current = replacement

@@ -130,3 +130,22 @@ def test_a_kept_copy_in_a_home_no_longer_open_is_not_reused(guard_home: Path, mo
     monkeypatch.setattr(root_module, "_private_roots", [])
     with root_module.verified_executable(_SCRIPT) as second:
         assert second != first
+
+
+def test_a_verified_digest_names_the_copy_but_its_bytes_are_still_compared(guard_home: Path, writes: list) -> None:
+    digest = hashlib.sha256(_SCRIPT).hexdigest()
+    with root_module.verified_executable(_SCRIPT, digest) as first:
+        assert first.parent.name == _kept_name(_SCRIPT)
+    root_module.release_copies()
+    # A copy found under that name with other bytes is replaced, never run.
+    first.write_bytes(_OTHER)
+    with root_module.verified_executable(_SCRIPT, digest) as second:
+        completed = subprocess.run([str(second)], capture_output=True, check=True)
+    assert completed.stdout == b"verified\n"
+    assert len(writes) == 2
+
+
+@pytest.mark.parametrize("digest", ["../escape", "A" * 64, "0" * 63])
+def test_a_digest_that_is_not_plain_hex_never_becomes_a_path(guard_home: Path, digest: str) -> None:
+    with root_module.verified_executable(_SCRIPT, digest) as path:
+        assert path.parent == guard_home / "native-exec" / _kept_name(_SCRIPT)
