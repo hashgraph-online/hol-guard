@@ -9047,6 +9047,66 @@
       "expect": "allow"
     },
     {
+      "id": "home-toolchain-find-printf-version-names",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp",
+        "codex",
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find \"$HOME/.nvm/versions/node\" -mindepth 1 -maxdepth 1 -type d -printf '%f\\n' | sort -V"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "home-toolchain-find-path-narrows-directory-walk",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp",
+        "codex",
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find \"$HOME/.nvm/versions/node\" -path '*/lib/node_modules/*' -mindepth 1 -maxdepth 4 -type d -print | sort"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-home-toolchain-find-printf-link-targets",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp",
+        "codex",
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find \"$HOME/.nvm\" -type l -printf '%l\\n'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-home-toolchain-find-path-alone-prints-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp",
+        "codex",
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find \"$HOME/.nvm\" -path '*/versions/*' -print"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "home-cache-find-tool-links",
       "fix_area": "shell",
       "harnesses": [
