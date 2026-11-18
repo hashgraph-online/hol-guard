@@ -265,9 +265,10 @@ def _raw_bytes(text: object) -> bytes:
 
 def _result_from_answer(answer: Mapping[str, object] | None) -> tuple[BoundedHookProcessResult, bool]:
     """The launch result and whether the launcher settled its quarantine."""
-    failed = BoundedHookProcessResult(None, "", False, False)
+    # An answer the launcher gave but this cannot read: nothing vouches for the child.
+    failed = BoundedHookProcessResult(None, "", False, False, containment_failed=True)
     if answer is None:
-        return failed, True
+        return failed, False
     returncode = answer.get("returncode")
     stdout = answer.get("stdout")
     stderr = answer.get("stderr")
@@ -279,7 +280,7 @@ def _result_from_answer(answer: Mapping[str, object] | None) -> tuple[BoundedHoo
         or not isinstance(stderr, str)
         or not all(isinstance(flag, bool) for flag in flags)
     ):
-        return failed, True
+        return failed, False
     return (
         BoundedHookProcessResult(
             returncode=returncode,
@@ -304,8 +305,8 @@ def _exchange(
     environment: Mapping[str, str],
     deadline: float,
     stop_event: threading.Event | None,
-) -> dict[str, object] | None:
-    """Run one ``launch`` request and return the answer; ``None`` when none came."""
+) -> tuple[dict[str, object] | None, bool]:
+    """Run one ``launch`` request: the answer (``None`` when none came) and whether the launcher started."""
     try:
         process = subprocess.Popen(
             [launcher, *LAUNCHER_ARGS],
@@ -317,7 +318,7 @@ def _exchange(
             **launcher_popen_options(),
         )
     except OSError:
-        return None
+        return None, False
     chunks: list[bytes] = []
     answered = threading.Event()
 
@@ -358,8 +359,8 @@ def _exchange(
     _reap_launcher(process, graceful_seconds=1.0 if got_answer else 0.0)
     reader.join(timeout=1.0)
     if not got_answer or process.returncode != 0 or not chunks:
-        return None
-    return _decode_answer(chunks[0])
+        return None, True
+    return _decode_answer(chunks[0]), True
 
 
 def run_isolated_hook_process(
@@ -410,7 +411,7 @@ def run_isolated_hook_process(
     path = native_launcher_path(launcher)
     if path is None:
         return BoundedHookProcessResult(None, "", False, False)
-    answer = _exchange(
+    answer, started = _exchange(
         path,
         {
             "op": "launch",
@@ -431,6 +432,10 @@ def run_isolated_hook_process(
         deadline=deadline,
         stop_event=stop_event,
     )
+    if answer is None and not started:
+        # The launcher never ran: the child never started, the same "could not
+        # start" result a failed spawn always was.
+        return BoundedHookProcessResult(None, "", False, False)
     if answer is None and time.monotonic() >= deadline + _ANSWER_GRACE_SECONDS:
         # The launcher itself stopped answering: nothing vouches for its child.
         _HOOK_PROCESS_CONTAINMENT_FAILED.set()
