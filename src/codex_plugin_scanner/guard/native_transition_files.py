@@ -202,6 +202,27 @@ def artifact_generation(kind: str, subject: str, *, bound: bool, restored: Seque
     return value
 
 
+def register_inverse(grant_id: str, deadline: float) -> tuple[str, ...]:
+    """Admit the pending inverse of a grant; the grant ids the runtime purged as expired.
+
+    The runtime refuses a grant already pending and a registry at capacity.
+    """
+
+    request: dict[str, object] = {
+        "op": "publication_inverse_register",
+        "grant_id": grant_id,
+        "deadline": deadline,
+        "now": time.monotonic(),
+    }
+    value = _ask(request, context=False).get("value")
+    purged = value.get("purged") if isinstance(value, Mapping) else None
+    if not isinstance(purged, list) or not all(isinstance(item, str) for item in purged):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return tuple(purged)
+
+
 def authorize_plan(kind: str, expires_at: str, deadline: float) -> Mapping[str, object]:
     """The forward ``deadline`` and grant retirement the runtime allows an authorization.
 
@@ -267,6 +288,7 @@ __all__ = [
     "authorize_plan",
     "compare_files",
     "publish_files",
+    "register_inverse",
     "request_policy",
     "require_deadline",
     "runtime_compare",

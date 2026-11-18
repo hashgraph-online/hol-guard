@@ -295,6 +295,7 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_artifact_generation" => {
             super::publication_artifact_generation::generation_op(call)
         }
+        "publication_inverse_register" => super::publication_inverse_registry::register_op(call),
         "publication_authorize" => super::publication_authorize::plan(call),
         "publication_repair_claim" => super::repair_claims::claim(call),
         "publication_repair_claim_check" => super::repair_claims::check(call),

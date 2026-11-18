@@ -37,6 +37,7 @@ mod publication_inverse_pinned;
 mod publication_inverse_plan;
 mod publication_inverse_prepare;
 mod publication_inverse_publish;
+mod publication_inverse_registry;
 mod publication_io;
 mod publication_lean;
 mod publication_observe;

@@ -188,14 +188,11 @@ def publish_codex_publication_inverse(
             plan.change_identities,
         )
         with _publications_guard:
-            now = time.monotonic()
-            for identifier, previous in tuple(_publications.items()):
-                if previous.authorization.deadline_monotonic <= now:
-                    del _publications[identifier]
-            if authorization.grant.grant_id in _publications:
-                raise TransitionError("publication_inverse_publication_claimed")
-            if len(_publications) >= 128:
-                raise TransitionError("publication_inverse_publication_capacity")
+            # The runtime decides who is admitted; this keeps only the handles.
+            for identifier in native_transition_files.register_inverse(
+                authorization.grant.grant_id, authorization.deadline_monotonic
+            ):
+                _publications.pop(identifier, None)
             _publications[authorization.grant.grant_id] = pending
         # Persist the reviewed current generation before changing any target.
         pending._write_record(phase="restoring")
