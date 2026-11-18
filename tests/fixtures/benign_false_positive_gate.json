@@ -7392,6 +7392,36 @@
       "expect": "allow"
     },
     {
+      "id": "omp-eval-commit-draft",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); await d.take('README.md'); return await d.commit('docs: record the lane', ['Add the lane note.']);",
+        "language": "js",
+        "title": "Commit the lane note"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-eval-commit-prelude-docs",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "return await read('xd://eval/commit');",
+        "language": "js",
+        "title": "Read the commit prelude docs"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "omp-eval-read-doc",
       "fix_area": "omp",
       "harnesses": [

@@ -85,6 +85,7 @@ pub fn contained_matcher_stage(program: &str, arguments: &[String]) -> bool {
 }
 pub(crate) mod curl_reads;
 mod cursor_session_outputs;
+mod in_process_scope;
 pub use curl_reads::bound_curl_read_destinations;
 
 /// Whether this host runs Guard's contained execution sink for a read-only

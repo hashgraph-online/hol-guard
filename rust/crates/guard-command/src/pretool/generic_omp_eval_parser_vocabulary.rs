@@ -4,6 +4,7 @@
 pub(super) const RESERVED: &[&str] = &[
     "read",
     "sh",
+    "commit",
     "tool",
     "display",
     "print",

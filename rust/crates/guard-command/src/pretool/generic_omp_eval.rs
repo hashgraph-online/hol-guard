@@ -34,8 +34,30 @@ mod pure;
 mod tokens;
 use parser::{parse_program, parse_python, Call, Lit};
 
+/// The command an Oh My Pi `commit` draft stands for. The prelude reads the
+/// worktree and writes objects, an index of its own and the branch ref, so it
+/// may start what `git add` and `git commit` start: clean filters, an
+/// fsmonitor, hooks and a signing program. The message is a placeholder; the
+/// real one is literal text that runs nothing.
+const COMMIT_PRELUDE_COMMAND: &str = "git add -A && git commit -m 'omp eval commit'";
+
 /// Map one literal call onto the equivalent standalone tool payload.
 fn standalone_payload(call: &Call, context: &OmpContext<'_>) -> Option<Value> {
+    if call.tool == "commit" {
+        // The draft's repository runs Git the way a `bash` call in that
+        // directory would, so the `bash` tool's own `cwd` proof resolves it.
+        let mut input = Map::new();
+        input.insert("command".to_owned(), json!(COMMIT_PRELUDE_COMMAND));
+        for (key, lit) in &call.args {
+            match (key.as_str(), lit) {
+                ("cwd", Lit::Str(repo)) if context.harness == "omp" => {
+                    input.insert("cwd".to_owned(), json!(repo));
+                }
+                _ => return None,
+            }
+        }
+        return Some(json!({"tool_name": "bash", "tool_input": Value::Object(input)}));
+    }
     let mut input = Map::new();
     for (key, lit) in &call.args {
         let allowed_string = match call.tool.as_str() {
@@ -51,7 +73,7 @@ fn standalone_payload(call: &Call, context: &OmpContext<'_>) -> Option<Value> {
                 input.insert(key.clone(), Value::String(text.clone()));
             }
             Lit::Str(text) if allowed_string.contains(&key.as_str()) => {
-                if call.sdk_read_helper && text.contains(':') {
+                if call.sdk_read_helper && text.contains(':') && !text.starts_with("xd://") {
                     let path = std::path::Path::new(text);
                     let candidate = if path.is_absolute() {
                         path.to_path_buf()
@@ -191,6 +213,9 @@ pub(super) fn evaluate(
             saw_unmodeled_call = true;
             continue;
         };
+        // The `commit` prelude runs Git in the harness process, where no
+        // sandbox can reach it, so it is judged without containment.
+        let _in_process = (call.tool == "commit").then(crate::pretool::in_process_scope::scope);
         // The entry point a direct call takes, so the bridged call gets the
         // same `cwd` resolution and compound re-judging as that call.
         let result = crate::pretool::generic::evaluate_pre_tool_envelope_with_execution_context(
@@ -220,7 +245,7 @@ pub(super) fn evaluate(
     }
     let mut ran_shell = false;
     for (call, result) in evaluated {
-        ran_shell |= call.tool == "bash";
+        ran_shell |= matches!(call.tool.as_str(), "bash" | "commit");
         if result.action.sensitive_target {
             return None;
         }
@@ -233,7 +258,10 @@ pub(super) fn evaluate(
             // of several calls keeps the fall-through: no single verdict
             // speaks for it. Containment is the inner call's own hook to
             // arrange, so a sandbox verdict keeps the fall-through too.
+            // A `commit` draft is judged as a stand-in command, whose own
+            // review would bind an approval to text the program never runs.
             return (calls.len() == 1
+                && call.tool != "commit"
                 && matches!(result.minimum_action.as_str(), "review" | "block"))
             .then_some(result);
         }
