@@ -47,6 +47,11 @@ function HarnessSetupPanel(props) {
   const gateLoaded = approvalGate !== void 0;
   const disconnectRequiresProof = approvalGate?.enabled === true;
   reactExports.useEffect(() => {
+    if (active) {
+      setLeftoverRemoved(false);
+    }
+  }, [active]);
+  reactExports.useEffect(() => {
     let cancelled = false;
     void fetchSettings().then((payload) => {
       if (!cancelled) {
@@ -109,7 +114,6 @@ function HarnessSetupPanel(props) {
           props.onLeftoverRemoved?.("removed");
         }
         if (action === "install" && options.dryRun !== true) {
-          setLeftoverRemoved(false);
           props.onLeftoverRemoved?.("installed");
         }
         if (action !== "verify" && options.dryRun !== true) {

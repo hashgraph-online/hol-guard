@@ -423,6 +423,10 @@ function testDisconnectWaitsForApprovalSettingsBeforeConfirm(): void {
   );
   const harnessDetection = readFileSync(new URL("./harness-detection.ts", import.meta.url), "utf8");
   assert(harnessDetection.includes("refresh: () => Promise<boolean>"), "harness detection exposes an explicit refresh result");
+  assert(
+    harnessSetupPanel.includes("if (active) {\n      setLeftoverRemoved(false);"),
+    "install cleanup suppression remains until the active install state is reconciled",
+  );
 }
 
 function testApprovalProofBlocksUnreadyGate(): void {
