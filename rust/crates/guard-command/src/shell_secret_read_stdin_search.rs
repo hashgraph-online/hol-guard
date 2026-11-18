@@ -152,9 +152,8 @@ fn pattern_is_quoted(text: &str, pattern: &str) -> bool {
         }
         index = state.advance(&chars, index).max(index + 1);
     }
-    if literal_match {
-        return true;
-    }
+    // Do not return for a literal contiguous match yet: it might belong
+    // to a separate option value while the pattern itself expands HOME.
     // A single-quoted home marker can join an unquoted suffix into one
     // literal shell word: grep '$HOME'/.config/example. Do not match that
     // spelling as a substring of an assignment or option value: an unrelated
@@ -190,7 +189,7 @@ fn pattern_is_quoted(text: &str, pattern: &str) -> bool {
         .iter()
         .filter(|word| word.contains("$HOME") || word.contains("${HOME}") || word.contains('~'))
         .collect();
-    home_words.len() == 1 && home_words[0] == &joined
+    home_words.len() == 1 && (literal_match || home_words[0] == &joined)
 }
 
 /// A quoted or escaped '<' is argument text, not input redirection.
