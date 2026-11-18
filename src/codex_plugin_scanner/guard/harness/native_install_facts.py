@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import cast
 
 from .base import HarnessContext
 
@@ -97,7 +98,9 @@ def install_facts(
     native = _native_context(context)
     providers = _facts(native, [name for name in delegates if name not in harnesses])
     for group in ("workspace_skills", "facts"):
-        facts[group] = {**providers[group], **facts[group]}  # type: ignore[dict-item]
+        merged: dict[str, object] = dict(cast("dict[str, object]", providers[group]))
+        merged.update(cast("dict[str, object]", facts[group]))
+        facts[group] = merged
     facts["runtime"] = facts["runtime"] or providers["runtime"]
     facts["delegates"] = {name: get_adapter(name).resolved_executable(native) is not None for name in delegates}
     facts["now"] = datetime.now(timezone.utc).isoformat()

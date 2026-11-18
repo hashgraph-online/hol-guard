@@ -423,3 +423,7 @@ pub(super) fn coordinate(call: &mut Call<'_>) -> Step<Value> {
     let action = state.advance(outcome.as_ref(), &clock)?;
     Ok(json!({ "action": action, "state": state }))
 }
+
+#[cfg(test)]
+#[path = "publication_coordinate_tests.rs"]
+mod tests;

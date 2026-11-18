@@ -50,7 +50,7 @@ pub(super) struct Facts<'a> {
     pub(super) codex: &'a Map<String, Value>,
     pub(super) launch: Map<String, Value>,
     /// `package_roots` and `budget`, as every transition op takes them.
-    transition: Map<String, Value>,
+    pub(super) transition: Map<String, Value>,
     held: Vec<HeldDirectory>,
     budget: Budget,
 }

@@ -35,6 +35,9 @@ use crate::transition_files::{
     with_owned, with_registered, Budget, OwnedFailure, OwnedSpec, Owner,
 };
 
+#[path = "detected_harnesses.rs"]
+mod detected_harnesses;
+
 /// The longest a request may wait for the locks, as the owned ops cap it.
 const MAX_WAIT: Duration = Duration::from_secs(600);
 
@@ -203,6 +206,7 @@ pub(super) fn route(op: &str, ctx: &Ctx, fields: &Map<String, Value>) -> Option<
         "shim_install" => standalone_install::shim(ctx, fields),
         "profile_install" => standalone_install::profile(ctx, fields),
         "cursor_hooks_install" => standalone_install::cursor_hooks(ctx, fields),
+        "detected_harnesses" => answer(detected_harnesses::run(ctx, fields)),
         "workspace_skills_scan" => answer(skills_scan::dispatch(ctx, fields)),
         _ => return None,
     })
