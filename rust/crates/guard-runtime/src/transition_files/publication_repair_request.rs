@@ -89,6 +89,8 @@ pub(super) fn normalized(item: &Value) -> bool {
     Path::new(path).is_absolute()
         && resolve_lenient(Path::new(path)).to_string_lossy() == path
         && FILE_FIELDS.iter().all(|key| object.contains_key(*key))
+        // `payload()` always writes `no_follow` as a bool.
+        && object.get("no_follow").is_some_and(Value::is_boolean)
         && object.iter().all(|(key, value)| {
             FILE_FIELDS.contains(&key.as_str())
                 || (FILE_OPTIONAL.contains(&key.as_str()) && !value.is_null())

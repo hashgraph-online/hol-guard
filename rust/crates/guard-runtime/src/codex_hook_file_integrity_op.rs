@@ -122,31 +122,38 @@ fn refused(role: &str, kind: &str) -> String {
 }
 
 /// What a path's `lstat` says about the file it names, for telling a file that
-/// was replaced while it was judged from one that was not.
+/// was replaced while it was judged from one that was not. `None` when it
+/// cannot be read.
 #[cfg(unix)]
-fn fingerprint(metadata: &fs::Metadata) -> Vec<u64> {
+fn fingerprint(path: &Path) -> Option<Vec<u64>> {
     use std::os::unix::fs::MetadataExt;
-    vec![
+    let metadata = fs::symlink_metadata(path).ok()?;
+    Some(vec![
         metadata.dev(),
         metadata.ino(),
         metadata.size(),
         (metadata.mtime() as u64).wrapping_mul(1_000_000_000) + metadata.mtime_nsec() as u64,
         u64::from(metadata.mode()),
         u64::from(metadata.uid()),
-    ]
+    ])
 }
 
-/// Off POSIX the volume and file index are not stable Rust API; the size,
-/// last write, creation time and attributes still change when a file is replaced.
+/// `os.lstat` as Python reads it: the volume serial and file index are
+/// `st_dev` and `st_ino`, with the size, times and attributes beside them.
 #[cfg(windows)]
-fn fingerprint(metadata: &fs::Metadata) -> Vec<u64> {
+fn fingerprint(path: &Path) -> Option<Vec<u64>> {
     use std::os::windows::fs::MetadataExt;
-    vec![
-        metadata.file_size(),
-        metadata.last_write_time(),
-        metadata.creation_time(),
-        u64::from(metadata.file_attributes()),
-    ]
+    let stat = guard_runtime_windows_process::link_stat(path).ok()?;
+    let attributes = fs::symlink_metadata(path).ok()?.file_attributes();
+    Some(vec![
+        stat.volume_serial,
+        (stat.file_index >> 64) as u64,
+        stat.file_index as u64,
+        stat.size,
+        stat.last_write_time,
+        stat.creation_time,
+        u64::from(attributes),
+    ])
 }
 
 /// `validate_regular_file`, bracketed: the name's `lstat` before the checks
@@ -159,10 +166,10 @@ fn validate(
     executable_required: bool,
     package_roots: &[PathBuf],
 ) -> Result<(), String> {
-    let before = fs::symlink_metadata(path).ok().map(|m| fingerprint(&m));
+    let before = fingerprint(path);
     admit(path, role, executable_required, package_roots)?;
-    let after = fs::symlink_metadata(path).map_err(|_| refused(role, "missing"))?;
-    if before != Some(fingerprint(&after)) {
+    let after = fingerprint(path).ok_or_else(|| refused(role, "missing"))?;
+    if before.as_ref() != Some(&after) {
         return Err(refused(role, "hash_mismatch"));
     }
     Ok(())

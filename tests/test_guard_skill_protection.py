@@ -383,7 +383,9 @@ def test_scan_workspace_skills_tells_the_runtime_what_the_store_holds(
 ) -> None:
     skills_dir, store = _one_docs_skill(tmp_path)
     skill = str(skills_dir / "SKILL.md")
-    store.save_snapshot("skill_scan", f"skill-path:{skill}", {"stored": True}, "hash-1", "2024-01-01T00:00:00")
+    store.save_snapshot(
+        "skill_scan", f"skill-path:{skill}", {"identity_hash": "hash-1"}, "hash-1", "2024-01-01T00:00:00"
+    )
     requests: list[dict[str, object]] = []
 
     def _answer(request: dict[str, object]) -> dict[str, object]:

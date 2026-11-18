@@ -154,7 +154,7 @@ fn malformed_requests_are_refused() {
 fn a_replaced_file_no_longer_matches_the_fingerprint_taken_before_the_checks() {
     let root = tempfile::tempdir().expect("a temporary directory");
     let path = hook_file(root.path(), 0o600);
-    let print = |path: &Path| fingerprint(&fs::symlink_metadata(path).expect("the file exists"));
+    let print = |path: &Path| fingerprint(path).expect("the file exists");
     let before = print(&path);
     assert_eq!(
         before,

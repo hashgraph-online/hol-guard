@@ -1,6 +1,6 @@
 use super::*;
 
-const OPERATION: &str = "12345678-1234-5678-1234-567812345678";
+const OPERATION: &str = "1b4e28ba-2fa1-41d2-883f-0016d3cca427";
 const REQUEST: &str = "transition-hook-0123456789abcdef0123456789abcdef";
 
 fn payload(probe: Value) -> Value {
