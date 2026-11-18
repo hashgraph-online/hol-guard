@@ -26,6 +26,29 @@ const XARGS_VALUE_OPTIONS: &[&str] = &[
     "--process-slot-var",
 ];
 
+/// The text with each double-quoted home directory read as a fixed path.
+///
+/// `"$HOME/.github/workflows"` names one directory the user owns: the
+/// shell does not split or glob it, and it cannot become a program or an
+/// option. Any other parameter is left in place, so `"$HOME/$DIR"` and a
+/// bare `$HOME` keep the `$` the callers refuse. A text that assigns `HOME`
+/// itself is returned unchanged.
+pub(super) fn with_fixed_home(text: &str) -> String {
+    if text.contains("HOME=") {
+        return text.to_owned();
+    }
+    let mut out = text.to_owned();
+    for (quoted, fixed) in [
+        ("\"$HOME\"", "\"/home\""),
+        ("\"${HOME}\"", "\"/home\""),
+        ("\"$HOME/", "\"/home/"),
+        ("\"${HOME}/", "\"/home/"),
+    ] {
+        out = out.replace(quoted, fixed);
+    }
+    out
+}
+
 /// Whether every `xargs` in the text names the program it runs.
 ///
 /// `xargs` reads standard input as arguments for a program the command

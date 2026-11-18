@@ -601,7 +601,7 @@ fn named_xargs_pipeline(text: &str) -> bool {
     text.contains("xargs")
         && xargs_names_its_program(text)
         && xargs_input_is_named(text)
-        && !text.contains(['<', '`', '$', '\n'])
+        && !xargs::with_fixed_home(text).contains(['<', '`', '$', '\n'])
         && !moves_data(&unquoted_literal(&kept.join(" ")))
 }
 

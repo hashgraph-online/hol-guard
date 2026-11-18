@@ -47,6 +47,25 @@ fn a_named_xargs_pipeline_that_discards_output_is_reviewable() {
     }
 }
 
+/// A double-quoted home directory is a fixed path, so a listing under it
+/// that pipes into a named program reaches review instead of failing.
+#[test]
+fn a_quoted_home_root_does_not_fail_a_named_xargs_pipeline() {
+    let controls = controls(github("enabled", None), false);
+    for command in [
+        "find \"$HOME/.github/workflows\" -maxdepth 1 -type f -print 2>/dev/null | sort | xargs -r grep -nE 'runs-on|runner'",
+        "find \"${HOME}/notes\" -type f | xargs grep -l todo",
+    ] {
+        assert_ne!(decision(&controls, command).1, FAILED, "{command}");
+    }
+    for command in [
+        "find \"$HOME/$DIR\" -type f | xargs grep -l todo",
+        "find $HOME/notes -type f | xargs grep -l todo",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+    }
+}
+
 /// Reading the program out of an `xargs` leaves the operands standard input
 /// supplies unread. An extension that owns that program judges arguments this
 /// text does not hold, so the read-through does not stand in for its rules.
