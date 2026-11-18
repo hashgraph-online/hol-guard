@@ -65,9 +65,13 @@ EXIT_WAIT_SECONDS = 10.0
 SETTLE_SECONDS = 1.0
 MAX_REASONS = 5
 MAX_REASON_CHARS = 240
-# A reply that is not a review of the hook. Only connection failures are
-# expected while the daemon is down; a daemon that answers must decide.
-UNDECIDED = ("unreadable", "fail-safe:harness_not_managed")
+# Not a review of the hook. Only connection failures are expected while the
+# daemon is down; a daemon that answers must decide (no HTTP error, no empty reply).
+UNDECIDED = ("unreadable", "no-decision", "fail-safe:harness_not_managed")
+
+
+def _is_undecided(kind: str) -> bool:
+    return kind in UNDECIDED or kind.startswith("http")
 
 
 @dataclass
@@ -186,15 +190,23 @@ def _send_hook(endpoint: str, token: str) -> tuple[str, str]:
         return f"connection:{type(error.reason).__name__}", ""
     except (OSError, http.client.HTTPException) as error:
         return f"connection:{type(error).__name__}", ""
-    kind = burst._reply_kind(body) if status == 200 else f"http{status}"
-    if kind == "reviewed" or kind.startswith("connection:"):
+    if status != 200:
+        return f"http{status}", ""
+    kind = burst._reply_kind(body)
+    if kind == "reviewed":
         return kind, ""
     try:
         reply = json.loads(body)
     except ValueError:
         return kind, ""
-    reason = reply.get("reason") if isinstance(reply, dict) else None
-    return kind, str(reason)[:MAX_REASON_CHARS] if reason else ""
+    if not isinstance(reply, dict):
+        return kind, ""
+    reason = reply.get("reason")
+    reason_text = str(reason)[:MAX_REASON_CHARS] if reason else ""
+    decision = reply.get("decision")
+    if not isinstance(decision, str) or not decision:
+        return "no-decision", reason_text
+    return kind, reason_text
 
 
 def _names(record: str, expected: str) -> bool:
@@ -219,6 +231,7 @@ class _HookTraffic:
         self.fail_safe_reasons: Counter[str] = Counter()
         self.recovery_errors: Counter[str] = Counter()
         self.fault_at: float | None = None
+        self.stopped_at: float | None = None
         self.served_again_at: float | None = None
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -236,6 +249,11 @@ class _HookTraffic:
     def mark_fault(self) -> None:
         with self._lock:
             self.fault_at = time.monotonic()
+
+    def mark_stopped(self) -> None:
+        """Only a hook sent after the faulted daemon exits counts as recovery."""
+        with self._lock:
+            self.stopped_at = time.monotonic()
 
     def _target(self) -> tuple[str, str] | None:
         url = load_guard_daemon_url(self.guard_home)
@@ -270,8 +288,8 @@ class _HookTraffic:
                 self.outcomes[kind] += 1
                 if reason:
                     self.fail_safe_reasons[reason] += 1
-                fault_at = self.fault_at
-                if kind == "reviewed" and fault_at is not None and sent_at > fault_at and self.served_again_at is None:
+                after_stop = self.stopped_at is not None and sent_at > self.stopped_at
+                if kind == "reviewed" and after_stop and self.served_again_at is None:
                     self.served_again_at = time.monotonic()
             if kind.startswith("connection:"):
                 self._recover()
@@ -288,7 +306,7 @@ def _check_recovered(
     fault_at = traffic.fault_at
     served_at = traffic.served_again_at
     if fault_at is None or served_at is None:
-        result.failures.append("no hook was reviewed after the fault")
+        result.failures.append("no hook was reviewed after the faulted daemon stopped")
     else:
         result.seconds_to_serve_again = round(served_at - fault_at, 2)
         if result.seconds_to_serve_again > max_recovery_seconds:
@@ -298,7 +316,7 @@ def _check_recovered(
     result.outcomes = dict(traffic.outcomes)
     result.fail_safe_reasons = dict(traffic.fail_safe_reasons.most_common(MAX_REASONS))
     result.recoveries = traffic.recoveries
-    undecided = {kind: count for kind, count in traffic.outcomes.items() if kind in UNDECIDED}
+    undecided = {kind: count for kind, count in traffic.outcomes.items() if _is_undecided(kind)}
     if undecided:
         result.failures.append(f"hooks were answered without a decision: {undecided}")
     if traffic.recovery_errors:
@@ -338,7 +356,9 @@ def _run_fault(
                 time.sleep(1.0)
                 traffic.mark_fault()
                 fault(execution.initial_pid)
-                if not _wait_for_exit(execution.initial_pid, EXIT_WAIT_SECONDS):
+                if _wait_for_exit(execution.initial_pid, EXIT_WAIT_SECONDS):
+                    traffic.mark_stopped()
+                else:
                     result.failures.append(f"the daemon did not stop within {EXIT_WAIT_SECONDS}s of the fault")
                 deadline = time.monotonic() + max_recovery_seconds + RECOVERY_LOCK_TIMEOUT_SECONDS
                 while traffic.served_again_at is None and time.monotonic() < deadline:
@@ -380,6 +400,23 @@ def _sigterm(pid: int) -> None:
 
 def run_closed_stderr_launch(runtime: Path) -> ScenarioResult:
     result = ScenarioResult(name="closed-stderr-launch")
+    try:
+        _closed_stderr_launch(runtime, result)
+    except Exception as error:  # a scenario that cannot run fails, it is not skipped
+        result.failures.append(f"scenario could not run: {type(error).__name__}: {error}")
+    result.passed = not result.failures
+    return result
+
+
+def _failure_code(line: str) -> str:
+    try:
+        record = json.loads(line)
+    except ValueError:
+        return "unreadable"
+    return str(record.get("code")) if isinstance(record, dict) else "unreadable"
+
+
+def _closed_stderr_launch(runtime: Path, result: ScenarioResult) -> None:
     with tempfile.TemporaryDirectory(prefix="hol-guard-chaos-") as temporary:
         guard_home = Path(temporary)
         reader, writer = os.pipe()
@@ -405,11 +442,9 @@ def run_closed_stderr_launch(runtime: Path) -> ScenarioResult:
             lines = [line for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]
         except OSError:
             lines = []
-        result.exit_records = [str(json.loads(line).get("code")) for line in lines]
+        result.exit_records = [_failure_code(line) for line in lines]
         if len(lines) != 1:
             result.failures.append(f"{len(lines)} failed-launch records, expected exactly one")
-    result.passed = not result.failures
-    return result
 
 
 def run_chaos(runtime: Path, *, max_recovery_seconds: float) -> ChaosResult:
@@ -444,6 +479,10 @@ def main() -> int:
     args = parser.parse_args()
     if args.runtime is None:
         parser.error("--runtime or HOL_GUARD_NATIVE_BINARY is required")
+    # The fault scenarios start and recover daemons through the environment's
+    # runtime, so pin it to the one under test.
+    args.runtime = args.runtime.resolve(strict=True)
+    os.environ["HOL_GUARD_NATIVE_BINARY"] = str(args.runtime)
     result = run_chaos(args.runtime, max_recovery_seconds=args.max_recovery_seconds)
     payload = json.dumps(asdict(result), indent=2)
     print(payload)
