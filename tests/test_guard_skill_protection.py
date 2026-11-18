@@ -10,8 +10,6 @@ import pytest
 
 from codex_plugin_scanner.guard.cli import install_commands as install_commands_module
 from codex_plugin_scanner.guard.cli.install_commands import scan_workspace_skills
-from codex_plugin_scanner.guard.native_mcp_tool_evidence import NativeMcpToolEvidenceError
-from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.runtime.skill_protection import detect_skill_content_risk
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -372,73 +370,78 @@ def test_shell_in_frontmatter_detected_when_after_non_skill_block() -> None:
     )
 
 
-def test_scan_workspace_skills_passes_the_store_guard_home(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _one_docs_skill(tmp_path: Path) -> tuple[Path, GuardStore]:
     skills_dir = tmp_path / ".codex" / "skills" / "docs"
     skills_dir.mkdir(parents=True)
     (skills_dir / "SKILL.md").write_text("---\nname: docs\n---\n# Docs\n", encoding="utf-8")
-    store = _make_store(tmp_path)
-    homes: list[Path | None] = []
+    return skills_dir, _make_store(tmp_path)
 
-    def _detect(content: str, *, guard_home: Path | None = None) -> tuple[()]:
-        homes.append(guard_home)
-        return ()
 
-    monkeypatch.setattr(install_commands_module, "detect_skill_content_risk", _detect)
+def test_scan_workspace_skills_tells_the_runtime_what_the_store_holds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    skills_dir, store = _one_docs_skill(tmp_path)
+    skill = str(skills_dir / "SKILL.md")
+    store.save_snapshot("skill_scan", f"skill-path:{skill}", {"stored": True}, "hash-1", "2024-01-01T00:00:00")
+    requests: list[dict[str, object]] = []
+
+    def _answer(request: dict[str, object]) -> dict[str, object]:
+        requests.append(request)
+        if request["op"] == "list":
+            return {"skills": [skill]}
+        return {"results": [], "snapshots": []}
+
+    monkeypatch.setattr(install_commands_module, "_skills_answer", _answer)
 
     assert scan_workspace_skills(tmp_path, store, "2024-01-01T00:00:00") == []
-    assert homes == [store.guard_home]
+    assert [request["op"] for request in requests] == ["list", "scan"]
+    assert requests[1]["stored"] == {skill: "hash-1"}
 
 
-def test_scan_workspace_skills_reports_unscanned_skill_when_the_resident_fails(
+def test_scan_workspace_skills_reports_unscanned_skill_when_the_runtime_does_not_answer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    skills_dir = tmp_path / ".codex" / "skills" / "docs"
-    skills_dir.mkdir(parents=True)
-    (skills_dir / "SKILL.md").write_text("---\nname: docs\n---\n# Docs\n", encoding="utf-8")
-    store = _make_store(tmp_path)
-
-    def _fail(content: str, *, guard_home: Path | None = None) -> tuple[()]:
-        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
-
-    monkeypatch.setattr(install_commands_module, "detect_skill_content_risk", _fail)
+    skills_dir, store = _one_docs_skill(tmp_path)
+    monkeypatch.setattr(install_commands_module, "_skills_answer", lambda request: None)
 
     result = scan_workspace_skills(tmp_path, store, "2024-01-01T00:00:00")
 
     assert len(result) == 1
-    assert result[0]["scan_error"] == "native_runner_authority_unavailable"
+    assert result[0]["scan_error"] == "native_workspace_skills_scan_unavailable"
     assert result[0]["status"] == "unscanned"
     assert result[0]["risk_count"] is None
-    assert ".codex/skills/docs/SKILL.md" in str(result[0]["skill_path"])
-    artifact_id = f"skill-path:{skills_dir / 'SKILL.md'}"
-    assert store.get_snapshot("skill_scan", artifact_id) is None
+    assert store.get_snapshot("skill_scan", f"skill-path:{skills_dir / 'SKILL.md'}") is None
 
 
-def test_scan_workspace_skills_reports_unscanned_skill_when_the_firewall_request_is_refused(
+def test_scan_workspace_skills_passes_the_runtime_unscanned_rows_without_a_snapshot(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    skills_dir = tmp_path / ".codex" / "skills" / "docs"
-    skills_dir.mkdir(parents=True)
-    (skills_dir / "SKILL.md").write_text("---\nname: docs\n---\n# Docs\n", encoding="utf-8")
-    store = _make_store(tmp_path)
+    skills_dir, store = _one_docs_skill(tmp_path)
+    skill = str(skills_dir / "SKILL.md")
+    row = {
+        "skill_path": ".codex/skills/docs/SKILL.md",
+        "identity_hash": None,
+        "status": "unscanned",
+        "risk_count": None,
+        "severities": [],
+        "signal_ids": [],
+        "scan_error": "native_mcp_tool_evidence_unavailable",
+    }
 
-    def _refuse(**_kwargs: object) -> dict[str, object]:
-        raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_unavailable")
+    def _answer(request: dict[str, object]) -> dict[str, object]:
+        if request["op"] == "list":
+            return {"skills": [skill]}
+        return {"results": [row], "snapshots": []}
 
-    monkeypatch.setattr(install_commands_module, "native_skill_firewall_metadata_patch", _refuse)
+    monkeypatch.setattr(install_commands_module, "_skills_answer", _answer)
 
     result = scan_workspace_skills(tmp_path, store, "2024-01-01T00:00:00")
 
-    assert len(result) == 1
-    assert result[0]["scan_error"] == "native_mcp_tool_evidence_unavailable"
-    assert result[0]["status"] == "unscanned"
-    assert result[0]["identity_hash"] is None
-    artifact_id = f"skill-path:{skills_dir / 'SKILL.md'}"
-    assert store.get_snapshot("skill_scan", artifact_id) is None
+    assert result == [row]
+    assert store.get_snapshot("skill_scan", f"skill-path:{skill}") is None
 
 
 def test_skill_scan_panel_shows_unscanned_skills_apart_from_risky_ones() -> None:

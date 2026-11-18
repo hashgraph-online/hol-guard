@@ -7,9 +7,9 @@ build does not recognise is treated as the review tier. This module sends it
 the verdict and the one fact it cannot know: for grok, whether the Guard home
 records protection as off.
 
-With no native runtime the outage policy is block and repair: a verdict that
-blocks exits with the fixed blocking code and the hook says how to repair; an
-allow still lets the turn continue, as the caller chose when it picked it.
+With no native runtime there is nothing to ask: the outage path applies the
+same table in this process, so an unavailable runtime exits exactly as the
+runtime would have, and never leaves a blocking verdict on the allow path.
 """
 
 from __future__ import annotations
@@ -23,11 +23,12 @@ _FEATURE = "native-hook-exit-code-v1"
 _COMMAND = "hook-exit-code"
 _OUTPUT_LIMIT = 4096
 _TIMEOUT_SECONDS = 5.0
-RUNTIME_ABSENT_EXIT_CODE = 2
-_PASSING_ACTIONS = frozenset({"allow", "warn"})
-RUNTIME_ABSENT_REPAIR_HINT = (
-    "HOL Guard's native runtime is unavailable, so this action is blocked. Run `hol-guard repair`."
-)
+_BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
+_RC_BLOCK_IS_ONE = frozenset({"opencode", "superagent"})
+_RC_BLOCK_IS_TWO = frozenset({"cursor", "devin", "kimi", "hermes"})
+_RC_BLOCK_IS_ZERO_ENVELOPE = frozenset({"codex", "claude-code", "copilot", "pi", "omp", "muse"})
+_PREEMPTIVE_EVENTS = frozenset({"PreToolUse", "UserPromptSubmit", "PermissionRequest"})
+_ZCODE_ASK_ACTIONS = frozenset({"review", "require-reapproval"})
 
 
 def native_hook_verdict_exit_code(
@@ -39,7 +40,7 @@ def native_hook_verdict_exit_code(
 
     ``policy_action`` is the resolved action, not the wire ``decision`` string;
     an unrecognised value is the review tier. Without the native runtime the
-    status is ``RUNTIME_ABSENT_EXIT_CODE`` unless the action is allow or warn.
+    outage table below answers.
     """
 
     from ..mdm.runtime_request import runtime_answer
@@ -49,10 +50,31 @@ def native_hook_verdict_exit_code(
     code = None if answer is None else answer.get("exit_code")
     if isinstance(code, int) and not isinstance(code, bool) and 0 <= code <= 255:
         return code
-    if policy_action in _PASSING_ACTIONS:
-        return 0
-    _ = sys.stderr.write(RUNTIME_ABSENT_REPAIR_HINT + "\n")
-    return RUNTIME_ABSENT_EXIT_CODE
+    return _outage_exit_code(harness, policy_action, event_name)
+
+
+def _outage_exit_code(harness: str, policy_action: object, event_name: str | None) -> int:
+    """The runtime's table, for the one moment no runtime can be asked."""
+
+    from ..action_lattice import normalize_guard_action
+
+    action = normalize_guard_action(policy_action)
+    blocking = action in _BLOCKING_ACTIONS
+    if harness == "grok":
+        return 2 if blocking and not _grok_recording_only() else 0
+    if harness == "zcode":
+        compact = (event_name or "PreToolUse").replace("_", "").replace("-", "").lower()
+        if compact == "pretooluse" and action in _ZCODE_ASK_ACTIONS:
+            return 0
+        return 2 if blocking else 0
+    if harness in _RC_BLOCK_IS_TWO:
+        return 2 if blocking else 0
+    if harness in _RC_BLOCK_IS_ONE:
+        return 1 if blocking else 0
+    if harness in _RC_BLOCK_IS_ZERO_ENVELOPE:
+        return 0 if not blocking or event_name in _PREEMPTIVE_EVENTS else 1
+    # Unknown harness: fail safe on the exit status only for blocking verdicts.
+    return 1 if blocking else 0
 
 
 def _encode(harness: str, policy_action: object, event_name: str | None) -> str:
@@ -95,4 +117,4 @@ def _grok_recording_only() -> bool:
     return protection_is_off(posture=config.protection_posture, mode=config.mode)
 
 
-__all__ = ["RUNTIME_ABSENT_EXIT_CODE", "RUNTIME_ABSENT_REPAIR_HINT", "native_hook_verdict_exit_code"]
+__all__ = ["native_hook_verdict_exit_code"]

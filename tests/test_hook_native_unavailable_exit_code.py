@@ -1,4 +1,4 @@
-"""The Python side of the native-hook exit code: the request it sends and the outage constant.
+"""The Python side of the native-hook exit code: the request it sends and the outage table.
 
 The verdict-to-exit-code table is native; its cases live in
 `rust/crates/guard-runtime/src/hook_exit_code_op_tests.rs`.
@@ -11,11 +11,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import native_hook_exit_code as module
-from codex_plugin_scanner.guard.cli.native_hook_exit_code import (
-    RUNTIME_ABSENT_EXIT_CODE,
-    RUNTIME_ABSENT_REPAIR_HINT,
-    native_hook_verdict_exit_code,
-)
+from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
 
 _TARGET = "codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer"
 
@@ -50,17 +46,23 @@ def test_the_runtime_answer_is_the_exit_code(monkeypatch: pytest.MonkeyPatch) ->
 @pytest.mark.parametrize(
     "answer", [None, {}, {"exit_code": "2"}, {"exit_code": True}, {"exit_code": -1}, {"exit_code": 256}]
 )
-def test_without_the_runtime_a_blocking_verdict_blocks_and_says_how_to_repair(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], answer: dict[str, object] | None
+def test_without_the_runtime_the_outage_table_answers_as_the_runtime_would(
+    monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None
 ) -> None:
     _Runtime(monkeypatch, answer)
-    for action in ("review", "require-reapproval", "sandbox-required", "block", "unheard-of", None):
-        assert native_hook_verdict_exit_code("codex", action, "PostToolUse") == RUNTIME_ABSENT_EXIT_CODE == 2
-    assert capsys.readouterr().err.count(RUNTIME_ABSENT_REPAIR_HINT) == 6
+    blocking = ("review", "require-reapproval", "sandbox-required", "block", "unheard-of", None)
+    for action in blocking:
+        assert native_hook_verdict_exit_code("opencode", action, "PreToolUse") == 1
+        assert native_hook_verdict_exit_code("cursor", action, "PreToolUse") == 2
+        assert native_hook_verdict_exit_code("grok", action) == 2
+        assert native_hook_verdict_exit_code("codex", action, "PreToolUse") == 0
+        assert native_hook_verdict_exit_code("codex", action, "PostToolUse") == 1
+        assert native_hook_verdict_exit_code("unknown-harness", action) == 1
     for action in ("allow", "warn"):
-        assert native_hook_verdict_exit_code("codex", action, "PostToolUse") == 0
-    assert capsys.readouterr().err == ""
-    assert "hol-guard repair" in RUNTIME_ABSENT_REPAIR_HINT
+        for harness in ("opencode", "cursor", "grok", "codex", "unknown-harness"):
+            assert native_hook_verdict_exit_code(harness, action, "PostToolUse") == 0
+    assert native_hook_verdict_exit_code("zcode", "review", "PreToolUse") == 0
+    assert native_hook_verdict_exit_code("zcode", "block", "PreToolUse") == 2
 
 
 def test_an_action_json_cannot_carry_is_sent_as_missing(monkeypatch: pytest.MonkeyPatch) -> None:
