@@ -463,7 +463,44 @@ mod config_pattern_tests;
 
 #[cfg(test)]
 mod tests {
-    use super::names_refused_option;
+    use super::{names_refused_option, plain_root_anchored_diff_pathspec};
+
+    #[test]
+    fn only_a_plain_root_anchored_diff_path_gets_magic_pathspec_proof() {
+        let words = |items: &[&str]| items.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        let safe = words(&["diff", "HEAD", "--", ":(top)src/sum.js"]);
+        assert!(plain_root_anchored_diff_pathspec(
+            &safe,
+            3,
+            ":(top)src/sum.js"
+        ));
+        for bad in [
+            ":(top)../.ssh/id_rsa",
+            ":(top).env",
+            ":(glob)src/*.js",
+            ":(top)src/**",
+            ":(top)src/../../etc/passwd",
+            ":(top)src//sum.js",
+            ":(top)/etc/passwd",
+            ":(top)src/./sum.js",
+        ] {
+            let arguments = words(&["diff", "HEAD", "--", bad]);
+            assert!(!plain_root_anchored_diff_pathspec(&arguments, 3, bad), "{bad}");
+        }
+        for arguments in [
+            words(&["show", "HEAD", "--", ":(top)src/sum.js"]),
+            words(&["diff", "HEAD", "--", ":(top)src/sum.js", "other"]),
+            words(&["diff", "--cached", "--", ":(top)src/sum.js"]),
+            words(&["-c", "core.pager=cat", "diff", "HEAD", "--", ":(top)src/sum.js"]),
+        ] {
+            assert!(!plain_root_anchored_diff_pathspec(
+                &arguments,
+                arguments.len() - 1,
+                ":(top)src/sum.js"
+            ));
+        }
+    }
+
 
     /// Git takes any unambiguous prefix of a long option, so a read that
     /// disables both helpers in full can turn one back on in an abbreviation
