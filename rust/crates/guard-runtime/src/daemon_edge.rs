@@ -74,7 +74,7 @@ impl Slots {
     }
 }
 
-const OVERLOAD_RESPONSE: &[u8] = b"HTTP/1.0 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\nRetry-After: 1\r\n\r\n";
+const OVERLOAD_RESPONSE: &[u8] = b"HTTP/1.0 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: 16\r\nConnection: close\r\nRetry-After: 1\r\n\r\ndaemon overload\n";
 
 /// The Guard package version the launcher named, which outbound requests
 /// identify themselves with; the runtime's own version until it is set.
@@ -229,5 +229,13 @@ mod tests {
         assert!(!slots.try_acquire());
         slots.release();
         assert!(slots.try_acquire());
+    }
+
+    #[test]
+    fn overload_response_is_recognizable_to_hook_bridges() {
+        let response = std::str::from_utf8(OVERLOAD_RESPONSE).expect("static response is utf8");
+        assert!(response.contains("503 Service Unavailable"));
+        assert!(response.contains("Retry-After: 1"));
+        assert!(response.ends_with("daemon overload\n"));
     }
 }

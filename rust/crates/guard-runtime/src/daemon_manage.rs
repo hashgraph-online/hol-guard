@@ -24,12 +24,18 @@ use crate::daemon_policy_authority::load_authenticated_daemon_identity;
 
 #[path = "daemon_manage_ensure.rs"]
 mod ensure;
+#[cfg(all(test, unix))]
+#[path = "daemon_manage_exit_record_tests.rs"]
+mod exit_record_tests;
 #[path = "daemon_manage_failure.rs"]
 mod failure;
 #[path = "daemon_manage_host.rs"]
 mod host;
 #[path = "daemon_manage_live_probe.rs"]
 mod live_probe;
+#[cfg(all(test, target_os = "linux"))]
+#[path = "daemon_manage_liveness_tests.rs"]
+mod liveness_tests;
 #[cfg(all(test, unix))]
 #[path = "daemon_manage_orphan_tests.rs"]
 mod orphan_tests;
@@ -45,6 +51,8 @@ mod recover;
 pub(crate) mod recovery_host;
 #[path = "daemon_manage_retire.rs"]
 mod retire;
+#[path = "daemon_manage_serve_stderr.rs"]
+mod serve_stderr;
 #[path = "daemon_manage_start_progress.rs"]
 mod start_progress;
 #[path = "daemon_manage_state.rs"]
@@ -157,9 +165,9 @@ fn answer(request: &Request, raw: &Map<String, Value>) -> Result<Value, String> 
             .map(|budget| Instant::now() + Duration::from_millis(budget)),
     );
     match request.op.as_str() {
-        "retire" => {
-            Ok(json!({"retired": retire::retire_all(&caller, request.keep_port, deadline)}))
-        }
+        "retire" => Ok(
+            json!({"retired": retire::retire_all(&caller, request.keep_port, "requested_retire", deadline)}),
+        ),
         "retirement_complete" => Ok(json!({"complete": retire::retirement_is_complete(&caller)})),
         "posture" => Ok(json!({"posture": recover::posture(&caller.guard_home)})),
         "repair_locator" => Ok(repair_locator(&caller, deadline)),
@@ -321,7 +329,7 @@ fn repair_locator(caller: &host::Caller, deadline: retire::Deadline) -> Value {
         }
         let mut daemon_is_live = pid_is_live && identity == Some(true);
         if identity_is_invalid {
-            retire::retire_all(caller, None, deadline);
+            retire::retire_all(caller, None, "repair_untrusted_state", deadline);
             if !records::is_exact_tombstone(&state_path) {
                 return json!({"error": "untrusted_state_not_retired"});
             }

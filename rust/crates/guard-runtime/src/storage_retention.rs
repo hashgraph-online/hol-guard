@@ -23,6 +23,9 @@
 //! than seven days old, and when any component of the staging path is a link.
 //! A stale directory is removed with `remove_dir_all`, which never follows a
 //! link inside the tree and stops at the first entry it cannot remove.
+//!
+//! A completed maintenance pass also removes the empty temporary files that
+//! interrupted atomic writes left behind (`storage_retention_temp.rs`).
 
 use std::collections::HashMap;
 use std::fs::{self, Metadata};
@@ -400,11 +403,10 @@ fn components_unlinked(path: &Path) -> bool {
     true
 }
 
-/// `st_mtime` as Python reads it: seconds since the epoch, negative before
-/// it. An unreadable time reads as the epoch.
 /// The sweeps a completed storage-maintenance pass runs, under the default
 /// policy: keep the newest two quarantine events, older ones for seven days
-/// within 2 GiB, and update staging for seven days.
+/// within 2 GiB, update staging for seven days, and empty temporary files
+/// that interrupted atomic writes left for a day.
 pub(crate) fn sweep_after_maintenance(guard_home: &Path) {
     let now = epoch_seconds(SystemTime::now());
     let policy = Retention {
@@ -415,8 +417,11 @@ pub(crate) fn sweep_after_maintenance(guard_home: &Path) {
     };
     let _ = prune_quarantine(guard_home, &policy);
     prune_staging(guard_home, ACTIVITY_WINDOW_SECONDS, now);
+    let _ = temp::prune_abandoned_temp_files(guard_home, now);
 }
 
+/// `st_mtime` as Python reads it: seconds since the epoch, negative before
+/// it. An unreadable time reads as the epoch.
 fn modified_seconds(metadata: &Metadata) -> f64 {
     metadata.modified().map(epoch_seconds).unwrap_or(0.0)
 }
@@ -434,6 +439,9 @@ fn epoch_seconds(time: SystemTime) -> f64 {
 fn invalid() -> String {
     "storage_retention_request_invalid".to_owned()
 }
+
+#[path = "storage_retention_temp.rs"]
+mod temp;
 
 #[path = "daemon_log_retention.rs"]
 pub(crate) mod daemon_log;

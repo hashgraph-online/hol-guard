@@ -17,6 +17,19 @@ fn warming_now(key: &Key) -> bool {
 }
 
 #[test]
+fn prompt_threads_have_a_process_wide_cap() {
+    let budget = Box::leak(Box::new(PromptThreadBudget::new(MAX_PROMPT_THREADS)));
+    let mut permits = Vec::new();
+    while let Some(permit) = budget.try_acquire() {
+        permits.push(permit);
+    }
+    assert!(permits.len() <= MAX_PROMPT_THREADS);
+    assert!(budget.try_acquire().is_none());
+    drop(permits);
+    assert!(budget.try_acquire().is_some());
+}
+
+#[test]
 fn a_prompt_that_finds_cigar_starting_leaves_one_warm_up_for_the_next() {
     let home = tempfile::tempdir().unwrap();
     let project = tempfile::tempdir().unwrap();

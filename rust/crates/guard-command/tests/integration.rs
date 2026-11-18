@@ -288,6 +288,7 @@ pub mod pretool_prompt_url_paths;
 pub mod pretool_pytest_contained_route;
 pub mod pretool_python_heredoc_programs;
 pub mod pretool_python_json_filters;
+pub mod pretool_quoted_route_group_search;
 pub mod pretool_read_directory_globs;
 pub mod pretool_read_output_scratch;
 pub mod pretool_recoverable_removal;

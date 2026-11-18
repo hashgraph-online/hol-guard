@@ -144,6 +144,7 @@ fn project(processes: Vec<Process>, now: u64) -> (Vec<Agent>, bool) {
             context_calls: 0,
             input_tokens: 0,
             output_tokens: 0,
+            blocked: Vec::new(),
             parent_pid: process.parent,
         });
     }
