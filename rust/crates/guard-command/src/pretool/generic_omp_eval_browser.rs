@@ -325,12 +325,9 @@ impl Parser {
             "press" | "waitForSelector" | "waitForText" => {
                 self.string()?;
                 if self.eat_punct(',') {
-                    // `press(selector, key)` names the key second.
-                    if method == "press" && matches!(self.peek(), Some(Token::Str(_))) {
-                        self.pos += 1;
-                    } else {
-                        self.options()?;
-                    }
+                    // OMP accepts a selector in the options object, not a
+                    // second string (`press(key, {selector})`).
+                    self.options()?;
                 }
             }
             "waitFor" => {
