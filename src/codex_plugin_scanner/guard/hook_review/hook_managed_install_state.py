@@ -139,6 +139,6 @@ def _read_harness_is_unmanaged(
         and _canonical_managed_harness(str(item.get("harness") or "")) != canonical
         for item in installs
     )
-    if not unmanaged and key is not None:
+    if not unmanaged and key is not None and revision is not None:
         _remember_protected(key, revision)
     return unmanaged
