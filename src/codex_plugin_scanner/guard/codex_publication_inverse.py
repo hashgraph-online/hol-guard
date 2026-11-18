@@ -247,10 +247,13 @@ def verify_and_retire_codex_publication_inverse(
         ),
     ):
         pending.compare()
-        if set(pending._restored) != {0, 1, 2} or plan.native_runtime is None or plan.verification_workspace is None:
-            raise TransitionError("publication_inverse_not_restored")
+        generation = native_transition_files.artifact_generation(
+            "inverse",
+            plan.subject(),
+            bound=plan.native_runtime is not None and plan.verification_workspace is not None,
+            restored=pending._restored,
+        )
         started = time.monotonic()
-        generation = "codex-publication-inverse-" + plan.subject().rsplit(":", 1)[1]
         proof = observe_configured_codex_hook(
             operation_id=plan.operation_id,
             artifact_generation=generation,

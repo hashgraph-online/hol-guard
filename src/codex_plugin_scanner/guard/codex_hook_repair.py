@@ -27,7 +27,7 @@ from .codex_hook_recovery import (
 )
 from .native_owned import CodexInstallOwner, record_codex_mutation, require_codex_install_owner
 from .native_runtime import NativeRuntimeIdentity
-from .native_transition_files import authorize_plan, require_deadline
+from .native_transition_files import artifact_generation, authorize_plan, require_deadline
 from .native_transition_files import publication as publication_record
 from .runtime_transition import (
     RuntimeTransition,
@@ -253,10 +253,12 @@ def verify_and_commit_codex_hook_repair(
 
     pending.compare("after")
     authorization, plan = pending.authorization, pending.authorization.plan
-    if plan.native_runtime is None or plan.verification_workspace is None:
-        raise TransitionError("authority_repair_native_binding_missing")
+    generation = artifact_generation(
+        "repair",
+        plan.subject(),
+        bound=plan.native_runtime is not None and plan.verification_workspace is not None,
+    )
     started = time.monotonic()
-    generation = "codex-authority-repair-" + plan.subject().rsplit(":", 1)[1]
     try:
         with (
             inverse_recovery_budget(authorization.deadline_monotonic),

@@ -179,6 +179,29 @@ def runtime_compare(stage: str, **fields: object) -> None:
     _ask({"op": "publication_runtime_compare", "stage": stage, **fields}, context=False)
 
 
+def artifact_generation(kind: str, subject: str, *, bound: bool, restored: Sequence[int] | None = None) -> str:
+    """The generation a ``repair`` or ``inverse`` is verified under.
+
+    ``bound`` says the plan carries its runtime and workspace; an inverse also
+    sends the indexes it ``restored``. The runtime refuses what is not ready.
+    """
+
+    request: dict[str, object] = {
+        "op": "publication_artifact_generation",
+        "kind": kind,
+        "subject": subject,
+        "bound": bound,
+    }
+    if restored is not None:
+        request["restored"] = list(restored)
+    value = _ask(request, context=False).get("value")
+    if not isinstance(value, str):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return value
+
+
 def authorize_plan(kind: str, expires_at: str, deadline: float) -> Mapping[str, object]:
     """The forward ``deadline`` and grant retirement the runtime allows an authorization.
 
@@ -240,6 +263,7 @@ def publish_files(
 
 
 __all__ = [
+    "artifact_generation",
     "authorize_plan",
     "compare_files",
     "publish_files",
