@@ -374,3 +374,24 @@ fn a_symlinked_cache_file_is_ignored() {
     assert_eq!(answer["reused"], false);
     assert_eq!(answer["fingerprint"], expected["fingerprint"]);
 }
+
+#[test]
+fn installed_fingerprint_is_the_command_answer_and_follows_the_tree() {
+    let root = tempfile::tempdir().expect("root");
+    let package = root.path().join(PACKAGE);
+    std::fs::create_dir_all(&package).expect("package");
+    std::fs::write(package.join("a.py"), "x = 1\n").expect("module");
+    let request = serde_json::json!({
+        "schema": SCHEMA,
+        "source_root": root.path().to_str().expect("utf-8"),
+        "version": "2.0.0",
+    });
+    let answer: serde_json::Value =
+        serde_json::from_slice(&run_command(request.to_string().as_bytes()).expect("answer"))
+            .expect("json");
+    let first = installed_fingerprint(root.path(), "2.0.0");
+    assert_eq!(answer["fingerprint"].as_str(), Some(first.as_str()));
+    assert_ne!(installed_fingerprint(root.path(), "2.0.1"), first);
+    std::fs::write(package.join("a.py"), "x = 22\n").expect("edit");
+    assert_ne!(installed_fingerprint(root.path(), "2.0.0"), first);
+}

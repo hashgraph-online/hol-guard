@@ -23,9 +23,11 @@
 //! tree rewrites it. A cache that cannot be read or written, or a
 //! `cache_dir` that cannot hold one, only costs the content hash.
 
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -89,6 +91,34 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     )
     .to_string()
     .into_bytes())
+}
+
+/// The fingerprint `version` has over the tree installed at `source_root`
+/// now, the same value `runtime-fingerprint` answers with. A daemon whose
+/// identity equals it runs the installed tree, whatever the asking process
+/// cached before an in-place upgrade. Memoised per tree signature, so a
+/// repeat costs one metadata walk.
+pub(crate) fn installed_fingerprint(source_root: &Path, version: &str) -> String {
+    type Memo = HashMap<(PathBuf, String), (String, String)>;
+    static MEMO: OnceLock<Mutex<Memo>> = OnceLock::new();
+    let paths = identity_paths(source_root);
+    let tree_sig = tree_signature(source_root, version, &paths);
+    let key = (source_root.to_path_buf(), version.to_owned());
+    let memo = MEMO.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some((signature, fingerprint)) = memo
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(&key)
+    {
+        if *signature == tree_sig {
+            return fingerprint.clone();
+        }
+    }
+    let fingerprint = content_fingerprint(source_root, version, &paths);
+    memo.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(key, (tree_sig, fingerprint.clone()));
+    fingerprint
 }
 
 fn invalid() -> String {

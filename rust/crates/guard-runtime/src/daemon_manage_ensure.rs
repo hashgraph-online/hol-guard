@@ -377,7 +377,11 @@ fn runtime_matches_current(current: &Map<String, Value>, payload: &Map<String, V
         return true;
     }
     if payload.get("source_root") == current_root {
-        return false;
+        // One install, two identities: one side predates the tree on disk.
+        // A process that cached its identity before an in-place upgrade must
+        // not retire the daemon the upgrade started, or the two retire each
+        // other's daemons in turn.
+        return daemon_runs_installed_tree(payload, fingerprint);
     }
     if same_version {
         return true;
@@ -390,6 +394,21 @@ fn runtime_matches_current(current: &Map<String, Value>, payload: &Map<String, V
         text(current, "package_version"),
         false,
     )
+}
+
+/// Whether `fingerprint`, the daemon's identity, is the one its version has
+/// over the tree now installed at its source root.
+fn daemon_runs_installed_tree(payload: &Map<String, Value>, fingerprint: &str) -> bool {
+    let (Some(root), Some(version)) = (
+        text(payload, "source_root").filter(|root| !root.trim().is_empty()),
+        text(payload, "package_version").filter(|version| !version.trim().is_empty()),
+    ) else {
+        return false;
+    };
+    let root = Path::new(root);
+    root.is_absolute()
+        && root.join("codex_plugin_scanner").is_dir()
+        && crate::runtime_fingerprint::installed_fingerprint(root, version) == fingerprint
 }
 
 pub(super) fn version_at_least(
@@ -1176,3 +1195,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "daemon_manage_ensure_same_install_tests.rs"]
+mod same_install_tests;
