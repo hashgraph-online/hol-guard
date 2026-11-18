@@ -38,7 +38,7 @@ fn a_workspace_skill_joins_the_detection_and_its_config_paths() {
         .expect("the workspace skill");
     assert_eq!(
         skill["artifact_id"],
-        "opencode:project:skill:.agents/skills:alpha"
+        "opencode:project:skill:agents:skills/alpha"
     );
     let path = skill["config_path"].as_str().unwrap();
     assert!(answer["config_paths"]

@@ -94,6 +94,7 @@ fn spec<'a>(args: &'a Map<String, Value>, dirs: &'a [PathBuf]) -> Result<Spec<'a
         thread: number(args, "thread")?,
         deadline: deadline(args)?,
         lock_dirs: dirs.to_vec(),
+        exclusive_dirs: Vec::new(),
         check_pending: flag(args, "check_pending"),
         recover: flag(args, "recover"),
     })

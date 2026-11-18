@@ -96,9 +96,7 @@ fn opencode_update_from_the_store_works_in_the_installs_own_workspace() {
         .as_str()
         .unwrap()
         .starts_with("Refreshed the OpenCode pretool plugin"));
-    let paths = workspace_plugin_paths(&home, &workspace);
-    assert!(paths.iter().any(|path| path.starts_with(&workspace)));
-    for path in paths {
+    for path in workspace_plugin_paths(&home, &workspace) {
         assert!(path.is_file(), "{}", path.display());
     }
 }

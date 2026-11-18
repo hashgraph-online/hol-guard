@@ -7,11 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
 from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.codex_hook_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from tests.codex_toml_support import parse_toml_object
 
 from .test_codex_publication_preparation import _context, _tree
@@ -191,20 +189,11 @@ def test_prepared_file_generations_match_ordinary_install(tmp_path, monkeypatch)
     assert len({change.path for change in repeated.files}) == len(repeated.files)
 
 
-def test_foreign_source_during_migration_prevents_plan_without_overwriting(tmp_path, monkeypatch):
+def test_foreign_source_before_the_plan_is_never_overwritten(tmp_path, monkeypatch):
     harness, context, _global_config, workspace_config = _sources(tmp_path, monkeypatch)
-    ask = adapter.ask
-
-    def foreign_write(op, *args, **kwargs):
-        # The sources were captured before the plan; a write while it runs
-        # must fail the plan's own comparison against disk.
-        if op == "install_plan":
-            workspace_config.write_text('model="foreign"\n')
-        return ask(op, *args, **kwargs)
-
-    monkeypatch.setattr(adapter, "ask", foreign_write)
-    with pytest.raises(TransitionError):
-        harness.prepare_install(context)
+    # The runtime reads the sources itself as it plans, and a plan publishes nothing.
+    workspace_config.write_text('model="foreign"\n')
+    harness.prepare_install(context)
     assert workspace_config.read_text() == 'model="foreign"\n'
     assert workspace_config.with_name("hooks.json").exists()
     assert context.home_dir.joinpath(".zshenv").read_bytes().startswith(b"\xffKEEP")

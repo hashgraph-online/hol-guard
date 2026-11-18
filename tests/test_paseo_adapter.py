@@ -12,6 +12,7 @@ import pytest
 
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install, build_harness_setup_plan
 from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness.native_harness import ask
 from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.inventory_contract import (
     inventory_snapshot_from_detection,
@@ -46,6 +47,12 @@ def context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HarnessContext:
     return HarnessContext(
         home, workspace, tmp_path / "guard", home_override_explicit=True, workspace_override_explicit=True
     )
+
+
+def assert_nothing_installed(context: HarnessContext) -> None:
+    """The Guard store stays as the command layer opened it: no install row and no launcher."""
+    assert GuardStore(context.guard_home).list_managed_installs() == []
+    assert not (context.guard_home / "bin").exists()
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -168,7 +175,7 @@ def test_malformed_paseo_configuration_is_not_overwritten(context: HarnessContex
     with pytest.raises(ValueError):
         get_adapter("paseo").install(context)
     assert path.read_bytes() == original
-    assert not context.guard_home.exists()
+    assert_nothing_installed(context)
 
 
 @pytest.mark.parametrize(
@@ -204,7 +211,7 @@ def test_native_symlink_targets_are_rejected_before_install(
     with pytest.raises(ValueError, match="symlink"):
         get_adapter("paseo").install(context)
     assert target.is_dir() or target.read_text() == "{}"
-    assert not context.guard_home.exists()
+    assert_nothing_installed(context)
 
 
 def test_preflight_checks_every_selected_provider_before_any_write(context: HarnessContext) -> None:
@@ -216,7 +223,7 @@ def test_preflight_checks_every_selected_provider_before_any_write(context: Harn
     with pytest.raises(ValueError):
         get_adapter("paseo").install(context)
     assert not (context.home_dir / ".claude/settings.json").exists()
-    assert not context.guard_home.exists()
+    assert_nothing_installed(context)
 
 
 def test_preflight_is_repeated_under_shared_owner_before_native_writes(
@@ -329,13 +336,11 @@ def test_install_failure_preserves_last_receipt_and_shared_hooks(
     original = extension.read_bytes()
     original_receipt = receipt_path(context).read_bytes()
 
-    def fail(_context: HarnessContext) -> dict[str, object]:
-        """Simulate a native installer failure after an earlier successful installation."""
-        raise ValueError("test installation failure")
-
-    monkeypatch.setattr(get_adapter("pi"), "install", fail)
-    with pytest.raises(ValueError, match="test installation failure"):
+    pi = get_adapter("pi")
+    monkeypatch.setattr(pi, "resolved_executable", lambda _context: None)
+    with pytest.raises(ValueError, match="No supported, enabled"):
         adapter.install(context)
+    monkeypatch.setattr(pi, "resolved_executable", lambda _context: sys.executable)
     assert receipt_path(context).read_bytes() == original_receipt
     assert extension.read_bytes() == original
     assert adapter.diagnostics(context)["setup_status"] == "active"
@@ -346,7 +351,7 @@ def test_public_install_flow_and_dry_run_use_paseo_contract(context: HarnessCont
     configure(context, {"pi": {"enabled": True}})
     plan = build_harness_setup_plan("install", "paseo", context, dry_run=True)
     assert plan
-    assert not context.guard_home.exists()
+    assert_nothing_installed(context)
     store = GuardStore(context.guard_home)
     payload = apply_managed_install("install", "paseo", False, context, store, None, "2026-09-11T00:00:00Z")
     managed = payload["managed_install"]
@@ -413,25 +418,19 @@ def test_native_managed_artifacts_participate_in_paseo_proofs(context: HarnessCo
     assert adapter.diagnostics(context)["setup_status"] == "broken"
 
 
-def test_child_drift_before_receipt_publication_rejects_install(
-    context: HarnessContext, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Reject success when an earlier child changes before the composite receipt is written."""
+def test_child_drift_before_receipt_publication_rejects_install(context: HarnessContext) -> None:
+    """Reject success when an earlier child's proof no longer verifies as the composite receipt is written."""
     configure(context, {"claude": {"enabled": True}, "pi": {"enabled": True}})
-    native = get_adapter("pi")
-    original = native.install
-
-    def change_earlier_install(native_context: HarnessContext) -> dict[str, object]:
-        """Simulate another writer changing the first provider during the second install."""
-        manifest = original(native_context)
-        write_json(context.home_dir / ".claude/settings.json", {"changed": True})
-        return manifest
-
-    monkeypatch.setattr(native, "install", change_earlier_install)
+    prepared = ask("prepare_install", context, harness="paseo", delegates={"claude": True, "pi": True})
     with pytest.raises(ValueError, match="Native protection changed"):
-        get_adapter("paseo").install(context)
+        ask(
+            "delegate_receipt",
+            context,
+            harness="paseo",
+            providers=prepared["providers"],
+            proofs={"claude": "{}", "pi": "{}"},
+        )
     assert not receipt_path(context).exists()
-    assert (context.home_dir / ".pi/agent/extensions/hol-guard.ts").is_file()
 
 
 def test_paseo_capability_does_not_claim_uniform_fail_closed_hooks() -> None:

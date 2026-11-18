@@ -113,6 +113,9 @@ pub(crate) struct Spec<'a> {
     pub(crate) deadline: Instant,
     /// Lifecycle directories to lock; the caller leaves out those it holds.
     pub(crate) lock_dirs: Vec<PathBuf>,
+    /// Lifecycle directories that exclude a competitor: taken first, they
+    /// refuse as busy after the short grace instead of waiting.
+    pub(crate) exclusive_dirs: Vec<PathBuf>,
     pub(crate) check_pending: bool,
     pub(crate) recover: bool,
 }
@@ -171,6 +174,16 @@ pub(super) fn begin(spec: &Spec<'_>, budget: &Budget) -> Result<(Locks, Owner), 
         .collect();
     directories.sort();
     directories.dedup_by(|a, b| a.0 == b.0);
+    let mut exclusive: Vec<(String, &Path)> = spec
+        .exclusive_dirs
+        .iter()
+        .map(|directory| (configuration_identity(directory), directory.as_path()))
+        .collect();
+    exclusive.sort();
+    exclusive.dedup_by(|a, b| a.0 == b.0);
+    for (_, directory) in exclusive {
+        locks.push(lock_directory(directory, Limit::Grace, None)?);
+    }
     for (_, directory) in directories {
         let held = lock_directory(directory, Limit::Until(spec.deadline), Some(spec.deadline))?;
         locks.push(held);

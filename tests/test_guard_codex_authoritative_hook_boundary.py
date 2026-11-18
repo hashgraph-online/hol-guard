@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import codex_install_flow_support as flow
 from tests import codex_plan_segments as segments
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.codex_toml_support import dump_toml, read_toml_payload
@@ -230,7 +231,7 @@ def test_codex_install_fails_closed_if_native_hook_reconciliation_is_unavailable
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
-    real_ask = codex_adapter.ask
+    real_ask = flow.ask
 
     def _strip_hooks(encoded):
         payload = tomllib.loads(base64.b64decode(encoded).decode("utf-8"))
@@ -249,7 +250,7 @@ def test_codex_install_fails_closed_if_native_hook_reconciliation_is_unavailable
 
     # Publish stepwise so the plan answer reaches the publication.
     use_stepwise_publication(monkeypatch)
-    monkeypatch.setattr(codex_adapter, "ask", _without_hooks)
+    monkeypatch.setattr(flow, "ask", _without_hooks)
 
     result = main(
         [

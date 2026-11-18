@@ -682,6 +682,7 @@
         "path": [
           "src/codex_plugin_scanner/guard/claude_hook_entry.py",
           "src/codex_plugin_scanner/guard/harness/cursor_client.py",
+          "src/codex_plugin_scanner/guard/harness/native_detected.py",
           "src/codex_plugin_scanner/guard/harness/native_extension.py",
           "src/codex_plugin_scanner/guard/harness/native_harness.py",
           "src/codex_plugin_scanner/guard/harness/native_harness_steps.py",

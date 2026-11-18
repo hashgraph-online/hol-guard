@@ -21,7 +21,7 @@
 //! answer `{ok: true, manifest}` for the request's `harness`. A failure answers
 //! `{ok: false, failure}` in the shape the owned ops use.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
@@ -87,10 +87,30 @@ pub(super) fn within<T>(
         deadline: Instant::now() + wait,
         // The lifecycle lock of the Guard home itself, as `config_path.parent`.
         lock_dirs: vec![ctx.guard_home.clone()],
+        exclusive_dirs: codex_directories(ctx, fields),
         check_pending: true,
         recover: false,
     };
     with_owned(&spec, &budget, work)
+}
+
+/// `codex_lifecycle_locks`: a Codex install or uninstall excludes every other
+/// lifecycle call over the home's and the workspace's configuration directory,
+/// and a busy one refuses before anything is discovered or written.
+fn codex_directories(ctx: &Ctx, fields: &Map<String, Value>) -> Vec<PathBuf> {
+    let names_codex = |item: &Value| item.get("harness").and_then(Value::as_str) == Some("codex");
+    let codex = fields.get("harness").and_then(Value::as_str) == Some("codex")
+        || fields
+            .get("targets")
+            .and_then(Value::as_array)
+            .is_some_and(|targets| targets.iter().any(names_codex));
+    if !codex {
+        return Vec::new();
+    }
+    std::iter::once(&ctx.home)
+        .chain(ctx.workspace.as_ref())
+        .map(|root| root.join(".codex"))
+        .collect()
 }
 
 pub(super) fn finish(done: Owned<Value>) -> KindResult {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -74,14 +75,12 @@ def test_failed_repair_keeps_receipt_but_detects_changed_artifacts(
     adapter.install(context)
     original = receipt_path(context).read_bytes()
 
-    def fail_after_write(_context: HarnessContext) -> dict[str, object]:
-        """Simulate a native installer which changes one file and then fails."""
-        (context.home_dir / ".pi/agent/extensions/hol-guard.ts").write_text("changed", encoding="utf-8")
-        raise ValueError("installation failed")
-
-    monkeypatch.setattr(get_adapter("pi"), "install", fail_after_write)
-    with pytest.raises(ValueError, match="installation failed"):
+    (context.home_dir / ".pi/agent/extensions/hol-guard.ts").write_text("changed", encoding="utf-8")
+    pi = get_adapter("pi")
+    monkeypatch.setattr(pi, "resolved_executable", lambda _context: None)
+    with pytest.raises(ValueError, match="No supported, enabled"):
         adapter.install(context)
+    monkeypatch.setattr(pi, "resolved_executable", lambda _context: sys.executable)
     assert receipt_path(context).read_bytes() == original
     assert adapter.diagnostics(context)["setup_status"] == "broken"
 
