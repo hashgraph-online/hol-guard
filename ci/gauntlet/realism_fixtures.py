@@ -439,8 +439,13 @@ def _copy_windows_interpreter(venv: Path, base: Path) -> None:
     """
     if os.name != "nt":
         return
-    launcher = base.parent / "Lib" / "venv" / "scripts" / "nt" / "python.exe"
-    if not launcher.is_file():
-        raise FileNotFoundError(f"base Python has no venv launcher: {launcher}")
+    scripts = base.parent / "Lib" / "venv" / "scripts" / "nt"
+    # CPython 3.13 renamed the launcher it ships here to `venvlauncher.exe`.
+    launcher = next(
+        (path for path in (scripts / "python.exe", scripts / "venvlauncher.exe") if path.is_file()),
+        None,
+    )
+    if launcher is None:
+        raise FileNotFoundError(f"base Python has no venv launcher in {scripts}")
     (venv / "bin").mkdir(parents=True, exist_ok=True)
     shutil.copyfile(launcher, venv / "bin" / "python.exe")
