@@ -54,6 +54,7 @@ from codex_plugin_scanner.guard.native_daemon_manage import (  # noqa: E402
     recover_guard_daemon_after_hook_failure,
 )
 from scripts import check_guard_daemon_burst as burst  # noqa: E402
+from scripts import guard_daemon_chaos_starts as starts  # noqa: E402
 from scripts import stress_guard_daemon as stress  # noqa: E402
 
 HOOK_WORKERS = 8
@@ -466,6 +467,7 @@ def run_chaos(runtime: Path, *, max_recovery_seconds: float) -> ChaosResult:
         ),
     )
     result.scenarios.append(run_closed_stderr_launch(runtime))
+    result.scenarios.extend(starts.run_start_scenarios())
     return result
 
 
