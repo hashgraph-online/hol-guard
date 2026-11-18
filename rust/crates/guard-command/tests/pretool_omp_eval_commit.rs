@@ -115,12 +115,13 @@ fn show_in_a_nested_directory_matches_the_root_anchored_git_diff() {
         nested.to_str(),
     );
     assert_eq!(direct.minimum_action, "allow", "{direct:?}");
-    assert_eq!(projected.minimum_action, direct.minimum_action, "{projected:?}");
+    assert_eq!(
+        projected.minimum_action, direct.minimum_action,
+        "{projected:?}"
+    );
 
     for path in [".env", "../.ssh/id_rsa", "src/**"] {
-        let code = format!(
-            "const d = await commit.draft(); return await d.show('{path}');"
-        );
+        let code = format!("const d = await commit.draft(); return await d.show('{path}');");
         let result = evaluate_pre_tool_envelope_with_context(
             "omp",
             "PreToolUse",
