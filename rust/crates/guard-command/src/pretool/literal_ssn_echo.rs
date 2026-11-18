@@ -18,6 +18,17 @@ static SSN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([0-9]{3})-([0-9]{2})-([0-9]{4})").expect("ssn pattern"));
 
 const PRINTERS: [&str; 2] = ["echo", "printf"];
+// A print with extreme width/repetition must not allocate unbounded memory
+// before the privacy check. Overflow is a conservative review, not an allow.
+const MAX_RENDERED_PRINT_BYTES: usize = 65_536;
+
+fn append_bounded(buffer: &mut String, part: &str) -> Option<()> {
+    if part.len() > MAX_RENDERED_PRINT_BYTES.saturating_sub(buffer.len()) {
+        return None;
+    }
+    buffer.push_str(part);
+    Some(())
+}
 
 fn issuable(area: &str, group: &str, serial: &str) -> bool {
     let area_ok = area != "000" && area != "666" && !area.starts_with('9');
@@ -145,7 +156,7 @@ fn printf_decimal(raw: &str) -> String {
 
 // Scan the RAW format. An escape-decoded percent sign is literal output,
 // not the beginning of a conversion (e.g. \045%s).
-fn render_printf(format: &str, args: &[String]) -> String {
+fn render_printf(format: &str, args: &[String]) -> Option<String> {
     let mut printed = String::new();
     let mut next_arg = 0;
     loop {
@@ -155,7 +166,7 @@ fn render_printf(format: &str, args: &[String]) -> String {
             if ch == '\\' {
                 let mut escape = String::from("\\");
                 let Some(next) = chars.next() else {
-                    printed.push('\\');
+                    append_bounded(&mut printed, "\\")?;
                     break;
                 };
                 escape.push(next);
@@ -176,16 +187,17 @@ fn render_printf(format: &str, args: &[String]) -> String {
                     }
                     escape.push(chars.next().expect("peeked escape digit"));
                 }
-                printed.push_str(&decode_printf_escapes(&escape, false));
+                append_bounded(&mut printed, &decode_printf_escapes(&escape, false))?;
                 continue;
             }
             if ch != '%' {
-                printed.push(ch);
+                let mut utf8 = [0_u8; 4];
+                append_bounded(&mut printed, ch.encode_utf8(&mut utf8))?;
                 continue;
             }
             if chars.peek() == Some(&'%') {
                 chars.next();
-                printed.push('%');
+                append_bounded(&mut printed, "%")?;
                 continue;
             }
             let mut flags = String::new();
@@ -233,7 +245,7 @@ fn render_printf(format: &str, args: &[String]) -> String {
                 chars.next();
             }
             let Some(spec) = chars.next() else {
-                printed.push('%');
+                append_bounded(&mut printed, "%")?;
                 break;
             };
             let operand = args.get(next_arg).map(String::as_str).unwrap_or("");
@@ -304,18 +316,18 @@ fn render_printf(format: &str, args: &[String]) -> String {
                     rendered = format!("{}{rendered}", " ".repeat(pad));
                 }
             }
-            printed.push_str(&rendered);
+            append_bounded(&mut printed, &rendered)?;
             if stop_after_percent_b {
                 // Bash applies this %b conversion's width and precision to
                 // the emitted prefix before stopping all later conversions.
-                return printed;
+                return Some(printed);
             }
         }
         if next_arg >= args.len() || next_arg == previous_arg {
             break;
         }
     }
-    printed
+    Some(printed)
 }
 
 // Parse only a single literal print. Shell quote removal can join fragments:
@@ -422,7 +434,13 @@ pub(super) fn echoes_ssn(command: &str) -> bool {
         let Some(format) = words.get(format_index) else {
             return false;
         };
-        render_printf(format, &words[format_index + 1..])
+        // If rendering exceeds the fixed budget, fail closed to review.
+        // An unbounded reconstruction would let large repeated formats
+        // exhaust resources before the SSN protection can inspect them.
+        let Some(rendered) = render_printf(format, &words[format_index + 1..]) else {
+            return true;
+        };
+        rendered
     } else {
         words.join(" ")
     };
