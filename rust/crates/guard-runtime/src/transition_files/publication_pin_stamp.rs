@@ -66,10 +66,13 @@ mod platform {
     }
 
     /// `os.open(path, ARTIFACT_READ_FLAGS)`: read-only, never through a link.
+    /// `O_NONBLOCK` keeps a FIFO swapped in after admission from blocking the
+    /// open past the pin's deadline; the descriptor's own identity, which
+    /// carries the file type, then refuses it.
     pub(in super::super) fn open(path: &Path) -> io::Result<fs::File> {
         fs::OpenOptions::new()
             .read(true)
-            .custom_flags(libc::O_NOFOLLOW)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
             .open(path)
     }
 

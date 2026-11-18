@@ -86,8 +86,11 @@ pub(super) fn pin(
     expect: &Expect<'_>,
 ) -> Step<Value> {
     alive(deadline)?;
+    // The identity is read before admission, so the mode and owner admission
+    // checked are those of the generation the descriptor must still match.
+    let before = stamp::of_path(path);
     admit(call, path)?;
-    let before = stamp::of_path(path).map_err(|_| {
+    let before = before.map_err(|_| {
         Fault::Integrity(
             "codex_hook_artifact_missing".to_owned(),
             message("codex_hook_artifact_missing"),

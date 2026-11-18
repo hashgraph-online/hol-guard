@@ -35,10 +35,16 @@ def detected_harnesses(context: HarnessContext) -> list[str]:
 
 
 def detect_all(context: HarnessContext) -> list[HarnessDetection]:
-    """Every harness's detection, in registry order, with the workspace AIBOM merged in by the runtime."""
-    from .native_harness_steps import detection_from
+    """Every harness's detection, in registry order, with the workspace AIBOM merged in by the runtime.
+
+    Each harness is its own resident call with its own deadline and reply, so a slow host or a large
+    skill inventory cannot push the whole batch past the resident call's time and size caps.
+    """
+    from .native_harness_client import describe
+    from .native_harness_ops import detect
 
     return [
-        detection_from(str(detection["harness"]), detection)
-        for detection in _ask_every_harness("detect_all", context)["detections"]
+        detect(str(adapter["harness"]), context)
+        for adapter in describe()["adapters"]
+        if isinstance(adapter, dict) and isinstance(adapter.get("harness"), str)
     ]

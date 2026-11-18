@@ -27,7 +27,7 @@ pub(super) fn plan_fields(
     artifacts: &[Value],
     enroll: bool,
 ) -> Owned<Map<String, Value>> {
-    let mut fields = facts.transition.clone();
+    let mut fields = facts.transition_now();
     fields.insert("launch".into(), Value::Object(facts.launch.clone()));
     fields.insert("contents".into(), Value::Object(contents));
     fields.insert(

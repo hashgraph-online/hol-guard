@@ -15,7 +15,7 @@
 //! its process already holds, each `{identity, lease}`.
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
@@ -53,6 +53,25 @@ pub(super) struct Facts<'a> {
     pub(super) transition: Map<String, Value>,
     held: Vec<HeldDirectory>,
     budget: Budget,
+    /// When the budgets were read: a step sees what is left of them, not a fresh grant.
+    started: Instant,
+}
+
+impl Facts<'_> {
+    /// The transition fields for the next step, with each budget reduced by
+    /// the time this request has already spent.
+    pub(super) fn transition_now(&self) -> Map<String, Value> {
+        let spent = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let mut fields = self.transition.clone();
+        if let Some(Value::Object(budget)) = fields.get_mut("budget") {
+            for value in budget.values_mut() {
+                if let Some(millis) = value.as_u64() {
+                    *value = json!(millis.saturating_sub(spent));
+                }
+            }
+        }
+        fields
+    }
 }
 
 pub(super) fn facts<'a>(ctx: &Ctx, request: &'a Map<String, Value>) -> Owned<Facts<'a>> {
@@ -92,6 +111,7 @@ pub(super) fn facts<'a>(ctx: &Ctx, request: &'a Map<String, Value>) -> Owned<Fac
         held: HeldDirectory::parse(request.get("held_dirs")).ok_or(INVALID)?,
         budget: Budget::parse(sent.get("budget")).map_err(|_| INVALID)?,
         transition,
+        started: Instant::now(),
     })
 }
 
@@ -101,7 +121,7 @@ fn fault(value: Value) -> OwnedFailure {
 
 /// One transition op on the caller's home: its value.
 fn ask(facts: &Facts<'_>, request: Map<String, Value>) -> Owned<Value> {
-    transition(&facts.transition, request, &mut Vec::new()).map_err(fault)
+    transition(&facts.transition_now(), request, &mut Vec::new()).map_err(fault)
 }
 
 fn op_request(op: &str, fields: &[(&str, Value)]) -> Map<String, Value> {
@@ -271,7 +291,7 @@ pub(super) fn text(value: &Value, key: &str) -> Owned<Value> {
 fn require_shell_hook(spec: &Spec, ctx: &Ctx, facts: &Facts<'_>) -> Owned<()> {
     let mut fields = Map::new();
     fields.insert("launch".into(), Value::Object(facts.launch.clone()));
-    for (key, value) in &facts.transition {
+    for (key, value) in &facts.transition_now() {
         if key == "package_roots" {
             fields.insert(key.clone(), value.clone());
         }
@@ -403,7 +423,7 @@ fn uninstall_owned(spec: &Spec, ctx: &Ctx, facts: &Facts<'_>, owner: &mut Owner)
         let parent = path.parent().map_or_else(PathBuf::new, resolve_lenient);
         path_text(&parent.join(name))
     };
-    let mut fields = facts.transition.clone();
+    let mut fields = facts.transition_now();
     fields.insert(
         "owned".into(),
         json!(serde_json::to_string(&owned).map_err(|_| INVALID)?),

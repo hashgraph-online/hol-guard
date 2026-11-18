@@ -16,7 +16,6 @@ use serde_json::{json, Map, Value};
 use crate::harness_adapter::codex::paths;
 use crate::harness_adapter::codex_install_request::detect_legacy;
 use crate::harness_adapter::codex_sources::check_sources;
-use crate::harness_adapter::paseo_paths::abspath;
 use crate::harness_adapter::{path_text, Ctx, Failure, Step};
 
 /// What detection found: the artifacts as the native kinds wrote them, the
@@ -79,8 +78,10 @@ fn hex_contents(captured: &Map<String, Value>) -> Step<Map<String, Value>> {
         .collect()
 }
 
+/// Anchored on the caller's directory without folding `..`: after a link it
+/// names another tree, which the discovery helpers resolve themselves.
 fn anchored(ctx: &Ctx, path: &Path) -> String {
-    path_text(&abspath(ctx, path))
+    path_text(&ctx.absolute(path))
 }
 
 /// `_merge_plan` applied: the workspace's shared artifacts replace or join

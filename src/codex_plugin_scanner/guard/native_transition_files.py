@@ -59,7 +59,7 @@ def _exception(fault: object) -> BaseException:
     runtime = fault.get("runtime")
     if isinstance(runtime, str):
         error = RuntimeError(runtime)
-        if "cause" in fault:
+        if fault.get("cause") is not None:
             error.__cause__ = _exception(fault["cause"])
         return error
     rollback = fault.get("rollback")
@@ -203,6 +203,11 @@ def require_deadline(deadline: float) -> None:
     """``deadline_exceeded`` unless ``deadline`` is a finite number still ahead of now."""
 
     _ask({"op": "publication_deadline", "deadline": deadline, "now": time.monotonic()}, context=False)
+    # The runtime approved the timestamp it was sent; the budget may have run out while it answered.
+    if time.monotonic() >= deadline:
+        from .runtime_transition import TransitionError
+
+        raise TransitionError("deadline_exceeded")
 
 
 def coordinate(
@@ -219,16 +224,21 @@ def coordinate(
     with its ``outcome``.
     """
 
+    now = time.monotonic()
     request: dict[str, object] = {
         "op": "publication_coordinate",
         "flow": flow,
         "deadline": _finite(deadline),
-        "now": time.monotonic(),
+        "now": now,
         "state": state,
         "outcome": outcome,
         "cause": cause,
     }
-    value = _ask(request, context=False).get("value")
+    # A live step waits no longer than the operation has left; a spent budget keeps the default wait so a
+    # failure can still be recorded.
+    remaining = deadline - now
+    timeout = min(_TIMEOUT_SECONDS, max(remaining, 1.0)) if 0 < remaining < _TIMEOUT_SECONDS else _TIMEOUT_SECONDS
+    value = _ask(request, timeout_seconds=timeout, context=False).get("value")
     if not isinstance(value, Mapping) or not isinstance(value.get("action"), Mapping):
         from .runtime_transition import TransitionError
 

@@ -23,6 +23,9 @@ from ..native_runner_authority import NativeRunnerAuthorityError
 _PER_TARGET_SECONDS = 90.0
 _OVERHEAD_SECONDS = 60.0
 
+# The ops that write a managed-install row: the standalone shim, profile and Cursor hook installs never open the store.
+_STORE_OPS = frozenset({"managed_install", "managed_update"})
+
 
 def _ownership_messages(harnesses: Sequence[str], op: str) -> dict[str, bool]:
     """The hook-ownership messages these harnesses name, each mapped to whether ``op`` is one of their ops."""
@@ -76,7 +79,8 @@ def ask_managed(
     **fields: object,
 ) -> dict[str, Any]:
     """One install op of the native runtime, naming a hook-ownership failure as the harness's spec words it."""
-    ensure_store(context)
+    if op in _STORE_OPS and fields.get("command") != "uninstall":
+        ensure_store(context)
     request: dict[str, Any] = {
         **owner_request(context.guard_home, actor=actor),
         **install_facts(
@@ -91,7 +95,7 @@ def ask_managed(
         return ask(op, context, timeout_seconds=timeout, **request)
     except NativeRunnerAuthorityError as error:
         applicable = [message for message, applies in _ownership_messages(harnesses, op).items() if applies]
-        if applicable:
+        if applicable and len(harnesses) == 1:
             raise HookOwnershipError(applicable[0]) from error
         raise
     except RuntimeError as error:

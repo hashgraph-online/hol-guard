@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 
 use super::lease;
-use super::lock_files::configuration_identity;
+use super::lock_files::{configuration_identity, lifecycle_lock_path};
 use super::owned::{pending, recover, Owner};
 use super::owned_locks::{lock_directory, Failure, Limit, LIFECYCLE_DEADLINE};
 use super::Budget;
@@ -74,18 +74,26 @@ pub(crate) fn within<T>(
         }
         match held.iter().find(|held| held.identity == identity) {
             Some(known) => {
-                if !lease::held(&known.lease) {
+                // The lease must hold this directory's lock file, not another one's.
+                let expected = lifecycle_lock_path(&identity).ok();
+                if !expected.is_some_and(|path| lease::held_at(&known.lease, &path)) {
                     return Err(Failure::Runtime(LOCK_INVALID.to_owned()));
                 }
                 if Instant::now() >= deadline {
                     return Err(Failure::Timeout(LIFECYCLE_DEADLINE));
                 }
             }
-            None => locks.push(lock_directory(
-                directory,
-                Limit::Until(deadline),
-                Some(deadline),
-            )?),
+            None => {
+                locks.push(lock_directory(
+                    directory,
+                    Limit::Until(deadline),
+                    Some(deadline),
+                )?);
+                // A lock that woke just after the shared deadline is not used.
+                if Instant::now() >= deadline {
+                    return Err(Failure::Timeout(LIFECYCLE_DEADLINE));
+                }
+            }
         }
         seen.push(identity);
     }

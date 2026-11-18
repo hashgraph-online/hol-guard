@@ -1,8 +1,6 @@
 //! What each adapter this kind owns is: its names, launcher, approval flow and
 //! which generic steps Python runs for it.
 
-use serde_json::{json, Value};
-
 /// How Python installs a harness.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Install {
@@ -406,29 +404,8 @@ pub(crate) fn resolve(name: &str) -> Option<&'static Spec> {
         .find(|spec| spec.harness == name || spec.aliases.contains(&name))
 }
 
-impl Spec {
-    /// Cline picks its hook transport from whether the runtime is frozen.
-    pub(crate) fn frozen_fact(&self) -> bool {
-        self.harness == "cline"
-    }
-
-    /// The Pi family renders an extension that runs this Guard process.
-    pub(crate) fn extension(&self) -> bool {
-        matches!(self.harness, "pi" | "omp")
-    }
-
-    /// The default approval flow, as `HarnessAdapter.approval_flow` answers it.
-    pub(crate) fn approval_flow(&self) -> Value {
-        json!({
-            "tier": self.tier,
-            "summary": self.summary,
-            "fallback_hint": self.fallback,
-            "prompt_channel": self.channel,
-            "auto_open_browser": self.auto_open,
-        })
-    }
-}
-
+#[path = "describe_facts.rs"]
+mod facts;
 #[path = "describe_wire.rs"]
 mod wire;
 pub(crate) use wire::describe;

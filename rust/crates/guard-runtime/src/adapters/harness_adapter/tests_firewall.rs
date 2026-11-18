@@ -44,6 +44,8 @@ fn a_skill_document_gains_its_identity() {
     let enriched = enrich(answer).unwrap();
     let metadata = &enriched["artifacts"][0]["metadata"];
     assert_eq!(metadata["keep"], json!(true));
+    let identity = metadata["mcpSkillFirewall"]["skill"]["identityHash"].as_str();
+    assert!(identity.is_some_and(|hash| !hash.is_empty()), "{metadata}");
 }
 
 #[test]
@@ -64,6 +66,10 @@ fn a_server_with_a_command_gains_firewall_metadata() {
     let enriched = enrich(answer).unwrap();
     let metadata = enriched["artifacts"][0]["metadata"].as_object().unwrap();
     assert_eq!(metadata["keep"], json!(true));
+    assert!(
+        metadata["mcpSkillFirewall"]["mcpServer"].is_object(),
+        "{metadata:?}"
+    );
 }
 
 #[test]

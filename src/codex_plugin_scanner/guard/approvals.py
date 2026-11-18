@@ -1087,7 +1087,9 @@ def _live_hook_verification(
     return {harness: proven for harness, proven in verified.items() if isinstance(proven, bool)}
 
 
-def _canonical_managed_installs_for_health(store: GuardStore) -> list[dict[str, object]]:
+def _canonical_managed_installs_for_health(
+    store: GuardStore, *, deadline_monotonic: float | None = None
+) -> list[dict[str, object]]:
     """The store's install rows, one per canonical harness; the runtime reads and decides."""
     from .native_harness_client import ask
 
@@ -1097,7 +1099,13 @@ def _canonical_managed_installs_for_health(store: GuardStore) -> list[dict[str, 
         guard_home=store.guard_home,
     )
     try:
-        installs = ask("canonical_managed_installs", context, store_home=str(store.guard_home))["installs"]
+        installs = ask(
+            "canonical_managed_installs",
+            context,
+            guard_home=store.guard_home,
+            deadline_monotonic=deadline_monotonic,
+            store_home=str(store.guard_home),
+        )["installs"]
     except (ImportError, OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
         raise NativeProtectionHealthError("native_canonical_installs_unavailable") from error
     return [install for install in installs if isinstance(install, dict)]

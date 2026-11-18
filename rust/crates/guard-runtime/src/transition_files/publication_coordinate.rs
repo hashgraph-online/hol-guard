@@ -400,7 +400,14 @@ pub(super) fn coordinate(call: &mut Call<'_>) -> Step<Value> {
         now: number(call, "now"),
     };
     let mut state = match call.args.get("state").filter(|state| !state.is_null()) {
-        Some(state) => serde_json::from_value(state.clone()).map_err(|_| INVALID)?,
+        Some(state) => {
+            let carried: State = serde_json::from_value(state.clone()).map_err(|_| INVALID)?;
+            // State from the other flow would override the one requested.
+            if carried.recover != recover {
+                return Err(INVALID);
+            }
+            carried
+        }
         None => State {
             recover,
             cause: call

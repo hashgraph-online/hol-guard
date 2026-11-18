@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 
 use super::{Failure, Step};
 use crate::guard_store_db::{int, is_null, query_all, query_one, text, Row};
-use crate::hook_evidence_store_gate::{hold_storage_gate, StorageGateHold};
+use crate::hook_evidence_store_gate::{hold_storage_gate, StorageGateHold, STORAGE_GATE_FILE_NAME};
 use crate::local_store_read::{open_read_only, table_exists, STORE_FILE_NAME};
 
 fn unavailable() -> Failure {
@@ -42,13 +42,18 @@ impl Deref for Reader {
 }
 
 /// The store's read-only connection, or `None` when the home has no store.
+///
+/// Absence is decided under the gate: recovery moves `guard.db` away while it
+/// holds the gate exclusively, so a missing file seen outside the gate may be
+/// a store in the middle of recovery. The gate is skipped only when neither
+/// the store nor the gate file exists, a home that was never opened (asking
+/// creates nothing).
 fn open(home: &Path) -> Step<Option<Reader>> {
     let path = home.join(STORE_FILE_NAME);
-    if !path.exists() {
+    if !path.exists() && !home.join(STORAGE_GATE_FILE_NAME).exists() {
         return Ok(None);
     }
     let gate = hold_storage_gate(home, GATE_WAIT).map_err(|_| unavailable())?;
-    // The store is looked at again under the gate: recovery may have moved it.
     Ok(open_read_only(&path)
         .map_err(|_| unavailable())?
         .map(|connection| Reader {

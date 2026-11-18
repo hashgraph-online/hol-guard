@@ -85,8 +85,13 @@ pub(super) fn dispatch(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     }
     let mut stored = Map::new();
     for path in &skills {
-        if let Some(hash) = stored_hash(ctx, source, path)? {
-            stored.insert(path.clone(), json!(hash));
+        // The install already applied: a store that cannot answer leaves the scan unavailable.
+        match stored_hash(ctx, source, path) {
+            Ok(Some(hash)) => {
+                stored.insert(path.clone(), json!(hash));
+            }
+            Ok(None) => {}
+            Err(_) => return Ok(unavailable()),
         }
     }
     let answer = scan_op("scan", workspace, Some(stored));
@@ -114,7 +119,9 @@ pub(super) fn dispatch(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         rows.push((artifact_id, payload, hash));
     }
     for (artifact_id, payload, hash) in rows {
-        store_call(
+        // A snapshot that cannot be saved is scanned again next time; the findings
+        // already computed are still returned rather than lost with the failure.
+        if store_call(
             ctx,
             source,
             "save_artifact_snapshot",
@@ -125,7 +132,11 @@ pub(super) fn dispatch(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
                 "artifact_hash": hash,
                 "now": now,
             }),
-        )?;
+        )
+        .is_err()
+        {
+            break;
+        }
     }
     let results: Vec<&Value> = results.iter().filter(|result| result.is_object()).collect();
     Ok(json!({ "skill_scan": results }))

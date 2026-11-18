@@ -474,6 +474,8 @@ def test_apps_inventory_uses_adapter_command_resolution(tmp_path: Path, monkeypa
     context = _context(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
+    # No `claude` on PATH, so availability can only come from the local candidate.
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
     local = tmp_path / "home" / ".claude" / "local" / "claude"
     local.parent.mkdir(parents=True)
     local.write_text("#!/bin/sh\n", encoding="utf-8")

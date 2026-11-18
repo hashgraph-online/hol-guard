@@ -17,6 +17,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -143,6 +144,26 @@ fn trusted(_metadata: &fs::Metadata, _path: &Path, _checker: Option<&Path>) -> b
     true
 }
 
+/// The manifest opened without following a link at the leaf, and without
+/// blocking on a FIFO swapped in for it.
+#[cfg(unix)]
+fn open_manifest(path: &Path) -> std::io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+}
+
+/// A link at the leaf is refused before the open, the way the Python read did.
+#[cfg(not(unix))]
+fn open_manifest(path: &Path) -> std::io::Result<fs::File> {
+    if fs::symlink_metadata(path)?.file_type().is_symlink() {
+        return Err(std::io::Error::from(std::io::ErrorKind::InvalidInput));
+    }
+    fs::File::open(path)
+}
+
 /// `_manifest_for_bundled_identity`: the bundled runtime's manifest, read
 /// without following a link, and the reason it does not vouch for `sha256`.
 fn manifest_for(
@@ -153,28 +174,32 @@ fn manifest_for(
 ) -> Result<NativeRuntimeManifestV1, &'static str> {
     const BAD: &str = "native_manifest_invalid";
     let path = runtime.with_file_name(NATIVE_MANIFEST_NAME);
-    let metadata = fs::symlink_metadata(&path).map_err(|error| {
+    let missing = |error: std::io::Error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             "native_manifest_missing"
         } else {
             BAD
         }
-    })?;
-    if metadata.file_type().is_symlink()
-        || !metadata.file_type().is_file()
+    };
+    // The checks run on the handle that supplies the bytes, so an entry swapped
+    // in after a pathname check cannot be the file that was trusted.
+    let mut file = open_manifest(&path).map_err(missing)?;
+    let metadata = file.metadata().map_err(|_| BAD)?;
+    if !metadata.file_type().is_file()
         || metadata.len() == 0
         || metadata.len() > MAX_MANIFEST_BYTES as u64
         || !trusted(&metadata, &path, facts.checker.as_deref())
     {
         return Err(BAD);
     }
-    let bytes = fs::read(&path).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::NotFound {
-            "native_manifest_missing"
-        } else {
-            BAD
-        }
-    })?;
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take(MAX_MANIFEST_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| BAD)?;
+    if bytes.len() as u64 > MAX_MANIFEST_BYTES as u64 {
+        return Err(BAD);
+    }
     let payload: Value = serde_json::from_slice(&bytes).map_err(|_| BAD)?;
     let manifest = decode_runtime_manifest(
         &payload,

@@ -140,15 +140,26 @@ def ask(
     *,
     harness: str | None = None,
     timeout_seconds: float | None = None,
+    guard_home: Path | None = None,
+    deadline_monotonic: float | None = None,
     **fields: object,
 ) -> dict[str, Any]:
-    """Run one op and raise the error the Python adapter raised for a refusal."""
+    """Run one op and raise the error the Python adapter raised for a refusal.
+
+    ``guard_home`` names the home whose resident answers (the ambient one when omitted) and
+    ``deadline_monotonic`` only ever shortens the call.
+    """
     from .native_runner_authority import native_runner_authority
 
     request: dict[str, object] = {"op": op, "context": wire_context(context), **fields}
     if harness is not None:
         request["harness"] = harness
-    answer = native_runner_authority(_KIND, request, timeout_seconds=timeout_seconds)
+    bounds: dict[str, Any] = {}
+    if guard_home is not None:
+        bounds["guard_home"] = guard_home
+    if deadline_monotonic is not None:
+        bounds["deadline_monotonic"] = deadline_monotonic
+    answer = native_runner_authority(_KIND, request, timeout_seconds=timeout_seconds, **bounds)
     if answer.get("ok") is False and "failure" in answer:
         # An install op that ran as the owner of the Guard home answers its failure in the owned shape.
         from .native_failure import failure_from_answer

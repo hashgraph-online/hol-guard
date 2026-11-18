@@ -80,6 +80,11 @@ def _mutation(
     from .runtime_transition import assert_transition_mutation_allowed
 
     assert_transition_mutation_allowed(context.guard_home)
+    if op == "adapter_install" and _description(harness).get("install") == "delegated":
+        # A delegated install records its provider rows; the runtime opens an existing store and never creates one.
+        from .cli.native_managed_install import ensure_store
+
+        ensure_store(context)
     preflight_management(harness, context, operation="install" if op == "adapter_install" else "uninstall")
     answer = owned_ask(
         harness,

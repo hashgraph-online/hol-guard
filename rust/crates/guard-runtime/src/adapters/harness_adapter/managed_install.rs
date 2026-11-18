@@ -70,6 +70,10 @@ pub(super) fn within<T>(
     .map_err(|_| INVALID)?;
     if let Some(token) = fields.get("owner").and_then(Value::as_str) {
         return with_registered(token, pid, thread, |owner| {
+            // The owner holds the locks of its own Guard home and journals there.
+            if owner.guard_home() != ctx.resolved(&ctx.guard_home).as_path() {
+                return Err(INVALID);
+            }
             if transition_pending(&ctx.guard_home) {
                 return Err(OwnedFailure::Transition("pending_transition"));
             }
@@ -148,9 +152,32 @@ fn record_fields(
     Ok(record)
 }
 
+/// One target's adapter, then its row; the row when the store answered one.
+fn one_target(
+    ctx: &Ctx,
+    fields: &Map<String, Value>,
+    owner: &mut Owner,
+    (command, active): (&str, bool),
+    target: &Value,
+) -> Owned<Option<Value>> {
+    let target = target.as_object().ok_or(INVALID)?;
+    let harness = text(target, "harness")?;
+    let spec = describe::spec(harness).ok_or(INVALID)?;
+    let surface = surface(target)?;
+    let manifest = match target.get("manifest").and_then(Value::as_str) {
+        Some(prepared) => prepared.to_owned(),
+        None if active => install(spec, ctx, fields, owner, surface)?,
+        None => uninstall(spec, ctx, fields, owner, surface)?,
+    };
+    let recorded =
+        record(ctx, &record_fields(fields, command, harness, &manifest)?).map_err(stopped)?;
+    Ok(recorded.get("row").filter(|row| row.is_object()).cloned())
+}
+
 /// `_apply_managed_install_owned`: each target's adapter, then its row, and
 /// the guidance once any row was written. A later failure keeps the rows
-/// already written.
+/// already written, and the guidance is reconciled with them before the
+/// failure is returned.
 pub(super) fn run(ctx: &Ctx, fields: &Map<String, Value>, owner: &mut Owner) -> Owned<Value> {
     let command = text(fields, "command")?;
     let active = match command {
@@ -163,20 +190,14 @@ pub(super) fn run(ctx: &Ctx, fields: &Map<String, Value>, owner: &mut Owner) -> 
         .and_then(Value::as_array)
         .ok_or(INVALID)?;
     let mut rows: Vec<Value> = Vec::new();
+    let mut failed = None;
     for target in targets {
-        let target = target.as_object().ok_or(INVALID)?;
-        let harness = text(target, "harness")?;
-        let spec = describe::spec(harness).ok_or(INVALID)?;
-        let surface = surface(target)?;
-        let manifest = match target.get("manifest").and_then(Value::as_str) {
-            Some(prepared) => prepared.to_owned(),
-            None if active => install(spec, ctx, fields, owner, surface)?,
-            None => uninstall(spec, ctx, fields, owner, surface)?,
-        };
-        let recorded =
-            record(ctx, &record_fields(fields, command, harness, &manifest)?).map_err(stopped)?;
-        if let Some(row) = recorded.get("row").filter(|row| row.is_object()) {
-            rows.push(row.clone());
+        match one_target(ctx, fields, owner, (command, active), target) {
+            Ok(row) => rows.extend(row),
+            Err(failure) => {
+                failed = Some(failure);
+                break;
+            }
         }
     }
     let mut guidance = Value::Null;
@@ -184,10 +205,17 @@ pub(super) fn run(ctx: &Ctx, fields: &Map<String, Value>, owner: &mut Owner) -> 
         let mut asked = Map::new();
         asked.insert("command".into(), json!(command));
         asked.insert("source".into(), json!(text(fields, "source")?));
-        let answer = guidance_after(ctx, &asked).map_err(stopped)?;
-        guidance = answer.get("guidance").cloned().unwrap_or(Value::Null);
+        match guidance_after(ctx, &asked).map_err(stopped) {
+            Ok(answer) => guidance = answer.get("guidance").cloned().unwrap_or(Value::Null),
+            // The target's own failure is the one the caller is told.
+            Err(failure) if failed.is_none() => return Err(failure),
+            Err(_) => {}
+        }
     }
-    Ok(json!({ "ok": true, "rows": rows, "guidance": guidance }))
+    match failed {
+        Some(failure) => Err(failure),
+        None => Ok(json!({ "ok": true, "rows": rows, "guidance": guidance })),
+    }
 }
 
 /// `managed_install`: the whole install or uninstall of `targets`.

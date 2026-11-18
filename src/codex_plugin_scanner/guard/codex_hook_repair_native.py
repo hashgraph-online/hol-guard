@@ -14,6 +14,16 @@ from .native_transition_files import inspect_runtime
 from .runtime_transition import TransitionError, inverse_recovery_budget
 
 
+def _expanded(override: str | None) -> str | None:
+    """The override with ``~user`` expanded as the launcher does; the resident expands only a bare ``~``."""
+    if not override:
+        return override
+    try:
+        return str(Path(override).expanduser())
+    except RuntimeError:
+        return override
+
+
 def inspect_codex_repair_native_runtime(*, deadline_monotonic: float) -> NativeRuntimeIdentity:
     """Inspect existing selection without chmod, installation or launch override.
 
@@ -29,7 +39,7 @@ def inspect_codex_repair_native_runtime(*, deadline_monotonic: float) -> NativeR
         identity = inspect_runtime(
             deadline=deadline_monotonic,
             mode=mode,
-            binary_override=os.environ.get(native._NATIVE_BINARY_ENV),
+            binary_override=_expanded(os.environ.get(native._NATIVE_BINARY_ENV)),
             bundled=native._bundled_runtime_candidate(),
             distribution=native._distribution_candidates() if mode == "force" else (),
             package_version=native._python_package_version(),

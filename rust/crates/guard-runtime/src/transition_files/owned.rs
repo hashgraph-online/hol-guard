@@ -95,7 +95,7 @@ impl Owner {
         &self.operation_id
     }
 
-    pub(super) fn guard_home(&self) -> &Path {
+    pub(crate) fn guard_home(&self) -> &Path {
         &self.guard_home
     }
 
