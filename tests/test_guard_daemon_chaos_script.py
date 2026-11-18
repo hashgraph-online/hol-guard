@@ -108,3 +108,15 @@ def test_only_this_homes_resident_is_the_one_to_kill(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(chaos, "_processes", lambda: processes)
 
     assert runtime_faults._resident_pids(guard_home) == [11, 12]
+
+
+def test_a_replacement_on_the_same_port_is_not_the_same_daemon() -> None:
+    from scripts.guard_daemon_chaos_runtime import _same_daemon
+
+    first = {"pid": 11, "state_id": "a", "port": 4781}
+    assert _same_daemon(first, dict(first))
+    assert not _same_daemon(first, {**first, "pid": 12})
+    assert not _same_daemon(first, {**first, "state_id": "b"})
+    assert not _same_daemon(first, None)
+    assert not _same_daemon(None, first)
+    assert not _same_daemon({"port": 4781}, {"port": 4781})

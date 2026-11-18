@@ -53,6 +53,15 @@ def _resident_pids(guard_home: Path) -> list[int]:
     return pids
 
 
+def _same_daemon(before: dict[str, object] | None, after: dict[str, object] | None) -> bool:
+    """Whether two authenticated states name one daemon. A home keeps its port, so a replacement can
+    publish the same URL; the pid and the state id tell daemons apart."""
+
+    if before is None or after is None:
+        return False
+    return all(before.get(key) is not None and before.get(key) == after.get(key) for key in ("pid", "state_id"))
+
+
 def _wait_for(condition: Callable[[], bool], timeout: float) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -68,12 +77,15 @@ def _under_traffic(
     *,
     max_recovery_seconds: float,
     older_runtime: bool = False,
+    keeps_daemon: bool = False,
 ) -> chaos.ScenarioResult:
     """Start a daemon in a temporary home, send hooks, and inject ``fault``.
 
     ``fault`` returns the pid of the process it stopped, or ``None`` after
     recording why it could not inject the fault. With ``older_runtime`` the
     daemon is started under another runtime identity than the current one.
+    With ``keeps_daemon`` the first daemon must still be the only one serving
+    once the traffic and the settle period are over.
     """
 
     result = chaos.ScenarioResult(name=name)
@@ -104,6 +116,8 @@ def _under_traffic(
                 time.sleep(chaos.SETTLE_SECONDS)
             finally:
                 traffic.stop()
+            if stopped is not None and keeps_daemon and chaos._daemon_pids(guard_home) != [execution.initial_pid]:
+                result.failures.append("the daemon was replaced after the fault, it must keep serving")
             if stopped is not None:
                 chaos._check_recovered(result, traffic, guard_home, stopped, max_recovery_seconds=max_recovery_seconds)
             result.exit_records = chaos._exit_records(guard_home, execution.initial_pid)
@@ -163,14 +177,16 @@ def _start_current_runtime(
     except Exception as error:  # a settled home must not refuse a start
         result.failures.append(f"a start after the swap failed: {type(error).__name__}: {error}"[:240])
     else:
-        if again != url:
+        if again != url or not _same_daemon(state, load_authenticated_daemon_state(guard_home)):
             result.failures.append("a start after the swap replaced the current runtime's daemon")
     return initial_pid
 
 
 def run_runtime_scenarios(*, max_recovery_seconds: float) -> list[chaos.ScenarioResult]:
     return [
-        _under_traffic("resident-sigkill", _kill_resident, max_recovery_seconds=max_recovery_seconds),
+        _under_traffic(
+            "resident-sigkill", _kill_resident, max_recovery_seconds=max_recovery_seconds, keeps_daemon=True
+        ),
         _under_traffic(
             "runtime-swap", _start_current_runtime, max_recovery_seconds=max_recovery_seconds, older_runtime=True
         ),
