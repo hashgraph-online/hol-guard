@@ -40,6 +40,8 @@ fn printf_escapes_are_decoded_before_ssn_boundary_check() {
         r"printf '\e123-45-6789'",
         // %b expands escapes in its operand the way the format string does.
         r"printf '%b\n' '123\x2d45\x2d6789'",
+        r"printf -- '123\05545\0556789'",
+        r"printf -- '%b\n' '123\x2d45\x2d6789'",
     ] {
         assert!(
             echoes_ssn(command),
@@ -53,6 +55,8 @@ fn printf_escapes_are_decoded_before_ssn_boundary_check() {
         // %s argument. Reviewing these would be a new false positive.
         r"printf '%s\n' '123\05545\0556789'",
         r"printf '%s\n' '123\x2d45\x2d6789'",
+        r"printf -- '%s\n' '123\05545\0556789'",
+        r"printf -- '123\05545\0550000'",
         r"printf '123\05545\0550000'",
         r"printf '123\x2d45\x2d0000'",
         r"printf '\0123-45-6789'",

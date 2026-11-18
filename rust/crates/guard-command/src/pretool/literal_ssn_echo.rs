@@ -179,13 +179,20 @@ pub(super) fn echoes_ssn(command: &str) -> bool {
         return false;
     };
     let decoded = if program == "printf" {
-        let Some(format) = words.get(1) else {
+        // Bash printf accepts `--` before its format string. Treating it as
+        // the format skips a real, escape-encoded SSN in the next word.
+        let format_index = if words.get(1).map(String::as_str) == Some("--") {
+            2
+        } else {
+            1
+        };
+        let Some(format) = words.get(format_index) else {
             return false;
         };
         let mut printed = decode_printf_escapes(format);
         // %b expands escapes in its operand the way the format string does.
         let decode_operands = format.contains("%b");
-        for argument in words.iter().skip(2) {
+        for argument in words.iter().skip(format_index + 1) {
             printed.push(' ');
             if decode_operands {
                 printed.push_str(&decode_printf_escapes(argument));
