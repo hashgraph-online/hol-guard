@@ -38,6 +38,8 @@ fn printf_escapes_are_decoded_before_ssn_boundary_check() {
         r"printf '\f123-45-6789'",
         r"printf '\v123-45-6789'",
         r"printf '\e123-45-6789'",
+        // %b expands escapes in its operand the way the format string does.
+        r"printf '%b\n' '123\x2d45\x2d6789'",
     ] {
         assert!(
             echoes_ssn(command),

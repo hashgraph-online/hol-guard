@@ -183,9 +183,15 @@ pub(super) fn echoes_ssn(command: &str) -> bool {
             return false;
         };
         let mut printed = decode_printf_escapes(format);
+        // %b expands escapes in its operand the way the format string does.
+        let decode_operands = format.contains("%b");
         for argument in words.iter().skip(2) {
             printed.push(' ');
-            printed.push_str(argument);
+            if decode_operands {
+                printed.push_str(&decode_printf_escapes(argument));
+            } else {
+                printed.push_str(argument);
+            }
         }
         printed
     } else {
