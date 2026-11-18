@@ -26,6 +26,9 @@ pub(crate) struct Detection {
     pub(crate) artifacts: Vec<Value>,
     pub(crate) found_paths: Vec<String>,
     pub(crate) warnings: Vec<String>,
+    /// Whether the config sources alone named a path, before the workspace and
+    /// skill inventories added theirs: what `installed` reads.
+    pub(crate) sourced: bool,
 }
 
 fn native(code: &'static str) -> Failure {
@@ -213,9 +216,11 @@ pub(crate) fn detect(
     request.insert("cwd".into(), json!(ctx.cwd.as_deref().map(path_text)));
     request.insert("legacy".into(), legacy);
     let found = crate::codex_detect::detect(&Value::Object(request)).map_err(native)?;
+    let found_paths = texts(&found, "found_paths")?;
     let mut detection = Detection {
         artifacts: list(&found, "artifacts")?.clone(),
-        found_paths: texts(&found, "found_paths")?,
+        sourced: !found_paths.is_empty(),
+        found_paths,
         warnings: match found.get("warnings") {
             None => Vec::new(),
             Some(_) => texts(&found, "warnings")?,

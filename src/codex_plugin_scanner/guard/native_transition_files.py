@@ -205,6 +205,37 @@ def require_deadline(deadline: float) -> None:
     _ask({"op": "publication_deadline", "deadline": deadline, "now": time.monotonic()}, context=False)
 
 
+def coordinate(
+    flow: str,
+    *,
+    deadline: float,
+    state: object,
+    outcome: Mapping[str, object] | None,
+    cause: str = "",
+) -> Mapping[str, object]:
+    """The next action of a coordinator loop: the runtime owns the order, this process runs each effect.
+
+    ``flow`` is ``activate`` or ``recover``. The answer holds the ``action`` to run and the ``state`` to send back
+    with its ``outcome``.
+    """
+
+    request: dict[str, object] = {
+        "op": "publication_coordinate",
+        "flow": flow,
+        "deadline": _finite(deadline),
+        "now": time.monotonic(),
+        "state": state,
+        "outcome": outcome,
+        "cause": cause,
+    }
+    value = _ask(request, context=False).get("value")
+    if not isinstance(value, Mapping) or not isinstance(value.get("action"), Mapping):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return value
+
+
 def request_policy(stage: str, **fields: object) -> Mapping[str, object]:
     """The review artifact's lifetime policy: ``stamp``, ``plan`` or ``window``.
 

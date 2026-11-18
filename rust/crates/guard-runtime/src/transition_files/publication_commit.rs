@@ -294,6 +294,7 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_pin_executable" => super::publication_pin_executable::pin_op(call),
         "publication_runtime_compare" => super::publication_runtime_compare::compare_op(call),
         "publication_inverse_proof" => super::publication_proof::inverse(call),
+        "publication_coordinate" => super::publication_coordinate::coordinate(call),
         "publication_deadline" => super::publication_authorize::deadline(call),
         "publication_artifact_generation" => {
             super::publication_artifact_generation::generation_op(call)

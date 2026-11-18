@@ -239,15 +239,25 @@ class NativeHarnessAdapter(HarnessAdapter):
         path = self._ask("resolved_executable", context).get("path")
         return path if isinstance(path, str) else None
 
+    def _detect_fields(self, context: HarnessContext) -> dict[str, object]:
+        """What the runtime's detection asks of this process; none by default."""
+        return {}
+
+    def _check_detected(self, answer: dict[str, Any]) -> None:
+        """Refuse a detection answer that names a refusal; none by default."""
+
     def detect(self, context: HarnessContext) -> HarnessDetection:
         from ..aibom_detection import _AIBOM_DISCOVERY_TIMEOUT_SECONDS, NativeAibomError
         from ..native_runner_authority import NativeRunnerAuthorityError
 
         # Discovery walks the workspace, so it keeps the longer AIBOM deadline.
         try:
-            answer = self._ask("detect", context, timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS)
+            answer = self._ask(
+                "detect", context, timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS, **self._detect_fields(context)
+            )
         except NativeRunnerAuthorityError as error:
             raise NativeAibomError(str(error)) from error
+        self._check_detected(answer)
         return detection_from(self.harness, context, answer)
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:

@@ -20,6 +20,7 @@ use std::time::Duration;
 use serde_json::{json, Map, Value};
 
 use super::codex_detection::{self, Detection};
+use super::codex_prepare::plan_fields;
 use crate::harness_adapter::codex_install::transition;
 use crate::harness_adapter::codex_spec::{self, spelled};
 use crate::harness_adapter::managed_install_target::{stopped, Owned, INVALID};
@@ -45,16 +46,16 @@ PermissionRequest hooks are missing or disabled. Run `hol-guard install codex` o
 to repair the native-hook enforcement boundary.";
 
 /// What the request carries for Codex.
-struct Facts<'a> {
-    codex: &'a Map<String, Value>,
-    launch: Map<String, Value>,
+pub(super) struct Facts<'a> {
+    pub(super) codex: &'a Map<String, Value>,
+    pub(super) launch: Map<String, Value>,
     /// `package_roots` and `budget`, as every transition op takes them.
     transition: Map<String, Value>,
     held: Vec<HeldDirectory>,
     budget: Budget,
 }
 
-fn facts<'a>(ctx: &Ctx, request: &'a Map<String, Value>) -> Owned<Facts<'a>> {
+pub(super) fn facts<'a>(ctx: &Ctx, request: &'a Map<String, Value>) -> Owned<Facts<'a>> {
     let codex = request
         .get("facts")
         .and_then(Value::as_object)
@@ -113,7 +114,7 @@ fn op_request(op: &str, fields: &[(&str, Value)]) -> Map<String, Value> {
 }
 
 /// The spec the publication expects, with whether a workspace may rebind.
-fn spec_of(ctx: &Ctx, facts: &Facts<'_>) -> Owned<Value> {
+pub(super) fn spec_of(ctx: &Ctx, facts: &Facts<'_>) -> Owned<Value> {
     let mut spec = codex_spec::build(ctx, &facts.launch, &Map::new()).map_err(stopped)?;
     let rebinding = facts
         .launch
@@ -126,7 +127,7 @@ fn spec_of(ctx: &Ctx, facts: &Facts<'_>) -> Owned<Value> {
 
 /// `load_hook_manifest_baseline`: the prior authenticated manifest, `None`
 /// for a clean install.
-fn baseline(ctx: &Ctx, facts: &Facts<'_>, spec: &Value) -> Owned<Option<Value>> {
+pub(super) fn baseline(ctx: &Ctx, facts: &Facts<'_>, spec: &Value) -> Owned<Option<Value>> {
     let home = path_text(&abspath(ctx, Path::new(&spelled(ctx, &ctx.guard_home))));
     let value = ask(
         facts,
@@ -155,7 +156,7 @@ fn baseline(ctx: &Ctx, facts: &Facts<'_>, spec: &Value) -> Owned<Option<Value>> 
 }
 
 /// The `events` bindings of a manifest, as `manifest_bindings` reads them.
-fn bindings(manifest: Option<&Value>) -> Vec<Value> {
+pub(super) fn bindings(manifest: Option<&Value>) -> Vec<Value> {
     manifest
         .and_then(|manifest| manifest.get("events"))
         .and_then(Value::as_array)
@@ -169,7 +170,7 @@ fn bindings(manifest: Option<&Value>) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-fn pairs(ctx: &Ctx) -> Vec<(String, String)> {
+pub(super) fn pairs(ctx: &Ctx) -> Vec<(String, String)> {
     paths(ctx)["pairs"]
         .as_array()
         .into_iter()
@@ -184,7 +185,11 @@ fn pairs(ctx: &Ctx) -> Vec<(String, String)> {
 }
 
 /// `_snapshot` of every config and hooks file, in pair order.
-fn capture(ctx: &Ctx, facts: &Facts<'_>, pairs: &[(String, String)]) -> Owned<Map<String, Value>> {
+pub(super) fn capture(
+    ctx: &Ctx,
+    facts: &Facts<'_>,
+    pairs: &[(String, String)],
+) -> Owned<Map<String, Value>> {
     let mut contents = Map::new();
     for path in pairs.iter().flat_map(|(config, hooks)| [config, hooks]) {
         if contents.contains_key(path) {
@@ -203,7 +208,7 @@ fn capture(ctx: &Ctx, facts: &Facts<'_>, pairs: &[(String, String)]) -> Owned<Ma
     Ok(contents)
 }
 
-fn manifest_text(
+pub(super) fn manifest_text(
     spec: &Spec,
     ctx: &Ctx,
     kind: &str,
@@ -233,7 +238,7 @@ fn manifest_text(
 /// `_raise_publication_error`: the failure an answer names in `raise`. A
 /// rollback that failed beside it, and the cause of a retirement that left
 /// the sources unrestored, travel in the fault for the caller to chain.
-fn raised(answer: &Value) -> Option<OwnedFailure> {
+pub(super) fn raised(answer: &Value) -> Option<OwnedFailure> {
     let raise = answer.get("raise")?.as_object()?;
     if let Some(runtime) = raise.get("runtime").and_then(Value::as_str) {
         let cause = raise.get("cause").cloned().unwrap_or(Value::Null);
@@ -261,7 +266,7 @@ fn key_refusal(reason: &str) -> OwnedFailure {
     }
 }
 
-fn text(value: &Value, key: &str) -> Owned<Value> {
+pub(super) fn text(value: &Value, key: &str) -> Owned<Value> {
     match value.get(key) {
         Some(found @ Value::String(_)) => Ok(found.clone()),
         _ => Err(INVALID),
@@ -328,39 +333,12 @@ fn install_owned(
         artifacts,
         found_paths,
         warnings: _,
+        sourced: _,
     } = codex_detection::detect(ctx, &facts.launch, &owned, Some(&contents), facts.codex)
         .map_err(stopped)?;
-    let mut fields = facts.transition.clone();
-    fields.insert("launch".into(), Value::Object(facts.launch.clone()));
-    fields.insert("contents".into(), Value::Object(contents));
-    fields.insert(
-        "owned".into(),
-        json!(serde_json::to_string(&owned).map_err(|_| INVALID)?),
-    );
-    fields.insert("require_owners".into(), json!(true));
-    fields.insert(
-        "artifacts".into(),
-        Value::Array(
-            artifacts
-                .into_iter()
-                .filter(|artifact| {
-                    artifact.get("artifact_type").and_then(Value::as_str) == Some("mcp_server")
-                })
-                .collect(),
-        ),
-    );
-    fields.insert(
-        "generation".into(),
-        json!({ "previous_manifest": previous, "create_key": true }),
-    );
-    fields.insert(
-        "interpreter".into(),
-        request.get("interpreter").cloned().unwrap_or(Value::Null),
-    );
-    fields.insert(
-        "package_root".into(),
-        facts.codex.get("package_root").cloned().ok_or(INVALID)?,
-    );
+    let mut fields = plan_fields(
+        request, facts, &previous, &owned, contents, &artifacts, true,
+    )?;
     fields.insert("operation_id".into(), json!(owner.operation_id()));
     let answer = dispatch(spec, "install", ctx, &fields).map_err(stopped)?;
     owner.record_events(&answer);

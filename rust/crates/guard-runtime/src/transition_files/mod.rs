@@ -32,6 +32,7 @@ mod publication_artifact_generation;
 mod publication_authorize;
 mod publication_baseline;
 mod publication_commit;
+mod publication_coordinate;
 mod publication_files;
 mod publication_generation;
 mod publication_inspect_runtime;

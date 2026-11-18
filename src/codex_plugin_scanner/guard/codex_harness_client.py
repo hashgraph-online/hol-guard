@@ -173,6 +173,29 @@ def _launch_fields(context: HarnessContext, *, home_is_current: bool | None = No
     return {**fields, "manifest_path": str(hook_manifest_file(guard_home, codex_paths(context).config))}
 
 
+def codex_native_request(context: HarnessContext) -> dict[str, object]:
+    """What a native Codex read or plan asks of this process: its facts and the transition budget."""
+    from .native_transition_files import _budget, _package_roots
+
+    return {
+        "facts": {"codex": codex_install_facts(context)},
+        "transition": {"package_roots": _package_roots(), "budget": _budget()},
+    }
+
+
+def raise_untrusted(untrusted: object) -> None:
+    """Raise the integrity error for a baseline the runtime refused to trust."""
+    from .codex_hook_file_integrity import CodexHookIntegrityError
+
+    if not isinstance(untrusted, Mapping):
+        raise CodexHookIntegrityError("native_transition_invalid", "Guard could not read the managed-hook baseline.")
+    error = CodexHookIntegrityError(str(untrusted["reason"]), str(untrusted["message"]))
+    cause = untrusted.get("cause")
+    if isinstance(cause, str):
+        raise error from CodexHookIntegrityError(cause, cause)
+    raise error
+
+
 def codex_install_facts(context: HarnessContext) -> dict[str, object]:
     """What the runtime's Codex install and uninstall cannot read: this launch, the installed package's root and
     the skill walks a host without the unix file-descriptor walk must run here."""
