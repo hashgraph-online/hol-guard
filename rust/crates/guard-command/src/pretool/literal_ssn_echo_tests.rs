@@ -119,6 +119,29 @@ fn printf_width_numeric_conversions_and_raw_escapes_preserve_the_floor() {
 }
 
 #[test]
+fn printf_dynamic_width_modifiers_and_radix_cannot_hide_an_ssn() {
+    for command in [
+        r"printf '%*d-45-6789' 5 123",
+        r"printf '%.*d-45-6789' 3 123",
+        r"printf '%ld-45-6789' 123",
+        r"printf '%lld-45-6789' 123",
+        r"printf '%x-45-6789' 291",
+        r"printf '%X-45-6789' 291",
+        r"printf '%o-45-6789' 83",
+        r"printf '%x-45-6789' 0x123",
+    ] {
+        assert!(echoes_ssn(command), "{command} prints an SSN");
+    }
+    for command in [
+        r"printf '%*d-45-6789' 5 000",
+        r"printf '%#x-45-6789' 291",
+        r"printf '%*d-45-6789' -5 123",
+    ] {
+        assert!(!echoes_ssn(command), "{command} does not print an isolated SSN");
+    }
+}
+
+#[test]
 fn other_numbers_and_shapes_pass() {
     for command in [
         "echo 000-12-3456",
