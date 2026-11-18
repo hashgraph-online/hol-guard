@@ -34,6 +34,10 @@ fn lone_home_dotpath_pattern_is_not_a_search() {
         "grep -id skip /home/agent/.ssh/id_rsa",
         "grep --directories=skip /home/agent/.ssh/id_rsa",
         "rg --encoding utf-8 /home/agent/.secrets/key.txt",
+        "rg -j 1 /home/agent/.secrets/key.txt",
+        "rg -j1 /home/agent/.secrets/key.txt",
+        "rg -ij 1 /home/agent/.secrets/key.txt",
+        "rg -i /home/agent/.secrets/key.txt",
     ] {
         assert!(
             names_dotpath(command),
@@ -54,6 +58,10 @@ fn ordinary_searches_still_pass() {
         "grep /home/agent/.secrets/key.txt notes.txt",
         "grep -e /home/agent/.secrets/key.txt",
         "grep -ie /home/agent/.ssh/id_rsa",
+        "rg -ie /home/agent/.ssh/id_rsa",
+        "rg -i -e /home/agent/.ssh/id_rsa",
+        "rg -e /home/agent/.ssh/id_rsa",
+        "rg -je /home/agent/.ssh/id_rsa",
         "grep -i -e /home/agent/.ssh/id_rsa",
         "grep --directories=recurse /home/agent/.ssh/id_rsa",
         "grep -f patterns.txt",
