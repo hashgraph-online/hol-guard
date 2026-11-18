@@ -15,6 +15,7 @@ export type GuardHarnessSetupItem = GuardHarnessSetupContract & {
   command_available: boolean;
   config_paths: string[];
   artifact_count: number;
+  warnings?: string[];
   // Added by newer daemons; normalize before rendering.
   version_compatibility?: unknown;
 };

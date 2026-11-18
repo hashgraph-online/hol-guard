@@ -217,6 +217,14 @@ function TabButton({ tabKey, label, icon: Icon, isActive, tabRefs, onSelect }: T
 
 export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
   const harnessDetection = useHarnessDetection();
+  const [cleanedLeftoverHarness, setCleanedLeftoverHarness] = useState<string | null>(null);
+  const detectedSetupWarnings = harnessDetection.kind === "ready"
+    ? harnessDetection.items.find((item) => item.harness === props.harness)?.warnings ?? []
+    : [];
+  const setupWarnings = cleanedLeftoverHarness === props.harness ? [] : detectedSetupWarnings;
+  const handleLeftoverRemoved = useCallback(() => {
+    setCleanedLeftoverHarness(props.harness);
+  }, [props.harness]);
   const versionCompatibility = useMemo(
     () => versionCompatibilityFor(harnessDetection, props.harness),
     [harnessDetection, props.harness],
@@ -476,6 +484,8 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
                 harnessInventory={harnessInventory}
                 pendingItems={pendingItems}
                 protection={runtime.supply_chain?.package_manager_protection}
+                setupWarnings={setupWarnings}
+                onLeftoverRemoved={handleLeftoverRemoved}
                 versionCompatibility={versionCompatibility}
                 onOpenRequest={props.onOpenRequest}
                 onManagedInstallChanged={props.onManagedInstallChanged}
@@ -496,6 +506,8 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
                 harness={harness}
                 status={status}
                 install={install}
+                setupWarnings={setupWarnings}
+                onLeftoverRemoved={handleLeftoverRemoved}
                 harnessPolicies={harnessPolicies}
                 onClearAppPolicies={props.onClearAppPolicies}
                 onClearPolicy={props.onClearPolicy}
@@ -553,6 +565,8 @@ function AppOverviewTab(props: {
   harnessInventory: GuardInventoryItem[];
   pendingItems: GuardApprovalRequest[];
   protection: PackageManagerProtection | undefined;
+  setupWarnings: string[];
+  onLeftoverRemoved: () => void;
   versionCompatibility: HarnessVersionCompatibility | null;
   onOpenRequest: (requestId: string) => void;
   onManagedInstallChanged?: () => Promise<void>;
@@ -576,6 +590,8 @@ function AppOverviewTab(props: {
           harness={props.harness}
           install={props.install}
           status={props.status}
+          setupWarnings={props.setupWarnings}
+          onLeftoverRemoved={props.onLeftoverRemoved}
           onManagedInstallChanged={props.onManagedInstallChanged}
         />
         <div className="grid gap-6 lg:grid-cols-2">
@@ -820,6 +836,8 @@ function FirstRunGuide(props: {
   harness: string;
   install: GuardManagedInstall | undefined;
   status: "active" | "needs_setup" | "observed" | "unknown";
+  setupWarnings: string[];
+  onLeftoverRemoved: () => void;
   onManagedInstallChanged?: () => Promise<void>;
 }) {
   const displayName = harnessDisplayName(props.harness);
@@ -845,6 +863,8 @@ function FirstRunGuide(props: {
             harness={props.harness}
             install={props.install}
             status={props.status}
+            setupWarnings={props.setupWarnings}
+            onLeftoverRemoved={props.onLeftoverRemoved}
             onManagedInstallChanged={props.onManagedInstallChanged}
           />
         </div>
@@ -1250,6 +1270,8 @@ function AppSettingsTab(props: {
   harness: string;
   status: "active" | "needs_setup" | "observed" | "unknown";
   install: GuardManagedInstall | undefined;
+  setupWarnings: string[];
+  onLeftoverRemoved: () => void;
   harnessPolicies: GuardPolicyDecision[];
   onClearAppPolicies?: (harness: string) => Promise<void>;
   onClearPolicy?: (policy: GuardPolicyDecision) => Promise<void>;
@@ -1308,6 +1330,8 @@ function AppSettingsTab(props: {
             harness={props.harness}
             install={props.install}
             status={props.status}
+            setupWarnings={props.setupWarnings}
+            onLeftoverRemoved={props.onLeftoverRemoved}
             onManagedInstallChanged={props.onManagedInstallChanged}
           />
         ) : (

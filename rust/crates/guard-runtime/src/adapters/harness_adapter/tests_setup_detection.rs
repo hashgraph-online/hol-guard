@@ -144,11 +144,14 @@ fn the_install_record_alone_says_whether_an_app_is_installed() {
     let home = Home::new();
     let none = detect(&home, "gemini", json!({}));
     assert_eq!(none["installed"], json!(false));
+    assert_eq!(none["managed_active"], json!(false));
     assert_eq!(none["needs_repair"], json!(false));
     assert_eq!(none["command_available"], json!(false));
     assert_eq!(none["config_paths"], json!([]));
     install(&home, "gemini", true, &json!({}), INSTALLED);
-    assert_eq!(detect(&home, "gemini", json!({}))["installed"], json!(true));
+    let installed = detect(&home, "gemini", json!({}));
+    assert_eq!(installed["installed"], json!(true));
+    assert_eq!(installed["managed_active"], json!(true));
     let without_store = home.ask("gemini", "setup_detection", json!({"now": NOW}));
     assert_eq!(without_store["installed"], json!(false));
 }

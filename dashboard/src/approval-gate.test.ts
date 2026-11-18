@@ -382,6 +382,7 @@ function testCloudReviewRecoveryDistinguishesSignInFromConsentAndDelivery(): voi
 
 function testDisconnectWaitsForApprovalSettingsBeforeConfirm(): void {
   const harnessSetupPanel = readFileSync(new URL("./apps/harness-setup-panel.tsx", import.meta.url), "utf8");
+  const leftoverCleanup = readFileSync(new URL("./apps/leftover-guard-cleanup.tsx", import.meta.url), "utf8");
   assert(
     harnessSetupPanel.includes("Checking approval requirements before disconnect"),
     "disconnect must wait for approval settings before showing confirm",
@@ -397,6 +398,18 @@ function testDisconnectWaitsForApprovalSettingsBeforeConfirm(): void {
   assert(
     harnessSetupPanel.includes('if (!(action === "uninstall" && options.dryRun === true))'),
     "disconnect dry-run must keep the confirm step armed",
+  );
+  assert(
+    harnessSetupPanel.includes("Remove leftover Guard files"),
+    "unmanaged leftover configuration must have a cleanup action",
+  );
+  assert(
+    leftoverCleanup.includes("Leftover Guard files detected"),
+    "unmanaged leftover configuration must explain why cleanup is offered",
+  );
+  assert(
+    harnessSetupPanel.includes('if (hasLeftover) return "Needs repair";'),
+    "the app detail must match the app list repair status",
   );
 }
 
