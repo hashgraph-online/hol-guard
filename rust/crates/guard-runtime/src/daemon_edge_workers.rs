@@ -18,7 +18,7 @@
 
 use std::sync::{mpsc, Arc};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
@@ -101,6 +101,11 @@ const IDLE_POLL: Duration = seconds(1);
 const IDLE_HOLD: Duration = seconds(5);
 /// The longest startup waits for the worker host's first policy publication.
 const HOST_READY_WAIT: Duration = seconds(15);
+/// The longest a starting daemon waits on the artifact reconcile, counted
+/// from when the reconcile began, before it reports ready anyway. A reconcile
+/// normally takes a few seconds; one held by its library call could keep the
+/// daemon from answering hooks for that call's whole timeout.
+pub(super) const RECONCILE_READY_WAIT: Duration = seconds(30);
 
 /// What the heartbeat records for this daemon.
 #[derive(Clone)]
@@ -153,10 +158,15 @@ pub(super) fn start(reads: &Arc<NativeReads>, registration: Registration) {
 /// the timeout and the daemon would exit before it reported ready. The idle
 /// clock restarts here for the same reason: a start that took longer than the
 /// timeout is not idle time.
+///
+/// A reconcile still running when the daemon reported ready is passed as
+/// `pending`: the idle clock starts only once it finishes, so an idle daemon
+/// never exits partway through one.
 pub(super) fn exit_when_idle(
     reads: &Arc<NativeReads>,
     registration: &Registration,
     timeout: Duration,
+    pending: Option<Reconcile>,
 ) {
     reads.touch();
     let idle_reads = Arc::clone(reads);
@@ -168,6 +178,10 @@ pub(super) fn exit_when_idle(
     let _ = thread::Builder::new()
         .name("daemon-idle".into())
         .spawn(move || {
+            if let Some(pending) = pending {
+                pending.finish();
+                idle_reads.touch();
+            }
             watch_idle(&idle_reads, timeout, thread::sleep);
             super::super::lifecycle::record(
                 &home,
@@ -207,22 +221,58 @@ pub(super) fn reconcile_artifacts(reads: &NativeReads, user_home: Option<&str>) 
     );
 }
 
+/// A reconcile running on its own thread. The thread signals `done` once the
+/// reconcile has finished and its `reconciled` record is written; the sender
+/// is dropped without a signal if the thread ends any other way.
+pub(super) struct Reconcile {
+    done: mpsc::Receiver<()>,
+    started: Instant,
+}
+
+impl Reconcile {
+    /// Waits until the reconcile finishes or `budget` has passed since it
+    /// started. Returns `None` once it has finished, or the reconcile itself
+    /// while it is still running, so the caller can report ready and wait on
+    /// it later.
+    pub(super) fn wait_until(self, budget: Duration) -> Option<Self> {
+        let left = budget.saturating_sub(self.started.elapsed());
+        match self.done.recv_timeout(left) {
+            Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => None,
+            Err(mpsc::RecvTimeoutError::Timeout) => Some(self),
+        }
+    }
+
+    /// Blocks until the reconcile thread ends.
+    fn finish(self) {
+        let _ = self.done.recv();
+    }
+}
+
 /// Starts `reconcile_artifacts` on its own thread, so it runs while the
 /// worker host starts and a cold start pays for the slower of the two rather
-/// than both. The daemon joins the handle before it reports ready. Without a
-/// thread the reconcile runs here and `None` is returned.
+/// than both. The daemon waits on it, up to `RECONCILE_READY_WAIT`, before it
+/// reports ready. Without a thread the reconcile runs here and `None` is
+/// returned.
 pub(super) fn reconcile_beside(
     reads: &Arc<NativeReads>,
     user_home: Option<String>,
     guard_home: std::path::PathBuf,
-) -> Option<thread::JoinHandle<()>> {
+) -> Option<Reconcile> {
     let (worker_reads, worker_user, worker_home) =
         (Arc::clone(reads), user_home.clone(), guard_home.clone());
+    let (done, finished) = mpsc::channel();
+    let started = Instant::now();
     let spawned = thread::Builder::new()
         .name("daemon-reconcile".into())
-        .spawn(move || reconciled(&worker_reads, worker_user.as_deref(), &worker_home));
+        .spawn(move || {
+            reconciled(&worker_reads, worker_user.as_deref(), &worker_home);
+            let _ = done.send(());
+        });
     match spawned {
-        Ok(handle) => Some(handle),
+        Ok(_) => Some(Reconcile {
+            done: finished,
+            started,
+        }),
         Err(_) => {
             reconciled(reads, user_home.as_deref(), &guard_home);
             None
