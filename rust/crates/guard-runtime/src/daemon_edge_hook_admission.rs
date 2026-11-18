@@ -4,6 +4,7 @@
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
+use super::Request;
 use crate::claude_hook_bridge_render::py_strip;
 use crate::directory_trust::{
     evaluate, DirectoryTrustCandidateV1, DirectoryTrustRequestV1, DIRECTORY_TRUST_REQUEST_SCHEMA,
@@ -363,6 +364,31 @@ impl Directories {
             .and_then(Value::as_str)
             .map(str::to_owned))
     }
+}
+
+/// The request body as the daemon's handler reads it, or `None` for a body it
+/// reads some other way.
+pub(super) fn payload(
+    request: &Request<'_>,
+    body: &[u8],
+) -> Option<Result<Map<String, Value>, ()>> {
+    if body.is_empty() {
+        return Some(Ok(Map::new()));
+    }
+    if !request
+        .single_header("Content-Type")?
+        .contains("application/json")
+    {
+        return None;
+    }
+    let text = std::str::from_utf8(body).ok()?;
+    // A body serde rejects may still be one `json.loads` reads (`NaN`, a lone
+    // surrogate escape); only a body neither reads is refused here.
+    Some(match serde_json::from_str::<Value>(text) {
+        Ok(Value::Object(payload)) => Ok(payload),
+        Ok(_) => Ok(Map::new()),
+        Err(_) => Err(()),
+    })
 }
 
 #[cfg(test)]
