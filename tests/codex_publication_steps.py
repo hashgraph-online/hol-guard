@@ -16,13 +16,14 @@ import base64
 import json
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.codex_hook_manifest import PreparedCodexHookPublication
+from codex_plugin_scanner.guard.harness.base import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 
 
@@ -125,6 +126,118 @@ def _inverse(change: TransitionFile) -> TransitionFile:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _Plan:
+    """A prepared install, with what publishing it as an ordinary install needs."""
+
+    prepared: PreparedHarnessInstall
+    publication: PreparedCodexHookPublication
+    backups: frozenset[Path]
+    shim_manifest: Mapping[str, object]
+    fields: dict[str, object]
+
+
+def _wire_artifact(artifact: Any) -> dict[str, object]:
+    return {
+        **artifact.to_dict(),
+        "args": list(artifact.args),
+        "url": artifact.url,
+        "metadata": dict(artifact.metadata),
+        "runtime_private_metadata": dict(artifact.runtime_private_metadata),
+    }
+
+
+def plan_install(adapter: Any, context: HarnessContext, *, enroll: bool) -> _Plan:
+    """The runtime's ``install_plan`` over freshly captured sources, as the install op asks it."""
+    from codex_plugin_scanner.guard import codex_harness_client as codex
+    from codex_plugin_scanner.guard import codex_hook_self_binding
+    from codex_plugin_scanner.guard.codex_hook_manifest import (
+        PreparedCodexHookPublication,
+        load_hook_manifest_baseline,
+        manifest_bindings,
+    )
+    from codex_plugin_scanner.guard.codex_hook_recovery import _snapshot
+    from codex_plugin_scanner.guard.shims import shim_interpreter
+
+    spec = codex._hook_manifest_spec(context)
+    previous = load_hook_manifest_baseline(spec)
+    paths = codex.codex_paths(context)
+    pairs = tuple((source.config, source.hooks) for source in paths.sources)
+    contents = {path: _snapshot(path) for pair in pairs for path in pair}
+    detection = adapter.detect(context)
+    request: dict[str, Any] = {
+        "launch": codex._launch_fields(context),
+        "contents": {str(path): codex._b64(data) for path, data in contents.items()},
+        "owned": json.dumps(manifest_bindings(previous), separators=(",", ":")),
+        "require_owners": enroll,
+        "artifacts": [_wire_artifact(item) for item in detection.artifacts if item.artifact_type == "mcp_server"],
+        "generation": {
+            "previous_manifest": None if previous is None else dict(previous),
+            "create_key": enroll,
+        },
+        "interpreter": shim_interpreter(),
+        "package_root": str(codex_hook_self_binding.install_package_root()),
+    }
+    answer = _ask_plan(context, request, spec.guard_home if enroll else None)
+    files = tuple(codex._plan_file(item) for item in answer["files"])
+    authority, manifest_change, receipt_change, config_change = files[:4]
+    publication = PreparedCodexHookPublication(
+        json.loads(bytes(manifest_change.after or b"")),
+        str(answer["rendered_config"]),
+        config_change,
+        manifest_change,
+        authority,
+        receipt_change,
+    )
+    shim_manifest = json.loads(str(answer["shim_manifest"]))
+    fields: dict[str, object] = {
+        "backup_path": str(answer["backup_path"]),
+        "managed": [str(name) for name in answer["managed_servers"]],
+        "migrated": [str(name) for name in answer["migrated"]],
+        "skipped": [str(name) for name in answer["skipped_servers"]],
+        "source_config_paths": list(detection.config_paths),
+    }
+    prepared = PreparedHarnessInstall(
+        files,
+        codex._install_manifest(
+            context,
+            "prepare",
+            shim_manifest,
+            manifest_path=str(manifest_change.path),
+            integrity="authenticated",
+            **fields,
+        ),
+    )
+    backups = frozenset(Path(str(path)) for path in answer["backups"])
+    return _Plan(prepared, publication, backups, shim_manifest, fields)
+
+
+def _ask_plan(context: HarnessContext, request: dict[str, Any], enroll_home: Path | None) -> dict[str, Any]:
+    from codex_plugin_scanner.guard import codex_harness_client as codex
+
+    return codex._ask_install_plan(context, request, enroll_home)
+
+
+def stepwise_install(self: Any, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
+    """``CodexHarnessAdapter.install`` with the hook generation published one step at a time."""
+    from codex_plugin_scanner.guard import codex_harness_client as codex
+    from codex_plugin_scanner.guard.native_owned import codex_install_transaction, codex_lifecycle_locks
+    from codex_plugin_scanner.guard.runtime_transition import assert_transition_mutation_allowed
+
+    with (
+        codex_lifecycle_locks(context),
+        codex_install_transaction(
+            context.guard_home,
+            codex.codex_paths(context).config,
+            actor="install",
+            check_pending=True,
+            recover=True,
+        ),
+    ):
+        assert_transition_mutation_allowed(context.guard_home)
+        return stepwise_install_owned(self, context)
+
+
 def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, object]:
     """The runtime's ``install`` op, one step at a time: plan, publish the
     generation with its backups ahead of it stepwise, then the remaining
@@ -142,11 +255,11 @@ def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, o
 
     assert_transition_mutation_allowed(context.guard_home)
     spec = codex._hook_manifest_spec(context)
-    codex._check_sources(context, adapter._config_hook_pairs(context))
+    codex._check_sources(context, tuple((source.config, source.hooks) for source in codex.codex_paths(context).sources))
     config = os.path.abspath(spec.config_path.expanduser())
     target = publication_op("target", context.guard_home, config=config)
     assert isinstance(target, dict)
-    planned = adapter._prepare_plan(context, enroll=True)
+    planned = plan_install(adapter, context, enroll=True)
     publication = planned.publication
     ahead = tuple(change for change in planned.prepared.files if change.path in planned.backups)
     files = (*ahead, *publication.files)
@@ -201,7 +314,7 @@ def use_stepwise_publication(monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 
     monkeypatch.setattr(codex, "_publish_hooks", stepwise_publish_hooks)
-    monkeypatch.setattr(codex_lifecycle.CodexHarnessAdapter, "_install_owned", stepwise_install_owned)
+    monkeypatch.setattr(codex_lifecycle.CodexHarnessAdapter, "install", stepwise_install)
 
 
 # The same switch for a child process script.
@@ -209,7 +322,7 @@ STEPWISE_HOOKS = r"""
 from codex_plugin_scanner.guard import codex_harness_client as _stepwise_codex
 from codex_plugin_scanner.guard import codex_harness_lifecycle as _stepwise_codex_lifecycle
 from tests.codex_publication_steps import stepwise_publish_hooks as _stepwise_publish_hooks
-from tests.codex_publication_steps import stepwise_install_owned as _stepwise_install_owned
+from tests.codex_publication_steps import stepwise_install as _stepwise_install
 _stepwise_codex._publish_hooks = _stepwise_publish_hooks
-_stepwise_codex_lifecycle.CodexHarnessAdapter._install_owned = _stepwise_install_owned
+_stepwise_codex_lifecycle.CodexHarnessAdapter.install = _stepwise_install
 """

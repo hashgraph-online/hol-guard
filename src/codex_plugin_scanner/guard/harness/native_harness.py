@@ -385,8 +385,9 @@ class NativeHarnessAdapter(HarnessAdapter):
         The owner this thread holds is named by its token, so the runtime journals every write under it.
         """
         from ..native_owned import owner_request
-        from .native_install_facts import adapter_manifest, install_facts
+        from .native_install_facts import adapter_manifest, ensure_store, install_facts
 
+        ensure_store(context)
         answer = self._owned_ask(
             op,
             context,

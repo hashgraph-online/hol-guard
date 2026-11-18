@@ -70,6 +70,16 @@ def _facts(
     return facts
 
 
+def ensure_store(context: HarnessContext) -> None:
+    """Create the Guard store the native install ops write their records into.
+
+    The runtime opens an existing store; creating its file and schema is still the Python store's first start.
+    """
+    from ..store import GuardStore
+
+    GuardStore(context.guard_home)
+
+
 def install_facts(
     context: HarnessContext,
     harnesses: Sequence[str],

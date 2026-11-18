@@ -18,6 +18,7 @@ except ModuleNotFoundError:
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
+from codex_plugin_scanner.guard.codex_harness_client import _current_launch, codex_paths
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import (
     CodexHookIntegrityError,
@@ -202,7 +203,7 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
 def test_guard_codex_native_hook_state_requires_authenticated_manifest(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir / ".hol-guard")
-    direct_argv = list(codex_adapter._current_launch(context)["fallback"])
+    direct_argv = list(_current_launch(context)["fallback"])
     bridge_config = json.dumps({"fallback_command": direct_argv}, separators=(",", ":"))
     forged_commands = [
         _registered_hook_command(context),
@@ -387,7 +388,7 @@ def test_guard_codex_install_and_uninstall_reject_manifest_from_another_workspac
     )
     adapter = CodexHarnessAdapter()
     adapter.install(first_context)
-    config_path = CodexHarnessAdapter._hook_config_path(first_context)
+    config_path = codex_paths(first_context).config
     state = codex_adapter.codex_native_hook_state(first_context)
     manifest_path = Path(str(state["manifest_path"]))
     original_config = config_path.read_bytes()
@@ -444,7 +445,7 @@ def test_guard_codex_native_hook_state_rejects_signed_stale_package_version_and_
     stale_manifest = sign_hook_manifest(manifest, secret)
     write_hook_manifest(
         context.guard_home,
-        CodexHarnessAdapter._hook_config_path(context),
+        codex_paths(context).config,
         stale_manifest,
     )
 
@@ -571,7 +572,7 @@ def test_guard_codex_install_safely_readopts_exact_current_legacy_bridge(tmp_pat
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    config_path = CodexHarnessAdapter._hook_config_path(context)
+    config_path = codex_paths(context).config
     legacy_group = codex_adapter._managed_hook_groups(context)["PreToolUse"]
     _write_text(
         config_path,
@@ -598,7 +599,7 @@ def test_guard_codex_authenticated_hook_transaction_rolls_back_after_partial_con
     )
     adapter = CodexHarnessAdapter()
     adapter.install(context)
-    config_path = CodexHarnessAdapter._hook_config_path(context)
+    config_path = codex_paths(context).config
     state = codex_adapter.codex_native_hook_state(context)
     manifest_path = Path(str(state["manifest_path"]))
     original_config = config_path.read_bytes()
@@ -630,7 +631,7 @@ def test_guard_codex_first_install_failure_rolls_back_new_hook_secret(
         guard_home=tmp_path / "guard-home",
     )
     adapter = CodexHarnessAdapter()
-    config_path = CodexHarnessAdapter._hook_config_path(context)
+    config_path = codex_paths(context).config
     manifest_path = hook_manifest_path(context.guard_home, config_path)
     secret_path = hook_secret_path(context.guard_home)
     interrupt_publication_at(monkeypatch, config_path, OSError("injected first-install config failure"))

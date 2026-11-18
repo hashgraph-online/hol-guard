@@ -9,6 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.codex_hook_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from tests.codex_toml_support import parse_toml_object
@@ -25,7 +26,7 @@ def _sources(tmp_path, monkeypatch):
     context = replace(_context(tmp_path, monkeypatch), workspace_dir=tmp_path / "workspace")
     harness = adapter_lifecycle.CodexHarnessAdapter()
     harness.install(context)
-    global_config = harness._target_config_path(context)
+    global_config = codex_paths(context).config
     global_config.write_text(
         global_config.read_text() + '\n[mcp_servers.fixture]\ncommand="node"\nargs=["fixture.js"]\n'
     )

@@ -16,6 +16,7 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_remote_client as codex_remote_control
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import evaluate_detection
@@ -182,7 +183,7 @@ def _write_test_executable(path: Path, body: str = "#!/bin/sh\nexit 0\n") -> Pat
 
 def _install_codex_native_hooks(context: HarnessContext) -> None:
     payload: dict[str, object] = {"features": {"hooks": True}}
-    config_path = CodexHarnessAdapter._hook_config_path(context)
+    config_path = codex_paths(context).config
     publication_helpers.install_config_hooks(payload, context, config_path=config_path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     publication_helpers.write_authenticated_hook_config(

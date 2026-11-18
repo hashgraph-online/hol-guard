@@ -114,8 +114,8 @@ def _stepwise_publication():
     # The hook generation goes through ``publish_files`` too.
     from codex_plugin_scanner.guard import codex_harness_client as codex
     from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
-    from tests.codex_publication_steps import stepwise_install_owned, stepwise_publish_hooks
+    from tests.codex_publication_steps import stepwise_install, stepwise_publish_hooks
 
     codex._publish_hooks = stepwise_publish_hooks
-    codex_lifecycle.CodexHarnessAdapter._install_owned = stepwise_install_owned
+    codex_lifecycle.CodexHarnessAdapter.install = stepwise_install
 """

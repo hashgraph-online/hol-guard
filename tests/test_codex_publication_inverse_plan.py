@@ -57,7 +57,7 @@ def exit_after_signed_conflict(op, *args, **kwargs):
         os._exit(17)
 from tests import codex_publication_steps
 codex._publish_hooks = codex_publication_steps.stepwise_publish_hooks
-codex_lifecycle.CodexHarnessAdapter._install_owned = codex_publication_steps.stepwise_install_owned
+codex_lifecycle.CodexHarnessAdapter.install = codex_publication_steps.stepwise_install
 codex_publication_steps.readback = conflict_after_publication
 native_transition_files.publication = exit_after_signed_conflict
 codex_lifecycle.CodexHarnessAdapter().install(context)

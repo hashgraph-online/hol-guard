@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
+from codex_plugin_scanner.guard.codex_harness_client import _current_launch, codex_paths
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from tests.codex_hook_paths_support import hook_manifest_path
@@ -27,8 +27,8 @@ def test_guard_codex_install_rejects_ambiguous_foreign_direct_hook(tmp_path: Pat
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    config_path = CodexHarnessAdapter._hook_config_path(context)
-    foreign_command = shlex.join(codex_adapter._current_launch(context)["fallback"])
+    config_path = codex_paths(context).config
+    foreign_command = shlex.join(_current_launch(context)["fallback"])
     foreign_group = {
         "matcher": _CODEX_GUARD_TOOL_MATCHER,
         "hooks": [
