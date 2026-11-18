@@ -86,6 +86,40 @@ def test_a_second_new_daemon_fails_the_parallel_starts() -> None:
     assert _judged(["http://127.0.0.1:1"], [], []) == ["0 new daemons published themselves, expected exactly one"]
 
 
+def _judged_mixed(
+    errors: list[str], new_publishers: list[int], retired: list[int], *, current: bool = True
+) -> list[str]:
+    from scripts import guard_daemon_chaos_starts as starts
+
+    result = chaos.ScenarioResult(name="mixed-runtime-starts")
+    starts.judge_mixed_starts(result, errors, 10, new_publishers, retired, current=current)
+    return result.failures
+
+
+def test_mixed_runtime_starts_pass_when_only_the_older_daemon_is_replaced() -> None:
+    assert _judged_mixed([], [41, 42], [41]) == []
+    assert _judged_mixed([], [41], []) == []
+
+
+def test_runtimes_taking_turns_to_replace_daemons_fail_the_mixed_starts() -> None:
+    thrashing = "the starters retired 2 daemons: the two runtimes replaced each other's daemons"
+    assert _judged_mixed([], [41, 42], [41, 42]) == [thrashing]
+    assert _judged_mixed([], [41, 42], [42]) == [
+        "the starters retired 1 daemons: the two runtimes replaced each other's daemons"
+    ]
+    assert _judged_mixed([], [41, 42, 43], [41, 42]) == [
+        "3 new daemons published themselves, expected the older runtime's and at most one more",
+        thrashing,
+    ]
+
+
+def test_a_refused_start_or_an_older_survivor_fails_the_mixed_starts() -> None:
+    assert _judged_mixed(["previous launch refused"], [41], []) == ["1 of 10 starts failed: previous launch refused"]
+    assert _judged_mixed([], [41], [], current=False) == [
+        "the daemon serving the home does not carry the current runtime's identity"
+    ]
+
+
 def test_only_this_homes_resident_is_the_one_to_kill(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from scripts import guard_daemon_chaos_runtime as runtime_faults
 
