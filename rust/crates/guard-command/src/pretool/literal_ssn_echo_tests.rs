@@ -4,6 +4,8 @@ use super::echoes_ssn;
 fn a_bare_print_of_an_ssn_is_reviewed() {
     for command in [
         "echo 123-45-6789",
+        "echo 'Customer SSN is 123-45-6789.'",
+        "echo 123-45-6789.",
         "echo 'SSN (123-45-6789)'",
         "echo \"SSN (123-45-6789)\"",
         "echo 000-12-3456 123-45-6789",
