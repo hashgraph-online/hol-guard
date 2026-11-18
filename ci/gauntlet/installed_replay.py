@@ -381,6 +381,10 @@ def replay_harness(
     skipped: list[dict[str, str]] = []
     for case in cases:
         event = case.get("event")
+        only = case.get("harnesses")
+        if only is not None and harness not in only:
+            skipped.append({"id": case["id"], "event": str(event or ""), "reason": "the case names other harnesses"})
+            continue
         if event is not None and event not in registered:
             skipped.append({"id": case["id"], "event": event, "reason": "the contract declares no such event here"})
             continue

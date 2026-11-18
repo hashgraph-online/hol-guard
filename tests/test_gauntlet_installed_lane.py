@@ -826,8 +826,14 @@ def test_a_build_that_answers_prompts_and_tool_calls_passes(tmp_path: Path) -> N
     assert evidence["failures"] == []
     assert evidence["accepted"] is True
     replay = evidence["harnesses"]["zcode"]["replay"]
-    assert [case["id"] for case in replay["cases"]] == [case["id"] for case in load_contract()["replay_cases"]]
-    assert replay["skipped"] == []
+    cases = load_contract()["replay_cases"]
+    assert [case["id"] for case in replay["cases"]] == [
+        case["id"] for case in cases if "zcode" in case.get("harnesses", ["zcode"])
+    ]
+    assert {skip["id"] for skip in replay["skipped"]} == {
+        case["id"] for case in cases if "zcode" not in case.get("harnesses", ["zcode"])
+    }
+    assert all(skip["reason"] == "the case names other harnesses" for skip in replay["skipped"])
 
 
 def test_a_declared_prompt_hook_the_install_never_registered_is_a_failure() -> None:
@@ -890,3 +896,36 @@ def test_the_contract_declares_the_prompt_hook_for_the_harnesses_that_have_one()
     assert "replay_events" not in contract["harnesses"]["claude-code"]
     prompt_cases = [case for case in contract["replay_cases"] if case.get("event") == "UserPromptSubmit"]
     assert prompt_cases and all(case["expect"] == "allow" for case in prompt_cases)
+
+
+def test_every_contract_case_is_replayed_by_some_harness() -> None:
+    from ci.gauntlet.installed_lane import unreplayed_cases
+
+    assert unreplayed_cases(load_contract()) == []
+
+
+def test_a_case_limited_to_harnesses_that_never_replay_it_is_refused() -> None:
+    from ci.gauntlet.installed_lane import unreplayed_cases
+
+    contract = load_contract()
+    contract["replay_cases"] = [
+        {"id": "omp-only", "expect": "allow", "harnesses": ["omp"], "payload": {}},
+        {"id": "prompt-on-claude-tool-only", "event": "Stop", "expect": "allow", "harnesses": ["claude-code"], "payload": {}},
+        {"id": "everywhere", "expect": "allow", "payload": {}},
+    ]
+    assert unreplayed_cases(contract) == ["omp-only", "prompt-on-claude-tool-only"]
+
+
+def test_claude_code_replays_every_tool_family_it_claims_with_an_allow_and_a_block() -> None:
+    contract = load_contract()
+    claude = [case for case in contract["replay_cases"] if "claude-code" in case.get("harnesses", ["claude-code"])]
+    by_tool: dict[str, set[str]] = {}
+    for case in claude:
+        payload = case["payload"]
+        key = payload.get("tool_name") or payload["hook_event_name"]
+        if case.get("event") == "PermissionRequest":
+            key = "PermissionRequest"
+        by_tool.setdefault(key.split("__")[0], set()).add(case["expect"])
+    for family in ("Bash", "Read", "Grep", "Write", "Edit", "MultiEdit", "mcp", "PermissionRequest", "UserPromptSubmit"):
+        assert by_tool.get(family) == {"allow", "not-allow"}, family
+    assert by_tool["WebFetch"] == {"allow"} and by_tool["WebSearch"] == {"allow"}

@@ -78,6 +78,30 @@ def undeclared_case_events(contract: dict[str, Any]) -> list[str]:
     return sorted(wanted - declared)
 
 
+def unreplayed_cases(contract: dict[str, Any]) -> list[str]:
+    """Cases that no replayable harness would run.
+
+    A case limited to ``harnesses`` that do not replay, or that do not declare
+    the case's event, is skipped everywhere while the lane passes. Like an
+    undeclared event, that is coverage the lane does not have.
+    """
+
+    missing: list[str] = []
+    for case in contract["replay_cases"]:
+        only = case.get("harnesses")
+        names = contract["harnesses"] if only is None else only
+        event = case.get("event")
+        runs = any(
+            (expectation := contract["harnesses"].get(str(name))) is not None
+            and expectation.get("replay")
+            and (event is None or event in expectation.get("replay_events", []))
+            for name in names
+        )
+        if not runs:
+            missing.append(str(case["id"]))
+    return missing
+
+
 def harness_pass(
     runtime: InstalledRuntime,
     harness: str,
@@ -241,6 +265,11 @@ def run_lane(
             "no harness declares replay_events for "
             f"{', '.join(undeclared)}; a case no harness replays is coverage the lane does not have"
         )
+    unreplayed = unreplayed_cases(contract)
+    if unreplayed:
+        raise InstalledRuntimeError(
+            f"no replayable harness runs {', '.join(unreplayed)}; a case no harness replays is coverage the lane does not have"
+        )
     output.mkdir(parents=True, exist_ok=True)
     root = work_root or (output / "work")
     root.mkdir(parents=True, exist_ok=True)
@@ -309,4 +338,5 @@ __all__ = [
     "prewarm_probe",
     "run_lane",
     "undeclared_case_events",
+    "unreplayed_cases",
 ]
