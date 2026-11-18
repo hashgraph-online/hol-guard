@@ -125,6 +125,36 @@ fn diff_reads_are_judged_as_the_diff_they_print() {
 }
 
 #[test]
+fn commit_grep_selectors_admit_bounded_searches_not_backtracking_patterns() {
+    for code in [
+        "const d=await commit.draft(); await d.take('README.md', {grep:'TODO'});",
+        "const d=await commit.draft(); await d.drop('src/**', {grep:'src/sum.js'});",
+    ] {
+        assert!(commands(code).is_some(), "{code}");
+    }
+    for code in [
+        "const d=await commit.draft(); await d.take('README.md', {grep:'(a+)+ {
+    let commands = commands(
+        "const d = await commit.draft(); for (const p of ['a.js', 'b.js', 'c.js']) await d.take(p);",
+    )
+    .unwrap();
+    assert_eq!(commands.len(), 2);
+}
+});",
+        "const d=await commit.draft(); await d.take('README.md', {grep:'a.*a'});",
+        "const d=await commit.draft(); await d.drop('README.md', {grep:''});",
+        "const d=await commit.draft(); await d.take('README.md', {grep:42});",
+    ] {
+        assert_eq!(commands(code), None, "{code}");
+    }
+    let long_pattern = "a".repeat(129);
+    let code = format!(
+        "const d=await commit.draft(); await d.take('README.md', {{grep:'{long_pattern}'}});"
+    );
+    assert_eq!(commands(&code), None);
+}
+
+#[test]
 fn a_loop_counts_one_call_per_item() {
     let commands = commands(
         "const d = await commit.draft(); for (const p of ['a.js', 'b.js', 'c.js']) await d.take(p);",
