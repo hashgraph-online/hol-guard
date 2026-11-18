@@ -11,3 +11,14 @@ fn event_aliases_are_normalized_by_the_resident() {
     let output: Value = serde_json::from_slice(&evaluate(&request).expect("facts")).expect("json");
     assert_eq!(output["result"]["event_name"], "PreToolUse");
 }
+
+#[test]
+fn python_control_strip_is_preserved() {
+    let request = HookPayloadFactsRequestV1 {
+        schema: "guard-hook-payload-facts-request.v1".to_owned(),
+        request_id: "facts-2".to_owned(),
+        payload: json!({"event": "\u{1c}PreToolUse\u{1c}"}),
+    };
+    let output: Value = serde_json::from_slice(&evaluate(&request).expect("facts")).expect("json");
+    assert_eq!(output["result"]["event_name"], "PreToolUse");
+}

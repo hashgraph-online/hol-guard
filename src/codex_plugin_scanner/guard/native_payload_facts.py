@@ -23,10 +23,15 @@ def native_hook_event(
 ) -> str | None:
     """Return the resident-normalized event, or ``None`` on native absence."""
 
+    event_payload = {
+        key: payload[key]
+        for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName")
+        if key in payload
+    }
     wire = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"hook-payload-facts-{uuid.uuid4().hex}",
-        "payload": dict(payload),
+        "payload": event_payload,
     }
     timeout_seconds = 1.0 if deadline is None else min(1.0, deadline - time.monotonic())
     if timeout_seconds <= 0:
@@ -39,7 +44,6 @@ def native_hook_event(
             timeout_seconds=timeout_seconds,
             required_feature=_FEATURE,
             response_schema=_RESULT_SCHEMA,
-            record_success=False,
         )
     except (OSError, RuntimeError, TypeError, ValueError):
         return None

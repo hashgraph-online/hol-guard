@@ -316,7 +316,7 @@ class HookWorker(HookWorkerNativeMixin):
         payload.setdefault(HOOK_EXECUTION_ENVIRONMENT_KEY, None)
         self._last_native_decision_receipt = None
         harness = self._runtime_harness(params) or default_harness
-        event_name = event_name or self._hook_event_name(payload)
+        event_name = event_name or self._hook_event_name(payload, deadline)
         if harness.strip().lower().replace("_", "-") == "claude-code":
             answered = self._claude_lifecycle_response(event_name, payload)
             if answered is not None:
@@ -464,8 +464,8 @@ class HookWorker(HookWorkerNativeMixin):
             return values[-1].strip()
         return None
 
-    def _hook_event_name(self, payload: Mapping[str, object]) -> str:
-        return native_hook_event(payload, self.store.guard_home) or runtime_hook_event_name(payload)
+    def _hook_event_name(self, payload: Mapping[str, object], deadline: float | None = None) -> str:
+        return native_hook_event(payload, self.store.guard_home, deadline=deadline) or runtime_hook_event_name(payload)
 
 
 __all__ = [

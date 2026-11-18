@@ -3,6 +3,7 @@
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
+use crate::claude_hook_bridge_render::py_strip;
 use crate::resident_protocol::encode_response;
 
 pub(crate) const HOOK_PAYLOAD_FACTS_FEATURE: &str = "hook-payload-facts-v1";
@@ -26,7 +27,7 @@ pub(crate) fn runtime_event(payload: &Map<String, Value>) -> String {
         "hook_name",
         "hookName",
     ] {
-        let Some(raw) = payload.get(key).and_then(Value::as_str).map(str::trim) else {
+        let Some(raw) = payload.get(key).and_then(Value::as_str).map(py_strip) else {
             continue;
         };
         if raw.is_empty() {
