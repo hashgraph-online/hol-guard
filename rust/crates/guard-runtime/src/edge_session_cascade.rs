@@ -1,7 +1,8 @@
 //! Runaway-session stops at the hook edge.
 //!
 //! An agent that is stuck repeats itself. Two shapes are stopped here, both
-//! measured per harness session in the resident runtime's memory:
+//! measured per harness session and kept under the Guard home, so the counts
+//! outlive any one resident runtime process:
 //!
 //! * a loop: the exact same shell command, already allowed five times in a
 //!   row within [`LOOP_WINDOW`] with no other tool call in between, made a
@@ -179,6 +180,38 @@ impl Tracker {
         self.sessions.remove(session);
     }
 
+    /// Observes `call` against the counts `store` holds for its session, and
+    /// saves them back. The saved counts win over this process's memory, since
+    /// another runtime process may have seen later calls.
+    fn observe_saved(
+        &mut self,
+        store: Option<&store::Store>,
+        call: &Observed<'_>,
+        now: Instant,
+    ) -> Option<Stop> {
+        let Some(store) = store else {
+            return self.observe(call, now);
+        };
+        let mut created = false;
+        match store.load(call.session, now) {
+            Ok(Some(saved)) => {
+                self.sessions.insert(call.session.to_owned(), saved);
+            }
+            Ok(None) => {
+                self.sessions.remove(call.session);
+                created = true;
+            }
+            Err(()) => {}
+        }
+        let stop = self.observe(call, now);
+        if let Some(session) = self.sessions.get(call.session) {
+            if store.save(call.session, session, now) && created {
+                store.prune();
+            }
+        }
+        stop
+    }
+
     fn prune(&mut self, now: Instant) {
         self.sessions
             .retain(|_, session| now.saturating_duration_since(session.touched) <= SESSION_IDLE);
@@ -262,14 +295,18 @@ pub(crate) fn apply(
     let Some(session) = session_key(harness, envelope) else {
         return result;
     };
+    if event_name != "UserPromptSubmit" && event_name != "PreToolUse" {
+        return result;
+    }
     let Ok(mut tracker) = tracker().lock() else {
         return result;
     };
+    let store = store::Store::open(&envelope.source.guard_home);
     if event_name == "UserPromptSubmit" {
         tracker.prompt(&session);
-        return result;
-    }
-    if event_name != "PreToolUse" {
+        if let Some(store) = &store {
+            store.remove(&session);
+        }
         return result;
     }
     let Some((digest, kind)) = call_digest(&envelope.raw_payload) else {
@@ -282,7 +319,7 @@ pub(crate) fn apply(
         kind,
         allowed: let_through(&result),
     };
-    match tracker.observe(&call, Instant::now()) {
+    match tracker.observe_saved(store.as_ref(), &call, Instant::now()) {
         Some(stop) => stopped(result, &stop),
         None => result,
     }
@@ -313,6 +350,9 @@ pub(crate) fn stopped(mut result: PreToolResultV1, stop: &Stop) -> PreToolResult
     result.reason = reason.into();
     result
 }
+
+#[path = "edge_session_cascade_store.rs"]
+mod store;
 
 #[cfg(test)]
 #[path = "edge_session_cascade_tests.rs"]

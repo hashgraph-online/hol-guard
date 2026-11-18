@@ -268,3 +268,104 @@ fn only_a_shell_command_loops_into_a_stop() {
         );
     }
 }
+
+const SAVED_SESSION: &str = "5f0c6f1d0bd7d6c3d8a4f0e7c1b2a3948576a6b7c8d9e0f1a2b3c4d5e6f70819";
+
+fn saved_call(
+    store: &super::store::Store,
+    tracker: &mut Tracker,
+    (digest, kind): ([u8; 32], Kind),
+    now: Instant,
+) -> Option<Stop> {
+    tracker.observe_saved(
+        Some(store),
+        &Observed {
+            session: SAVED_SESSION,
+            request: None,
+            digest,
+            kind,
+            allowed: true,
+        },
+        now,
+    )
+}
+
+#[test]
+fn the_counts_outlive_the_process_that_saw_them() {
+    let home = tempfile::tempdir().unwrap();
+    let store = super::store::open_at(home.path()).unwrap();
+    let start = Instant::now();
+    // Each call lands in a fresh runtime process with empty memory.
+    for step in 0..LOOP_PRIORS {
+        let at = start + Duration::from_secs(step as u64);
+        let stop = saved_call(&store, &mut Tracker::default(), bash("npm test"), at);
+        assert_eq!(stop, None);
+    }
+    let at = start + Duration::from_secs(LOOP_PRIORS as u64);
+    let stop = saved_call(&store, &mut Tracker::default(), bash("npm test"), at);
+    assert_eq!(stop, Some(Stop::Loop));
+    let again = saved_call(&store, &mut Tracker::default(), bash("npm test"), at);
+    assert_eq!(again, None);
+    let mut spawner = Tracker::default();
+    for step in 0..FANOUT_PRIORS {
+        let stop = saved_call(
+            &store,
+            &mut Tracker::default(),
+            spawn(&format!("{step}")),
+            at,
+        );
+        assert_eq!(stop, None);
+    }
+    assert_eq!(
+        saved_call(&store, &mut spawner, spawn("more"), at),
+        Some(Stop::Fanout)
+    );
+}
+
+#[test]
+fn a_call_another_process_saw_breaks_the_streak() {
+    let home = tempfile::tempdir().unwrap();
+    let store = super::store::open_at(home.path()).unwrap();
+    let mut first = Tracker::default();
+    let now = Instant::now();
+    for _ in 0..3 {
+        assert_eq!(saved_call(&store, &mut first, bash("npm test"), now), None);
+    }
+    let edit = digest("Edit", serde_json::json!({"file_path": "src/a.rs"}));
+    assert_eq!(saved_call(&store, &mut Tracker::default(), edit, now), None);
+    for _ in 0..3 {
+        assert_eq!(saved_call(&store, &mut first, bash("npm test"), now), None);
+    }
+}
+
+#[test]
+fn a_removed_or_malformed_file_forgets_the_counts() {
+    let home = tempfile::tempdir().unwrap();
+    let store = super::store::open_at(home.path()).unwrap();
+    let mut tracker = Tracker::default();
+    let now = Instant::now();
+    for _ in 0..LOOP_PRIORS {
+        saved_call(&store, &mut tracker, bash("npm test"), now);
+    }
+    store.remove(SAVED_SESSION);
+    assert_eq!(
+        saved_call(&store, &mut tracker, bash("npm test"), now),
+        None
+    );
+    for _ in 0..LOOP_PRIORS {
+        saved_call(&store, &mut tracker, bash("npm test"), now);
+    }
+    let file = home
+        .path()
+        .join("native-runtime/session-cascade.v1")
+        .join(format!("{SAVED_SESSION}.json"));
+    std::fs::write(
+        &file,
+        br#"{"calls":[],"spawns":[],"requests":[],"touched":99999999999999}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        saved_call(&store, &mut tracker, bash("npm test"), now),
+        None
+    );
+}
