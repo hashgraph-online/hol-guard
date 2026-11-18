@@ -31,13 +31,9 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::managed_resident;
-
 const SCHEMA: &str = "runtime-fingerprint.v1";
 const MAX_REQUEST_BYTES: u64 = 64 * 1024;
 const CHUNK_BYTES: usize = 64 * 1024;
-/// The private-file reader's size bound, which the cache has always kept to.
-const MAX_CACHE_BYTES: u64 = 4096;
 const PACKAGE: &str = "codex_plugin_scanner";
 
 #[derive(Deserialize)]
@@ -137,8 +133,11 @@ pub(crate) fn installed_fingerprint(
     let cache = cache_dir
         .and_then(|directory| directory.to_str())
         .and_then(|directory| CacheFile::new(directory, source_root));
-    let paths = identity_paths(root);
-    let tree_sig = tree_signature(root, version, &paths);
+    let (paths, listed) = identity_paths(root);
+    let (tree_sig, signed) = tree_signature(root, version, &paths);
+    if !listed || !signed {
+        return None;
+    }
     if let Some(cached) = cache.as_ref().and_then(CacheFile::load) {
         if cached.tree_sig == tree_sig {
             return Some(cached.fingerprint);
@@ -164,8 +163,8 @@ fn answer(
     cached: Option<Cached>,
     cache: Option<&CacheFile>,
 ) -> Value {
-    let paths = identity_paths(source_root);
-    let tree_sig = tree_signature(source_root, version, &paths);
+    let (paths, listed) = identity_paths(source_root);
+    let (tree_sig, _) = tree_signature(source_root, version, &paths);
     let cached = cached.or_else(|| cache.and_then(CacheFile::load));
     let reused =
         cached.filter(|cached| cached.tree_sig == tree_sig && is_sha256_hex(&cached.fingerprint));
@@ -173,7 +172,7 @@ fn answer(
         Some(cached) => (cached.fingerprint, true),
         None => {
             let (fingerprint, complete) = content_fingerprint(source_root, version, &paths);
-            if let (Some(cache), true) = (cache, complete) {
+            if let (Some(cache), true) = (cache, listed && complete) {
                 cache.store(&tree_sig, &fingerprint);
             }
             (fingerprint, false)
@@ -182,164 +181,22 @@ fn answer(
     json!({ "tree_sig": tree_sig, "fingerprint": fingerprint, "reused": reused })
 }
 
-/// The on-disk form of the cache, keyed by the source root it describes.
-/// Unknown keys are ignored.
-#[derive(Deserialize)]
-struct Stored {
-    content_fingerprint: String,
-    source_root: String,
-    tree_sig: String,
-}
-
-struct CacheFile {
-    directory: PathBuf,
-    path: PathBuf,
-    private_root: PathBuf,
-    source_root: String,
-}
-
-impl CacheFile {
-    fn new(directory: &str, source_root: &str) -> Option<Self> {
-        let directory = PathBuf::from(directory);
-        if !directory.is_absolute() {
-            return None;
-        }
-        let private_root = directory.parent()?.to_path_buf();
-        let name = format!(
-            "{}.json",
-            hex::encode(Sha256::digest(source_root.as_bytes()))
-        );
-        Some(Self {
-            path: directory.join(name),
-            directory,
-            private_root,
-            source_root: source_root.to_owned(),
-        })
-    }
-
-    fn load(&self) -> Option<Cached> {
-        let bytes = read_cache(&self.directory, &self.path, &self.private_root)?;
-        let stored: Stored = serde_json::from_slice(&bytes).ok()?;
-        (stored.source_root == self.source_root && is_sha256_hex(&stored.content_fingerprint))
-            .then_some(Cached {
-                tree_sig: stored.tree_sig,
-                fingerprint: stored.content_fingerprint,
-            })
-    }
-
-    fn store(&self, tree_sig: &str, fingerprint: &str) {
-        #[cfg(not(windows))]
-        {
-            let mut builder = fs::DirBuilder::new();
-            builder.recursive(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::DirBuilderExt;
-                builder.mode(0o700);
-            }
-            if builder.create(&self.private_root).is_err() {
-                return;
-            }
-        }
-        if crate::resident_state::ensure_private_directory_under(
-            &self.directory,
-            &self.private_root,
-            true,
-        )
-        .is_err()
-        {
-            return;
-        }
-        let body = json!({
-            "content_fingerprint": fingerprint,
-            "source_root": self.source_root,
-            "tree_sig": tree_sig,
-        });
-        let _ = managed_resident::private_file::write_private(
-            &self.path,
-            body.to_string().as_bytes(),
-            &self.private_root,
-        );
-    }
-}
-
-/// The cache file's bytes. The directory is opened without following a
-/// final link and must be a directory the effective user owns that no one
-/// else can enter; the file is then opened relative to that handle, so a
-/// directory swapped after the check is never read, and it too must be a
-/// private regular file the effective user owns.
-#[cfg(unix)]
-fn read_cache(directory: &Path, path: &Path, _private_root: &Path) -> Option<Vec<u8>> {
-    use std::os::fd::AsFd;
-    use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
-
-    use nix::fcntl::{openat, OFlag};
-    use nix::sys::stat::Mode;
-
-    let euid = nix::unistd::geteuid().as_raw();
-    let private = |metadata: &fs::Metadata| {
-        metadata.uid() == euid && metadata.permissions().mode() & 0o077 == 0
-    };
-    let handle = fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
-        .open(directory)
-        .ok()?;
-    let metadata = handle.metadata().ok()?;
-    if !metadata.is_dir() || !private(&metadata) {
-        return None;
-    }
-    let fd = openat(
-        handle.as_fd(),
-        path.file_name()?,
-        OFlag::O_RDONLY | OFlag::O_NOFOLLOW | OFlag::O_NONBLOCK | OFlag::O_CLOEXEC,
-        Mode::empty(),
-    )
-    .ok()?;
-    let file = File::from(fd);
-    let metadata = file.metadata().ok()?;
-    if !metadata.is_file()
-        || !private(&metadata)
-        || metadata.nlink() != 1
-        || metadata.len() > MAX_CACHE_BYTES
-    {
-        return None;
-    }
-    let mut bytes = Vec::new();
-    file.take(MAX_CACHE_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .ok()?;
-    (bytes.len() as u64 <= MAX_CACHE_BYTES).then_some(bytes)
-}
-
-#[cfg(not(unix))]
-fn read_cache(directory: &Path, path: &Path, private_root: &Path) -> Option<Vec<u8>> {
-    if !fs::symlink_metadata(directory).is_ok_and(|metadata| metadata.is_dir()) {
-        return None;
-    }
-    managed_resident::private_file::read_private_bytes(
-        path,
-        private_root,
-        "runtime_fingerprint_cache",
-    )
-    .ok()?
-}
-
-fn is_sha256_hex(value: &str) -> bool {
+pub(super) fn is_sha256_hex(value: &str) -> bool {
     value.len() == 64
         && value
             .bytes()
             .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-/// The files that make up the runtime's identity, sorted by path.
+/// The files that make up the runtime's identity, sorted by path, and
+/// whether every directory of the listing was read.
 ///
 /// A static asset that is also a `*.py` file is listed twice, as the walk
 /// that defined this identity listed it.
-pub(crate) fn identity_paths(source_root: &Path) -> Vec<PathBuf> {
+fn identity_paths(source_root: &Path) -> (Vec<PathBuf>, bool) {
     let package = source_root.join(PACKAGE);
     let mut paths = Vec::new();
-    walk(&package, &mut |path| {
+    let mut complete = walk(&package, &mut |path| {
         if python_name(path) {
             paths.push(path.to_path_buf());
         }
@@ -350,32 +207,40 @@ pub(crate) fn identity_paths(source_root: &Path) -> Vec<PathBuf> {
     }
     let assets = package.join("guard").join("daemon").join("static");
     if assets.is_dir() {
-        walk(&assets, &mut |path| {
+        complete &= walk(&assets, &mut |path| {
             if path.is_file() {
                 paths.push(path.to_path_buf());
             }
         });
     }
     paths.sort_by_cached_key(|path| sort_key(path));
-    paths
+    (paths, complete)
 }
 
 /// Every entry below `root`, descending into real directories only: a
-/// symlinked directory is listed but not entered.
-fn walk(root: &Path, visit: &mut dyn FnMut(&Path)) {
+/// symlinked directory is listed but not entered. False when a directory or
+/// entry could not be read, so the listing may be short.
+fn walk(root: &Path, visit: &mut dyn FnMut(&Path)) -> bool {
     let Ok(entries) = fs::read_dir(root) else {
-        return;
+        return false;
     };
-    for entry in entries.flatten() {
+    let mut complete = true;
+    for entry in entries {
+        let Ok(entry) = entry else {
+            complete = false;
+            continue;
+        };
         let Ok(kind) = entry.file_type() else {
+            complete = false;
             continue;
         };
         let path = entry.path();
         visit(&path);
         if kind.is_dir() {
-            walk(&path, visit);
+            complete &= walk(&path, visit);
         }
     }
+    complete
 }
 
 #[cfg(not(windows))]
@@ -430,18 +295,21 @@ fn modified_ns(metadata: &fs::Metadata) -> i128 {
 }
 
 /// Path, size and modification time of each file that can be read.
-fn tree_signature(source_root: &Path, version: &str, paths: &[PathBuf]) -> String {
+/// Also whether every path's metadata could be read.
+fn tree_signature(source_root: &Path, version: &str, paths: &[PathBuf]) -> (String, bool) {
     let mut digest = Sha256::new();
     digest.update(version.as_bytes());
+    let mut complete = true;
     for path in paths {
         let Ok(metadata) = fs::metadata(path) else {
+            complete = false;
             continue;
         };
         digest.update(relative(source_root, path).as_bytes());
         digest.update(metadata.len().to_string().as_bytes());
         digest.update(modified_ns(&metadata).to_string().as_bytes());
     }
-    hex::encode(digest.finalize())
+    (hex::encode(digest.finalize()), complete)
 }
 
 /// Path, size and bytes of each file, and whether every file was read in
@@ -461,12 +329,20 @@ fn content_fingerprint(source_root: &Path, version: &str, paths: &[PathBuf]) -> 
         };
         digest.update(relative(source_root, path).as_bytes());
         digest.update(metadata.len().to_string().as_bytes());
+        if !metadata.is_file() {
+            continue;
+        }
         let Ok(mut file) = open_identity_file(path) else {
             complete = false;
             continue;
         };
-        if !file.metadata().is_ok_and(|opened| opened.is_file()) {
-            continue;
+        match file.metadata() {
+            Ok(opened) if opened.is_file() => {}
+            Ok(_) => continue,
+            Err(_) => {
+                complete = false;
+                continue;
+            }
         }
         loop {
             match file.read(&mut chunk) {
@@ -494,6 +370,10 @@ fn open_identity_file(path: &Path) -> std::io::Result<File> {
     }
     options.open(path)
 }
+
+#[path = "runtime_fingerprint_cache.rs"]
+mod cache;
+use cache::CacheFile;
 
 #[cfg(test)]
 #[path = "runtime_fingerprint_tests.rs"]

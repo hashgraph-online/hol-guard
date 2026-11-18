@@ -54,6 +54,7 @@ fn run(root: &Path, cached: Option<Value>) -> Value {
 
 fn relative_names(root: &Path) -> Vec<String> {
     identity_paths(root)
+        .0
         .iter()
         .map(|path| relative(root, path).replace('\\', "/"))
         .collect()
@@ -452,6 +453,64 @@ fn a_named_pipe_in_the_tree_does_not_hold_the_answer() {
         .expect("mkfifo runs");
     assert!(status.success(), "the fixture pipe");
     assert!(relative_names(root.path()).contains(&format!("{PACKAGE}/pipe.py")));
+    let answer = run(root.path(), None);
+    assert_eq!(
+        installed(root.path(), VERSION, None).as_deref(),
+        answer["fingerprint"].as_str()
+    );
+}
+
+/// A package directory that cannot be listed leaves its files out of the
+/// digest, so the listing is no installed fingerprint and is not cached.
+#[cfg(unix)]
+#[test]
+fn an_unlisted_directory_is_no_installed_fingerprint() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tree();
+    let guard = root.path().join(PACKAGE).join("guard");
+    fs::set_permissions(&guard, fs::Permissions::from_mode(0o000)).unwrap();
+    let listed = fs::read_dir(&guard).is_ok();
+    let (_home, cache_dir) = private_cache_dir();
+    let installed_now = installed(root.path(), VERSION, Some(&cache_dir));
+    let partial = run_with_cache_dir(root.path(), &cache_dir);
+    fs::set_permissions(&guard, fs::Permissions::from_mode(0o755)).unwrap();
+    if listed {
+        // Running as root: permissions cannot hide the directory.
+        return;
+    }
+    assert_eq!(installed_now, None);
+    assert!(partial["fingerprint"].is_string());
+    assert!(!cache_file(&cache_dir, root.path()).exists());
+}
+
+/// A module path whose metadata cannot be read (here a dangling link) is
+/// no installed fingerprint, even with a cache entry written before it
+/// appeared.
+#[cfg(unix)]
+#[test]
+fn a_dangling_module_link_is_no_installed_fingerprint_even_when_cached() {
+    let root = tree();
+    let (_home, cache_dir) = private_cache_dir();
+    assert!(installed(root.path(), VERSION, Some(&cache_dir)).is_some());
+    assert!(cache_file(&cache_dir, root.path()).exists());
+    std::os::unix::fs::symlink(
+        root.path().join("missing.py"),
+        root.path().join(PACKAGE).join("extra.py"),
+    )
+    .unwrap();
+    assert_eq!(installed(root.path(), VERSION, Some(&cache_dir)), None);
+}
+
+/// A socket with a module's name is listed but never opened: it adds its
+/// path and size, as it always has, and leaves the digest complete.
+#[cfg(unix)]
+#[test]
+fn a_socket_in_the_tree_is_listed_and_not_opened() {
+    let root = tree();
+    let _socket =
+        std::os::unix::net::UnixListener::bind(root.path().join(PACKAGE).join("w.py")).unwrap();
+    assert!(relative_names(root.path()).contains(&format!("{PACKAGE}/w.py")));
     let answer = run(root.path(), None);
     assert_eq!(
         installed(root.path(), VERSION, None).as_deref(),
