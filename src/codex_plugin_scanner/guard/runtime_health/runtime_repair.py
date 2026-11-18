@@ -16,6 +16,7 @@ from ..native_daemon_manage import (
     clear_guard_daemon_state,
     ensure_guard_daemon_after_update,
     guard_daemon_retirement_is_complete,
+    record_daemon_repair,
     repair_approval_center_locator,
     retire_all_guard_daemons_for_home,
 )
@@ -115,6 +116,7 @@ def repair_guard_daemon_runtime(
     trusted_home = (home_dir or Path.home()).expanduser().resolve(strict=True)
     if not trusted_home.is_dir():
         raise RuntimeError("Guard daemon requires a user home directory.")
+    record_daemon_repair(guard_home)
     started = time.monotonic()
     deadline = None if lock_timeout_seconds is None else started + max(lock_timeout_seconds, 0.0)
     with ExitStack() as held:
