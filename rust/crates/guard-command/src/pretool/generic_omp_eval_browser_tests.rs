@@ -240,6 +240,10 @@ fn a_workspace_page_in_the_own_browser_is_modeled() {
     let cwd = workspace.path().to_str().unwrap();
     let safe = workspace.path().join("index.html");
     std::fs::write(&safe, "<html>project</html>").unwrap();
+    // In-workspace symlinks are allowed only when their resolved targets are HTML.
+    std::fs::write(workspace.path().join(".env"), "SYNTHETIC_TEST_VALUE").unwrap();
+    symlink(&safe, workspace.path().join("alias.html")).unwrap();
+    symlink(workspace.path().join(".env"), workspace.path().join("masquerade.html")).unwrap();
     std::fs::write(outside.path().join("secrets.html"), "<html>private</html>").unwrap();
     symlink(
         outside.path().join("secrets.html"),
@@ -247,6 +251,9 @@ fn a_workspace_page_in_the_own_browser_is_modeled() {
     )
     .unwrap();
     symlink(outside.path(), workspace.path().join("outside")).unwrap();
+
+    assert!(super::lex::workspace_file_url(&format!("file://{cwd}/alias.html"), Some(cwd)));
+    assert!(!super::lex::workspace_file_url(&format!("file://{cwd}/masquerade.html"), Some(cwd)));
 
     let safe_page = format!(
         "const tab = await browser.open({{name:'game', url:'file://{cwd}/index.html', app:'own'}}); return await tab.screenshot({{fullPage:true}})"
@@ -279,6 +286,8 @@ fn a_workspace_page_in_the_own_browser_is_modeled() {
         format!("const tab = await browser.open({{url:'file://{cwd}/.env'}});"),
         format!("const tab = await browser.open({{url:'file://{cwd}/a%2e%2e/index.html'}});"),
         format!("const tab = await browser.open({{url:'file://{cwd}/index.html?x=1'}});"),
+        // A contained alias to a non-HTML secret must also remain non-allow.
+        format!("const tab = await browser.open({{url:'file://{cwd}/masquerade.html',app:'own'}});"),
         // Both final-file and intermediate-directory symlinks escape the workspace.
         format!("const tab = await browser.open({{url:'file://{cwd}/escape.html',app:'own'}});"),
         format!("const tab = await browser.open({{url:'file://{cwd}/outside/secrets.html',app:'own'}});"),
