@@ -7,8 +7,10 @@
 //! `nullglob` the word disappears instead. Without `-r`, `grep` then reads
 //! its other operands or standard input. With `-r` and no operand left it
 //! would walk the working directory, so a recursive search counts an
-//! unmatched glob only beside a root that is still there to be proven or
-//! missing.
+//! unmatched glob beside a root that is still there to be proven or missing,
+//! or on its own when the working directory itself is a proven root:
+//! `grep -rn KEY *.ts` in a folder whose `.ts` files sit in subdirectories
+//! reads no more than `grep -rn KEY .` there.
 
 use super::{tree, ReadContext};
 
@@ -30,8 +32,8 @@ fn unmatched_glob(value: &str, context: ReadContext<'_>) -> bool {
 /// Every recursive root is proven or missing (`grep -rn x src tests` with no
 /// `tests`, and `grep -rn x <absent>` on its own): a root that is not there
 /// opens nothing, so the walk reads no file. With no operand at all `grep -r`
-/// walks the working directory instead, which only a proven root admits, so
-/// at least one root must be one `nullglob` cannot remove.
+/// walks the working directory instead, so when `nullglob` could remove
+/// every root the working directory must itself be a proven root.
 pub(super) fn recursive_targets_proven(
     targets: &[&str],
     proven: impl Fn(&str) -> bool,
@@ -45,5 +47,5 @@ pub(super) fn recursive_targets_proven(
             return false;
         }
     }
-    kept
+    kept || (!targets.is_empty() && proven("."))
 }
