@@ -10,9 +10,9 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::aibom_op::workspace_merge_plan;
 use crate::harness_adapter::describe::SPECS;
-use crate::harness_adapter::{path_text, route, Ctx, Failure, Step};
+use crate::harness_adapter::detect_merged::plan;
+use crate::harness_adapter::{route, Ctx, Step};
 
 /// What one harness's detection found, as `HarnessDetection` counts it.
 fn found(answer: &Value, extra: &Value) -> bool {
@@ -31,37 +31,6 @@ fn found(answer: &Value, extra: &Value) -> bool {
         || count(extra, "appended") > 0
 }
 
-/// `extend_detection_with_workspace_aibom`'s plan for one harness's answer.
-fn workspace_plan(ctx: &Ctx, harness: &str, answer: &Value) -> Step<Value> {
-    let Some(workspace) = ctx.workspace.as_deref() else {
-        return Ok(Value::Null);
-    };
-    if answer.get("workspace_aibom") != Some(&Value::Bool(true)) {
-        return Ok(Value::Null);
-    }
-    let existing: Vec<Value> = answer
-        .get("artifacts")
-        .and_then(Value::as_array)
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|artifact| {
-            let key = |name: &str| artifact.get(name).cloned().unwrap_or(Value::Null);
-            json!({
-                "artifact_id": key("artifact_id"),
-                "artifact_type": key("artifact_type"),
-                "harness": key("harness"),
-                "config_path": key("config_path"),
-            })
-        })
-        .collect();
-    workspace_merge_plan(&json!({
-        "harness": harness,
-        "workspace_dir": path_text(&ctx.absolute(workspace)),
-        "existing": existing,
-    }))
-    .map_err(|_| Failure::Invalid)
-}
-
 /// The sorted harness names that were detected, or the first detection's
 /// failure (a Codex whose hook files are not trusted answers `untrusted`).
 pub(super) fn run(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
@@ -71,7 +40,7 @@ pub(super) fn run(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         if answer.get("untrusted").is_some() {
             return Ok(answer);
         }
-        let extra = workspace_plan(ctx, spec.harness, &answer)?;
+        let extra = plan(ctx, spec.harness, &answer)?;
         if found(&answer, &extra) {
             detected.push(spec.harness);
         }

@@ -245,12 +245,15 @@ class NativeHarnessAdapter(HarnessAdapter):
         # Discovery walks the workspace, so it keeps the longer AIBOM deadline.
         try:
             answer = self._ask(
-                "detect", context, timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS, **self._detect_fields(context)
+                "detect_merged",
+                context,
+                timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS,
+                **self._detect_fields(context),
             )
         except NativeRunnerAuthorityError as error:
             raise NativeAibomError(str(error)) from error
         self._check_detected(answer)
-        return detection_from(self.harness, context, answer)
+        return detection_from(self.harness, answer)
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
         if self._spec.get("launch_runner"):

@@ -97,23 +97,17 @@ def prepared_surfaces(
     return prepared
 
 
-def detection_from(harness: str, context: HarnessContext, answer: dict[str, Any]) -> HarnessDetection:
-    """The detection a ``detect``-shaped answer describes."""
-    from ..aibom_detection import _artifacts_from_payload, extend_detection_with_workspace_aibom
+def detection_from(harness: str, answer: dict[str, Any]) -> HarnessDetection:
+    """The detection a ``detect``-shaped answer describes; the runtime has already merged the workspace AIBOM."""
+    from ..aibom_detection import _artifacts_from_payload
 
-    artifacts = _artifacts_from_payload(answer)
-    detection = HarnessDetection(
+    return HarnessDetection(
         harness=harness,
         installed=answer.get("installed") is True,
         command_available=answer.get("command_available") is True,
         config_paths=tuple(str(path) for path in answer.get("config_paths", ())),
-        artifacts=artifacts,
+        artifacts=_artifacts_from_payload(answer),
         warnings=tuple(str(warning) for warning in answer.get("warnings", ())),
-    )
-    if answer.get("workspace_aibom") is not True:
-        return detection
-    return extend_detection_with_workspace_aibom(
-        detection, home_dir=context.home_dir, workspace_dir=context.workspace_dir
     )
 
 

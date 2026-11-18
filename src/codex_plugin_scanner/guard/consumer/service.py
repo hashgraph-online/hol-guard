@@ -455,9 +455,9 @@ def _persist_detected(
 def detect_all(context: HarnessContext) -> list[HarnessDetection]:
     """Run detection across all adapters."""
 
-    from ..harness.registry import list_adapters
+    from ..harness.native_detected import detect_all as native_detect_all
 
-    return [adapter.detect(context) for adapter in list_adapters()]
+    return native_detect_all(context)
 
 
 def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:

@@ -29,7 +29,10 @@ use serde_json::{json, Map, Value};
 use super::describe;
 use super::managed_install_target::{install, stopped, uninstall, Owned, INVALID};
 use super::managed_record::{guidance_after, record, transition_pending};
-use super::{answer, managed_update, skills_scan, standalone_install, update_bounded, Ctx, Spec};
+use super::{
+    answer, detect_merged, managed_update, skills_scan, standalone_install, update_bounded, Ctx,
+    Spec,
+};
 use crate::runner_authority_op::KindResult;
 use crate::transition_files::{
     with_owned, with_registered, Budget, OwnedFailure, OwnedSpec, Owner,
@@ -207,6 +210,7 @@ pub(super) fn route(op: &str, ctx: &Ctx, fields: &Map<String, Value>) -> Option<
         "profile_install" => standalone_install::profile(ctx, fields),
         "cursor_hooks_install" => standalone_install::cursor_hooks(ctx, fields),
         "detected_harnesses" => answer(detected_harnesses::run(ctx, fields)),
+        "detect_all" => answer(detect_merged::all(ctx, fields)),
         "workspace_skills_scan" => answer(skills_scan::dispatch(ctx, fields)),
         _ => return None,
     })

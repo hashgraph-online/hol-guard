@@ -94,6 +94,7 @@ mod cursor_surfaces;
 mod describe;
 mod describe_env;
 mod desktop_core;
+mod detect_merged;
 mod durable_runtime;
 mod files;
 mod firewall;
@@ -163,6 +164,9 @@ mod codex_owners_tests;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "tests_detect_merged.rs"]
+mod tests_detect_merged;
 #[cfg(test)]
 #[path = "tests_firewall.rs"]
 mod tests_firewall;
@@ -383,6 +387,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     let spec = describe::spec(harness).ok_or(ERR_INVALID)?;
     if op == "adapter_install" || op == "adapter_uninstall" {
         return managed_install::adapter(op, spec, &ctx, fields);
+    }
+    if op == "detect_merged" {
+        return answer(detect_merged::one(spec, &ctx, fields));
     }
     if op == "apply_uninstall" {
         return uninstall_apply::apply(spec, &ctx, fields);
