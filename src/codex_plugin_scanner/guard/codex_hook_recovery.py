@@ -10,7 +10,6 @@ diagnostic/export material.
 from __future__ import annotations
 
 import base64
-import hashlib
 import math
 import os
 from dataclasses import dataclass
@@ -192,13 +191,6 @@ def _load_record(home: Path, *, live_config_conflict: bool = False) -> dict[str,
     if not isinstance(payload, dict):
         raise _error("record_invalid")
     return payload
-
-
-def _record_authentication_targets(home: Path, payload: dict[str, object]) -> tuple[Path, Path]:
-    # Hash the authenticated original target, never a substituted live symlink.
-    target_hash = hashlib.sha256(str(payload["config_path"]).encode("utf-8")).hexdigest()[:24]
-    manifest = home / "managed" / "codex" / f"hooks-{target_hash}.manifest.json"
-    return manifest, manifest.with_name(f"hooks-{target_hash}.authority-receipt.json")
 
 
 def mark_owned_hook_publication_conflict(home: Path, config: Path) -> None:

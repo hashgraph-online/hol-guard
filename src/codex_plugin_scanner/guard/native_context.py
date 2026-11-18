@@ -84,6 +84,8 @@ _RESULT_OPTIONAL_KEYS = {
     "memory_pattern",
     "guard_run_launch",
     "package_runner_target",
+    "transition_hook_observation",
+    "publication_inverse_claim",
 }
 _RESULT_CODES = {
     "ok",
@@ -127,6 +129,8 @@ _UNCACHEABLE_DIGEST_KINDS = frozenset(
         "runtime_launch_identity_projection",
         "package_json_scripts",
         "local_cli_identify",
+        # A claim is resident state: a replayed answer would hide a spent grant.
+        "publication_inverse_claim",
     }
 )
 _MAX_REQUEST_BYTES = 2 * 1024 * 1024
