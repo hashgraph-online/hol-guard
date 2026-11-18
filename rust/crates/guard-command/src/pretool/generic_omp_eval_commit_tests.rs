@@ -133,14 +133,7 @@ fn commit_grep_selectors_admit_bounded_searches_not_backtracking_patterns() {
         assert!(commands(code).is_some(), "{code}");
     }
     for code in [
-        "const d=await commit.draft(); await d.take('README.md', {grep:'(a+)+ {
-    let commands = commands(
-        "const d = await commit.draft(); for (const p of ['a.js', 'b.js', 'c.js']) await d.take(p);",
-    )
-    .unwrap();
-    assert_eq!(commands.len(), 2);
-}
-});",
+        "const d=await commit.draft(); await d.take('README.md', {grep:'(a+)+$'});",",
         "const d=await commit.draft(); await d.take('README.md', {grep:'a.*a'});",
         "const d=await commit.draft(); await d.drop('README.md', {grep:''});",
         "const d=await commit.draft(); await d.take('README.md', {grep:42});",
