@@ -49,6 +49,11 @@ fn decode_printf_escapes(text: &str) -> String {
             Some('n') => out.push('\n'),
             Some('r') => out.push('\r'),
             Some('t') => out.push('\t'),
+            Some('a') => out.push('\x07'),
+            Some('b') => out.push('\x08'),
+            Some('f') => out.push('\x0c'),
+            Some('v') => out.push('\x0b'),
+            Some('e') => out.push('\x1b'),
             Some('\\') => out.push('\\'),
             Some('x') => {
                 let mut hex = String::new();
