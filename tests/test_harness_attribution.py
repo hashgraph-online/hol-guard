@@ -3,25 +3,33 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.harness import native_harness
 from codex_plugin_scanner.guard.runtime import harness_attribution
 from tests.conftest import guard_commands_module
 
 
 @pytest.fixture
-def asked(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, object]]]:
+def asked(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[tuple[str, dict[str, object]]]]:
     """Record what reaches the native runtime and answer as it would."""
     calls: list[tuple[str, dict[str, object]]] = []
 
     def answer(kind: str, args: dict[str, object], *_args: object, **_kwargs: object) -> dict[str, object]:
+        if kind == "harness_adapter" and args.get("op") == "describe":
+            # The cached adapter description the request environment reads; not an attribution question.
+            return {"adapters": [], "env_names": ["CURSOR_VERSION"], "env_prefixes": []}
         calls.append((kind, dict(args)))
         return {"harness": "cursor", "env": {"HOL_GUARD_ORIGIN_HARNESS": "grok"}}
 
+    # `describe` is cached per process; a description from another test must not leak in or out.
+    native_harness.describe.cache_clear()
     monkeypatch.setattr("codex_plugin_scanner.guard.native_runner_authority.native_runner_authority", answer)
-    return calls
+    yield calls
+    native_harness.describe.cache_clear()
 
 
 # The markers, the precedence, the parent walk and the origin stamp are the native runtime's
