@@ -82,9 +82,7 @@ impl Call<'_> {
     }
 
     pub(super) fn record_path(home: &Path) -> PathBuf {
-        home.join("managed")
-            .join("codex")
-            .join("pending-hook-publication.json")
+        crate::codex_hook_paths_op::record_path(home)
     }
 
     /// The home's key ids, raised as `load_hook_secret` raises them.

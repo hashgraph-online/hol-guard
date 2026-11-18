@@ -79,8 +79,10 @@ def build_hook_authority_receipt(home: Path, config: Path, *, config_bytes: byte
 
 
 def _record_path(home: Path) -> Path:
-    # One pending publication per home, including installations of other targets.
-    return home / "managed" / "codex" / "pending-hook-publication.json"
+    """The runtime's one pending-publication journal for ``home``."""
+    from .codex_hook_integrity import _named, _paths_answer
+
+    return _named(_paths_answer(home, None), "record_path")
 
 
 def _publication(op: str, home: Path, **fields: Any) -> object:

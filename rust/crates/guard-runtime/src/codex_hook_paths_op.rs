@@ -8,8 +8,8 @@
 //! is the one `managed/codex/hook-manifest.key`. The caller sends the Guard
 //! home as it spells it (the answer joins it unchanged) and an absolute
 //! `config_path` when it wants the per-target files; the key path answers
-//! either way. The answer is `{manifest_path, receipt_path, key_path}`, the
-//! first two `null` without a config.
+//! either way. The answer is `{manifest_path, receipt_path, key_path,
+//! record_path}`, the first two `null` without a config.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -22,6 +22,7 @@ use crate::codex_hook_bridge_trust_files::canonical;
 
 const MAX_REQUEST_BYTES: u64 = 16 * 1024;
 const KEY_FILE: &str = "hook-manifest.key";
+const RECORD_FILE: &str = "pending-hook-publication.json";
 
 pub(crate) fn is_command(command: &str) -> bool {
     command == "codex-hook-paths"
@@ -63,6 +64,12 @@ pub(crate) fn key_path(home: &Path) -> PathBuf {
     directory(home).join(KEY_FILE)
 }
 
+/// `_record_path`: the one pending-publication journal a Guard home keeps,
+/// shared by installations of every target.
+pub(crate) fn record_path(home: &Path) -> PathBuf {
+    directory(home).join(RECORD_FILE)
+}
+
 fn text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -88,6 +95,7 @@ fn answer(request: &Request) -> Result<Value, String> {
         "manifest_path": target.map(|target| text(&manifest_path(home, target))),
         "receipt_path": target.map(|target| text(&receipt_path(home, target))),
         "key_path": text(&key_path(home)),
+        "record_path": text(&record_path(home)),
     }))
 }
 

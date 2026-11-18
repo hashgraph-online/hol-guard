@@ -94,6 +94,17 @@ pub(super) fn claim(call: &mut Call<'_>) -> Step<Value> {
 /// the one publication the claim allows. Any other claim, or none, leaves
 /// the authorization invalid.
 pub(super) fn check(call: &mut Call<'_>) -> Step<Value> {
+    // The owner holding the lock now must be the one that was approved; this
+    // is its own reason, and it answers before any claim is read.
+    let current_id = call.args.get("current_owner_operation_id");
+    let current_pid = call.args.get("current_owner_pid");
+    if current_id.is_some() || current_pid.is_some() {
+        let approved_id = call.args.get("owner_operation_id");
+        let approved_pid = call.args.get("owner_pid");
+        if current_id != approved_id || current_pid != approved_pid {
+            return Err(Fault::Transition("authority_repair_owner_mismatch"));
+        }
+    }
     let grant = grant(call)?;
     let subject = call.text("subject").map_err(|_| INVALID)?;
     // The subject the plan derives now must still be the one approved.
@@ -240,6 +251,38 @@ mod tests {
                 error.contains("authority_repair_authorization_invalid"),
                 "{field}: {error}"
             );
+        }
+    }
+
+    #[test]
+    fn a_different_lock_owner_is_its_own_mismatch() {
+        let grant = format!("grant-{}", crate::unique_nanos::unique_nanos());
+        let claim = json!({
+            "op": "publication_repair_claim",
+            "grant_id": grant,
+            "subject": "subject",
+            "owner_operation_id": "owner",
+            "owner_pid": 7,
+            "deadline": 12.5,
+            "retire_ms": 60_000,
+        });
+        ask(claim).unwrap();
+        let check = |id: Value, pid: Value| {
+            ask(json!({
+                "op": "publication_repair_claim_check",
+                "grant_id": grant,
+                "subject": "subject",
+                "owner_operation_id": "owner",
+                "owner_pid": 7,
+                "deadline": 12.5,
+                "current_owner_operation_id": id,
+                "current_owner_pid": pid,
+            }))
+        };
+        assert!(check(json!("owner"), json!(7)).is_ok());
+        for (id, pid) in [(json!("other"), json!(7)), (json!("owner"), json!(8))] {
+            let error = check(id, pid).unwrap_err();
+            assert!(error.contains("authority_repair_owner_mismatch"), "{error}");
         }
     }
 

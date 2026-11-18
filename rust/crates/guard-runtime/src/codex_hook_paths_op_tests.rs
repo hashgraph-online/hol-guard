@@ -104,3 +104,13 @@ fn an_oversized_request_is_refused() {
     let error = run_command(json!({"guard_home": big}).to_string().as_bytes()).unwrap_err();
     assert_eq!(error, "codex_hook_paths_request_too_large");
 }
+
+#[test]
+fn the_pending_publication_journal_is_one_per_home_with_or_without_a_config() {
+    let journal = json!("/guard/managed/codex/pending-hook-publication.json");
+    let bare = ask(json!({"guard_home": "/guard"})).expect("an answer");
+    let owned = ask(json!({"guard_home": "/guard", "config_path": "/nowhere/cfg/config.toml"}))
+        .expect("an answer");
+    assert_eq!(bare["record_path"], journal);
+    assert_eq!(owned["record_path"], journal);
+}

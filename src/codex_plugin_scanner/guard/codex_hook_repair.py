@@ -141,8 +141,6 @@ class CodexHookRepairAuthorization:
         if publication is not None and publication.authorization is not self:
             raise TransitionError("authority_repair_authorization_invalid")
         owner = _owner_and_pending(self.plan, publication)
-        if owner.operation_id != self.owner_operation_id or owner.pid != self.owner_pid:
-            raise TransitionError("authority_repair_owner_mismatch")
         expected_home = lifecycle_authority_home(
             self.plan.guard_home,
             requirement=LifecycleGateRequirement(CODEX_AUTHORITY_REPAIR_ACTION, self.approved_subject),
@@ -160,6 +158,8 @@ class CodexHookRepairAuthorization:
             current_subject=self.plan.subject(),
             owner_operation_id=self.owner_operation_id,
             owner_pid=self.owner_pid,
+            current_owner_operation_id=owner.operation_id,
+            current_owner_pid=owner.pid,
             deadline=self.deadline_monotonic,
             publication=None if publication is None else publication.publication_monotonic,
         )
