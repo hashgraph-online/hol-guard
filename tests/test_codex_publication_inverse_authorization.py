@@ -178,7 +178,7 @@ def test_new_owner_cannot_borrow_previous_authorization(inverse):
 
 
 def test_inverse_authorization_preserves_parent_deadline(inverse, monkeypatch):
-    from codex_plugin_scanner.guard import codex_publication_inverse_authorization as module
+    from codex_plugin_scanner.guard import native_transition_files as module
 
     context, config, _manifest, _unbound, plan = inverse
     with codex_install_transaction(context.guard_home, config, actor=PUBLICATION_INVERSE_ACTION) as owner:

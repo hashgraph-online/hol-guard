@@ -26,7 +26,9 @@ fn manifest(version: &str) -> Value {
 fn only_a_clean_zero_exit_passes_the_probe() {
     let probe = |code: i64, flag: &str| {
         let mut fields = json!({"returncode": code, "timed_out": false, "containment_failed": false, "output_limit_exceeded": false});
-        fields[flag] = json!(flag != "returncode");
+        if flag != "returncode" {
+            fields[flag] = json!(true);
+        }
         compare("probe", fields)
     };
     assert!(probe(0, "returncode").is_ok());
