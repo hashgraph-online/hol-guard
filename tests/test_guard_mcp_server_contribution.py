@@ -18,6 +18,7 @@ _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/m
 _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
 _DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
 _REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
+_NJC_CHAIN_READS = _FILESYSTEM.with_name("mcp.njc-chain-reads.json")
 
 
 def _filesystem_payload() -> dict[str, object]:
@@ -35,6 +36,12 @@ def _tether_payload() -> dict[str, object]:
 
 def _dev_mcp_payload() -> dict[str, object]:
     payload = json.loads(_DEV_MCP.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _njc_chain_reads_payload() -> dict[str, object]:
+    payload = json.loads(_NJC_CHAIN_READS.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
 
@@ -193,6 +200,54 @@ def test_dev_mcp_unlisted_tools_default_to_review() -> None:
     tools = payload.get("tools")
     assert isinstance(tools, list)
     declared = {item["name"]: item["state"] for item in tools}
+    assert declared["other"] == "review"
+    assert mcp_tool_state(payload, "unlisted_future_tool") == "review"
+
+
+def test_njc_chain_reads_contribution_is_external_opt_in_remote() -> None:
+    """Keep the hosted chain-reads server external, opt-in and bound to its HTTPS endpoint."""
+    payload = _njc_chain_reads_payload()
+    validate_mcp_contribution(payload, filename=_NJC_CHAIN_READS.name)
+    assert payload["id"] == "mcp.njc-chain-reads"
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "remote-http",
+        "url": "https://njc-tx-explain.departmentofjazz.workers.dev/mcp",
+        "serverNames": ["njc-chain-reads", "rh-tx-explain"],
+    }
+
+
+def test_njc_chain_reads_paid_tools_require_review() -> None:
+    """Paid reads settle an attached x402 payment from the caller's wallet, so they stay review-gated."""
+    payload = _njc_chain_reads_payload()
+    declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    free = {"explain_transaction", "who_controls_agent", "jobs_board"}
+    paid = {
+        "money_trail",
+        "line_read",
+        "transfer_read",
+        "sol_trail",
+        "base_trail",
+        "halt_check",
+        "usdg_ledger",
+        "wallet_handover",
+        "poison_check",
+        "income_read",
+    }
+    assert "allow" not in declared.values()
+    for tool_name in free:
+        assert declared[tool_name] == "inherit"
+        assert mcp_tool_state(payload, tool_name) == "inherit"
+    for tool_name in paid:
+        assert declared[tool_name] == "review"
+        assert mcp_tool_state(payload, tool_name) == "review"
+
+
+def test_njc_chain_reads_unlisted_tools_default_to_review() -> None:
+    """Keep future chain-read tools on the conservative review fallback."""
+    payload = _njc_chain_reads_payload()
+    declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
     assert declared["other"] == "review"
     assert mcp_tool_state(payload, "unlisted_future_tool") == "review"
 
