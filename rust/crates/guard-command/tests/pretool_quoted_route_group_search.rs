@@ -50,6 +50,9 @@ fn fixture() -> Fixture {
     std::fs::create_dir_all(site.join(".git")).unwrap();
     for file in [
         "app/(marketing)/blog/[slug]/page.tsx",
+        // A directory spelled like zsh's "not" pattern, so the literal name
+        // holds only a component.
+        "app/(marketing)/blog/^[slug]/page.tsx",
         "app/(shop)/s/[id]/page.tsx",
     ] {
         write(site.join(file), "export default function Page() {}\n");
@@ -114,6 +117,10 @@ fn route_group_searches_that_could_reach_more_keep_their_review() {
         // The class sits outside the quotes, so the shell expands it to the
         // sibling `s`, whose environment file keeps the review.
         format!("rg -n KEY \"{site}/app/(marketing)/blog/\"[slug]"),
+        // With zsh's `EXTENDED_GLOB`, an unquoted `^` means "every entry but
+        // this one", so the search reaches the sibling `s` and its
+        // environment file, even though every bracket is quoted.
+        format!("rg -n KEY \"{site}/app/(marketing)/blog/\"^\"[slug]\""),
     ] {
         check(&f, &command, false);
     }

@@ -52,3 +52,20 @@ fn unquoted_parentheses_make_the_word_a_glob() {
     let words = quoted_words(r#"ls "app/"(shop)"/[id]""#).expect("words");
     assert!(words[1].unquoted_glob);
 }
+
+#[test]
+fn zsh_extended_glob_operators_make_the_word_a_glob() {
+    for (text, value) in [
+        (r##"rg KEY "site/"^"[id]""##, "site/^[id]"),
+        (r##"rg KEY "site/[id]"#"##, "site/[id]#"),
+        (r##"rg KEY "site/[id]"~"x""##, "site/[id]~x"),
+    ] {
+        assert!(!literal_words(text).contains(&value.to_owned()), "{text}");
+    }
+    // Quoted, the same characters reach the program as written.
+    let words = literal_words(r#"rg KEY "site/^[id]#~x""#);
+    assert!(words.contains(&"site/^[id]#~x".to_owned()));
+    // A leading tilde is the home directory, not a pattern.
+    let words = quoted_words("ls ~/site").expect("words");
+    assert!(!words[1].unquoted_glob);
+}
