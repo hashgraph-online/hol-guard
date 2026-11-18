@@ -54,6 +54,7 @@ from .fixtures import (
     stage_directory,
 )
 from .git_allow_fixtures import GIT_ALLOW_CASES, configure_git_allow_controls
+from .git_rules_cases import stage_git_rules_cases
 from .host_process import clean_environment, realistic_environment, run_process
 from .host_shims import omp_version
 from .input_evidence import (
@@ -166,6 +167,7 @@ def run_case(
     stage_supply_chain(fixture.workspace, scenario.id)
     stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
     stage_runtime_cases(fixture.root / "guard-home", fixture.workspace, scenario.id)
+    stage_git_rules_cases(fixture.root / "guard-home", fixture.workspace, scenario.id)
     seed_session_folder(fixture.home, stage_directory(fixture.root), scenario.id)
     session = session_cwd(fixture.home, fixture.workspace, scenario.id)
     private = fixture.root / "private-evidence"

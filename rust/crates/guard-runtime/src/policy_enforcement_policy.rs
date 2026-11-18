@@ -33,6 +33,8 @@ const VALID_RISK_KEYS: &[&str] = &[
     "package_install",
     "low_trust_artifact",
     "runtime_known_vulnerable",
+    "git_hook_bypass",
+    "git_stage_all",
     "execution",
     "supply_chain",
     "policy_bypass",
