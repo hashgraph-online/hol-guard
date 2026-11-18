@@ -57,3 +57,30 @@ def test_a_connection_failure_during_the_outage_is_expected(monkeypatch: pytest.
     traffic = _traffic_with_one_connection_failure(monkeypatch, tmp_path, fault_at=0.0, served_again_at=None)
     assert dict(traffic.stray_failures) == {}
     assert traffic.outcomes["connection:ConnectionRefusedError"] == 1
+
+
+def _judged(answers: list[str], errors: list[str], new_publishers: list[int]) -> list[str]:
+    from scripts import guard_daemon_chaos_starts as starts
+
+    result = chaos.ScenarioResult(name="parallel-starts")
+    starts.judge_starts(result, answers, errors, new_publishers)
+    return result.failures
+
+
+def test_parallel_starts_pass_with_one_daemon_for_every_starter() -> None:
+    assert _judged(["http://127.0.0.1:1"] * 20, [], [42]) == []
+
+
+def test_a_refused_start_fails_the_parallel_starts() -> None:
+    failures = _judged(["http://127.0.0.1:1"] * 19, ["RuntimeError: refused"], [42])
+    assert failures == ["1 of 20 starts failed: RuntimeError: refused"]
+
+
+def test_starters_answered_with_different_daemons_fail() -> None:
+    failures = _judged(["http://127.0.0.1:1", "http://127.0.0.1:2"], [], [42])
+    assert failures == ["the starts answered with 2 different daemons"]
+
+
+def test_a_second_new_daemon_fails_the_parallel_starts() -> None:
+    assert _judged(["http://127.0.0.1:1"], [], [42, 43]) == ["2 new daemons published themselves, expected exactly one"]
+    assert _judged(["http://127.0.0.1:1"], [], []) == ["0 new daemons published themselves, expected exactly one"]
