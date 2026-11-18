@@ -137,7 +137,10 @@ fn printf_dynamic_width_modifiers_and_radix_cannot_hide_an_ssn() {
         r"printf '%#x-45-6789' 291",
         r"printf '%*d-45-6789' -5 123",
     ] {
-        assert!(!echoes_ssn(command), "{command} does not print an isolated SSN");
+        assert!(
+            !echoes_ssn(command),
+            "{command} does not print an isolated SSN"
+        );
     }
 }
 
