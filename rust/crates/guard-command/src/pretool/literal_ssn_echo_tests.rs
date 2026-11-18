@@ -153,6 +153,29 @@ fn printf_dynamic_width_modifiers_and_radix_cannot_hide_an_ssn() {
 }
 
 #[test]
+fn percent_b_stop_does_not_review_a_later_never_printed_ssn() {
+    // Bash %b stops the whole printf at \c. These commands print only the
+    // harmless prefix, even though a later operand resembles a synthetic SSN.
+    for command in [
+        r"printf '%b%s\n' 'build ok\c' '123-45-6789'",
+        r"printf '%b/%s' 'safe\c' '123-45-6789'",
+        r"printf -- '%b%s' 'ordinary\c' '123-45-6789'",
+    ] {
+        assert!(!echoes_ssn(command), "{command} stops before the SSN");
+    }
+
+    // An SSN printed before the stop remains protected. Escaping the
+    // backslash means the c is literal and later operands are printed.
+    for command in [
+        r"printf '%b%s' '123-45-6789\c' 'unused'",
+        r"printf '%b%s' 'safe\\c ' '123-45-6789'",
+        r"printf 'literal\c %s\n' '123-45-6789'",
+    ] {
+        assert!(echoes_ssn(command), "{command} really prints an SSN");
+    }
+}
+
+#[test]
 fn other_numbers_and_shapes_pass() {
     for command in [
         "echo 000-12-3456",
