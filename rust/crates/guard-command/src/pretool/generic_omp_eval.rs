@@ -125,7 +125,11 @@ pub(super) fn evaluate_browser(
     });
     if !modeled
         || input.get("language")?.as_str()? != "js"
-        || !browser::loopback_browser_program(input.get("code")?.as_str()?, context.path.home_dir)
+        || !browser::loopback_browser_program(
+            input.get("code")?.as_str()?,
+            context.path.home_dir,
+            context.path.cwd,
+        )
     {
         return None;
     }

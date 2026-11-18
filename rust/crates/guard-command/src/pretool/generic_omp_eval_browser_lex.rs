@@ -317,6 +317,35 @@ pub(super) const OPEN_KEYS: &[&str] = &[
     "wait_until",
 ];
 
+/// A `file://` URL naming a file inside the workspace: the agent's own page,
+/// loaded the way a loopback dev server would serve it. Only an HTML page
+/// counts, so a secret beside it cannot be opened. The path is literal,
+/// absolute and plain, with no query, fragment, escape or `..` step, and the
+/// workspace is a directory below the root.
+pub(super) fn workspace_file_url(url: &str, cwd: Option<&str>) -> bool {
+    let (Some(path), Some(cwd)) = (url.strip_prefix("file://"), cwd) else {
+        return false;
+    };
+    let cwd = cwd.trim_end_matches('/');
+    let plain = |text: &str| {
+        text.starts_with('/')
+            && text.is_ascii()
+            && !text.chars().any(|c| {
+                c.is_ascii_whitespace()
+                    || c.is_ascii_control()
+                    || matches!(c, '\\' | '?' | '#' | '%')
+            })
+            && !text.split('/').any(|step| step == ".." || step == ".")
+    };
+    let page = path.ends_with(".html") || path.ends_with(".htm");
+    page && plain(path)
+        && plain(cwd)
+        && cwd.matches('/').count() >= 2
+        && path
+            .strip_prefix(cwd)
+            .is_some_and(|rest| rest.len() > 1 && rest.starts_with('/'))
+}
+
 /// An `http(s)` URL whose host is the loopback interface, with no userinfo.
 pub(super) fn loopback_url(url: &str) -> bool {
     let Some(rest) = url

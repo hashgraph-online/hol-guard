@@ -3,6 +3,8 @@
 //! counted retry loops, `try`/`catch`, `if (!NAME) throw Error('...')`, and a
 //! `TAB.run(async ({page}) => {...})` body limited to modeled `page` calls.
 
+use std::collections::HashSet;
+
 use super::lex::{Token, RESERVED};
 use super::Parser;
 use crate::pretool::curl_reads::loopback_url;
@@ -235,7 +237,17 @@ impl Parser {
         self.keyword("async")?;
         self.punct('(')?;
         self.punct('{')?;
-        self.keyword("page")?;
+        // The callback destructures `page` and the `wait` pause helper.
+        let mut named = HashSet::new();
+        loop {
+            let name = self.ident()?;
+            if !matches!(name.as_str(), "page" | "wait") || !named.insert(name) {
+                return None;
+            }
+            if !self.eat_punct(',') {
+                break;
+            }
+        }
         self.punct('}')?;
         self.punct(')')?;
         self.punct('=')?;
@@ -244,6 +256,33 @@ impl Parser {
         self.block()?;
         self.in_run = false;
         Some(())
+    }
+
+    /// The `viewport` object of `browser.open`: page dimensions only.
+    pub(super) fn viewport(&mut self) -> Option<()> {
+        self.punct('{')?;
+        while !self.eat_punct('}') {
+            if !matches!(
+                self.key()?.as_str(),
+                "width" | "height" | "deviceScaleFactor" | "isMobile" | "hasTouch"
+            ) {
+                return None;
+            }
+            self.punct(':')?;
+            self.scalar()?;
+            if !self.eat_punct(',') {
+                return self.punct('}');
+            }
+        }
+        Some(())
+    }
+
+    /// `wait(MS)` inside `TAB.run`, after its `await`: a pause.
+    pub(super) fn wait_call(&mut self) -> Option<()> {
+        self.keyword("wait")?;
+        self.punct('(')?;
+        matches!(self.next()?, Token::Num(_)).then_some(())?;
+        self.punct(')')
     }
 
     /// `page.METHOD(args)` inside `TAB.run`, after its `await`: input,

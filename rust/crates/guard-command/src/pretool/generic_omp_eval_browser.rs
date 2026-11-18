@@ -44,7 +44,8 @@ mod lex;
 #[path = "generic_omp_eval_browser_page.rs"]
 mod page;
 use lex::{
-    loopback_url, timer_pause, tokenize, Token, NO_ARGUMENT_METHODS, OPEN_KEYS, OPTION_KEYS,
+    loopback_url, timer_pause, tokenize, workspace_file_url, Token, NO_ARGUMENT_METHODS, OPEN_KEYS,
+    OPTION_KEYS,
 };
 
 #[derive(Default)]
@@ -64,6 +65,8 @@ struct Parser {
     /// Locates the Guard daemon's state file, so its port stays unreachable
     /// from `fetch` and `page.goto`.
     home_dir: Option<String>,
+    /// The workspace, whose own files `browser.open` may load by `file://`.
+    cwd: Option<String>,
 }
 
 impl Parser {
@@ -175,12 +178,13 @@ impl Parser {
                 Some(())
             }
             "await" if self.in_run && self.peek_ident("page") => self.page_call(),
+            "await" if self.in_run && self.peek_ident("wait") => self.wait_call(),
             "await" => self.tab_call(),
             "for" => self.for_loop(),
             "try" => self.try_block(),
             "if" => self.if_throw(),
             "break" if self.loops > 0 => Some(()),
-            "return" if self.in_run => self.value(),
+            "return" => self.value(),
             "display" | "log" => self.output_args(),
             "console" => {
                 self.punct('.')?;
@@ -234,12 +238,18 @@ impl Parser {
         let mut loopback = false;
         while !self.eat_punct('}') {
             let key = self.key()?;
-            if !OPEN_KEYS.contains(&key.as_str()) || !seen.insert(key.clone()) {
+            if !(OPEN_KEYS.contains(&key.as_str()) || key == "app") || !seen.insert(key.clone()) {
                 return None;
             }
             self.punct(':')?;
             match key.as_str() {
-                "url" => loopback = loopback_url(&self.string()?),
+                "url" => {
+                    let url = self.string()?;
+                    loopback = loopback_url(&url) || workspace_file_url(&url, self.cwd.as_deref());
+                }
+                // `own` is OMP's own headless browser, the one it opens by
+                // default; any other `app` attaches a browser of the user's.
+                "app" => (self.string()? == "own").then_some(())?,
                 "viewport" => self.viewport()?,
                 _ => self.scalar()?,
             }
@@ -253,25 +263,7 @@ impl Parser {
         loopback.then_some(())
     }
 
-    fn viewport(&mut self) -> Option<()> {
-        self.punct('{')?;
-        while !self.eat_punct('}') {
-            if !matches!(
-                self.key()?.as_str(),
-                "width" | "height" | "deviceScaleFactor" | "isMobile" | "hasTouch"
-            ) {
-                return None;
-            }
-            self.punct(':')?;
-            self.scalar()?;
-            if !self.eat_punct(',') {
-                return self.punct('}');
-            }
-        }
-        Some(())
-    }
-
-    fn key(&mut self) -> Option<String> {
+    pub(super) fn key(&mut self) -> Option<String> {
         match self.next()? {
             Token::Ident(name) | Token::Str(name) => Some(name),
             _ => None,
@@ -279,7 +271,7 @@ impl Parser {
     }
 
     /// A string, number, boolean or `null` literal.
-    fn scalar(&mut self) -> Option<()> {
+    pub(super) fn scalar(&mut self) -> Option<()> {
         self.eat_punct('-');
         match self.next()? {
             Token::Str(_) | Token::Num(_) => Some(()),
@@ -330,7 +322,12 @@ impl Parser {
             "press" | "waitForSelector" | "waitForText" => {
                 self.string()?;
                 if self.eat_punct(',') {
-                    self.options()?;
+                    // `press(selector, key)` names the key second.
+                    if method == "press" && matches!(self.peek(), Some(Token::Str(_))) {
+                        self.pos += 1;
+                    } else {
+                        self.options()?;
+                    }
                 }
             }
             "waitFor" => {
@@ -453,8 +450,8 @@ impl Parser {
                 self.keyword("await")?;
                 self.tab_call()?;
                 self.punct(')')?;
-                if self.eat_punct('.') {
-                    self.keyword("length")?;
+                if self.eat_punct('.') && !matches!(self.ident()?.as_str(), "length" | "entries") {
+                    return None;
                 }
             }
             Token::Ident(word) if self.values.contains(&word) || self.responses.contains(&word) => {
@@ -470,7 +467,11 @@ impl Parser {
 
 /// Whether `code` is a JavaScript program that only drives the isolated
 /// browser against loopback pages and displays what it reads.
-pub(super) fn loopback_browser_program(code: &str, home_dir: Option<&str>) -> bool {
+pub(super) fn loopback_browser_program(
+    code: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
     if code.len() > MAX_CODE_BYTES {
         return false;
     }
@@ -480,6 +481,7 @@ pub(super) fn loopback_browser_program(code: &str, home_dir: Option<&str>) -> bo
     Parser {
         tokens,
         home_dir: home_dir.map(str::to_owned),
+        cwd: cwd.map(str::to_owned),
         ..Parser::default()
     }
     .program()
