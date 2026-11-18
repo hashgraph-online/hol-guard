@@ -586,7 +586,7 @@ fn project_config_rc_name(lowered: &str) -> bool {
 /// spells its own dotfile differently collected an approval nobody could
 /// answer, while the file itself is part of the checkout the agent is already
 /// working in. What stands in for that list is the shape such a file has: an
-/// ordinary document extension, a name carrying no credential marker and none
+/// ordinary document or script extension, a name carrying no credential marker and none
 /// of the words a tool keeps its own login under, every parent component
 /// visible, and a work tree of the home directory's own above it. That work
 /// tree is never the home directory itself, where a dotfiles repository would

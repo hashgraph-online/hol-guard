@@ -144,8 +144,14 @@ pub(super) const KNOWN_AGENT_DOC_ROOTS: &[&str] =
 /// `.pgpass` and `.git-credentials` are named for what they hold and end
 /// there, so requiring one of these already separates a project's documents
 /// from a store of logins.
+///
+/// A project hides scripts the same way: a one-off `.repair-stage.py` or
+/// `.check-routes.ts` beside the code it works on. Source text is no more a
+/// login store hidden than visible, where every read of it is already
+/// ordinary, so the script extensions stand with the document ones.
 pub(super) const PROJECT_DOCUMENT_EXTENSIONS: &[&str] = &[
-    "cfg", "conf", "ini", "json", "jsonc", "markdown", "md", "toml", "txt", "yaml", "yml",
+    "cfg", "cjs", "conf", "go", "ini", "js", "json", "jsonc", "jsx", "markdown", "md", "mjs", "py",
+    "rb", "rs", "sh", "toml", "ts", "tsx", "txt", "yaml", "yml",
 ];
 
 /// Words that name a tool's own login or keystore rather than a project's

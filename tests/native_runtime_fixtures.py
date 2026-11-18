@@ -473,7 +473,7 @@ def native_adapter_state_integrity_runtime(
     runtime call.
     """
 
-    from codex_plugin_scanner.guard import native_adapter_state_integrity
+    from tests.python_oracles import native_adapter_state_integrity
 
     binary = _context_digest_runtime_binary()
     if binary is None:

@@ -83,3 +83,35 @@ def write_sibling_documents(sibling: Path) -> None:
     target = sibling / CATALOG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(CATALOG_SOURCE, encoding="utf-8")
+
+
+def write_platform_dotfiles(platform: Path) -> None:
+    """Write the platform checkout's ignore list and a one-off script it keeps as a dotfile."""
+    (platform / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
+    (platform / ".repair-stage.py").write_text("def main():\n    return 0\n", encoding="utf-8")
+
+
+def write_plain_project(plain: Path) -> None:
+    """Write the plain project directory beside the checkout and its hidden config files."""
+    _write_text(plain / "README.txt", "Plain notes directory.\n")
+    _write_text(plain / "probe_py.py", "print('probe')\n")
+    # A project directory beside the checkout that was never `git init`-ed:
+    # a handed-over tree, an unpacked archive, a scaffold still being set up.
+    # Its hidden files are the ordinary project configuration an agent reads
+    # to match the workspace it is working in.
+    _write_text(plain / ".gitattributes", "* text=auto eol=lf\n")
+    _write_text(plain / ".npmignore", "src/\ntests/\n")
+    _write_text(plain / ".node-version", "22.11.0\n")
+    _write_text(plain / ".tool-versions", "nodejs 22.11.0\npython 3.12.7\n")
+    _write_text(plain / ".browserslistrc", "defaults\nnot IE 11\n")
+    _write_text(plain / ".prettierrc", '{\n  "semi": false\n}\n')
+    _write_text(plain / ".eslintrc.json", '{\n  "root": true\n}\n')
+    _write_text(plain / ".mocharc.json", '{\n  "spec": "tests/**/*.spec.js"\n}\n')
+    # Negative control for the same directory: a registry file keeps its
+    # review wherever it sits, because that is where a publish token lands.
+    _write_text(plain / ".npmrc", "registry=https://registry.npmjs.org/\n")
+
+
+def _write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")

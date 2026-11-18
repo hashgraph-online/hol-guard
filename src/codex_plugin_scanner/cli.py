@@ -34,7 +34,7 @@ def _load_guard_command_hub() -> None:
 
 
 def _supported_harness_values() -> tuple[str, ...]:
-    # Deferred: product_model transitively imports the whole Guard command
+    # Deferred: the harness registry transitively imports the whole Guard command
     # surface, which short-lived invocations must not pay for.
     from .guard.harness.contract_registry import harness_names
     from .guard.native_runner_authority import NativeRunnerAuthorityError

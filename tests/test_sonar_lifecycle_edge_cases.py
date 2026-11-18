@@ -14,7 +14,7 @@ import yaml
 
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.harness.registry import get_adapter
-from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
+from tests.python_oracles.native_adapter_state_integrity import native_adapter_state_integrity
 
 
 def _servers_left_after_uninstall(context: HarnessContext, config_path: Path) -> list[str]:

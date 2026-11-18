@@ -6988,6 +6988,35 @@
       "expect": "allow"
     },
     {
+      "id": "read-hidden-project-script-in-sibling-checkout",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "cursor",
+        "omp"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${HOME}/Code/acme-platform/.repair-stage.py"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cat-hidden-project-script-in-sibling-checkout",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/Code/acme-platform/.repair-stage.py"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "read-large-file-body",
       "fix_area": "shell",
       "harnesses": [
