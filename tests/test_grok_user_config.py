@@ -106,7 +106,7 @@ def test_malformed_config_leaves_uninstall_artifacts_intact(tmp_path: Path, monk
     assert config.read_text() == "[permission\n"
 
 
-def test_missing_ownership_refuses_cleanup_without_deleting_user_settings(
+def test_missing_ownership_preserves_config_while_completing_safe_cleanup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     context = HarnessContext(tmp_path / "home", None, tmp_path / "guard")
@@ -124,6 +124,6 @@ def test_missing_ownership_refuses_cleanup_without_deleting_user_settings(
     result = harness_support.uninstall("grok", context)
     assert config.read_bytes() == before
     assert not grok_paths(context)["pretool"].exists()
-    assert result["manifest"]["cleanup_incomplete"] is True
-    notes = result["manifest"]["notes"]
+    assert result["cleanup_incomplete"] is True
+    notes = result["notes"]
     assert any(isinstance(note, str) and "ownership records are missing" in note for note in notes)
