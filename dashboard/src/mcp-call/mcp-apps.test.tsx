@@ -242,6 +242,11 @@ const call = (server: string, tool: string, input: unknown) => request(envelope(
   assert(alias?.aside?.includes("cannot read") === true && alias.code?.collapsed === false, "T-APP-73: the call function under another name is called out");
   const imported = workbench("from composio import run_composio_tool\nrun_composio_tool('GMAIL_FETCH_EMAILS', {'query': 'a'})");
   assert(imported?.code?.collapsed === true && imported.aside?.includes("cannot read") === false, "T-APP-74: importing the call function is not passing it around");
+  const named = "\nrun_composio_tool('GMAIL_FETCH_EMAILS', {'query': 'a'})\nsend('GMAIL_SEND_EMAIL', {})";
+  const renamed = workbench(`from composio import run_composio_tool as send${named}`);
+  assert(renamed?.aside?.includes("cannot read") === true && renamed.code?.collapsed === false, "T-APP-78: importing the call function under another name is called out");
+  const sameLine = workbench(`import os; send = run_composio_tool${named}`);
+  assert(sameLine?.aside?.includes("cannot read") === true, "T-APP-79: an alias after an import on the same line is called out");
 
   const many = Array.from({ length: 11 }, (_, index) => `run_composio_tool('GMAIL_FETCH_EMAILS', {'query': 'q${index}'})`);
   many.push("run_composio_tool('SLACK_SEND_MESSAGE', {'text': 'done'})");

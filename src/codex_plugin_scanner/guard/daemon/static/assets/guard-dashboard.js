@@ -14260,10 +14260,19 @@ function countOutsideStrings(scan, quoted, pattern, skipImports) {
   for (const match of scan.matchAll(pattern)) {
     const at = match.index ?? 0;
     if (quoted[at] === 1) continue;
-    if (skipImports && /\bimport\b/.test(scan.slice(scan.lastIndexOf("\n", at) + 1, at))) continue;
+    if (skipImports && plainImport(scan, at, at + match[0].length)) continue;
     count2 += 1;
   }
   return count2;
+}
+const IMPORT_BEFORE = /^\s*(?:from\s+[\w.]+\s+)?import\s+(?:[\w.]+\s*,\s*)*$/;
+const IMPORT_AFTER = /^\s*(?:,\s*[\w.]+\s*)*$/;
+function plainImport(scan, start, end) {
+  const lineStart = scan.lastIndexOf("\n", start) + 1;
+  const lineEnd = scan.indexOf("\n", end);
+  const before = scan.slice(lineStart, start);
+  const after = scan.slice(end, lineEnd === -1 ? scan.length : lineEnd);
+  return IMPORT_BEFORE.test(before) && IMPORT_AFTER.test(after);
 }
 function maskPython(code) {
   const quoted = new Uint8Array(code.length);

@@ -76,16 +76,30 @@ export function readComposioCode(code: string): ComposioCodeReading {
   return { steps, unreadable };
 }
 
-/** Matches outside strings. Importing the call function by name is not passing it around. */
+/** Matches outside strings. A plain import of the call function is not passing it around. */
 function countOutsideStrings(scan: string, quoted: Uint8Array, pattern: RegExp, skipImports: boolean): number {
   let count = 0;
   for (const match of scan.matchAll(pattern)) {
     const at = match.index ?? 0;
     if (quoted[at] === 1) continue;
-    if (skipImports && /\bimport\b/.test(scan.slice(scan.lastIndexOf("\n", at) + 1, at))) continue;
+    if (skipImports && plainImport(scan, at, at + match[0].length)) continue;
     count += 1;
   }
   return count;
+}
+
+// `from composio import a, run_composio_tool` or `import run_composio_tool`, with nothing else on the line.
+const IMPORT_BEFORE = /^\s*(?:from\s+[\w.]+\s+)?import\s+(?:[\w.]+\s*,\s*)*$/;
+// The name is not renamed (`as send`): the line ends, or another plain name follows.
+const IMPORT_AFTER = /^\s*(?:,\s*[\w.]+\s*)*$/;
+
+/** Only a one-statement import line that keeps the name as it is. `as send` or `; send = ...` still counts. */
+function plainImport(scan: string, start: number, end: number): boolean {
+  const lineStart = scan.lastIndexOf("\n", start) + 1;
+  const lineEnd = scan.indexOf("\n", end);
+  const before = scan.slice(lineStart, start);
+  const after = scan.slice(end, lineEnd === -1 ? scan.length : lineEnd);
+  return IMPORT_BEFORE.test(before) && IMPORT_AFTER.test(after);
 }
 
 /**
