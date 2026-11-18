@@ -30,7 +30,7 @@ def publish_hooks(
     context: HarnessContext, request: Mapping[str, Any], files: Sequence[TransitionFile]
 ) -> dict[str, Any]:
     """One ``publish_hooks`` request, its journal records replayed."""
-    from .native_transition_files import _replay
+    from codex_plugin_scanner.guard.native_transition_files import _replay
 
     answer = dict(ask("publish_hooks", context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request))
     _replay(answer.get("events"), files, None)
@@ -39,7 +39,7 @@ def publish_hooks(
 
 def publication_fault(fault: object) -> BaseException:
     """The exception a ``publish_hooks`` fault names."""
-    from .native_transition_files import _exception
+    from codex_plugin_scanner.guard.native_transition_files import _exception
 
     if isinstance(fault, Mapping) and isinstance(fault.get("runtime"), str):
         return RuntimeError(fault["runtime"])
@@ -76,9 +76,9 @@ def ask_install_plan(
     An enrolling plan may create the hook key, so it runs under the key's
     ordinary writer, as the generation always has. The runtime names the
     failure the answer ends in; this only raises it."""
-    from .codex_hook_file_integrity import check_hook_validation_deadline
-    from .codex_hook_integrity import _ordinary_hook_writer, hook_secret_file
-    from .native_transition_files import _budget, _package_roots, _replay
+    from codex_plugin_scanner.guard.codex_hook_file_integrity import check_hook_validation_deadline
+    from codex_plugin_scanner.guard.codex_hook_integrity import _ordinary_hook_writer, hook_secret_file
+    from codex_plugin_scanner.guard.native_transition_files import _budget, _package_roots, _replay
 
     request["package_roots"] = _package_roots()
     request["budget"] = _budget()
