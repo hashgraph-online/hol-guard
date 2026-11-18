@@ -14,11 +14,13 @@ use crate::daemon_policy_authority::{
 };
 
 use super::host::{self, Caller};
+use super::leftovers;
 use super::records::{self, int, owner, text};
 
 #[path = "daemon_manage_retire_state.rs"]
 mod state;
 
+pub(super) use leftovers::identity_for_retirement;
 pub(super) use state::record_retirement;
 use state::retire_state_daemon;
 
@@ -186,15 +188,6 @@ pub(super) fn retire_pid(
     false
 }
 
-/// `_guard_daemon_pid_identity_for_retirement`: the generation and owner an
-/// inventoried process must keep, when it runs as this user.
-pub(super) fn identity_for_retirement(pid: i64) -> Option<(String, String)> {
-    let marker = host::start_marker(pid)?;
-    let owner = host::owner_marker(pid)?;
-    let own = host::own_owner_marker()?;
-    host::same_text(&owner, &own).then_some((marker, owner))
-}
-
 /// `_guard_daemon_pending_launch_is_abandoned`.
 pub(super) fn pending_is_abandoned(pending: Option<&Map<String, Value>>) -> bool {
     let Some(pending) = pending.filter(|p| records::is_generation_bound(Some(p))) else {
@@ -343,14 +336,20 @@ fn resolve_handed_off(caller: &Caller, pending: Option<&Map<String, Value>>) -> 
 }
 
 /// `_resolve_abandoned_guard_daemon_pending_launch`.
-pub(super) fn resolve_abandoned(caller: &Caller, pending: Option<&Map<String, Value>>) -> bool {
+pub(super) fn resolve_abandoned(
+    caller: &Caller,
+    pending: Option<&Map<String, Value>>,
+    deadline: Deadline,
+) -> bool {
     if resolve_handed_off(caller, pending) {
         return true;
     }
     let Some(pending) = pending.filter(|p| pending_is_abandoned(Some(p))) else {
         return false;
     };
-    if host::daemon_inventory(caller).as_deref() != Some(&[]) {
+    // A daemon of this home that Guard can prove is its own may still be the
+    // launch's; one it cannot prove is never signalled and holds nothing.
+    if leftovers::only_unproven(caller, deadline).is_none() {
         return false;
     }
     let Some(pid) = int(pending, "pid") else {
@@ -451,7 +450,7 @@ pub(super) fn retire_all(
         );
     }
 
-    if let Some(inventory) = host::daemon_inventory(caller) {
+    if let Some(inventory) = leftovers::inventory(caller, deadline) {
         for &(pid, port) in &inventory {
             if handled.contains(&pid) || keep_port == Some(port) {
                 continue;
@@ -472,16 +471,13 @@ pub(super) fn retire_all(
                 }
             }
         }
-        let remaining = host::daemon_inventory(caller);
-        let empty = Some(Vec::new());
-        let confirmed = if inventory.is_empty() {
-            remaining == empty
-        } else {
-            remaining == empty && host::daemon_inventory(caller) == empty
-        };
+        // Read twice after signalling: what remains must be only processes
+        // Guard cannot prove are its own, and so must leave alone.
+        let settled = || leftovers::only_unproven(caller, deadline).is_some();
+        let confirmed = settled() && (inventory.is_empty() || settled());
         if confirmed && keep_port.is_none() {
             records::reconcile_invalid(home);
-            resolve_abandoned(caller, pending.as_ref());
+            resolve_abandoned(caller, pending.as_ref(), deadline);
         }
     }
     reap_orphaned_workers(caller, deadline);
@@ -512,7 +508,7 @@ pub(super) fn reap_orphaned_workers(caller: &Caller, deadline: Deadline) {
 }
 
 /// `guard_daemon_retirement_is_complete`.
-pub(super) fn retirement_is_complete(caller: &Caller) -> bool {
+pub(super) fn retirement_is_complete(caller: &Caller, deadline: Deadline) -> bool {
     let home = caller.guard_home.as_path();
     if let Some(state) = load_authenticated_daemon_state(home) {
         let Some(pid) = int(&state, "pid").filter(|pid| *pid > 0) else {
@@ -528,11 +524,11 @@ pub(super) fn retirement_is_complete(caller: &Caller) -> bool {
         }
     }
     if !records::pending_is_resolved(home)
-        && !resolve_abandoned(caller, records::load_pending(home).as_ref())
+        && !resolve_abandoned(caller, records::load_pending(home).as_ref(), deadline)
     {
         return false;
     }
-    host::daemon_inventory(caller).as_deref() == Some(&[])
+    leftovers::only_unproven(caller, deadline).is_some()
 }
 
 /// `_guard_daemon_pid_command_identity` for a state pid that is running.
