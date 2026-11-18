@@ -21,15 +21,32 @@ mod claude;
 pub(super) use claude::claude_grep_directory_scope_proven;
 #[path = "search_scope_grok.rs"]
 mod grok;
-pub(super) use grok::grok_grep_directory_scope_proven;
+use grok::grok_grep_directory_scope_proven;
 #[path = "search_scope_cursor.rs"]
 mod cursor;
-pub(super) use cursor::cursor_grep_directory_scope_proven;
+use cursor::cursor_grep_directory_scope_proven;
 #[path = "search_scope_grep_include.rs"]
 mod grep_include;
 pub(super) use grep_include::{grep_include_scope_proven, grep_include_walk_proven};
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
+
+/// True when a harness's own search tool provably reaches no sensitive file.
+pub(super) fn harness_search_scope_proven(
+    harness: &str,
+    tool: Option<&str>,
+    payload: &Value,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    match (harness, tool) {
+        ("claude-code", Some("Grep")) => claude_grep_directory_scope_proven(payload, home_dir, cwd),
+        ("claude-code", Some("Glob")) => claude_glob_scope_proven(payload, home_dir, cwd),
+        ("grok", Some("Grep" | "grep")) => grok_grep_directory_scope_proven(payload, home_dir, cwd),
+        ("cursor", Some("Grep")) => cursor_grep_directory_scope_proven(payload, home_dir, cwd),
+        _ => false,
+    }
+}
 
 /// Links into the main checkout one names-only walk may follow and prove.
 const MAX_CHECKOUT_LINK_WALKS: usize = 8;

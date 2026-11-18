@@ -44,7 +44,7 @@ SHELL = {
 }
 READ = {"zcode": "Read", "claude-code": "Read", "omp": "read", "pi": "read", "cursor": "Read"}
 GLOB = {"claude-code": "Glob", "omp": "glob"}
-GREP = {"claude-code": "Grep", "omp": "grep", "pi": "grep"}
+GREP = {"claude-code": "Grep", "omp": "grep", "pi": "grep", "cursor": "Grep"}
 WRITE = {"zcode": "Write", "claude-code": "Write", "omp": "write", "pi": "write", "cursor": "Write"}
 FIXED = {
     "eval": "eval",
@@ -193,9 +193,17 @@ def payload_input(case: ReplayCase, resolved: dict[str, object]) -> dict[str, ob
         resolved = {"file_path": resolved["path"]}
     if case.harness == "cursor" and case.tool == "read":
         resolved = {"file_path": resolved["path"], "path": resolved["path"]}
+    if case.harness == "cursor" and case.tool == "grep":
+        resolved = cursor_grep_input(resolved)
     if case.harness in {"claude-code", "zcode", "cursor"} and case.tool == "write":
         resolved = {"file_path": resolved["path"], "content": resolved["content"]}
     return resolved
+
+
+def cursor_grep_input(resolved: dict[str, object]) -> dict[str, object]:
+    """Cursor's hook names the folder a Grep searches ``file_path``."""
+    folder = {"file_path": resolved["path"]} if "path" in resolved else {}
+    return {**{key: value for key, value in resolved.items() if key != "path"}, **folder}
 
 
 def cursor_hook_fields(tool: str, payload: dict[str, object]) -> dict[str, object]:

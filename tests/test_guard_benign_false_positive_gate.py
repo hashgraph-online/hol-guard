@@ -36,7 +36,13 @@ from tests.benign_fp_gate_connectors import allow_ready_cli, assert_connector_se
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, replay
 from tests.benign_fp_gate_projects import host_tool_path
-from tests.gauntlet_replay import cursor_hook_fields, cursor_route_probe, omp_routes_profile, source_ref_payload
+from tests.gauntlet_replay import (
+    cursor_grep_input,
+    cursor_hook_fields,
+    cursor_route_probe,
+    omp_routes_profile,
+    source_ref_payload,
+)
 from tests.native_gate_retry import BUDGET_MISS_REASONS, RetryApprovals, review_with_unavailable_retry
 from tests.outbound_network_guard import outbound_network_attempts
 
@@ -192,9 +198,7 @@ def _tool_input(case: GateCase, fixture: BenignFixture) -> dict[str, object]:
     if case.harness == "cursor" and case.tool == "read":
         resolved = {"file_path": resolved["path"], "path": resolved["path"]}
     if case.harness == "cursor" and case.tool == "grep":
-        # Cursor's hook names the searched folder file_path.
-        folder = {"file_path": resolved["path"]} if "path" in resolved else {}
-        resolved = {**{k: v for k, v in resolved.items() if k != "path"}, **folder}
+        resolved = cursor_grep_input(resolved)
     if case.harness in {"claude-code", "zcode", "cursor"} and case.tool == "write":
         resolved = {"file_path": resolved["path"], "content": resolved["content"]}
     return resolved
