@@ -14216,65 +14216,120 @@ function promotedFacts(input, skip, tool, max) {
   }
   return facts;
 }
-const CALL = /\b(?:run_composio_tool|execute_action|tools\.execute)\s*\(\s*(?:(["'])([A-Za-z][A-Za-z0-9_]{2,119})\1)?/g;
-const PAIR = /(?:(["'])([A-Za-z_][A-Za-z0-9_]{0,59})\1\s*:|\b([A-Za-z_][A-Za-z0-9_]{0,59})\s*=(?!=))\s*(?:(["'])((?:\\.|(?!\4)[^\\\n]){0,400})\4|(-?\d+(?:\.\d+)?)\b|(True|False|None|true|false|null)\b)/g;
-const STEP_LIMIT = 10;
+const CALL_NAMES = "run_composio_tool|execute_action|tools\\.execute";
+const CALL = new RegExp(
+  `\\b(?:${CALL_NAMES})\\s*\\(\\s*(?:(["'])([A-Za-z][A-Za-z0-9_]{2,119})\\1(?=\\s*[,)]))?`,
+  "g"
+);
+const PASSED_AROUND = new RegExp(`\\b(?:${CALL_NAMES})\\b(?!\\s*\\()`, "g");
+const RUNS_TEXT = /\b(?:exec|eval|compile|__import__)\s*\(/g;
+const KEY$1 = /(["'])([A-Za-z_][A-Za-z0-9_]{0,59})\1\s*:|\b([A-Za-z_][A-Za-z0-9_]{0,59})\s*=(?!=)/g;
+const LITERAL = /\s*(?:(["'])((?:\\.|(?!\1)[^\\\n]){0,400})\1|(-?\d+(?:\.\d+)?)(?![\w.])|(True|False|None|true|false|null)\b)(?=\s*[,})\]])/y;
 const ARG_REACH = 1200;
 function readComposioCode(code) {
-  const calls = [...code.matchAll(CALL)];
+  const { scan, quoted } = maskPython(code);
   const steps = [];
-  let unnamedCalls = 0;
-  calls.forEach((match, index) => {
+  let unreadable = 0;
+  for (const match of scan.matchAll(CALL)) {
+    const at = match.index ?? 0;
+    if (quoted[at] === 1) continue;
     const slug = match[2];
     if (slug === void 0) {
-      unnamedCalls += 1;
-      return;
+      unreadable += 1;
+      continue;
     }
-    if (steps.length >= STEP_LIMIT) return;
-    const start = (match.index ?? 0) + match[0].length;
-    const args = literalArguments(code.slice(start, callEnd(code, start)));
-    const { app, action: action2 } = splitToolSlug(slug.toUpperCase());
-    const { facts, hidden } = scalarFacts(args, { max: 4, tool: slug.toUpperCase() });
+    const start = at + match[0].length;
+    const { args, unknown } = literalArguments(scan, quoted, start, callEnd(scan, quoted, start));
+    const tool = slug.toUpperCase();
+    const { app, action: action2 } = splitToolSlug(tool);
+    const { facts, hidden } = scalarFacts(args, { max: 4, tool });
     steps.push({
-      id: `code-${index}-${slug}`,
+      id: `code-${steps.length}-${slug}`,
       app,
       action: action2,
       effect: classifyMcpEffect(slug),
       details: facts,
-      hiddenDetails: hidden
+      hiddenDetails: hidden + unknown
     });
-  });
-  return { steps, unnamedCalls };
+  }
+  unreadable += countOutsideStrings(scan, quoted, PASSED_AROUND, true) + countOutsideStrings(scan, quoted, RUNS_TEXT, false);
+  return { steps, unreadable };
 }
-function callEnd(code, start) {
-  const limit = Math.min(code.length, start + ARG_REACH);
-  let depth = 1;
-  let quote = null;
-  for (let at = start; at < limit; at += 1) {
+function countOutsideStrings(scan, quoted, pattern, skipImports) {
+  let count2 = 0;
+  for (const match of scan.matchAll(pattern)) {
+    const at = match.index ?? 0;
+    if (quoted[at] === 1) continue;
+    if (skipImports && /\bimport\b/.test(scan.slice(scan.lastIndexOf("\n", at) + 1, at))) continue;
+    count2 += 1;
+  }
+  return count2;
+}
+function maskPython(code) {
+  const quoted = new Uint8Array(code.length);
+  const out = [];
+  let at = 0;
+  while (at < code.length) {
     const char = code[at];
-    if (quote !== null) {
-      if (char === "\\") at += 1;
-      else if (char === quote) quote = null;
+    if (char === "#") {
+      while (at < code.length && code[at] !== "\n") {
+        out.push(" ");
+        at += 1;
+      }
       continue;
     }
-    if (char === "'" || char === '"') quote = char;
-    else if (char === "(") depth += 1;
-    else if (char === ")") {
+    if (char !== "'" && char !== '"') {
+      out.push(char);
+      at += 1;
+      continue;
+    }
+    const delimiter = code.startsWith(char.repeat(3), at) ? char.repeat(3) : char;
+    out.push(delimiter);
+    at += delimiter.length;
+    while (at < code.length) {
+      if (code.startsWith(delimiter, at)) {
+        quoted.fill(1, at, at + delimiter.length);
+        out.push(delimiter);
+        at += delimiter.length;
+        break;
+      }
+      if (delimiter.length === 1 && code[at] === "\n") break;
+      const width = code[at] === "\\" && at + 1 < code.length ? 2 : 1;
+      quoted.fill(1, at, at + width);
+      out.push(code.slice(at, at + width));
+      at += width;
+    }
+  }
+  return { scan: out.join(""), quoted };
+}
+function callEnd(scan, quoted, start) {
+  const limit = Math.min(scan.length, start + ARG_REACH);
+  let depth = 1;
+  for (let at = start; at < limit; at += 1) {
+    if (quoted[at] === 1) continue;
+    if (scan[at] === "(") depth += 1;
+    else if (scan[at] === ")") {
       depth -= 1;
       if (depth === 0) return at;
     }
   }
   return limit;
 }
-function literalArguments(text2) {
+function literalArguments(scan, quoted, from, to) {
+  const text2 = scan.slice(0, to);
   const args = {};
-  for (const match of text2.matchAll(PAIR)) {
+  let unknown = 0;
+  KEY$1.lastIndex = from;
+  for (let match = KEY$1.exec(text2); match !== null; match = KEY$1.exec(text2)) {
     const key = match[2] ?? match[3];
-    if (key === void 0 || key in args) continue;
-    if (match[5] !== void 0) args[key] = match[5].replace(/\\(["'\\])/g, "$1");
-    else if (match[6] !== void 0) args[key] = Number(match[6]);
+    if (key === void 0 || quoted[match.index] === 1 || key in args) continue;
+    LITERAL.lastIndex = match.index + match[0].length;
+    const value = LITERAL.exec(text2);
+    if (value === null) unknown += 1;
+    else if (value[2] !== void 0) args[key] = value[2].replace(/\\(["'\\])/g, "$1");
+    else if (value[3] !== void 0) args[key] = Number(value[3]);
   }
-  return args;
+  return { args, unknown };
 }
 const NAME_BASIS = "Read from the tool's name. Guard has not checked what it does.";
 const STEP_BASIS = "Read from the action names. Guard has not checked what they do.";
@@ -14456,33 +14511,36 @@ function toStep(tool, index) {
 function workbenchCode({ harness, input }) {
   const code = codeOf(input?.code_to_execute);
   if (code === null) return null;
-  const { steps, unnamedCalls } = readComposioCode(code);
-  if (steps.length === 0) return null;
-  const apps = unique(steps.map((step) => step.app).filter((app) => app !== null));
-  const first = steps[0];
-  const count2 = steps.length;
+  const { steps: all, unreadable } = readComposioCode(code);
+  if (all.length === 0) return null;
+  const steps = all.slice(0, STEP_ROW_LIMIT);
+  const apps = unique(all.map((step) => step.app).filter((app) => app !== null));
+  const first = all[0];
+  const count2 = all.length;
   const thought = textOf(input?.thought, 300);
   const lines = code.split("\n").length;
   return {
     headline: `${harness} wants to ${batchPhrase(first, count2, apps.length > 0 ? joinList(apps) : "Composio")}, using code`,
     title: batchTitle(first, count2, apps),
-    aside: codeAside(apps, unnamedCalls),
+    aside: codeAside(apps, unreadable),
     effect: "run-code",
     effectBasis: "Read from the action names in the code. Guard has not run or checked it.",
     facts: [],
     steps,
+    hiddenSteps: all.length - steps.length,
     stepsCaption: count2 === 1 ? "What the code asks for" : "What the code asks for, in order",
     effectApps: apps,
     quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
-    code: { label: `The code (${lines} ${lines === 1 ? "line" : "lines"})`, text: code, collapsed: true },
+    // When part of the code could not be read, the code itself stays in view.
+    code: { label: `The code (${lines} ${lines === 1 ? "line" : "lines"})`, text: code, collapsed: unreadable === 0 },
     queueTitle: `${apps.length === 1 ? apps[0] : "Composio"} · ${first.action}${count2 > 1 ? ` and ${count2 - 1} more` : ""}`,
     queueDetail: batchQueueDetail(first, apps)
   };
 }
-function codeAside(apps, unnamedCalls) {
+function codeAside(apps, unreadable) {
   const account = apps.length > 0 ? `your connected ${accountPhrase(apps)}` : "your connected accounts";
-  const unnamed = unnamedCalls > 0 ? " It also calls actions Guard could not name." : "";
-  return `The agent wrote code that Composio runs with ${account}.${unnamed}`;
+  const rest = unreadable > 0 ? " Some of it reaches actions in ways Guard cannot read, so read the code below." : "";
+  return `The agent wrote code that Composio runs with ${account}.${rest}`;
 }
 function remoteCode(context, title, field, label) {
   const code = codeOf(context.input?.[field]);
@@ -34830,6 +34888,11 @@ function decisionButtonLabels(input) {
   const blockLabel = watchOnlyObservation || persistExactBlock ? "Stop this next time" : blockButtonLabel(blockScope);
   return { persistExactAllow, persistExactBlock, allowLabel, blockLabel };
 }
+function resolvedActionCopy(item, action2, persistedExactAction) {
+  if (item !== null) return buildRetryAfterApprovalCopy(item, action2, persistedExactAction);
+  if (action2 === "allow") return "Approved: action can proceed";
+  return "Blocked: action stopped";
+}
 const EXTENSION_BRANDS = {
   git: { slug: "git", label: "Git", color: "F05032" },
   github: { slug: "github", label: "GitHub", color: "181717" },
@@ -37697,11 +37760,6 @@ function ReviewLastTimeCard({ detail }) {
   ] });
 }
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
-function resolvedActionCopy(item, action2, persistedExactAction) {
-  if (item !== null) return buildRetryAfterApprovalCopy(item, action2, persistedExactAction);
-  if (action2 === "allow") return "Approved: action can proceed";
-  return "Blocked: action stopped";
-}
 function ReviewDecisionCard(props) {
   const detail = props.detail;
   const item = detail?.item ?? null;

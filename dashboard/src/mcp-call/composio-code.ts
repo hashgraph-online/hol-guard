@@ -7,67 +7,139 @@ import { splitToolSlug } from "./mcp-services";
  * Code sent to Composio's workspace usually calls Composio actions by name:
  * `run_composio_tool('GMAIL_FETCH_EMAILS', {'query': 'riverside', ...})`.
  * Those names say what the code is for in words people know, so the card can
- * show "Search emails in Gmail" instead of asking them to read Python.
+ * show "Get emails in Gmail" instead of asking them to read Python.
  *
  * This reads the text only. It finds the action names and the plain values
  * written next to them; it does not run or fully parse the code, and code can
  * do more than the actions it names. The card says so and keeps the code one
  * click away.
+ *
+ * The agent writes this code, so nothing it can hide counts: a call inside a
+ * comment or a string is not a call, and a value is shown only when the whole
+ * value is one plain literal. Anything else is counted as unreadable, and the
+ * card says so instead of guessing.
  */
 export type ComposioCodeReading = {
+  /** Every call whose action name is written out, in order. */
   steps: McpStep[];
-  /** Calls whose action name is not written out (a variable), so the card cannot name them. */
-  unnamedCalls: number;
+  /**
+   * Places the code reaches actions in a way Guard cannot name: an action
+   * name built at run time, a call function passed around under another
+   * name, or code run from text (`exec`, `eval`).
+   */
+  unreadable: number;
 };
 
-const CALL = /\b(?:run_composio_tool|execute_action|tools\.execute)\s*\(\s*(?:(["'])([A-Za-z][A-Za-z0-9_]{2,119})\1)?/g;
-// `'key': 'value'`, `"key": 15`, `key=True`. Strings stop at their closing quote; a string the input cut short is left out.
-const PAIR = /(?:(["'])([A-Za-z_][A-Za-z0-9_]{0,59})\1\s*:|\b([A-Za-z_][A-Za-z0-9_]{0,59})\s*=(?!=))\s*(?:(["'])((?:\\.|(?!\4)[^\\\n]){0,400})\4|(-?\d+(?:\.\d+)?)\b|(True|False|None|true|false|null)\b)/g;
-const STEP_LIMIT = 10;
+const CALL_NAMES = "run_composio_tool|execute_action|tools\\.execute";
+// The action name counts only when the whole first argument is that one string.
+const CALL = new RegExp(
+  `\\b(?:${CALL_NAMES})\\s*\\(\\s*(?:(["'])([A-Za-z][A-Za-z0-9_]{2,119})\\1(?=\\s*[,)]))?`,
+  "g",
+);
+// The call function named without calling it, so it is handed to something else.
+const PASSED_AROUND = new RegExp(`\\b(?:${CALL_NAMES})\\b(?!\\s*\\()`, "g");
+const RUNS_TEXT = /\b(?:exec|eval|compile|__import__)\s*\(/g;
+// `'key':` or `key=` (not `==`).
+const KEY = /(["'])([A-Za-z_][A-Za-z0-9_]{0,59})\1\s*:|\b([A-Za-z_][A-Za-z0-9_]{0,59})\s*=(?!=)/g;
+// One plain literal that is the whole value: the next thing is a comma or a closing bracket.
+const LITERAL =
+  /\s*(?:(["'])((?:\\.|(?!\1)[^\\\n]){0,400})\1|(-?\d+(?:\.\d+)?)(?![\w.])|(True|False|None|true|false|null)\b)(?=\s*[,})\]])/y;
 const ARG_REACH = 1200;
 
 export function readComposioCode(code: string): ComposioCodeReading {
-  const calls = [...code.matchAll(CALL)];
+  const { scan, quoted } = maskPython(code);
   const steps: McpStep[] = [];
-  let unnamedCalls = 0;
-  calls.forEach((match, index) => {
+  let unreadable = 0;
+  for (const match of scan.matchAll(CALL)) {
+    const at = match.index ?? 0;
+    if (quoted[at] === 1) continue;
     const slug = match[2];
     if (slug === undefined) {
-      unnamedCalls += 1;
-      return;
+      unreadable += 1;
+      continue;
     }
-    if (steps.length >= STEP_LIMIT) return;
-    const start = (match.index ?? 0) + match[0].length;
-    const args = literalArguments(code.slice(start, callEnd(code, start)));
-    const { app, action } = splitToolSlug(slug.toUpperCase());
-    const { facts, hidden } = scalarFacts(args, { max: 4, tool: slug.toUpperCase() });
+    const start = at + match[0].length;
+    const { args, unknown } = literalArguments(scan, quoted, start, callEnd(scan, quoted, start));
+    const tool = slug.toUpperCase();
+    const { app, action } = splitToolSlug(tool);
+    const { facts, hidden } = scalarFacts(args, { max: 4, tool });
     steps.push({
-      id: `code-${index}-${slug}`,
+      id: `code-${steps.length}-${slug}`,
       app,
       action,
       effect: classifyMcpEffect(slug),
       details: facts,
-      hiddenDetails: hidden,
+      hiddenDetails: hidden + unknown,
     });
-  });
-  return { steps, unnamedCalls };
+  }
+  unreadable += countOutsideStrings(scan, quoted, PASSED_AROUND, true) + countOutsideStrings(scan, quoted, RUNS_TEXT, false);
+  return { steps, unreadable };
 }
 
-/** Where the call's parentheses close, skipping quoted text, so values written after the call are not read as its inputs. */
-function callEnd(code: string, start: number): number {
-  const limit = Math.min(code.length, start + ARG_REACH);
-  let depth = 1;
-  let quote: string | null = null;
-  for (let at = start; at < limit; at += 1) {
+/** Matches outside strings. Importing the call function by name is not passing it around. */
+function countOutsideStrings(scan: string, quoted: Uint8Array, pattern: RegExp, skipImports: boolean): number {
+  let count = 0;
+  for (const match of scan.matchAll(pattern)) {
+    const at = match.index ?? 0;
+    if (quoted[at] === 1) continue;
+    if (skipImports && /\bimport\b/.test(scan.slice(scan.lastIndexOf("\n", at) + 1, at))) continue;
+    count += 1;
+  }
+  return count;
+}
+
+/**
+ * Python text with every `#` comment blanked to spaces (offsets kept), and a
+ * map of which characters sit inside a string literal. A string's opening
+ * quote is left unmarked so a quoted key can still start there.
+ */
+export function maskPython(code: string): { scan: string; quoted: Uint8Array } {
+  const quoted = new Uint8Array(code.length);
+  const out: string[] = [];
+  let at = 0;
+  while (at < code.length) {
     const char = code[at];
-    if (quote !== null) {
-      if (char === "\\") at += 1;
-      else if (char === quote) quote = null;
+    if (char === "#") {
+      while (at < code.length && code[at] !== "\n") {
+        out.push(" ");
+        at += 1;
+      }
       continue;
     }
-    if (char === "'" || char === '"') quote = char;
-    else if (char === "(") depth += 1;
-    else if (char === ")") {
+    if (char !== "'" && char !== '"') {
+      out.push(char);
+      at += 1;
+      continue;
+    }
+    const delimiter = code.startsWith(char.repeat(3), at) ? char.repeat(3) : char;
+    out.push(delimiter);
+    at += delimiter.length;
+    while (at < code.length) {
+      if (code.startsWith(delimiter, at)) {
+        quoted.fill(1, at, at + delimiter.length);
+        out.push(delimiter);
+        at += delimiter.length;
+        break;
+      }
+      // A one-line string the code never closed ends at the line break.
+      if (delimiter.length === 1 && code[at] === "\n") break;
+      const width = code[at] === "\\" && at + 1 < code.length ? 2 : 1;
+      quoted.fill(1, at, at + width);
+      out.push(code.slice(at, at + width));
+      at += width;
+    }
+  }
+  return { scan: out.join(""), quoted };
+}
+
+/** Where the call's parentheses close, so values written after the call are not read as its inputs. */
+function callEnd(scan: string, quoted: Uint8Array, start: number): number {
+  const limit = Math.min(scan.length, start + ARG_REACH);
+  let depth = 1;
+  for (let at = start; at < limit; at += 1) {
+    if (quoted[at] === 1) continue;
+    if (scan[at] === "(") depth += 1;
+    else if (scan[at] === ")") {
       depth -= 1;
       if (depth === 0) return at;
     }
@@ -75,14 +147,30 @@ function callEnd(code: string, start: number): number {
   return limit;
 }
 
-/** The plain values written beside an action name. Yes/no switches are settings, not something a person judges, so they stay in the code. */
-function literalArguments(text: string): Record<string, unknown> {
+/**
+ * The plain values written beside an action name. A value built from more
+ * than one piece (`'a' + domain`, a variable, an f-string) is not shown, since
+ * what runs could differ from any piece of it; it is counted instead. Yes/no
+ * switches are settings, not something a person judges, so they stay in the code.
+ */
+function literalArguments(
+  scan: string,
+  quoted: Uint8Array,
+  from: number,
+  to: number,
+): { args: Record<string, unknown>; unknown: number } {
+  const text = scan.slice(0, to);
   const args: Record<string, unknown> = {};
-  for (const match of text.matchAll(PAIR)) {
+  let unknown = 0;
+  KEY.lastIndex = from;
+  for (let match = KEY.exec(text); match !== null; match = KEY.exec(text)) {
     const key = match[2] ?? match[3];
-    if (key === undefined || key in args) continue;
-    if (match[5] !== undefined) args[key] = match[5].replace(/\\(["'\\])/g, "$1");
-    else if (match[6] !== undefined) args[key] = Number(match[6]);
+    if (key === undefined || quoted[match.index] === 1 || key in args) continue;
+    LITERAL.lastIndex = match.index + match[0].length;
+    const value = LITERAL.exec(text);
+    if (value === null) unknown += 1;
+    else if (value[2] !== undefined) args[key] = value[2].replace(/\\(["'\\])/g, "$1");
+    else if (value[3] !== undefined) args[key] = Number(value[3]);
   }
-  return args;
+  return { args, unknown };
 }
