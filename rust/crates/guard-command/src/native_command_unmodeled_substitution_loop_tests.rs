@@ -61,7 +61,7 @@ fn a_loop_that_keeps_a_value_and_runs_no_interpreter_reaches_review() {
         r#"while read -r f; do n=$(printf '%s' "$f" | wc -c); echo "$f $n"; done < /dev/null"#,
         r#"if [ -f VERSION ]; then v=$(cat VERSION); printf '%s\n' "$v"; fi"#,
         "set -e\nfor entry in 'a 1' 'b 2'; do\n  set -- $entry\n  actual=$(shasum -a 256 \"$1\" | awk '{print $1}')\n  test \"$actual\" = \"$2\"\ndone",
-        "set -eu\nfor file in a.js b.tgz; do\n  path=\"$HOME/Downloads/w/$file\"\n  hash=$(shasum -a 256 \"$path\" | awk '{print $1}')\n  grep -F \"| \\`$file\\` | \\`$hash\\` |\" docs/notes.md >/dev/null\ndone\nprintf 'ok\\n'",
+        "set -eu\nfor file in a.js b.tgz; do\n  artifact_path=\"$HOME/Downloads/w/$file\"\n  hash=$(shasum -a 256 \"$artifact_path\" | awk '{print $1}')\n  grep -F \"| \\`$file\\` | \\`$hash\\` |\" docs/notes.md >/dev/null\ndone\nprintf 'ok\\n'",
     ] {
         let (action, code) = decision(&controls, command);
         assert_ne!(code, FAILED, "{command}\n{}", diagnose(command));
@@ -101,6 +101,16 @@ fn diagnose(command: &str) -> String {
         shape(&bounded),
         shape(&kept),
     )
+}
+
+#[test]
+fn a_shell_state_path_assignment_is_not_treated_as_plain_data() {
+    // In zsh, `path` is tied to PATH; unlike `artifact_path`, it can change
+    // which commands execute. The uncertain floor must not treat it as an
+    // ordinary local binding.
+    let controls = controls(github("enabled", None), false);
+    let command = r#"for file in a.js; do path="$HOME/Downloads/w/$file"; hash=$(shasum -a 256 "$path" | awk '{print $1}'); test "$hash" = x; done"#;
+    assert_eq!(decision(&controls, command).1, FAILED, "{command}");
 }
 
 #[test]
