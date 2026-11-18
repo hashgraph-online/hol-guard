@@ -34,6 +34,29 @@ fn attached_after(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'/' | b':')
 }
 
+fn decode_printf_escapes(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\\\' {
+            out.push(ch);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('r') => out.push('\r'),
+            Some('t') => out.push('\t'),
+            Some('\\\\') => out.push('\\\\'),
+            Some(other) => {
+                out.push('\\\\');
+                out.push(other);
+            }
+            None => out.push('\\\\'),
+        }
+    }
+    out
+}
+
 // Parse only a single literal print. Shell quote removal can join fragments:
 // 123-45-67"89" prints 123-45-6789, while '123-45-6789'0 is attached.
 // A comment starts at an unquoted, unescaped word boundary, so syntax after
@@ -108,6 +131,11 @@ pub(super) fn echoes_ssn(command: &str) -> bool {
     }
     let Some(decoded) = literal_print_text(trimmed) else {
         return false;
+    };
+    let decoded = if program == "printf" {
+        decode_printf_escapes(&decoded)
+    } else {
+        decoded
     };
     let bytes = decoded.as_bytes();
     SSN.captures_iter(&decoded).any(|found| {
