@@ -325,7 +325,7 @@ def _unsupported_capability(host: str) -> HarnessEventCapability:
         known_blind_spots=(
             f"Requested host {requested_input!r} has no registered Guard adapter or declared event surface.",
         ),
-        source_reference="src/codex_plugin_scanner/guard/harness/registry.py:_ADAPTER_SPECS",
+        source_reference="src/codex_plugin_scanner/guard/native_harness_client.py:NATIVE_HARNESSES",
     )
 
 

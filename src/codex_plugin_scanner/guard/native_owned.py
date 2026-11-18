@@ -15,18 +15,16 @@ import os
 import threading
 import time
 import uuid
-from collections.abc import Callable, Generator, Iterable, Mapping
-from contextlib import ExitStack, contextmanager
+from collections.abc import Generator, Iterable, Mapping
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 from .native_failure import INVALID_ANSWER, failure_from_answer
 
 if TYPE_CHECKING:
-    from .harness.base import HarnessAdapter
     from .harness_context import HarnessContext
 
 _INVALID = INVALID_ANSWER
@@ -346,30 +344,3 @@ def codex_install_transaction(
             _OWNER.reset(owner_token)
             if held_token is not None:
                 _HELD_TARGETS.reset(held_token)
-
-
-_MutationResult = TypeVar("_MutationResult")
-
-
-def owned_adapter_mutation(method: Callable[..., _MutationResult]) -> Callable[..., _MutationResult]:
-    """Run an adapter's install or uninstall as the sole owner of its Guard home."""
-
-    @wraps(method)
-    def owned(self: HarnessAdapter, context: HarnessContext, *args: object, **kwargs: object) -> _MutationResult:
-        from .runtime_transition import assert_transition_mutation_allowed
-
-        with ExitStack() as ownership:
-            if self.harness == "codex":
-                ownership.enter_context(codex_lifecycle_locks(context))
-            assert_transition_mutation_allowed(context.guard_home)
-            self.preflight_management(context, operation=method.__name__)
-            with codex_install_transaction(
-                context.guard_home,
-                context.guard_home / "managed",
-                actor=f"adapter.{self.harness}.{method.__name__}",
-                check_pending=True,
-            ):
-                return method(self, context, *args, **kwargs)
-
-    owned.__dict__["_guard_mutation_owned"] = True
-    return owned

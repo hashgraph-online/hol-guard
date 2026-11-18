@@ -265,7 +265,12 @@
     "src/codex_plugin_scanner/guard/native_harness_ops.py",
     "src/codex_plugin_scanner/guard/native_codex_ops.py",
     "src/codex_plugin_scanner/guard/native_harness_install_ops.py",
-    "src/codex_plugin_scanner/guard/harness_context.py"
+    "src/codex_plugin_scanner/guard/harness_context.py",
+    "src/codex_plugin_scanner/guard/native_detected.py",
+    "src/codex_plugin_scanner/guard/native_extension.py",
+    "src/codex_plugin_scanner/guard/native_failure.py",
+    "src/codex_plugin_scanner/guard/native_harness_steps.py",
+    "src/codex_plugin_scanner/guard/native_install_facts.py"
    ],
    "current": "plain functions that send one harness op to the native runtime; registry, detection, installation, and adapter control surfaces run in Rust, and transport and semantic subsets are classified below",
    "target": "control-plane registration and installation only"

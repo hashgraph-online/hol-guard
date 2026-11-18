@@ -598,7 +598,6 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/codex_harness_client.py",
-          "src/codex_plugin_scanner/guard/codex_harness_lifecycle.py",
           "src/codex_plugin_scanner/guard/native_owned.py",
           "src/codex_plugin_scanner/guard/codex_remote_client.py",
           "src/codex_plugin_scanner/guard/mcp_server_client.py",
@@ -689,7 +688,6 @@
           "src/codex_plugin_scanner/guard/diagnostics_bridge.py",
           "src/codex_plugin_scanner/guard/native_detected.py",
           "src/codex_plugin_scanner/guard/native_extension.py",
-          "src/codex_plugin_scanner/guard/harness/native_harness.py",
           "src/codex_plugin_scanner/guard/native_harness_steps.py",
           "src/codex_plugin_scanner/guard/native_install_facts.py",
           "src/codex_plugin_scanner/guard/cli/native_managed_install.py",
@@ -820,9 +818,7 @@
       ]
     },
     "adapters": {
-      "path": [
-        "src/codex_plugin_scanner/guard/harness/*.py"
-      ]
+      "path": []
     },
     "vendored": {
       "path": []
@@ -1040,31 +1036,6 @@
         "evidence": "The retained reference closure of every symbol other modules import from render.py (emit_guard_payload) contains none of the excluded symbols except through emit_guard_payload, whose as_json=True branch (which writes JSON through _redact_payload and _render_redacted_json_payload; the hook protocol's redacted document is printed by the resident's cli_hook_emit op, not by render.py) never reads them. The excluded symbols are reached only from emit_guard_payload's as_json=False branch through the _RENDERERS and _PLAIN_TEXT_RENDERERS tables. The report validates this reference closure on every run."
       },
       {
-        "id": "adapter-base-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/harness/base.py",
-        "symbols": [
-          "HarnessAdapter.prepare_install",
-          "HarnessAdapter.install",
-          "HarnessAdapter.uninstall"
-        ],
-        "entry_points": [],
-        "reason": "HarnessAdapter default install, prepare_install and uninstall implementations used when an adapter does not override them.",
-        "evidence": "The default prepare_install, install and uninstall are invoked only from the excluded install, uninstall and repair command dispatchers. No retained runtime code reads these attributes. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
-        "id": "adapter-codex-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/codex_harness_lifecycle.py",
-        "symbols": [
-          "CodexHarnessAdapter.prepare_install",
-          "CodexHarnessAdapter._backup_path"
-        ],
-        "entry_points": [],
-        "reason": "Codex install preparation, which asks the native harness_adapter prepare_install op and wraps its files; install and uninstall run in the native harness_adapter adapter_install and adapter_uninstall ops.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. Launch, detect, diagnostics and the runtime hook-state readers stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
         "id": "runtime-policy-admin-payloads",
         "category": "cli_only",
         "path": "src/codex_plugin_scanner/guard/cli/commands_support_runtime_policy.py",
@@ -1111,17 +1082,6 @@
         "entry_points": [],
         "reason": "Requests to the runtime's device-key-helper command and health-lease, protection-lease and health-key-registration signing for the MDM health reporter; windows_current_user_sid stays because the Windows policy snapshot lazily imports it to bind snapshot ownership; the runtime reads the token user.",
         "evidence": "run_helper, the sign_* functions, require_machine_context and the canonical-claims validators are called only from mdm/device_key.py, which is reached only through mdm/integrity.py, mdm/continuity.py and mdm/health_*.py (the periodic MDM health and lease reporter, already excluded by mdm-health) and cli/commands_dispatch_mdm.py. The only in-scope importer of this module is native_policy_snapshot_windows_support._windows_owner_sid, a lazy import of windows_current_user_sid, which asks the runtime for this process's token user."
-      },
-      {
-        "id": "adapter-inventory-snapshot",
-        "category": "offline_reporting",
-        "path": "src/codex_plugin_scanner/guard/harness/base.py",
-        "symbols": [
-          "HarnessAdapter.inventory_snapshot"
-        ],
-        "entry_points": [],
-        "reason": "HarnessAdapter.inventory_snapshot assembles the AIBOM inventory snapshot (including optional Cisco scans) for export and cloud inventory upload.",
-        "evidence": "No production code calls inventory_snapshot: the only references are the method definition and tests/test_guard_aibom_detection.py, which test the method directly. The AIBOM collection, upload and CLI modules (aibom_collection, aibom_commands, aibom_cli, aibom_content_upload) are already excluded by aibom-inventory and build snapshots through their own path. Its lazy imports of inventory_contract and inventory_cisco were the only in-scope edge to the inventory_contract assembly modules (items, metadata, redaction, scans, mcp, models, constants) and, through them, skill_document_evidence and trust_metadata_boundary. aibom_detection now imports fingerprint_mapping and fingerprint_text straight from inventory_contract_fingerprints, which stay in scope because adapter detect() hashes MCP server content synchronously during launch."
       },
       {
         "id": "adapter-cursor-setup",
