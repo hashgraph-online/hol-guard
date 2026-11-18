@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.native_runtime import (
     _INTEGRITY_FAILURE_REASONS,
     _native_error,
@@ -29,6 +30,32 @@ def test_native_error_requires_a_bounded_known_error_envelope() -> None:
     assert _native_error({"error": "native_overloaded", "retryable": "yes"}) is None
     assert _native_error({"error": "native_overloaded", "retryable": True, "extra": 1}) is None
     assert _native_error({"error": "unknown", "retryable": True}) is None
+
+
+def test_native_error_prefers_rust_transport_validation(monkeypatch) -> None:
+    calls: list[tuple[object, tuple[str, ...], str, float, int]] = []
+    candidate = ROOT / "runtime"
+
+    monkeypatch.setattr(native_runtime, "_runtime_candidates", lambda: (candidate,))
+    monkeypatch.setattr(native_runtime, "_validate_binary", lambda path: object())
+
+    def run(path, args, *, input_text, timeout_seconds, output_limit, **kwargs):
+        calls.append((path, args, input_text, timeout_seconds, output_limit))
+        return '{"error":"native_overloaded"}'
+
+    monkeypatch.setattr(native_runtime, "_run_native_process", run)
+    assert native_runtime._native_error({"error": "native_overloaded", "retryable": True}) == (
+        "native_overloaded"
+    )
+    assert calls == [
+        (
+            candidate,
+            ("native-error-code", "--stdin"),
+            '{"error":"native_overloaded","retryable":true}',
+            0.25,
+            16 * 1024,
+        )
+    ]
 
 
 def test_native_runtime_fixtures_use_the_platform_temp_directory() -> None:
