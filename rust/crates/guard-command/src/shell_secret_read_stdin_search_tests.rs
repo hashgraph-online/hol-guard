@@ -61,7 +61,7 @@ fn ordinary_searches_still_pass() {
         "rg -ie /home/agent/.ssh/id_rsa",
         "rg -i -e /home/agent/.ssh/id_rsa",
         "rg -e /home/agent/.ssh/id_rsa",
-        "rg -je /home/agent/.ssh/id_rsa",
+        "rg -e/home/agent/.ssh/id_rsa",
         "grep -i -e /home/agent/.ssh/id_rsa",
         "grep --directories=recurse /home/agent/.ssh/id_rsa",
         "grep -f patterns.txt",
