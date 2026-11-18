@@ -394,7 +394,7 @@ def bound_resident_call(
         decoded = json.loads(output)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise reply.fail() from error
-    error_code = _native_error(decoded)
+    error_code = _native_error(decoded, deadline_monotonic=deadline)
     if error_code is not None:
         if error_code == "native_overloaded":
             native_record_overload(identity, home)

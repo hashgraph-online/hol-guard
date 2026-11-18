@@ -22,6 +22,11 @@ fn literal_path_redirects_are_projected_away() {
         ("python3 app.py &>> log.txt", "python3 app.py"),
         ("python3 app.py &> /dev/null", "python3 app.py"),
         ("python3 app.py>out.txt", "python3 app.py"),
+        ("(true) && (cat b 2>&1)", "(true) && (cat b )"),
+        (
+            "(npm test 2>&1 || npm test 2>&1)",
+            "(npm test || npm test )",
+        ),
         ("echo a > a.txt  &&  echo b", "echo a &&  echo b"),
         ("echo a\\ > a.txt\nrm -rf x", "echo a\\ \nrm -rf x"),
     ] {

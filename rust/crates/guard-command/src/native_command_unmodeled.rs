@@ -59,6 +59,8 @@ mod functions;
 mod heredoc;
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
+#[path = "native_command_unmodeled_loop.rs"]
+mod loops;
 #[path = "native_command_unmodeled_operands.rs"]
 mod operands;
 #[path = "native_command_unmodeled_redirections.rs"]
@@ -159,6 +161,8 @@ const INTERPRETERS: &[&str] = &[
     "osascript",
     "awk",
     "gawk",
+    "mawk",
+    "nawk",
     "watch",
     "parallel",
     "su",
@@ -241,7 +245,11 @@ impl CompiledNativeCommandControls {
         // name in an operand position runs nothing: `rg env src` searches for
         // the word, the way `rg bar src` always has, and reading the operand
         // as a program refused it outright with no approval left to give it.
-        let commanded = named_words(&joined_quotes(&text_in_command_positions(&bare)));
+        // A double-quoted `"$HOME/..."` is a fixed path, so it is read as one
+        // when telling operands from programs.
+        let commanded = named_words(&joined_quotes(&text_in_command_positions(
+            &xargs::with_fixed_home(&bare),
+        )));
         // `source FILE` runs the file's words in this shell, so the file names
         // the programs the command can run. Reading it bounds those owners the
         // way a script file bounds an interpreter's. Until it was read, an
@@ -601,7 +609,7 @@ fn named_xargs_pipeline(text: &str) -> bool {
     text.contains("xargs")
         && xargs_names_its_program(text)
         && xargs_input_is_named(text)
-        && !text.contains(['<', '`', '$', '\n'])
+        && !xargs::with_fixed_home(text).contains(['<', '`', '$', '\n'])
         && !moves_data(&unquoted_literal(&kept.join(" ")))
 }
 
@@ -842,8 +850,9 @@ fn reviewable_structure(
             let looked = without_lookups(&command.normalized_text);
             bounded_substitutions(&looked)
                 .or_else(|| {
-                    reviewable_substitutions(&looked)
-                        .filter(|bounded| plain_sequence(&bounded.text))
+                    reviewable_substitutions(&looked).filter(|bounded| {
+                        plain_sequence(&bounded.text) || loops::launcher_free_loop(&bounded.text)
+                    })
                 })
                 .is_some_and(|bounded| {
                     let text = bounded.text;
@@ -1393,7 +1402,8 @@ fn glues_a_word(character: char) -> bool {
 }
 
 fn synthesizes_program(literal: &str, sourced: bool) -> bool {
-    let masked = mask_double_quoted_separators(&without_case_labels(literal));
+    let plain = expansion::without_literal_subscripts(literal);
+    let masked = mask_double_quoted_separators(&without_case_labels(&plain));
     let mut words = command_words(&masked).filter(|word| !is_assignment(word));
     words.any(|word| {
         !matches!(

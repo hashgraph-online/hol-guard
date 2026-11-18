@@ -215,6 +215,39 @@ fn a_git_rule_review_offers_always_allow() {
     }
 }
 
+/// An Oh My Pi eval made only of `commit` drafts is approved for the
+/// repositories it commits to. Always allow on one draft holds for the next
+/// draft there with another subject, body or file selection, and not for a
+/// draft in another repository or a program that does more than draft.
+#[test]
+fn a_commit_draft_approval_holds_for_the_next_draft_in_that_repository() {
+    let draft = |code: &str| {
+        let code = code.to_owned();
+        token(&root(), move |query| {
+            query["harness"] = json!("omp");
+            query["tool_name"] = json!("eval");
+            query["command"] = Value::Null;
+            query["tool_input"] = json!([["language", "js"], ["code", code], ["title", "Commit"]]);
+            query["facts"]["reason_code"] = json!("native_command_review_required");
+        })
+        .unwrap()
+    };
+    let first = draft("const d = await commit.draft(); await d.take('README.md'); return await d.commit('Add notes', {body: ['Explain the retry window.']});");
+    for next in [
+        "const d = await commit.draft(); return await d.commit('Fix the parser');",
+        "const d = await commit.draft({ agents: 'self' }); await d.take(['src/a.js', 'src/b.js']); print(await d.commit('Raise the timeout', ['Document it.']));",
+    ] {
+        assert_eq!(draft(next), first, "{next}");
+    }
+    for other in [
+        "const d = await commit.draft({ repo: '../other' }); return await d.commit('Add notes');",
+        "const d = await commit.draft(); await d.commit('Add notes'); return await read('README.md');",
+        "const m = 'x'; const d = await commit.draft(); return await d.commit(m);",
+    ] {
+        assert_ne!(draft(other), first, "{other}");
+    }
+}
+
 #[test]
 fn a_tool_called_with_no_input_can_be_approved() {
     let bare = token(&root(), |query| {

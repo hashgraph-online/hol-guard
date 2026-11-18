@@ -422,9 +422,12 @@ fn remove_redirect(
     }
     if chars.get(index) == Some(&'&') {
         // A descriptor copy between stdout and stderr moves no file data.
+        // The `)` that closes a subshell ends the copy as a blank does:
+        // `(npm test 2>&1 || true)` copies the descriptor inside the group.
+        let after = chars.get(index + 2);
         if input
             || !matches!(chars.get(index + 1), Some('1' | '2'))
-            || !boundary(chars.get(index + 2))
+            || !(boundary(after) || after == Some(&')'))
         {
             return None;
         }

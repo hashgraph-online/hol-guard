@@ -1,0 +1,216 @@
+//! Oh My Pi's `commit` eval prelude: `await commit.draft(options)` and the
+//! draft's `take`, `drop`, `only`, `show`, `diff` and `commit` methods.
+//!
+//! The prelude runs Git from the host process to attribute, select and commit
+//! changed lines in one repository: the session's, or the checkout `repo`
+//! names. It builds the commit from a private index and never touches the
+//! worktree, but Git may still start configured programs (filters, an
+//! fsmonitor, hooks, signing) the way `git add` and `git commit` do. Each
+//! draft is recorded as one `commit` call, which the eval judges as that local
+//! Git write in that repository.
+//!
+//! Every argument must be a literal. Options outside the documented ones,
+//! including `amend`, keep the whole program reviewed, as does a draft method
+//! on anything but a name bound to an awaited draft.
+
+use super::super::tokens::Token;
+use super::{Call, Lit, Parser, MAX_CALLS, MAX_DEPTH};
+use serde_json::{json, Map, Value};
+
+impl Parser {
+    /// Whether `await commit.draft` starts at the cursor.
+    pub(super) fn draft_ahead(&self) -> bool {
+        let word = |offset: usize, name: &str| matches!(self.tokens.get(self.pos + offset), Some(Token::Ident(ident)) if ident == name);
+        word(0, "await")
+            && word(1, "commit")
+            && self.tokens.get(self.pos + 2) == Some(&Token::Punct('.'))
+            && word(3, "draft")
+    }
+
+    /// `.draft(options?)` after `commit`, recorded as one `commit` call.
+    pub(super) fn commit_draft(&mut self) -> Option<()> {
+        self.eat('.')?;
+        self.eat_ident("draft")?;
+        let args = self.literal_args()?;
+        let mut call_args = Vec::new();
+        match args.as_slice() {
+            [] => {}
+            [Value::Object(options)] => {
+                for (key, value) in options {
+                    match (key.as_str(), value) {
+                        ("agents", value) if strings(value) => {}
+                        ("silent", Value::Bool(_)) => {}
+                        ("repo", Value::String(repo)) if !repo.is_empty() => {
+                            call_args.push(("cwd".to_owned(), Lit::Str(repo.clone())));
+                        }
+                        _ => return None,
+                    }
+                }
+            }
+            _ => return None,
+        }
+        if self.calls.len() >= MAX_CALLS {
+            return None;
+        }
+        self.calls.push(Call {
+            tool: "commit".to_owned(),
+            args: call_args,
+            sdk_read_helper: false,
+            shell_helper: false,
+        });
+        Some(())
+    }
+
+    /// A name bound to a draft: shown as is, or one of its methods called
+    /// with literal arguments. The draft's repository is already recorded.
+    pub(super) fn draft_use(&mut self) -> Option<()> {
+        if !self.at('.') {
+            return Some(());
+        }
+        self.pos += 1;
+        let method = self.ident()?;
+        let args = self.literal_args()?;
+        let silent = |value: &Value| object_keys(value, &["silent"]);
+        let selection = |value: &Value| object_keys(value, &["units", "grep", "silent"]);
+        let valid = match (method.as_str(), args.as_slice()) {
+            ("take" | "drop", []) => true,
+            ("take" | "drop", [path]) => strings(path),
+            ("take" | "drop", [path, options]) => {
+                (strings(path) || path.is_null()) && selection(options)
+            }
+            ("only", [globs]) => strings(globs),
+            ("only", [globs, options]) => strings(globs) && silent(options),
+            ("show", []) => true,
+            ("show", [path]) => strings(path),
+            ("show", [path, options]) => (strings(path) || path.is_null()) && silent(options),
+            ("diff", []) => true,
+            ("diff", [options]) => silent(options),
+            ("commit", [Value::String(subject)]) => !subject.trim().is_empty(),
+            ("commit", [Value::String(subject), options]) => {
+                !subject.trim().is_empty() && commit_options(options)
+            }
+            _ => false,
+        };
+        valid.then_some(())
+    }
+
+    /// `(literal, ...)`: strings, numbers, booleans, `null`, and arrays and
+    /// objects of them. Identifiers, calls and computed keys are rejected.
+    fn literal_args(&mut self) -> Option<Vec<Value>> {
+        self.eat('(')?;
+        let mut args = Vec::new();
+        while !self.at(')') {
+            args.push(self.literal(0)?);
+            if self.at(',') {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        self.eat(')')?;
+        Some(args)
+    }
+
+    fn literal(&mut self, depth: usize) -> Option<Value> {
+        if depth > MAX_DEPTH {
+            return None;
+        }
+        match self.next()? {
+            Token::Str(text) => Some(Value::String(text)),
+            Token::Num(number) => Some(number),
+            Token::Ident(word) => match word.as_str() {
+                "true" => Some(json!(true)),
+                "false" => Some(json!(false)),
+                "null" => Some(Value::Null),
+                _ => None,
+            },
+            Token::Punct('[') => {
+                let mut items = Vec::new();
+                while !self.at(']') {
+                    items.push(self.literal(depth + 1)?);
+                    if self.at(',') {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
+                self.eat(']')?;
+                Some(Value::Array(items))
+            }
+            Token::Punct('{') => {
+                let mut fields = Map::new();
+                while !self.at('}') {
+                    let key = match self.next()? {
+                        Token::Ident(key) | Token::Str(key) => key,
+                        _ => return None,
+                    };
+                    self.eat(':')?;
+                    let value = self.literal(depth + 1)?;
+                    if fields.insert(key, value).is_some() {
+                        return None;
+                    }
+                    if self.at(',') {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
+                self.eat('}')?;
+                Some(Value::Object(fields))
+            }
+            _ => None,
+        }
+    }
+}
+
+/// A string, or an array of strings.
+fn strings(value: &Value) -> bool {
+    match value {
+        Value::String(_) => true,
+        Value::Array(items) => items.iter().all(Value::is_string),
+        _ => false,
+    }
+}
+
+/// An options object whose keys are all in `allowed`, each with the type the
+/// prelude expects.
+fn object_keys(value: &Value, allowed: &[&str]) -> bool {
+    let Value::Object(options) = value else {
+        return false;
+    };
+    options.iter().all(|(key, value)| {
+        allowed.contains(&key.as_str())
+            && match key.as_str() {
+                "silent" => value.is_boolean(),
+                "grep" => value.is_string(),
+                "units" => value.as_array().is_some_and(|units| {
+                    units
+                        .iter()
+                        .all(|unit| unit.is_string() || unit.is_number())
+                }),
+                _ => false,
+            }
+    })
+}
+
+/// `commit(subject, options)`: a body as a string or lines, `fixes`,
+/// `noVerify` (which only skips hooks) and `silent`. An array in the options
+/// place carries no option at all. `amend` rewrites an earlier commit and
+/// keeps its review.
+fn commit_options(value: &Value) -> bool {
+    match value {
+        Value::Array(lines) => lines.iter().all(Value::is_string),
+        Value::Object(options) => options.iter().all(|(key, value)| match key.as_str() {
+            "body" => strings(value),
+            "fixes" => match value {
+                Value::Array(items) => items
+                    .iter()
+                    .all(|item| item.is_string() || item.is_number()),
+                other => other.is_string() || other.is_number(),
+            },
+            "noVerify" | "silent" => value.is_boolean(),
+            _ => false,
+        }),
+        _ => false,
+    }
+}

@@ -298,6 +298,18 @@ fn binds_plain_parameters(segment: &CommandSegmentV1) -> bool {
             .all(|name| environment::ordinary_setting_name(name))
 }
 
+/// Names the shell keeps for a directory or the account it runs as. Setting
+/// one steers where programs look, so they are not ordinary names, but
+/// reading one only copies a path or a user name into an ordinary variable.
+/// `P=$PWD` on its own line used to fail the evaluation and block with no
+/// approval to give.
+fn readable_location_name(name: &str) -> bool {
+    matches!(
+        name,
+        "PWD" | "OLDPWD" | "HOME" | "TMPDIR" | "USER" | "LOGNAME"
+    )
+}
+
 fn plain_parameter_expansions(text: &str) -> bool {
     let characters: Vec<char> = text.chars().collect();
     let name = |character: &char| *character == '_' || character.is_ascii_alphanumeric();
@@ -323,7 +335,9 @@ fn plain_parameter_expansions(text: &str) -> bool {
                     Some(character) if name(character) => {
                         let length = inner.iter().take_while(|c| name(c)).count();
                         let referenced: String = inner[..length].iter().collect();
-                        if !environment::ordinary_setting_name(&referenced) {
+                        if !(environment::ordinary_setting_name(&referenced)
+                            || readable_location_name(&referenced))
+                        {
                             return false;
                         }
                         length

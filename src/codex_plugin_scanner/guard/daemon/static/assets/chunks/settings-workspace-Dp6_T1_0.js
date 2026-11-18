@@ -1,7 +1,7 @@
-import { r as reactExports, aY as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aZ as ApprovalProofModal, T as Tag, a_ as PROTECTION_POSTURE_COPY, a$ as POSTURE_OUTCOME_COLUMNS, b0 as harnessPostureRows, b1 as overrideRows, aP as harnessRowTone, b2 as harnessPostureSummary, b3 as joinNames, b4 as sortHarnessRows, b5 as globalPosture, b6 as selectHarnessPosture, b7 as restartHarnessWatch, h as HiMiniMagnifyingGlass, b8 as harnessWatchPrompt, b9 as harnessPostureOptions, ba as canRestartHarnessWatch, aS as HiMiniEye, af as HiMiniShieldCheck, aR as harnessRowStatus, bb as getDefaultExportFromCjs, bc as React, bd as authorizeApprovalGatePulseSetup, be as confirmApprovalGatePulseEnrollment, bf as waitForPulseApproval, f as fetchWithGuardAuth, bg as beginApprovalGatePulseEnrollment, bh as GuardModalLayer, S as SectionLabel, am as HiMiniXMark, bi as PULSE_FACE_SCAN_OPTIONS, bj as SelectMenu, bk as disableApprovalGatePulse, bl as setApprovalGatePulseShowCommand, bm as recoverApprovalGatePulse, e as HiMiniSquares2X2, K as HiMiniLockClosed, bn as HiMiniBellAlert, bo as HiMiniAdjustmentsHorizontal, d as HiMiniCircleStack, ap as HiMiniCloud, bp as TabBar, q as HiMiniChevronRight, ar as useFocusTrap, bq as fetchCloudReviewSettings, k as HiMiniArrowPath, br as ApprovalProofFieldInputs, bs as isApprovalProofSubmitDisabled, bt as buildApprovalProofCredentials, bu as changeCloudReviewSettings, bv as isRecord$1, bw as HiMiniArrowTopRightOnSquare, bx as shellHref, p as contextStatusCopy, G as HiMiniCheckCircle, as as HiMiniExclamationTriangle, by as HiMiniPauseCircle, t as harnessDisplayName, bz as listContextAgentSessions, bA as HiMiniLink, bB as revokeContextAgentSession, bC as grantContextWorkspace, bD as authorizeContextAgentSession, bE as ContextAssistanceApiError, bF as ask, bG as parseContextScope, bH as validContextBrokerRevision, bI as isGuardDemoMode, bJ as commitDashboardLocation, bK as HiMiniArrowUturnLeft, E as HiMiniPencilSquare, bL as HiMiniCodeBracketSquare, c as HiMiniFolder, F as HiMiniDocumentText, g as HiMiniComputerDesktop, bM as HiMiniHome, y as HiMiniCheck, bN as HiMiniFolderPlus, bO as HiMiniClock, l as listContextWorkspaces, bP as HiMiniFolderOpen, bQ as manageContextWorkspace, bR as compileWorkspaceContext, I as HiMiniArrowRight, bS as HiMiniChatBubbleLeftEllipsis, bT as HiMiniDocumentMagnifyingGlass, bU as HiMiniPower, bV as HiMiniEyeSlash, bW as HiMiniCpuChip, bX as HiMiniAcademicCap, aq as HiMiniQuestionMarkCircle, a0 as HiMiniClipboardDocument, bY as HiMiniArrowLeft, bZ as isCigarProducerVersion, b_ as isCigarCoreLabel, al as HiMiniSparkles, b$ as subscribeDashboardLocation, c0 as HiMiniChatBubbleLeftRight, c1 as HiMiniArrowUpCircle, c2 as parseContextAssistanceStatus, c3 as isCigarBuildIdentity, c4 as fetchContextInstallations, c5 as HiMiniCloudArrowDown, c6 as turnOnJob, c7 as shouldResumeTurnOn, c8 as turnOnRequestedAt, c9 as forgetTurnOn, ca as rememberTurnOn, cb as forgetTurnOnClick, cc as rememberTurnOnJob, a as fetchContextAssistance, o as controlContextAssistance, cd as HiMiniArrowDownTray, ce as downloadBlob, cf as savedEvidenceCopy, cg as guardAwareHref, ch as fetchContextData, ci as forgetContextHistory, cj as forgetSavedEvidence, ck as resolveProtectionLevelCopy, cl as fetchSettings, cm as fetchRuntimeSnapshot, cn as clearHarnessWatchOverrides, co as withHarnessPosturePatch, a3 as updateSettings, cp as clearPolicy, cq as clearReviewQueue, cr as revokeApprovalGateCooldown, cs as disableApprovalGateTotp, ct as importSettings, cu as resetSettings, cv as enrollApprovalGateTotp, cw as verifyApprovalGateTotp, cx as clearEvidence, cy as exportDiagnostics, cz as repairApprovalCenter, cA as exportSettings, cB as setupDesktopNotifications, an as EmptyState, cC as settingsWatchBannerModel, cD as WorkspacePageHeader, ac as WatchProtectionBanner, cE as navigateFromAnchor, x as HiMiniChevronDown, cF as humanizeList, cG as isProtectionPosture, cH as deriveProtectionPosture, cI as normalizeHarnessPostures, cJ as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { r as reactExports, aY as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aZ as ApprovalProofModal, T as Tag, a_ as PROTECTION_POSTURE_COPY, a$ as POSTURE_OUTCOME_COLUMNS, b0 as harnessPostureRows, b1 as overrideRows, aP as harnessRowTone, b2 as harnessPostureSummary, b3 as joinNames, b4 as sortHarnessRows, b5 as globalPosture, b6 as selectHarnessPosture, b7 as restartHarnessWatch, h as HiMiniMagnifyingGlass, b8 as harnessWatchPrompt, b9 as harnessPostureOptions, ba as canRestartHarnessWatch, aS as HiMiniEye, af as HiMiniShieldCheck, aR as harnessRowStatus, bb as getDefaultExportFromCjs, bc as React, bd as PULSE_FACE_SCAN_OPTIONS, be as authorizeApprovalGatePulseSetup, bf as confirmApprovalGatePulseEnrollment, bg as waitForPulseApproval, f as fetchWithGuardAuth, bh as beginApprovalGatePulseEnrollment, bi as GuardModalLayer, S as SectionLabel, am as HiMiniXMark, bj as SelectMenu, bk as disableApprovalGatePulse, bl as setApprovalGatePulseShowCommand, bm as recoverApprovalGatePulse, e as HiMiniSquares2X2, K as HiMiniLockClosed, bn as HiMiniBellAlert, bo as HiMiniAdjustmentsHorizontal, d as HiMiniCircleStack, ap as HiMiniCloud, bp as TabBar, q as HiMiniChevronRight, ar as useFocusTrap, bq as fetchCloudReviewSettings, k as HiMiniArrowPath, br as ApprovalProofFieldInputs, bs as isApprovalProofSubmitDisabled, bt as buildApprovalProofCredentials, bu as changeCloudReviewSettings, bv as isRecord$1, bw as HiMiniArrowTopRightOnSquare, bx as shellHref, p as contextStatusCopy, G as HiMiniCheckCircle, as as HiMiniExclamationTriangle, by as HiMiniPauseCircle, t as harnessDisplayName, bz as listContextAgentSessions, bA as HiMiniLink, bB as revokeContextAgentSession, bC as grantContextWorkspace, bD as authorizeContextAgentSession, bE as ContextAssistanceApiError, bF as ask, bG as parseContextScope, bH as validContextBrokerRevision, bI as isGuardDemoMode, bJ as commitDashboardLocation, bK as HiMiniArrowUturnLeft, E as HiMiniPencilSquare, bL as HiMiniCodeBracketSquare, c as HiMiniFolder, F as HiMiniDocumentText, g as HiMiniComputerDesktop, bM as HiMiniHome, y as HiMiniCheck, bN as HiMiniFolderPlus, bO as HiMiniClock, l as listContextWorkspaces, bP as HiMiniFolderOpen, bQ as manageContextWorkspace, bR as compileWorkspaceContext, I as HiMiniArrowRight, bS as HiMiniChatBubbleLeftEllipsis, bT as HiMiniDocumentMagnifyingGlass, bU as HiMiniPower, bV as HiMiniEyeSlash, bW as HiMiniCpuChip, bX as HiMiniAcademicCap, aq as HiMiniQuestionMarkCircle, a0 as HiMiniClipboardDocument, bY as HiMiniArrowLeft, bZ as isCigarProducerVersion, b_ as isCigarCoreLabel, al as HiMiniSparkles, b$ as subscribeDashboardLocation, c0 as HiMiniChatBubbleLeftRight, c1 as HiMiniArrowUpCircle, c2 as parseContextAssistanceStatus, c3 as isCigarBuildIdentity, c4 as fetchContextInstallations, c5 as HiMiniCloudArrowDown, c6 as turnOnJob, c7 as shouldResumeTurnOn, c8 as turnOnRequestedAt, c9 as forgetTurnOn, ca as rememberTurnOn, cb as forgetTurnOnClick, cc as rememberTurnOnJob, a as fetchContextAssistance, o as controlContextAssistance, cd as HiMiniArrowDownTray, ce as downloadBlob, cf as savedEvidenceCopy, cg as guardAwareHref, ch as fetchContextData, ci as forgetContextHistory, cj as forgetSavedEvidence, ck as resolveProtectionLevelCopy, cl as fetchSettings, cm as fetchRuntimeSnapshot, cn as clearHarnessWatchOverrides, co as withHarnessPosturePatch, a3 as updateSettings, cp as clearPolicy, cq as clearReviewQueue, cr as revokeApprovalGateCooldown, cs as disableApprovalGateTotp, ct as importSettings, cu as resetSettings, cv as enrollApprovalGateTotp, cw as verifyApprovalGateTotp, cx as clearEvidence, cy as exportDiagnostics, cz as repairApprovalCenter, cA as exportSettings, cB as setupDesktopNotifications, an as EmptyState, cC as settingsWatchBannerModel, cD as WorkspacePageHeader, ac as WatchProtectionBanner, cE as navigateFromAnchor, x as HiMiniChevronDown, cF as humanizeList, cG as isProtectionPosture, cH as deriveProtectionPosture, cI as normalizeHarnessPostures, cJ as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, G as GuardRepairControl } from "./guard-repair-control-sTMvCuK1.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
-import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-D0lvG39B.js";
+import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-BRFnoEG3.js";
 import { S as SettingsSaveProofModal, r as resolveSettingsSaveProofKind, a as requiresSettingsSaveProof, b as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-DdKoGp14.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-04d3wLni.js";
 import { u as usesPromptContext, s as setSwarmContextTarget, a as useSwarmContextTarget } from "./swarm-handoff-BIqKreGh.js";
@@ -2324,7 +2324,191 @@ function TotpEnrollmentQrPanel({ enrollment }) {
     ] })
   ] }) });
 }
+function boxWithin(inner, outer) {
+  return inner.top >= outer.top && inner.bottom <= outer.bottom;
+}
+function isFullyVisible(element, view) {
+  let clip = { top: 0, bottom: view.innerHeight };
+  for (let node = element.parentElement; node !== null; node = node.parentElement) {
+    if (view.overflowY(node) === "visible") continue;
+    const rect = node.getBoundingClientRect();
+    clip = { top: Math.max(clip.top, rect.top), bottom: Math.min(clip.bottom, rect.bottom) };
+  }
+  return boxWithin(element.getBoundingClientRect(), clip);
+}
+function pulseInitialFocusPlan(keyFieldVisible, qrPanelVisible) {
+  if (keyFieldVisible) return { target: "key", scroll: false };
+  return { target: "qr", scroll: !qrPanelVisible };
+}
+function focusForPlan(element, scroll) {
+  element?.focus({ preventScroll: !scroll });
+}
+function browserView() {
+  return {
+    innerHeight: window.innerHeight,
+    overflowY: (node) => window.getComputedStyle(node).overflowY
+  };
+}
 const PULSE_SITE_URL = "https://pulse.yanez.ai/?referrer_id=holguard";
+const PULSE_LABEL_CLASS = "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500";
+const PULSE_INPUT_CLASS = "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20";
+function pulseCooldownLabel(seconds) {
+  if (seconds === 900) return "15 minutes, same kind of action";
+  if (seconds === 3600) return "1 hour, same kind of action";
+  return "Every action (recommended)";
+}
+function ErrorNote({ message: message2 }) {
+  if (message2 === null) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark", children: message2 });
+}
+function Field(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: PULSE_LABEL_CLASS, children: props.label }),
+    props.children,
+    props.hint ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: props.hint }) : null
+  ] });
+}
+function pulseCooldownFromSeconds(seconds) {
+  if (seconds === 900) return 900;
+  if (seconds === 3600) return 3600;
+  return 0;
+}
+function pulseAgentKeyHint(value) {
+  const key2 = value.trim();
+  if (key2.length === 0 || key2.startsWith("yak_")) return null;
+  return "Agent keys start with yak_. Check that you copied the whole key from the YID app.";
+}
+function pulseApprovalSettingsSummary(minTier, cooldown) {
+  const faceScan = PULSE_FACE_SCAN_OPTIONS.find((option) => option.value === minTier)?.label ?? "Standard face scan";
+  return `${faceScan.replace(" (recommended)", "")} · ${pulseCooldownLabel(cooldown).replace(" (recommended)", "")}`;
+}
+function PulseQrPanel(props) {
+  const qr = buildTotpQrImageOptions();
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      ref: props.panelRef,
+      role: "group",
+      "aria-label": "Scan the YID app code",
+      tabIndex: -1,
+      className: "rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.08] via-white to-white p-4 text-center focus:outline-none focus:ring-2 focus:ring-brand-blue/40",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto flex w-fit rounded-2xl border border-white bg-white p-5 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          QRCode,
+          {
+            value: PULSE_SITE_URL,
+            size: qr.size,
+            level: qr.level,
+            bgColor: qr.bgColor,
+            fgColor: qr.fgColor,
+            role: "img",
+            "aria-label": "Scan this QR code with your phone camera to get the YID app"
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm font-semibold text-brand-dark", children: "Scan with your phone camera" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-slate-500", children: "It opens the YID page. Tap its app link, then follow the prompts to install the app and register your Yanez identity." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-slate-500", children: [
+          "Can't scan?",
+          " ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "text-brand-blue underline", href: PULSE_SITE_URL, target: "_blank", rel: "noreferrer noopener", children: "Open pulse.yanez.ai" })
+        ] })
+      ]
+    }
+  );
+}
+const STEP_CHIP = "flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue";
+function PulseConnectStep(props) {
+  const keyHint = pulseAgentKeyHint(props.agentKey);
+  const keyInput = reactExports.useRef(null);
+  const qrPanel = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    const field = keyInput.current;
+    const panel = qrPanel.current;
+    const view = browserView();
+    const plan = pulseInitialFocusPlan(
+      field !== null && isFullyVisible(field, view),
+      panel !== null && isFullyVisible(panel, view)
+    );
+    focusForPlan(plan.target === "key" ? field : panel, plan.scroll);
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 p-6 lg:grid-cols-[240px_minmax(0,1fr)]", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PulseQrPanel, { panelRef: qrPanel }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "space-y-3 text-sm leading-6 text-slate-600", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: STEP_CHIP, children: "1" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Scan the code, or skip this if you already have the YID app." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: STEP_CHIP, children: "2" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+            "In the YID app, open ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-dark", children: "Settings → Agent Keys" }),
+            " and create a key named HOL Guard."
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: STEP_CHIP, children: "3" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Paste the key here." })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "YID agent key", hint: keyHint ?? "Hidden as you type. Guard stores it in its secret store.", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          ref: keyInput,
+          type: "password",
+          autoComplete: "off",
+          spellCheck: false,
+          placeholder: "yak_…",
+          value: props.agentKey,
+          onChange: (event) => props.onAgentKeyChange(event.target.value),
+          onKeyDown: (event) => {
+            if (event.key === "Enter" && props.ready && !props.pending) props.onSubmit();
+          },
+          className: PULSE_INPUT_CLASS
+        }
+      ) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "cursor-pointer text-xs font-semibold text-brand-dark", children: [
+          "Approval settings",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 font-normal text-slate-500", children: pulseApprovalSettingsSummary(props.minTier, props.cooldown) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-4 pb-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Field,
+            {
+              label: "Face scan",
+              hint: "Strict needs a phone that supports the stronger face scan. To change this later, turn Pulse off and set it up again.",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "select",
+                {
+                  value: props.minTier,
+                  onChange: (event) => props.onMinTierChange(event.target.value === "high" ? "high" : "medium"),
+                  className: PULSE_INPUT_CLASS,
+                  children: PULSE_FACE_SCAN_OPTIONS.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option.value, children: option.label }, option.value))
+                }
+              )
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Cooldown", hint: "A cooldown only covers the same kind of action and scope from the same session. Guard changes always ask again.", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "select",
+            {
+              value: String(props.cooldown),
+              onChange: (event) => props.onCooldownChange(pulseCooldownFromSeconds(Number(event.target.value))),
+              className: PULSE_INPUT_CLASS,
+              children: [0, 900, 3600].map((seconds) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: seconds, children: pulseCooldownLabel(seconds) }, seconds))
+            }
+          ) })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorNote, { message: props.error }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onSubmit, disabled: props.pending || !props.ready, children: props.pending ? "Contacting Pulse..." : "Continue" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", disabled: props.pending, onClick: props.onBack, children: "Back" })
+      ] })
+    ] })
+  ] });
+}
 const ENROLLMENT_OUTCOME_MESSAGES = {
   rejected: "The enrollment was rejected in the YID app.",
   expired: "The enrollment was not approved within 15 minutes. Try again.",
@@ -2354,7 +2538,7 @@ const STEP_TEXT = {
   connect: {
     label: "Step 2 of 3",
     title: "Connect the YID app",
-    description: "Create an agent key for HOL Guard in the YID app and paste it here."
+    description: "Scan the code with your phone, create an agent key for HOL Guard in the YID app and paste it here."
   },
   approve: {
     label: "Step 3 of 3",
@@ -2372,24 +2556,6 @@ const STEP_TEXT = {
     description: "Pulse is now your approval factor. Keep this code offline: with your approval password it turns Pulse off if you lose the YID app."
   }
 };
-const LABEL_CLASS = "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500";
-const INPUT_CLASS$1 = "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20";
-function pulseCooldownLabel(seconds) {
-  if (seconds === 900) return "15 minutes, same kind of action";
-  if (seconds === 3600) return "1 hour, same kind of action";
-  return "Every action (recommended)";
-}
-function ErrorNote({ message: message2 }) {
-  if (message2 === null) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark", children: message2 });
-}
-function Field(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: LABEL_CLASS, children: props.label }),
-    props.children,
-    props.hint ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: props.hint }) : null
-  ] });
-}
 function PulseSetupModal(props) {
   const [step, setStep] = reactExports.useState("confirm");
   const [password, setPassword] = reactExports.useState("");
@@ -2517,7 +2683,7 @@ function PulseSetupModal(props) {
           value: password,
           onChange: (event) => setPassword(event.target.value),
           onKeyDown: onEnter(confirmReady, handleConfirm),
-          className: INPUT_CLASS$1
+          className: PULSE_INPUT_CLASS
         }
       ) }),
       props.totpEnabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Authenticator code", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2538,78 +2704,28 @@ function PulseSetupModal(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorNote, { message: error }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleConfirm, disabled: pending || !confirmReady, children: pending ? "Checking..." : "Continue" })
     ] }) : null,
-    step === "connect" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_300px]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "list-decimal space-y-3 pl-5 text-sm leading-6 text-slate-600", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-          "Scan the QR code on",
-          " ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "text-brand-blue underline", href: PULSE_SITE_URL, target: "_blank", rel: "noreferrer noopener", children: "pulse.yanez.ai" }),
-          " ",
-          "with your phone camera. It installs the YanezYID app if needed, then registers your Yanez identity."
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-          "In the YID app, go to ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-dark", children: "Settings → Agent Keys" }),
-          ", create a key named HOL Guard, and paste it here. It starts with ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "font-mono text-xs", children: "yak_" }),
-          "."
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "If a face scan isn't accepted, just scan again." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "YID agent key", hint: "Hidden as you type. Guard stores it in its secret store.", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            type: "password",
-            autoComplete: "off",
-            spellCheck: false,
-            value: agentKey,
-            onChange: (event) => setAgentKey(event.target.value),
-            onKeyDown: onEnter(connectReady, handleConnect),
-            className: INPUT_CLASS$1
-          }
-        ) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          Field,
-          {
-            label: "Face scan",
-            hint: "Strict needs a phone that supports the stronger face scan. To change this later, turn Pulse off and set it up again.",
-            children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "select",
-              {
-                value: minTier,
-                onChange: (event) => setMinTier(event.target.value === "high" ? "high" : "medium"),
-                className: INPUT_CLASS$1,
-                children: PULSE_FACE_SCAN_OPTIONS.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option.value, children: option.label }, option.value))
-              }
-            )
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "Cooldown", hint: "A cooldown only covers the same kind of action and scope from the same session. Guard changes always ask again.", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "select",
-          {
-            value: String(cooldown),
-            onChange: (event) => {
-              const seconds = Number(event.target.value);
-              setCooldown(seconds === 900 ? 900 : seconds === 3600 ? 3600 : 0);
-            },
-            className: INPUT_CLASS$1,
-            children: [0, 900, 3600].map((seconds) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: seconds, children: pulseCooldownLabel(seconds) }, seconds))
-          }
-        ) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorNote, { message: error }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleConnect, disabled: pending || !connectReady, children: pending ? "Contacting Pulse..." : "Continue" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", disabled: pending, onClick: () => {
-            setError(null);
-            setStep("confirm");
-          }, children: "Back" })
-        ] })
-      ] })
-    ] }) : null,
+    step === "connect" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PulseConnectStep,
+      {
+        agentKey,
+        onAgentKeyChange: setAgentKey,
+        minTier,
+        onMinTierChange: setMinTier,
+        cooldown,
+        onCooldownChange: setCooldown,
+        error,
+        pending,
+        ready: connectReady,
+        onSubmit: handleConnect,
+        onBack: () => {
+          setError(null);
+          setStep("confirm");
+        }
+      }
+    ) : null,
     (step === "approve" || step === "verifying") && enrollment !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 p-6", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-slate-50/70 p-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: LABEL_CLASS, children: "Match code" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: PULSE_LABEL_CLASS, children: "Match code" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 font-mono text-3xl font-semibold tracking-[0.35em] text-brand-dark", children: enrollment.match_code }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-slate-500", children: [
           "The YID app shows the same code for identity ",
@@ -2618,11 +2734,14 @@ function PulseSetupModal(props) {
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-brand-dark", children: step === "verifying" ? "Approved in the YID app. Checking the approval..." : "Waiting for your approval. Guard checks every 10 seconds, for up to 15 minutes." }),
-      step === "approve" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: () => cancelWait.current?.abort(), children: "Cancel" }) : null
+      step === "approve" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "If a face scan isn't accepted, just scan again." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: () => cancelWait.current?.abort(), children: "Cancel" })
+      ] }) : null
     ] }) : null,
     step === "recovery" && recoveryCode !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 p-6", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "rounded-2xl border border-brand-attention/20 bg-brand-attention/[0.06] p-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: LABEL_CLASS, children: "Recovery code" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: PULSE_LABEL_CLASS, children: "Recovery code" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 font-mono text-lg tracking-wider text-brand-dark", children: recoveryCode }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-600", children: "Guard will not show it again." })
       ] }),

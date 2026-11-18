@@ -85,6 +85,7 @@ pub fn contained_matcher_stage(program: &str, arguments: &[String]) -> bool {
 }
 pub(crate) mod curl_reads;
 mod cursor_session_outputs;
+mod in_process_scope;
 pub use curl_reads::bound_curl_read_destinations;
 
 /// Whether this host runs Guard's contained execution sink for a read-only
@@ -213,6 +214,7 @@ mod tool_bin_listing;
 mod trailing_group;
 mod trusted_location;
 mod venv_program_path;
+mod windows_pytest_base;
 pub(crate) use git_routes::{
     git_dir_route_within_scope, git_route_within_workspace, git_route_without_repository,
     reads_without_repository,
