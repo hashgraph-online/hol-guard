@@ -239,15 +239,12 @@ fn render_printf(format: &str, args: &[String]) -> String {
             let operand = args.get(next_arg).map(String::as_str).unwrap_or("");
             next_arg += 1;
             let numeric = matches!(spec, 'd' | 'i' | 'u' | 'x' | 'X' | 'o');
+            let mut stop_after_percent_b = false;
             let mut rendered = match spec {
                 's' => operand.to_string(),
                 'b' => {
                     let (prefix, stopped) = decode_printf_escapes_with_stop(operand, true);
-                    if stopped {
-                        // Bash does not evaluate, render, or pad later output.
-                        printed.push_str(&prefix);
-                        return printed;
-                    }
+                    stop_after_percent_b = stopped;
                     prefix
                 },
                 'd' | 'i' | 'u' => printf_decimal(operand),
@@ -308,6 +305,11 @@ fn render_printf(format: &str, args: &[String]) -> String {
                 }
             }
             printed.push_str(&rendered);
+            if stop_after_percent_b {
+                // Bash applies this %b conversion's width and precision to
+                // the emitted prefix before stopping all later conversions.
+                return printed;
+            }
         }
         if next_arg >= args.len() || next_arg == previous_arg {
             break;
