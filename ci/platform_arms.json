@@ -2907,6 +2907,14 @@
    "body": "56c09a52a558"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no `O_NOFOLLOW` or `O_NONBLOCK` and no FIFOs, so this arm refuses a link at the leaf with `symlink_metadata` before it opens the file, as the Python read did, and then opens it normally. The manifest checks that follow run on the opened handle in both arms, so an entry swapped in after the link check is still the file whose type, size and ownership are checked and read.",
+   "file": "rust/crates/guard-runtime/src/transition_files/publication_inspect_runtime.rs",
+   "item": "fn open_manifest(path: &Path) -> std::io::Result<fs::File>",
+   "cfg": "not(unix)",
+   "body": "1ccec5e032fc"
+  },
+  {
    "verdict": "windows-permissive",
    "note": "Owner uid and mode bits do not exist on Windows; the arm checks only the file kind, as `private_file_io.read_private_regular_bytes` did on Windows, where the Guard home's ACL is what keeps the receipt and records private.",
    "file": "rust/crates/guard-runtime/src/transition_files/publication_io.rs",
