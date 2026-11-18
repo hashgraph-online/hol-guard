@@ -8697,6 +8697,10 @@
       grid-template-columns: 1fr 340px;
     }
 
+    .lg\:grid-cols-\[240px_minmax\(0\,1fr\)\] {
+      grid-template-columns: 240px minmax(0, 1fr);
+    }
+
     .lg\:grid-cols-\[340px_minmax\(0\,1fr\)\] {
       grid-template-columns: 340px minmax(0, 1fr);
     }

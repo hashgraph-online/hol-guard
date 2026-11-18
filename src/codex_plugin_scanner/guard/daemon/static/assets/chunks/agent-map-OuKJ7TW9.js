@@ -1,5 +1,5 @@
 import { j as jsxRuntimeExports, c as HiMiniFolder, b as HiMiniCommandLine, d as HiMiniCircleStack, fF as HiMiniArrowUpRight } from "../guard-dashboard.js";
-import { p as projectsFor, c as contextFor, s as stateLabel } from "./swarm-workspace-h_1W6b72.js";
+import { p as projectsFor, c as contextFor, s as stateLabel } from "./swarm-workspace-DOpgXP-w.js";
 import { g as goalOf } from "./work-DPWaZlHI.js";
 import "./swarm-handoff-BIqKreGh.js";
 function AgentMap({ agents, selected, onSelect, context, mode }) {

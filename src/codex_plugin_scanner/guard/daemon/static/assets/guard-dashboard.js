@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-h_1W6b72.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-CmqdRvvS.js","assets/chunks/home-protection-module-DPMDKD16.js","assets/chunks/supply-chain-protection-stats-XiD1X6oR.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-J-EYqDgj.js","assets/chunks/harness-version-label-B2Ob_2J1.js","assets/chunks/settings-save-proof-modal-DdKoGp14.js","assets/chunks/connect-guard-cloud-button-04d3wLni.js","assets/chunks/guard-repair-control-sTMvCuK1.js","assets/chunks/settings-workspace-BaJqouWC.js","assets/chunks/confirm-dialog-D0lvG39B.js","assets/chunks/extensions-workspace-DU3QYQU4.js","assets/chunks/app-detail-workspace-BII5IeG3.js","assets/chunks/harness-action-errors-BMFGvfEG.js","assets/chunks/supply-chain-hub-workspace-CZ4ZPeWf.js","assets/chunks/policy-workspace-page-DVW5txUL.js","assets/chunks/about-workspace-MVcBq84r.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-DOpgXP-w.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-CmqdRvvS.js","assets/chunks/home-protection-module-DPMDKD16.js","assets/chunks/supply-chain-protection-stats-XiD1X6oR.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-J-EYqDgj.js","assets/chunks/harness-version-label-B2Ob_2J1.js","assets/chunks/settings-save-proof-modal-DdKoGp14.js","assets/chunks/connect-guard-cloud-button-04d3wLni.js","assets/chunks/guard-repair-control-sTMvCuK1.js","assets/chunks/settings-workspace-CqjAlsHv.js","assets/chunks/confirm-dialog-BRFnoEG3.js","assets/chunks/extensions-workspace-C6DMg8OL.js","assets/chunks/app-detail-workspace-BII5IeG3.js","assets/chunks/harness-action-errors-BMFGvfEG.js","assets/chunks/supply-chain-hub-workspace-CsUOrp8Y.js","assets/chunks/policy-workspace-page-DVW5txUL.js","assets/chunks/about-workspace-MVcBq84r.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -41595,19 +41595,19 @@ function PulseApprovalOverlay() {
   )) });
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-h_1W6b72.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-DOpgXP-w.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-CmqdRvvS.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-J-EYqDgj.js"), true ? __vite__mapDeps([10,11,12,13,9,14]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-BaJqouWC.js"), true ? __vite__mapDeps([15,14,9,16,12,13,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CqjAlsHv.js"), true ? __vite__mapDeps([15,14,9,16,12,13,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-DU3QYQU4.js"), true ? __vite__mapDeps([17,16]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-C6DMg8OL.js"), true ? __vite__mapDeps([17,16]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
 const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-BII5IeG3.js"), true ? __vite__mapDeps([18,19,11,12]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-DavIenbm.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CZ4ZPeWf.js").then((n) => n.d), true ? __vite__mapDeps([20,19]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CsUOrp8Y.js").then((n) => n.d), true ? __vite__mapDeps([20,19]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
@@ -42699,12 +42699,12 @@ export {
   canRestartHarnessWatch as ba,
   getDefaultExportFromCjs as bb,
   React as bc,
-  authorizeApprovalGatePulseSetup as bd,
-  confirmApprovalGatePulseEnrollment as be,
-  waitForPulseApproval as bf,
-  beginApprovalGatePulseEnrollment as bg,
-  GuardModalLayer as bh,
-  PULSE_FACE_SCAN_OPTIONS as bi,
+  PULSE_FACE_SCAN_OPTIONS as bd,
+  authorizeApprovalGatePulseSetup as be,
+  confirmApprovalGatePulseEnrollment as bf,
+  waitForPulseApproval as bg,
+  beginApprovalGatePulseEnrollment as bh,
+  GuardModalLayer as bi,
   SelectMenu as bj,
   disableApprovalGatePulse as bk,
   setApprovalGatePulseShowCommand as bl,
