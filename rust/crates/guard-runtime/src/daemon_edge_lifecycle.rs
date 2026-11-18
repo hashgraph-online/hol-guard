@@ -6,7 +6,7 @@
 //! events keep their own short ring (`*.recovery.json`). They no longer push
 //! the daemon's own start, exit and retirement history out of the journal.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -153,8 +153,12 @@ fn unexplained_predecessors(guard_home: &Path, own_pid: u32) -> Vec<u32> {
         .collect();
     names.sort_unstable_by(|left, right| right.cmp(left));
     names.truncate(MAX_PREDECESSOR_SCAN);
-    // Newest first: a terminal record seen before a pid's start ends that run.
+    // Newest first, back to the pid's `published`: a terminal record anywhere
+    // in that run ends it. A daemon stopped while it starts can journal its
+    // exit before a later start step (`ready` is written after the ready
+    // line), so the newest record alone does not say whether the run ended.
     let mut runs: HashMap<u32, (bool, bool)> = HashMap::new();
+    let mut published: HashSet<u32> = HashSet::new();
     let mut order = Vec::new();
     for name in &names {
         let Some(event) = read_event(&directory.join(name)) else {
@@ -176,13 +180,16 @@ fn unexplained_predecessors(guard_home: &Path, own_pid: u32) -> Vec<u32> {
             order.push(pid);
             (false, false)
         });
-        if *started {
+        if published.contains(&pid) {
             continue;
         }
         if TERMINAL_EVENTS.contains(&kind) {
             *ended = true;
         } else if STARTED_EVENTS.contains(&kind) {
             *started = true;
+            if kind == "published" {
+                published.insert(pid);
+            }
         }
     }
     order
