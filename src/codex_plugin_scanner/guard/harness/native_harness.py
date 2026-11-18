@@ -79,21 +79,12 @@ class NativeHarnessAdapter(HarnessAdapter):
         return self._ask(op, context, **fields)
 
     def _ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
-        if op in _EXTENSION_OPS and self._spec.get("extension"):
-            from ..extension_runtime import extension_runtime
+        from ..native_harness_client import run_op
 
-            fields["runtime"] = extension_runtime()
-        answer = self._owned_ask(op, context, **fields)
-        if answer == {"reply": {"facts": None}} and "facts" not in fields:
-            # The daemon URL the hooks reach is only known to this process.
-            from ..claude_hook_entry import claude_facts
-
-            fields["facts"] = claude_facts(context.guard_home)
-            answer = self._owned_ask(op, context, **fields)
-        return answer
+        return run_op(self.harness, op, context, **fields)
 
     def _owned_ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
-        from ..native_harness_steps import owned_ask
+        from ..native_harness_client import owned_ask
 
         return owned_ask(self.harness, self._spec.get("hook_ownership"), op, context, **fields)
 
@@ -207,11 +198,11 @@ class NativeHarnessAdapter(HarnessAdapter):
         if self._spec.get("prepare") == "detected":
             from ..native_harness_steps import prepared_from_detection
 
-            return prepared_from_detection(self, context, create_key=False)
+            return prepared_from_detection(self.harness, context, create_key=False)
         if self._spec.get("prepare") == "surfaces":
             from ..native_harness_steps import prepared_surfaces
 
-            return prepared_surfaces(self, context, **_surface(surface))
+            return prepared_surfaces(self.harness, context, **_surface(surface))
         shim = prepare_guard_shim(self.harness, context, **self._shim_names())
         if mode == "shim":
             manifest = {"harness": self.harness, "active": True, "config_path": shim.manifest["shim_path"]}
@@ -285,7 +276,7 @@ class NativeHarnessAdapter(HarnessAdapter):
             return None
         from ..native_harness_steps import native_warnings
 
-        return native_warnings(self, detection, runtime_probe)
+        return native_warnings(self.harness, detection, runtime_probe)
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         payload = super().diagnostics(context)

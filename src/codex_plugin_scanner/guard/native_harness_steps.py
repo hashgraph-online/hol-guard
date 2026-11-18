@@ -12,49 +12,24 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .models import HarnessDetection
+from .native_harness_client import HookOwnershipError, owned_ask, run_op
 
 if TYPE_CHECKING:
-    from .harness.native_harness import NativeHarnessAdapter
     from .harness_context import HarnessContext, PreparedHarnessInstall
 
 
-class HookOwnershipError(RuntimeError):
-    """The native runtime could not say which hook commands Guard wrote."""
-
-
-def owned_ask(harness: str, owned: object, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
-    """``ask``, naming a hook-ownership failure as the harness's spec words it."""
-    from .native_harness_client import ask
-    from .native_runner_authority import NativeRunnerAuthorityError
-
-    if not isinstance(owned, dict):
-        return ask(op, context, harness=harness, **fields)
-    message = str(owned["message"])
-    try:
-        return ask(op, context, harness=harness, **fields)
-    except NativeRunnerAuthorityError as error:
-        if op in owned["ops"]:
-            raise HookOwnershipError(message) from error
-        raise
-    except RuntimeError as error:
-        if str(error) == message:
-            raise HookOwnershipError(message) from error
-        raise
-
-
-def prepared_from_detection(
-    adapter: NativeHarnessAdapter, context: HarnessContext, *, create_key: bool
-) -> PreparedHarnessInstall:
+def prepared_from_detection(harness: str, context: HarnessContext, *, create_key: bool) -> PreparedHarnessInstall:
     """A rebind planned from what the runtime detected, using existing enrolled authority."""
     from .harness_context import PreparedHarnessInstall
     from .runtime_transition import RuntimeTransition, TransitionError, TransitionFile
     from .shims import prepare_guard_shim
 
-    found = adapter._ask("install_detection", context, create_key=create_key)
+    found = run_op(harness, "install_detection", context, create_key=create_key)
     if set(found) == {"transition_error"}:
         raise TransitionError(str(found["transition_error"]))
-    shim = prepare_guard_shim(adapter.harness, context)
-    answer = adapter._ask(
+    shim = prepare_guard_shim(harness, context)
+    answer = run_op(
+        harness,
         "prepare_install",
         context,
         create_key=create_key,
@@ -74,15 +49,14 @@ def prepared_from_detection(
     return prepared
 
 
-def prepared_surfaces(
-    adapter: NativeHarnessAdapter, context: HarnessContext, **surface: object
-) -> PreparedHarnessInstall:
+def prepared_surfaces(harness: str, context: HarnessContext, **surface: object) -> PreparedHarnessInstall:
     """Every surface the runtime selects, planned in one op before any publication."""
     from .harness_context import PreparedHarnessInstall
     from .runtime_transition import RuntimeTransition, TransitionError, TransitionFile
     from .shims import shell_profile_facts, shim_interpreter
 
-    answer = adapter._ask(
+    answer = run_op(
+        harness,
         "prepare_surfaces",
         context,
         interpreter=shim_interpreter(),
@@ -115,14 +89,15 @@ __all__ = ["HookOwnershipError", "detection_from", "owned_ask", "planned_files",
 
 
 def native_warnings(
-    adapter: NativeHarnessAdapter,
+    harness: str,
     detection: HarnessDetection,
     runtime_probe: dict[str, object] | None,
 ) -> list[str]:
     """The doctor warnings a harness's own ``diagnostic_warnings`` op words."""
     from .harness_context import HarnessContext
 
-    answer = adapter._ask(
+    answer = run_op(
+        harness,
         "diagnostic_warnings",
         HarnessContext(home_dir=Path.home(), workspace_dir=None, guard_home=Path.home()),
         warnings=list(detection.warnings),

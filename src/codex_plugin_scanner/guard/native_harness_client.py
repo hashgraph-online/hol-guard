@@ -45,6 +45,46 @@ NATIVE_HARNESSES: tuple[tuple[str, tuple[str, ...], str], ...] = (
 )
 
 
+#: The order ``list_harnesses`` answers in: Codex first, then the rest as the product names them.
+HARNESS_ORDER: tuple[str, ...] = (
+    "codex",
+    "claude-code",
+    "copilot",
+    "cursor",
+    "cline",
+    "devin",
+    "antigravity",
+    "gemini",
+    "grok",
+    "hermes",
+    "kimi",
+    "omp",
+    "pi",
+    "openclaw",
+    "opencode",
+    "zcode",
+    "paseo",
+    "muse",
+)
+
+#: Ops that render a Pi-family extension, so they carry this process's facts.
+_EXTENSION_OPS = frozenset(
+    {
+        "apply_install",
+        "prepare_install",
+        "prepare_uninstall",
+        "apply_uninstall",
+        "extension_source",
+        "extension_current",
+        "legacy_omp_verified",
+    }
+)
+
+
+class HookOwnershipError(RuntimeError):
+    """The native runtime could not say which hook commands Guard wrote."""
+
+
 @cache
 def describe() -> dict[str, Any]:
     """The runtime's description of every adapter it answers."""
@@ -150,3 +190,47 @@ def _text(answer: dict[str, Any], key: str) -> str:
 def _native_context(context: HarnessContext) -> HarnessContext:
     """Paseo installs for the daemon user, not the caller's current worktree."""
     return replace(context, workspace_dir=None, workspace_override_explicit=False)
+
+
+def canonical_harness(name: str) -> str:
+    """The harness a name or alias stands for."""
+    for harness, aliases, _launcher in NATIVE_HARNESSES:
+        if name == harness or name in aliases:
+            return harness
+    raise ValueError(f"Unsupported harness: {name}")
+
+
+def owned_ask(harness: str, owned: object, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
+    """``ask``, naming a hook-ownership failure as the harness's spec words it."""
+    from .native_runner_authority import NativeRunnerAuthorityError
+
+    if not isinstance(owned, dict):
+        return ask(op, context, harness=harness, **fields)
+    message = str(owned["message"])
+    try:
+        return ask(op, context, harness=harness, **fields)
+    except NativeRunnerAuthorityError as error:
+        if op in owned["ops"]:
+            raise HookOwnershipError(message) from error
+        raise
+    except RuntimeError as error:
+        if str(error) == message:
+            raise HookOwnershipError(message) from error
+        raise
+
+
+def run_op(harness: str, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
+    """One op of ``harness``, with the replies only this process can give answered."""
+    spec = _description(harness)
+    if op in _EXTENSION_OPS and spec.get("extension"):
+        from .extension_runtime import extension_runtime
+
+        fields["runtime"] = extension_runtime()
+    answer = owned_ask(harness, spec.get("hook_ownership"), op, context, **fields)
+    if answer == {"reply": {"facts": None}} and "facts" not in fields:
+        # The daemon URL the hooks reach is only known to this process.
+        from .claude_hook_entry import claude_facts
+
+        fields["facts"] = claude_facts(context.guard_home)
+        answer = owned_ask(harness, spec.get("hook_ownership"), op, context, **fields)
+    return answer

@@ -5,45 +5,36 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .harness.native_harness import NativeHarnessAdapter
 from .harness_context import HarnessContext
-from .native_harness_client import _text
+from .native_harness_client import _description, _text, canonical_harness, run_op
 
 
 def extension_source(
     harness: str, context: HarnessContext, *, variant: str = "active", config_path: Path | None = None
 ) -> str:
     """The Pi-family extension source this Guard renders for ``harness``."""
-    from .harness.registry import get_adapter
-
-    adapter = get_adapter(harness)
-    if not isinstance(adapter, NativeHarnessAdapter):
-        raise ValueError(f"Unsupported harness: {harness}")
-    answer = adapter._ask(
-        "extension_source", context, variant=variant, config_path=None if config_path is None else str(config_path)
+    answer = run_op(
+        canonical_harness(harness),
+        "extension_source",
+        context,
+        variant=variant,
+        config_path=None if config_path is None else str(config_path),
     )
     return _text(answer, "source")
 
 
 def extension_is_current(harness: str, context: HarnessContext) -> bool:
     """Whether the managed Pi-family extension already matches this Guard."""
-    from .harness.registry import get_adapter
-
-    adapter = get_adapter(harness)
-    if not isinstance(adapter, NativeHarnessAdapter) or not adapter._spec.get("extension"):
+    name = canonical_harness(harness)
+    if not _description(name).get("extension"):
         return False
-    return adapter._ask("extension_current", context).get("current") is True
+    return run_op(name, "extension_current", context).get("current") is True
 
 
 def legacy_omp_extension_is_verified(context: HarnessContext, pi_install: dict[str, object]) -> bool:
     """Whether Oh My Pi holds exactly the extension the former combined Pi install wrote."""
-    from .harness.registry import get_adapter
-
-    adapter = get_adapter("pi")
-    if not isinstance(adapter, NativeHarnessAdapter):
-        return False
-    answer = adapter._ask(
-        "legacy_omp_verified", context, managed_install=json.loads(json.dumps(pi_install, default=lambda _: None))
+    answer = run_op(
+        "pi", "legacy_omp_verified", context, managed_install=json.loads(json.dumps(pi_install, default=lambda _: None))
     )
     return answer.get("verified") is True
 

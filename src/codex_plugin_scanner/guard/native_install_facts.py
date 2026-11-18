@@ -70,8 +70,8 @@ def install_facts(
     """
     from datetime import datetime, timezone
 
-    from .harness.registry import get_adapter
     from .native_harness_client import _native_context, describe
+    from .native_harness_ops import resolved_executable
 
     descriptions = {
         str(adapter.get("harness")): adapter for adapter in describe()["adapters"] if isinstance(adapter, dict)
@@ -91,7 +91,7 @@ def install_facts(
     merged.update(cast("dict[str, object]", facts["facts"]))
     facts["facts"] = merged
     facts["runtime"] = facts["runtime"] or providers["runtime"]
-    facts["delegates"] = {name: get_adapter(name).resolved_executable(native) is not None for name in delegates}
+    facts["delegates"] = {name: resolved_executable(name, native) is not None for name in delegates}
     facts["now"] = datetime.now(timezone.utc).isoformat()
     facts["source"] = "default"
     return facts
