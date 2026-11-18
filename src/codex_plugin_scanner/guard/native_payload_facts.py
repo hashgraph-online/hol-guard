@@ -6,6 +6,7 @@ resident already normalizes. It does not classify or reinterpret the reply.
 
 from __future__ import annotations
 
+import time
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
@@ -17,7 +18,9 @@ _REQUEST_SCHEMA = "guard-hook-payload-facts-request.v1"
 _RESULT_SCHEMA = "guard-hook-payload-facts-result.v1"
 
 
-def native_hook_event(payload: Mapping[str, object], guard_home: Path) -> str | None:
+def native_hook_event(
+    payload: Mapping[str, object], guard_home: Path, *, deadline: float | None = None
+) -> str | None:
     """Return the resident-normalized event, or ``None`` on native absence."""
 
     wire = {
@@ -25,12 +28,15 @@ def native_hook_event(payload: Mapping[str, object], guard_home: Path) -> str | 
         "request_id": f"hook-payload-facts-{uuid.uuid4().hex}",
         "payload": dict(payload),
     }
+    timeout_seconds = 1.0 if deadline is None else min(1.0, deadline - time.monotonic())
+    if timeout_seconds <= 0:
+        return None
     try:
         response = _resident_request(
             operation="hook_payload_facts",
             request=wire,
             guard_home=guard_home,
-            timeout_seconds=1.0,
+            timeout_seconds=timeout_seconds,
             required_feature=_FEATURE,
             response_schema=_RESULT_SCHEMA,
             record_success=False,

@@ -297,6 +297,7 @@ class HookWorker(HookWorkerNativeMixin):
         guard_home: Path,
         workspace: Path | None,
         deadline: float | None = None,
+        event_name: str | None = None,
         claim_saved_approval: bool = True,
         claimed_saved_allow_hash: str | None = None,
         claimed_approval_request_id: str | None = None,
@@ -315,7 +316,7 @@ class HookWorker(HookWorkerNativeMixin):
         payload.setdefault(HOOK_EXECUTION_ENVIRONMENT_KEY, None)
         self._last_native_decision_receipt = None
         harness = self._runtime_harness(params) or default_harness
-        event_name = self._hook_event_name(payload)
+        event_name = event_name or self._hook_event_name(payload)
         if harness.strip().lower().replace("_", "-") == "claude-code":
             answered = self._claude_lifecycle_response(event_name, payload)
             if answered is not None:

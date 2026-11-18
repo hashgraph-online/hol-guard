@@ -143,6 +143,7 @@ def try_native_hook_authority(
     workspace: Path | None,
     store: GuardStore,
     deadline: float | None = None,
+    event_name: str | None = None,
 ) -> dict[str, Any]:
     """Review one hook with the same fail-closed worker the daemon uses.
 
@@ -165,15 +166,16 @@ def try_native_hook_authority(
             guard_home=guard_home,
             workspace=workspace,
             deadline=deadline,
+            event_name=event_name,
         )
     except Exception as error:
         _record_native_hook_exception(
             guard_home,
             harness=harness,
-            event_name=native_hook_event(payload, guard_home) or runtime_hook_event_name(payload),
+            event_name=event_name or runtime_hook_event_name(payload),
         )
         _log_worker_exception(error, harness=harness)
-        event_name = native_hook_event(payload, guard_home) or runtime_hook_event_name(payload)
+        event_name = event_name or runtime_hook_event_name(payload)
         response = availability_harness_response(
             harness=harness,
             event_name=event_name,
@@ -325,10 +327,13 @@ def route_native_hook(
     fallback, and the answer is the one the daemon gives the same request.
     """
 
-    event_name = native_hook_event(payload, context.guard_home) or runtime_hook_event_name(payload)
+    event_name = runtime_hook_event_name(payload)
     deadline: float | None = None
     try:
         deadline = _cli_review_deadline(payload)
+        event_name = native_hook_event(
+            payload, context.guard_home, deadline=deadline
+        ) or runtime_hook_event_name(payload)
         payload = dict(payload)
         # This process runs in the shell the command is about to run in, so its
         # environment is the caller context the daemon would get from a bridge.
@@ -342,6 +347,7 @@ def route_native_hook(
             workspace=runtime_workspace or _payload_workspace(payload),
             store=store,
             deadline=deadline,
+            event_name=event_name,
         )
         if not isinstance(response, dict):
             response = availability_harness_response(
