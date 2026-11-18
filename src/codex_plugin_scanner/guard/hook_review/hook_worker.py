@@ -44,8 +44,8 @@ from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as a
 from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS, TRANSIENT_PUBLICATION_ERRORS
 from ..native_runtime import NativeRuntimeStatus, native_runtime_status
 from ..native_runtime_status_share import share_verified_runtime_status
+from ..resident_route_counters import RouteCounterLog
 from ..runtime.extension_control_runtime import current_extension_control_binding_digest
-from .hook_direct_counters import HookCounterLog
 from .hook_request_parsing import (
     runtime_hook_event_name,
 )
@@ -127,7 +127,7 @@ class HookWorker(HookWorkerNativeMixin):
         from ..route_metrics import RouteMetricsRecorder
 
         self.metrics = RouteMetricsRecorder()
-        self.hook_counters = HookCounterLog()
+        self.hook_counters = RouteCounterLog()
         self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
         # Resolve adapter modules before a managed hook request starts
         # its deadline. This lookup grants no authority; native policy

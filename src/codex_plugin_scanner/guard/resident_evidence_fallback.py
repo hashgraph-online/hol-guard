@@ -15,7 +15,7 @@ lane answered by ``mcp_relay_package_evidence_drain``. The publisher advertises 
 direct-lane binding only while it runs, so a resident never answers directly
 for a daemon that would leave the evidence behind. A page from a current
 resident also carries its diagnostic hook counts, which go to
-``hook_direct_counters`` for the daemon log and nowhere else.
+the resident route counters for the daemon log and nowhere else.
 
 The resident records a page's receipts, and the tool activity the binding let
 it record, with its own evidence writer before the page leaves, and marks the

@@ -554,7 +554,7 @@
    "class": "persistence_only",
    "paths": [
     "src/codex_plugin_scanner/guard/route_metrics.py",
-    "src/codex_plugin_scanner/guard/hook_review/hook_direct_counters.py",
+    "src/codex_plugin_scanner/guard/resident_route_counters.py",
     "rust/crates/guard-command/src/hook_evidence_writer.rs",
     "rust/crates/guard-command/src/hook_evidence_journal_fs.rs",
     "rust/crates/guard-command/src/hook_evidence_batch.rs",
