@@ -117,13 +117,15 @@ fn a_loop_that_hands_a_kept_value_to_an_interpreter_keeps_the_failure() {
     }
 }
 
-
 #[test]
 fn nested_shell_quote_state_never_hides_unescaped_backticks() {
     use super::substitution::without_escaped_backticks;
     let commands = [
         r#"v="$(printf "'")"; echo `printf launched` # '"#.to_owned(),
-        format!(r#"echo {}'\''; echo `printf launched` # '"#, char::from(36u8)),
+        format!(
+            r#"echo {}\'\''; echo `printf launched` # '"#,
+            char::from(36u8)
+        ),
     ];
     for command in commands {
         let looked = without_escaped_backticks(&command);
