@@ -117,13 +117,238 @@ pub(crate) fn lone_home_dotpath_search(
 /// `$HOME`, and quotes in other words do not change the pattern.
 fn pattern_is_quoted(text: &str, pattern: &str) -> bool {
     let tilde = pattern.starts_with('~');
-    if !tilde && !pattern.starts_with('$') {
+    if !tilde && !pattern.starts_with('
+
+/// A quoted or escaped '<' is argument text, not input redirection.
+/// Respect shell structure and mask comments before reading the operators.
+pub(crate) fn has_input_redirect_syntax(command: &str) -> bool {
+    let visible = crate::shell_structure::mask_shell_comments(command);
+    let chars: Vec<char> = visible.chars().collect();
+    let mut state = crate::shell_structure::ShellScanState::new();
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] == '<' && state.is_top_level() {
+            return true;
+        }
+        index = state.advance(&chars, index).max(index + 1);
+    }
+    false
+}
+
+/// Whether this `grep`/`rg` call's only word is a path into a hidden entry
+/// of the home directory.
+pub(crate) fn lone_search_pattern_names_home_dotpath(
+    command: &str,
+    args: &[String],
+    home_dir: Option<&Path>,
+) -> bool {
+    let Some(pattern) = lone_pattern(command, args) else {
+        return false;
+    };
+    let relative = if let Some(rest) = pattern.strip_prefix("~/") {
+        rest.to_owned()
+    } else if let Some(rest) = pattern.strip_prefix("$HOME/") {
+        rest.to_owned()
+    } else if let Some(rest) = pattern.strip_prefix("${HOME}/") {
+        rest.to_owned()
+    } else {
+        let Some(home) = home_dir else {
+            return false;
+        };
+        match under_home(Path::new(pattern), home) {
+            Some(rest) => rest,
+            None => return false,
+        }
+    };
+    let first = relative.split('/').next().unwrap_or("");
+    first.len() > 1 && first.starts_with('.') && first != ".."
+}
+
+enum GrepShort<'a> {
+    Recursive,
+    ExplicitPattern,
+    Directory(Option<&'a str>),
+    Value(bool),
+}
+
+// GNU grep combines short options. A value-taking option consumes the rest
+// of that group or the following word; -T is NOT value-taking in grep.
+fn grep_short(arg: &str) -> Option<GrepShort<'_>> {
+    let flags = arg.strip_prefix('-')?;
+    if flags.is_empty() || flags.starts_with('-') {
+        return None;
+    }
+    for (index, flag) in flags.char_indices() {
+        let remaining = &flags[index + flag.len_utf8()..];
+        match flag {
+            'r' | 'R' => return Some(GrepShort::Recursive),
+            'e' | 'f' => return Some(GrepShort::ExplicitPattern),
+            'd' => {
+                return Some(GrepShort::Directory(
+                    (!remaining.is_empty()).then_some(remaining),
+                ))
+            }
+            'A' | 'B' | 'C' | 'D' | 'm' => {
+                return Some(GrepShort::Value(remaining.is_empty()));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+// Ripgrep clusters boolean short flags with -e/-f and arity-bearing flags.
+// The latter own the rest of the cluster, so a later letter is a value,
+// not another option. Do not treat an explicit pattern as a lone stdin search.
+fn rg_short(arg: &str) -> Option<GrepShort<'_>> {
+    let flags = arg.strip_prefix('-')?;
+    if flags.is_empty() || flags.starts_with('-') {
+        return None;
+    }
+    for (index, flag) in flags.char_indices() {
+        let remaining = &flags[index + flag.len_utf8()..];
+        match flag {
+            'e' | 'f' => return Some(GrepShort::ExplicitPattern),
+            'A' | 'B' | 'C' | 'd' | 'E' | 'g' | 'j' | 'm' | 'M' | 'r' | 't' | 'T' => {
+                return Some(GrepShort::Value(remaining.is_empty()));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn lone_pattern<'a>(command: &str, args: &'a [String]) -> Option<&'a str> {
+    let grep_like = GREP_FAMILY.contains(&command);
+    if !grep_like && command != "rg" {
+        return None;
+    }
+    let mut pattern: Option<&str> = None;
+    let mut skip_value = false;
+    let mut directory_value_pending = false;
+    let mut after_options = false;
+    for arg in args {
+        if directory_value_pending {
+            directory_value_pending = false;
+            if arg == "recurse" {
+                return None;
+            }
+            continue;
+        }
+        if skip_value {
+            skip_value = false;
+            continue;
+        }
+        if after_options || !arg.starts_with('-') || arg == "-" {
+            if arg == "-" || pattern.is_some() {
+                // A second word is a file operand (or stdin named outright).
+                return None;
+            }
+            pattern = Some(arg);
+            continue;
+        }
+        if arg == "--" {
+            after_options = true;
+            continue;
+        }
+        let flag = arg.split_once('=').map_or(arg.as_str(), |(f, _)| f);
+        if PATTERN_OPTIONS.contains(&flag)
+            || (!arg.starts_with("--") && (arg.starts_with("-e") || arg.starts_with("-f")))
+        {
+            return None;
+        }
+        if command == "rg" && matches!(flag, "--files" | "--type-list") {
+            return None;
+        }
+        if grep_like {
+            if matches!(flag, "--recursive" | "--dereference-recursive") {
+                return None;
+            }
+            if flag == "--directories" {
+                if let Some(value) = arg.strip_prefix("--directories=") {
+                    if value == "recurse" {
+                        return None;
+                    }
+                } else {
+                    directory_value_pending = true;
+                }
+                continue;
+            }
+            if let Some(option) = grep_short(arg) {
+                match option {
+                    GrepShort::Recursive | GrepShort::ExplicitPattern => return None,
+                    GrepShort::Directory(Some("recurse")) => return None,
+                    GrepShort::Directory(Some(_)) => {}
+                    GrepShort::Directory(None) => directory_value_pending = true,
+                    GrepShort::Value(needs_next) => skip_value = needs_next,
+                }
+                continue;
+            }
+        }
+        if command == "rg" {
+            if let Some(option) = rg_short(arg) {
+                match option {
+                    GrepShort::ExplicitPattern => return None,
+                    GrepShort::Value(needs_next) => skip_value = needs_next,
+                    _ => {}
+                }
+                continue;
+            }
+        }
+        let value_options = if grep_like {
+            GREP_VALUE_OPTIONS
+        } else {
+            RG_VALUE_OPTIONS
+        };
+        if value_options.contains(&arg.as_str()) {
+            skip_value = true;
+        }
+    }
+    pattern
+}
+
+/// The pattern's path below the home directory, matching either spelling of
+/// each side: macOS reports `/tmp/...` and `/private/tmp/...` for one place.
+fn under_home(pattern: &Path, home: &Path) -> Option<String> {
+    let homes = [Some(home.to_path_buf()), std::fs::canonicalize(home).ok()];
+    let patterns = [Some(pattern.to_path_buf()), canonical_prefix(pattern)];
+    for home in homes.iter().flatten() {
+        for pattern in patterns.iter().flatten() {
+            if let Ok(rest) = pattern.strip_prefix(home) {
+                return Some(rest.to_string_lossy().into_owned());
+            }
+        }
+    }
+    None
+}
+
+/// The path with its deepest existing ancestor resolved, so a missing file
+/// under a symlinked directory still resolves.
+fn canonical_prefix(path: &Path) -> Option<std::path::PathBuf> {
+    let mut tail = Vec::new();
+    let mut current = path;
+    loop {
+        if let Ok(resolved) = std::fs::canonicalize(current) {
+            return Some(tail.iter().rev().fold(resolved, |acc, part| acc.join(part)));
+        }
+        tail.push(current.file_name()?.to_owned());
+        current = current.parent()?;
+    }
+}
+) {
         return false;
     }
-    text.match_indices(pattern).any(|(index, _)| {
+    // A quoted option can contain exactly the same text as the unquoted
+    // search pattern. Never let that unrelated quote exempt the latter.
+    let mut saw_literal = false;
+    let mut saw_unquoted = false;
+    for (index, _) in text.match_indices(pattern) {
         let before = text[..index].chars().next_back();
-        before == Some('\\') || before == Some('\'') || (tilde && before == Some('"'))
-    })
+        let literal = before == Some('\\') || before == Some('\'') || (tilde && before == Some('"'));
+        saw_literal |= literal;
+        saw_unquoted |= !literal;
+    }
+    saw_literal && !saw_unquoted
 }
 
 /// A quoted or escaped '<' is argument text, not input redirection.
