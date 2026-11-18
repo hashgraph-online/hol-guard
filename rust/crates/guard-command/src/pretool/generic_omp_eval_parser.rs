@@ -39,6 +39,8 @@ struct Parser {
     calls: Vec<Call>,
 }
 
+#[path = "generic_omp_eval_parser_builtins.rs"]
+mod builtins;
 #[path = "generic_omp_eval_parser_commit.rs"]
 mod commit;
 #[path = "generic_omp_eval_parser_vocabulary.rs"]
@@ -192,13 +194,7 @@ impl Parser {
                 "read" => self.read_helper()?,
                 "sh" => self.shell_helper()?,
                 "Promise" => self.promise_all(depth)?,
-                "JSON" => {
-                    self.eat('.')?;
-                    self.eat_ident("stringify")?;
-                    self.eat('(')?;
-                    self.value(depth + 1)?;
-                    self.eat(')')?;
-                }
+                "JSON" | "typeof" | "Object" => self.builtin(&word, depth)?,
                 "true" | "false" | "null" => {}
                 name if self.drafts.contains(name) => self.draft_use()?,
                 name if self.declared.contains(name) => {}
