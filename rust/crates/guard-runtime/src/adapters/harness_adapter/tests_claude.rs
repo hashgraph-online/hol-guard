@@ -7,6 +7,8 @@ use serde_json::{json, Map, Value};
 
 use super::{after, dispatch, shim, Home};
 
+#[path = "tests_claude_render.rs"]
+mod render;
 #[path = "tests_claude_round_trip.rs"]
 mod round_trip;
 

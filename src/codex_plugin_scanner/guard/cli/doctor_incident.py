@@ -7,7 +7,7 @@ import sys
 from typing import TextIO
 
 from ..codex_harness_client import live_hook_ask
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 
 
 def run_codex_incident_export(args: object, context: HarnessContext, output_stream: TextIO | None = None) -> int:

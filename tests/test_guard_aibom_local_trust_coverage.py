@@ -3,7 +3,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard import aibom_cli as aibom_cli_module
 from codex_plugin_scanner.guard.aibom_cli import _artifact_rows_from_store
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 

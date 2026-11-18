@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 from codex_plugin_scanner.guard.approval_scope_support import package_request_runtime_workspace_scope
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact, package_request_policy_hash
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision

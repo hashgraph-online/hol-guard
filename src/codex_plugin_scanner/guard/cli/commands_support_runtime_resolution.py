@@ -25,7 +25,7 @@ def _runtime_request_summary(artifact: GuardArtifact) -> str | None:
 
 def _canonical_harness_name(harness: str) -> str:
     try:
-        return get_adapter(harness).harness
+        return resolve_harness(harness)
     except ValueError:
         return harness
 

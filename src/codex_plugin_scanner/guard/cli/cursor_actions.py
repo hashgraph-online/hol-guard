@@ -2,15 +2,15 @@
 
 The native ``harness_adapter`` cursor ops own which surfaces exist, which are
 detected, which Guard protects and the payload that reports them. These helpers
-only name the context and pass the managed-install rows in.
+only name the context and pass the store's home and managed-install rows in.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from ..harness.base import HarnessContext
-from ..harness.native_harness import ask
+from ..harness_context import HarnessContext
+from ..native_harness_client import ask
 from ..store import GuardStore
 
 
@@ -55,11 +55,16 @@ def cursor_protected_surfaces(
 
 
 def cursor_protected_surfaces_from_store(
-    harness: str,
     store: GuardStore | None,
     detection: dict[str, object],
     context: HarnessContext,
 ) -> tuple[str, ...]:
-    installed = bool(detection["installed"])
-    managed = store.get_managed_install(harness) if installed and store is not None else None
-    return _surfaces(_cursor_ask("protected_surfaces_from_store", context, installed=installed, managed=managed))
+    """The surfaces Guard protects; the runtime reads Cursor's record from the caller's store itself."""
+    return _surfaces(
+        _cursor_ask(
+            "protected_surfaces_from_store",
+            context,
+            installed=bool(detection["installed"]),
+            store_home=None if store is None else str(store.guard_home),
+        )
+    )

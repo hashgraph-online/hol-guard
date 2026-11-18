@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 
 
 def audit_workspace_is_bound_to_context(payload: dict[str, object], context: HarnessContext) -> bool:

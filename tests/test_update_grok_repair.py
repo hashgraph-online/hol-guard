@@ -10,9 +10,9 @@ import pytest
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.native_install_checks import grok_protection
 from codex_plugin_scanner.guard.cli.update_grok_repair import repair_grok_install
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import harness_ops_support as harness_support
 from tests.native_bounded_runtime import use_bounded_runtime
 
 _PROMPT_FILE = "hol-guard-prompt.json"
@@ -35,7 +35,7 @@ def _context(tmp_path: Path) -> HarnessContext:
 
 
 def _seed_grok_install(context: HarnessContext, store: GuardStore, now: str) -> Path:
-    manifest = get_adapter("grok").install(context)
+    manifest = harness_support.install("grok", context)
     store.set_managed_install("grok", True, None, manifest, now)
     return Path(grok_protection(context)["pretool_hook_path"])
 
@@ -263,11 +263,11 @@ def test_grok_repair_rewrites_versioned_desktop_core_when_shim_exists(
     shim.write_text("#!/bin/sh\n", encoding="utf-8")
     shim.chmod(0o755)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge.sys.executable",
+        "codex_plugin_scanner.guard.bounded_cli_hook_bridge.sys.executable",
         str(versioned),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge.sys.frozen",
+        "codex_plugin_scanner.guard.bounded_cli_hook_bridge.sys.frozen",
         True,
         raising=False,
     )

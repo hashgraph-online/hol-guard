@@ -336,6 +336,36 @@ fn a_legacy_observation_needs_its_store_and_one_stable_key() {
     assert_eq!(reason(late), "admission_deadline_expired");
 }
 
+#[cfg(unix)]
+#[test]
+fn a_legacy_observation_refuses_a_key_that_is_unsafe_or_malformed() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let budget = Budget::none();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let home = private_home();
+    let args = legacy_args(home.path(), home.path());
+    let key = home
+        .path()
+        .join(crate::hook_evidence_correlation::CORRELATION_KEY_FILE);
+    crate::hook_evidence_correlation::load_or_create_correlation_key(home.path()).unwrap();
+    std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let error = Legacy::open(&legacy_call(&args, &budget), home.path(), deadline)
+        .err()
+        .unwrap();
+    assert_eq!(reason(error), "legacy_probe_correlation_unavailable");
+    assert_eq!(
+        std::fs::metadata(&key).unwrap().permissions().mode() & 0o777,
+        0o644
+    );
+    std::fs::write(&key, r#"{"invalid":"fixture"}"#).unwrap();
+    std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let error = Legacy::open(&legacy_call(&args, &budget), home.path(), deadline)
+        .err()
+        .unwrap();
+    assert_eq!(reason(error), "legacy_probe_correlation_invalid");
+}
+
 #[test]
 fn a_store_failure_is_named_by_what_the_caller_can_do_about_it() {
     let future = Instant::now() + Duration::from_secs(30);

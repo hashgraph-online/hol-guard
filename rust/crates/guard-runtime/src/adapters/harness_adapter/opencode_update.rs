@@ -15,7 +15,9 @@ use serde_json::{json, Map, Value};
 
 use super::opencode_checks::{plugin_refresh, refresh_apply};
 use super::update_support::os_failure;
-use super::{install_apply, Ctx, Failure, Spec, Step};
+use super::{install_apply, managed_store, Ctx, Failure, Spec, Step};
+use crate::guard_paths::expanduser;
+use crate::transition_files::resolve_lenient;
 
 const COMPANION_PARTIAL: &str =
     "Could not refresh OpenCode MCP companion launchers in every config: ";
@@ -94,7 +96,54 @@ fn write_plugin(ctx: &Ctx, path: &Path, source: &str) -> Step<()> {
     fs::write(ctx.absolute(path), body).map_err(|error| os_failure(ctx, &error, path))
 }
 
+const WORKSPACE_INVALID: &str = "managed install workspace path is invalid";
+
+/// `managed_install_context`: the context with the install's recorded
+/// workspace, resolved as `Path.resolve()` would, or none when it records
+/// none.
+pub(super) fn rebind(ctx: &Ctx, recorded: Option<&Value>) -> Result<Ctx, &'static str> {
+    let mut rebound = ctx.clone();
+    rebound.workspace = None;
+    let Some(text) = recorded
+        .and_then(Value::as_str)
+        .filter(|text| !text.trim().is_empty())
+    else {
+        return Ok(rebound);
+    };
+    let home = ctx.user_home.to_str().ok_or(WORKSPACE_INVALID)?;
+    let expanded = expanduser(text, home).map_err(|_| WORKSPACE_INVALID)?;
+    let mut path = Path::new(&expanded).to_path_buf();
+    if path.is_relative() {
+        path = ctx.cwd.as_ref().ok_or(WORKSPACE_INVALID)?.join(path);
+    }
+    rebound.workspace = Some(resolve_lenient(&path));
+    Ok(rebound)
+}
+
+/// `update_refresh`. With `store_home` the runtime also reads the OpenCode
+/// install record itself: nothing to say when there is no active install or
+/// the record cannot be read, and the install's own workspace is the one the
+/// refresh works in.
 pub(super) fn update_refresh(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    let Some(store_home) = fields.get("store_home") else {
+        return refresh(spec, ctx, fields);
+    };
+    let home = Path::new(store_home.as_str().ok_or(Failure::Invalid)?);
+    let install = match managed_store::managed_install(home, "opencode") {
+        Ok(Some(install)) => install,
+        Ok(None) | Err(Failure::Runtime(_)) => return note(None),
+        Err(other) => return Err(other),
+    };
+    if install.get("active") != Some(&Value::Bool(true)) {
+        return note(None);
+    }
+    match rebind(ctx, install.get("workspace")) {
+        Ok(rebound) => refresh(spec, &rebound, fields),
+        Err(message) => note(Some(format!("{INSPECT_FAILED}{message}"))),
+    }
+}
+
+fn refresh(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let (refreshed, companion_warning) = refresh_companions(spec, ctx)?;
     let refresh = match plugin_refresh(ctx, fields) {
         Ok(refresh) => refresh,

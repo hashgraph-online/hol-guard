@@ -17,8 +17,9 @@ except ModuleNotFoundError:
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
-from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
+from codex_plugin_scanner.guard import native_codex_ops as codex_ops
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.codex_hook_file_integrity import (
     CodexHookIntegrityError,
     describe_executable_file,
@@ -26,15 +27,17 @@ from codex_plugin_scanner.guard.codex_hook_file_integrity import (
     validate_regular_file,
 )
 from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 from tests import codex_hook_publication_helpers as publication_helpers
+from tests import harness_ops_support as harness_support
 from tests.codex_hook_integrity_fixtures import (
     load_or_create_hook_secret,
     sign_hook_manifest,
     write_hook_manifest,
 )
 from tests.codex_hook_paths_support import hook_manifest_path, hook_secret_path
+from tests.codex_install_flow_support import current_launch
 from tests.codex_toml_support import dump_toml
 from tests.native_runtime_stamp import stamp_native_runtime
 from tests.transition_fault_support import interrupt_publication_at
@@ -202,7 +205,7 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
 def test_guard_codex_native_hook_state_requires_authenticated_manifest(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir / ".hol-guard")
-    direct_argv = list(codex_adapter._current_launch(context)["fallback"])
+    direct_argv = list(current_launch(context)["fallback"])
     bridge_config = json.dumps({"fallback_command": direct_argv}, separators=(",", ":"))
     forged_commands = [
         _registered_hook_command(context),
@@ -266,7 +269,7 @@ def test_guard_codex_native_hook_state_detects_registered_handler_tampering(tmp_
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
     _build_guard_fixture(home_dir, workspace_dir)
 
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     valid_state = codex_adapter.codex_native_hook_state(context)
     payload = tomllib.loads((home_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
     payload["hooks"]["PreToolUse"][-1]["hooks"][0]["statusMessage"] = "HOL Guard checking tool action (forged)"
@@ -285,8 +288,7 @@ def test_guard_codex_native_hook_state_detects_registered_handler_tampering(tmp_
 def test_guard_codex_native_hook_state_reports_missing_config_target(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir / ".hol-guard")
-    adapter = CodexHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("codex", context)
     (home_dir / ".codex" / "config.toml").unlink()
 
     state = codex_adapter.codex_native_hook_state(context)
@@ -299,8 +301,7 @@ def test_guard_codex_native_hook_state_reports_missing_config_target(tmp_path: P
 def test_guard_codex_native_hook_state_reports_missing_registration(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir / ".hol-guard")
-    adapter = CodexHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("codex", context)
     config_path = home_dir / ".codex" / "config.toml"
     payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
     payload.pop("hooks")
@@ -317,8 +318,7 @@ def test_guard_codex_install_refuses_to_replace_bad_manifest_mac(tmp_path: Path)
     home_dir = tmp_path / "home"
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir / ".hol-guard")
 
-    adapter = CodexHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("codex", context)
     valid_state = codex_adapter.codex_native_hook_state(context)
     manifest_path = Path(str(valid_state["manifest_path"]))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -328,7 +328,7 @@ def test_guard_codex_install_refuses_to_replace_bad_manifest_mac(tmp_path: Path)
 
     state = codex_adapter.codex_native_hook_state(context)
     with pytest.raises(CodexHookIntegrityError, match="Reinstall hol-guard from a trusted package") as error:
-        adapter.install(context)
+        harness_support.install("codex", context)
 
     assert state["protection_active"] is False
     assert state["integrity_status"] == "tampered"
@@ -349,9 +349,8 @@ def test_guard_codex_native_hook_state_rejects_manifest_copied_from_another_guar
         workspace_dir=None,
         guard_home=tmp_path / "second-guard",
     )
-    adapter = CodexHarnessAdapter()
-    adapter.install(first_context)
-    adapter.install(second_context)
+    harness_support.install("codex", first_context)
+    harness_support.install("codex", second_context)
     first_state = codex_adapter.codex_native_hook_state(first_context)
     second_state = codex_adapter.codex_native_hook_state(second_context)
     first_manifest = Path(str(first_state["manifest_path"]))
@@ -361,7 +360,7 @@ def test_guard_codex_native_hook_state_rejects_manifest_copied_from_another_guar
 
     copied_state = codex_adapter.codex_native_hook_state(second_context)
     with pytest.raises(CodexHookIntegrityError, match="Reinstall hol-guard from a trusted package") as error:
-        adapter.install(second_context)
+        harness_support.install("codex", second_context)
 
     assert copied_state["protection_active"] is False
     assert copied_state["integrity_status"] == "foreign"
@@ -385,18 +384,17 @@ def test_guard_codex_install_and_uninstall_reject_manifest_from_another_workspac
         guard_home=guard_home,
         workspace_override_explicit=True,
     )
-    adapter = CodexHarnessAdapter()
-    adapter.install(first_context)
-    config_path = CodexHarnessAdapter._hook_config_path(first_context)
+    harness_support.install("codex", first_context)
+    config_path = codex_paths(first_context).config
     state = codex_adapter.codex_native_hook_state(first_context)
     manifest_path = Path(str(state["manifest_path"]))
     original_config = config_path.read_bytes()
     original_manifest = manifest_path.read_bytes()
 
     with pytest.raises(CodexHookIntegrityError) as install_error:
-        adapter.install(second_context)
+        harness_support.install("codex", second_context)
     with pytest.raises(CodexHookIntegrityError) as uninstall_error:
-        adapter.uninstall(second_context)
+        harness_support.uninstall("codex", second_context)
 
     assert install_error.value.reason == "codex_hook_manifest_baseline_untrusted"
     assert uninstall_error.value.reason == "codex_hook_manifest_baseline_untrusted"
@@ -411,13 +409,12 @@ def test_guard_codex_install_refuses_missing_manifest_when_modern_secret_remains
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    adapter = CodexHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("codex", context)
     state = codex_adapter.codex_native_hook_state(context)
     Path(str(state["manifest_path"])).unlink()
 
     with pytest.raises(CodexHookIntegrityError, match="Reinstall hol-guard from a trusted package") as error:
-        adapter.install(context)
+        harness_support.install("codex", context)
 
     missing_state = codex_adapter.codex_native_hook_state(context)
     assert error.value.reason == "codex_hook_manifest_baseline_untrusted"
@@ -433,8 +430,7 @@ def test_guard_codex_native_hook_state_rejects_signed_stale_package_version_and_
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    adapter = CodexHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("codex", context)
     valid_state = codex_adapter.codex_native_hook_state(context)
     manifest_path = Path(str(valid_state["manifest_path"]))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -444,12 +440,12 @@ def test_guard_codex_native_hook_state_rejects_signed_stale_package_version_and_
     stale_manifest = sign_hook_manifest(manifest, secret)
     write_hook_manifest(
         context.guard_home,
-        CodexHarnessAdapter._hook_config_path(context),
+        codex_paths(context).config,
         stale_manifest,
     )
 
     stale_state = codex_adapter.codex_native_hook_state(context)
-    adapter.install(context)
+    harness_support.install("codex", context)
     repaired_state = codex_adapter.codex_native_hook_state(context)
 
     assert stale_state["protection_active"] is False
@@ -475,8 +471,7 @@ def test_guard_codex_native_hook_state_detects_bridge_content_mode_and_symlink_c
     bridge_path.write_bytes(b"#!/bin/sh\nexit 0\n")
     bridge_path.chmod(0o644)
     stamp_native_runtime(monkeypatch, bridge_path)
-    adapter = CodexHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("codex", context)
 
     original_bytes = bridge_path.read_bytes()
     bridge_path.write_bytes(original_bytes + b"\n# tampered\n")
@@ -514,8 +509,7 @@ def test_guard_codex_repair_refuses_to_authenticate_changed_same_version_bridge(
     bridge_path.write_bytes(b"#!/bin/sh\nexit 0\n")
     bridge_path.chmod(0o644)
     stamp_native_runtime(monkeypatch, bridge_path)
-    adapter = CodexHarnessAdapter()
-    adapter.install(context)
+    harness_support.install("codex", context)
     valid_state = codex_adapter.codex_native_hook_state(context)
     manifest_path = Path(str(valid_state["manifest_path"]))
     original_manifest = manifest_path.read_bytes()
@@ -525,7 +519,7 @@ def test_guard_codex_repair_refuses_to_authenticate_changed_same_version_bridge(
         CodexHookIntegrityError,
         match="refused to authenticate changed same-version hook code",
     ) as error:
-        adapter.install(context)
+        harness_support.install("codex", context)
 
     state = codex_adapter.codex_native_hook_state(context)
     assert error.value.reason == "codex_hook_package_reauthentication_refused"
@@ -552,7 +546,7 @@ def test_guard_codex_native_hook_state_binds_interpreter_invocation_symlink_targ
     replacement.chmod(0o755)
     monkeypatch.setattr(sys, "executable", str(interpreter_link))
 
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     valid_state = codex_adapter.codex_native_hook_state(context)
     interpreter_link.unlink()
     interpreter_link.symlink_to(replacement)
@@ -571,14 +565,14 @@ def test_guard_codex_install_safely_readopts_exact_current_legacy_bridge(tmp_pat
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    config_path = CodexHarnessAdapter._hook_config_path(context)
+    config_path = codex_paths(context).config
     legacy_group = codex_adapter._managed_hook_groups(context)["PreToolUse"]
     _write_text(
         config_path,
         dump_toml({"features": {"hooks": True}, "hooks": {"PreToolUse": [legacy_group]}}),
     )
 
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     installed = tomllib.loads(config_path.read_text(encoding="utf-8"))
     state = codex_adapter.codex_native_hook_state(context)
 
@@ -596,9 +590,8 @@ def test_guard_codex_authenticated_hook_transaction_rolls_back_after_partial_con
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    adapter = CodexHarnessAdapter()
-    adapter.install(context)
-    config_path = CodexHarnessAdapter._hook_config_path(context)
+    harness_support.install("codex", context)
+    config_path = codex_paths(context).config
     state = codex_adapter.codex_native_hook_state(context)
     manifest_path = Path(str(state["manifest_path"]))
     original_config = config_path.read_bytes()
@@ -606,7 +599,7 @@ def test_guard_codex_authenticated_hook_transaction_rolls_back_after_partial_con
     interrupt_publication_at(monkeypatch, config_path, OSError("injected config write failure"))
 
     try:
-        adapter.install(context)
+        harness_support.install("codex", context)
     except OSError as error:
         assert str(error) == "injected config write failure"
     else:  # pragma: no cover - the injected failure must escape after rollback
@@ -629,20 +622,19 @@ def test_guard_codex_first_install_failure_rolls_back_new_hook_secret(
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    adapter = CodexHarnessAdapter()
-    config_path = CodexHarnessAdapter._hook_config_path(context)
+    config_path = codex_paths(context).config
     manifest_path = hook_manifest_path(context.guard_home, config_path)
     secret_path = hook_secret_path(context.guard_home)
     interrupt_publication_at(monkeypatch, config_path, OSError("injected first-install config failure"))
 
     with pytest.raises(OSError, match="injected first-install config failure"):
-        adapter.install(context)
+        harness_support.install("codex", context)
 
     assert not config_path.exists()
     assert not manifest_path.exists()
     assert not secret_path.exists()
 
-    installed = adapter.install(context)
+    installed = harness_support.install("codex", context)
     state = codex_adapter.codex_native_hook_state(context)
 
     assert installed["active"] is True
@@ -668,12 +660,12 @@ def test_guard_codex_launch_uses_remote_control_for_dashboard_continuation(tmp_p
         captured.update(kwargs)
         return ["/usr/bin/codex", "--remote", "unix:///guarded.sock", "Fix it."]
 
-    monkeypatch.setattr(codex_lifecycle, "_require_codex_authoritative_shell_hook", lambda _context: None)
-    monkeypatch.setattr(codex_lifecycle, "guarded_codex_launch_command", fake_remote_launch)
-    monkeypatch.setattr(CodexHarnessAdapter, "resolved_executable", lambda self, ctx: "/usr/bin/codex")
+    monkeypatch.setattr(codex_ops, "_require_authoritative_shell_hook", lambda _context: None)
+    monkeypatch.setattr(codex_ops, "guarded_codex_launch_command", fake_remote_launch)
+    monkeypatch.setattr(codex_ops, "_executable", lambda _context: "/usr/bin/codex")
 
-    command = CodexHarnessAdapter().launch_command(context, ["Fix it."])
-    environment = CodexHarnessAdapter().launch_environment(context)
+    command = harness_ops.launch_command("codex", context, ["Fix it."])
+    environment = harness_ops.launch_environment("codex", context)
 
     assert command == ["/usr/bin/codex", "--remote", "unix:///guarded.sock", "Fix it."]
     assert captured == {
@@ -786,12 +778,13 @@ def test_guard_install_codex_detects_wrapped_servers_without_rewrapping(tmp_path
     )
     json.loads(capsys.readouterr().out)
 
-    detection = CodexHarnessAdapter().detect(
+    detection = harness_ops.detect(
+        "codex",
         HarnessContext(
             home_dir=home_dir,
             workspace_dir=workspace_dir,
             guard_home=home_dir,
-        )
+        ),
     )
     artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
 
@@ -976,9 +969,8 @@ def test_guard_codex_uninstall_removes_authenticated_baseline_before_reinstall(t
         workspace_dir=workspace_dir,
         guard_home=guard_home,
     )
-    adapter = CodexHarnessAdapter()
 
-    adapter.install(context)
+    harness_support.install("codex", context)
     first_state = codex_adapter.codex_native_hook_state(context)
     manifest_path = Path(str(first_state["manifest_path"]))
     secret_path = hook_secret_path(guard_home)
@@ -986,11 +978,11 @@ def test_guard_codex_uninstall_removes_authenticated_baseline_before_reinstall(t
     assert manifest_path.is_file()
     assert secret_path.is_file()
 
-    adapter.uninstall(context)
+    harness_support.uninstall("codex", context)
     assert manifest_path.exists() is False
     assert secret_path.exists() is False
 
-    adapter.install(context)
+    harness_support.install("codex", context)
     reinstalled_state = codex_adapter.codex_native_hook_state(context)
     assert reinstalled_state["integrity_status"] == "valid"
     assert reinstalled_state["integrity_reason"] == "codex_hook_manifest_valid"
@@ -2085,7 +2077,7 @@ def test_guard_install_codex_disables_empty_alternate_hook_config(tmp_path: Path
         ),
     )
 
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
 
     alternate_config = tomllib.loads(alternate_config_path.read_text(encoding="utf-8"))
     assert alternate_config["features"] == {"experimental": True}
@@ -2197,12 +2189,13 @@ def test_guard_detect_codex_collects_global_and_workspace_hooks(tmp_path):
         + "\n",
     )
 
-    detection = CodexHarnessAdapter().detect(
+    detection = harness_ops.detect(
+        "codex",
         HarnessContext(
             home_dir=home_dir,
             workspace_dir=workspace_dir,
             guard_home=tmp_path / "guard-home",
-        )
+        ),
     )
 
     hook_artifacts = [artifact for artifact in detection.artifacts if artifact.artifact_type == "hook"]

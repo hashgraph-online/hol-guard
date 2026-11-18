@@ -10,7 +10,7 @@ from .aibom_models import (
     AibomCliOptions,
     AibomExportFormat,
 )
-from .harness.base import HarnessContext
+from .harness_context import HarnessContext
 
 
 def build_inventory_json_payload(

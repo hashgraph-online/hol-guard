@@ -10,13 +10,13 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_self_binding
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_self_binding import (
     codex_hook_binds_guard_home,
     codex_hook_guard_home,
     self_bound_hook_bindings,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.codex_toml_support import dump_toml, read_toml_payload
 
 from .test_codex_migration_preparation import migration_kept_hooks
@@ -52,7 +52,7 @@ def packaged_bridge(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 
 
 def _install(home: Path, guard_home: Path) -> None:
-    CodexHarnessAdapter().install(HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home))
+    harness_support.install("codex", HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home))
 
 
 def _config_path(home: Path) -> Path:

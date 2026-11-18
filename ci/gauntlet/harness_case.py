@@ -129,7 +129,7 @@ def install_harness_hooks(name: str, daemon: Any, *, home: Path, guard_home: Pat
     applied to a disposable HOME and Guard home the operator never uses.
     """
     from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     context = HarnessContext(
         home_dir=home,

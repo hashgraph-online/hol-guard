@@ -95,6 +95,8 @@ pub(super) fn dispatch(
             super::codex_uninstall_op::uninstall(ctx, &request).map(codex_failure::with_raise)
         }
         "detect_legacy" => codex_install_request::detect_legacy(ctx, fields),
+        "detect" => codex_detect_op::detect(spec, ctx, fields),
+        "prepare_install" => codex_prepare::prepare_install(spec, ctx, fields),
         "manifest_spec" => codex_spec::manifest_spec(ctx, fields),
         "live_hook_state" => {
             let spec_fields = codex_spec::with_spec(ctx, fields)?;
@@ -405,3 +407,12 @@ pub(super) fn doctor_status(fields: &Map<String, Value>) -> Step<Value> {
     };
     Ok(json!({ "status": status }))
 }
+
+#[path = "codex_detect_op.rs"]
+mod codex_detect_op;
+#[path = "codex_detection.rs"]
+pub(super) mod codex_detection;
+#[path = "codex_managed.rs"]
+pub(super) mod codex_managed;
+#[path = "codex_prepare.rs"]
+mod codex_prepare;

@@ -12,7 +12,11 @@
   "dead_duplicate"
  ],
  "scope_globs": [
-  "src/codex_plugin_scanner/guard/harness/*hook*.py",
+  "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
+  "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
+  "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
+  "src/codex_plugin_scanner/guard/muse_hook_render.py",
+  "src/codex_plugin_scanner/guard/native_hook_bridge.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_*.py",
@@ -30,7 +34,11 @@
    "id": "hook_control_and_transport",
    "class": "required_control_plane",
    "patterns": [
-    "src/codex_plugin_scanner/guard/harness/*hook*.py",
+    "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
+    "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
+    "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
+    "src/codex_plugin_scanner/guard/muse_hook_render.py",
+    "src/codex_plugin_scanner/guard/native_hook_bridge.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_*.py",
     "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",

@@ -19,7 +19,7 @@ from codex_plugin_scanner.guard.codex_hook_registration import (
     require_codex_hook_owner,
 )
 from codex_plugin_scanner.guard.frozen_runtime_commands import FROZEN_CODEX_BRIDGE_ARG
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 _PYTHON = r"C:\Users\tester\.venv\Scripts\python.exe"
 _SPACED_PYTHON = r"C:\Program Files\HOL Guard's\.venv\Scripts\python.exe"

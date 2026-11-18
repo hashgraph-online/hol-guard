@@ -28,6 +28,7 @@ except ModuleNotFoundError:
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import claude_hook_entry as claude_adapter_module
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter_module
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_connect as guard_connect_support_module
@@ -36,10 +37,10 @@ from codex_plugin_scanner.guard.cli import product as guard_product_module
 from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli import update_commands as guard_update_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import codex_hook_publication_helpers as publication_helpers
@@ -4056,14 +4057,13 @@ args = ["workspace-skill.js", "--changed"]
         assert runtime_payload["permission"]["global_only_lab_*"] == "ask"
 
     def test_opencode_launch_command_treats_debug_tokens_as_interactive_prompt(self, tmp_path):
-        adapter = get_adapter("opencode")
         context = HarnessContext(
             home_dir=tmp_path / "home",
             workspace_dir=tmp_path / "workspace",
             guard_home=tmp_path / "guard-home",
         )
 
-        command = adapter.launch_command(context, ["debug", "oauth"])
+        command = harness_ops.launch_command("opencode", context, ["debug", "oauth"])
 
         assert command == ["opencode", str(context.workspace_dir), "--prompt", "debug oauth"]
 
@@ -4865,7 +4865,7 @@ args = ["-lc", "echo hi"]
             + "\n",
         )
         context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir)
-        _write_text(guard_update_commands_module.CodexHarnessAdapter._backup_path(context), "# backup\n")
+        _write_text(codex_paths(context).backup, "# backup\n")
         monkeypatch.setattr(
             guard_update_commands_module.subprocess,
             "run",
@@ -4922,7 +4922,7 @@ args = ["-lc", "echo hi"]
             + "\n",
         )
         workspace_context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
-        _write_text(guard_update_commands_module.CodexHarnessAdapter._backup_path(workspace_context), "# backup\n")
+        _write_text(codex_paths(workspace_context).backup, "# backup\n")
         monkeypatch.chdir(workspace_dir)
         monkeypatch.setattr(
             guard_update_commands_module.subprocess,
@@ -4973,7 +4973,7 @@ args = ["-lc", "echo hi"]
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
         workspace_context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
-        _write_text(guard_update_commands_module.CodexHarnessAdapter._backup_path(workspace_context), "# backup\n")
+        _write_text(codex_paths(workspace_context).backup, "# backup\n")
         monkeypatch.chdir(workspace_dir)
         monkeypatch.setattr(
             guard_update_commands_module.subprocess,
@@ -5029,9 +5029,6 @@ args = ["-lc", "echo hi"]
 """.strip()
             + "\n",
         )
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.codex_harness_lifecycle._command_available", lambda *_args: True
-        )
 
         rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -5053,9 +5050,6 @@ args = ["-lc", "echo hi"]
                 ]
             )
             + "\n",
-        )
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.codex_harness_lifecycle._command_available", lambda *_args: True
         )
 
         rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
@@ -5087,9 +5081,6 @@ command = "/bin/sh"
 args = ["-lc", "echo hi"]
 """.strip()
             + "\n",
-        )
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.codex_harness_lifecycle._command_available", lambda *_args: True
         )
         monkeypatch.setattr(
             GuardStore,
@@ -5393,9 +5384,6 @@ args = ["-lc", "echo hi"]
         home_dir = tmp_path / "home"
         guard_home = tmp_path / "guard-home"
         _write_text(guard_home / "config.toml", "runtime_detector_registry = true\n")
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.codex_harness_lifecycle._command_available", lambda *_args: True
-        )
 
         rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--guard-home", str(guard_home)])
         output = capsys.readouterr().out

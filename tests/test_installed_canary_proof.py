@@ -85,7 +85,7 @@ def test_installed_corpus_reports_malformed_json_clearly(tmp_path: Path, monkeyp
 def test_unavailable_native_harness_records_prevention(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The harness contract registry is read from the native runtime, which the
     # regression job pins by mode; read it before the parent adopts auto below.
-    from codex_plugin_scanner.guard.harness.contracts import contract_for
+    from codex_plugin_scanner.guard.setup_contracts import contract_for
 
     assert contract_for("opencode") is not None
     # The runner must establish its outage even when the parent uses auto and
