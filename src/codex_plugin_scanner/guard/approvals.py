@@ -1102,7 +1102,7 @@ def _canonical_managed_installs_for_health(
         installs = ask(
             "canonical_managed_installs",
             context,
-            guard_home=store.guard_home,
+            resident_home=store.guard_home,
             deadline_monotonic=deadline_monotonic,
             store_home=str(store.guard_home),
         )["installs"]
