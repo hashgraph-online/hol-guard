@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from .base import HarnessContext
 
 
@@ -21,13 +23,13 @@ def detected_harnesses(context: HarnessContext) -> list[str]:
         for adapter in describe()["adapters"]
         if isinstance(adapter, dict)
     }
+    fields: dict[str, Any] = {"workspace_skills": skills, **codex_native_request(context)}
     try:
         answer = ask(
             "detected_harnesses",
             context,
             timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS * len(skills),
-            workspace_skills=skills,
-            **codex_native_request(context),
+            **fields,
         )
     except NativeRunnerAuthorityError as error:
         raise NativeAibomError(str(error)) from error
