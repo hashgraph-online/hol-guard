@@ -61,9 +61,9 @@ mod tests_owned_locks;
 #[cfg(test)]
 mod tests_publication_inverse_plan;
 #[cfg(test)]
-mod tests_publication_repair_plan;
-#[cfg(test)]
 mod tests_publication_proof;
+#[cfg(test)]
+mod tests_publication_repair_plan;
 #[cfg(test)]
 mod tests_publication_repair_request;
 #[cfg(test)]

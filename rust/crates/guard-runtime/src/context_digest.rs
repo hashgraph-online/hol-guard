@@ -521,6 +521,7 @@ fn evaluate_request(
                     subject,
                     operation_id,
                     owner_pid: *owner_pid,
+                    deadline,
                 },
                 *retirement_seconds,
             ));
