@@ -11,7 +11,7 @@ use std::path::Path;
 
 use serde_json::{json, Value};
 
-use super::{Ctx, Step};
+use crate::harness_adapter::{Ctx, Step};
 
 fn linked(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink())
