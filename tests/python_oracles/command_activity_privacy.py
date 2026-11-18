@@ -9,7 +9,7 @@ from typing import Final, cast, final
 
 from typing_extensions import override
 
-from .command_activity_contract import (
+from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     COMMAND_ACTIVITY_SCHEMA_VERSION,
     CorrelationHandle,
     CorrelationKind,

@@ -12,14 +12,14 @@ from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.native_process_stop_scope import native_process_stop_scope
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity
-from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
-    COMMAND_ACTIVITY_CORRELATION_KEY_FILE,
-)
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_hook_paths_support import hook_manifest_path
 from tests.codex_legacy_roles import without_package_roles
 from tests.command_activity_correlation_key_support import write_correlation_key
+from tests.python_oracles.command_activity_correlation import (
+    COMMAND_ACTIVITY_CORRELATION_KEY_FILE,
+)
 
 
 def installed_context(tmp_path):

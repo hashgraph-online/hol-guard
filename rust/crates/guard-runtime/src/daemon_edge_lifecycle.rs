@@ -50,7 +50,7 @@ const STARTED_EVENTS: [&str; 6] = [
     "reconcile_deferred",
 ];
 /// Records also written to `logs/daemon.log`, where people look first.
-const LOGGED_EVENTS: [&str; 9] = [
+const LOGGED_EVENTS: [&str; 10] = [
     "published",
     "ready",
     "reconcile_deferred",
@@ -60,6 +60,7 @@ const LOGGED_EVENTS: [&str; 9] = [
     "shutdown_requested",
     "unclean_exit_detected",
     "repair_requested",
+    "leftover_left_alone",
 ];
 
 /// The optional fields of one record.

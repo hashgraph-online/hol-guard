@@ -16,9 +16,13 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
-from .native_execution import _resident_request
-from .native_store_policy import _payload
+from codex_plugin_scanner.guard.native_context import (
+    _canonical_request_sha256,
+    _resolve_digest_home,
+    ensure_resident_prerequisite,
+)
+from codex_plugin_scanner.guard.native_execution import _resident_request
+from codex_plugin_scanner.guard.native_store_policy import _payload
 
 ADAPTER_STATE_INTEGRITY_FEATURE = "adapter-state-integrity-v1"
 _REQUEST_SCHEMA = "guard-adapter-state-integrity-request.v1"
