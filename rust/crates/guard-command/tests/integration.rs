@@ -281,6 +281,7 @@ pub mod pretool_private_temporary_worktree_runs;
 pub mod pretool_process_probe_chains;
 pub mod pretool_process_stops;
 pub mod pretool_project_dotfile_reads;
+pub mod pretool_project_script_dotfile_reads;
 pub mod pretool_prompt_negation_scope;
 pub mod pretool_prompt_ordinary_verbs;
 pub mod pretool_prompt_secret_requests;
