@@ -25,6 +25,27 @@ fn a_bare_print_of_an_ssn_is_reviewed() {
 }
 
 #[test]
+fn printf_escapes_are_decoded_before_ssn_boundary_check() {
+    // Bash printf expands these format escapes. The literal echo command
+    // does not expand them, so it must retain its existing benign verdict.
+    for command in [
+        r"printf 'SSN:\n123-45-6789\n'",
+        r"printf '123\05545\0556789'",
+        r"printf '123\x2d45\x2d6789'",
+    ] {
+        assert!(echoes_ssn(command), "{command} prints an SSN and must be reviewed");
+    }
+    for command in [
+        r"echo '123\05545\0556789'",
+        r"echo '123\x2d45\x2d6789'",
+        r"printf '123\05545\0550000'",
+        r"printf '123\x2d45\x2d0000'",
+    ] {
+        assert!(!echoes_ssn(command), "{command} does not print an issuable SSN");
+    }
+}
+
+#[test]
 fn other_numbers_and_shapes_pass() {
     for command in [
         "echo 000-12-3456",
