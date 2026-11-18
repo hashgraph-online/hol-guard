@@ -270,8 +270,21 @@ impl Parser {
         match method.as_str() {
             "take" | "drop" => {
                 let path_ok = args.first().is_none_or(strings_literal);
+                // OMP runs `grep` through JavaScript RegExp on its host thread.
+                // Only bounded, repetition-free selectors can be silently
+                // admitted: nested quantifiers could stall the host process.
+                let grep_ok = match args
+                    .get(1)
+                    .and_then(Value::as_object)
+                    .and_then(|options| options.get("grep"))
+                {
+                    None => true,
+                    Some(Value::String(pattern)) => bounded_grep_selector(pattern),
+                    _ => false,
+                };
                 (args.len() <= 2
                     && path_ok
+                    && grep_ok
                     && options_ok(args.get(1), &["units", "grep", "silent"]))
                 .then_some(())?;
                 self.push(repo.as_deref(), "git status --short")
@@ -417,6 +430,17 @@ impl Parser {
         });
         Some(())
     }
+}
+
+/// Patterns with no repetition, backreferences, groups or lookarounds have
+/// a bounded match cost on a changed line. Ordinary file names and fixed
+/// position wildcards remain available without an extra review.
+fn bounded_grep_selector(pattern: &str) -> bool {
+    !pattern.is_empty()
+        && pattern.len() <= 128
+        && pattern.bytes().all(|c| {
+            c.is_ascii_alphanumeric() || matches!(c, b' ' | b'_' | b'-' | b'/' | b'.' | b':' )
+        })
 }
 
 /// A string or a list of strings, the shape `agents`, `take`, `drop` and
