@@ -513,6 +513,10 @@
         "reason": "Reviewed diagnostic sink: the extension-control authority commit and background catalog workers report a bounded failure line through it to the daemon log when a sink is installed, and drop it otherwise. Nothing reads a record back and no decision depends on it; count the complete module in runtime scope. No runtime behavior is excluded."
       },
       {
+        "path": "src/codex_plugin_scanner/guard/runtime_health/background_loop_gate.py",
+        "reason": "Reviewed thin caller: the catalog publication refresh, default authority enrollment and installed authority migration loops ask the native background-loop-gate op whether to run and whether to log a failure, and report the outcome after. The native op owns the ledger, backoff and log decisions; this module only builds the request, checks the answer's shape and falls back to running and logging when the op is unavailable. None of it runs in hook admission or decides a command. Count the complete module in runtime scope."
+      },
+      {
         "path": "src/codex_plugin_scanner/guard/runtime/runner_native_sync.py",
         "reason": "Reviewed native runner-authority projections: store_cloud_events lazily imports cloud_exceptions from this module, alongside the sync URL, pain-signal, value-metric and policy-bundle projections the cloud sync transport uses. Every function ships a minimal projection to the resident and returns its answer unchanged; count the complete module in runtime scope. No runtime behavior is excluded."
       },
