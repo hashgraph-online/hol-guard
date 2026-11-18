@@ -21,6 +21,7 @@ struct Claim {
     subject: String,
     operation_id: String,
     owner_pid: u64,
+    deadline: String,
     retirement: Instant,
 }
 
@@ -35,6 +36,8 @@ pub(crate) struct Presented<'a> {
     pub(crate) subject: &'a str,
     pub(crate) operation_id: &'a str,
     pub(crate) owner_pid: u64,
+    /// The caller's deadline, opaque: stored on claim, compared exactly on redeem.
+    pub(crate) deadline: &'a str,
 }
 
 fn seconds(value: f64) -> Duration {
@@ -68,6 +71,7 @@ impl Claims {
                 subject: presented.subject.to_owned(),
                 operation_id: presented.operation_id.to_owned(),
                 owner_pid: presented.owner_pid,
+                deadline: presented.deadline.to_owned(),
                 retirement: now.checked_add(seconds(retirement_seconds)).unwrap_or(now),
             },
         );
@@ -86,6 +90,7 @@ impl Claims {
                 && claim.subject == presented.subject
                 && claim.operation_id == presented.operation_id
                 && claim.owner_pid == presented.owner_pid
+                && claim.deadline == presented.deadline
         });
         if held {
             Ok(())

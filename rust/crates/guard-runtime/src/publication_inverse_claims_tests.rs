@@ -6,6 +6,7 @@ fn presented<'a>(grant_id: &'a str, subject: &'a str) -> Presented<'a> {
         subject,
         operation_id: "operation-1",
         owner_pid: 41,
+        deadline: "812.5",
     }
 }
 
@@ -39,6 +40,25 @@ fn a_grant_is_spent_once_and_only_its_claimant_holds_it() {
     other_owner.owner_pid = 41;
     other_owner.operation_id = "operation-2";
     assert_eq!(claims.check(&other_owner, now), Err(INVALID));
+}
+
+#[test]
+fn a_mismatched_deadline_is_refused() {
+    let claims = Claims::default();
+    let now = Instant::now();
+    assert_eq!(
+        claims.claim(&presented("grant-1", "subject-a"), 60.0, now),
+        Ok(())
+    );
+    for other in ["812.50", "812.4", "", "813.5"] {
+        let mut changed = presented("grant-1", "subject-a");
+        changed.deadline = other;
+        assert_eq!(claims.check(&changed, now), Err(INVALID), "{other}");
+    }
+    assert_eq!(
+        claims.check(&presented("grant-1", "subject-a"), now),
+        Ok(())
+    );
 }
 
 #[test]

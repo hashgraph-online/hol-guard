@@ -511,6 +511,7 @@ fn evaluate_request(
             subject,
             operation_id,
             owner_pid,
+            deadline,
             retirement_seconds,
         } => {
             result.publication_inverse_claim = Some(crate::publication_inverse_claims::answer(

@@ -277,6 +277,8 @@ pub enum ContextDigestKindV1 {
         subject: String,
         operation_id: String,
         owner_pid: u64,
+        /// The caller's deadline as an opaque string, compared exactly.
+        deadline: String,
         #[serde(default)]
         retirement_seconds: f64,
     },

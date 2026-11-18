@@ -29,6 +29,7 @@ def _claim_call(
     grant_id: str,
     subject: str,
     owner: tuple[str, int],
+    deadline: float,
     retirement_seconds: float = 0.0,
 ) -> None:
     """Ask the resident, which holds every claim, to spend or confirm one.
@@ -46,6 +47,7 @@ def _claim_call(
             "subject": subject,
             "operation_id": owner[0],
             "owner_pid": owner[1],
+            "deadline": repr(float(deadline)),
             "retirement_seconds": retirement_seconds,
         },
         guard_home=_resolve_existing_digest_home(plan.guard_home),
@@ -96,6 +98,7 @@ class CodexPublicationInverseAuthorization:
             grant_id=self.grant.grant_id,
             subject=self.approved_subject,
             owner=(self.owner_operation_id, self.owner_pid),
+            deadline=self.deadline_monotonic,
         )
         validate_grant(
             expected,
@@ -162,6 +165,7 @@ def authorize_codex_publication_inverse(
         grant_id=grant.grant_id,
         subject=subject,
         owner=(owner.operation_id, owner.pid),
+        deadline=deadline,
         retirement_seconds=retirement_seconds,
     )
     authorization = CodexPublicationInverseAuthorization(
