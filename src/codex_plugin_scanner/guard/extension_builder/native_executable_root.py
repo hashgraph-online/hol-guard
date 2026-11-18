@@ -76,6 +76,8 @@ class _Copy:
     root: Path | None
     # Runs currently using the copy; a replaced copy is removed once none are.
     users: int = 0
+    # When this process last marked a kept copy as in use.
+    touched: float = 0.0
 
 
 # The copy runs reuse, and replaced copies another thread is still running.
@@ -148,10 +150,30 @@ def _plain_windows_directory(path: Path) -> bool:
     return stat.S_ISDIR(metadata.st_mode) and not reparse
 
 
-def _windows_root_directory(root: Path) -> Path | None:
-    """The Guard-home folder on Windows, where the user profile's access list keeps other accounts out."""
+def _inside_windows_profile(folder: Path) -> bool:
+    """Whether `folder` sits in the user's profile through plain folders only.
+
+    The profile's access list keeps other accounts out and its subfolders
+    inherit it. A Guard home elsewhere, such as `C:\\guard`, may inherit a
+    list that lets other accounts write, so it gets no private copies.
+    """
     try:
-        if not _plain_windows_directory(root.parent):
+        profile = Path.home().absolute()
+        relative = folder.absolute().relative_to(profile)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    current = profile
+    for part in relative.parts:
+        current = current / part
+        if not _plain_windows_directory(current):
+            return False
+    return True
+
+
+def _windows_root_directory(root: Path) -> Path | None:
+    """The Guard-home folder on Windows, when the user profile's access list keeps other accounts out."""
+    try:
+        if not _inside_windows_profile(root.parent):
             return None
         with suppress(FileExistsError):
             root.mkdir()
@@ -348,34 +370,65 @@ def _kept(raw: bytes, sha256: str | None) -> _Copy | None:
     place, so no process ever runs a partly written copy.
     """
     # The name only finds the copy; its bytes are still compared with `raw` before any run.
-    named = sha256 is not None and len(sha256) == 64 and all(c in "0123456789abcdef" for c in sha256)
-    name = _KEPT_PREFIX + (sha256 if named else hashlib.sha256(raw).hexdigest())
+    plain_hex = sha256 is not None and len(sha256) == 64 and all(c in "0123456789abcdef" for c in sha256)
+    digest = sha256 if plain_hex else None
+    name = _KEPT_PREFIX + (digest if digest is not None else hashlib.sha256(raw).hexdigest())
     for private_root in tuple(_private_roots):
         if (directory := _private_root_directory(private_root)) is None:
             continue
         copy = _Copy(directory=None, path=directory / name / _EXECUTABLE_NAME, root=private_root)
-        if not _holds_exactly(copy, raw):
-            if os.path.islink(copy.path.parent):
-                with suppress(OSError):
-                    os.unlink(copy.path.parent)
-            elif os.path.lexists(copy.path.parent):
-                _remove_released(copy.path.parent)
-            made = _candidate(raw, directory)
-            if made is None:
-                continue
-            written, _path = made
-            # Fails when another process placed the same copy first.
-            with suppress(OSError):
-                os.rename(written.name, copy.path.parent)
-            written.cleanup()
-            if not _holds_exactly(copy, raw):
-                continue
-        with suppress(OSError):
-            os.utime(copy.path.parent)
+        if not _holds_exactly(copy, raw) and not _place(copy, raw, directory):
+            continue
+        _touch(copy, force=True)
         _remove_abandoned(directory)
         _remove_idle_kept(directory, name)
         return copy
     return None
+
+
+def _place(copy: _Copy, raw: bytes, directory: Path) -> bool:
+    """Write the kept copy under a private name and rename it into place.
+
+    Another process starting at the same moment may place the same copy
+    first. What is in the way is removed only after a fresh look shows it
+    still differs from `raw`, so a copy another process just placed is kept.
+    """
+    made = _candidate(raw, directory)
+    if made is None:
+        return False
+    written, _path = made
+    try:
+        for _attempt in range(2):
+            try:
+                os.rename(written.name, copy.path.parent)
+            except OSError:
+                if _holds_exactly(copy, raw):
+                    return True
+                if os.path.islink(copy.path.parent):
+                    with suppress(OSError):
+                        os.unlink(copy.path.parent)
+                elif os.path.lexists(copy.path.parent):
+                    _remove_released(copy.path.parent)
+                continue
+            return _holds_exactly(copy, raw)
+        return False
+    finally:
+        written.cleanup()
+
+
+_TOUCH_SECONDS = 60 * 60
+
+
+def _touch(copy: _Copy, *, force: bool = False) -> None:
+    """Mark a kept copy as in use, at most hourly, so idle cleanup in other processes leaves it."""
+    if copy.directory is not None:
+        return
+    now = time.monotonic()
+    if not force and now - copy.touched < _TOUCH_SECONDS:
+        return
+    copy.touched = now
+    with suppress(OSError):
+        os.utime(copy.path.parent)
 
 
 def _remove(copies: list[_Copy]) -> None:
@@ -422,6 +475,7 @@ def verified_executable(raw: bytes, sha256: str | None = None) -> Generator[Path
             _current = replacement
         copy = _current
         copy.users += 1
+        _touch(copy)
         idle = _take_idle_retired()
     _remove(idle)
     try:
@@ -444,6 +498,7 @@ def reused_executable(size: int, sha256: str) -> Generator[Path | None]:
         copy = _current if _current is not None and _holds_digest(_current, size, sha256) else None
         if copy is not None:
             copy.users += 1
+            _touch(copy)
     if copy is None:
         yield None
         return

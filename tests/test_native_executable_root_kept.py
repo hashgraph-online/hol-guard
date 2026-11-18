@@ -149,3 +149,68 @@ def test_a_verified_digest_names_the_copy_but_its_bytes_are_still_compared(guard
 def test_a_digest_that_is_not_plain_hex_never_becomes_a_path(guard_home: Path, digest: str) -> None:
     with root_module.verified_executable(_SCRIPT, digest) as path:
         assert path.parent == guard_home / "native-exec" / _kept_name(_SCRIPT)
+
+
+def test_a_copy_another_process_places_meanwhile_is_kept_not_removed(
+    guard_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kept = guard_home / "native-exec" / _kept_name(_SCRIPT)
+    real = root_module._holds_exactly
+    placed: list[int] = []
+
+    def holds_exactly(copy, raw: bytes) -> bool:
+        # Another process finishes placing the copy just after this one looked.
+        if not placed and copy.path.parent == kept:
+            kept.mkdir(mode=0o700)
+            other = kept / root_module._EXECUTABLE_NAME
+            other.write_bytes(_SCRIPT)
+            other.chmod(0o700)
+            placed.append(other.stat().st_ino)
+            return False
+        return real(copy, raw)
+
+    monkeypatch.setattr(root_module, "_holds_exactly", holds_exactly)
+    with root_module.verified_executable(_SCRIPT) as path:
+        assert path == kept / root_module._EXECUTABLE_NAME
+        assert path.stat().st_ino == placed[0]
+        assert subprocess.run([str(path)], capture_output=True, check=True).stdout == b"verified\n"
+
+
+def _age(folder: Path) -> None:
+    old = time.time() - 2 * 24 * 60 * 60
+    os.utime(folder, (old, old))
+
+
+def test_a_kept_copy_this_process_keeps_using_stays_marked_in_use(guard_home: Path) -> None:
+    with root_module.verified_executable(_SCRIPT) as path:
+        pass
+    _age(path.parent)
+    current = root_module._current
+    assert current is not None
+    current.touched -= 2 * root_module._TOUCH_SECONDS
+    with root_module.verified_executable(_SCRIPT):
+        pass
+    assert time.time() - path.parent.stat().st_mtime < 60 * 60
+
+    _age(path.parent)
+    current.touched -= 2 * root_module._TOUCH_SECONDS
+    digest = hashlib.sha256(_SCRIPT).hexdigest()
+    with root_module.reused_executable(len(_SCRIPT), digest) as reused:
+        assert reused == path
+    assert time.time() - path.parent.stat().st_mtime < 60 * 60
+
+
+def test_only_a_windows_guard_home_inside_the_profile_through_plain_folders_holds_copies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    profile = tmp_path / "profile"
+    (profile / "guard").mkdir(parents=True)
+    (tmp_path / "elsewhere").mkdir()
+    (profile / "linked").symlink_to(tmp_path / "elsewhere", target_is_directory=True)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: profile))
+    monkeypatch.setattr(root_module, "_plain_windows_directory", lambda path: path.is_dir() and not path.is_symlink())
+    assert root_module._inside_windows_profile(profile / "guard")
+    assert root_module._windows_root_directory(profile / "guard" / "native-exec") == profile / "guard" / "native-exec"
+    assert not root_module._inside_windows_profile(tmp_path / "elsewhere")
+    assert root_module._windows_root_directory(tmp_path / "elsewhere" / "native-exec") is None
+    assert not root_module._inside_windows_profile(profile / "linked")
