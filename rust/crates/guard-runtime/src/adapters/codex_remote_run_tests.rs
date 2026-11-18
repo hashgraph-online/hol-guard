@@ -99,7 +99,11 @@ mod processes {
 
     #[test]
     fn a_started_remote_control_that_listens_connects_the_tui() {
-        let root = tempfile::tempdir().unwrap();
+        // A Unix socket path is short-limited, so the home sits under `/tmp`.
+        let root = tempfile::Builder::new()
+            .prefix("guard-codex-")
+            .tempdir_in("/tmp")
+            .unwrap();
         let home = root.path().join("home");
         let socket = control_directory(&home).join("app-server-control.sock");
         let _listener = UnixListener::bind(&socket).unwrap();
