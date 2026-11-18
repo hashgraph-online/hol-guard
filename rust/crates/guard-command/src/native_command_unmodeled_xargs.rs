@@ -31,12 +31,11 @@ const XARGS_VALUE_OPTIONS: &[&str] = &[
 /// `"$HOME/.github/workflows"` names one directory the user owns: the
 /// shell does not split or glob it, and it cannot become a program or an
 /// option. Any other parameter is left in place, so `"$HOME/$DIR"` and a
-/// bare `$HOME` keep the `$` the callers refuse. A text that assigns `HOME`
-/// itself is returned unchanged.
+/// bare `$HOME` keep the `$` the callers refuse. Bash can bind `HOME`
+/// without writing `HOME=` (`read HOME`, `printf -v HOME`, `for HOME in`,
+/// `HOME+=`), so a text that still mentions `HOME` anywhere once the quoted
+/// reads are replaced is returned unchanged.
 pub(super) fn with_fixed_home(text: &str) -> String {
-    if text.contains("HOME=") {
-        return text.to_owned();
-    }
     let mut out = text.to_owned();
     for (quoted, fixed) in [
         ("\"$HOME\"", "\"/home\""),
@@ -45,6 +44,9 @@ pub(super) fn with_fixed_home(text: &str) -> String {
         ("\"${HOME}/", "\"/home/"),
     ] {
         out = out.replace(quoted, fixed);
+    }
+    if out.contains("HOME") {
+        return text.to_owned();
     }
     out
 }

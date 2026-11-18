@@ -63,6 +63,11 @@ fn a_quoted_home_root_does_not_fail_a_named_xargs_pipeline() {
     }
     for command in [
         "find \"$HOME/$DIR\" -type f | xargs grep -l todo",
+        // Bash binds HOME without writing `HOME=`.
+        "printf -v HOME -- -delete; find \"$HOME\" | xargs echo",
+        "read HOME; find \"$HOME/notes\" -type f | xargs grep -l todo",
+        "for HOME in /etc; do find \"$HOME\" -type f | xargs grep -l x; done",
+        "HOME+=/x; find \"$HOME/notes\" -type f | xargs grep -l todo",
         "find $HOME/notes -type f | xargs grep -l todo",
     ] {
         assert_ne!(decision(&controls, command).0, "allow", "{command}");
