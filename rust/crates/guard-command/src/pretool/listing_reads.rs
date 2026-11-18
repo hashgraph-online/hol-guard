@@ -106,6 +106,8 @@ pub(super) fn safe_listing_segment(
             Operand::QuotedLiteral => {
                 surviving += 1;
                 search::safe_literal_bracket_tree(argument, context, recursive)
+                    || (!recursive
+                        && search::safe_literal_bracket_listing_target(argument, context))
             }
             Operand::Glob if search::safe_glob_operand(argument, context, recursive) => {
                 surviving += 1;
@@ -114,9 +116,11 @@ pub(super) fn safe_listing_segment(
             Operand::Glob => {
                 search::safe_unmatched_glob_operand(argument, context, recursive)
                     || (!recursive && leaf_glob_operand(argument, context))
+                    || (!recursive
+                        && search::safe_literal_bracket_listing_target(argument, context))
             }
         };
-        if !allowed {
+        if !allowed || !search::listable_spelling(argument, context, recursive, kinds.is_some()) {
             return false;
         }
     }

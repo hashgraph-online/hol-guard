@@ -224,6 +224,7 @@ pub mod pretool_leaf_glob_exact_matches;
 pub mod pretool_link_chains;
 pub mod pretool_linked_writes;
 pub mod pretool_links_removals;
+pub mod pretool_literal_route_listings;
 pub mod pretool_literal_route_reads;
 pub mod pretool_literal_route_writes;
 pub mod pretool_lockfile_install;
