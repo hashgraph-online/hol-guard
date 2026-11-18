@@ -78,6 +78,7 @@ from tests.benign_fp_gate_projects import (
     _vendored_toolchain,
     _write,
 )
+from tests.benign_fp_gate_stale_lockfile import stale_lockfile_app, stale_lockfile_app_path
 
 
 @dataclass(frozen=True)
@@ -186,6 +187,7 @@ class BenignFixture:
             "ignore_negation": self.home / "Code" / "ignore-rules" / "billing-api",
             "feature_app": feature_app_path(self.home),
             "pnpm_monorepo": self.home / "Code" / "acme-platform",
+            "stale_lockfile_app": stale_lockfile_app_path(self.home),
             "linked_worktree": self.linked_worktree,
             "linked_sources": linked_sources_path(self.home),
         }[name]
@@ -292,6 +294,13 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(home / "Code" / "acme-platform" / ".gitignore", "node_modules/\n")
     _git(home / "Code" / "acme-platform", "add", "-A", home=home)
     _git(home / "Code" / "acme-platform", "commit", "--quiet", "-m", "platform base", home=home)
+    # An npm project that still commits the pnpm lockfile from before its last upgrade.
+    stale_app = stale_lockfile_app_path(home)
+    stale_lockfile_app(stale_app)
+    _git(stale_app, "init", "--quiet", "--initial-branch=main", home=home)
+    _write(stale_app / ".gitignore", "node_modules/\n")
+    _git(stale_app, "add", "-A", home=home)
+    _git(stale_app, "commit", "--quiet", "-m", "dashboard base", home=home)
     _write(home / "acme-plain" / "README.txt", "Plain notes directory.\n")
     _write(home / "acme-plain" / "probe_py.py", "print('probe')\n")
     # A project directory beside the checkout that was never `git init`-ed:
