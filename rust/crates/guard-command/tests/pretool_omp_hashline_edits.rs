@@ -163,14 +163,6 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
             "`[*** Update File: src/a.ts#0AC4]`",
         ),
         (
-            patch(&["[FILE: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
-            "`[FILE: src/a.ts#0AC4]`",
-        ),
-        (
-            patch(&["[*** Begin Patch] [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
-            "`[*** Begin Patch] [src/a.ts#0AC4]`",
-        ),
-        (
             patch(&[put_a, "[src/a.ts#NOPE]\nPUT 1.=1:\n+x\n"]),
             "`[src/a.ts#NOPE]`",
         ),
@@ -179,6 +171,36 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         assert_eq!(
             (result.minimum_action.as_str(), result.reason_code.as_str()),
             ("review", "native_file_write_review"),
+            "{input}"
+        );
+        assert!(
+            result.reason.contains(shown) && result.reason.contains("[src/app.py#1A2B]"),
+            "{}",
+            result.reason
+        );
+    }
+    // Oh My Pi reads these headers as tagged paths to files that do not
+    // exist, so the edit cannot apply. Guard stops it at once and shows the
+    // agent the header it can prove, instead of holding it for review. The
+    // first is an edit a model sent with its reasoning leaked into the header.
+    for (input, shown) in [
+        (
+            patch(&["[tool/analysis code] JSImport to=functions.edit commentary  { \"input\": \"[src/a.ts#D5E8]\nPUT 1.=1:\n+x\n"]),
+            "`[tool/analysis code] JSImport",
+        ),
+        (
+            patch(&["[FILE: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "`[FILE: src/a.ts#0AC4]`",
+        ),
+        (
+            patch(&["[*** Begin Patch] [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "`[*** Begin Patch] [src/a.ts#0AC4]`",
+        ),
+    ] {
+        let result = evaluate("omp", &input);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("block", "native_missing_path"),
             "{input}"
         );
         assert!(

@@ -227,6 +227,7 @@ mod literal_secrets;
 mod literal_ssn_echo;
 mod lockfile_install;
 mod omp_file_url;
+mod omp_hashline_recovery;
 mod omp_hashline_writes;
 pub(crate) mod pipe_attacks;
 mod planted_instructions;

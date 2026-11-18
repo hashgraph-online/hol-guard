@@ -131,6 +131,11 @@ pub(super) fn header_paths(input: &str) -> Option<Vec<&str>> {
     Some(paths)
 }
 
+/// Whether `line` is a plain `[PATH#TAG]` or `[PATH]` header this proof reads.
+pub(super) fn plain_header(line: &str) -> bool {
+    header_path(line).is_some()
+}
+
 fn header_path(line: &str) -> Option<(&str, bool)> {
     let body = line.strip_prefix('[')?.strip_suffix(']')?;
     // Oh My Pi trims the whole header body with JavaScript's `trim` before it
