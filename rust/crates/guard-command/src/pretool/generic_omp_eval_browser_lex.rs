@@ -344,7 +344,9 @@ pub(super) fn workspace_file_url(url: &str, cwd: Option<&str>) -> bool {
     if !page
         || !plain(path)
         || !plain(cwd)
-        || cwd == "/"
+        // A top-level directory such as /tmp or /home is not a project
+        // workspace: it may contain unrelated users' HTML pages.
+        || cwd.matches('/').count() < 2
         || !path
             .strip_prefix(cwd)
             .is_some_and(|rest| rest.len() > 1 && rest.starts_with('/'))
@@ -352,8 +354,7 @@ pub(super) fn workspace_file_url(url: &str, cwd: Option<&str>) -> bool {
         return false;
     }
     // Resolve the actual target (including symlinked intermediate directories)
-    // and fail closed if the page or workspace cannot be verified. A directory
-    // directly beneath / is a valid workspace; / itself is not.
+    // and fail closed if the page or workspace cannot be verified.
     let (Ok(root), Ok(target)) = (std::fs::canonicalize(cwd), std::fs::canonicalize(path)) else {
         return false;
     };
