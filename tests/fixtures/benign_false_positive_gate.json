@@ -1696,7 +1696,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "grep -rn \"mode\" *.yaml"
+        "command": "grep -rn \"mode\" *.yml"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -1713,7 +1713,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "cd app && grep -rln \"default\" *.tsx; grep -rn \"mode\" *.yaml | head -5"
+        "command": "cd app && grep -rln \"default\" *.tsx; grep -rn \"mode\" *.yml | head -5"
       },
       "cwd": "worktree",
       "expect": "not_allow"
