@@ -7,12 +7,10 @@ persisted.
 
 from __future__ import annotations
 
-import math
 import time
 from dataclasses import dataclass, replace
-from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .approval_gate import ApprovalGateGrant, validate_grant
 from .cli.commands_lifecycle_gate import LifecycleGateRequirement, lifecycle_authority_home
@@ -29,6 +27,7 @@ from .codex_hook_recovery import (
 )
 from .native_owned import CodexInstallOwner, record_codex_mutation, require_codex_install_owner
 from .native_runtime import NativeRuntimeIdentity
+from .native_transition_files import authorize_plan, require_deadline
 from .native_transition_files import publication as publication_record
 from .runtime_transition import (
     RuntimeTransition,
@@ -41,8 +40,6 @@ from .runtime_transition import (
 if TYPE_CHECKING:
     from .runtime_transition_admission import NativeProtectionAdmission
     from .store import GuardStore
-
-_FORWARD_CAP_SECONDS = 60.0
 
 
 def prepare_codex_hook_repair_verification(
@@ -60,12 +57,7 @@ def prepare_codex_hook_repair_verification(
     """
     from .runtime_transition_prepare import _pin_executable
 
-    if (
-        isinstance(deadline_monotonic, bool)
-        or not math.isfinite(deadline_monotonic)
-        or time.monotonic() >= deadline_monotonic
-    ):
-        raise TransitionError("deadline_exceeded")
+    require_deadline(deadline_monotonic)
     if plan.native_runtime is not None or plan.verification_workspace is not None:
         raise TransitionError("authority_repair_native_binding_already_prepared")
     plan.payload()
@@ -87,8 +79,7 @@ def prepare_codex_hook_repair_verification(
             plan, files=tuple(files.values()), native_runtime=expected_runtime, verification_workspace=workspace
         )
         RuntimeTransition._compare(prepared.payload(), "before")
-    if time.monotonic() >= deadline_monotonic:
-        raise TransitionError("deadline_exceeded")
+    require_deadline(deadline_monotonic)
     return prepared
 
 
@@ -136,8 +127,7 @@ class CodexHookRepairAuthorization:
         self._check()
 
     def _check(self, publication: PendingCodexHookRepair | None = None) -> None:
-        if time.monotonic() >= self.deadline_monotonic:
-            raise TransitionError("deadline_exceeded")
+        require_deadline(self.deadline_monotonic)
         if publication is not None and publication.authorization is not self:
             raise TransitionError("authority_repair_authorization_invalid")
         owner = _owner_and_pending(self.plan, publication)
@@ -188,12 +178,7 @@ def authorize_codex_hook_repair(
     grant: ApprovalGateGrant | None,
     deadline_monotonic: float,
 ) -> CodexHookRepairAuthorization:
-    if (
-        isinstance(deadline_monotonic, bool)
-        or not math.isfinite(deadline_monotonic)
-        or time.monotonic() >= deadline_monotonic
-    ):
-        raise TransitionError("deadline_exceeded")
+    require_deadline(deadline_monotonic)
     owner = _owner_and_pending(plan)
     subject = plan.subject()
     expected_home = lifecycle_authority_home(
@@ -213,10 +198,8 @@ def authorize_codex_hook_repair(
         session_nonce=owner.operation_id,
     )
     assert grant is not None
-    now = time.monotonic()
-    expires_epoch = datetime.fromisoformat(grant.expires_at.replace("Z", "+00:00")).timestamp()
-    claim_retirement = now + max(0.0, expires_epoch - time.time())
-    deadline = min(deadline_monotonic, now + _FORWARD_CAP_SECONDS, claim_retirement)
+    timing = authorize_plan("repair", grant.expires_at, deadline_monotonic)
+    deadline = cast(float, timing["deadline"])
     # Claim before checking files: a failed generation comparison must not
     # become a forward replay with the same proof after an inverse or edit.
     publication_record(
@@ -227,7 +210,8 @@ def authorize_codex_hook_repair(
         owner_operation_id=owner.operation_id,
         owner_pid=owner.pid,
         deadline=deadline,
-        retire_ms=max(0.0, claim_retirement - time.monotonic()) * 1000,
+        retirement=timing["retirement"],
+        now=time.monotonic(),
     )
     authorization = CodexHookRepairAuthorization(
         plan, expected_home, grant, owner.operation_id, owner.pid, deadline, subject

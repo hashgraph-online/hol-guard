@@ -7,11 +7,9 @@ caller's deadline.
 
 from __future__ import annotations
 
-import math
-import time
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 from .approval_gate import ApprovalGateError, ApprovalGateGrant, validate_grant
 from .cli.commands_lifecycle_gate import LifecycleGateRequirement, lifecycle_authority_home
@@ -19,6 +17,7 @@ from .codex_hook_file_integrity import hook_validation_deadline
 from .codex_publication_inverse_plan import PUBLICATION_INVERSE_ACTION, PreparedCodexPublicationInverse
 from .native_context import _resolve_existing_digest_home, native_context_digest
 from .native_owned import CodexInstallOwner, require_codex_install_owner
+from .native_transition_files import authorize_plan, require_deadline
 from .runtime_transition import TransitionError, inverse_recovery_budget
 
 
@@ -79,8 +78,7 @@ class CodexPublicationInverseAuthorization:
     approved_subject: str
 
     def check(self) -> None:
-        if time.monotonic() >= self.deadline_monotonic:
-            raise TransitionError("deadline_exceeded")
+        require_deadline(self.deadline_monotonic)
         owner = _owner(self.plan)
         if owner.operation_id != self.owner_operation_id or owner.pid != self.owner_pid:
             raise TransitionError("publication_inverse_owner_mismatch")
@@ -125,13 +123,7 @@ def authorize_codex_publication_inverse(
     grant: ApprovalGateGrant | None,
     deadline_monotonic: float,
 ) -> CodexPublicationInverseAuthorization:
-    if (
-        isinstance(deadline_monotonic, bool)
-        or not isinstance(deadline_monotonic, (int, float))
-        or not math.isfinite(deadline_monotonic)
-        or time.monotonic() >= deadline_monotonic
-    ):
-        raise TransitionError("deadline_exceeded")
+    require_deadline(deadline_monotonic)
     owner = _owner(plan)
     subject = plan.subject()
     expected = lifecycle_authority_home(
@@ -152,11 +144,8 @@ def authorize_codex_publication_inverse(
         subject=subject,
         session_nonce=owner.operation_id,
     )
-    now = time.monotonic()
-    expires_at = datetime.fromisoformat(grant.expires_at.replace("Z", "+00:00")).timestamp()
-    retirement_seconds = max(0.0, expires_at - time.time())
-    retirement = now + retirement_seconds
-    deadline = min(deadline_monotonic, now + 60.0, retirement)
+    timing = authorize_plan("inverse", grant.expires_at, deadline_monotonic)
+    deadline = cast(float, timing["deadline"])
     # Claim before file comparison: restoring old bytes cannot replay a proof
     # whose first attempted use observed a different generation.
     _claim_call(
@@ -166,7 +155,7 @@ def authorize_codex_publication_inverse(
         subject=subject,
         owner=(owner.operation_id, owner.pid),
         deadline=deadline,
-        retirement_seconds=retirement_seconds,
+        retirement_seconds=cast(float, timing["retirement_seconds"]),
     )
     authorization = CodexPublicationInverseAuthorization(
         plan,

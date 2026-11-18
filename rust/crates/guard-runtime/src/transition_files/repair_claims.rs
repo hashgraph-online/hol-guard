@@ -63,7 +63,8 @@ pub(super) fn claim(call: &mut Call<'_>) -> Step<Value> {
         .filter(|pid| *pid > 0)
         .ok_or(INVALID)?;
     let deadline = number(call, "deadline")?;
-    let retire_ms = number(call, "retire_ms")?.max(0.0);
+    // The grant retires at `retirement`; `now` is the caller's clock as it asks.
+    let retire_ms = (number(call, "retirement")? - number(call, "now")?).max(0.0) * 1000.0;
     let now = Instant::now();
     let retire = now + Duration::from_secs_f64((retire_ms / 1000.0).min(86_400.0));
     let mut guard = CLAIMS.lock().unwrap_or_else(PoisonError::into_inner);
@@ -188,7 +189,8 @@ mod tests {
             "owner_operation_id": "owner",
             "owner_pid": 7,
             "deadline": 12.5,
-            "retire_ms": 60_000,
+            "retirement": 60.0,
+            "now": 0.0,
         });
         assert_eq!(ask(claim.clone()).unwrap(), json!(null));
         assert!(ask(claim)
@@ -229,7 +231,8 @@ mod tests {
             "owner_operation_id": "owner",
             "owner_pid": 7,
             "deadline": 12.5,
-            "retire_ms": 60_000,
+            "retirement": 60.0,
+            "now": 0.0,
         });
         ask(claim).unwrap();
         let check = |field: &str, value: Value| {
@@ -270,7 +273,8 @@ mod tests {
             "owner_operation_id": "owner",
             "owner_pid": 7,
             "deadline": 12.5,
-            "retire_ms": 60_000,
+            "retirement": 60.0,
+            "now": 0.0,
         });
         ask(claim).unwrap();
         let check = |id: Value, pid: Value| {
@@ -302,7 +306,8 @@ mod tests {
             "owner_operation_id": "owner",
             "owner_pid": 7,
             "deadline": 12.5,
-            "retire_ms": 60_000,
+            "retirement": 60.0,
+            "now": 0.0,
         }))
         .unwrap();
         let check = |owner: &str, home: &str| {

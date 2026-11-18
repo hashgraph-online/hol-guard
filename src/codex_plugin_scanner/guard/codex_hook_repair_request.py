@@ -8,7 +8,6 @@ Factors and grants are deliberately absent from this protocol.
 from __future__ import annotations
 
 import base64
-import math
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -29,7 +28,7 @@ from .codex_publication_inverse_plan import (
     prepare_authenticated_hook_publication_inverse,
 )
 from .native_runtime import NativeRuntimeIdentity
-from .native_transition_files import publication
+from .native_transition_files import publication, require_deadline
 from .runtime_transition import (
     RuntimeTransition,
     TransitionError,
@@ -79,11 +78,6 @@ def _inverse_from_payload(
     return bound
 
 
-def _check_deadline(deadline: float) -> None:
-    if isinstance(deadline, bool) or not math.isfinite(deadline) or time.monotonic() >= deadline:
-        raise TransitionError("deadline_exceeded")
-
-
 def _plan_from_payload(value: object, *, home: Path, config: Path) -> PreparedCodexHookRepair:
     # The native runtime owns every shape, context and file-set check; it
     # answers which file is the manifest change.
@@ -114,11 +108,11 @@ def _plan_from_payload(value: object, *, home: Path, config: Path) -> PreparedCo
 
 
 def _compare(plan: RepairPlan, deadline: float) -> None:
-    _check_deadline(deadline)
+    require_deadline(deadline)
     with inverse_recovery_budget(deadline), hook_validation_deadline(deadline):
         if isinstance(plan, PreparedCodexPublicationInverse):
             plan.compare_before()
-            _check_deadline(deadline)
+            require_deadline(deadline)
             return
         RuntimeTransition._compare(plan.payload(), "before")
         load_hook_authority_receipt(
@@ -127,7 +121,7 @@ def _compare(plan: RepairPlan, deadline: float) -> None:
             require_manifest=(plan.manifest_change.after, "authority_repair_request_plan_invalid"),
         )
         RuntimeTransition._compare(plan.payload(), "before")
-    _check_deadline(deadline)
+    require_deadline(deadline)
 
 
 def _read(path: Path, home: Path, expected_sha256: str, deadline: float) -> bytes:
@@ -146,7 +140,7 @@ def write_codex_hook_repair_request(
     deadline_monotonic: float,
 ) -> str:
     """Exclusively create a private review artifact; return its exact digest."""
-    _check_deadline(deadline_monotonic)
+    require_deadline(deadline_monotonic)
     inverse = isinstance(plan, PreparedCodexPublicationInverse)
     if not inverse:
         plan = _plan_from_payload(plan.payload(), home=plan.guard_home, config=plan.config_path)
@@ -196,11 +190,11 @@ def load_codex_hook_repair_request(
     inverse_spec: CodexHookManifestSpec | None = None,
 ) -> RepairPlan:
     """Authenticate and compare the captured plan; never regenerate or grant."""
-    _check_deadline(deadline_monotonic)
+    require_deadline(deadline_monotonic)
     if not isinstance(expected_sha256, str):
         raise TransitionError("authority_repair_request_digest_invalid")
     raw = _read(path, guard_home, expected_sha256, deadline_monotonic)
-    _check_deadline(deadline_monotonic)
+    require_deadline(deadline_monotonic)
     home = guard_home.resolve(strict=False)
     config = config_path.parent.resolve(strict=False) / config_path.name
     inverse = inverse_spec is not None
@@ -227,5 +221,5 @@ def load_codex_hook_repair_request(
         raise TransitionError("authority_repair_request_changed")
     if not created <= time.monotonic() < expires:
         raise TransitionError("authority_repair_request_expired")
-    _check_deadline(deadline_monotonic)
+    require_deadline(deadline_monotonic)
     return plan

@@ -27,6 +27,7 @@ mod owned_locks;
 mod owned_ops;
 mod publication;
 mod publication_abort;
+mod publication_authorize;
 mod publication_baseline;
 mod publication_commit;
 mod publication_files;
@@ -58,6 +59,8 @@ mod tests;
 mod tests_owned;
 #[cfg(test)]
 mod tests_owned_locks;
+#[cfg(test)]
+mod tests_publication_authorize;
 #[cfg(test)]
 mod tests_publication_inverse_plan;
 #[cfg(test)]

@@ -104,10 +104,11 @@ def _ask(
     files: Sequence[TransitionFile] | None = None,
     on_write: Callable[[TransitionFile], None] | None = None,
     timeout_seconds: float = _TIMEOUT_SECONDS,
+    context: bool = True,
 ) -> Mapping[str, object]:
     from .native_runner_authority import native_runner_authority
 
-    request = {**request, **transition_context()}
+    request = {**request, **transition_context()} if context else request
     answer = native_runner_authority("transition_files", request, timeout_seconds=timeout_seconds)
     return _settle(answer, files, on_write)
 
@@ -153,6 +154,34 @@ def publication(op: str, home: Path, *, timeout_seconds: float = _TIMEOUT_SECOND
     return _ask(request, timeout_seconds=timeout_seconds).get("value")
 
 
+def require_deadline(deadline: float) -> None:
+    """``deadline_exceeded`` unless ``deadline`` is a finite number still ahead of now."""
+
+    _ask({"op": "publication_deadline", "deadline": deadline, "now": time.monotonic()}, context=False)
+
+
+def authorize_plan(kind: str, expires_at: str, deadline: float) -> Mapping[str, object]:
+    """The forward ``deadline`` and grant retirement the runtime allows an authorization.
+
+    The clocks go as facts; ``kind`` is ``repair`` or ``inverse``.
+    """
+
+    request: dict[str, object] = {
+        "op": "publication_authorize",
+        "kind": kind,
+        "expires_at": expires_at,
+        "deadline": deadline,
+        "now": time.monotonic(),
+        "wall": time.time(),
+    }
+    value = _ask(request, context=False).get("value")
+    if not isinstance(value, Mapping):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return value
+
+
 def merge_dependency(previous: dict[str, object], change: dict[str, object]) -> Mapping[str, object]:
     """``merge_transition_dependency``: one pin of a shared artifact, or ``same``."""
 
@@ -192,7 +221,9 @@ def publish_files(
 
 
 __all__ = [
+    "authorize_plan",
     "compare_files",
     "publish_files",
+    "require_deadline",
     "write_file",
 ]
