@@ -4,6 +4,7 @@
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
+use super::Request;
 use crate::claude_hook_bridge_render::py_strip;
 use crate::directory_trust::{
     evaluate, DirectoryTrustCandidateV1, DirectoryTrustRequestV1, DIRECTORY_TRUST_REQUEST_SCHEMA,
@@ -165,6 +166,51 @@ pub(super) fn exec_workdir(payload: &Map<String, Value>) -> (bool, Option<String
     }
 }
 
+/// The code a tool call gets when the working directory it named does not
+/// exist.
+pub(super) const MISSING_WORKDIR_CODE: &str = "hook_workdir_missing";
+
+/// The working directory a refused tool call named, when that directory does
+/// not exist, with the message that says so.
+///
+/// A directory outside the trusted roots is refused, and the review then runs
+/// with no workspace, so a test command that would have run contained asks a
+/// person instead and the agent waits out the approval window. When the
+/// directory is missing, usually a mistyped path, the command cannot start
+/// anywhere, so answering at once with what is wrong costs nothing and lets
+/// the agent fix the path. `named` lists the directories the hook named in the
+/// order the route settles them (`exec_command` workdir, payload `cwd`, query
+/// `workspace`); the first one present is the one that was refused.
+pub(super) fn missing_workdir(
+    event: &str,
+    rejection: &Rejection,
+    named: &[Option<&str>],
+) -> Option<String> {
+    if event != "PreToolUse"
+        || rejection.parameter != "workspace"
+        || rejection.reason != "unexpected_root"
+    {
+        return None;
+    }
+    let path = py_strip(
+        named
+            .iter()
+            .flatten()
+            .find(|value| !py_strip(value).is_empty())?,
+    );
+    if !std::path::Path::new(path).is_absolute() {
+        return None;
+    }
+    let missing = std::fs::symlink_metadata(path)
+        .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound);
+    missing.then(|| {
+        format!(
+            "HOL Guard stopped this command because its working directory does not exist: \
+             {path}. Check the path and run the command again."
+        )
+    })
+}
+
 /// The reservation a referenced payload takes before it is read.
 pub(super) const MAX_PAYLOAD_REFERENCE_BYTES: u64 = 5 * 1024 * 1024;
 const PAYLOAD_REFERENCE_KEY: &str = "guard_payload_ref";
@@ -318,6 +364,31 @@ impl Directories {
             .and_then(Value::as_str)
             .map(str::to_owned))
     }
+}
+
+/// The request body as the daemon's handler reads it, or `None` for a body it
+/// reads some other way.
+pub(super) fn payload(
+    request: &Request<'_>,
+    body: &[u8],
+) -> Option<Result<Map<String, Value>, ()>> {
+    if body.is_empty() {
+        return Some(Ok(Map::new()));
+    }
+    if !request
+        .single_header("Content-Type")?
+        .contains("application/json")
+    {
+        return None;
+    }
+    let text = std::str::from_utf8(body).ok()?;
+    // A body serde rejects may still be one `json.loads` reads (`NaN`, a lone
+    // surrogate escape); only a body neither reads is refused here.
+    Some(match serde_json::from_str::<Value>(text) {
+        Ok(Value::Object(payload)) => Ok(payload),
+        Ok(_) => Ok(Map::new()),
+        Err(_) => Err(()),
+    })
 }
 
 #[cfg(test)]
