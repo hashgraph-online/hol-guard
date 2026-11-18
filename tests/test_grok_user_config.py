@@ -107,7 +107,7 @@ def test_malformed_config_leaves_uninstall_artifacts_intact(tmp_path: Path, monk
     assert config.read_text() == "[permission\n"
 
 
-def test_missing_ownership_warns_without_deleting_user_settings(
+def test_missing_ownership_refuses_cleanup_without_deleting_user_settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     context = HarnessContext(tmp_path / "home", None, tmp_path / "guard")
@@ -116,14 +116,14 @@ def test_missing_ownership_warns_without_deleting_user_settings(
         "codex_plugin_scanner.guard.shims.prepare_guard_shim",
         lambda *args, **kwargs: PreparedGuardShim((), {"notes": []}),
     )
-    monkeypatch.setattr("codex_plugin_scanner.guard.shims.remove_guard_shim", lambda *args, **kwargs: {})
+    remove_shim = Mock()
+    monkeypatch.setattr("codex_plugin_scanner.guard.shims.remove_guard_shim", remove_shim)
     harness_support.install("grok", context)
     config = grok_paths(context)["config"]
     before = config.read_bytes()
     grok_paths(context)["state"].unlink()
-    result = harness_support.uninstall("grok", context)
+    with pytest.raises(ValueError, match="ownership records are missing"):
+        harness_support.uninstall("grok", context)
     assert config.read_bytes() == before
-    assert not grok_paths(context)["pretool"].exists()
-    notes = result["notes"]
-    assert isinstance(notes, list)
-    assert any(isinstance(note, str) and "ownership records are missing" in note for note in notes)
+    assert grok_paths(context)["pretool"].exists()
+    remove_shim.assert_not_called()
