@@ -498,6 +498,13 @@
     ],
     "reviewed_runtime": [
       {
+        "path": [
+          "src/codex_plugin_scanner/guard/resident_evidence_client.py",
+          "src/codex_plugin_scanner/guard/route_metrics.py"
+        ],
+        "reason": "Reviewed generic transport facades: the resident owns evidence persistence and native route decisions, while these callers carry only bounded requests, acknowledgements, counters and sanitized route dimensions. Count the complete adapters in runtime scope rather than treating their Python transport code as a decision implementation."
+      },
+      {
         "path": "src/codex_plugin_scanner/guard/harness/extension_runtime.py",
         "reason": "Reviewed process facts for the Pi-family extension render: the Guard process's own hol-guard entry points, native hook runtime, Windows interpreter, contained-run sink and taskkill path, which only that process knows. native_harness.py imports it lazily for render and install ops; the native harness_adapter kind renders the extension and decides everything. Count the complete module in runtime scope."
       },

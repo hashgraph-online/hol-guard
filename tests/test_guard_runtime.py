@@ -490,9 +490,9 @@ def _approve_native_request(monkeypatch, capsys, home_dir: Path, output: dict[st
 def _drain_hook_evidence(home_dir: Path) -> None:
     """Wait for the resident writer to persist what a one-shot hook handed it."""
 
-    from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
+    from codex_plugin_scanner.guard.resident_evidence_client import ResidentEvidenceClient
 
-    assert NativeHookEvidenceWriter(store=GuardStore(home_dir)).stop(timeout_seconds=5.0)
+    assert ResidentEvidenceClient(store=GuardStore(home_dir)).stop(timeout_seconds=5.0)
 
 
 def _native_receipts(guard_home: Path) -> list[tuple[str, str]]:

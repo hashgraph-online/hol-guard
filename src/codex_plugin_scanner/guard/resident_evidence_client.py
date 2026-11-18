@@ -1,6 +1,6 @@
 """The hook evidence writer owned by the native resident.
 
-``daemon.runtime_hook_evidence_writer.RuntimeHookEvidenceWriter`` keeps a
+``RuntimeHookEvidenceWriter`` keeps a
 queue, a journal and a draining thread per Guard home. All of that now lives in
 the resident, which builds one writer per Guard home from its own store,
 correlation, receipt, Composio and journal seams. This module is the client:
@@ -25,7 +25,7 @@ a reply lost in transport, or a recovery that itself fails, is retried rather
 than forgotten.
 
 A resident that is unavailable, replies unbound, or violates the contract never
-yields a silent default: the call raises ``NativeHookEvidenceWriterUnavailableError``
+yields a silent default: the call raises ``ResidentEvidenceUnavailableError``
 rather than reporting evidence as queued when nothing was.
 """
 
@@ -71,14 +71,14 @@ _CODE: Final = re.compile(r"[a-z0-9_]{1,64}")
 _LOGGER: Final = logging.getLogger(__name__)
 
 
-class NativeHookEvidenceWriterUnavailableError(RuntimeError):
+class ResidentEvidenceUnavailableError(RuntimeError):
     """The resident gave no authoritative answer; the evidence was not queued."""
 
-    reason: str = "native_hook_evidence_writer_unavailable"
+    reason: str = "resident_evidence_client_unavailable"
 
 
-def _unavailable(reason: str) -> NativeHookEvidenceWriterUnavailableError:
-    error = NativeHookEvidenceWriterUnavailableError(f"Guard hook evidence writer unavailable ({reason}).")
+def _unavailable(reason: str) -> ResidentEvidenceUnavailableError:
+    error = ResidentEvidenceUnavailableError(f"Resident evidence client unavailable ({reason}).")
     error.reason = reason
     return error
 
@@ -114,7 +114,7 @@ def unreachable_writer_stats() -> dict[str, Any]:
     }
 
 
-class NativeHookEvidenceWriter:
+class ResidentEvidenceClient:
     """The resident's writer for one Guard home, shaped like the Python one.
 
     Holds the ``GuardStore`` only to recover it: no evidence is written through
@@ -139,7 +139,7 @@ class NativeHookEvidenceWriter:
     def _call(self, action: Mapping[str, object], *, timeout_seconds: float) -> dict[str, object]:
         if not ensure_resident_prerequisite(self._guard_home):
             raise _unavailable(
-                prerequisite_unavailable_code("native_hook_evidence_writer_prerequisite_unavailable", self._guard_home)
+                prerequisite_unavailable_code("resident_evidence_client_prerequisite_unavailable", self._guard_home)
             )
         request: dict[str, object] = {
             "schema": _REQUEST_SCHEMA,
@@ -155,7 +155,7 @@ class NativeHookEvidenceWriter:
         try:
             digest = "sha256:" + _canonical_request_sha256(request)
         except (TypeError, ValueError):
-            raise _unavailable("native_hook_evidence_writer_request_invalid") from None
+            raise _unavailable("resident_evidence_client_request_invalid") from None
         response = _resident_request(
             operation="hook_evidence_writer",
             request=request,
@@ -174,9 +174,9 @@ class NativeHookEvidenceWriter:
         ):
             if response is not None and identity is not None:
                 native_record_resident_failure(
-                    identity.sha256, self._guard_home, reason="native_hook_evidence_writer_binding"
+                    identity.sha256, self._guard_home, reason="resident_evidence_client_binding"
                 )
-            raise _unavailable("native_hook_evidence_writer_unavailable")
+            raise _unavailable("resident_evidence_client_unavailable")
         if identity is not None:
             native_record_resident_success(identity.sha256, self._guard_home)
         # The resident answered, so the acknowledgement this request carried
@@ -186,7 +186,7 @@ class NativeHookEvidenceWriter:
         if status == "error":
             self._raise_for_resident_error(code, payload)
         if status != "ok" or code != "ok" or not isinstance(payload, dict):
-            raise _unavailable("native_hook_evidence_writer_response_invalid")
+            raise _unavailable("resident_evidence_client_response_invalid")
         return payload
 
     @staticmethod
@@ -202,7 +202,7 @@ class NativeHookEvidenceWriter:
         if isinstance(code, str) and code.startswith(_STORE_CODE_PREFIX):
             _raise_for_code(code, payload)
         named = code if isinstance(code, str) and _CODE.fullmatch(code) else "unavailable"
-        raise _unavailable(f"native_hook_evidence_writer_{named}")
+        raise _unavailable(f"resident_evidence_client_{named}")
 
     def start(self) -> bool:
         """Build the resident's writer for this home before a hook needs it.
@@ -229,7 +229,7 @@ class NativeHookEvidenceWriter:
         self._consume_signals(payload)
         queued = payload.get("queued")
         if not isinstance(queued, bool):
-            raise _unavailable("native_hook_evidence_writer_response_invalid")
+            raise _unavailable("resident_evidence_client_response_invalid")
         return queued
 
     def submit_command_activity(
@@ -311,7 +311,7 @@ class NativeHookEvidenceWriter:
         drained = payload.get("drained")
         self._consume_signals(payload)
         if not isinstance(drained, bool):
-            raise _unavailable("native_hook_evidence_writer_response_invalid")
+            raise _unavailable("resident_evidence_client_response_invalid")
         return drained
 
     def _consume_signals(self, payload: Mapping[str, object]) -> None:
@@ -357,6 +357,6 @@ class NativeHookEvidenceWriter:
 
 __all__ = [
     "HOOK_EVIDENCE_WRITER_FEATURE",
-    "NativeHookEvidenceWriter",
-    "NativeHookEvidenceWriterUnavailableError",
+    "ResidentEvidenceClient",
+    "ResidentEvidenceUnavailableError",
 ]

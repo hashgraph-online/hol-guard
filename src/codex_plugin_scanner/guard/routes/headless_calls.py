@@ -25,7 +25,7 @@ from ..harness.base import HarnessContext
 from ..harness.registry import get_adapter
 from ..harness_disconnect_gate import require_harness_disconnect_gate
 from ..headless_receipts import record_headless_receipt
-from ..native_hook_evidence_writer import unreachable_writer_stats
+from ..resident_evidence_client import unreachable_writer_stats
 from ..store import GuardStore
 from .control_host import control_server
 

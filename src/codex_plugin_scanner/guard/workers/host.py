@@ -260,7 +260,7 @@ class WorkerHost:
 
         from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
         from ..hook_review.hook_worker import HookWorker
-        from ..native_hook_evidence_writer import NativeHookEvidenceWriter
+        from ..resident_evidence_client import ResidentEvidenceClient
 
         try:
             # Direct answers are bound only while their evidence has a writer,
@@ -268,7 +268,7 @@ class WorkerHost:
             self._hook_worker = HookWorker(
                 store=self.store,
                 home_dir=self.home_dir,
-                activity_writer=NativeHookEvidenceWriter(store=self.store),
+                activity_writer=ResidentEvidenceClient(store=self.store),
                 evidence_dispatch=HookEvidenceDispatch(),
                 capture_writer=None,
                 wait_for_native_policy=False,

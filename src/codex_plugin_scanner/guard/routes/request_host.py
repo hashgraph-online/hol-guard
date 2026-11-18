@@ -231,9 +231,9 @@ def _replay_server_class() -> type:
             from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
             from ..hook_review.hook_direct_counters import bind_hook_counter_sink
             from ..hook_review.hook_worker import HookWorker
-            from ..native_hook_evidence_writer import NativeHookEvidenceWriter
+            from ..resident_evidence_client import ResidentEvidenceClient
 
-            self.runtime_hook_evidence_writer = NativeHookEvidenceWriter(store=self.store)
+            self.runtime_hook_evidence_writer = ResidentEvidenceClient(store=self.store)
             self.runtime_hook_evidence_dispatch = HookEvidenceDispatch()
             worker = HookWorker(
                 store=self.store,
