@@ -99,6 +99,13 @@ fn wire_row(stored: &Value) -> Value {
     })
 }
 
+/// How one reinstall ended: the hooks were already current, or it recorded
+/// the row (`None` when the install answered none).
+enum Done {
+    Current,
+    Installed(Option<Value>),
+}
+
 fn reinstall(
     ctx: &Ctx,
     fields: &Map<String, Value>,
