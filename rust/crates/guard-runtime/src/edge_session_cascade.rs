@@ -245,11 +245,11 @@ fn let_through(result: &PreToolResultV1) -> bool {
 }
 
 /// [`Tracker::observe`] for a hook envelope, after every other edge step.
-pub(crate) fn apply_to_envelope(
+/// `call` is the hook's event name and canonical harness.
+pub(crate) fn apply(
     envelope: &GuardHookEnvelopeV2,
     policy_snapshot: Option<&AdmittedPolicySnapshot>,
-    event_name: &str,
-    harness: &str,
+    (event_name, harness): (&str, &str),
     result: PreToolResultV1,
 ) -> PreToolResultV1 {
     let observe = policy_snapshot.is_some_and(|snapshot| snapshot.mode == "observe");
