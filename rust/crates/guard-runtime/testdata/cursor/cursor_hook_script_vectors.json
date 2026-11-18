@@ -85,7 +85,7 @@
     "-S",
     "-s",
     "-c",
-    "import json,sys;sys.path[:0]=[\"/opt/site\"];from pathlib import Path;from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure;recover_guard_daemon_after_hook_failure(Path('/guard-vectors/g'),home_dir=Path('/guard-vectors/h'),failure_kind=sys.argv[1])"
+    "import json,sys;sys.path[:0]=[\"/opt/site\"];from pathlib import Path;from codex_plugin_scanner.guard.native_daemon_manage import recover_guard_daemon_after_hook_failure;recover_guard_daemon_after_hook_failure(Path('/guard-vectors/g'),home_dir=Path('/guard-vectors/h'),failure_kind=sys.argv[1])"
    ]
   },
   {
@@ -107,7 +107,7 @@
     "-S",
     "-s",
     "-c",
-    "import json,sys;sys.path[:0]=[\"/opt/s\\u00e9\", \"/opt/it's\", \"a\\\"b\"];from pathlib import Path;from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure;recover_guard_daemon_after_hook_failure(Path(\"/guard-vectors/it's\"),home_dir=Path('/guard-vectors/\"both\\' \\\\ \\x7f\\u2028😀\\t'),failure_kind=sys.argv[1])"
+    "import json,sys;sys.path[:0]=[\"/opt/s\\u00e9\", \"/opt/it's\", \"a\\\"b\"];from pathlib import Path;from codex_plugin_scanner.guard.native_daemon_manage import recover_guard_daemon_after_hook_failure;recover_guard_daemon_after_hook_failure(Path(\"/guard-vectors/it's\"),home_dir=Path('/guard-vectors/\"both\\' \\\\ \\x7f\\u2028😀\\t'),failure_kind=sys.argv[1])"
    ]
   },
   {
@@ -125,7 +125,7 @@
     "-S",
     "-s",
     "-c",
-    "import json,sys;sys.path[:0]=[];from pathlib import Path;from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure;recover_guard_daemon_after_hook_failure(Path('/g'),home_dir=Path('/h\\x1b\\x85'),failure_kind=sys.argv[1])"
+    "import json,sys;sys.path[:0]=[];from pathlib import Path;from codex_plugin_scanner.guard.native_daemon_manage import recover_guard_daemon_after_hook_failure;recover_guard_daemon_after_hook_failure(Path('/g'),home_dir=Path('/h\\x1b\\x85'),failure_kind=sys.argv[1])"
    ]
   }
  ]

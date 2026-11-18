@@ -6,7 +6,16 @@
  * A name that carries a change word is never called a read, so
  * `search_and_delete` is a delete and `get_or_create_user` is a change.
  */
-export type McpEffectKind = "in-app" | "read" | "write" | "send" | "delete" | "run-code" | "connect" | "unknown";
+export type McpEffectKind =
+  | "in-app"
+  | "read"
+  | "write"
+  | "send"
+  | "delete"
+  | "run-code"
+  | "connect"
+  | "act-as-you"
+  | "unknown";
 
 export type McpEffectCopy = {
   /** Short pill text. */
@@ -24,6 +33,8 @@ export const MCP_EFFECT_COPY: Record<McpEffectKind, McpEffectCopy> = {
   delete: { label: "Deletes things", meaning: "The name suggests it removes or deletes something." },
   "run-code": { label: "Runs code", meaning: "The name suggests it runs code or a command." },
   connect: { label: "Changes connections", meaning: "The name suggests it connects or changes a linked account." },
+  // Only a browser or screen-control tool gets this; no name is read as acting as you on its own.
+  "act-as-you": { label: "Acts as you", meaning: "It clicks, types or opens pages as if it were you." },
   unknown: { label: "Effect unclear", meaning: "The name does not say what it does." },
 };
 
@@ -104,9 +115,10 @@ const SEVERITY: Record<McpEffectKind, number> = {
   unknown: 2,
   connect: 3,
   write: 4,
-  send: 5,
-  "run-code": 6,
-  delete: 7,
+  "act-as-you": 5,
+  send: 6,
+  "run-code": 7,
+  delete: 8,
 };
 
 /** The effect a group of actions has as a whole: the most serious one in it. */

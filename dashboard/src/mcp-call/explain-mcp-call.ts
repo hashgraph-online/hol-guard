@@ -1,5 +1,6 @@
 import { harnessDisplayName } from "../approval-center-utils";
 import type { GuardActionEnvelope, GuardApprovalRequest } from "../guard-types";
+import { explainBrowserTool } from "./browser-tools";
 import { explainComposioTool, THOUGHT_CAPTION, type McpCallBody } from "./composio-calls";
 import type { McpCallExplanation } from "./mcp-call-types";
 import { explainHostAppTool, hostAppTool, type HostAppTool } from "./host-app-tools";
@@ -17,9 +18,9 @@ import {
 import {
   isPlainNamePart,
   parseNamespacedMcpName,
-  sentenceCase,
   serviceDisplayName,
   shortToolName,
+  toolTitle,
   type McpServerRef,
 } from "./mcp-services";
 
@@ -51,6 +52,7 @@ export function explainMcpCall(item: GuardApprovalRequest): McpCallExplanation |
   const body =
     (host !== null ? explainHostAppTool(host, input) : null) ??
     (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ??
+    (host === null ? explainBrowserTool(ref.server, shortTool, { harness, connector, input }) : null) ??
     explainGenericTool({ harness, connector, shortTool, input });
 
   return {
@@ -129,7 +131,7 @@ function explainGenericTool(context: {
 }): McpCallBody {
   const { harness, connector, shortTool, input } = context;
   const effect = classifyMcpEffect(shortTool);
-  const title = sentenceCase(shortTool);
+  const title = toolTitle(connector, shortTool);
   // `thought` and `use_case` are the agent's own account of the call. They are quoted, never shown as a fact.
   const { facts } = scalarFacts(input, { skip: AGENT_TEXT_KEYS, tool: shortTool });
   const thought = textOf(input?.thought, 300);
@@ -139,10 +141,8 @@ function explainGenericTool(context: {
     title,
     aside: null,
     effect,
-    effectBasis:
-      effect === "unknown"
-        ? "Guard cannot tell what this does from its name. Read the inputs below."
-        : "Read from the tool's name. Guard has not checked what it does.",
+    // An unclear effect is already said in the note's first line, so it needs no second line.
+    effectBasis: effect === "unknown" ? "" : "Read from the tool's name. Guard has not checked what it does.",
     facts,
     steps: [],
     quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
@@ -168,6 +168,8 @@ function effectPhrase(effect: McpEffectKind, connector: string): string {
       return `run code with ${connector}`;
     case "connect":
       return `change a connection in ${connector}`;
+    case "act-as-you":
+      return `use ${connector} as you`;
     case "unknown":
       return `use ${connector}`;
   }

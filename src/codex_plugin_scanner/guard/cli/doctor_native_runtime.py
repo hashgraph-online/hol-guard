@@ -375,6 +375,23 @@ def native_runtime_section(
     lifecycle = native_resident_lifecycle(guard_home)
     if lifecycle is not None:
         section["lifecycle"] = lifecycle
+    # The catalog refresh and authority loops back off while they fail, so a
+    # quiet daemon.log can mean "waiting to retry". This says which.
+    background_loops = _background_loops(guard_home)
+    if background_loops is not None:
+        section["background_loops"] = background_loops
     if repair is not None:
         section["repair"] = repair
     return section
+
+
+def _background_loops(guard_home: Path | None) -> list[dict[str, object]] | None:
+    """Each background loop's state from the runtime's ledger, when it can say."""
+
+    if guard_home is None:
+        return None
+    if skipped_command_probe(["hol-guard-runtime", "background-loop-gate", "--stdin"]) is not None:
+        return None
+    from ..runtime_health.background_loop_gate import loop_status
+
+    return loop_status(guard_home)

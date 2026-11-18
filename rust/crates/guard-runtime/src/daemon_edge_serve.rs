@@ -327,7 +327,8 @@ fn start_and_serve(home: &Path, config: &LaunchConfig) -> i32 {
     let session_id = random_hex(16);
     if config.workers {
         // Guard-owned hooks and launchers are brought in line with this
-        // runtime before the daemon reports ready, as its start always did.
+        // runtime before the daemon reports ready, as its start always did,
+        // unless the reconcile outlasts its ready wait.
         let reconcile = workers::reconcile_beside(&reads, config.user_home.clone(), home.clone());
         let registration = workers::Registration {
             session_id: session_id.clone(),
@@ -338,11 +339,9 @@ fn start_and_serve(home: &Path, config: &LaunchConfig) -> i32 {
         };
         workers::start(&reads, registration.clone());
         super::lifecycle::record(&home, "workers_started", None, None, None);
-        if let Some(reconcile) = reconcile {
-            let _ = reconcile.join();
-        }
+        let pending = workers::settle_before_ready(reconcile, &home);
         if let Some(timeout) = idle_timeout(config.idle_timeout_seconds) {
-            workers::exit_when_idle(&reads, &registration, timeout);
+            workers::exit_when_idle(&reads, &registration, timeout, pending);
         }
     }
     warm_hook_worker(&reads, port, pid);

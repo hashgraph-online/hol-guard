@@ -26,6 +26,7 @@ from .native_policy_snapshot_constants import NativePolicySnapshotError
 from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
 from .runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
+from .runtime_health import background_loop_gate
 from .runtime_health.background_diagnostics import failure_detail, record_background_event, record_background_notice
 from .store import GuardStore
 
@@ -125,11 +126,17 @@ def migrate_installed_authority(
             store.migrate_installed_command_pack_authority()
     except Exception as error:
         elapsed_ms = round((time.monotonic() - started) * 1000)
-        record_background_event(
-            "installed_authority_migration_failed", f"{failure_detail(error)} elapsed_ms={elapsed_ms}"
+        # Every new library process retries this, so an unchanged failure is
+        # logged when it starts and then every few hours, not on each restart.
+        background_loop_gate.report_failure(
+            store.guard_home,
+            background_loop_gate.AUTHORITY_MIGRATION,
+            f"failed:{type(error).__name__}",
+            (("installed_authority_migration_failed", f"{failure_detail(error)} elapsed_ms={elapsed_ms}"),),
         )
         _LOGGER.warning("Installed command-pack authority could not be migrated: %s", error, exc_info=True)
         return False
+    background_loop_gate.report_success(store.guard_home, background_loop_gate.AUTHORITY_MIGRATION)
     elapsed = time.monotonic() - started
     if elapsed >= _SLOW_MIGRATION_SECONDS:
         record_background_notice("installed_authority_migration_slow", f"elapsed_ms={round(elapsed * 1000)}")
@@ -192,12 +199,26 @@ class ExtensionControlHost:
                 BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
             )
         except Exception as error:
-            record_background_event("default_authority_enrollment_failed", failure_detail(error))
+            background_loop_gate.report_failure(
+                self.store.guard_home,
+                background_loop_gate.AUTHORITY_ENROLLMENT,
+                f"failed:{type(error).__name__}",
+                (("default_authority_enrollment_failed", failure_detail(error)),),
+            )
             # The redacted detail is in the background event; the log names the class only.
             _LOGGER.warning("Extension-control authority could not be enrolled by default: %s", type(error).__name__)
             return
         if view.health is not AuthorityHealth.PROTECTED:
-            record_background_event("default_authority_enrollment_skipped", f"health={view.health.value}")
+            # A home that stays unprotected is skipped by every new library
+            # process; the state is logged when it starts or changes.
+            background_loop_gate.report_failure(
+                self.store.guard_home,
+                background_loop_gate.AUTHORITY_ENROLLMENT,
+                f"skipped:{view.health.value}",
+                (("default_authority_enrollment_skipped", f"health={view.health.value}"),),
+            )
+            return
+        background_loop_gate.report_success(self.store.guard_home, background_loop_gate.AUTHORITY_ENROLLMENT)
 
     def _startup_view(self, registry: CommandSafetyExtensionRegistry) -> ExtensionControlAuthorityView:
         """Read the authority without letting a busy lease stop the service.

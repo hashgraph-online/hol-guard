@@ -328,7 +328,7 @@ pub(super) fn python_session_start_argv(
         let code = format!(
             "_HOL_GUARD_CLAUDE_SESSION_START_HOOK_MARKER = {};import sys;\
              sys.path.insert(0, {});\
-             from codex_plugin_scanner.guard.adapters.claude_code import \
+             from codex_plugin_scanner.guard.claude_hook_entry import \
              _run_session_start_from_argv;\
              raise SystemExit(_run_session_start_from_argv(sys.argv[1:]))",
             py_repr_str(&marker),
