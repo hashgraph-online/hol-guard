@@ -17,6 +17,7 @@ fn a_bare_print_of_an_ssn_is_reviewed() {
         "printf '%s\\n' 'case (123-45-6789)'",
         "echo \"SSN: 123-45-6789\"",
         "printf '%s\\n' 123-45-6789",
+        "printf 'SSN:\\n123-45-6789\\n'",
         "echo 'customer 078-05-1120 on file'",
     ] {
         assert!(echoes_ssn(command), "{command} must be reviewed");
