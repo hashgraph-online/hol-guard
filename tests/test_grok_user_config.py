@@ -83,8 +83,6 @@ def test_legacy_backup_hooks_migrate_without_changing_vendor_settings(
 
 
 def test_malformed_config_leaves_uninstall_artifacts_intact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from unittest.mock import Mock
-
     context = HarnessContext(tmp_path / "home", None, tmp_path / "guard")
     monkeypatch.delenv("GROK_HOME", raising=False)
     shim = context.guard_home / "bin" / "guard-grok"
@@ -123,8 +121,9 @@ def test_missing_ownership_refuses_cleanup_without_deleting_user_settings(
     config = grok_paths(context)["config"]
     before = config.read_bytes()
     grok_paths(context)["state"].unlink()
-    with pytest.raises(ValueError, match="ownership records are missing"):
-        harness_support.uninstall("grok", context)
+    result = harness_support.uninstall("grok", context)
     assert config.read_bytes() == before
-    assert grok_paths(context)["pretool"].exists()
-    remove_shim.assert_not_called()
+    assert not grok_paths(context)["pretool"].exists()
+    assert result["manifest"]["cleanup_incomplete"] is True
+    notes = result["manifest"]["notes"]
+    assert any(isinstance(note, str) and "ownership records are missing" in note for note in notes)

@@ -127,8 +127,11 @@ export function HarnessSetupPanel(props: {
           setDisconnectArmed(false);
         }
         setSetupState({ kind: "success", action, result });
-        if (action === "uninstall" && options.dryRun !== true && !active) {
-          setLeftoverRemoved(true);
+        const cleanupIncomplete = result.managed_install?.manifest?.cleanup_incomplete === true;
+        if (action === "uninstall" && options.dryRun !== true && !cleanupIncomplete) {
+          if (!active) {
+            setLeftoverRemoved(true);
+          }
           props.onLeftoverRemoved?.();
         }
         if (action !== "verify" && options.dryRun !== true) {

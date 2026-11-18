@@ -107,7 +107,7 @@ fn grok_repeated_install_does_not_back_up_its_own_hooks() {
 }
 
 #[test]
-fn grok_uninstall_refuses_to_claim_cleanup_without_ownership_state() {
+fn grok_uninstall_removes_hooks_but_marks_config_cleanup_incomplete_without_ownership_state() {
     let home = Home::new();
     let config = home.home().join(".grok/config.toml");
     fs::create_dir_all(config.parent().unwrap()).unwrap();
@@ -115,10 +115,9 @@ fn grok_uninstall_refuses_to_claim_cleanup_without_ownership_state() {
 
     let answer = home.ask("grok", "prepare_uninstall", json!({}));
 
-    assert_eq!(
-        answer["refusal"],
-        "Cannot remove Guard settings from .grok/config.toml because ownership records are missing; reinstall Guard or review the file manually."
-    );
+    assert_eq!(answer["refusal"], Value::Null);
+    assert_eq!(answer["finish"]["cleanup_incomplete"], true);
+    assert!(answer["deletes"].as_array().unwrap().is_empty());
 }
 
 #[test]

@@ -411,6 +411,14 @@ function testDisconnectWaitsForApprovalSettingsBeforeConfirm(): void {
     harnessSetupPanel.includes('if (hasLeftover) return "Needs repair";'),
     "the app detail must match the app list repair status",
   );
+  assert(
+    harnessSetupPanel.includes("cleanupIncomplete = result.managed_install?.manifest?.cleanup_incomplete === true"),
+    "incomplete cleanup must keep the leftover warning visible",
+  );
+  assert(
+    harnessSetupPanel.includes("props.onLeftoverRemoved?.();") && harnessSetupPanel.includes("!cleanupIncomplete"),
+    "every completed disconnect must refresh workspace detection unless config cleanup is incomplete",
+  );
 }
 
 function testApprovalProofBlocksUnreadyGate(): void {
