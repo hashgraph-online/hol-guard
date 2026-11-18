@@ -69,6 +69,17 @@ fn a_quoted_home_root_does_not_fail_a_named_xargs_pipeline() {
     }
 }
 
+/// Subshells that only discard errors or join them to output move no data,
+/// so a test run behind a manifest read reaches review instead of failing.
+#[test]
+fn a_subshell_chain_that_only_joins_errors_is_reviewable() {
+    let controls = controls(github("enabled", None), false);
+    let command = "ls -la && (cat package.json 2>/dev/null || true) && (npm test -- --runInBand 2>&1 || npm test 2>&1)";
+    let (action, code) = decision(&controls, command);
+    assert_ne!(code, FAILED, "{command}\n{}", diagnose(command));
+    assert_ne!(action, "block", "{command}: {code}");
+}
+
 /// What each step of the xargs floor answered, for a failure message.
 fn diagnose(command: &str) -> String {
     let request = crate::CommandModelRequestV1 {
