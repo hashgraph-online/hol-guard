@@ -801,6 +801,19 @@
       ]
     },
     {
+      "id": "omp-native-shell-home-toolchain-name-formats",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "List the Node versions installed in my toolchain and the global packages they carry: run each listed command once, in order, exactly as written, then tell me which versions are installed.",
+      "commands": [
+        "find \"$HOME/.nvm/versions/node\" -mindepth 1 -maxdepth 1 -type d -printf '%f\\n' | sort -V",
+        "find \"$HOME/.nvm/versions/node\" -path '*/lib/node_modules/*' -mindepth 1 -maxdepth 4 -type d -print | sort"
+      ]
+    },
+    {
       "id": "omp-native-glob-home-skill-docs",
       "expectation": "allow",
       "oracle": "native-tools",
