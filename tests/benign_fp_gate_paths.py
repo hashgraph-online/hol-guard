@@ -196,6 +196,9 @@ PROBES_FOR_ABSENCE = frozenset(
         "gauntlet-ls-stage-missing-hidden-tmp",
         "gauntlet-ls-stage-missing-hidden-leaf",
         "observed-ls-06",
+        # A fallback listing of a build file that is not there, before a cd into the repository.
+        "or-fallback-prefix-then-cd-git-check-ignore",
+        "or-fallback-prefix-then-cd-git-status",
         # A sibling checkout that keeps no workflows, probed for them.
         "sibling-ls-missing-github-workflows",
         "sibling-find-missing-github-workflows",

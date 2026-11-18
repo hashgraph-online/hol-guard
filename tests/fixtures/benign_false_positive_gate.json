@@ -14562,6 +14562,40 @@
       "expect": "allow"
     },
     {
+      "id": "or-fallback-prefix-then-cd-git-check-ignore",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "lsof -iTCP:3000 -sTCP:LISTEN 2>/dev/null | head -3; echo \"---\"; ls ${TMP_ORG}/missing.tsbuildinfo 2>/dev/null || echo \"none\"; echo \"---\"; cd ${TMP_ORG}/app && git check-ignore tsconfig.tsbuildinfo && echo \"ignored\" || echo \"not ignored\""
+      },
+      "cwd": "tmp_org",
+      "expect": "allow"
+    },
+    {
+      "id": "or-fallback-prefix-then-cd-git-status",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${TMP_ORG}/missing.tsbuildinfo 2>/dev/null || echo \"none\"; cd ${TMP_ORG}/app && git status --short"
+      },
+      "cwd": "tmp_org",
+      "expect": "allow"
+    },
+    {
       "id": "git-cd-worktree-diff-check",
       "fix_area": "shell",
       "harnesses": [
