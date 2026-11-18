@@ -241,7 +241,11 @@ impl CompiledNativeCommandControls {
         // name in an operand position runs nothing: `rg env src` searches for
         // the word, the way `rg bar src` always has, and reading the operand
         // as a program refused it outright with no approval left to give it.
-        let commanded = named_words(&joined_quotes(&text_in_command_positions(&bare)));
+        // A double-quoted `"$HOME/..."` is a fixed path, so it is read as one
+        // when telling operands from programs.
+        let commanded = named_words(&joined_quotes(&text_in_command_positions(
+            &xargs::with_fixed_home(&bare),
+        )));
         // `source FILE` runs the file's words in this shell, so the file names
         // the programs the command can run. Reading it bounds those owners the
         // way a script file bounds an interpreter's. Until it was read, an
