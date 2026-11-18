@@ -148,7 +148,7 @@
   {
    "old_node": "tests/test_hook_evidence_dispatch.py::test_evidence_is_submitted_in_the_order_the_hooks_left_it",
    "replacement_nodes": [
-    "rust/crates/guard-command/src/hook_evidence_writer_tests.rs::a_receipt_handoff_returns_before_the_store_has_written_it"
+    "rust/crates/guard-command/src/hook_evidence_writer_tests.rs::receipt_handoffs_preserve_submission_order"
    ],
    "status": "native_behavior_ported_requires_ci"
   },
