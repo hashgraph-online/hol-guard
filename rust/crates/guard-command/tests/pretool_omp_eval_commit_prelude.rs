@@ -31,6 +31,8 @@ const AGENT_PROGRAMS: &[&str] = &[
     "const d=await commit.draft(); return await d.take(['index.html','style.css','game.js']);",
     "const d = await commit.draft(); await d.take('docs/environment.md'); await d.commit('Document local development environment', ['Add verified details.']);",
     "const d = await commit.draft(); await d.drop('notes.md'); print(await d.diff()); return await d.commit('Add report', {body: 'One line.', fixes: [12], noVerify: true});",
+    r#"const d = await commit.draft(); return await d.commit({body:"Fix sum to include first value\n\nStart iteration at index 0."});"#,
+    r#"const d = await commit.draft(); return await d.commit({subject: "docs: document the environment", body: ["- Add Node and npm details."]});"#,
 ];
 
 /// With no hook, filter, fsmonitor or signing program configured, the draft
@@ -98,6 +100,9 @@ fn a_commit_program_outside_the_grammar_stays_reviewed() {
         "const d = await commit.draft(); const e = d; return await e.commit('x');",
         "return await commit.run('x');",
         "const d = await commit.draft(); return await d.commit('x', {body: 'y', hooks: false});",
+        "const d = await commit.draft(); return await d.commit({subject: 'x', amend: true});",
+        "const d = await commit.draft(); return await d.commit({subject: 1, body: 'y'});",
+        "const d = await commit.draft(); return await d.commit({subject: 'x', hooks: false});",
     ] {
         let result = eval(&session, code);
         assert_ne!(result.minimum_action, "allow", "{code}");
