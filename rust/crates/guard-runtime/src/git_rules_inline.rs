@@ -34,26 +34,60 @@ const PROCESS_CALLS: &[&str] = &[
 /// Inline code longer than this is not read.
 const MAX_CODE: usize = 16_384;
 
+/// How deep template expressions inside template expressions are read.
+const MAX_NESTING: usize = 8;
+
 /// The process calls in `code`. `hash_comments` says the language starts a
 /// line comment with `#` (Python, Ruby, Perl); otherwise `//` and `/* */`
 /// are comments (JavaScript).
 pub(crate) fn process_calls(code: &str, hash_comments: bool) -> Vec<Call> {
     let mut calls = Vec::new();
-    if code.len() > MAX_CODE {
-        return calls;
+    if code.len() <= MAX_CODE {
+        calls_in(code, hash_comments, 0, &mut calls);
     }
+    calls
+}
+
+fn calls_in(code: &str, hash_comments: bool, nesting: usize, calls: &mut Vec<Call>) {
     let bytes = code.as_bytes();
     let mut index = 0;
     while index < bytes.len() {
         let byte = bytes[index];
-        if byte == b'"' || byte == b'\'' || byte == b'`' {
+        if byte == b'`' && hash_comments {
+            // Ruby and Perl run a backtick string as a shell command.
+            match literal(code, index) {
+                Some((text, end)) => {
+                    calls.push(Call::Shell(text));
+                    index = end;
+                }
+                None => index = bytes.len(),
+            }
+            continue;
+        }
+        if byte == b'`' {
+            // A JavaScript template runs the expressions in its `${...}`.
+            let (expressions, end) = template(code, index);
+            if nesting < MAX_NESTING {
+                for expression in expressions {
+                    calls_in(expression, hash_comments, nesting + 1, calls);
+                }
+            }
+            index = end;
+            continue;
+        }
+        if byte == b'"' || byte == b'\'' {
             // Skip string literals so a name inside one is not a call.
             index = literal(code, index).map_or(bytes.len(), |(_, end)| end);
             continue;
         }
-        // Skip comments, which run nothing.
+        // Skip comments, which run nothing. A `#` starts one only at the
+        // start of a word: Perl's `$#array` and `s#a#b#` are code.
         let next = bytes.get(index + 1).copied();
-        if (hash_comments && byte == b'#') || (!hash_comments && byte == b'/' && next == Some(b'/'))
+        let word_start = index
+            .checked_sub(1)
+            .is_none_or(|at| bytes[at].is_ascii_whitespace() || bytes[at] == b';');
+        if (hash_comments && byte == b'#' && word_start)
+            || (!hash_comments && byte == b'/' && next == Some(b'/'))
         {
             index = code[index..]
                 .find('\n')
@@ -86,7 +120,42 @@ pub(crate) fn process_calls(code: &str, hash_comments: bool) -> Vec<Call> {
             calls.push(call);
         }
     }
-    calls
+}
+
+/// The `${...}` expressions of the template literal at `at`, and the index
+/// past its closing backtick.
+fn template(code: &str, at: usize) -> (Vec<&str>, usize) {
+    let bytes = code.as_bytes();
+    let mut expressions = Vec::new();
+    let mut index = at + 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\' => index += 2,
+            b'`' => return (expressions, index + 1),
+            b'$' if bytes.get(index + 1) == Some(&b'{') => {
+                let start = index + 2;
+                let mut depth = 1usize;
+                let mut end = start;
+                while end < bytes.len() {
+                    match bytes[end] {
+                        b'{' => depth += 1,
+                        b'}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                    end += 1;
+                }
+                expressions.push(&code[start..end.min(bytes.len())]);
+                index = end + 1;
+            }
+            _ => index += 1,
+        }
+    }
+    (expressions, bytes.len())
 }
 
 fn first_argument(code: &str, at: usize) -> Option<Call> {
@@ -194,10 +263,12 @@ fn literal(code: &str, at: usize) -> Option<(String, usize)> {
 }
 
 /// Whether a bare `name(...)` at `at` calls a function the code defines
-/// itself (`def run(...)`, `function run(...)`, `run = ...`) rather than a
-/// process API. A method call (`subprocess.run`) is always a process call,
-/// and so is a local function in code that reaches a process module at all,
-/// since it may wrap one.
+/// itself (`def run(...)`, `function run(...)`, `run = lambda ...`,
+/// `const run = (...) => ...`) rather than a process API. A method call
+/// (`subprocess.run`) is always a process call, and so is a local function
+/// in code that reaches a process module at all, since it may wrap one. A
+/// name assigned anything but a function (`system = o.system`) may be a
+/// process API under another name, so it is not a local definition.
 fn defined_here(code: &str, at: usize, name: &str) -> bool {
     if at > 0 && code.as_bytes()[at - 1] == b'.' {
         return false;
@@ -215,25 +286,45 @@ fn defined_here(code: &str, at: usize, name: &str) -> bool {
             continue;
         }
         let before = code[..start].trim_end();
-        let declared = ["def", "function", "const", "let", "var"]
-            .iter()
-            .any(|keyword| {
-                before.strip_suffix(keyword).is_some_and(|rest| {
-                    !rest.ends_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
-                })
-            });
+        let declared = ["def", "function"].iter().any(|keyword| {
+            before.strip_suffix(keyword).is_some_and(|rest| {
+                !rest.ends_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+            })
+        });
         let after = code[end..].trim_start();
-        if declared || (after.starts_with('=') && !after.starts_with("==")) {
+        let assigned_function = after
+            .strip_prefix('=')
+            .filter(|value| !value.starts_with('='))
+            .is_some_and(function_value);
+        if declared || assigned_function {
             return true;
         }
     }
     false
 }
 
+/// Whether an assigned value is a function written here: a `lambda`, a
+/// `function` expression or an arrow function.
+fn function_value(value: &str) -> bool {
+    let value = value.trim_start();
+    let statement = value.split(['\n', ';']).next().unwrap_or(value);
+    ["lambda", "function", "async"].iter().any(|keyword| {
+        value
+            .strip_prefix(keyword)
+            .is_some_and(|rest| !rest.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_'))
+    }) || statement.split_once("=>").is_some_and(|(head, _)| {
+        let head = head.trim();
+        head.starts_with('(') || (!head.is_empty() && head.bytes().all(is_word))
+    })
+}
+
 /// Names that reach a process API, so a local function may wrap one.
 const PROCESS_MODULES: &[&str] = &[
     "subprocess",
     "os.",
+    "import os",
+    "from os",
+    "importlib",
     "child_process",
     "commands",
     "pty",

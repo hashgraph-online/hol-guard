@@ -106,7 +106,9 @@ impl Hooks {
 
 /// The shell state that carries from one segment to the next.
 #[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct State {
+pub(crate) struct State<'a> {
+    /// The top of the working tree the agent started in, when known.
+    pub(crate) top: Option<&'a std::path::Path>,
     pub(crate) dir: Dir,
     /// The folder `cd -` and `popd` return to.
     pub(crate) previous: Dir,
@@ -114,7 +116,7 @@ pub(crate) struct State {
     pub(crate) hooks: Hooks,
 }
 
-impl State {
+impl State<'_> {
     /// `cd`, `pushd` or `popd` with their arguments.
     pub(crate) fn change_directory(&mut self, program: &str, args: &[&str]) {
         let target = args

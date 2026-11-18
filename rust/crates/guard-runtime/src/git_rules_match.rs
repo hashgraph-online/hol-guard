@@ -9,6 +9,8 @@
 //! process call. A mention of git in text that is never run, such as an
 //! `echo`, a commit message or a `print`, is not a match.
 
+use std::path::Path;
+
 use guard_command::command_model::{parse_shell_command, CommandSegment};
 
 use crate::git_rules_state::{Dir, Hooks, State};
@@ -23,10 +25,39 @@ pub(crate) struct Breaks {
     pub(crate) stage_all: bool,
 }
 
-pub(crate) fn breaks(command: &str) -> Breaks {
+/// The rules `command` breaks when the agent runs it from `cwd`.
+pub(crate) fn breaks(command: &str, cwd: Option<&Path>) -> Breaks {
     let mut found = Breaks::default();
-    scan(command, 0, &mut State::default(), &mut found);
+    let top = cwd.and_then(work_tree_top);
+    let dir = match (cwd, top) {
+        (Some(cwd), Some(top)) => below(cwd, top),
+        _ => Dir::Root,
+    };
+    let mut state = State {
+        dir,
+        previous: Dir::Elsewhere,
+        top,
+        ..State::default()
+    };
+    scan(command, 0, &mut state, &mut found);
     found
+}
+
+/// The top of the working tree `cwd` sits in: the nearest folder with a
+/// `.git` entry.
+fn work_tree_top(cwd: &Path) -> Option<&Path> {
+    cwd.ancestors()
+        .take(64)
+        .find(|folder| folder.join(".git").symlink_metadata().is_ok())
+}
+
+/// Where `cwd` sits relative to the top of its working tree.
+fn below(cwd: &Path, top: &Path) -> Dir {
+    match cwd.strip_prefix(top).map(|rest| rest.components().count()) {
+        Ok(0) => Dir::Root,
+        Ok(depth) => Dir::Below(u16::try_from(depth).unwrap_or(u16::MAX)),
+        Err(_) => Dir::Elsewhere,
+    }
 }
 
 fn scan(text: &str, depth: usize, state: &mut State, found: &mut Breaks) {
@@ -49,14 +80,23 @@ fn scan(text: &str, depth: usize, state: &mut State, found: &mut Breaks) {
         while let Some(inner) = embedded.next_if(|inner| inner.start < segment.end) {
             scan(&inner.text, depth + 1, &mut { *state }, found);
         }
-        segment_breaks(segment, depth, state, found);
+        let raw = text
+            .get(segment.start..segment.end)
+            .unwrap_or(&segment.text);
+        segment_breaks(segment, raw, depth, state, found);
     }
     for inner in embedded {
         scan(&inner.text, depth + 1, &mut { *state }, found);
     }
 }
 
-fn segment_breaks(segment: &CommandSegment, depth: usize, state: &mut State, found: &mut Breaks) {
+fn segment_breaks(
+    segment: &CommandSegment,
+    raw: &str,
+    depth: usize,
+    state: &mut State,
+    found: &mut Breaks,
+) {
     let Some(executable) = segment.executable.as_deref() else {
         return;
     };
@@ -66,6 +106,21 @@ fn segment_breaks(segment: &CommandSegment, depth: usize, state: &mut State, fou
         let inner = inner.strip_suffix(')').unwrap_or(inner);
         scan(inner, depth + 1, &mut { *state }, found);
         return;
+    }
+    // The command model unwraps a leading `env` and drops its options, so
+    // a segment that starts with one is read from its source words: `env -C`
+    // moves the folder and `env -u` clears a switch.
+    if let Some(words) = guard_command::contained_execution::shlex_split(raw) {
+        let words: Vec<&str> = words.iter().map(String::as_str).collect();
+        let at = words
+            .iter()
+            .position(|word| crate::git_rules_state::assignment(word).is_none())
+            .unwrap_or(words.len());
+        if words.get(at).is_some_and(|word| base_name(word) == "env") {
+            let (hooks, _) = state.hooks.prefix(&words[..at]);
+            run(&words[at..], hooks, depth, state, found);
+            return;
+        }
     }
     // The words before the program: assignments, and an `env` the command
     // model left in place inside a compound command.
@@ -97,8 +152,25 @@ fn run(argv: &[&str], hooks: Hooks, depth: usize, state: &mut State, found: &mut
         "env" => {
             let words: Vec<&str> = std::iter::once("env").chain(rest.iter().copied()).collect();
             let (hooks, read) = hooks.prefix(&words);
-            if depth < MAX_DEPTH {
-                run(&words[read..], hooks, depth + 1, state, found);
+            if depth >= MAX_DEPTH {
+                return;
+            }
+            let (folder, split) = env_options(&words[1..read]);
+            let mut inner = State { hooks, ..*state };
+            if let Some(target) = folder {
+                inner.dir = inner.dir.enter(target);
+            }
+            match split {
+                // `env -S 'git commit --no-verify'` splits its value into
+                // the command it runs, ahead of any words that follow.
+                Some(split) => {
+                    let text = std::iter::once(split)
+                        .chain(words[read..].iter().copied())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    scan(&text, depth + 1, &mut inner, found);
+                }
+                None => run(&words[read..], hooks, depth + 1, &mut inner, found),
             }
         }
         "eval" => {
@@ -150,6 +222,38 @@ fn run(argv: &[&str], hooks: Hooks, depth: usize, state: &mut State, found: &mut
 
 const INLINE_RUNTIMES: &[&str] = &["python", "node", "bun", "deno", "ruby", "perl"];
 
+/// The folder `env -C` starts its command in and the string `env -S` splits
+/// into it, from `env`'s own options.
+fn env_options<'a>(options: &[&'a str]) -> (Option<&'a str>, Option<&'a str>) {
+    let (mut folder, mut split) = (None, None);
+    let mut index = 0;
+    while let Some(word) = options.get(index) {
+        let next = options.get(index + 1).copied();
+        match *word {
+            "-C" | "--chdir" => {
+                folder = next;
+                index += 1;
+            }
+            "-S" | "--split-string" => {
+                split = next;
+                index += 1;
+            }
+            "-u" | "--unset" => index += 1,
+            word => {
+                if let Some(value) = word.strip_prefix("--chdir=") {
+                    folder = Some(value);
+                } else if let Some(value) = word.strip_prefix("--split-string=") {
+                    split = Some(value);
+                } else if let Some(value) = word.strip_prefix("-S").filter(|v| !v.is_empty()) {
+                    split = Some(value);
+                }
+            }
+        }
+        index += 1;
+    }
+    (folder, split)
+}
+
 /// The argv a process wrapper runs, past the wrapper's own options.
 fn wrapped<'a>(name: &str, rest: &'a [&'a str]) -> Option<&'a [&'a str]> {
     // Options of each wrapper that take a separate value.
@@ -182,6 +286,8 @@ fn wrapped<'a>(name: &str, rest: &'a [&'a str]) -> Option<&'a [&'a str]> {
 
 /// Git's own options before the subcommand, and the subcommand's rules.
 fn git(args: &[&str], hooks: Hooks, state: &State, found: &mut Breaks) {
+    // A relative hooks folder is read from the top of the tree git works in.
+    let top = state.top.filter(|_| state.dir != Dir::Elsewhere);
     let mut config_disarms = false;
     let mut dir = state.dir;
     let mut index = 0;
@@ -197,7 +303,7 @@ fn git(args: &[&str], hooks: Hooks, state: &State, found: &mut Breaks) {
             "-c" => {
                 config_disarms |= next.is_some_and(|pair| {
                     pair.split_once('=')
-                        .is_some_and(|(key, value)| disarming_hooks_path(key, value))
+                        .is_some_and(|(key, value)| runs_no_hook(key, value, top))
                 });
                 index += 2;
             }
@@ -213,12 +319,13 @@ fn git(args: &[&str], hooks: Hooks, state: &State, found: &mut Breaks) {
     };
     let rest = &args[index + 1..];
     let moved = dir != Dir::Root;
-    // A commit preview runs no hook and stages nothing.
+    // A commit preview runs no hook and stages nothing. The option is read
+    // after the values of the options before it, so a message `--dry-run`
+    // is still a message.
     if *subcommand == "commit"
-        && rest
-            .iter()
-            .take_while(|word| **word != "--")
-            .any(|word| *word == "--dry-run")
+        && split_options(rest, COMMIT_VALUED_LONG)
+            .0
+            .contains(&"--dry-run")
     {
         return;
     }
@@ -267,21 +374,7 @@ const HOOK_RUNNING: &[&str] = &[
 /// whole-tree pathspec commits every change instead of the staged names.
 fn commit(rest: &[&str], moved: bool, found: &mut Breaks) {
     const VALUED_SHORT: &[char] = &['m', 'F', 'c', 'C', 't'];
-    const VALUED_LONG: &[&str] = &[
-        "--message",
-        "--file",
-        "--reuse-message",
-        "--reedit-message",
-        "--fixup",
-        "--squash",
-        "--author",
-        "--date",
-        "--template",
-        "--cleanup",
-        "--trailer",
-        "--pathspec-from-file",
-    ];
-    let (flags, paths) = split_options(rest, VALUED_LONG);
+    let (flags, paths) = split_options(rest, COMMIT_VALUED_LONG);
     for flag in &flags {
         match *flag {
             "--no-verify" => found.hook_bypass = true,
@@ -305,6 +398,22 @@ fn commit(rest: &[&str], moved: bool, found: &mut Breaks) {
         found.stage_all = true;
     }
 }
+
+/// `git commit`'s long options that take a separate value.
+const COMMIT_VALUED_LONG: &[&str] = &[
+    "--message",
+    "--file",
+    "--reuse-message",
+    "--reedit-message",
+    "--fixup",
+    "--squash",
+    "--author",
+    "--date",
+    "--template",
+    "--cleanup",
+    "--trailer",
+    "--pathspec-from-file",
+];
 
 /// `git add`: everything, every tracked change, or every file but a few.
 fn add(rest: &[&str], moved: bool, found: &mut Breaks) {
@@ -457,16 +566,62 @@ fn config_disarms_hooks(rest: &[&str]) -> bool {
     if words.first() == Some(&"set") {
         words.remove(0);
     }
-    matches!(words.as_slice(), [key, value, ..] if disarming_hooks_path(key, value))
+    // A saved hooks folder inside the tree is how hook managers install
+    // themselves, so only a folder outside it is read.
+    matches!(words.as_slice(), [key, value, ..] if runs_no_hook(key, value, None))
 }
 
-fn disarming_hooks_path(key: &str, value: &str) -> bool {
-    key.eq_ignore_ascii_case("core.hooksPath")
-        && matches!(
-            value.trim().trim_matches(|c| c == '"' || c == '\''),
-            "" | "/dev/null" | "NUL" | "nul" | "/nonexistent" | "/var/empty"
-        )
+/// Whether `core.hooksPath = value` points git at a place that runs no
+/// hook: nothing, a missing path, a file, or a folder with no hook in it.
+/// A relative value is read from `top` and is left alone without it.
+fn runs_no_hook(key: &str, value: &str, top: Option<&Path>) -> bool {
+    if !key.eq_ignore_ascii_case("core.hooksPath") {
+        return false;
+    }
+    let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
+    if matches!(value, "" | "/dev/null" | "NUL" | "nul") {
+        return true;
+    }
+    if value.starts_with(['~', '$', '`']) {
+        return false;
+    }
+    let path = Path::new(value);
+    let folder = match (path.is_absolute(), top) {
+        (true, _) => path.to_path_buf(),
+        (false, Some(top)) => top.join(path),
+        (false, None) => return false,
+    };
+    match std::fs::metadata(&folder) {
+        Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+        Ok(metadata) if !metadata.is_dir() => true,
+        Ok(_) => std::fs::read_dir(&folder).is_ok_and(|entries| {
+            !entries.flatten().take(256).any(|entry| {
+                entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|name| HOOK_NAMES.contains(&name))
+            })
+        }),
+    }
 }
+
+/// The hooks git runs around a commit, push, merge or rewrite.
+const HOOK_NAMES: &[&str] = &[
+    "pre-commit",
+    "prepare-commit-msg",
+    "commit-msg",
+    "post-commit",
+    "pre-merge-commit",
+    "pre-push",
+    "pre-rebase",
+    "post-rewrite",
+    "post-merge",
+    "post-checkout",
+    "applypatch-msg",
+    "pre-applypatch",
+    "post-applypatch",
+    "reference-transaction",
+];
 
 fn flag_value<'a>(rest: &[&'a str], flags: &[&str]) -> Option<&'a str> {
     let at = rest.iter().position(|word| flags.contains(word))?;

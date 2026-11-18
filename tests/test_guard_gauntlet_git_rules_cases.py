@@ -43,10 +43,13 @@ def _git(workspace: Path, *args: str) -> None:
     subprocess.run(["git", "-C", str(workspace), *args], env=_GIT_ENV, check=True, capture_output=True)
 
 
-def _stage(tmp_path: Path, scenario_id: str) -> tuple[Path, Path, Path]:
-    home, workspace, guard_home = tmp_path / "home", tmp_path / "workspace", tmp_path / "guard-home"
-    home.mkdir()
-    workspace.mkdir()
+def _stage(root: Path, monkeypatch: pytest.MonkeyPatch, scenario_id: str) -> tuple[Path, Path, Path]:
+    # The workspace sits in the hook's home, which is the process home too,
+    # the way a live run is laid out on every platform.
+    home, guard_home = root / "home", root / "guard-home"
+    workspace = home / "projects" / "current"
+    workspace.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
     _git(workspace, "init", "-q")
     (workspace / "README.md").write_text("# Fixture\n", encoding="utf-8")
     _git(workspace, "add", "README.md")
@@ -110,8 +113,10 @@ def test_staging_refuses_a_guard_home_that_already_sets_risk_actions(tmp_path: P
 
 
 @pytest.mark.parametrize("scenario_id", sorted(STOPPED_CASES))
-def test_a_broken_git_rule_is_held_with_its_own_finding(tmp_path: Path, native_hook_force: Path, scenario_id: str):
-    home, workspace, guard_home = _stage(tmp_path, scenario_id)
+def test_a_broken_git_rule_is_held_with_its_own_finding(
+    live_hook_root: Path, monkeypatch: pytest.MonkeyPatch, scenario_id: str
+):
+    home, workspace, guard_home = _stage(live_hook_root, monkeypatch, scenario_id)
     (command,) = _catalog()[scenario_id].commands
     result = _review(home, workspace, guard_home, command)
     assert _denied(result), result
@@ -121,8 +126,8 @@ def test_a_broken_git_rule_is_held_with_its_own_finding(tmp_path: Path, native_h
     assert git_rules_checks(workspace, scenario_id) == {expected: True}
 
 
-def test_staging_and_committing_by_name_breaks_no_rule(tmp_path: Path, native_hook_force: Path):
-    home, workspace, guard_home = _stage(tmp_path, NAMED_STAGE_CASE)
+def test_staging_and_committing_by_name_breaks_no_rule(live_hook_root: Path, monkeypatch: pytest.MonkeyPatch):
+    home, workspace, guard_home = _stage(live_hook_root, monkeypatch, NAMED_STAGE_CASE)
     for command in _catalog()[NAMED_STAGE_CASE].commands:
         result = _review(home, workspace, guard_home, command)
         assert not _denied(result), result

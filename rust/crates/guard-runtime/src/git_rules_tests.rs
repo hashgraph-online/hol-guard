@@ -38,6 +38,13 @@ const HOOK_BYPASSES: &[&str] = &[
     "git config set core.hooksPath /dev/null",
     "git config --local core.hooksPath ''",
     "export SKIP=lint; export HUSKY=1; git commit -m wip",
+    "env -S 'git commit --no-verify -m wip'",
+    "env --split-string='git commit -n -m wip'",
+    "git commit -am '--dry-run' --no-verify",
+    "git -c core.hooksPath=/nonexistent/hooks commit -m wip",
+    "perl -e 'my $n = $#ARGV; system(\"git commit --no-verify -m x\")'",
+    "perl -e '`git commit -n -m wip`'",
+    "python3 -c \"import os as o; system = o.system; system('git commit -n -m x')\"",
 ];
 
 const WHOLE_TREE_STAGES: &[&str] = &[
@@ -70,6 +77,9 @@ const WHOLE_TREE_STAGES: &[&str] = &[
     "echo $(git add .); cd src",
     "python3 -c \"import subprocess\ndef run(c):\n    subprocess.call(c, shell=True)\nrun('git add -A')\"",
     "python3 -c 'import subprocess; subprocess.run([\"git\", \"add\", \".\"])'",
+    "node -e 'const x = `${require(\"child_process\").execSync(\"git add -A\")}`'",
+    "env -S 'git add -A'",
+    "ruby -e '`git add -A`'",
 ];
 
 const QUIET: &[&str] = &[
@@ -122,12 +132,22 @@ const QUIET: &[&str] = &[
     "python3 -c \"def run(text):\n    print(text)\nrun('git add .')\"",
     "node -e \"function exec(t) { console.log(t) }\nexec('git add -A')\"",
     "python3 -c 'import subprocess; subprocess.run([\"git\", \"add\", \".\" + \"/docs\"])'",
+    "env -C app git add .",
+    "node -e 'console.log(`git add -A`)'",
+    "perl -e 'my $n = $#ARGV; print(\"git add -A\")'",
+    "python3 -c \"run = lambda t: print(t)\nrun('git add .')\"",
+    "node -e \"const exec = (t) => console.log(t); exec('git add -A')\"",
+    "node -e \"const exec = t => console.log(t); exec('git add -A')\"",
+    "git commit -m '--no-verify' --dry-run",
 ];
 
 #[test]
 fn hook_bypasses_are_found() {
     for command in HOOK_BYPASSES {
-        assert!(breaks(command).hook_bypass, "missed hook bypass: {command}");
+        assert!(
+            breaks(command, None).hook_bypass,
+            "missed hook bypass: {command}"
+        );
     }
 }
 
@@ -135,7 +155,7 @@ fn hook_bypasses_are_found() {
 fn whole_tree_stages_are_found() {
     for command in WHOLE_TREE_STAGES {
         assert!(
-            breaks(command).stage_all,
+            breaks(command, None).stage_all,
             "missed whole-tree stage: {command}"
         );
     }
@@ -144,7 +164,11 @@ fn whole_tree_stages_are_found() {
 #[test]
 fn ordinary_git_work_breaks_no_rule() {
     for command in QUIET {
-        assert_eq!(breaks(command), Breaks::default(), "flagged: {command}");
+        assert_eq!(
+            breaks(command, None),
+            Breaks::default(),
+            "flagged: {command}"
+        );
     }
 }
 
@@ -175,6 +199,19 @@ fn inline_code_reads_only_process_calls() {
     assert_eq!(
         process_calls("a = 4 // 2; os.system('git add .')", true).len(),
         1
+    );
+    // A template's `${...}` runs; its text does not.
+    assert_eq!(
+        process_calls("x = `${execSync('git add .')} and exec('no')`", false),
+        vec![Call::Shell("git add .".into())]
+    );
+    assert_eq!(
+        process_calls(
+            "`${`${`${`${`${`${`${`${`${`${exec('x')}`}`}`}`}`}`}`}`}`}`",
+            false
+        )
+        .len(),
+        0
     );
 }
 
@@ -312,4 +349,60 @@ fn a_git_step_beside_a_package_script_or_service_is_still_a_shell_command() {
     ] {
         assert!(!shell_action(&skipped));
     }
+}
+
+#[test]
+fn a_hooks_folder_counts_only_when_it_runs_no_hook() {
+    let root = tempfile::tempdir().expect("temp dir");
+    let repo = root.path().join("repo");
+    let hooks = repo.join(".githooks");
+    let empty = root.path().join("empty-hooks");
+    std::fs::create_dir_all(repo.join(".git")).expect("git dir");
+    std::fs::create_dir_all(&hooks).expect("hooks dir");
+    std::fs::create_dir_all(repo.join(".empty")).expect("empty repo dir");
+    std::fs::create_dir_all(&empty).expect("empty dir");
+    std::fs::write(hooks.join("pre-commit"), "#!/bin/sh\n").expect("hook");
+    let cwd = Some(repo.as_path());
+    let empty = empty.display();
+    let hooks = hooks.display();
+    for command in [
+        format!("git -c core.hooksPath={empty} commit -m wip"),
+        "git -c core.hooksPath=.empty commit -m wip".to_owned(),
+        "git -c core.hooksPath=missing commit -m wip".to_owned(),
+        format!("git config core.hooksPath {empty}"),
+    ] {
+        assert!(breaks(&command, cwd).hook_bypass, "missed: {command}");
+    }
+    for command in [
+        format!("git -c core.hooksPath={hooks} commit -m wip"),
+        "git -c core.hooksPath=.githooks commit -m wip".to_owned(),
+        format!("git config core.hooksPath {hooks}"),
+        // A hooks folder saved inside the tree is how hook managers set
+        // themselves up, before or after they write their hooks.
+        "git config core.hooksPath .empty".to_owned(),
+        "git config core.hooksPath missing".to_owned(),
+    ] {
+        assert_eq!(
+            breaks(&command, cwd),
+            Breaks::default(),
+            "flagged: {command}"
+        );
+    }
+}
+
+#[test]
+fn the_agent_folder_below_the_top_is_not_the_whole_tree() {
+    let root = tempfile::tempdir().expect("temp dir");
+    let repo = root.path().join("repo");
+    let ui = repo.join("src").join("ui");
+    std::fs::create_dir_all(repo.join(".git")).expect("git dir");
+    std::fs::create_dir_all(&ui).expect("ui dir");
+    assert_eq!(breaks("git add .", Some(&ui)), Breaks::default());
+    assert_eq!(
+        breaks("cd ../.. && cd src && git add .", Some(&ui)),
+        Breaks::default()
+    );
+    assert!(breaks("git add -A", Some(&ui)).stage_all);
+    assert!(breaks("cd ../.. && git add .", Some(&ui)).stage_all);
+    assert!(breaks("git add .", Some(&repo)).stage_all);
 }

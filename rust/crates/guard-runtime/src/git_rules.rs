@@ -65,7 +65,8 @@ pub(crate) fn apply(
     let Some(command) = crate::runtime_known_vulnerable::command_text(&envelope.raw_payload) else {
         return result;
     };
-    let found = breaks(&command);
+    let cwd = envelope.source.cwd.as_deref().map(std::path::Path::new);
+    let found = breaks(&command, cwd);
     let mut rules = Vec::new();
     if let Some(action) = hook_action.filter(|_| found.hook_bypass) {
         rules.push(Rule {
