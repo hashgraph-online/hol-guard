@@ -1138,7 +1138,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shim-gate: [vectors, native-op, mcp]
+        # Keep fast Windows contract smoke on pull requests. The native-op
+        # family remains in the complete main and explicit full-validation run.
+        shim-gate: ${{ github.event_name == 'pull_request' && fromJSON('["vectors", "mcp"]') || fromJSON('["vectors", "native-op", "mcp"]') }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
