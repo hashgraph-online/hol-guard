@@ -1,6 +1,7 @@
 """Durable user settings retain native coverage and unrelated TOML on migration."""
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 import tomlkit
