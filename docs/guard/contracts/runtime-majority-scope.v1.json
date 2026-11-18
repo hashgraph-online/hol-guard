@@ -696,6 +696,8 @@
           "src/codex_plugin_scanner/guard/harness/native_extension.py",
           "src/codex_plugin_scanner/guard/harness/native_harness.py",
           "src/codex_plugin_scanner/guard/harness/native_harness_steps.py",
+          "src/codex_plugin_scanner/guard/harness/native_install_facts.py",
+          "src/codex_plugin_scanner/guard/cli/native_managed_install.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
         "reason": "Reviewed: adapter implementations behind the harness registry. Adapters normalize harness payloads into hook requests, so they sit on the hook path, and hook-path authority is never excluded. Install and setup methods that have a function_exclusions entry are excluded as install_config, not hook path; install helpers without an entry (for example in the Cline support modules) stay counted, which understates the Rust share."
@@ -1060,21 +1062,11 @@
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/codex_harness_lifecycle.py",
         "symbols": [
-          "_plan_report",
-          "_located",
           "CodexHarnessAdapter.prepare_install",
-          "CodexHarnessAdapter._prepare_plan",
-          "CodexHarnessAdapter._plan_request",
-          "CodexHarnessAdapter._planned",
-          "CodexHarnessAdapter.install",
-          "CodexHarnessAdapter._install_owned",
-          "CodexHarnessAdapter.uninstall",
-          "CodexHarnessAdapter._uninstall_owned",
-          "CodexHarnessAdapter._target_config_path",
           "CodexHarnessAdapter._backup_path"
         ],
         "entry_points": [],
-        "reason": "Codex config.toml and hooks.json install, uninstall, migration, alternate-config cleanup and shell-guard cleanup, plus the helpers only they use; the shell-guard block ranges and the Guard proxy recognition they act on run in the native codex_install_plan runner-authority kind.",
+        "reason": "Codex install preparation, which asks the native harness_adapter prepare_install op and wraps its files; install and uninstall run in the native harness_adapter adapter_install and adapter_uninstall ops.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. Launch, detect, diagnostics and the runtime hook-state readers stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
@@ -1574,13 +1566,11 @@
           "NativeHarnessAdapter.install",
           "NativeHarnessAdapter.uninstall",
           "NativeHarnessAdapter._hook_argv",
-          "NativeHarnessAdapter._apply_install",
-          "NativeHarnessAdapter._apply_uninstall",
           "NativeHarnessAdapter.current_hook_command"
         ],
         "entry_points": [],
         "reason": "Install and uninstall for the harnesses the native harness_adapter kind answers (Devin, Antigravity, Gemini, Kimi, OpenClaw, Paseo and Muse): the launcher shim, the bounded hook argv, publishing the native file plan and Paseo's delegated provider installs.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_argv, _apply_install and _apply_uninstall are called only from them; current_hook_command is called only by the excluded update repair, to tell an up-to-date hook from an old one. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_argv is called only from them; current_hook_command is called only by the excluded update repair, to tell an up-to-date hook from an old one. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "adapter-native-harness-detected-rebind",
