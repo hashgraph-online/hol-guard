@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -283,11 +284,20 @@ def venv_pytest_module(venv: Path) -> str:
     version, so both spellings have to find the same suite. It refuses to report
     a pass unless the environment's own interpreter imported it.
     """
+    # Guard's Windows contained pytest runs a credential-filtered copy of the
+    # workspace, so there the environment's own interpreter reports the copy's
+    # `.venv` as its prefix rather than this path.
+    own_prefix = (
+        f"sys.prefix == sys.base_prefix or os.path.basename(sys.prefix) != {VENV!r}"
+        if os.name == "nt"
+        else f"sys.prefix != {str(venv)!r}"
+    )
     return (
         '"""Synthetic stand-in for the installed pytest: no network, no writes."""\n'
+        "import os\n"
         "import sys\n"
         "\n"
-        f"if sys.prefix != {str(venv)!r}:\n"
+        f"if {own_prefix}:\n"
         '    sys.stderr.write("pytest stand-in: not the virtualenv interpreter\\n")\n'
         "    raise SystemExit(1)\n"
         'print(".....")\n'
@@ -397,5 +407,27 @@ def add_worktree_venv(worktree: Path) -> None:
         _link(venv / "bin" / name, base)
     _write(venv / "bin/pytest", venv_pytest_stub(venv), 0o755)
     write_windows_launcher(venv / "bin", "pytest", VENV_PYTEST_STUB_PYTHON)
-    packages = venv / f"lib/python{sys.version_info[0]}.{sys.version_info[1]}/site-packages"
+    _copy_windows_interpreter(venv)
+    packages = venv / (
+        "Lib/site-packages"
+        if os.name == "nt"
+        else f"lib/python{sys.version_info[0]}.{sys.version_info[1]}/site-packages"
+    )
     _write(packages / "pytest.py", venv_pytest_module(venv))
+
+
+def _copy_windows_interpreter(venv: Path) -> None:
+    """Copy the launcher ``python -m venv`` gives a Windows environment.
+
+    It reads the ``pyvenv.cfg`` above its directory and starts the base
+    interpreter that file names, so the environment holds an interpreter of its
+    own, which Guard's Windows contained pytest runs inside its copy.
+    """
+    if os.name != "nt":
+        return
+    import venv as venv_module
+
+    launcher = Path(venv_module.__file__).parent / "scripts" / "nt" / "python.exe"
+    if launcher.is_file():
+        (venv / "bin").mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(launcher, venv / "bin" / "python.exe")

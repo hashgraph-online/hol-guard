@@ -702,6 +702,8 @@
       "src/pretool/venv_command_position.rs",
       "src/pretool/venv_program_path.rs",
       "src/pretool/version_probes.rs",
+      "src/pretool/windows_pytest_base.rs",
+      "src/pretool/windows_pytest_base_tests.rs",
       "src/pretool/workspace_contained.rs",
       "src/pretool/workspace_contained_cd.rs",
       "src/pretool/workspace_contained_cd_tests.rs",
