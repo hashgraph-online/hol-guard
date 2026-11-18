@@ -32,6 +32,11 @@ fn printf_escapes_are_decoded_before_ssn_boundary_check() {
         r"printf 'SSN:\n123-45-6789\n'",
         r"printf '123\05545\0556789'",
         r"printf '123\x2d45\x2d6789'",
+        r"printf '\a123-45-6789'",
+        r"printf '\b123-45-6789'",
+        r"printf '\f123-45-6789'",
+        r"printf '\v123-45-6789'",
+        r"printf '\e123-45-6789'",
     ] {
         assert!(echoes_ssn(command), "{command} prints an SSN and must be reviewed");
     }
@@ -40,6 +45,8 @@ fn printf_escapes_are_decoded_before_ssn_boundary_check() {
         r"echo '123\x2d45\x2d6789'",
         r"printf '123\05545\0550000'",
         r"printf '123\x2d45\x2d0000'",
+        r"printf '\0123-45-6789'",
+        r"echo '\a123-45-6789'",
     ] {
         assert!(!echoes_ssn(command), "{command} does not print an issuable SSN");
     }
