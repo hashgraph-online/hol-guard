@@ -89,10 +89,16 @@ fn decode_printf_escapes(text: &str) -> String {
 // 123-45-67"89" prints 123-45-6789, while '123-45-6789'0 is attached.
 // A comment starts at an unquoted, unescaped word boundary, so syntax after
 // it is not executable. Reject substitutions, operators and multiline input.
-fn literal_print_text(command: &str) -> Option<String> {
-    let mut decoded = String::with_capacity(command.len());
+// Preserve shell-word boundaries while removing only literal quoting.
+// In printf, backslash escapes are expanded by the *format*, not by a
+// regular %s argument. Flattening these words before decoding would review
+// a printed literal such as 123\05545\0556789 as though it were an SSN.
+fn literal_print_words(command: &str) -> Option<Vec<String>> {
+    let mut words = Vec::new();
+    let mut word = String::new();
     let mut quote: Option<char> = None;
     let mut word_start = true;
+    let mut started = false;
     let mut chars = command.chars();
     while let Some(ch) = chars.next() {
         match quote {
@@ -100,7 +106,7 @@ fn literal_print_text(command: &str) -> Option<String> {
                 if ch == '\'' {
                     quote = None;
                 } else {
-                    decoded.push(ch);
+                    word.push(ch);
                 }
             }
             Some('"') => match ch {
@@ -109,23 +115,27 @@ fn literal_print_text(command: &str) -> Option<String> {
                 '\\' => {
                     let escaped = chars.next()?;
                     match escaped {
-                        '$' | '\x60' | '"' | '\\' => decoded.push(escaped),
+                        '$' | '\x60' | '"' | '\\' => word.push(escaped),
                         '\n' | '\r' => return None,
                         _ => {
-                            decoded.push('\\');
-                            decoded.push(escaped);
+                            word.push('\\');
+                            word.push(escaped);
                         }
                     }
                 }
-                _ => decoded.push(ch),
+                _ => word.push(ch),
             },
             _ => match ch {
                 '\'' | '"' => {
                     quote = Some(ch);
+                    started = true;
                     word_start = false;
                 }
                 ' ' | '\t' => {
-                    decoded.push(ch);
+                    if started {
+                        words.push(std::mem::take(&mut word));
+                        started = false;
+                    }
                     word_start = true;
                 }
                 '#' if word_start => break,
@@ -134,20 +144,28 @@ fn literal_print_text(command: &str) -> Option<String> {
                     if matches!(escaped, '\n' | '\r') {
                         return None;
                     }
-                    decoded.push(escaped);
+                    word.push(escaped);
+                    started = true;
                     word_start = false;
                 }
                 '|' | ';' | '&' | '<' | '>' | '$' | '\x60' | '\n' | '\r' | '(' | ')' => {
                     return None;
                 }
                 _ => {
-                    decoded.push(ch);
+                    word.push(ch);
+                    started = true;
                     word_start = false;
                 }
             },
         }
     }
-    quote.is_none().then_some(decoded)
+    if quote.is_some() {
+        return None;
+    }
+    if started {
+        words.push(word);
+    }
+    Some(words)
 }
 
 /// Whether command is a single echo/printf that prints a plausible US SSN.
@@ -157,13 +175,21 @@ pub(super) fn echoes_ssn(command: &str) -> bool {
     if !PRINTERS.contains(&program) {
         return false;
     }
-    let Some(decoded) = literal_print_text(trimmed) else {
+    let Some(words) = literal_print_words(trimmed) else {
         return false;
     };
     let decoded = if program == "printf" {
-        decode_printf_escapes(&decoded)
+        let Some(format) = words.get(1) else {
+            return false;
+        };
+        let mut printed = decode_printf_escapes(format);
+        for argument in words.iter().skip(2) {
+            printed.push(' ');
+            printed.push_str(argument);
+        }
+        printed
     } else {
-        decoded
+        words.join(" ")
     };
     let bytes = decoded.as_bytes();
     SSN.captures_iter(&decoded).any(|found| {
