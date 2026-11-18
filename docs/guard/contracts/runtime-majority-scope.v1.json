@@ -1153,7 +1153,6 @@
         "path": "src/codex_plugin_scanner/guard/harness/cursor_client.py",
         "symbols": [
           "install_cursor_hooks",
-          "_install_hooks",
           "rebind_stale_cursor_hooks"
         ],
         "entry_points": [],

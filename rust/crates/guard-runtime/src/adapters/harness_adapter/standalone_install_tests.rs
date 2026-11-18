@@ -62,7 +62,7 @@ fn a_shim_install_journals_the_launcher_under_its_own_owner() {
     );
     assert_eq!(answer["ok"], json!(true), "{answer}");
     let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
-    assert_eq!(manifest["harness"], json!("gemini"));
+    assert_eq!(manifest["shim_command"], json!("guard-gemini"));
     let operations = operations(&home);
     assert_eq!(operations.first().map(String::as_str), Some("begin"));
     assert_eq!(operations.last().map(String::as_str), Some("committed"));
