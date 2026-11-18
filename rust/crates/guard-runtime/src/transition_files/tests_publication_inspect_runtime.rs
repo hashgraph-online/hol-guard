@@ -283,7 +283,8 @@ fn a_bundled_runtime_is_admitted_by_its_manifest_before_it_runs() {
 
 #[test]
 fn a_bundled_runtime_with_a_wrong_manifest_never_runs() {
-    let cases: [(&str, fn(&mut Value), &str); 6] = [
+    type Case = (&'static str, fn(&mut Value), &'static str);
+    let cases: [Case; 6] = [
         (
             "sha",
             |manifest| manifest["runtime_sha256"] = json!("0".repeat(64)),
