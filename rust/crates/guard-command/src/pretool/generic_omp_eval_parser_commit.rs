@@ -61,14 +61,18 @@ impl Parser {
         Some(())
     }
 
-    /// A name bound to a draft: shown as is, or one of its methods called
-    /// with literal arguments. The draft's repository is already recorded.
+    /// A name bound to a draft: shown as is, one of its fields, one of its
+    /// methods called with literal arguments, or a method itself, uncalled or
+    /// shown with `toString()`. The draft's repository is already recorded.
     pub(super) fn draft_use(&mut self) -> Option<()> {
         if !self.at('.') {
             return Some(());
         }
         self.pos += 1;
         let method = self.ident()?;
+        if !self.at('(') {
+            return self.draft_member(&method);
+        }
         let args = self.literal_args()?;
         let silent = |value: &Value| object_keys(value, &["silent"]);
         let selection = |value: &Value| object_keys(value, &["units", "grep", "silent"]);
@@ -93,6 +97,25 @@ impl Parser {
             _ => false,
         };
         valid.then_some(())
+    }
+
+    /// `draft.id`, `draft.details` and `draft.text` are plain fields the
+    /// prelude sets. A method named without a call runs nothing; only
+    /// `toString()` may follow it, so `call`, `apply` and `bind` stay out.
+    fn draft_member(&mut self, name: &str) -> Option<()> {
+        match name {
+            "id" | "details" | "text" => Some(()),
+            "take" | "drop" | "only" | "show" | "diff" | "commit" => {
+                if self.at('.') {
+                    self.pos += 1;
+                    self.eat_ident("toString")?;
+                    self.eat('(')?;
+                    self.eat(')')?;
+                }
+                Some(())
+            }
+            _ => None,
+        }
     }
 
     /// `(literal, ...)`: strings, numbers, booleans, `null`, and arrays and

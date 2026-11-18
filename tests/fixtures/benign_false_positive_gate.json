@@ -7456,6 +7456,21 @@
       "expect": "allow"
     },
     {
+      "id": "omp-eval-commit-draft-introspection",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); return { keys: Object.keys(d), proto: Object.getOwnPropertyNames(Object.getPrototypeOf(d)), commit: typeof d.commit, details: d.details };",
+        "language": "js",
+        "title": "Inspect the commit draft"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "omp-eval-commit-prelude-docs",
       "fix_area": "omp",
       "harnesses": [
