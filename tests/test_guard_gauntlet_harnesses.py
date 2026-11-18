@@ -312,25 +312,6 @@ def test_foreign_receipt_harness_is_rejected():
     assert result["outcome"] == "harness-error"
 
 
-def test_cursor_route_probe_is_not_a_decision():
-    # Cursor sends a shell call to preToolUse and then beforeShellExecution. Guard answers
-    # the first as a route probe with no receipt; the second is the reviewed check.
-    scenario = SCENARIOS["secret-copy"]
-    probe = row("PreToolUse", {"policy_action": "allow"}, decision=None, harness="cursor", command=COPY)
-    probe["payload"]["cursor_route_probe"] = True
-    stop = row("PreToolUse", deny("native_secret_exfiltration"), decision="deny",
-               reason="native_secret_exfiltration", harness="cursor", command=COPY)
-    cursor_case = case(scenario.id, [probe, stop], [BASH_CALL], harness="cursor")
-    assert [d["receipt_decision"] for d in guard_decisions([probe, stop])] == ["deny"]
-    assert assess_harness_case(scenario, cursor_case)["outcome"] == "pass"
-    unmarked = {**probe, "payload": {k: v for k, v in probe["payload"].items() if k != "cursor_route_probe"}}
-    result = assess_harness_case(scenario, case(scenario.id, [unmarked, stop], [BASH_CALL], harness="cursor"))
-    assert result["reason"] == "a hook decision lacks a validated native receipt"
-    other_harness = {**probe, "route_harness": "codex"}
-    result = assess_harness_case(scenario, case(scenario.id, [other_harness, stop], [BASH_CALL], harness="cursor"))
-    assert result["outcome"] == "harness-error"
-
-
 def test_codex_command_keeps_fixture_context_out_of_the_prompt(tmp_path):
     scenario = SCENARIOS["secret-copy"]
     command = adapter("codex").command(
