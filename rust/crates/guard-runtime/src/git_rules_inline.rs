@@ -53,12 +53,17 @@ pub(crate) fn process_calls(code: &str, hash_comments: bool) -> Vec<Call> {
         }
         // Skip comments, which run nothing.
         let next = bytes.get(index + 1).copied();
-        if (hash_comments && byte == b'#') || (!hash_comments && byte == b'/' && next == Some(b'/')) {
-            index = code[index..].find('\n').map_or(bytes.len(), |end| index + end);
+        if (hash_comments && byte == b'#') || (!hash_comments && byte == b'/' && next == Some(b'/'))
+        {
+            index = code[index..]
+                .find('\n')
+                .map_or(bytes.len(), |end| index + end);
             continue;
         }
         if !hash_comments && byte == b'/' && next == Some(b'*') {
-            index = code[index + 2..].find("*/").map_or(bytes.len(), |end| index + 2 + end + 2);
+            index = code[index + 2..]
+                .find("*/")
+                .map_or(bytes.len(), |end| index + 2 + end + 2);
             continue;
         }
         if !is_word(byte) || (index > 0 && is_word(bytes[index - 1])) {
@@ -70,7 +75,7 @@ pub(crate) fn process_calls(code: &str, hash_comments: bool) -> Vec<Call> {
             index += 1;
         }
         let name = &code[start..index];
-        if !PROCESS_CALLS.contains(&name) {
+        if !PROCESS_CALLS.contains(&name) || defined_here(code, start, name) {
             continue;
         }
         let open = skip_space(code, index);
@@ -121,13 +126,19 @@ fn list(code: &str, mut at: usize, close: u8) -> Option<Vec<String>> {
         match bytes.get(at)? {
             byte if *byte == close => return Some(words),
             b',' => at += 1,
-            b'"' | b'\'' | b'`' => {
+            b'"' | b'\'' | b'`'
+                if literal(code, at).is_some_and(|(_, end)| {
+                    let next = bytes.get(skip_space(code, end));
+                    next == Some(&b',') || next == Some(&close)
+                }) =>
+            {
                 let (text, end) = literal(code, at)?;
                 words.push(text);
                 at = end;
             }
             _ => {
-                // A name or expression: its value is unknown.
+                // A name or expression, or a literal joined to one
+                // (`"." + "/docs"`): its value is unknown.
                 let mut depth = 0usize;
                 while let Some(byte) = bytes.get(at) {
                     match byte {
@@ -149,7 +160,9 @@ fn list(code: &str, mut at: usize, close: u8) -> Option<Vec<String>> {
 /// Python prefixes (`f"..."`, `r"..."`) are read as the quote that follows.
 fn literal(code: &str, at: usize) -> Option<(String, usize)> {
     let bytes = code.as_bytes();
-    let quote = *bytes.get(at).filter(|byte| matches!(byte, b'"' | b'\'' | b'`'))?;
+    let quote = *bytes
+        .get(at)
+        .filter(|byte| matches!(byte, b'"' | b'\'' | b'`'))?;
     let triple = bytes.get(at + 1) == Some(&quote) && bytes.get(at + 2) == Some(&quote);
     let mut index = at + if triple { 3 } else { 1 };
     let mut text = String::new();
@@ -179,6 +192,60 @@ fn literal(code: &str, at: usize) -> Option<(String, usize)> {
     }
     None
 }
+
+/// Whether a bare `name(...)` at `at` calls a function the code defines
+/// itself (`def run(...)`, `function run(...)`, `run = ...`) rather than a
+/// process API. A method call (`subprocess.run`) is always a process call,
+/// and so is a local function in code that reaches a process module at all,
+/// since it may wrap one.
+fn defined_here(code: &str, at: usize, name: &str) -> bool {
+    if at > 0 && code.as_bytes()[at - 1] == b'.' {
+        return false;
+    }
+    if PROCESS_MODULES.iter().any(|module| code.contains(module)) {
+        return false;
+    }
+    let bytes = code.as_bytes();
+    let mut from = 0;
+    while let Some(found) = code[from..].find(name) {
+        let start = from + found;
+        let end = start + name.len();
+        from = end;
+        if (start > 0 && is_word(bytes[start - 1])) || bytes.get(end).is_some_and(|b| is_word(*b)) {
+            continue;
+        }
+        let before = code[..start].trim_end();
+        let declared = ["def", "function", "const", "let", "var"]
+            .iter()
+            .any(|keyword| {
+                before.strip_suffix(keyword).is_some_and(|rest| {
+                    !rest.ends_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+                })
+            });
+        let after = code[end..].trim_start();
+        if declared || (after.starts_with('=') && !after.starts_with("==")) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Names that reach a process API, so a local function may wrap one.
+const PROCESS_MODULES: &[&str] = &[
+    "subprocess",
+    "os.",
+    "child_process",
+    "commands",
+    "pty",
+    "Deno.",
+    "Bun.",
+    "shelljs",
+    "execa",
+    "import(",
+    "require(",
+    "__import__",
+    "getattr",
+];
 
 fn skip_space(code: &str, mut at: usize) -> usize {
     let bytes = code.as_bytes();

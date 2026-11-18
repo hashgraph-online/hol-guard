@@ -67,6 +67,9 @@ const WHOLE_TREE_STAGES: &[&str] = &[
     "git add \"$(git rev-parse --show-toplevel)\"",
     "cd \"$(git rev-parse --show-toplevel)\" && git add .",
     "git -C . add -A",
+    "echo $(git add .); cd src",
+    "python3 -c \"import subprocess\ndef run(c):\n    subprocess.call(c, shell=True)\nrun('git add -A')\"",
+    "python3 -c 'import subprocess; subprocess.run([\"git\", \"add\", \".\"])'",
 ];
 
 const QUIET: &[&str] = &[
@@ -113,6 +116,12 @@ const QUIET: &[&str] = &[
     "git config --file .git/config core.hooksPath .githooks",
     "cd app/src && cd .. && git add .",
     "pushd app && git add .",
+    "cd src; echo $(git add .)",
+    "git rm -n -r --cached .",
+    "git rm --dry-run -r --cached .",
+    "python3 -c \"def run(text):\n    print(text)\nrun('git add .')\"",
+    "node -e \"function exec(t) { console.log(t) }\nexec('git add -A')\"",
+    "python3 -c 'import subprocess; subprocess.run([\"git\", \"add\", \".\" + \"/docs\"])'",
 ];
 
 #[test]
@@ -163,7 +172,10 @@ fn inline_code_reads_only_process_calls() {
     assert!(process_calls("# os.system('git add .')", true).is_empty());
     assert_eq!(process_calls("# x\nos.system('git add .')", true).len(), 1);
     assert!(process_calls("// execSync('git add .')", false).is_empty());
-    assert_eq!(process_calls("a = 4 // 2; os.system('git add .')", true).len(), 1);
+    assert_eq!(
+        process_calls("a = 4 // 2; os.system('git add .')", true).len(),
+        1
+    );
 }
 
 fn result(minimum_action: &str) -> PreToolResultV1 {
@@ -220,11 +232,14 @@ fn a_set_rule_raises_an_allowed_command_to_its_action() {
 }
 
 #[test]
-fn a_sandbox_route_does_not_stand_in_for_a_set_rule() {
-    let raised = raise(result("sandbox-required"), &rule("review"), false);
-    assert_eq!(raised.minimum_action, "review");
-    assert_eq!(raised.decision, "deny");
-    assert_eq!(raised.reason_code, STAGE_ALL);
+fn a_floor_sandbox_stays_contained_under_a_set_rule() {
+    // A review in its place would let an approval run it uncontained.
+    for configured in ["review", "require-reapproval"] {
+        let raised = raise(result("sandbox-required"), &rule(configured), false);
+        assert_eq!(raised.minimum_action, "sandbox-required");
+        assert_eq!(raised.policy_action, "sandbox-required");
+        assert_eq!(raised.reason_code, "native_test");
+    }
 }
 
 #[test]
@@ -262,6 +277,15 @@ fn watch_mode_and_warn_only_record_a_warning() {
     assert_eq!(watched.minimum_action, "warn");
     assert_eq!(watched.decision, "allow");
     assert_eq!(watched.reason_code, STAGE_ALL_OBSERVED);
+    assert!(watched.reason.contains("would have required review"));
+    let mut warned = result("warn");
+    warned.decision = "allow".into();
+    warned.reason = "An earlier warning.".into();
+    let watched = raise(warned, &rule("review"), true);
+    assert_eq!(watched.minimum_action, "warn");
+    assert_eq!(watched.decision, "allow");
+    assert_eq!(watched.reason_code, "native_test");
+    assert!(watched.reason.starts_with("An earlier warning."));
     assert!(watched.reason.contains("would have required review"));
     let warned = raise(result("allow"), &rule("warn"), false);
     assert_eq!(warned.minimum_action, "warn");

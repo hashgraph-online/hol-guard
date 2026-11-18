@@ -12,8 +12,9 @@
 //! sets one. A command that breaks a rule the user set is raised to that
 //! rule's action, with Allow once and Always allow on the review like any
 //! other. Watch mode records the would-be decision as a warning. A sandbox
-//! route does not stop either effect, so a rule the user set to review holds
-//! a command that would otherwise run in the sandbox. A block stays a block.
+//! route the user's posture chose does not stop either effect, so a rule the
+//! user set to review holds that command for review. A command the floor
+//! itself sends to the sandbox stays contained, and a block stays a block.
 
 use guard_contracts::{GuardHookEnvelopeV2, PreToolActionTypeV1, PreToolResultV1};
 
@@ -121,7 +122,17 @@ fn raise(mut result: PreToolResultV1, rule: &Rule, observe: bool) -> PreToolResu
         return result;
     };
     if observe || configured <= ActionFloor::Warn {
-        if minimum < ActionFloor::Warn {
+        let note = if configured > ActionFloor::Warn {
+            format!("{} Guard would have required {}.", rule.reason, rule.action)
+        } else {
+            rule.reason.into()
+        };
+        if minimum == ActionFloor::Warn && result.decision == "allow" {
+            // Keep the warning already given and add this rule's finding.
+            if !result.reason.contains(rule.reason) {
+                result.reason = format!("{} {note}", result.reason).trim().into();
+            }
+        } else if minimum < ActionFloor::Warn {
             result.minimum_action = "warn".into();
             if policy < ActionFloor::Warn {
                 result.policy_action = "warn".into();
@@ -129,19 +140,20 @@ fn raise(mut result: PreToolResultV1, rule: &Rule, observe: bool) -> PreToolResu
             result.decision = "allow".into();
             result.explicitly_benign = false;
             result.reason_code = rule.observed.into();
-            result.reason = if configured > ActionFloor::Warn {
-                format!("{} Guard would have required {}.", rule.reason, rule.action)
-            } else {
-                rule.reason.into()
-            };
+            result.reason = note;
         }
         return result;
     }
-    // A sandbox lets the command run, and running it is the harm here. The
-    // route can come from the floor or from the user's posture alone, as when
-    // a package script beside the git step is contained under a review floor.
+    // A command the floor itself sends to the sandbox stays there: a review
+    // in its place would let an approval run it uncontained.
     let sandbox = ActionFloor::SandboxRequired;
-    let sandboxed = (minimum == sandbox || policy == sandbox) && configured < ActionFloor::Block;
+    if minimum == sandbox && configured < ActionFloor::Block {
+        return result;
+    }
+    // A sandbox route from the user's posture alone lets the command run, and
+    // running it is the harm here, as when a package script beside the git
+    // step is contained under a review floor. The rule holds it for review.
+    let sandboxed = policy == sandbox && configured < ActionFloor::Block;
     if minimum >= configured && !sandboxed {
         return result;
     }

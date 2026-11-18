@@ -42,11 +42,17 @@ fn scan(text: &str, depth: usize, state: &mut State, found: &mut Breaks) {
         "guard-shell",
         true,
     );
+    // A substitution runs before the command it sits in, in the folder and
+    // environment the shell has at that point.
+    let mut embedded = model.embedded_commands.iter().peekable();
     for segment in &model.segments {
+        while let Some(inner) = embedded.next_if(|inner| inner.start < segment.end) {
+            scan(&inner.text, depth + 1, &mut { *state }, found);
+        }
         segment_breaks(segment, depth, state, found);
     }
-    for embedded in &model.embedded_commands {
-        scan(&embedded.text, depth + 1, &mut { *state }, found);
+    for inner in embedded {
+        scan(&inner.text, depth + 1, &mut { *state }, found);
     }
 }
 
@@ -224,7 +230,8 @@ fn git(args: &[&str], hooks: Hooks, state: &State, found: &mut Breaks) {
         "add" => add(rest, moved, found),
         "rm" => {
             let (flags, paths) = split_options(rest, &[]);
-            if flags.iter().any(|flag| *flag == "--cached")
+            if flags.contains(&"--cached")
+                && !flags.iter().any(|flag| matches!(*flag, "-n" | "--dry-run"))
                 && paths.iter().any(|path| whole_tree(path, moved))
             {
                 found.stage_all = true;

@@ -125,6 +125,10 @@ def test_staging_and_committing_by_name_breaks_no_rule(tmp_path: Path, native_ho
     home, workspace, guard_home = _stage(tmp_path, NAMED_STAGE_CASE)
     for command in _catalog()[NAMED_STAGE_CASE].commands:
         result = _review(home, workspace, guard_home, command)
+        assert not _denied(result), result
+        output = result.get("hookSpecificOutput")
+        decision = output.get("permissionDecision") if isinstance(output, dict) else None
+        assert decision in {None, "allow"}, result
         assert "native_git_" not in str(result), result
         subprocess.run(["/bin/sh", "-c", command], cwd=workspace, env=_GIT_ENV, check=True, capture_output=True)
     assert git_rules_checks(workspace, NAMED_STAGE_CASE) == {NAMED_COMMIT_CHECK: True}
