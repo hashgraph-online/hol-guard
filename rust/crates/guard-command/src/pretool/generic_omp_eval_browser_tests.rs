@@ -258,11 +258,14 @@ fn a_workspace_page_in_the_own_browser_is_modeled() {
 
     // A direct child of / (typically /tmp) must also be a valid workspace.
     let direct_child = workspace.path().parent().unwrap().to_str().unwrap();
-    assert_eq!(direct_child.matches('/').count(), 1);
-    assert!(super::lex::workspace_file_url(
-        &format!("file://{}", safe.display()),
-        Some(direct_child)
-    ));
+    // Linux often uses /tmp; macOS temp directories may be several levels
+    // deep, so check this special case only when the fixture has that shape.
+    if direct_child.matches('/').count() == 1 {
+        assert!(super::lex::workspace_file_url(
+            &format!("file://{}", safe.display()),
+            Some(direct_child)
+        ));
+    }
 
     for code in [
         "const tab = await browser.open({url:'file:///etc/passwd'});".to_owned(),
