@@ -17,7 +17,6 @@ from ..harness.base import HarnessContext
 from ..harness.native_harness import ask, describe
 from ..harness.native_harness_steps import HookOwnershipError
 from ..harness.native_install_facts import install_facts
-from ..managed_install_revision import bump_managed_install_revision
 from ..native_owned import owner_request
 from ..native_runner_authority import NativeRunnerAuthorityError
 
@@ -77,8 +76,6 @@ def ask_managed(
         if str(error) in _ownership_messages(harnesses, op):
             raise HookOwnershipError(str(error)) from error
         raise
-    finally:
-        bump_managed_install_revision()
 
 
 def native_managed_install(

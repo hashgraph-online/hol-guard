@@ -14,8 +14,6 @@ import time
 from functools import lru_cache
 from typing import Any
 
-from ..managed_install_revision import current_managed_install_revision
-
 _PROTECTED_ANSWER_TTL_SECONDS = 1.0
 _MAX_REMEMBERED_ANSWERS = 256
 _lock = threading.Lock()
@@ -38,13 +36,26 @@ def _canonical_managed_harness(harness: str) -> str:
     return _canonical_managed_harness_cached(harness)
 
 
-def _remembered_protected(key: tuple[str, str]) -> bool:
+def _store_revision(store: Any) -> int | None:
+    """The managed-install revision the runtime keeps in the store, or ``None`` when it cannot be read."""
+    reader = getattr(store, "managed_install_revision", None)
+    if not callable(reader):
+        return None
+    try:
+        return int(reader())
+    except Exception:
+        return None
+
+
+def _remembered_protected(key: tuple[str, str], store: Any) -> bool:
     with _lock:
         remembered = _protected_until.get(key)
     if remembered is None:
         return False
     revision, expires_at = remembered
-    return revision == current_managed_install_revision() and time.monotonic() < expires_at
+    if time.monotonic() >= expires_at:
+        return False
+    return revision == _store_revision(store)
 
 
 def _remember_protected(key: tuple[str, str], revision: int) -> None:
@@ -78,7 +89,7 @@ def _hook_harness_is_unmanaged(daemon_server: Any, harness: str) -> bool:
     key = (str(store_path), canonical) if store_path is not None else None
     if key is None:
         return _read_harness_is_unmanaged(store, getter, canonical, key)
-    if _remembered_protected(key):
+    if _remembered_protected(key, store):
         return False
     # When the remembered answer expires every concurrent hook misses at once.
     # One of them re-reads the store; the others wait for it and reuse the
@@ -87,7 +98,7 @@ def _hook_harness_is_unmanaged(daemon_server: Any, harness: str) -> bool:
     refresh_lock = _refresh_lock_for(key)
     acquired = refresh_lock.acquire(timeout=_REFRESH_WAIT_SECONDS)
     try:
-        if acquired and _remembered_protected(key):
+        if acquired and _remembered_protected(key, store):
             return False
         return _read_harness_is_unmanaged(store, getter, canonical, key)
     finally:
@@ -102,7 +113,7 @@ def _read_harness_is_unmanaged(
     key: tuple[str, str] | None,
 ) -> bool:
     # Read the revision before the store so a concurrent write is never missed.
-    revision = current_managed_install_revision()
+    revision = _store_revision(store)
     try:
         # Reuse setup only for this hook; each read keeps its own transaction.
         with store.connection_scope():
@@ -110,7 +121,7 @@ def _read_harness_is_unmanaged(
             if isinstance(managed, dict) and managed.get("active") is False:
                 return True
             if managed is not None:
-                if key is not None:
+                if key is not None and revision is not None:
                     _remember_protected(key, revision)
                 return False
             lister = getattr(store, "list_managed_installs", None)
