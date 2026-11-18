@@ -176,6 +176,26 @@ fn percent_b_stop_does_not_review_a_later_never_printed_ssn() {
 }
 
 #[test]
+fn percent_b_stop_keeps_bash_width_and_precision_semantics() {
+    // The prefix from a stopped %b still gets padded to field width.
+    // Without that space the synthetic SSN looks attached to x, and a
+    // real emitted SSN could incorrectly escape Guard review.
+    for command in [
+        r"printf 'x%12b' '123-45-6789\c'",
+        r"printf 'x%12b%s' '123-45-6789\c' unused",
+    ] {
+        assert!(echoes_ssn(command), "{command} prints a padded SSN");
+    }
+    // Precision truncates the stopped prefix: the full number never prints.
+    for command in [
+        r"printf '%.3b' '123-45-6789\c'",
+        r"printf 'x%.3b' '123-45-6789\c'",
+    ] {
+        assert!(!echoes_ssn(command), "{command} prints no SSN");
+    }
+}
+
+#[test]
 fn other_numbers_and_shapes_pass() {
     for command in [
         "echo 000-12-3456",
