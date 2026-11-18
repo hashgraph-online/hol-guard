@@ -39,6 +39,10 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
                 args, &roots,
             )))
         }
+        "launch_failure_kind" => {
+            return crate::codex_hook_launch_result::failure_kind(args).map(answered)
+        }
+        "launch_result" => return crate::codex_hook_launch_result::succeeded(args).map(answered),
         "validate" => {
             let (path, role, executable_required) = target(args)?;
             validate(&path, role, executable_required, &roots).map(|_| Value::Null)
@@ -64,6 +68,10 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         Ok(identity) => json!({ "ok": true, "identity": identity }),
         Err(reason) => json!({ "error": { "message": message(&reason), "reason": reason } }),
     })
+}
+
+fn answered(identity: Value) -> Value {
+    json!({ "ok": true, "identity": identity })
 }
 
 /// A launch answer: `{"ok": true}` with any facts it carries, or the

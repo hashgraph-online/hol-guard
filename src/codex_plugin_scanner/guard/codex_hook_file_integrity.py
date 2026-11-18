@@ -152,24 +152,31 @@ _IO_MESSAGE = "Guard could not verify the Codex hook installation; run repair an
 _TIMEOUT_SECONDS = 30.0
 
 
-def _native(op: str, **fields: object) -> dict[str, object]:
-    """One ``codex_hook_file_integrity`` op, refused as the runtime refuses it."""
+def _native(op: str, *, deadline_bound: bool = True, **fields: object) -> dict[str, object]:
+    """One ``codex_hook_file_integrity`` op, refused as the runtime refuses it.
+
+    The hook validation deadline bounds the call unless ``deadline_bound`` is
+    false, for a verdict on a child that already ran under its own limits.
+    """
 
     from .native_runner_authority import native_runner_authority
 
-    check_hook_validation_deadline()
+    if deadline_bound:
+        check_hook_validation_deadline()
     request = {"op": op, "package_roots": [str(root) for root in _python_package_roots()], **fields}
     try:
         answer = native_runner_authority(
             "codex_hook_file_integrity",
             request,
             timeout_seconds=_TIMEOUT_SECONDS,
-            deadline_monotonic=active_hook_validation_deadline(),
+            deadline_monotonic=active_hook_validation_deadline() if deadline_bound else None,
         )
     except (OSError, ValueError) as exc:
-        check_hook_validation_deadline()
+        if deadline_bound:
+            check_hook_validation_deadline()
         raise CodexHookIntegrityError(_IO_REASON, _IO_MESSAGE) from exc
-    check_hook_validation_deadline()
+    if deadline_bound:
+        check_hook_validation_deadline()
     error = answer.get("error")
     if isinstance(error, dict):
         reason, message = error.get("reason"), error.get("message")
