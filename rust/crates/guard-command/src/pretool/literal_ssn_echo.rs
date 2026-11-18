@@ -34,54 +34,83 @@ fn attached_after(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'/' | b':')
 }
 
-// Quoted parentheses are printed punctuation, not shell control operators.
-// Reject executable shell syntax and substitutions, including in double quotes.
-fn single_literal_print(command: &str) -> bool {
+// Parse only a single literal print. Shell quote removal can join fragments:
+// 123-45-67"89" prints 123-45-6789, while '123-45-6789'0 is attached.
+// A comment starts at an unquoted, unescaped word boundary, so syntax after
+// it is not executable. Reject substitutions, operators and multiline input.
+fn literal_print_text(command: &str) -> Option<String> {
+    let mut decoded = String::with_capacity(command.len());
     let mut quote: Option<char> = None;
+    let mut word_start = true;
     let mut chars = command.chars();
     while let Some(ch) = chars.next() {
         match quote {
             Some('\'') => {
                 if ch == '\'' {
                     quote = None;
+                } else {
+                    decoded.push(ch);
                 }
             }
             Some('"') => match ch {
                 '"' => quote = None,
-                '$' | '\x60' | '\n' | '\r' => return false,
+                '$' | '\x60' | '\n' | '\r' => return None,
                 '\\' => {
-                    if chars.next().is_none() {
-                        return false;
+                    let escaped = chars.next()?;
+                    match escaped {
+                        '$' | '\x60' | '"' | '\\' => decoded.push(escaped),
+                        '\n' | '\r' => return None,
+                        _ => {
+                            decoded.push('\\');
+                            decoded.push(escaped);
+                        }
                     }
                 }
-                _ => {}
+                _ => decoded.push(ch),
             },
             _ => match ch {
-                '\'' | '"' => quote = Some(ch),
-                '|' | ';' | '&' | '<' | '>' | '$' | '\x60' | '\n' | '\r' | '(' | ')' => {
-                    return false;
+                '\'' | '"' => {
+                    quote = Some(ch);
+                    word_start = false;
                 }
+                ' ' | '\t' => {
+                    decoded.push(ch);
+                    word_start = true;
+                }
+                '#' if word_start => break,
                 '\\' => {
-                    if chars.next().is_none() {
-                        return false;
+                    let escaped = chars.next()?;
+                    if matches!(escaped, '\n' | '\r') {
+                        return None;
                     }
+                    decoded.push(escaped);
+                    word_start = false;
                 }
-                _ => {}
+                '|' | ';' | '&' | '<' | '>' | '$' | '\x60' | '\n' | '\r' | '(' | ')' => {
+                    return None;
+                }
+                _ => {
+                    decoded.push(ch);
+                    word_start = false;
+                }
             },
         }
     }
-    quote.is_none()
+    quote.is_none().then_some(decoded)
 }
 
 /// Whether command is a single echo/printf that prints a plausible US SSN.
 pub(super) fn echoes_ssn(command: &str) -> bool {
     let trimmed = command.trim();
     let program = trimmed.split_whitespace().next().unwrap_or("");
-    if !PRINTERS.contains(&program) || !single_literal_print(trimmed) {
+    if !PRINTERS.contains(&program) {
         return false;
     }
-    let bytes = trimmed.as_bytes();
-    SSN.captures_iter(trimmed).any(|found| {
+    let Some(decoded) = literal_print_text(trimmed) else {
+        return false;
+    };
+    let bytes = decoded.as_bytes();
+    SSN.captures_iter(&decoded).any(|found| {
         let span = found.get(0).expect("SSN capture");
         (span.start() == 0 || !attached_before(bytes[span.start() - 1]))
             && (span.end() == bytes.len() || !attached_after(bytes[span.end()]))
