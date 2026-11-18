@@ -33,8 +33,10 @@ const XARGS_VALUE_OPTIONS: &[&str] = &[
 /// option. Any other parameter is left in place, so `"$HOME/$DIR"` and a
 /// bare `$HOME` keep the `$` the callers refuse. Bash can bind `HOME`
 /// without writing `HOME=` (`read HOME`, `printf -v HOME`, `for HOME in`,
-/// `HOME+=`), so a text that still mentions `HOME` anywhere once the quoted
-/// reads are replaced is returned unchanged.
+/// `HOME+=`), and quoting or escaping can split the name (`HO''ME`,
+/// `HO\ME`). A text that still spells `HOME` once the quoted reads are
+/// replaced and the quote, backslash and newline characters are dropped is
+/// returned unchanged.
 pub(super) fn with_fixed_home(text: &str) -> String {
     let mut out = text.to_owned();
     for (quoted, fixed) in [
@@ -45,7 +47,11 @@ pub(super) fn with_fixed_home(text: &str) -> String {
     ] {
         out = out.replace(quoted, fixed);
     }
-    if out.contains("HOME") {
+    let unquoted: String = out
+        .chars()
+        .filter(|c| !matches!(c, '\'' | '"' | '\\' | '\n'))
+        .collect();
+    if unquoted.contains("HOME") {
         return text.to_owned();
     }
     out

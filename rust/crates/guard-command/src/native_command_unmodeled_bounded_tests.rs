@@ -68,6 +68,10 @@ fn a_quoted_home_root_does_not_fail_a_named_xargs_pipeline() {
         "read HOME; find \"$HOME/notes\" -type f | xargs grep -l todo",
         "for HOME in /etc; do find \"$HOME\" -type f | xargs grep -l x; done",
         "HOME+=/x; find \"$HOME/notes\" -type f | xargs grep -l todo",
+        // Quoting or escaping splits the name the shell still binds.
+        "printf -v HO''ME -- -delete; find \"$HOME\" | xargs echo",
+        "read HO\\ME; find \"$HOME/notes\" -type f | xargs grep -l todo",
+        "for H\"\"OME in /etc; do find \"$HOME\" -type f | xargs grep -l x; done",
         "find $HOME/notes -type f | xargs grep -l todo",
     ] {
         assert_ne!(decision(&controls, command).0, "allow", "{command}");
