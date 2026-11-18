@@ -119,7 +119,7 @@ fn prepare_remote(plan: &Value, home: &str, mut environment: Environment) -> boo
     false
 }
 
-fn command_line(prefix: &[String], tail: &[&str]) -> Vec<OsString> {
+fn command_line(prefix: &[&str], tail: &[&str]) -> Vec<OsString> {
     prefix
         .iter()
         .map(OsString::from)
@@ -129,7 +129,7 @@ fn command_line(prefix: &[String], tail: &[&str]) -> Vec<OsString> {
 
 /// The exit code of `prefix tail`, or none when it cannot start, outlives `timeout` or is signalled.
 fn run_to_exit(
-    prefix: &[String],
+    prefix: &[&str],
     tail: &[&str],
     environment: &Environment,
     timeout: Duration,
@@ -159,7 +159,7 @@ fn run_to_exit(
 }
 
 /// The pid of `prefix tail` started detached, or none when it cannot start.
-fn spawn(prefix: &[String], tail: &[&str], environment: &Environment) -> Option<u32> {
+fn spawn(prefix: &[&str], tail: &[&str], environment: &Environment) -> Option<u32> {
     let argv = command_line(prefix, tail);
     let env: Vec<(OsString, OsString)> = environment
         .iter()
