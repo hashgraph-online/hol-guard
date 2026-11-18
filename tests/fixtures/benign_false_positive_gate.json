@@ -11663,6 +11663,22 @@
       "expect": "allow"
     },
     {
+      "id": "queue-home-tilde-kubeconfig-setting-get-deploy",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "KUBECONFIG=~/kubeconfig.yaml kubectl get deploy,pods -n web -o wide"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
       "id": "queue-cloud-sdk-path-kubectl-get-pods",
       "fix_area": "queue",
       "harnesses": [
