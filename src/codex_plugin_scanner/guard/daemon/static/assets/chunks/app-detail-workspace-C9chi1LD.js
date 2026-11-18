@@ -1,6 +1,6 @@
 import { j as jsxRuntimeExports, as as HiMiniExclamationTriangle, r as reactExports, t as harnessDisplayName, cl as fetchSettings, em as runHarnessAction, en as GuardHarnessActionError, S as SectionLabel, A as ActionButton, eo as HiMiniRocketLaunch, af as HiMiniShieldCheck, k as HiMiniArrowPath, s as formatRelativeTime, G as HiMiniCheckCircle, ep as HiMiniTrash, aZ as ApprovalProofModal, bI as isGuardDemoMode, eq as fetchGuardApi, er as formatHarnessCommand, bo as HiMiniAdjustmentsHorizontal, aQ as appModesNote, es as appModes, et as fetchApprovalPage, eu as fetchPolicy, ah as guardActionDisposition, a7 as protectionHealthFor, a6 as useProtectionPresentationState, bY as HiMiniArrowLeft, q as HiMiniChevronRight, aU as GuardHero, aV as ProofStrip, ev as appSetupTarget, bM as HiMiniHome, at as HiMiniBolt, ew as guardActionPresentation, au as Badge, ex as DEFAULT_FILTER_STATE, ey as filterEvidence, ez as sortEvidence, eA as computeMetrics, eB as CommandActivityWorkspace, an as EmptyState, eC as EvidenceFilterBar, eD as EvidenceInsightStrip, eE as EvidenceActionList, eF as EvidenceActionDetail, ar as useFocusTrap, eG as policyIdentityKey, ap as HiMiniCloud, T as Tag, aT as HiMiniXCircle, eH as clearLabelForScope, eI as HiMiniChartBar } from "../guard-dashboard.js";
 import { s as setupActionErrorMessage } from "./harness-action-errors-BMFGvfEG.js";
-import { u as useFleetAppPosture, c as versionCheckUnsupported, e as versionReasonCopy, H as HarnessVersionLabel, f as refreshVersionCompatibility, g as acknowledgeUntestedVersion, h as clearVersionAcknowledgement, p as protectionStateLabel, j as protectionStateTone, k as eventReasonCopy, l as eventProtectionName, a as useHarnessDetection, b as versionCompatibilityFor, m as isHarnessDetected } from "./harness-version-label-B2Ob_2J1.js";
+import { u as useFleetAppPosture, c as versionCheckUnsupported, e as versionReasonCopy, H as HarnessVersionLabel, f as refreshVersionCompatibility, g as acknowledgeUntestedVersion, h as clearVersionAcknowledgement, p as protectionStateLabel, j as protectionStateTone, k as eventReasonCopy, l as eventProtectionName, a as useHarnessDetection, b as versionCompatibilityFor, m as isHarnessDetected } from "./harness-version-label-BTjqj8Ip.js";
 import "./settings-save-proof-modal-DdKoGp14.js";
 function LeftoverGuardCleanup({ warnings }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
@@ -783,16 +783,24 @@ function AppDetailWorkspace(props) {
   const detectedSetupWarnings = harnessDetection.kind === "ready" ? harnessDetection.items.find((item) => item.harness === props.harness)?.warnings ?? [] : [];
   const setupWarnings = cleanedLeftoverHarnesses.has(props.harness) ? [] : detectedSetupWarnings;
   const handleLeftoverRemoved = reactExports.useCallback((change = "removed") => {
+    if (change === "installed") {
+      void harnessDetection.refresh().then((refreshed) => {
+        if (refreshed) {
+          setCleanedLeftoverHarnesses((current) => {
+            const next = new Set(current);
+            next.delete(props.harness);
+            return next;
+          });
+        }
+      });
+      return;
+    }
     setCleanedLeftoverHarnesses((current) => {
       const next = new Set(current);
-      if (change === "installed") {
-        next.delete(props.harness);
-      } else {
-        next.add(props.harness);
-      }
+      next.add(props.harness);
       return next;
     });
-  }, [props.harness]);
+  }, [harnessDetection.refresh, props.harness]);
   const versionCompatibility = reactExports.useMemo(
     () => versionCompatibilityFor(harnessDetection, props.harness),
     [harnessDetection, props.harness]

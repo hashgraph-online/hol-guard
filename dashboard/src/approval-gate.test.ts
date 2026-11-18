@@ -421,6 +421,8 @@ function testDisconnectWaitsForApprovalSettingsBeforeConfirm(): void {
       && harnessSetupPanel.includes("!cleanupIncomplete"),
     "every completed disconnect must refresh workspace detection unless config cleanup is incomplete",
   );
+  const harnessDetection = readFileSync(new URL("./harness-detection.ts", import.meta.url), "utf8");
+  assert(harnessDetection.includes("refresh: () => Promise<boolean>"), "harness detection exposes an explicit refresh result");
 }
 
 function testApprovalProofBlocksUnreadyGate(): void {

@@ -223,16 +223,24 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
     : [];
   const setupWarnings = cleanedLeftoverHarnesses.has(props.harness) ? [] : detectedSetupWarnings;
   const handleLeftoverRemoved = useCallback((change: "removed" | "installed" = "removed") => {
+    if (change === "installed") {
+      void harnessDetection.refresh().then((refreshed) => {
+        if (refreshed) {
+          setCleanedLeftoverHarnesses((current) => {
+            const next = new Set(current);
+            next.delete(props.harness);
+            return next;
+          });
+        }
+      });
+      return;
+    }
     setCleanedLeftoverHarnesses((current) => {
       const next = new Set(current);
-      if (change === "installed") {
-        next.delete(props.harness);
-      } else {
-        next.add(props.harness);
-      }
+      next.add(props.harness);
       return next;
     });
-  }, [props.harness]);
+  }, [harnessDetection.refresh, props.harness]);
   const versionCompatibility = useMemo(
     () => versionCompatibilityFor(harnessDetection, props.harness),
     [harnessDetection, props.harness],
