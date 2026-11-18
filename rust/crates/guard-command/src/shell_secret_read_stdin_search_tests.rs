@@ -47,6 +47,7 @@ fn lone_home_dotpath_pattern_is_not_a_search() {
         "rg --maxdepth=1 /home/agent/.secrets/key.txt",
         "rg --threads 1 /home/agent/.secrets/key.txt",
         "rg --max-columns 80 /home/agent/.secrets/key.txt",
+        "rg --glob='~*' /home/agent/.secrets/key.txt",
     ] {
         assert!(
             names_dotpath(command),
