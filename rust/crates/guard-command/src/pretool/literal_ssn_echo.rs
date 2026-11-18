@@ -100,7 +100,10 @@ fn printf_decimal(raw: &str) -> String {
     } else {
         (false, raw.strip_prefix('+').unwrap_or(raw))
     };
-    let (base, digits) = if let Some(hex) = unsigned.strip_prefix("0x").or_else(|| unsigned.strip_prefix("0X")) {
+    let (base, digits) = if let Some(hex) = unsigned
+        .strip_prefix("0x")
+        .or_else(|| unsigned.strip_prefix("0X"))
+    {
         (16, hex)
     } else if unsigned.len() > 1 && unsigned.starts_with('0') {
         (8, &unsigned[1..])
@@ -130,7 +133,11 @@ fn render_printf(format: &str, args: &[String]) -> String {
                     break;
                 };
                 escape.push(next);
-                let extra = if next == 'x' { 2 } else if ('0'..='7').contains(&next) { 2 } else { 0 };
+                let extra = if next == 'x' || ('0'..='7').contains(&next) {
+                    2
+                } else {
+                    0
+                };
                 for _ in 0..extra {
                     let valid = if next == 'x' {
                         chars.peek().is_some_and(char::is_ascii_hexdigit)
@@ -198,7 +205,10 @@ fn render_printf(format: &str, args: &[String]) -> String {
                     } else {
                         ("", rendered.as_str())
                     };
-                    rendered = format!("{sign}{}{digits}", "0".repeat(limit.saturating_sub(digits.len())));
+                    rendered = format!(
+                        "{sign}{}{digits}",
+                        "0".repeat(limit.saturating_sub(digits.len()))
+                    );
                 }
             }
             let pad = width.saturating_sub(rendered.chars().count());
