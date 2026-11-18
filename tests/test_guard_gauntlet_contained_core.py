@@ -160,6 +160,35 @@ def test_windows_sink_run_passes_and_stays_bound_to_this_installation(fixture, t
     assert assess_case(SCENARIO, posix_home)["reason"] == "contained wrapper guard-home binding is malformed"
 
 
+def test_windows_sink_under_the_redacted_operator_home_passes(fixture, tmp_path):
+    """Guard's Python and the request file live under the home that evidence redaction hides."""
+    case = _contained(fixture, tmp_path, windows=True, guard_home="{{fixture}}\\guard-home", operator_home=True)
+    assessment = assess_case(SCENARIO, case)
+    assert assessment["outcome"] == "pass", assessment["reason"]
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("'{{operator_home}}\\hgw-gauntlet", "'{{fixture}}\\hgw-gauntlet"),
+        ("'{{operator_home}}/hgw-gauntlet", "'{{fixture}}/hgw-gauntlet"),
+        ("'{{operator_home}}\\AppData", "'{{workspace}}\\AppData"),
+        ("'{{operator_home}}\\AppData", "'AppData"),
+    ],
+)
+def test_windows_sink_root_must_be_a_drive_or_the_operator_home(fixture, tmp_path, old, new):
+    case = _contained(fixture, tmp_path, windows=True, guard_home="{{fixture}}\\guard-home", operator_home=True)
+    for event in case["events"]:
+        for call in event.get("calls", []):
+            if call["id"] == CALL:
+                call["arguments"]["command"] = call["arguments"]["command"].replace(old, new)
+        if event.get("toolCallId") == CALL and "args" in event:
+            event["args"]["command"] = event["args"]["command"].replace(old, new)
+    assessment = assess_case(SCENARIO, case)
+    assert assessment["outcome"] == "harness-error"
+    assert assessment["reason"].startswith("contained wrapper")
+
+
 @pytest.mark.parametrize(
     ("old", "new"),
     [
