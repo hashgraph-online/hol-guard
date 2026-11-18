@@ -1448,7 +1448,7 @@
           "live_guard_codex_hooks_intercept"
         ],
         "entry_points": [],
-        "reason": "Checking whether the installed Codex hooks still route shell tool calls through Guard, for the hook health report. It inspects installed configuration and never runs on a hook call.",
+        "reason": "Checked whether the installed Codex hooks still route shell tool calls through Guard. The hook health report was its former caller; it now has no caller on the request path. It inspects installed configuration and never runs on a hook call.",
         "evidence": "No runtime module calls live_guard_codex_hooks_intercept. The retained hook registration and doctor-finalization code does not reference these symbols, and the report validates this reference closure on every run."
       },
       {
