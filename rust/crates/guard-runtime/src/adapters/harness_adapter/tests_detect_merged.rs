@@ -4,10 +4,9 @@ use std::fs;
 
 use serde_json::{json, Value};
 
-use super::super::dispatch;
-use super::describe::SPECS;
-use super::detect_merged::ORDER;
-use super::Home;
+use super::super::describe::SPECS;
+use super::super::detect_merged::ORDER;
+use super::{dispatch, Home};
 
 fn request(home: &Home, op: &str, harness: &str, workspace: Option<&str>) -> Value {
     let mut request = json!({"op": op, "context": home.context(json!({"PATH": ""}))});

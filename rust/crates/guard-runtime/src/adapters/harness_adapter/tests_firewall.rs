@@ -4,7 +4,7 @@ use std::fs;
 
 use serde_json::{json, Value};
 
-use super::firewall::enrich;
+use super::super::firewall::enrich;
 use super::Home;
 
 fn artifact(artifact_type: &str, config_path: &str, command: Value) -> Value {

@@ -165,12 +165,6 @@ mod codex_owners_tests;
 #[path = "tests.rs"]
 mod tests;
 #[cfg(test)]
-#[path = "tests_detect_merged.rs"]
-mod tests_detect_merged;
-#[cfg(test)]
-#[path = "tests_firewall.rs"]
-mod tests_firewall;
-#[cfg(test)]
 #[path = "tests_mcp_launch.rs"]
 mod tests_mcp_launch;
 
