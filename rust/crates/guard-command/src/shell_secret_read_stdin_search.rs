@@ -26,29 +26,16 @@ use std::path::Path;
 
 const GREP_FAMILY: &[&str] = &["grep", "egrep", "fgrep"];
 const PATTERN_OPTIONS: &[&str] = &["-e", "--regexp", "-f", "--file"];
-const VALUE_OPTIONS: &[&str] = &[
-    "-A",
-    "-B",
-    "-C",
-    "-D",
-    "-g",
-    "-m",
-    "-t",
-    "-T",
-    "--after-context",
-    "--before-context",
-    "--context",
-    "--devices",
-    "--exclude",
-    "--exclude-dir",
-    "--glob",
-    "--iglob",
-    "--include",
-    "--max-count",
-    "--max-depth",
-    "--max-filesize",
-    "--type",
-    "--type-not",
+const GREP_VALUE_OPTIONS: &[&str] = &[
+    "--after-context", "--before-context", "--context", "--devices",
+    "--exclude", "--exclude-dir", "--include", "--max-count",
+];
+const RG_VALUE_OPTIONS: &[&str] = &[
+    "-A", "-B", "-C", "-g", "-m", "-t", "-T", "-E",
+    "--after-context", "--before-context", "--context", "--encoding",
+    "--engine", "--glob", "--iglob", "--ignore-file", "--max-count",
+    "--max-depth", "--max-filesize", "--pre", "--pre-glob", "--replace",
+    "--sort", "--sortr", "--type", "--type-not",
 ];
 
 /// Whether this `grep`/`rg` call's only word is a path into a hidden entry
@@ -80,6 +67,37 @@ pub(crate) fn lone_search_pattern_names_home_dotpath(
     first.len() > 1 && first.starts_with('.') && first != ".."
 }
 
+enum GrepShort<'a> {
+    Recursive,
+    ExplicitPattern,
+    Directory(Option<&'a str>),
+    Value(bool),
+}
+
+// GNU grep combines short options. A value-taking option consumes the rest
+// of that group or the following word; -T is NOT value-taking in grep.
+fn grep_short(arg: &str) -> Option<GrepShort<'_>> {
+    let flags = arg.strip_prefix('-')?;
+    if flags.is_empty() || flags.starts_with('-') {
+        return None;
+    }
+    for (index, flag) in flags.char_indices() {
+        let remaining = &flags[index + flag.len_utf8()..];
+        match flag {
+            'r' | 'R' => return Some(GrepShort::Recursive),
+            'e' | 'f' => return Some(GrepShort::ExplicitPattern),
+            'd' => return Some(GrepShort::Directory(
+                (!remaining.is_empty()).then_some(remaining),
+            )),
+            'A' | 'B' | 'C' | 'D' | 'm' => {
+                return Some(GrepShort::Value(remaining.is_empty()));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 fn lone_pattern<'a>(command: &str, args: &'a [String]) -> Option<&'a str> {
     let grep_like = GREP_FAMILY.contains(&command);
     if !grep_like && command != "rg" {
@@ -87,8 +105,16 @@ fn lone_pattern<'a>(command: &str, args: &'a [String]) -> Option<&'a str> {
     }
     let mut pattern: Option<&str> = None;
     let mut skip_value = false;
+    let mut directory_value_pending = false;
     let mut after_options = false;
     for arg in args {
+        if directory_value_pending {
+            directory_value_pending = false;
+            if arg == "recurse" {
+                return None;
+            }
+            continue;
+        }
         if skip_value {
             skip_value = false;
             continue;
@@ -114,24 +140,41 @@ fn lone_pattern<'a>(command: &str, args: &'a [String]) -> Option<&'a str> {
         if command == "rg" && matches!(flag, "--files" | "--type-list") {
             return None;
         }
-        if grep_like && grep_flag_recurses(arg, flag) {
-            return None;
+        if grep_like {
+            if matches!(flag, "--recursive" | "--dereference-recursive") {
+                return None;
+            }
+            if flag == "--directories" {
+                if let Some(value) = arg.strip_prefix("--directories=") {
+                    if value == "recurse" {
+                        return None;
+                    }
+                } else {
+                    directory_value_pending = true;
+                }
+                continue;
+            }
+            if let Some(option) = grep_short(arg) {
+                match option {
+                    GrepShort::Recursive | GrepShort::ExplicitPattern => return None,
+                    GrepShort::Directory(Some("recurse")) => return None,
+                    GrepShort::Directory(Some(_)) => {}
+                    GrepShort::Directory(None) => directory_value_pending = true,
+                    GrepShort::Value(needs_next) => skip_value = needs_next,
+                }
+                continue;
+            }
         }
-        if VALUE_OPTIONS.contains(&arg.as_str()) {
+        let value_options = if grep_like {
+            GREP_VALUE_OPTIONS
+        } else {
+            RG_VALUE_OPTIONS
+        };
+        if value_options.contains(&arg.as_str()) {
             skip_value = true;
         }
     }
     pattern
-}
-
-fn grep_flag_recurses(arg: &str, flag: &str) -> bool {
-    if matches!(
-        flag,
-        "--recursive" | "--dereference-recursive" | "--directories" | "-d"
-    ) {
-        return true;
-    }
-    !arg.starts_with("--") && arg[1..].chars().any(|c| matches!(c, 'r' | 'R' | 'd'))
 }
 
 /// The pattern's path below the home directory, matching either spelling of
