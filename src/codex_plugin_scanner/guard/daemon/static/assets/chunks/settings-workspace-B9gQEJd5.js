@@ -2348,6 +2348,10 @@ function pulseCooldownFromSeconds(seconds) {
   if (seconds === 3600) return 3600;
   return 0;
 }
+const PULSE_SIDE_BY_SIDE_QUERY = "(min-width: 1024px)";
+function pulseInitialFocusTarget(sideBySide) {
+  return sideBySide ? "key" : "qr";
+}
 function focusWithoutScrolling(element) {
   element?.focus({ preventScroll: true });
 }
@@ -2360,39 +2364,51 @@ function pulseApprovalSettingsSummary(minTier, cooldown) {
   const faceScan = PULSE_FACE_SCAN_OPTIONS.find((option) => option.value === minTier)?.label ?? "Standard face scan";
   return `${faceScan.replace(" (recommended)", "")} · ${pulseCooldownLabel(cooldown).replace(" (recommended)", "")}`;
 }
-function PulseQrPanel() {
+function PulseQrPanel(props) {
   const qr = buildTotpQrImageOptions();
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.08] via-white to-white p-4 text-center", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto flex w-fit rounded-2xl border border-white bg-white p-3 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      QRCode,
-      {
-        value: PULSE_SITE_URL,
-        size: qr.size,
-        level: qr.level,
-        bgColor: qr.bgColor,
-        fgColor: qr.fgColor,
-        role: "img",
-        "aria-label": "Scan this QR code with your phone camera to get the YID app"
-      }
-    ) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm font-semibold text-brand-dark", children: "Scan with your phone camera" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-slate-500", children: "It installs the YID app if you need it, then registers your Yanez identity." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-slate-500", children: [
-      "Can't scan?",
-      " ",
-      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "text-brand-blue underline", href: PULSE_SITE_URL, target: "_blank", rel: "noreferrer noopener", children: "Open pulse.yanez.ai" })
-    ] })
-  ] });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      ref: props.panelRef,
+      role: "group",
+      "aria-label": "Scan the YID app code",
+      tabIndex: -1,
+      className: "rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.08] via-white to-white p-4 text-center outline-none",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto flex w-fit rounded-2xl border border-white bg-white p-5 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          QRCode,
+          {
+            value: PULSE_SITE_URL,
+            size: qr.size,
+            level: qr.level,
+            bgColor: qr.bgColor,
+            fgColor: qr.fgColor,
+            role: "img",
+            "aria-label": "Scan this QR code with your phone camera to get the YID app"
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm font-semibold text-brand-dark", children: "Scan with your phone camera" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-slate-500", children: "It opens the YID page. Tap its app link, then follow the prompts to install the app and register your Yanez identity." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-slate-500", children: [
+          "Can't scan?",
+          " ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "text-brand-blue underline", href: PULSE_SITE_URL, target: "_blank", rel: "noreferrer noopener", children: "Open pulse.yanez.ai" })
+        ] })
+      ]
+    }
+  );
 }
 const STEP_CHIP = "flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue";
 function PulseConnectStep(props) {
   const keyHint = pulseAgentKeyHint(props.agentKey);
   const keyInput = reactExports.useRef(null);
+  const qrPanel = reactExports.useRef(null);
   reactExports.useEffect(() => {
-    focusWithoutScrolling(keyInput.current);
+    const sideBySide = typeof window.matchMedia === "function" && window.matchMedia(PULSE_SIDE_BY_SIDE_QUERY).matches;
+    focusWithoutScrolling(pulseInitialFocusTarget(sideBySide) === "key" ? keyInput.current : qrPanel.current);
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 p-6 lg:grid-cols-[240px_minmax(0,1fr)]", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(PulseQrPanel, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PulseQrPanel, { panelRef: qrPanel }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "space-y-3 text-sm leading-6 text-slate-600", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-3", children: [

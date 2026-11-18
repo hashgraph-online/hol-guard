@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type Ref } from "react";
 import QRCode from "react-qr-code";
 import { ActionButton } from "./approval-center-primitives";
 import { PULSE_FACE_SCAN_OPTIONS, type PulseMinTier } from "./pulse-approval";
@@ -20,9 +20,22 @@ export function pulseCooldownFromSeconds(seconds: number): PulseCooldown {
   return 0;
 }
 
+/** Tailwind's `lg` breakpoint: from here the QR code sits beside the key field instead of above it. */
+export const PULSE_SIDE_BY_SIDE_QUERY = "(min-width: 1024px)";
+
 /**
- * Focus the key field without scrolling to it. In a short window the field sits below the QR code,
- * and a scroll to reveal it would carry the code out of view before the user can scan it.
+ * Where focus goes when the step opens. Side by side the key field is always in view, so it takes
+ * focus. Stacked, the field can sit below the fold of a short window: focusing it would either scroll
+ * the QR code away or leave focus on a field nobody can see, so focus starts on the QR panel and
+ * the next Tab reaches the field.
+ */
+export function pulseInitialFocusTarget(sideBySide: boolean): "key" | "qr" {
+  return sideBySide ? "key" : "qr";
+}
+
+/**
+ * Focus without scrolling, so opening the step never carries the QR code out of view before the
+ * user can scan it.
  */
 export function focusWithoutScrolling(element: { focus: (options?: FocusOptions) => void } | null): void {
   element?.focus({ preventScroll: true });
@@ -45,11 +58,18 @@ export function pulseApprovalSettingsSummary(minTier: PulseMinTier, cooldown: Pu
  * The QR code for the YID app page, drawn here so the user never leaves HOL
  * Guard to find it. It encodes only the public page link: no key, no secret.
  */
-export function PulseQrPanel() {
+export function PulseQrPanel(props: { panelRef?: Ref<HTMLDivElement> }) {
   const qr = buildTotpQrImageOptions();
   return (
-    <div className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.08] via-white to-white p-4 text-center">
-      <div className="mx-auto flex w-fit rounded-2xl border border-white bg-white p-3 shadow-sm">
+    <div
+      ref={props.panelRef}
+      role="group"
+      aria-label="Scan the YID app code"
+      tabIndex={-1}
+      className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.08] via-white to-white p-4 text-center outline-none"
+    >
+      {/* react-qr-code draws to the edge of the symbol; 20px is about the four-module quiet zone at 160px. */}
+      <div className="mx-auto flex w-fit rounded-2xl border border-white bg-white p-5 shadow-sm">
         <QRCode
           value={PULSE_SITE_URL}
           size={qr.size}
@@ -62,7 +82,7 @@ export function PulseQrPanel() {
       </div>
       <p className="mt-3 text-sm font-semibold text-brand-dark">Scan with your phone camera</p>
       <p className="mt-1 text-xs leading-5 text-slate-500">
-        It installs the YID app if you need it, then registers your Yanez identity.
+        It opens the YID page. Tap its app link, then follow the prompts to install the app and register your Yanez identity.
       </p>
       <p className="mt-2 text-xs text-slate-500">
         Can&apos;t scan?{" "}
@@ -92,12 +112,14 @@ export function PulseConnectStep(props: {
 }) {
   const keyHint = pulseAgentKeyHint(props.agentKey);
   const keyInput = useRef<HTMLInputElement>(null);
+  const qrPanel = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    focusWithoutScrolling(keyInput.current);
+    const sideBySide = typeof window.matchMedia === "function" && window.matchMedia(PULSE_SIDE_BY_SIDE_QUERY).matches;
+    focusWithoutScrolling(pulseInitialFocusTarget(sideBySide) === "key" ? keyInput.current : qrPanel.current);
   }, []);
   return (
     <div className="grid gap-6 p-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-      <PulseQrPanel />
+      <PulseQrPanel panelRef={qrPanel} />
       <div className="space-y-5">
         <ol className="space-y-3 text-sm leading-6 text-slate-600">
           <li className="flex gap-3">

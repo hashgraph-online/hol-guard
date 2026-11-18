@@ -9,6 +9,7 @@ import {
   pulseAgentKeyHint,
   pulseApprovalSettingsSummary,
   pulseCooldownFromSeconds,
+  pulseInitialFocusTarget,
 } from "./pulse-connect-step";
 import { PULSE_SITE_URL } from "./pulse-setup-modal";
 import { buildTotpQrImageOptions } from "./totp-enrollment-qr-panel";
@@ -60,6 +61,11 @@ function theQrCodeEncodesOnlyTheYidAppPage(): void {
   assert(shapes === qrShapes(qrFor(PULSE_SITE_URL)), "PULSE-QR-1: the QR code encodes the YID app page link");
   assert(shapes !== qrShapes(qrFor("https://example.invalid/")), "PULSE-QR-1: the comparison tells different links apart");
   assert(/role="img"/.test(panel) && /aria-label="Scan this QR code/.test(panel), "PULSE-QR-1: the QR code has a text label");
+  assert(/<div[^>]*class="[^"]*\sp-5\s[^"]*"[^>]*><svg/.test(panel),
+    "PULSE-QR-1: the white wrapper leaves about four modules of clear space around the code");
+  assert(panel.includes("Tap its app link") && !panel.includes("It installs the YID app"),
+    "PULSE-QR-1: the copy says what to tap after scanning instead of promising an install");
+  assert(panel.includes('tabindex="-1"'), "PULSE-QR-1: the panel can take focus when the key field is out of view");
   assert(panel.includes(`href="${PULSE_SITE_URL}"`) && /rel="noreferrer noopener"/.test(panel),
     "PULSE-QR-1: users who cannot scan still get the link, opened without a referrer");
 }
@@ -114,6 +120,9 @@ function focusingTheKeyFieldNeverScrollsTheQrCodeOutOfView(): void {
   assert(calls.length === 1 && calls[0]?.preventScroll === true, "PULSE-QR-5: the key field is focused with preventScroll");
   focusWithoutScrolling(null);
   assert(calls.length === 1, "PULSE-QR-5: no field yet, nothing to focus");
+  assert(pulseInitialFocusTarget(true) === "key", "PULSE-QR-5: side by side, the key field is in view and takes focus");
+  assert(pulseInitialFocusTarget(false) === "qr",
+    "PULSE-QR-5: stacked, focus starts on the QR panel so it never lands on a field below the fold");
 }
 
 function theCooldownSelectMapsBackToTheThreeChoices(): void {
