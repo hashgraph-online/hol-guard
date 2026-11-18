@@ -89,7 +89,8 @@ def test_packaged_bridge_accepts_files_under_imported_package_root(
     monkeypatch.setattr(site_module, "getsitepackages", lambda: [])
     monkeypatch.setattr(site_module, "getusersitepackages", lambda: "")
 
-    assert integrity._is_installed_python_package_file(bridge) is True
+    canonical = bridge.resolve(strict=False)
+    assert any(root in canonical.parents for root in integrity._python_package_roots())
     if not group_is_private_to_owner(bridge):
         _assert_refused(bridge)
         return

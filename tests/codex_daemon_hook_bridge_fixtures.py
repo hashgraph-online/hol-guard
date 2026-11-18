@@ -161,13 +161,15 @@ def signed_native_bridge_argv(runtime: Path, guard_home: Path, registered: dict[
     from datetime import datetime, timezone
 
     from codex_plugin_scanner.guard.codex_hook_file_integrity import (
-        canonical_path,
         describe_executable_file,
         describe_regular_file,
     )
     from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_bytes
     from tests.codex_hook_integrity_fixtures import load_or_create_hook_secret, sign_hook_manifest
     from tests.codex_hook_paths_support import canonical_manifest_bytes, hook_manifest_path
+
+    def canonical_path(path):
+        return str(Path(path).expanduser().resolve(strict=False))
 
     config_target = guard_home.parent / ".codex" / "config.toml"
     config_target.parent.mkdir(parents=True, exist_ok=True)

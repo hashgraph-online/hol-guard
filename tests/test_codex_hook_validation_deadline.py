@@ -61,10 +61,10 @@ def test_nested_and_legacy_validation_scopes_cannot_renew_original_budget(tmp_pa
                 files.hook_validation_deadline(nested),
             ):
                 clock[0] = 11.0
-                files.canonical_path(path)
+                files.check_hook_validation_deadline()
             clock[0] = 5.0
     clock[0] = 11.0
-    assert files.canonical_path(path) == str(path.resolve())
+    assert files.check_hook_validation_deadline() is None
 
 
 def test_expiry_after_manifest_read_does_not_read_authority_key(tmp_path, monkeypatch):
@@ -97,7 +97,7 @@ def test_validation_deadline_does_not_leak_into_another_thread(tmp_path, monkeyp
 
     def other_validator():
         try:
-            results.append(files.canonical_path(path))
+            results.append(files.check_hook_validation_deadline())
         except Exception as error:
             results.append(error)
 
@@ -106,7 +106,7 @@ def test_validation_deadline_does_not_leak_into_another_thread(tmp_path, monkeyp
         thread.start()
         thread.join(timeout=1)
         assert not thread.is_alive()
-    assert results == [str(path.resolve())]
+    assert results == [None]
 
 
 @pytest.mark.parametrize("deadline", [float("nan"), float("inf"), True])

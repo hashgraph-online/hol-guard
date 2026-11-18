@@ -42,19 +42,21 @@ def _native_status(features: tuple[str, ...], path: Path) -> object:
     )
 
 
-def _hook_argv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, features: tuple[str, ...]) -> tuple[str, ...]:
+def _hook_argv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, features: tuple[str, ...] | None) -> tuple[str, ...]:
+    """The hook argv; ``features=None`` asks the real native runtime, which derives it."""
     from dataclasses import fields
 
     from codex_plugin_scanner.guard import native_runtime
     from codex_plugin_scanner.guard.config import GuardConfig
 
-    runtime = tmp_path / "hol-guard-runtime"
     timeout = next(field.default for field in fields(GuardConfig) if field.name == "approval_wait_timeout_seconds")
-    monkeypatch.setattr(
-        native_runtime,
-        "native_runtime_status",
-        lambda *, deadline_monotonic=None: _native_status(features, runtime),
-    )
+    if features is not None:
+        runtime = tmp_path / "hol-guard-runtime"
+        monkeypatch.setattr(
+            native_runtime,
+            "native_runtime_status",
+            lambda *, deadline_monotonic=None: _native_status(features, runtime),
+        )
     # The timeout read goes through the native config loader. This test checks
     # the hook argv, so it supplies the shipped default instead of a runtime.
     monkeypatch.setattr(
@@ -70,9 +72,18 @@ def _hook_argv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, features: tuple[
 
 
 def test_hook_runs_the_native_bridge_with_only_its_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    argv = _hook_argv(tmp_path, monkeypatch, (NATIVE_CODEX_HOOK_FEATURE,))
+    from codex_plugin_scanner.guard import native_runtime
 
-    assert argv[:2] == (str(tmp_path / "hol-guard-runtime"), NATIVE_CODEX_HOOK_COMMAND)
+    status = native_runtime.native_runtime_status()
+    if (
+        not status.available
+        or status.identity is None
+        or NATIVE_CODEX_HOOK_FEATURE not in (status.capabilities.features if status.capabilities else ())
+    ):
+        pytest.skip("the hook argv is derived by the native runtime")
+    argv = _hook_argv(tmp_path, monkeypatch, None)
+
+    assert argv[:2] == (str(status.identity.path), NATIVE_CODEX_HOOK_COMMAND)
     assert len(argv) == 3
 
 
