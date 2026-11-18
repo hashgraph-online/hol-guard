@@ -171,3 +171,28 @@ fn an_awk_that_can_run_a_program_inside_a_substitution_stays_refused() {
         );
     }
 }
+
+#[test]
+fn a_loop_whose_kept_value_reaches_a_launcher_or_conditional_stays_refused() {
+    let (home, project) = reported_context();
+    let binding = binding_with_layers(serde_json::json!([]));
+    for command in [
+        "for f in a; do x=$(cat cmd); pkexec $x; done",
+        "cmd=$(cat program); for f in a; do systemd-run --user \"$cmd\"; done",
+        "x=$(cat id); for f in a; do if test -n \"$x\"; then gh pr view $x; fi; done",
+        "echo \"$(awk -vX=\"$(gh pr list)\" 'BEGIN{print X}')\"",
+    ] {
+        let result = evaluate_in(&binding, command, home.path(), &project);
+        eprintln!(
+            "NEG {} {} :: {command}",
+            result.minimum_action, result.reason_code
+        );
+        assert_ne!(result.minimum_action, "allow", "{command}");
+        assert!(!result.explicitly_benign, "{command}");
+        assert_eq!(
+            result.reason_code, "native_command_extension_evaluation_failed",
+            "{command} {}",
+            result.minimum_action
+        );
+    }
+}

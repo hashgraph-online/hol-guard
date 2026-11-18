@@ -42,7 +42,7 @@ const LOOKUPS: &[&str] = &["command", "which", "type", "whence", "where", "hash"
 
 /// Launchers the unmodeled reader does not list as interpreters. Each runs
 /// the program named by a later word.
-const LAUNCHERS: &[&str] = &[
+pub(super) const LAUNCHERS: &[&str] = &[
     "pkexec",
     "runuser",
     "unshare",
@@ -584,9 +584,14 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     // to give. A program that names `system`, `getline` or a pipe keeps its
     // words and is refused below as before.
     let unawked;
-    let inner = if named_words(inner)
-        .iter()
-        .any(|name| matches!(name.as_str(), "awk" | "gawk" | "mawk" | "nawk"))
+    // The rewrite drops every word of the awk command, so it runs only on a
+    // text with no nested substitution: `awk -vX="$(gh pr list)"` would
+    // otherwise lose the program its option value starts.
+    let nested = inner.contains("$(") || inner.contains(['`', '<', '>']);
+    let inner = if !nested
+        && named_words(inner)
+            .iter()
+            .any(|name| matches!(name.as_str(), "awk" | "gawk" | "mawk" | "nawk"))
     {
         unawked = super::without_plain_awk(inner);
         unawked.as_str()
