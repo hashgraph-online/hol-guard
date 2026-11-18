@@ -17,6 +17,15 @@ a copy that differs, is missing or sits in a directory that is no longer
 private is replaced, never run. A replaced copy is removed as soon as no run is using
 it.
 
+A process that has opened a Guard home also keeps one copy in that home's
+private folder, named by the SHA-256 of its bytes, for later processes. The
+first run of a newly written executable costs over a second on macOS, which
+assesses every new image, and on Windows, which scans it; a fresh copy per
+process paid that on every cold start. A later process runs the kept copy only
+after the same byte-for-byte comparison with the bytes it verified, and replaces
+a copy that differs. Copies of other runtimes nobody has used for a day are
+removed.
+
 Windows keeps an executable's image locked for a moment after its process
 exits, so each directory is removed at exit with a short backoff once that
 lock is released. A single attempt left directories behind on Windows until
@@ -52,12 +61,16 @@ _private_roots: list[Path] = []
 # Seconds to wait between removal attempts while Windows still holds the image.
 _REMOVAL_BACKOFF = (0.05, 0.1, 0.2, 0.4, 0.8, 1.6)
 _COMPARE_CHUNK = 1024 * 1024
+_KEPT_PREFIX = "hol-guard-runtime-"
+# A kept copy of another runtime unused for this long is removed.
+_KEPT_IDLE_SECONDS = 24 * 60 * 60
 _copies_lock = threading.Lock()
 
 
 @dataclass
 class _Copy:
-    directory: tempfile.TemporaryDirectory[str]
+    # None for a copy kept for later processes, which this process never removes.
+    directory: tempfile.TemporaryDirectory[str] | None
     path: Path
     # The Guard-home private folder holding the copy, or None for the system temp.
     root: Path | None
@@ -109,6 +122,8 @@ def _replaceable_by_another_account(directory: Path) -> bool:
 
 
 def _private_root_directory(root: Path) -> Path | None:
+    if os.name == "nt":
+        return _windows_root_directory(root)
     try:
         # Another account that can write the Guard home, or any directory
         # above it, could rename the private folder or the home away and put
@@ -120,6 +135,27 @@ def _private_root_directory(root: Path) -> Path | None:
         with suppress(FileExistsError):
             root.mkdir(mode=0o700)
         if not _closed_directory(root.lstat(), open_bits=0o077):
+            return None
+    except OSError:
+        return None
+    return root
+
+
+def _plain_windows_directory(path: Path) -> bool:
+    """A directory that is not a link or junction, which could point it elsewhere."""
+    metadata = path.lstat()
+    reparse = getattr(metadata, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return stat.S_ISDIR(metadata.st_mode) and not reparse
+
+
+def _windows_root_directory(root: Path) -> Path | None:
+    """The Guard-home folder on Windows, where the user profile's access list keeps other accounts out."""
+    try:
+        if not _plain_windows_directory(root.parent):
+            return None
+        with suppress(FileExistsError):
+            root.mkdir()
+        if not _plain_windows_directory(root):
             return None
     except OSError:
         return None
@@ -224,13 +260,17 @@ def _remove_abandoned(parent: Path) -> None:
 def _holds(copy: _Copy, size: int, same: Callable[[BinaryIO], bool]) -> bool:
     """Whether a kept copy is still private, executable, of this size and passes `same`."""
     path = copy.path
+    if copy.directory is None and copy.root not in _private_roots:
+        return False
     try:
-        if os.name != "nt":
-            # The same checks that admitted the copy's directory when it was written.
-            if copy.root is not None and _private_root_directory(copy.root) is None:
+        # The same checks that admitted the copy's directory when it was written.
+        if copy.root is not None and _private_root_directory(copy.root) is None:
+            return False
+        if os.name == "nt":
+            if not _plain_windows_directory(path.parent):
                 return False
-            if not _closed_directory(path.parent.lstat(), open_bits=0o077) or not os.access(path, os.X_OK):
-                return False
+        elif not _closed_directory(path.parent.lstat(), open_bits=0o077) or not os.access(path, os.X_OK):
+            return False
         flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
         with os.fdopen(os.open(path, flags), "rb") as handle:
             metadata = os.fstat(handle.fileno())
@@ -284,8 +324,61 @@ def _materialize(raw: bytes) -> _Copy:
     return _Copy(*candidate, root=root)
 
 
+def _remove_idle_kept(directory: Path, keep: str) -> None:
+    """Remove kept copies of other runtimes that no process has used for a day."""
+    try:
+        entries = list(os.scandir(directory))
+    except OSError:
+        return
+    for entry in entries:
+        if not entry.name.startswith(_KEPT_PREFIX) or entry.name == keep:
+            continue
+        with suppress(OSError):
+            if time.time() - entry.stat(follow_symlinks=False).st_mtime > _KEPT_IDLE_SECONDS:
+                shutil.rmtree(entry.path, ignore_errors=True)
+
+
+def _kept(raw: bytes) -> _Copy | None:
+    """The copy kept in a private Guard-home folder for later processes, holding exactly `raw`.
+
+    Only a Guard home's private folder holds one; without an open Guard home
+    every process writes its own copy as before. A kept copy that differs is
+    replaced, and the new copy is written under a private name and renamed into
+    place, so no process ever runs a partly written copy.
+    """
+    name = _KEPT_PREFIX + hashlib.sha256(raw).hexdigest()
+    for private_root in tuple(_private_roots):
+        if (directory := _private_root_directory(private_root)) is None:
+            continue
+        copy = _Copy(directory=None, path=directory / name / _EXECUTABLE_NAME, root=private_root)
+        if not _holds_exactly(copy, raw):
+            if os.path.islink(copy.path.parent):
+                with suppress(OSError):
+                    os.unlink(copy.path.parent)
+            elif os.path.lexists(copy.path.parent):
+                _remove_released(copy.path.parent)
+            made = _candidate(raw, directory)
+            if made is None:
+                continue
+            written, _path = made
+            # Fails when another process placed the same copy first.
+            with suppress(OSError):
+                os.rename(written.name, copy.path.parent)
+            written.cleanup()
+            if not _holds_exactly(copy, raw):
+                continue
+        with suppress(OSError):
+            os.utime(copy.path.parent)
+        _remove_abandoned(directory)
+        _remove_idle_kept(directory, name)
+        return copy
+    return None
+
+
 def _remove(copies: list[_Copy]) -> None:
     for copy in copies:
+        if copy.directory is None:
+            continue
         copy.directory.cleanup()
         _remove_released(Path(copy.directory.name))
 
@@ -316,7 +409,7 @@ def verified_executable(raw: bytes) -> Generator[Path]:
     global _current
     with _copies_lock:
         if _current is None or not _holds_exactly(_current, raw):
-            replacement = _materialize(raw)
+            replacement = _kept(raw) or _materialize(raw)
             if _current is not None:
                 _retired.append(_current)
             _current = replacement
