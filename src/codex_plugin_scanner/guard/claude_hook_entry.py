@@ -3,7 +3,8 @@
 The native ``harness_adapter`` kind owns Claude's settings, hook argv and the
 SessionStart path vector. A Claude op that needs the daemon URL replies
 ``{"facts": null}``; :func:`claude_facts` answers it. The SessionStart hook
-starts the daemon and asks the runtime to rewrite the managed hooks.
+starts the daemon, asks the runtime to rewrite the managed hooks and prints the hook
+output the runtime words.
 """
 
 from __future__ import annotations
@@ -113,8 +114,7 @@ def _run_session_start_from_argv(argv: Sequence[str]) -> int:
             workspace_dir=None if workspace is None else Path(workspace),
             guard_home=guard_home,
         )
-    output = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": paths["context"]}}
-    print(json.dumps(output, separators=(",", ":")))
+    print(paths["output"])
     return 0
 
 

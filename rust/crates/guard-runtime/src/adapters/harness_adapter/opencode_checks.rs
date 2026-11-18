@@ -121,13 +121,19 @@ fn config_uses_proxy(ctx: &Ctx, path: &Path) -> bool {
     })
 }
 
-/// `_opencode_protection_checks`, given the store's managed flag. The
-/// loaded config paths are this adapter's own detection.
+/// `_opencode_protection_checks`. The request names the `store_home` of the
+/// caller's store, whose install record says whether OpenCode is managed; a
+/// caller with no store leaves it out. The loaded config paths are this
+/// adapter's own detection.
 pub(super) fn protection(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let active = fields
-        .get("managed_active")
-        .and_then(Value::as_bool)
-        .ok_or(Failure::Invalid)?;
+    let active = match fields.get("store_home") {
+        None | Some(Value::Null) => false,
+        Some(Value::String(home)) => {
+            super::managed_store::managed_install(Path::new(home), "opencode")?
+                .is_some_and(|row| row.get("active") == Some(&Value::Bool(true)))
+        }
+        Some(_) => return Err(Failure::Invalid),
+    };
     let mut detection = super::opencode::detect(spec, ctx)?;
     let detected = match detection["config_paths"].take() {
         Value::Array(paths) => paths,

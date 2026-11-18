@@ -9,6 +9,7 @@ owner is answered from this process's account database when the resident asks.
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -170,13 +171,90 @@ def request_policy(stage: str, **fields: object) -> Mapping[str, object]:
     return value if isinstance(value, Mapping) else {}
 
 
-def runtime_compare(stage: str, **fields: object) -> None:
-    """One comparison of a native-runtime inspection; the runtime raises on a mismatch.
+def _finite(value: object) -> object:
+    """``value``, or text a number-only field refuses when it is NaN or infinite."""
 
-    ``stage`` is ``probe``, ``capabilities``, ``version`` or ``generation``.
+    return "non-finite" if isinstance(value, float) and not math.isfinite(value) else value
+
+
+def prepare_request(stage: str, **fields: object) -> Mapping[str, object]:
+    """One check of a runtime-transition preparation request; the runtime raises on a bad one.
+
+    ``stage`` is ``deadline``, ``operation``, ``bindings`` or ``identity``. A
+    number that is not finite travels as null, which every stage refuses.
     """
 
-    _ask({"op": "publication_runtime_compare", "stage": stage, **fields}, context=False)
+    clean = {key: _finite(value) for key, value in fields.items()}
+    value = _ask({"op": "publication_prepare_request", "stage": stage, **clean}, context=False).get("value")
+    return value if isinstance(value, Mapping) else {}
+
+
+def pin_executable(
+    path: Path,
+    *,
+    deadline: float,
+    expected: Mapping[str, object] | None = None,
+    expected_sha256: str | None = None,
+) -> Mapping[str, object]:
+    """The artifact record of the executable at ``path``, hashed and pinned by the runtime.
+
+    ``expected`` is the runtime identity (``sha256``, ``size``, ``mtime_ns``) it
+    must still be and ``expected_sha256`` the digest a reviewed artifact bound.
+    ``deadline`` is this process's monotonic clock.
+    """
+
+    request: dict[str, object] = {
+        "op": "publication_pin_executable",
+        "path": str(path),
+        "deadline": _finite(deadline),
+        "now": time.monotonic(),
+        "expected": None if expected is None else dict(expected),
+        "expected_sha256": expected_sha256,
+    }
+    value = _ask(request).get("value")
+    if not isinstance(value, Mapping):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return value
+
+
+def inspect_runtime(
+    *,
+    deadline: float,
+    mode: str,
+    binary_override: str | None,
+    bundled: Path,
+    distribution: Sequence[Path],
+    package_version: str | None,
+    checker: str | None,
+    base_prefix: str | None,
+) -> Mapping[str, object]:
+    """The identity (``path``, ``size``, ``mtime_ns``, ``sha256``) of the runtime a repair compares with.
+
+    The runtime finds, admits, probes and pins the candidate; this process names
+    the install-layout facts only it knows.
+    """
+
+    request: dict[str, object] = {
+        "op": "publication_inspect_runtime",
+        "deadline": _finite(deadline),
+        "now": time.monotonic(),
+        "mode": mode,
+        "binary_override": binary_override,
+        "bundled": str(bundled),
+        "distribution": [str(item) for item in distribution],
+        "package_version": package_version,
+        "checker": checker,
+        "base_prefix": base_prefix,
+    }
+    value = _ask(request).get("value")
+    identity = value.get("identity") if isinstance(value, Mapping) else None
+    if not isinstance(identity, Mapping):
+        from .runtime_transition import TransitionError
+
+        raise TransitionError(_INVALID)
+    return identity
 
 
 def artifact_generation(kind: str, subject: str, *, bound: bool, restored: Sequence[int] | None = None) -> str:
@@ -287,10 +365,12 @@ __all__ = [
     "artifact_generation",
     "authorize_plan",
     "compare_files",
+    "inspect_runtime",
+    "pin_executable",
+    "prepare_request",
     "publish_files",
     "register_inverse",
     "request_policy",
     "require_deadline",
-    "runtime_compare",
     "write_file",
 ]

@@ -518,6 +518,8 @@ mod grok_user_config_op;
 #[cfg(all(test, unix))]
 #[path = "adapters/detection/grok_user_config_tests.rs"]
 mod grok_user_config_tests;
+#[cfg(unix)]
+mod group_write_trust;
 mod guard_config_coerce;
 mod guard_config_harness;
 mod guard_config_iso;

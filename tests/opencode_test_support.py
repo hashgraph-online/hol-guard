@@ -51,5 +51,5 @@ def install_pretool_plugin(context: HarnessContext) -> dict[str, str]:
 def config_uses_guard_proxy(context: HarnessContext, config: Path) -> bool:
     # The native op detects the loaded configs itself; OPENCODE_CONFIG points it at this one.
     with patch.dict(os.environ, {"OPENCODE_CONFIG": str(config)}):
-        answer = ask("protection", context, harness="opencode", managed_active=True)
+        answer = ask("protection", context, harness="opencode")
     return bool(json.loads(str(answer["checks"]))["mcp_proxy_configured"])

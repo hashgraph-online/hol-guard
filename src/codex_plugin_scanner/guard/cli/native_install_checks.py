@@ -14,8 +14,7 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
     """Verify the managed OpenCode plugin, launcher, and MCP routing configuration."""
     from ..harness.native_harness import ask
 
-    managed = store.get_managed_install("opencode") if store is not None else None
-    answer = ask("protection", context, harness="opencode", managed_active=bool(managed and managed.get("active")))
+    answer = ask("protection", context, harness="opencode", store_home=None if store is None else str(store.guard_home))
     return json.loads(str(answer["checks"]))
 
 

@@ -6,15 +6,15 @@ the durable protocol owns all planned file and managed-install publication.
 
 from __future__ import annotations
 
-import math
 import time
 from collections.abc import Generator, Mapping
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 from .approval_gate import ApprovalGateGrant
 from .native_owned import codex_install_transaction, codex_publication_locks
+from .native_transition_files import prepare_request, require_deadline
 from .runtime_transition import (
     RuntimeTransition,
     TransitionError,
@@ -47,8 +47,7 @@ class RuntimeTransitionCoordinator:
 
     @staticmethod
     def _check_deadline(deadline: float) -> None:
-        if time.monotonic() >= deadline:
-            raise TransitionError("deadline_exceeded")
+        require_deadline(deadline)
 
     @contextmanager
     def _publication_owner(self, plan: TransitionPlan, deadline: float) -> Generator[None, None, None]:
@@ -76,13 +75,7 @@ class RuntimeTransitionCoordinator:
         A caller supplies one deadline for lock admission, restoration and proof.
         """
         deadline = deadline_monotonic
-        if (
-            isinstance(deadline, bool)
-            or not isinstance(deadline, (int, float))
-            or not math.isfinite(deadline)
-            or deadline - time.monotonic() > 60
-        ):
-            raise TransitionError("deadline_invalid")
+        prepare_request("recovery", deadline=deadline, now=time.monotonic())
         self._check_deadline(deadline)
         with (
             codex_install_transaction(
@@ -100,8 +93,7 @@ class RuntimeTransitionCoordinator:
         status = self.runtime.status(operation_id)
         if status.phase in {"Committed", "FailedWithVerifiedRollback"}:
             raise TransitionError("terminal_transition")
-        if set(plan.native_runtimes or {}) != {"candidate", "predecessor"}:
-            raise TransitionError("native_runtime_bindings_missing")
+        prepare_request("bindings", native=dict(plan.native_runtimes or {}))
         cause = status.first_cause or "interrupted_transition"
         self._check_deadline(deadline)
         persistence_error: Exception | None = None
@@ -154,15 +146,19 @@ class RuntimeTransitionCoordinator:
         grant: ApprovalGateGrant | None,
         deadline_monotonic: float | None = None,
     ) -> TransitionStatus:
-        if set(plan.native_runtimes or {}) != {"candidate", "predecessor"}:
-            raise TransitionError("native_runtime_bindings_missing")
+        prepare_request("bindings", native=dict(plan.native_runtimes or {}))
         # Capture once before owner admission; waiting for the lock consumes
         # this same operation budget. Begin validates the signed exact subject.
-        deadline = time.monotonic() + max(0.0, plan.deadline_epoch - time.time())
-        if deadline_monotonic is not None:
-            if isinstance(deadline_monotonic, bool) or not math.isfinite(deadline_monotonic):
-                raise TransitionError("deadline_invalid")
-            deadline = min(deadline, deadline_monotonic)
+        deadline = cast(
+            float,
+            prepare_request(
+                "activation",
+                deadline_epoch=plan.deadline_epoch,
+                wall=time.time(),
+                now=time.monotonic(),
+                deadline=deadline_monotonic,
+            ).get("deadline"),
+        )
         self._check_deadline(deadline)
         with (
             self._publication_owner(plan, deadline),

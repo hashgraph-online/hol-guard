@@ -396,6 +396,13 @@ pub(crate) fn spec(harness: &str) -> Option<&'static Spec> {
     SPECS.iter().find(|spec| spec.harness == harness)
 }
 
+/// `get_adapter`: the adapter a harness name or alias selects.
+pub(crate) fn resolve(name: &str) -> Option<&'static Spec> {
+    SPECS
+        .iter()
+        .find(|spec| spec.harness == name || spec.aliases.contains(&name))
+}
+
 impl Spec {
     /// The default approval flow, as `HarnessAdapter.approval_flow` answers it.
     pub(crate) fn approval_flow(&self) -> Value {

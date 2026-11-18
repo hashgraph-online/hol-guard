@@ -33,6 +33,7 @@ mod caller;
 mod claude;
 mod claude_argv;
 mod claude_install_target;
+mod claude_install_target_text;
 mod claude_settings;
 mod cline;
 mod cline_apply;
@@ -120,6 +121,7 @@ mod kimi;
 mod live_hook_verification;
 mod managed_record;
 mod managed_servers;
+mod managed_store;
 mod mcp_servers;
 mod openclaw;
 mod opencode;
@@ -138,6 +140,7 @@ mod probe_run;
 mod proof;
 mod proxy_launch;
 mod settings_hooks;
+mod setup_detection;
 mod shim_profile;
 mod shim_remove;
 mod shims_apply;
@@ -168,6 +171,7 @@ pub(crate) use describe::Spec;
 
 /// The paths a harness adapter works from, as Python's `HarnessContext` and
 /// process hold them.
+#[derive(Clone)]
 pub(crate) struct Ctx {
     pub(crate) home: PathBuf,
     pub(crate) workspace: Option<PathBuf>,
@@ -340,6 +344,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     }
     if contract_config_paths::handles(op) {
         return answer(contract_config_paths::dispatch(&ctx, fields));
+    }
+    if setup_detection::handles(op) {
+        return answer(setup_detection::dispatch(op, &ctx, fields));
     }
     if live_hook_verification::handles(op) {
         return answer(live_hook_verification::dispatch(&ctx, fields));

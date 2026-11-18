@@ -47,12 +47,16 @@ mod pi_family;
 mod probe_run_family;
 #[path = "tests_round_trip.rs"]
 mod round_trip;
+#[path = "tests_setup_detection.rs"]
+mod setup_detection_family;
 #[path = "tests_shims.rs"]
 mod shim_family;
 #[path = "tests_shims_apply.rs"]
 mod shims_apply_family;
 #[path = "update_tests.rs"]
 mod update_family;
+#[path = "update_store_tests.rs"]
+mod update_store_family;
 
 struct Home {
     _dir: TempDir,

@@ -86,24 +86,32 @@ def _runtime_candidates() -> tuple[Path, ...]:
     )
 
 
+def _distribution_candidates() -> tuple[Path, ...]:
+    """Runtimes a separately installed ``hol-guard-runtime`` distribution ships.
+
+    Developer compatibility: such a runtime is validation-only. Automatic
+    production selection must use the runtime bundled inside the
+    version-matched hol-guard wheel and its manifest.
+    """
+
+    try:
+        distribution = importlib.metadata.distribution("hol-guard-runtime")
+    except importlib.metadata.PackageNotFoundError:
+        return ()
+    executable_names = {"hol-guard-runtime", "hol-guard-runtime.exe"}
+    return tuple(
+        Path(str(distribution.locate_file(entry)))
+        for entry in distribution.files or ()
+        if Path(str(entry)).name in executable_names
+    )
+
+
 def _discover_runtime_candidates() -> tuple[Path, ...]:
     mode = native_mode()
     candidates = list(primary_candidates(mode, os.environ.get(_NATIVE_BINARY_ENV), _bundled_runtime_candidate()))
 
-    # Developer compatibility: a separately installed runtime distribution is
-    # validation-only. Automatic production selection must use the runtime
-    # bundled inside the version-matched hol-guard wheel and its manifest.
     if mode == "force":
-        try:
-            distribution = importlib.metadata.distribution("hol-guard-runtime")
-        except importlib.metadata.PackageNotFoundError:
-            distribution = None
-        if distribution is not None:
-            executable_names = {"hol-guard-runtime", "hol-guard-runtime.exe"}
-            for entry in distribution.files or ():
-                if Path(str(entry)).name not in executable_names:
-                    continue
-                candidates.append(Path(str(distribution.locate_file(entry))))
+        candidates.extend(_distribution_candidates())
 
     unique: list[Path] = []
     seen: set[str] = set()

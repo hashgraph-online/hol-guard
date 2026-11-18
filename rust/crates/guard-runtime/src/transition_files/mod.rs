@@ -33,6 +33,7 @@ mod publication_baseline;
 mod publication_commit;
 mod publication_files;
 mod publication_generation;
+mod publication_inspect_runtime;
 mod publication_inverse_pinned;
 mod publication_inverse_plan;
 mod publication_inverse_prepare;
@@ -45,6 +46,9 @@ mod publication_observe_check;
 mod publication_observe_legacy;
 mod publication_observe_run;
 mod publication_observer;
+mod publication_pin_executable;
+mod publication_pin_stamp;
+mod publication_prepare_request;
 mod publication_proof;
 mod publication_receipt;
 mod publication_repair_files;
@@ -68,7 +72,13 @@ mod tests_publication_artifact_generation;
 #[cfg(test)]
 mod tests_publication_authorize;
 #[cfg(test)]
+mod tests_publication_inspect_runtime;
+#[cfg(test)]
 mod tests_publication_inverse_plan;
+#[cfg(test)]
+mod tests_publication_pin_executable;
+#[cfg(test)]
+mod tests_publication_prepare_request;
 #[cfg(test)]
 mod tests_publication_proof;
 #[cfg(test)]
