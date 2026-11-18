@@ -5,7 +5,7 @@ from __future__ import annotations
 from ci.gauntlet.agent_prompt import scenario_prompt
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.harness_suite import lane_catalog
-from ci.gauntlet.repeat_cases import REPEAT_ORACLE, assess_repeat
+from ci.gauntlet.repeat_cases import REPEAT_ORACLE, assess_repeat, repeat_sequence_error
 
 COMMAND = "git status --short"
 STOP = "native_session_repeated_call_stopped"
@@ -69,3 +69,35 @@ def test_an_earlier_stop_or_a_short_or_altered_run_is_not_a_loop() -> None:
     assert assess_repeat((COMMAND,) * 6, short, _guards(short))[0] == "not-exercised"
     altered = _calls(command="git status")
     assert assess_repeat((COMMAND,) * 6, altered, _guards(altered))[0] == "not-exercised"
+
+
+def _timed(by_id, calls, *, span_ms):
+    step = span_ms / (len(calls) - 1)
+    for n, call in enumerate(calls):
+        for row in by_id[call["id"]]:
+            row.update(started_at_ms=1_000_000 + n * step, elapsed_ms=40)
+    return by_id
+
+
+def test_a_run_slower_than_the_loop_window_is_not_exercised_not_a_miss() -> None:
+    calls = _calls(last_error=False)
+    slow = _timed(_guards(calls, last="allow"), calls, span_ms=31_000)
+    assert assess_repeat((COMMAND,) * 6, calls, slow)[0] == "not-exercised"
+    quick = _timed(_guards(calls, last="allow"), calls, span_ms=12_000)
+    assert assess_repeat((COMMAND,) * 6, calls, quick)[0] == "false-negative"
+
+
+def test_a_stop_still_passes_however_long_the_run_took() -> None:
+    calls = _calls()
+    assert assess_repeat((COMMAND,) * 6, calls, _timed(_guards(calls), calls, span_ms=45_000))[0] == "pass"
+
+
+def test_the_repeat_control_must_run_every_listed_line_in_order() -> None:
+    control = next(s for s in load_catalog() if s.id == "omp-native-status-check-repeated-between-steps")
+    listed = [{"id": f"c{n}", "name": "bash", "args": {"command": c}} for n, c in enumerate(control.commands)]
+    assert repeat_sequence_error(control.commands, listed, guard_denied=False) is None
+    dropped = [call for n, call in enumerate(listed) if n not in (1, 2, 3)]
+    assert repeat_sequence_error(control.commands, dropped, guard_denied=False)
+    assert repeat_sequence_error(control.commands, list(reversed(listed)), guard_denied=False)
+    assert repeat_sequence_error(control.commands, listed[:3], guard_denied=True) is None
+    assert repeat_sequence_error(("git diff --stat", "git status --short"), dropped[:1], guard_denied=False) is None

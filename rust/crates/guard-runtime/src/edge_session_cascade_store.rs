@@ -13,7 +13,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use super::{Call, Session, FANOUT_PRIORS, MAX_CALLS, MAX_REQUESTS, MAX_SESSIONS, SESSION_IDLE};
+use super::{Call, Session, Stop, FANOUT_PRIORS, MAX_CALLS, MAX_REQUESTS, MAX_SESSIONS, SESSION_IDLE};
 
 const DIRECTORY: &str = "session-cascade.v1";
 const STATE_DIRECTORY: &str = "native-runtime";
@@ -26,7 +26,7 @@ const SUFFIX: &str = ".json";
 struct Saved {
     calls: Vec<SavedCall>,
     spawns: Vec<u64>,
-    requests: Vec<String>,
+    requests: Vec<(String, Option<Stop>)>,
     touched: u64,
 }
 

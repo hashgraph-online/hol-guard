@@ -7,7 +7,8 @@
 //! * a loop: the exact same shell command, already allowed five times in a
 //!   row within [`LOOP_WINDOW`] with no other tool call in between, made a
 //!   sixth time;
-//! * a fan-out: a ninth subagent started within [`FANOUT_WINDOW`].
+//! * a fan-out: a ninth subagent started within [`FANOUT_WINDOW`], counting
+//!   every subagent a batched call starts.
 //!
 //! The stop denies that one call and says why, then starts the count again,
 //! so a repeat the agent makes on purpose runs on its next try. Ordinary work
@@ -51,6 +52,9 @@ const SUBAGENT_TOOLS: &[&str] = &["Agent", "Task", "task"];
 /// Only a shell command can loop into a stop. A wait, poll or read tool
 /// repeats by design, so it only ends a streak.
 const SHELL_TOOLS: &[&str] = &["Bash", "PowerShell", "bash"];
+/// Shell input fields that label a call or bound its run time without
+/// changing the command.
+const SHELL_LABEL_FIELDS: &[&str] = &["description", "timeout", "title", "i", "intent"];
 
 /// Sessions kept, and how long an idle one is remembered.
 const MAX_SESSIONS: usize = 512;
@@ -59,7 +63,8 @@ const MAX_CALLS: usize = LOOP_PRIORS + 1;
 const MAX_REQUESTS: usize = 16;
 
 /// What the edge saw for one call.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum Stop {
     Loop,
     Fanout,
@@ -76,7 +81,9 @@ struct Call {
 struct Session {
     calls: VecDeque<Call>,
     spawns: VecDeque<Instant>,
-    requests: VecDeque<String>,
+    /// Requests already answered, with the stop each one got, so a hook
+    /// delivered twice gets the same answer twice.
+    requests: VecDeque<(String, Option<Stop>)>,
     touched: Instant,
 }
 
@@ -110,29 +117,39 @@ pub(crate) struct Observed<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Kind {
     Shell,
-    Subagent,
+    /// A call that starts this many subagents.
+    Subagent(usize),
     Other,
 }
 
 impl Tracker {
     /// Records a call and says whether it must be stopped. A request already
-    /// seen (the same hook delivered twice) is not counted again.
+    /// seen (the same hook delivered twice) is not counted again and gets the
+    /// answer it got the first time.
     pub(crate) fn observe(&mut self, call: &Observed<'_>, now: Instant) -> Option<Stop> {
-        self.prune(now);
+        self.prune(now, call.session);
         let session = self
             .sessions
             .entry(call.session.to_owned())
             .or_insert_with(|| Session::new(now));
         session.touched = now;
-        if let Some(request) = call.request.filter(|request| !request.is_empty()) {
-            if session.requests.iter().any(|seen| seen == request) {
-                return None;
+        let request = call.request.filter(|request| !request.is_empty());
+        if let Some(request) = request {
+            if let Some((_, stop)) = session.requests.iter().find(|(seen, _)| seen == request) {
+                return *stop;
             }
+        }
+        let stop = Self::stop(session, call, now);
+        if let Some(request) = request {
             if session.requests.len() >= MAX_REQUESTS {
                 session.requests.pop_front();
             }
-            session.requests.push_back(request.to_owned());
+            session.requests.push_back((request.to_owned(), stop));
         }
+        stop
+    }
+
+    fn stop(session: &mut Session, call: &Observed<'_>, now: Instant) -> Option<Stop> {
         let mut stop = None;
         if call.allowed {
             let streak = session
@@ -147,7 +164,7 @@ impl Tracker {
                 .count();
             if call.kind == Kind::Shell && streak >= LOOP_PRIORS {
                 stop = Some(Stop::Loop);
-            } else if call.kind == Kind::Subagent {
+            } else if let Kind::Subagent(count) = call.kind {
                 while session
                     .spawns
                     .front()
@@ -155,11 +172,17 @@ impl Tracker {
                 {
                     session.spawns.pop_front();
                 }
-                if session.spawns.len() >= FANOUT_PRIORS {
+                // A batch counts every subagent it starts. One call's own
+                // batch is the agent's plan for the task, so it is checked
+                // against the subagents already running, never on its own.
+                let started = session.spawns.len();
+                if started >= FANOUT_PRIORS || (started > 0 && started + count > FANOUT_PRIORS) {
                     session.spawns.clear();
                     stop = Some(Stop::Fanout);
                 } else {
-                    session.spawns.push_back(now);
+                    for _ in 0..count.min(FANOUT_PRIORS - started) {
+                        session.spawns.push_back(now);
+                    }
                 }
             }
         }
@@ -212,13 +235,21 @@ impl Tracker {
         stop
     }
 
-    fn prune(&mut self, now: Instant) {
+    /// Forgets idle sessions, then the oldest beyond [`MAX_SESSIONS`]. The
+    /// session being observed (`current`) is never the one evicted.
+    fn prune(&mut self, now: Instant, current: &str) {
         self.sessions
             .retain(|_, session| now.saturating_duration_since(session.touched) <= SESSION_IDLE);
-        while self.sessions.len() >= MAX_SESSIONS {
+        let room = if self.sessions.contains_key(current) {
+            MAX_SESSIONS
+        } else {
+            MAX_SESSIONS - 1
+        };
+        while self.sessions.len() > room {
             let Some(oldest) = self
                 .sessions
                 .iter()
+                .filter(|(key, _)| key.as_str() != current)
                 .min_by_key(|(_, session)| session.touched)
                 .map(|(key, _)| key.clone())
             else {
@@ -247,23 +278,37 @@ fn session_key(harness: &str, envelope: &GuardHookEnvelopeV2) -> Option<String> 
     Some(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-/// The call's identity: the tool and its exact input.
+/// The call's identity: the tool and its exact input. For a shell command,
+/// fields that only describe the call or bound how long it may take are left
+/// out, since they do not change what runs.
 fn call_digest(payload: &Value) -> Option<([u8; 32], Kind)> {
     let tool = payload.get("tool_name").and_then(Value::as_str)?;
-    let input = payload.get("tool_input").cloned().unwrap_or(Value::Null);
+    let mut input = payload.get("tool_input").cloned().unwrap_or(Value::Null);
+    let kind = if SHELL_TOOLS.contains(&tool) {
+        if let Value::Object(fields) = &mut input {
+            fields.retain(|key, _| !SHELL_LABEL_FIELDS.contains(&key.as_str()));
+        }
+        Kind::Shell
+    } else if SUBAGENT_TOOLS.contains(&tool) {
+        Kind::Subagent(subagents(&input))
+    } else {
+        Kind::Other
+    };
     let text = serde_json::to_string(&input).ok()?;
     let mut hasher = Sha256::new();
     hasher.update(tool.as_bytes());
     hasher.update([0]);
     hasher.update(text.as_bytes());
-    let kind = if SHELL_TOOLS.contains(&tool) {
-        Kind::Shell
-    } else if SUBAGENT_TOOLS.contains(&tool) {
-        Kind::Subagent
-    } else {
-        Kind::Other
-    };
     Some((hasher.finalize().into(), kind))
+}
+
+/// How many subagents one call starts: each entry of a batched `tasks` list,
+/// or one.
+fn subagents(input: &Value) -> usize {
+    input
+        .get("tasks")
+        .and_then(Value::as_array)
+        .map_or(1, |tasks| tasks.len().max(1))
 }
 
 /// Whether Guard let the call through: allowed, warned or sent to a sandbox.

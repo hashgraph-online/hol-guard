@@ -163,6 +163,111 @@ fn a_redelivered_request_is_counted_once() {
 }
 
 #[test]
+fn a_redelivered_stopped_request_is_stopped_again() {
+    let mut tracker = Tracker::default();
+    let now = Instant::now();
+    let (digest, kind) = bash("npm test");
+    let observed = |request| Observed {
+        session: "s",
+        request: Some(request),
+        digest,
+        kind,
+        allowed: true,
+    };
+    for request in ["r0", "r1", "r2", "r3", "r4"] {
+        assert_eq!(tracker.observe(&observed(request), now), None);
+    }
+    assert_eq!(tracker.observe(&observed("r-stop"), now), Some(Stop::Loop));
+    assert_eq!(tracker.observe(&observed("r-stop"), now), Some(Stop::Loop));
+    assert_eq!(tracker.observe(&observed("r0"), now), None);
+    assert_eq!(tracker.observe(&observed("r-next"), now), None);
+}
+
+#[test]
+fn a_full_session_table_never_evicts_the_session_being_observed() {
+    let mut tracker = Tracker::default();
+    let start = Instant::now();
+    for _ in 0..LOOP_PRIORS {
+        call(&mut tracker, "s", bash("npm test"), true, start);
+    }
+    for other in 1..super::MAX_SESSIONS {
+        let at = start + Duration::from_millis(other as u64);
+        call(&mut tracker, &format!("o{other}"), bash("ls"), true, at);
+    }
+    // The table is full and `s` is its oldest session; its own call must
+    // not evict it.
+    let at = start + Duration::from_secs(2);
+    assert_eq!(
+        call(&mut tracker, "s", bash("npm test"), true, at),
+        Some(Stop::Loop)
+    );
+    assert_eq!(tracker.sessions.len(), super::MAX_SESSIONS);
+    call(&mut tracker, "new", bash("ls"), true, at);
+    assert_eq!(tracker.sessions.len(), super::MAX_SESSIONS);
+    assert!(!tracker.sessions.contains_key("o1"), "the oldest other session goes");
+}
+
+#[test]
+fn a_changed_description_or_timeout_does_not_hide_a_loop() {
+    let mut tracker = Tracker::default();
+    let now = Instant::now();
+    for step in 0..LOOP_PRIORS {
+        let labelled = digest(
+            "Bash",
+            serde_json::json!({"command": "npm test", "description": format!("try {step}"), "timeout": 1000 * step}),
+        );
+        assert_eq!(call(&mut tracker, "s", labelled, true, now), None);
+    }
+    assert_eq!(
+        call(&mut tracker, "s", bash("npm test"), true, now),
+        Some(Stop::Loop)
+    );
+    assert_ne!(
+        digest("Bash", serde_json::json!({"command": "npm test", "run_in_background": true})).0,
+        bash("npm test").0,
+        "a field that changes how the command runs still counts"
+    );
+}
+
+#[test]
+fn a_batched_call_counts_every_subagent_it_starts() {
+    let batch = |prompt: &str, size: usize| {
+        let tasks: Vec<_> = (0..size)
+            .map(|n| serde_json::json!({"id": format!("{prompt}{n}"), "assignment": "look"}))
+            .collect();
+        digest("task", serde_json::json!({"agent": "explore", "tasks": tasks}))
+    };
+    assert_eq!(batch("a", 3).1, Kind::Subagent(3));
+    assert_eq!(digest("task", serde_json::json!({"tasks": []})).1, Kind::Subagent(1));
+    let mut tracker = Tracker::default();
+    let now = Instant::now();
+    for step in 0..4 {
+        assert_eq!(call(&mut tracker, "s", batch(&format!("b{step}"), 2), true, now), None);
+    }
+    assert_eq!(
+        call(&mut tracker, "s", batch("b4", 2), true, now),
+        Some(Stop::Fanout)
+    );
+    let mut tracker = Tracker::default();
+    assert_eq!(call(&mut tracker, "s", batch("c", 3), true, now), None);
+    assert_eq!(
+        call(&mut tracker, "s", batch("d", FANOUT_PRIORS), true, now),
+        Some(Stop::Fanout),
+        "a batch that would pass the limit beside running subagents is stopped"
+    );
+    let mut tracker = Tracker::default();
+    assert_eq!(
+        call(&mut tracker, "s", batch("e", FANOUT_PRIORS + 4), true, now),
+        None,
+        "one call's own batch is the agent's plan"
+    );
+    assert_eq!(
+        call(&mut tracker, "s", spawn("next"), true, now),
+        Some(Stop::Fanout)
+    );
+}
+
+#[test]
 fn a_user_prompt_starts_the_counts_again() {
     let mut tracker = Tracker::default();
     let now = Instant::now();
@@ -264,7 +369,7 @@ fn only_a_shell_command_loops_into_a_stop() {
     for tool in ["Agent", "Task", "task"] {
         assert_eq!(
             digest(tool, serde_json::json!({"prompt": "x"})).1,
-            Kind::Subagent
+            Kind::Subagent(1)
         );
     }
 }
@@ -352,8 +457,13 @@ fn a_removed_or_malformed_file_forgets_the_counts() {
         saved_call(&store, &mut tracker, bash("npm test"), now),
         None
     );
-    for _ in 0..LOOP_PRIORS {
-        saved_call(&store, &mut tracker, bash("npm test"), now);
+    // Five in a row now: memory alone would stop the next one, so only a
+    // read of the file below can let it run.
+    for _ in 0..LOOP_PRIORS - 1 {
+        assert_eq!(
+            saved_call(&store, &mut tracker, bash("npm test"), now),
+            None
+        );
     }
     let file = home
         .path()
