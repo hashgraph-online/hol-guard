@@ -271,7 +271,7 @@ def test_desktop_transition_status_is_authenticated_and_redacted(transition, mon
     import uuid
 
     from codex_plugin_scanner.guard.cli import desktop_runtime_transition as module
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, plan, *_ = transition
     plan = replace(plan, operation_id=str(uuid.uuid4()))
@@ -301,7 +301,7 @@ def test_desktop_transition_status_is_authenticated_and_redacted(transition, mon
 
 def test_desktop_transition_observer_refuses_uncovered_harness(transition, tmp_path):
     from codex_plugin_scanner.guard.cli.desktop_runtime_transition import _codex_observer
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, plan, *_ = transition
     store, plan = with_install_store(runtime, plan, [])
@@ -311,7 +311,7 @@ def test_desktop_transition_observer_refuses_uncovered_harness(transition, tmp_p
 
 def test_desktop_transition_observer_uses_recorded_binding_and_native_identity(transition, monkeypatch, tmp_path):
     from codex_plugin_scanner.guard.cli import desktop_runtime_transition as module
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, plan, bindings, _ = transition
     plan = core_dependencies(plan)
@@ -549,7 +549,7 @@ def test_interrupted_file_publication_rolls_back_rows_then_recovers(transition, 
 
 
 def test_shared_launcher_preparation_has_no_home_side_effects(tmp_path: Path):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.shims import prepare_guard_shim
 
     ctx = HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=tmp_path / "new-guard")
@@ -560,7 +560,7 @@ def test_shared_launcher_preparation_has_no_home_side_effects(tmp_path: Path):
 
 
 def test_prepared_launchers_join_signed_publication_and_exact_inverse(transition):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.shims import install_guard_shim, prepare_guard_shim
 
     runtime, plan, _, _ = transition
@@ -584,7 +584,7 @@ def test_prepared_launchers_join_signed_publication_and_exact_inverse(transition
 
 def test_prepared_launcher_refuses_symlink_before_any_write(tmp_path: Path):
     from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.shims import prepare_guard_shim
 
     ctx = HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=tmp_path / "guard")
@@ -600,8 +600,8 @@ def test_prepared_launcher_refuses_symlink_before_any_write(tmp_path: Path):
 
 
 def test_native_claude_binding_plan_restores_user_hooks_and_launchers(transition):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -635,8 +635,8 @@ def test_native_claude_binding_plan_restores_user_hooks_and_launchers(transition
 
 
 def test_native_kimi_plan_restores_config_and_launchers_after_rebind(transition):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -662,8 +662,8 @@ def test_native_kimi_plan_restores_config_and_launchers_after_rebind(transition)
 
 
 def test_prepared_native_install_preserves_foreign_edit_before_any_publication(transition):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, _, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -740,8 +740,8 @@ def test_authenticated_invalid_file_contract_refuses_publication(transition, fie
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_openclaw_complete_plan_recovers_overlay_hook_manifest_and_launchers(transition, previous_exists):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -766,8 +766,8 @@ def test_openclaw_complete_plan_recovers_overlay_hook_manifest_and_launchers(tra
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_grok_plan_restores_config_hooks_state_and_backup_lifetime(transition, previous_exists):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -809,8 +809,8 @@ def test_grok_plan_restores_config_hooks_state_and_backup_lifetime(transition, p
 @pytest.mark.parametrize("previous_exists", [False, True])
 @pytest.mark.parametrize("harness", ["zcode", "devin"])
 def test_native_json_plan_restores_config_state_and_backup_lifetime(transition, previous_exists, harness):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -849,8 +849,8 @@ def test_native_json_plan_restores_config_state_and_backup_lifetime(transition, 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_pi_family_plan_restores_extension_settings_and_user_entries(transition, harness, previous_exists):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -883,8 +883,8 @@ def test_pi_family_plan_restores_extension_settings_and_user_entries(transition,
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(transition, previous_exists):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -924,8 +924,8 @@ def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(tran
 
 
 def test_opencode_foreign_source_config_prevents_any_transition_publication(transition):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, plan, bindings, pointer = transition
     workspace = runtime.home.parent / "workspace"
@@ -957,8 +957,8 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
     native_adapter_state_integrity_runtime,
 ):
     del native_adapter_state_integrity_runtime
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from tests.python_oracles.native_adapter_state_integrity import native_adapter_state_integrity
 
     runtime, plan, _, _ = transition
@@ -987,7 +987,7 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
     if previous_exists:
         adapter.install(ctx)
     if frozen:
-        from codex_plugin_scanner.guard.harness import bounded_cli_hook_bridge as bridge
+        from codex_plugin_scanner.guard import bounded_cli_hook_bridge as bridge
 
         monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
         use_bounded_runtime(monkeypatch, runtime.home.parent / "hol-guard-runtime")
@@ -1026,8 +1026,8 @@ def test_changed_copilot_authority_prevents_any_transition_mutation(
     native_adapter_state_integrity_runtime,
 ):
     del native_adapter_state_integrity_runtime
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from tests.python_oracles.native_adapter_state_integrity import native_adapter_state_integrity
 
     runtime, plan, bindings, pointer = transition
@@ -1088,8 +1088,8 @@ def test_authority_dependency_rejects_mutating_or_invalid_contracts(tmp_path, kw
 @pytest.mark.parametrize("previous_exists", [False, True])
 @pytest.mark.parametrize("legacy", ["none", "user", "managed", "backup"])
 def test_cursor_editor_plan_restores_native_and_legacy_bindings(transition, previous_exists, legacy):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from tests.cursor_test_support import (
         HOOK_SCRIPT_NAME,
         cursor_hooks_backup_path,
@@ -1147,8 +1147,8 @@ def test_cursor_editor_plan_restores_native_and_legacy_bindings(transition, prev
 
 
 def test_cursor_foreign_workspace_config_prevents_any_transition_publication(transition):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from tests.cursor_test_support import enroll_cursor_hook_key
 
     runtime, plan, bindings, pointer = transition
@@ -1178,8 +1178,8 @@ def test_cursor_foreign_workspace_config_prevents_any_transition_publication(tra
 @pytest.mark.parametrize("profile_exists", [False, True])
 def test_cursor_all_surfaces_restore_launchers_and_shell_profile(transition, monkeypatch, surface, profile_exists):
     from codex_plugin_scanner.guard import shims
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from tests.cursor_test_support import enroll_cursor_hook_key
 
     runtime, plan, _, _ = transition
@@ -1222,8 +1222,8 @@ def test_cursor_all_surfaces_restore_launchers_and_shell_profile(transition, mon
 @pytest.mark.skipif(os.name == "nt", reason="POSIX shell profiles")
 def test_cursor_foreign_profile_prevents_any_transition_publication(transition, monkeypatch):
     from codex_plugin_scanner.guard import shims
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
     from codex_plugin_scanner.guard.harness.registry import get_adapter
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     runtime, plan, bindings, pointer = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, guard_home=runtime.home, workspace_dir=None)

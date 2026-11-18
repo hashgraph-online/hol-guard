@@ -10,7 +10,7 @@ from pathlib import Path
 from packaging.version import InvalidVersion, Version
 
 from ...version import __version__
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..mdm.contracts import ManagedNetworkPolicy
 from ..native_daemon_manage import GuardDaemonStillStartingError
 from ..native_daemon_peer import (

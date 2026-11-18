@@ -12,8 +12,8 @@ from codex_plugin_scanner.guard.aibom_content_upload import (
     primary_content_sources_from_artifacts,
     upload_primary_content_sources,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import (
     extract_aibom_metadata_extensions,
     inventory_snapshot_from_detection,

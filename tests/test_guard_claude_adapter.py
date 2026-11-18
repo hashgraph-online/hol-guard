@@ -13,9 +13,10 @@ import pytest
 from codex_plugin_scanner.guard import claude_hook_entry as claude_code
 from codex_plugin_scanner.guard import native_caller
 from codex_plugin_scanner.guard.claude_hook_entry import CLAUDE_GUARD_DAEMON_HOOK_MARKER
-from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
 from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 

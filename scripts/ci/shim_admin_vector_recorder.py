@@ -127,7 +127,7 @@ def run_call(shims: object, context: object, subop: str, args: dict[str, object]
 
 def record_scenario(scenario: dict[str, object], work_base: str) -> dict[str, object]:
     from codex_plugin_scanner.guard import shims
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     root = os.path.realpath(tempfile.mkdtemp(prefix="v", dir=work_base))
     saved_environ = dict(os.environ)

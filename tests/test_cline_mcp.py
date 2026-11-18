@@ -8,9 +8,9 @@ import pytest
 
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard.cli.commands_router import _COMMON_HANDLERS, _resolve_guard_handler
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import ask
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 from tests.cline_test_support import uninstall
 
 

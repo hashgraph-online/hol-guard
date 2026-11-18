@@ -2,122 +2,21 @@
 
 from __future__ import annotations
 
-import os
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..harness.contracts import HarnessCoverageSummary, HarnessSetupContract, HarnessSetupStep, setup_contract_for
-from ..harness.diagnostic_probes import command_probes_enabled
-from ..harness.harness_diagnostics_bridge import (
-    artifacts_use_guard,
-    guard_warnings,
-    native_diagnostics,
-)
-from ..harness.harness_diagnostics_bridge import shell_command as _shell_command
+from ..command_probes import _run_command_probe
+from ..diagnostics_bridge import artifacts_use_guard, guard_warnings, native_diagnostics
+from ..diagnostics_bridge import shell_command as _shell_command
+from ..harness_context import HarnessContext, PreparedHarnessInstall
 from ..models import GuardArtifact, HarnessDetection
 from ..native_owned import owned_adapter_mutation
+from ..setup_contracts import HarnessCoverageSummary, HarnessSetupContract, HarnessSetupStep, setup_contract_for
 
 if TYPE_CHECKING:
     from ..inventory_contract import GuardAgentInventorySnapshot
-    from ..runtime_transition import TransitionFile
-
-
-@dataclass(frozen=True, slots=True)
-class HarnessContext:
-    """Paths used by harness adapters."""
-
-    home_dir: Path
-    workspace_dir: Path | None
-    guard_home: Path
-    executable_overrides: Mapping[str, str] = field(default_factory=dict[str, str])
-    home_override_explicit: bool = False
-    workspace_override_explicit: bool = False
-
-
-@dataclass(frozen=True)
-class PreparedHarnessInstall:
-    files: tuple[TransitionFile, ...]
-    manifest: dict[str, object]
-
-    def publish(
-        self,
-        guard_home: Path,
-        *,
-        removals: bool = False,
-        rollback: bool = True,
-        on_write: Callable[[TransitionFile], None] | None = None,
-    ) -> dict[str, object]:
-        """Publish an ordinary install under ownership; pending transitions use their signed plan.
-
-        ``removals`` admits planned deletions, for a plan that retires files an
-        older install left behind. Rollback still restores them. A caller that
-        journals the plan itself passes ``rollback=False`` and recovers from its
-        own record; ``on_write`` sees each file just after it is written.
-        """
-        from ..native_owned import require_codex_install_owner
-        from ..native_transition_files import publish_files
-        from ..runtime_transition import assert_transition_mutation_allowed
-
-        require_codex_install_owner(guard_home)
-        assert_transition_mutation_allowed(guard_home)
-        publish_files(self.files, removals=removals, rollback=rollback, on_write=on_write)
-        return self.manifest
-
-
-#: The caller environment a harness CLI probe runs with.
-_PROBE_ENV_KEYS = (
-    "PATH",
-    "PATHEXT",
-    "HOME",
-    "USERPROFILE",
-    "SYSTEMROOT",
-    "WINDIR",
-    "COMSPEC",
-    "TEMP",
-    "TMP",
-    "TMPDIR",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "XDG_CONFIG_HOME",
-    "XDG_DATA_HOME",
-    "LANG",
-    "LC_ALL",
-)
-
-
-def _run_command_probe(
-    command: list[str],
-    timeout_seconds: int = 5,
-    *,
-    cwd: Path | None = None,
-    env: Mapping[str, str] | None = None,
-) -> dict[str, object]:
-    """Run a harness CLI's ``--help`` or ``--version`` through the native ``command_probe`` kind.
-
-    The working directory and the probe environment are facts of the calling
-    Python process, so they travel with the request until the resident request
-    envelope stamps them.
-    """
-
-    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
-
-    if not command_probes_enabled():
-        # The runtime answers the record that says nothing ran.
-        return native_runner_authority("command_probe", {"command": [str(part) for part in command], "probes": False})
-    request = {
-        "command": [str(part) for part in command],
-        "cwd": str((cwd or Path.cwd()).absolute()),
-        "env": {key: os.environ[key] for key in _PROBE_ENV_KEYS if key in os.environ} if env is None else dict(env),
-        "timeout_seconds": timeout_seconds,
-    }
-    try:
-        return native_runner_authority("command_probe", request, timeout_seconds=timeout_seconds + 10.0)
-    except NativeRunnerAuthorityError:
-        # A diagnostic probe never fails the doctor; it reports that nothing ran.
-        return {"command": command, "ok": False, "return_code": None, "stdout": "", "stderr": "probe unavailable"}
 
 
 class HarnessAdapter:

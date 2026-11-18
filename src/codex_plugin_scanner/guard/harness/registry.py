@@ -7,7 +7,8 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .base import HarnessAdapter, HarnessContext
+    from ..harness_context import HarnessContext
+    from .base import HarnessAdapter
 
 # ``(module, class)`` for a Python adapter; ``(".native_harness", harness)``
 # for one the native ``harness_adapter`` kind answers.
@@ -35,7 +36,8 @@ _ADAPTER_SPECS: tuple[tuple[str, str], ...] = (
 
 @lru_cache(maxsize=1)
 def _adapters() -> tuple[HarnessAdapter, ...]:
-    from .native_harness import NATIVE_HARNESSES, NativeHarnessAdapter
+    from ..native_harness_client import NATIVE_HARNESSES
+    from .native_harness import NativeHarnessAdapter
 
     native = {harness: (harness, aliases, launcher) for harness, aliases, launcher in NATIVE_HARNESSES}
     adapters: list[HarnessAdapter] = []

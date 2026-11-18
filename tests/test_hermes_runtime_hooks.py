@@ -14,8 +14,8 @@ import yaml as pyyaml
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority
-from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
 

@@ -8,9 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
 from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter
 from codex_plugin_scanner.guard.harness.registry import get_adapter, list_adapters
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
@@ -83,7 +84,7 @@ class TestDevinAdapterIdentity:
         assert "devin" in {item.harness for item in list_adapters()}
 
     def test_contract_resolve(self) -> None:
-        from codex_plugin_scanner.guard.harness.contracts import contract_for, setup_contract_for
+        from codex_plugin_scanner.guard.setup_contracts import contract_for, setup_contract_for
 
         contract = contract_for("devin")
         assert contract is not None

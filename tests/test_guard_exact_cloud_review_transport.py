@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.contracts.guard_cloud_review import validate_exact_command_result
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
     validated_remote_approval_envelope,

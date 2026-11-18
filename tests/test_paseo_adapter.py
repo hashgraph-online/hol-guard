@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install, build_harness_setup_plan
-from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import (
     inventory_snapshot_from_detection,
     serialize_inventory_snapshot,

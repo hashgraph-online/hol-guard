@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.local_clis.local_cli_api as local_cli_api_module
-from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.mcp_discovery_client import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.store import GuardStore

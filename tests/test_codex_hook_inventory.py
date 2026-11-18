@@ -11,7 +11,7 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_adapter_lifecycle
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.codex_toml_support import dump_toml, read_toml_payload
 from tests.python_oracles.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_MALFORMED_GROUP,

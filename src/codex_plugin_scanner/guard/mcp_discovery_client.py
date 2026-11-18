@@ -37,7 +37,7 @@ from .runtime.mcp_connection_identity import McpConnectionIdentity
 from .runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 
 if TYPE_CHECKING:
-    from .harness.base import HarnessContext
+    from .harness_context import HarnessContext
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ def _stdio_servers(loaded: Sequence[HarnessDetection]) -> tuple[DiscoveredHarnes
 
 
 def _group_entry(server: ManagedMcpServer, identity: McpServerIdentity) -> dict[str, object]:
-    from .harness.contracts import display_name_for
+    from .setup_contracts import display_name_for
 
     return {
         "harness": server.harness,
@@ -447,8 +447,8 @@ def apply_source_labels(items: list[dict[str, object]], labels: dict[str, str]) 
 def _safe_detections(
     home_dir: Path, guard_home: Path, workspace_dir: Path | None, skipped: list[str] | None = None
 ) -> list[HarnessDetection]:
-    from .harness.base import HarnessContext
     from .harness.registry import list_adapters
+    from .harness_context import HarnessContext
 
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
     detections: list[HarnessDetection] = []

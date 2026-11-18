@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..mdm.network import managed_urlopen
 from ..redaction import redact_sensitive_text
 from ..remote_pairing_constants import (

@@ -32,8 +32,8 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
-from ..native_hook_render import native_muse_bridge
 from .hook_failure_bridge import native_stderr_hook_failure
+from .native_hook_render import native_muse_bridge
 
 _UNAVAILABLE_REASON = "HOL Guard blocked this action."
 

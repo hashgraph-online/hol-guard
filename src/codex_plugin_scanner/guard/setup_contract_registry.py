@@ -13,11 +13,11 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-from .contract_models import HarnessEventCapability, HarnessProtectionContract
+from .setup_contract_models import HarnessEventCapability, HarnessProtectionContract
 
 
 def _registry(op: str, **fields: object) -> dict[str, Any]:
-    from ..native_runner_authority import native_runner_authority
+    from .native_runner_authority import native_runner_authority
 
     return native_runner_authority("harness_contract_registry", {"op": op, **fields})
 

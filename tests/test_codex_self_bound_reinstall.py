@@ -16,7 +16,7 @@ from codex_plugin_scanner.guard.codex_hook_self_binding import (
     codex_hook_guard_home,
     self_bound_hook_bindings,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.codex_toml_support import dump_toml, read_toml_payload
 
 from .test_codex_migration_preparation import migration_kept_hooks

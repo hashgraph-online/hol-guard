@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from .harness.base import HarnessContext
 from .harness.registry import list_adapters
+from .harness_context import HarnessContext
 from .hook_removal_sweep import (
     BackupError,
     SweepUnavailableError,

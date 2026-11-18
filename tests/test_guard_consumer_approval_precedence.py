@@ -20,10 +20,12 @@ from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import evaluate_detection
-from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import NATIVE_HARNESSES, NativeHarnessAdapter
+from codex_plugin_scanner.guard.harness.base import HarnessAdapter
+from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.native_harness_client import NATIVE_HARNESSES
 from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import guard_run_launch as guard_run_launch
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module

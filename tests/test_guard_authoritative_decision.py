@@ -13,7 +13,8 @@ import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import service as consumer_service
-from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessAdapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime import guard_run_launch as guard_run_launch
 from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run

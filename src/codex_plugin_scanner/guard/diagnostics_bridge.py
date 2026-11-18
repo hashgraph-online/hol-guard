@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, TypeVar
 
-from ..models import GuardArtifact, HarnessDetection
+from .models import GuardArtifact, HarnessDetection
 
 _T = TypeVar("_T")
 
@@ -56,7 +56,7 @@ def _runtime_probe_request(runtime_probe: dict[str, object] | None) -> object:
 def _harness_diagnostics(op: str, valid: Callable[[object], bool], **fields: object) -> Any:
     """The native ``harness_diagnostics`` answer to ``op``, which it returns under the op's own name."""
 
-    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     value = native_runner_authority("harness_diagnostics", {"op": op, **fields}).get(op)
     if not valid(value):

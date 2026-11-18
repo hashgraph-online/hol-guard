@@ -13,7 +13,7 @@ import pytest
 
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install, list_harness_setup_items
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cursor_test_support import cursor_agent_on_path

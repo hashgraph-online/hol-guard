@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .harness.base import HarnessContext
     from .harness.native_harness import NativeHarnessAdapter
+    from .harness_context import HarnessContext
 
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 CLAUDE_GUARD_SESSION_START_HOOK_MARKER = "HOL_GUARD_CLAUDE_SESSION_START_HOOK"
@@ -62,7 +62,7 @@ def claude_argv(which: str, context: HarnessContext) -> tuple[str, ...]:
 
 def claude_hook_command(context: HarnessContext) -> str:
     """The fallback hook argv as one shell command line."""
-    from .harness.base import _shell_command
+    from .diagnostics_bridge import shell_command as _shell_command
 
     return _shell_command(claude_argv("hook", context))
 
@@ -82,7 +82,7 @@ def _refresh_owned(adapter: NativeHarnessAdapter, context: HarnessContext) -> No
 
 def refresh_claude_hooks(*, home_dir: Path, workspace_dir: Path | None, guard_home: Path) -> None:
     """Rewrite the managed Claude hooks with this build's argv, under the install lock."""
-    from .harness.base import HarnessContext
+    from .harness_context import HarnessContext
 
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
     _refresh_owned(_claude_adapter(), context)
@@ -90,9 +90,9 @@ def refresh_claude_hooks(*, home_dir: Path, workspace_dir: Path | None, guard_ho
 
 def _run_session_start_from_argv(argv: Sequence[str]) -> int:
     """Start the daemon and refresh the managed hooks from the hook's path vector."""
-    from .harness.base import HarnessContext
-    from .harness.native_harness import ask
+    from .harness_context import HarnessContext
     from .native_context import bound_context_digest_home
+    from .native_harness_client import ask
 
     home = Path.home()
     # Every native request here, the description included, answers for the

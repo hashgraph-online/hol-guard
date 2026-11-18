@@ -194,7 +194,7 @@ def test_unproven_live_hooks_are_left_out_not_reported_inactive(
         asked.append({"op": op, **fields})
         return {"verified": {"cursor": None, "grok": True, "codex": "yes"}}
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.harness.native_harness.ask", fake_ask)
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_harness_client.ask", fake_ask)
     assert approvals_module._live_hook_verification(installs, store) == {"grok": True}
     assert asked[0]["op"] == "live_hook_verification"
     assert asked[0]["managed_installs"] == [{"harness": "cursor", "active": True, "manifest": {}}]
@@ -203,7 +203,7 @@ def test_unproven_live_hooks_are_left_out_not_reported_inactive(
     def refusing_ask(*_args: object, **_fields: object) -> dict[str, object]:
         raise RuntimeError("runtime unavailable")
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.harness.native_harness.ask", refusing_ask)
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_harness_client.ask", refusing_ask)
     assert approvals_module._live_hook_verification(installs, store) == {}
 
 

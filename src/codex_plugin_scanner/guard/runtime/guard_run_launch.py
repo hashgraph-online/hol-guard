@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from ..harness.base import HarnessAdapter, HarnessContext
+from ..harness.base import HarnessAdapter
+from ..harness_context import HarnessContext
 from ..store import GuardStore
 from .local_runtime_fallbacks import best_effort_access_token
 

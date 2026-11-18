@@ -18,7 +18,7 @@ from html import escape as html_escape
 
 from jsonschema import Draft202012Validator
 
-from codex_plugin_scanner.guard.harness.contract_models import CAPABILITY_DECLARED_ACTIONS, HarnessEventCapability
+from codex_plugin_scanner.guard.setup_contract_models import CAPABILITY_DECLARED_ACTIONS, HarnessEventCapability
 
 
 @dataclass(frozen=True, slots=True)
@@ -368,7 +368,7 @@ def build_capability_report(
         raise ValueError("build_id must be a non-empty string")
     if not isinstance(commit, str) or not commit.strip():
         raise ValueError("commit must be a non-empty string")
-    from codex_plugin_scanner.guard.harness.contracts import HARNESS_CONTRACTS, contract_for
+    from codex_plugin_scanner.guard.setup_contracts import HARNESS_CONTRACTS, contract_for
 
     requested_label = _bounded_host_label(requested_host) if requested_host is not None else None
     if requested_label is None or requested_label.lower() in {"", "all", "*"}:

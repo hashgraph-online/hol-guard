@@ -181,8 +181,8 @@ def harness_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
         build_harness_verification,
         uninstall_confirmation_token,
     )
-    from .harness.base import HarnessContext
     from .harness.registry import get_adapter
+    from .harness_context import HarnessContext
     from .harness_disconnect_gate import require_harness_disconnect_gate
     from .harness_versions.service import invalidate as invalidate_harness_versions
     from .native_daemon_handler import NativeDaemonHandlerError, native_harness_action

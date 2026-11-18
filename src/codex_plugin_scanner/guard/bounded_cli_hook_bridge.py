@@ -16,11 +16,7 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 
-from .bounded_cli_hook_native import (
-    NATIVE_BOUNDED_HOOK_COMMAND,
-    NATIVE_BOUNDED_HOOK_FEATURE,
-    NATIVE_MUSE_HOOK_FEATURE,
-)
+from .bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND, NATIVE_BOUNDED_HOOK_FEATURE, NATIVE_MUSE_HOOK_FEATURE
 from .hook_failure_bridge import RUNTIME_MISSING
 
 _TRAILING_MANAGED_MARKERS = frozenset({"HOL_GUARD_MANAGED_ZCODE"})

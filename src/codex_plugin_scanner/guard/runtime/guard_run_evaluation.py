@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import GuardConfig
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..models import GuardArtifact, HarnessDetection
 from ..native_prompt import NativePromptAnalysisError
 from ..native_prompt import analyze as _prompt_analyze_native

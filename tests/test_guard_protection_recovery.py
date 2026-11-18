@@ -20,8 +20,9 @@ from codex_plugin_scanner.guard.cli.native_install_checks import grok_runtime_ho
 from codex_plugin_scanner.guard.cloud_control.server_control_connect_flow import (
     _repair_command_activity_persistence_health,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.managed_install_proof import (
     bind_managed_install_proof,
     verify_managed_install_proof,

@@ -7,9 +7,10 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from ..harness.base import HarnessAdapter, HarnessContext
-from ..harness.native_harness import ask as native_ask
+from ..harness.base import HarnessAdapter
 from ..harness.registry import get_adapter, list_adapters
+from ..harness_context import HarnessContext
+from ..native_harness_client import ask as native_ask
 from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore
 from .claude_settings_target import claude_settings_target

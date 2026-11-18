@@ -5,8 +5,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli.install_commands import _selected_surface
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter, ask
+from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 
 
 def _context(tmp_path: Path) -> HarnessContext:

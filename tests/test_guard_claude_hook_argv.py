@@ -16,9 +16,10 @@ from codex_plugin_scanner.guard.claude_hook_entry import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
     CLAUDE_GUARD_SESSION_START_HOOK_MARKER,
 )
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
 from codex_plugin_scanner.guard.harness import native_harness
-from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.native_runtime_stamp import stamp_native_runtime
 
 

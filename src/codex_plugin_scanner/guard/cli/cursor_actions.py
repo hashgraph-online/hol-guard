@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..harness.base import HarnessContext
-from ..harness.native_harness import ask
+from ..harness_context import HarnessContext
+from ..native_harness_client import ask
 from ..store import GuardStore
 
 

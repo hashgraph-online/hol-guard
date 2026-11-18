@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 
 from ..approval_gate_nudge import approval_gate_posture
-from ..harness.diagnostic_probes import without_command_probes
+from ..command_probes import without_command_probes
 from ..harness_version_api import compatibility_or_unknown
 from ..native_aibom_summaries import NativeAibomSummariesError
 from ..native_daemon_peer import load_guard_daemon_endpoint_url
@@ -321,7 +321,7 @@ def _run_guard_doctor_command(
             stream.write(render_runtime_status(section))
         return 0
     if getattr(args, "harnesses", False):
-        from ..harness.contracts import HARNESS_CONTRACTS
+        from ..setup_contracts import HARNESS_CONTRACTS
 
         contracts_payload = [
             {

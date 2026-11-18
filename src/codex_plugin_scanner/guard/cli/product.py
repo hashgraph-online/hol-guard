@@ -14,8 +14,9 @@ from typing import Any, TypeGuard
 
 from ..config import GuardConfig
 from ..consumer import detect_all
-from ..harness.base import HarnessContext, artifacts_use_guard
+from ..diagnostics_bridge import artifacts_use_guard
 from ..harness.registry import get_adapter
+from ..harness_context import HarnessContext
 from ..models import HarnessDetection
 from ..native_daemon_peer import load_guard_daemon_endpoint_url
 from ..redaction import redact_local_path

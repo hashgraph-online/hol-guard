@@ -26,7 +26,7 @@ from codex_plugin_scanner.guard.codex_hook_self_binding import (
     install_fields,
     short_path_fields,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from tests import codex_install_flow_support as flow
 from tests.codex_hook_paths_support import canonical_manifest_bytes, hook_secret_path

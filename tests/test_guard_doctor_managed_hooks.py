@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.codex_hook_state_support import fixed_hook_state
 from tests.cursor_test_support import cursor_agent_on_path
 

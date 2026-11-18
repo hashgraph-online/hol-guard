@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from .codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline
-from .harness.base import HarnessContext
 from .harness.registry import get_adapter
+from .harness_context import HarnessContext
 from .native_owned import require_codex_install_owner
 from .native_transition_files import pin_executable, prepare_request, require_deadline
 from .runtime_transition import (

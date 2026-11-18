@@ -6,7 +6,7 @@ import pytest
 
 from codex_plugin_scanner.guard.cli import native_managed_install
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 def test_install_hands_the_native_runtime_every_target_and_holds_no_owner_of_its_own(

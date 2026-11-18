@@ -11,7 +11,7 @@ from ...models import ScanOptions
 from ..action_lattice import is_guard_action as _is_guard_action
 from ..approval_gate import ApprovalGateGrant
 from ..config import GuardConfig
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..models import (
     DECISION_SCOPE_VALUES,
     DecisionScope,
@@ -455,7 +455,7 @@ def _persist_detected(
 def detect_all(context: HarnessContext) -> list[HarnessDetection]:
     """Run detection across all adapters."""
 
-    from ..harness.native_detected import detect_all as native_detect_all
+    from ..native_detected import detect_all as native_detect_all
 
     return native_detect_all(context)
 

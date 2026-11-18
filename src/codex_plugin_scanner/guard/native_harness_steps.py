@@ -11,11 +11,11 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..models import HarnessDetection
+from .models import HarnessDetection
 
 if TYPE_CHECKING:
-    from .base import HarnessContext, PreparedHarnessInstall
-    from .native_harness import NativeHarnessAdapter
+    from .harness.native_harness import NativeHarnessAdapter
+    from .harness_context import HarnessContext, PreparedHarnessInstall
 
 
 class HookOwnershipError(RuntimeError):
@@ -24,8 +24,8 @@ class HookOwnershipError(RuntimeError):
 
 def owned_ask(harness: str, owned: object, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
     """``ask``, naming a hook-ownership failure as the harness's spec words it."""
-    from ..native_runner_authority import NativeRunnerAuthorityError
-    from .native_harness import ask
+    from .native_harness_client import ask
+    from .native_runner_authority import NativeRunnerAuthorityError
 
     if not isinstance(owned, dict):
         return ask(op, context, harness=harness, **fields)
@@ -46,9 +46,9 @@ def prepared_from_detection(
     adapter: NativeHarnessAdapter, context: HarnessContext, *, create_key: bool
 ) -> PreparedHarnessInstall:
     """A rebind planned from what the runtime detected, using existing enrolled authority."""
-    from ..runtime_transition import RuntimeTransition, TransitionError, TransitionFile
-    from ..shims import prepare_guard_shim
-    from .base import PreparedHarnessInstall
+    from .harness_context import PreparedHarnessInstall
+    from .runtime_transition import RuntimeTransition, TransitionError, TransitionFile
+    from .shims import prepare_guard_shim
 
     found = adapter._ask("install_detection", context, create_key=create_key)
     if set(found) == {"transition_error"}:
@@ -78,9 +78,9 @@ def prepared_surfaces(
     adapter: NativeHarnessAdapter, context: HarnessContext, **surface: object
 ) -> PreparedHarnessInstall:
     """Every surface the runtime selects, planned in one op before any publication."""
-    from ..runtime_transition import RuntimeTransition, TransitionError, TransitionFile
-    from ..shims import shell_profile_facts, shim_interpreter
-    from .base import PreparedHarnessInstall
+    from .harness_context import PreparedHarnessInstall
+    from .runtime_transition import RuntimeTransition, TransitionError, TransitionFile
+    from .shims import shell_profile_facts, shim_interpreter
 
     answer = adapter._ask(
         "prepare_surfaces",
@@ -99,7 +99,7 @@ def prepared_surfaces(
 
 def detection_from(harness: str, answer: dict[str, Any]) -> HarnessDetection:
     """The detection a ``detect``-shaped answer describes; the runtime has already merged the workspace AIBOM."""
-    from ..aibom_detection import _artifacts_from_payload
+    from .aibom_detection import _artifacts_from_payload
 
     return HarnessDetection(
         harness=harness,
@@ -120,7 +120,7 @@ def native_warnings(
     runtime_probe: dict[str, object] | None,
 ) -> list[str]:
     """The doctor warnings a harness's own ``diagnostic_warnings`` op words."""
-    from .base import HarnessContext
+    from .harness_context import HarnessContext
 
     answer = adapter._ask(
         "diagnostic_warnings",
@@ -135,7 +135,7 @@ def runner_launch_environment(runner: str, context: HarnessContext) -> dict[str,
     """The launch environment a harness's own runner kind renders (OpenCode's inline config)."""
     import os
 
-    from ..native_runner_authority import native_runner_authority
+    from .native_runner_authority import native_runner_authority
 
     request = {"op": "environment", "inline": os.getenv("OPENCODE_CONFIG_CONTENT")}
     content = native_runner_authority(runner, request, guard_home=context.guard_home).get("content")
@@ -144,7 +144,7 @@ def runner_launch_environment(runner: str, context: HarnessContext) -> dict[str,
 
 def runner_launch_argv(runner: str, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
     """The launch argv a harness's own runner kind builds around the caller's arguments."""
-    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     workspace = str(context.workspace_dir) if context.workspace_dir is not None else None
     request = {"op": "argv", "args": "\0".join(passthrough_args), "count": len(passthrough_args)}
@@ -161,7 +161,7 @@ def _decoded(value: object) -> bytes | None:
 
 def planned_files(answer: dict[str, Any]) -> list[Any]:
     """The transition files a ``prepare_install`` answer plans."""
-    from ..runtime_transition import TransitionFile
+    from .runtime_transition import TransitionFile
 
     files = [
         TransitionFile(

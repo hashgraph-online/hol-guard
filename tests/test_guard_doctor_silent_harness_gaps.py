@@ -9,8 +9,9 @@ import tomlkit
 
 from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_registration import codex_doctor_result
-from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessAdapter
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.python_oracles.codex_hook_trust import codex_command_hook_hash
 
 GUARD_COMMAND = "/opt/guard/1.2.3/hol-guard-codex-hook --harness codex"

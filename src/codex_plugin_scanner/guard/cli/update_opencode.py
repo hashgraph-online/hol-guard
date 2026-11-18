@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ..harness.base import HarnessContext
-from ..harness.native_harness import ask
+from ..harness_context import HarnessContext
+from ..native_harness_client import ask
 from ..store import GuardStore
 
 _INSPECT_FAILED = "Could not inspect OpenCode pretool plugin during update: "

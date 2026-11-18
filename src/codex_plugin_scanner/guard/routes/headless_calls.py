@@ -21,8 +21,8 @@ from ..cli.install_commands import (
     build_harness_verification,
     uninstall_confirmation_token,
 )
-from ..harness.base import HarnessContext
 from ..harness.registry import get_adapter
+from ..harness_context import HarnessContext
 from ..harness_disconnect_gate import require_harness_disconnect_gate
 from ..headless_receipts import record_headless_receipt
 from ..native_hook_evidence_writer import unreachable_writer_stats

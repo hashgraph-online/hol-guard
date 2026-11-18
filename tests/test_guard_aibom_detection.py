@@ -15,8 +15,8 @@ from codex_plugin_scanner.guard.aibom_detection import (
     extend_detection_with_workspace_aibom,
 )
 from codex_plugin_scanner.guard.consumer.service import artifact_hash, diff_artifact
-from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import (
     inventory_snapshot_from_detection,
     serialize_inventory_snapshot,

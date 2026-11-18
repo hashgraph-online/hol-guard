@@ -49,7 +49,7 @@ from .aibom_sync import _inventory_events_request_body as _inventory_events_requ
 from .aibom_sync import _sync_summary as _sync_summary
 from .aibom_sync import _sync_timestamp_from_payload as _sync_timestamp_from_payload
 from .aibom_trust_metadata import apply_local_trust_metadata as apply_local_trust_metadata
-from .harness.base import HarnessContext as HarnessContext
+from .harness_context import HarnessContext as HarnessContext
 from .inventory_cisco import run_cisco_inventory_scans as run_cisco_inventory_scans
 from .inventory_contract import GuardAgentInventorySnapshot as GuardAgentInventorySnapshot
 from .inventory_contract import cloud_inventory_artifacts_from_detection as cloud_inventory_artifacts_from_detection

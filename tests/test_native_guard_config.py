@@ -212,7 +212,7 @@ def test_directory_permission_change_invalidates_memo(tmp_path: Path, monkeypatc
 
 
 def test_every_harness_id_and_alias_keeps_its_posture_override(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.harness.contracts import HARNESS_CONTRACTS, contract_for
+    from codex_plugin_scanner.guard.setup_contracts import HARNESS_CONTRACTS, contract_for
 
     names = {contract.harness for contract in HARNESS_CONTRACTS}
     for contract in HARNESS_CONTRACTS:

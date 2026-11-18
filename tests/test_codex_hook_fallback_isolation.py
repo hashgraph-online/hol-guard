@@ -24,7 +24,7 @@ from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
     run_isolated_hook_process,
 )
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 def _installed_launch(tmp_path: Path) -> tuple[HarnessContext, tuple[str, ...], dict[str, object]]:

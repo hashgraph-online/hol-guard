@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from contextlib import suppress
 
 from .continuation_runtime import continue_request_after_application
-from .harness.contracts import contract_for
+from .setup_contracts import contract_for
 from .store import GuardStore
 
 

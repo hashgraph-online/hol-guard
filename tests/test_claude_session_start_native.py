@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import claude_hook_entry, native_caller
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.native_runtime_stamp import stamp_native_runtime
 
 _REPO = Path(__file__).resolve().parents[1]

@@ -23,7 +23,7 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard.codex_hook_manifest import PreparedCodexHookPublication
-from codex_plugin_scanner.guard.harness.base import HarnessContext, PreparedHarnessInstall
+from codex_plugin_scanner.guard.harness_context import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 from tests import codex_install_flow_support as flow
 
@@ -246,7 +246,7 @@ def stepwise_install_owned(adapter: Any, context: HarnessContext) -> dict[str, o
     from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
     from codex_plugin_scanner.guard.codex_hook_file_integrity import _python_package_roots
     from codex_plugin_scanner.guard.codex_hook_recovery import _owned
-    from codex_plugin_scanner.guard.harness.base import PreparedHarnessInstall
+    from codex_plugin_scanner.guard.harness_context import PreparedHarnessInstall
     from codex_plugin_scanner.guard.native_transition_files import publication as publication_op
     from codex_plugin_scanner.guard.runtime_transition import assert_transition_mutation_allowed
     from tests.codex_hook_integrity_fixtures import remove_hook_secret_if_unused

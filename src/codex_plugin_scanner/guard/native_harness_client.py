@@ -1,0 +1,152 @@
+"""The thin client every native harness operation goes through.
+
+The ``harness_adapter`` runner-authority kind owns every harness's paths, detection, command lookup, install and
+uninstall plans, manifests, launch environment, runtime probe fields and approval flow. This module sends a request
+with the context only this process knows and raises the error the runtime's answer names.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import replace
+from functools import cache
+from pathlib import Path
+from typing import Any
+
+from .command_probes import command_probes_enabled
+from .harness_context import HarnessContext
+from .native_caller import caller_identity
+
+_KIND = "harness_adapter"
+
+
+#: ``(harness, aliases, launcher_name)`` in registry order. The runtime's
+#: ``describe`` answer carries the same identity; a test keeps them in step,
+#: so building the registry never needs a resident call.
+NATIVE_HARNESSES: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("devin", ("devin", "devin-cli", "cognition-devin"), "devin"),
+    ("antigravity", (), ""),
+    ("gemini", (), ""),
+    ("kimi", ("kimi", "kimi-code", "kimi-cli"), "kimi"),
+    ("openclaw", (), ""),
+    ("paseo", (), ""),
+    ("muse", ("muse", "muse-code"), "muse"),
+    ("grok", ("grok-build", "grok-build-cli", "xai-grok"), "grok"),
+    ("zcode", ("zcode", "zai", "z-code", "zai-zcode"), "zcode"),
+    ("pi", ("pi", "pi-agent", "pi-coding-agent"), "pi"),
+    ("omp", ("omp", "oh-my-pi"), "omp"),
+    ("opencode", (), ""),
+    ("cline", ("cline-cli", "cline-vscode"), "cline"),
+    ("copilot", (), ""),
+    ("cursor", (), "cursor-agent"),
+    ("claude-code", ("claude",), "claude"),
+    ("hermes", (), ""),
+    ("codex", (), ""),
+)
+
+
+@cache
+def describe() -> dict[str, Any]:
+    """The runtime's description of every adapter it answers."""
+    from .native_runner_authority import native_runner_authority
+
+    answer = native_runner_authority(_KIND, {"op": "describe"})
+    if not isinstance(answer.get("adapters"), list):
+        raise ValueError("Harness adapter description is malformed")
+    return answer
+
+
+def _description(harness: str) -> dict[str, Any]:
+    for adapter in describe()["adapters"]:
+        if isinstance(adapter, dict) and adapter.get("harness") == harness:
+            return adapter
+    raise ValueError(f"Unsupported harness: {harness}")
+
+
+def request_environment() -> dict[str, str]:
+    """The variables the runtime reads, and nothing else from this process."""
+    description = describe()
+    names = set(description.get("env_names", ()))
+    prefixes = tuple(description.get("env_prefixes", ()))
+    return {name: value for name, value in os.environ.items() if name in names or name.startswith(prefixes)}
+
+
+def wire_context(context: HarnessContext) -> dict[str, object]:
+    """The context a ``harness_adapter`` request carries."""
+    try:
+        cwd: str | None = os.getcwd()
+    except OSError:
+        paths = (context.home_dir, context.guard_home, context.workspace_dir)
+        if any(path is not None and not path.is_absolute() for path in paths):
+            raise
+        cwd = None
+    return {
+        "home": str(context.home_dir),
+        "workspace": None if context.workspace_dir is None else str(context.workspace_dir),
+        "guard_home": str(context.guard_home),
+        "home_override_explicit": bool(getattr(context, "home_override_explicit", False)),
+        "cwd": cwd,
+        "user_home": str(Path.home()),
+        "env": request_environment(),
+        "executable_overrides": dict(getattr(context, "executable_overrides", {}) or {}),
+        "caller": caller_identity(),
+        "probes": command_probes_enabled(),
+    }
+
+
+def ask(
+    op: str,
+    context: HarnessContext,
+    *,
+    harness: str | None = None,
+    timeout_seconds: float | None = None,
+    **fields: object,
+) -> dict[str, Any]:
+    """Run one op and raise the error the Python adapter raised for a refusal."""
+    from .native_runner_authority import native_runner_authority
+
+    request: dict[str, object] = {"op": op, "context": wire_context(context), **fields}
+    if harness is not None:
+        request["harness"] = harness
+    answer = native_runner_authority(_KIND, request, timeout_seconds=timeout_seconds)
+    if answer.get("ok") is False and "failure" in answer:
+        # An install op that ran as the owner of the Guard home answers its failure in the owned shape.
+        from .native_failure import failure_from_answer
+
+        raise failure_from_answer(answer)
+    if len(answer) == 1:
+        raise_failure(answer)
+    return answer
+
+
+def _surface(surface: str | None) -> dict[str, object]:
+    """The surface field, left out so the runtime applies the harness default."""
+    return {} if surface is None else {"surface": surface}
+
+
+def raise_failure(answer: dict[str, Any]) -> None:
+    """Raise the error a one-key failure answer names; return for any other answer."""
+    if "refusal" in answer:
+        raise ValueError(str(answer["refusal"]))
+    if "os_error" in answer:
+        raise OSError(str(answer["os_error"]))
+    if "not_found" in answer:
+        raise FileNotFoundError(str(answer["not_found"]))
+    if "runtime_error" in answer:
+        raise RuntimeError(str(answer["runtime_error"]))
+    if "integrity" in answer:
+        from .codex_hook_recovery import _error
+
+        raise _error(str(answer["integrity"]))
+
+
+def _text(answer: dict[str, Any], key: str) -> str:
+    value = answer.get(key)
+    if not isinstance(value, str):
+        raise ValueError("Harness adapter answer is malformed")
+    return value
+
+
+def _native_context(context: HarnessContext) -> HarnessContext:
+    """Paseo installs for the daemon user, not the caller's current worktree."""
+    return replace(context, workspace_dir=None, workspace_override_explicit=False)

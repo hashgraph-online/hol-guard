@@ -21,7 +21,7 @@ def native_hook_bridge_executable(
     frozen = bool(getattr(sys, "frozen", False))
     if frozen and guard_home is None:
         return None
-    from ..native_runtime import native_runtime_status
+    from .native_runtime import native_runtime_status
 
     status = native_runtime_status(deadline_monotonic=deadline_monotonic)
     if (
@@ -36,7 +36,7 @@ def native_hook_bridge_executable(
         return status.identity.path
     if guard_home is None:
         return None
-    from ..native_runtime_durable import durable_hook_runtime
+    from .native_runtime_durable import durable_hook_runtime
 
     return durable_hook_runtime(status.identity, guard_home)
 

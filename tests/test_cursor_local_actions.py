@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     build_harness_verification,
     cursor_local_action_payload,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 
 

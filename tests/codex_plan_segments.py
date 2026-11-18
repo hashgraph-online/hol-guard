@@ -16,9 +16,9 @@ from typing import Any
 from codex_plugin_scanner.guard.codex_config import _Wire
 from codex_plugin_scanner.guard.codex_harness_client import _codex, _reply_text, _runtime_guard_home
 from codex_plugin_scanner.guard.codex_hook_self_binding import install_fields, short_path_fields
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import planned_files
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer
+from codex_plugin_scanner.guard.native_harness_steps import planned_files
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 from tests.codex_install_flow_support import legacy_fields
 from tests.codex_toml_support import _restore_native

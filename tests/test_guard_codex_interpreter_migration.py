@@ -16,7 +16,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
 
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX executable fixtures are required")

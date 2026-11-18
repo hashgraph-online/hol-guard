@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:

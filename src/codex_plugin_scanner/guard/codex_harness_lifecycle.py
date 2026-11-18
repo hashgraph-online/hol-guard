@@ -29,8 +29,8 @@ from .codex_remote_client import (
     guarded_codex_launch_command_candidates,
     guarded_codex_launch_command_from_prefixes,
 )
-from .harness.base import HarnessContext, PreparedHarnessInstall
 from .harness.native_harness import NativeHarnessAdapter
+from .harness_context import HarnessContext, PreparedHarnessInstall
 
 _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON = "codex_authoritative_hook_unavailable"
 

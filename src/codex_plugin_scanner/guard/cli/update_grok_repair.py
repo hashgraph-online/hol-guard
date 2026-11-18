@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..store import GuardStore
 from .native_managed_update import native_update_repair
 

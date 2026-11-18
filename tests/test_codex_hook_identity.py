@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.consumer.service import (
     artifact_hash,
     diff_artifact,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from tests import codex_plan_segments as segments
 from tests import codex_publication_steps

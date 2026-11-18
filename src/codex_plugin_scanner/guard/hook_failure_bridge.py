@@ -28,7 +28,7 @@ def native_hook_failure(harness: str, event_name: str, reason: str) -> tuple[str
     ``RUNTIME_MISSING``.
     """
 
-    from ..native_runner_authority import native_runner_authority
+    from .native_runner_authority import native_runner_authority
 
     try:
         answer = native_runner_authority(
@@ -49,7 +49,7 @@ def native_stderr_hook_failure(harness: str, event_name: str, reason: str) -> tu
     and leaves an observing event silent.
     """
 
-    from ..native_runner_authority import native_runner_authority
+    from .native_runner_authority import native_runner_authority
 
     try:
         answer = native_runner_authority(

@@ -9,7 +9,7 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.codex_hook_paths_support import hook_manifest_path
 from tests.codex_install_flow_support import current_launch
 from tests.codex_toml_support import dump_toml

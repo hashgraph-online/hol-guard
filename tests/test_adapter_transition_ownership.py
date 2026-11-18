@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
+from codex_plugin_scanner.guard.harness.base import HarnessAdapter
 from codex_plugin_scanner.guard.harness.registry import list_adapters
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_owned import require_codex_install_owner
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from tests.native_bounded_runtime import use_bounded_runtime
@@ -129,7 +130,7 @@ def test_install_preparation_is_complete_or_explicitly_unavailable(tmp_path: Pat
 @pytest.mark.parametrize("harness,expected", [("kimi", 3), ("zcode", 5), ("devin", 5), ("grok", 10)])
 def test_frozen_preparation_hands_the_hook_to_the_runtime(tmp_path, monkeypatch, harness, expected):
     """A frozen Guard writes no helper script; its runtime's durable copy answers the hook."""
-    from codex_plugin_scanner.guard.harness import bounded_cli_hook_bridge as bridge
+    from codex_plugin_scanner.guard import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.harness.registry import get_adapter
 
     ctx = context(tmp_path)
@@ -171,7 +172,7 @@ def test_frozen_copilot_preparation_plans_no_helper_and_publishes_nothing(
     native_adapter_state_integrity_runtime,
 ):
     del native_adapter_state_integrity_runtime
-    from codex_plugin_scanner.guard.harness import bounded_cli_hook_bridge as bridge
+    from codex_plugin_scanner.guard import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.harness.registry import get_adapter
     from tests.python_oracles.native_adapter_state_integrity import native_adapter_state_integrity
 

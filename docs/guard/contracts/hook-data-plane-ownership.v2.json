@@ -270,7 +270,9 @@
    "id": "harness_launchers",
    "class": "python_transport",
    "paths": [
-    "src/codex_plugin_scanner/guard/harness/*bridge*.py",
+    "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
+    "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
+    "src/codex_plugin_scanner/guard/native_hook_bridge.py",
     "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
     "src/codex_plugin_scanner/guard/codex_hook_windows_job.py"
    ],
@@ -282,7 +284,7 @@
    "class": "python_semantic",
    "paths": [
     "src/codex_plugin_scanner/guard/codex_harness_lifecycle.py",
-    "src/codex_plugin_scanner/guard/harness/contracts.py"
+    "src/codex_plugin_scanner/guard/setup_contracts.py"
    ],
    "current": "transport-only harness envelope forwarding; Rust owns event, tool, action, and payload normalization",
    "target": "Rust raw-envelope normalization"

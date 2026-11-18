@@ -23,8 +23,8 @@ from .codex_hook_file_integrity import CodexHookIntegrityError
 from .codex_hook_integrity import hook_manifest_file
 from .codex_hook_manifest import CodexHookManifestSpec
 from .config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
-from .harness.base import HarnessContext
-from .harness.native_harness import ask
+from .harness_context import HarnessContext
+from .native_harness_client import ask
 
 if TYPE_CHECKING:
     from .runtime_transition import TransitionFile

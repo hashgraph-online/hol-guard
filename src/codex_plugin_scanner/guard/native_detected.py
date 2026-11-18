@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..models import HarnessDetection
-from .base import HarnessContext
+from .harness_context import HarnessContext
+from .models import HarnessDetection
 
 
 def _ask_every_harness(op: str, context: HarnessContext) -> dict[str, Any]:
     """One op the runtime answers for every harness; this process supplies the Codex facts only it knows."""
-    from ..aibom_detection import _AIBOM_DISCOVERY_TIMEOUT_SECONDS, NativeAibomError
-    from ..codex_harness_client import codex_native_request, raise_untrusted
-    from ..native_runner_authority import NativeRunnerAuthorityError
-    from .native_harness import ask, describe
+    from .aibom_detection import _AIBOM_DISCOVERY_TIMEOUT_SECONDS, NativeAibomError
+    from .codex_harness_client import codex_native_request, raise_untrusted
+    from .native_harness_client import ask, describe
+    from .native_runner_authority import NativeRunnerAuthorityError
 
     count = sum(1 for adapter in describe()["adapters"] if isinstance(adapter, dict))
     fields: dict[str, Any] = codex_native_request(context)

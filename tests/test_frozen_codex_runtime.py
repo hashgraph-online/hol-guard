@@ -23,7 +23,7 @@ from codex_plugin_scanner.guard.frozen_runtime_commands import (
     frozen_daemon_serve_command,
     frozen_windows_extension_control_commands,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 from tests.codex_legacy_roles import without_package_roles
 from tests.codex_toml_support import read_toml_payload

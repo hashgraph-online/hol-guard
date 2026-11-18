@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.harness.base import HarnessContext, PreparedHarnessInstall
+from codex_plugin_scanner.guard.harness_context import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError, TransitionFile
 from codex_plugin_scanner.guard.store import GuardStore

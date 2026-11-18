@@ -62,7 +62,7 @@ class TestZCodeAdapterIdentity:
         assert "zcode" in {item.harness for item in list_adapters()}
 
     def test_contract_resolve(self) -> None:
-        from codex_plugin_scanner.guard.harness.contracts import contract_for
+        from codex_plugin_scanner.guard.setup_contracts import contract_for
 
         c = contract_for("zcode")
         assert c is not None

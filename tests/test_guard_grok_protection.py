@@ -13,11 +13,11 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     grok_hooks_protection_ready,
     uninstall_confirmation_token,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext, PreparedHarnessInstall
-from codex_plugin_scanner.guard.harness.contracts import setup_contract_for
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
+from codex_plugin_scanner.guard.setup_contracts import setup_contract_for
 from tests.native_approval_writes import (
     add_approval_request,
     native_approval_connection,

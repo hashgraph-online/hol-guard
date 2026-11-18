@@ -28,7 +28,7 @@ from .approval_gate_prompt import (
 )
 
 if TYPE_CHECKING:
-    from ..harness.base import HarnessContext
+    from ..harness_context import HarnessContext
 
 _ENROLLMENT_NOTICE = (
     "Local Guard approval protection is not enabled. Guard Cloud sign-in and account MFA are separate from this "

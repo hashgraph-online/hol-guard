@@ -7,7 +7,7 @@ from rich.console import Console
 
 from codex_plugin_scanner.guard.cli import install_commands, render
 from codex_plugin_scanner.guard.harness import native_harness
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 def _context(tmp_path):

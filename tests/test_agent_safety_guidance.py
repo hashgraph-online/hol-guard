@@ -11,7 +11,7 @@ from codex_plugin_scanner.guard.agent_safety_guidance import (
     uninstall_agent_safety_guidance,
 )
 from codex_plugin_scanner.guard.cli import install_commands
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 
 

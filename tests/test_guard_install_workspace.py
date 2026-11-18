@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.cli.commands import (
     _resolve_guard_workspace,
 )
 from codex_plugin_scanner.guard.config import resolve_guard_home
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore

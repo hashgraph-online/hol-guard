@@ -41,7 +41,7 @@
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge",
+        "module": "codex_plugin_scanner.guard.bounded_cli_hook_bridge",
         "surface": "hook_http_and_cli_events"
       },
       {
@@ -498,7 +498,7 @@
     ],
     "reviewed_runtime": [
       {
-        "path": "src/codex_plugin_scanner/guard/harness/extension_runtime.py",
+        "path": "src/codex_plugin_scanner/guard/extension_runtime.py",
         "reason": "Reviewed process facts for the Pi-family extension render: the Guard process's own hol-guard entry points, native hook runtime, Windows interpreter, contained-run sink and taskkill path, which only that process knows. native_harness.py imports it lazily for render and install ops; the native harness_adapter kind renders the extension and decides everything. Count the complete module in runtime scope."
       },
       {
@@ -541,7 +541,11 @@
           "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
           "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
-          "src/codex_plugin_scanner/guard/harness/*hook*.py",
+          "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
+          "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
+          "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
+          "src/codex_plugin_scanner/guard/muse_hook_render.py",
+          "src/codex_plugin_scanner/guard/native_hook_bridge.py",
           "src/codex_plugin_scanner/guard/native_*.py",
           "src/codex_plugin_scanner/guard/proxy/*",
           "src/codex_plugin_scanner/guard/runtime/restricted_*.py",
@@ -681,12 +685,12 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/claude_hook_entry.py",
-          "src/codex_plugin_scanner/guard/harness/cursor_client.py",
-          "src/codex_plugin_scanner/guard/harness/native_detected.py",
-          "src/codex_plugin_scanner/guard/harness/native_extension.py",
+          "src/codex_plugin_scanner/guard/cursor_hook_ops.py",
+          "src/codex_plugin_scanner/guard/native_detected.py",
+          "src/codex_plugin_scanner/guard/native_extension.py",
           "src/codex_plugin_scanner/guard/harness/native_harness.py",
-          "src/codex_plugin_scanner/guard/harness/native_harness_steps.py",
-          "src/codex_plugin_scanner/guard/harness/native_install_facts.py",
+          "src/codex_plugin_scanner/guard/native_harness_steps.py",
+          "src/codex_plugin_scanner/guard/native_install_facts.py",
           "src/codex_plugin_scanner/guard/cli/native_managed_install.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
@@ -1121,7 +1125,7 @@
       {
         "id": "adapter-cursor-setup",
         "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/harness/cursor_client.py",
+        "path": "src/codex_plugin_scanner/guard/cursor_hook_ops.py",
         "symbols": [
           "install_cursor_hooks",
           "rebind_stale_cursor_hooks"
@@ -1554,7 +1558,7 @@
       {
         "id": "adapter-native-harness-detected-rebind",
         "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/harness/native_harness_steps.py",
+        "path": "src/codex_plugin_scanner/guard/native_harness_steps.py",
         "symbols": [
           "prepared_from_detection",
           "prepared_surfaces"

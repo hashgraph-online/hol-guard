@@ -36,11 +36,11 @@ def _windows_facts(platform_name: str = os.name) -> dict[str, object] | None:
     """The sink, request root and ``taskkill`` path the Windows route uses."""
     if platform_name != "nt":
         return None
-    from ..codex_hook_launch_runtime import windows_system_executable_path
-    from ..contained_sink_command import contained_sink_command_prefix
-    from ..windows_paths import trusted_windows_local_temp
+    from .codex_hook_launch_runtime import windows_system_executable_path
+    from .contained_sink_command import contained_sink_command_prefix
+    from .windows_paths import trusted_windows_local_temp
 
-    package_root = Path(__file__).resolve().parents[3]
+    package_root = Path(__file__).resolve().parents[2]
     python = str(Path(sys.executable).expanduser().absolute())
     try:
         taskkill: str | None = windows_system_executable_path("taskkill.exe")

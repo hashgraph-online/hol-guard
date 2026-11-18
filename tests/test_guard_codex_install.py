@@ -27,7 +27,7 @@ from codex_plugin_scanner.guard.codex_hook_file_integrity import (
     validate_regular_file,
 )
 from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mcp_server_client import managed_stdio_servers
 from tests import codex_hook_publication_helpers as publication_helpers
 from tests.codex_hook_integrity_fixtures import (

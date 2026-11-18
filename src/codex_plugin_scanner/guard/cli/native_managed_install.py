@@ -12,10 +12,10 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
-from ..harness.base import HarnessContext
-from ..harness.native_harness import ask, describe
-from ..harness.native_harness_steps import HookOwnershipError
-from ..harness.native_install_facts import install_facts
+from ..harness_context import HarnessContext
+from ..native_harness_client import ask, describe
+from ..native_harness_steps import HookOwnershipError
+from ..native_install_facts import install_facts
 from ..native_owned import owner_request
 from ..native_runner_authority import NativeRunnerAuthorityError
 

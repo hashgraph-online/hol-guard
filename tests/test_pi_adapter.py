@@ -10,13 +10,13 @@ from pathlib import Path
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _approval_surface_policy_for_flow
 from codex_plugin_scanner.guard.consumer import artifact_hash
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.contracts import contract_for
 from codex_plugin_scanner.guard.harness.registry import get_adapter, list_adapters
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
+from codex_plugin_scanner.guard.setup_contracts import contract_for
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.live_hook_review_support import LIVE_REVIEWS_RETIRED_ALLOW, assert_secret_output_held, live_post_tool_flag
 from tests.pi_extension_support import managed_extension_source, previous_managed_extension_source

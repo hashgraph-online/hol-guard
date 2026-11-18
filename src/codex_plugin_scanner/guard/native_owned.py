@@ -23,10 +23,13 @@ from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
 
-if TYPE_CHECKING:
-    from .harness.base import HarnessAdapter, HarnessContext
+from .native_failure import INVALID_ANSWER, failure_from_answer
 
-_INVALID = "native_transition_invalid"
+if TYPE_CHECKING:
+    from .harness.base import HarnessAdapter
+    from .harness_context import HarnessContext
+
+_INVALID = INVALID_ANSWER
 _OVERHEAD_SECONDS = 30.0
 _LOCK_INVALID = "codex_lifecycle_lock_invalid: lifecycle lock changed during ownership"
 _TargetKey = tuple[str, int, int]
@@ -64,34 +67,6 @@ def _remaining_ms(deadline: float) -> int:
     return max(0, int((deadline - time.monotonic()) * 1000))
 
 
-def _failure(answer: Mapping[str, object]) -> BaseException:
-    from .codex_hook_file_integrity import CodexHookIntegrityError
-    from .native_transition_files import _exception
-    from .runtime_transition import TransitionError
-
-    failure = answer.get("failure")
-    if not isinstance(failure, Mapping):
-        return TransitionError(_INVALID)
-    kind, message = failure.get("kind"), failure.get("message")
-    if kind == "timeout" and isinstance(message, str):
-        return TimeoutError(message)
-    if kind == "runtime" and isinstance(message, str):
-        return RuntimeError(message)
-    code = failure.get("code")
-    if kind == "integrity" and isinstance(code, str) and isinstance(message, str):
-        error = CodexHookIntegrityError(code, message)
-        cause = failure.get("cause")
-        if isinstance(cause, str):
-            error.__cause__ = CodexHookIntegrityError(cause, cause)
-        return error
-    reason = failure.get("reason")
-    if kind == "transition" and isinstance(reason, str):
-        return TransitionError(reason)
-    if kind == "fault":
-        return _exception(failure.get("fault"))
-    return TransitionError(_INVALID)
-
-
 def _call(op: str, *, deadline: float | None = None, **fields: object) -> Mapping[str, object]:
     from .native_runner_authority import native_runner_authority
     from .native_transition_files import transition_context
@@ -105,7 +80,7 @@ def _call(op: str, *, deadline: float | None = None, **fields: object) -> Mappin
     if not isinstance(answer, Mapping):
         raise RuntimeError(_INVALID)
     if answer.get("ok") is not True:
-        raise _failure(answer)
+        raise failure_from_answer(answer)
     return answer
 
 

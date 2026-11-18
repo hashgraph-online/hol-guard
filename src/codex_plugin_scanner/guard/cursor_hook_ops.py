@@ -13,8 +13,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from ..harness.base import HarnessContext
-from ..harness.native_harness import ask
+from .harness_context import HarnessContext
+from .native_harness_client import ask
 
 _HARNESS = "cursor"
 
@@ -36,14 +36,14 @@ def install_cursor_hooks(context: HarnessContext, *, actor: str = "cursor-hooks"
     The native runtime holds the installation transaction, publishes the plan, then requires the hooks Cursor
     now reads to be Guard's.
     """
-    from ..cli.native_managed_install import ask_managed
+    from .cli.native_managed_install import ask_managed
 
     return _manifest(ask_managed("cursor_hooks_install", context, [], actor=actor))
 
 
 def rebind_stale_cursor_hooks(guard_home: Path, *, home_dir: Path) -> dict[str, object]:
     """Rewrite managed Cursor hooks that still bake a pruneable Core path or an outdated script."""
-    from ..runtime_transition import TransitionError
+    from .runtime_transition import TransitionError
 
     context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=None)
     answer = _cursor_ask("rebind", context)

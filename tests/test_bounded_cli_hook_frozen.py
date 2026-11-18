@@ -6,11 +6,10 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard import native_caller
+from codex_plugin_scanner.guard import bounded_cli_hook_bridge, native_caller
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import isolated_hook_environment
-from codex_plugin_scanner.guard.harness import bounded_cli_hook_bridge
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import ask
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 
 from .bounded_cli_hook_test_support import config as _config
 from .bounded_cli_hook_test_support import json_object as _json_object

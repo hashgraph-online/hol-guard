@@ -24,8 +24,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .harness.base import HarnessContext
 from .harness.registry import get_adapter
+from .harness_context import HarnessContext
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -180,7 +180,7 @@ def _onefile_leaks_result(
 def broken_hook_harnesses(context: HarnessContext, store: GuardStore) -> list[dict[str, object]]:
     """Harnesses Guard manages whose registration is broken or incomplete."""
 
-    from .harness.diagnostic_probes import without_command_probes
+    from .command_probes import without_command_probes
 
     broken: list[dict[str, object]] = []
     managed = [

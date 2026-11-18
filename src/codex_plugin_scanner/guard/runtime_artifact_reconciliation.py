@@ -12,9 +12,9 @@ from pathlib import Path
 
 from .approvals import _live_hook_verification
 from .cli.install_commands import apply_managed_install
-from .harness.base import HarnessContext
-from .harness.cursor_client import rebind_stale_cursor_hooks
+from .cursor_hook_ops import rebind_stale_cursor_hooks
 from .harness.registry import get_adapter
+from .harness_context import HarnessContext
 from .shim_refresh import refresh_stale_harness_shims
 from .shims import package_shim_dashboard_status, package_shim_status, repair_package_shims
 from .store import GuardStore

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..harness.base import HarnessContext
-from ..harness.native_detected import detected_harnesses
 from ..harness.registry import get_adapter
+from ..harness_context import HarnessContext
+from ..native_detected import detected_harnesses
 from ..store import GuardStore
 
 

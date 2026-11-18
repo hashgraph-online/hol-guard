@@ -21,7 +21,7 @@ from codex_plugin_scanner.guard.approval_gate import update_settings as update_a
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.update_commands import build_guard_update_status_payload
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.updates import dashboard_update as dashboard_update_module
 from codex_plugin_scanner.guard.updates.dashboard_update import (

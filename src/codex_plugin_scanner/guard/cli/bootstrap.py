@@ -7,8 +7,8 @@ from pathlib import Path
 
 from ..agent_safety_guidance import install_agent_safety_guidance
 from ..config import GuardConfig
-from ..harness.base import HarnessContext
 from ..harness.registry import get_adapter
+from ..harness_context import HarnessContext
 from ..native_daemon_manage import ensure_guard_daemon
 from ..native_owned import codex_install_transaction
 from ..runtime_transition import assert_transition_mutation_allowed

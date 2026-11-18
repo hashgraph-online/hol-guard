@@ -100,8 +100,8 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
-from ..harness.base import HarnessContext
 from ..harness.registry import get_adapter
+from ..harness_context import HarnessContext
 from ..local_dashboard_session import build_local_dashboard_session_token
 from ..local_supply_chain import (
     _resolve_guard_sync_auth_context,

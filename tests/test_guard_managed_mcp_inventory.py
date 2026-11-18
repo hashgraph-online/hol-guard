@@ -7,9 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import ask
 from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mcp_discovery_client import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.mcp_server_client import (
     ManagedMcpServer,
@@ -18,6 +17,7 @@ from codex_plugin_scanner.guard.mcp_server_client import (
     proxy_cli_args,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.native_harness_client import ask
 from tests.cursor_test_support import cursor_mcp_state_path
 
 

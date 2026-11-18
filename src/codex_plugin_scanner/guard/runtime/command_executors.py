@@ -19,8 +19,8 @@ from ..cli.update_commands import (
 )
 from ..config import load_guard_config
 from ..continuation_runtime import continue_request_after_application
-from ..harness.base import HarnessContext
 from ..harness.registry import get_adapter
+from ..harness_context import HarnessContext
 from ..harness_resume import resume_harness_operation, safe_resume_metadata
 from ..local_supply_chain import (
     managed_install_audit_workspace_dirs,

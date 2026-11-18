@@ -7,7 +7,7 @@ finish. This module shapes that answer for the update command.
 
 from __future__ import annotations
 
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..store import GuardStore
 from .managed_install_payload import managed_install_payload
 from .native_managed_install import ask_managed, native_row

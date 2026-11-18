@@ -10,16 +10,16 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
-from .contract_models import CAPABILITY_DECLARED_ACTIONS as CAPABILITY_DECLARED_ACTIONS
-from .contract_models import CapabilityLocalHosted as CapabilityLocalHosted
-from .contract_models import HarnessCoverageSummary as HarnessCoverageSummary
-from .contract_models import HarnessEventCapability as HarnessEventCapability
-from .contract_models import HarnessProtectionContract as HarnessProtectionContract
-from .contract_models import HarnessSetupContract as HarnessSetupContract
-from .contract_models import HarnessSetupStep as HarnessSetupStep
-from .contract_registry import contract_for as contract_for
-from .contract_registry import harness_contracts
-from .contract_registry import harness_names as harness_names
+from .setup_contract_models import CAPABILITY_DECLARED_ACTIONS as CAPABILITY_DECLARED_ACTIONS
+from .setup_contract_models import CapabilityLocalHosted as CapabilityLocalHosted
+from .setup_contract_models import HarnessCoverageSummary as HarnessCoverageSummary
+from .setup_contract_models import HarnessEventCapability as HarnessEventCapability
+from .setup_contract_models import HarnessProtectionContract as HarnessProtectionContract
+from .setup_contract_models import HarnessSetupContract as HarnessSetupContract
+from .setup_contract_models import HarnessSetupStep as HarnessSetupStep
+from .setup_contract_registry import contract_for as contract_for
+from .setup_contract_registry import harness_contracts as harness_contracts
+from .setup_contract_registry import harness_names as harness_names
 
 if TYPE_CHECKING:
     HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...]
@@ -50,7 +50,7 @@ def setup_contract_for(harness: str) -> HarnessSetupContract | None:
 
 
 def _setup_contract_kind(op: str, harness: str) -> dict[str, Any]:
-    from ..native_runner_authority import native_runner_authority
+    from .native_runner_authority import native_runner_authority
 
     return native_runner_authority("harness_setup_contract", {"op": op, "harness": harness})
 

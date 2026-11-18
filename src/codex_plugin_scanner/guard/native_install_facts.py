@@ -11,7 +11,7 @@ import json
 from collections.abc import Sequence
 from typing import cast
 
-from .base import HarnessContext
+from .harness_context import HarnessContext
 
 
 def _facts(
@@ -24,10 +24,10 @@ def _facts(
 
     A removal renders no hook, so it asks the Guard daemon nothing: ``uninstall`` leaves out the daemon facts.
     """
-    from .. import native_transition_files
-    from ..frozen_runtime_commands import is_frozen_guard_runtime
-    from ..shims import shell_profile_facts, shim_interpreter
-    from .native_harness import describe
+    from . import native_transition_files
+    from .frozen_runtime_commands import is_frozen_guard_runtime
+    from .native_harness_client import describe
+    from .shims import shell_profile_facts, shim_interpreter
 
     descriptions = {
         str(adapter.get("harness")): adapter for adapter in describe()["adapters"] if isinstance(adapter, dict)
@@ -46,11 +46,11 @@ def _facts(
         facts["runtime"] = extension_runtime()
     harness_facts: dict[str, object] = {}
     if "claude-code" in harnesses and not uninstall:
-        from ..claude_hook_entry import claude_facts
+        from .claude_hook_entry import claude_facts
 
         harness_facts["claude-code"] = claude_facts(context.guard_home)
     if "codex" in harnesses:
-        from ..codex_harness_client import codex_install_facts
+        from .codex_harness_client import codex_install_facts
 
         harness_facts["codex"] = codex_install_facts(context)
     facts["facts"] = harness_facts
@@ -70,8 +70,8 @@ def install_facts(
     """
     from datetime import datetime, timezone
 
-    from .native_harness import _native_context, describe
-    from .registry import get_adapter
+    from .harness.registry import get_adapter
+    from .native_harness_client import _native_context, describe
 
     descriptions = {
         str(adapter.get("harness")): adapter for adapter in describe()["adapters"] if isinstance(adapter, dict)

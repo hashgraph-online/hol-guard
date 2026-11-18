@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:

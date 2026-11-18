@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext, artifacts_use_guard
+from codex_plugin_scanner.guard.diagnostics_bridge import artifacts_use_guard
+from codex_plugin_scanner.guard.harness.base import HarnessAdapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 

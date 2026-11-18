@@ -33,8 +33,8 @@ from ..codex_publication_inverse_plan import (
     bind_codex_publication_inverse_verification,
     prepare_authenticated_hook_publication_inverse,
 )
-from ..harness.base import HarnessContext
 from ..harness.registry import get_adapter
+from ..harness_context import HarnessContext
 from ..native_owned import codex_install_transaction
 from ..runtime_transition import TransitionError, assert_transition_mutation_allowed, inverse_recovery_budget
 from ..sqlite_tuning import sqlite_operation_deadline

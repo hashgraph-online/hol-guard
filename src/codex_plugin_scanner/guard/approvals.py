@@ -43,8 +43,8 @@ from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
 )
-from .harness.base import HarnessContext
 from .harness.registry import get_adapter
+from .harness_context import HarnessContext
 from .harness_posture import harness_posture_summary
 from .local_dashboard_session import (
     build_approval_browser_url as build_approval_browser_url,
@@ -1060,7 +1060,7 @@ def _live_hook_verification(
     The runtime decides which proof settles each harness; this only names the
     installs, and the Codex launch facts when one is active."""
     from .codex_harness_client import live_hook_fields
-    from .harness.native_harness import ask
+    from .native_harness_client import ask
 
     context = HarnessContext(
         home_dir=Path.home().resolve(),
@@ -1089,7 +1089,7 @@ def _live_hook_verification(
 
 def _canonical_managed_installs_for_health(store: GuardStore) -> list[dict[str, object]]:
     """The store's install rows, one per canonical harness; the runtime reads and decides."""
-    from .harness.native_harness import ask
+    from .native_harness_client import ask
 
     context = HarnessContext(
         home_dir=Path.home().resolve(),
