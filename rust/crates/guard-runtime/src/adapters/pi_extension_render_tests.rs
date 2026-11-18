@@ -160,13 +160,15 @@ fn watch_output_findings_are_record_only_and_monitor_failures_are_visible() {
     let rendered = source(&case_args("active_omp_posix"));
     assert!(rendered.contains("watchPostureActive && response.decision === \"deny\""));
     assert!(rendered.contains("'output_secret_match', 'sensitive_path', 'model_output_action'"));
-    let monitor = rendered
+    let post_tool = &rendered[rendered
+        .find("pi.on(\"tool_result\", async (event, ctx) => {")
+        .expect("post-tool handler")..];
+    let monitor = post_tool
         .find("response.observe_mode === true && response.reason_code === 'watch_monitor_unavailable'")
         .expect("monitor fallback handler");
-    let deny = monitor
-        + rendered[monitor..]
-            .find("if (response.decision === \"deny\")")
-            .expect("generic denial handler");
+    let deny = post_tool
+        .find("if (response.decision === \"deny\")")
+        .expect("generic denial handler");
     assert!(
         monitor < deny,
         "monitor fallback must be handled before generic denial"
