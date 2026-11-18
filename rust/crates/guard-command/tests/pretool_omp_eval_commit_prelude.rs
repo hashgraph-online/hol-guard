@@ -116,6 +116,10 @@ fn a_commit_program_outside_the_grammar_stays_reviewed() {
         "const d = await commit.draft(); return Object.keys(globalThis);",
         "const d = await commit.draft(); const p = Object.getPrototypeOf(d); return await p.commit.call(d, 'x');",
         "const d = await commit.draft(); return typeof d.commit('x', {amend: true});",
+        "const d = await commit.draft(); return {then: d.commit};",
+        "const d = await commit.draft(); return JSON.stringify({toJSON: d.drop});",
+        "const d = await commit.draft(); return d.commit;",
+        "const d = await commit.draft(); return typeof d.commit.call(d, 'x', {amend: true});",
         "const Object = 'x'; const d = await commit.draft(); return Object.keys(d);",
     ] {
         let result = eval(&session, code);

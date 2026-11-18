@@ -17,6 +17,8 @@ use super::super::tokens::Token;
 use super::{Call, Lit, Parser, MAX_CALLS, MAX_DEPTH};
 use serde_json::{json, Map, Value};
 
+const DRAFT_METHODS: &[&str] = &["take", "drop", "only", "show", "diff", "commit"];
+
 impl Parser {
     /// Whether `await commit.draft` starts at the cursor.
     pub(super) fn draft_ahead(&self) -> bool {
@@ -100,22 +102,41 @@ impl Parser {
     }
 
     /// `draft.id`, `draft.details` and `draft.text` are plain fields the
-    /// prelude sets. A method named without a call runs nothing; only
-    /// `toString()` may follow it, so `call`, `apply` and `bind` stay out.
+    /// prelude sets. A method named without a call is taken only as its
+    /// source text through `toString()`, never as a value: placed under
+    /// `then` or `toJSON`, the host would call it with arguments no literal
+    /// check saw. `typeof draft.method` is read before this.
     fn draft_member(&mut self, name: &str) -> Option<()> {
         match name {
             "id" | "details" | "text" => Some(()),
-            "take" | "drop" | "only" | "show" | "diff" | "commit" => {
-                if self.at('.') {
-                    self.pos += 1;
-                    self.eat_ident("toString")?;
-                    self.eat('(')?;
-                    self.eat(')')?;
-                }
-                Some(())
+            name if DRAFT_METHODS.contains(&name) => {
+                self.eat('.')?;
+                self.eat_ident("toString")?;
+                self.eat('(')?;
+                self.eat(')')
             }
             _ => None,
         }
+    }
+
+    /// `typeof draft.method`, which names the method without reading it as
+    /// a value anything could call.
+    pub(super) fn typeof_draft_method(&mut self) -> bool {
+        let ident = |offset: usize| match self.tokens.get(self.pos + offset) {
+            Some(Token::Ident(ident)) => Some(ident.as_str()),
+            _ => None,
+        };
+        let found = ident(0).is_some_and(|name| self.drafts.contains(name))
+            && self.tokens.get(self.pos + 1) == Some(&Token::Punct('.'))
+            && ident(2).is_some_and(|name| DRAFT_METHODS.contains(&name))
+            && !matches!(
+                self.tokens.get(self.pos + 3),
+                Some(Token::Punct('(' | '.' | '['))
+            );
+        if found {
+            self.pos += 3;
+        }
+        found
     }
 
     /// `(literal, ...)`: strings, numbers, booleans, `null`, and arrays and

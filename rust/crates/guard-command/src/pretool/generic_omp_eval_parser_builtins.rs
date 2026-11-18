@@ -17,6 +17,7 @@ impl Parser {
             }
             // `typeof x` binds tighter than any operator the grammar takes,
             // so its operand is the value that follows, postfix included.
+            "typeof" if self.typeof_draft_method() => Some(()),
             "typeof" => self.value(depth + 1),
             "Object" => {
                 self.eat('.')?;
