@@ -38,7 +38,7 @@ fn decode_printf_escapes(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars();
     while let Some(ch) = chars.next() {
-        if ch != '\\\\' {
+        if ch != '\\' {
             out.push(ch);
             continue;
         }
@@ -46,12 +46,12 @@ fn decode_printf_escapes(text: &str) -> String {
             Some('n') => out.push('\n'),
             Some('r') => out.push('\r'),
             Some('t') => out.push('\t'),
-            Some('\\\\') => out.push('\\\\'),
+            Some('\\') => out.push('\\'),
             Some(other) => {
-                out.push('\\\\');
+                out.push('\\');
                 out.push(other);
             }
-            None => out.push('\\\\'),
+            None => out.push('\\'),
         }
     }
     out
