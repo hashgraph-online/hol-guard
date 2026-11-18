@@ -76,6 +76,19 @@ fn an_adapter_install_journals_its_launchers_under_its_own_owner() {
 }
 
 #[test]
+fn a_hooked_harness_install_writes_its_settings_under_its_own_owner() {
+    let home = Home::new();
+    let answer = home.ask("muse", "adapter_install", owned(json!({})));
+    assert_eq!(answer["ok"], json!(true), "{answer}");
+    let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
+    assert_eq!(manifest["harness"], json!("muse"));
+    assert_eq!(manifest["active"], json!(true));
+    let operations = operations(&home);
+    assert_eq!(operations.first().map(String::as_str), Some("begin"));
+    assert_eq!(operations.last().map(String::as_str), Some("committed"));
+}
+
+#[test]
 fn a_pending_transition_refuses_an_install_before_any_write() {
     let home = Home::new();
     fs::create_dir_all(home.guard().join("managed")).unwrap();

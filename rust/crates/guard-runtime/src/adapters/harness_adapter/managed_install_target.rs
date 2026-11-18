@@ -22,7 +22,8 @@ mod paseo_delegated;
 use super::describe::{Hook, Install};
 use super::files::{render, text, Doc};
 use super::{
-    answer, codex, install_apply, route, shims_apply, uninstall_apply, Ctx, Failure, Spec, Step,
+    answer, codex, hook_config, install_apply, route, shims_apply, uninstall_apply, Ctx, Failure,
+    Spec, Step,
 };
 use crate::pyjson::{self, PyVal};
 use crate::transition_files::{OwnedFailure, Owner};
@@ -141,7 +142,8 @@ fn plan_fields(
         if let Some(facts) = fields.get("facts") {
             asked.insert("facts".into(), facts.clone());
         }
-        let hook = route(spec, "hook_spec", ctx, &asked)?;
+        let hook = route(spec, "hook_spec", ctx, &asked)
+            .and_then(|spec_answer| hook_config::with_config(spec, ctx, spec_answer))?;
         fields.insert(
             "hook_argv".into(),
             hook.get("hook_argv").cloned().ok_or(Failure::Invalid)?,
