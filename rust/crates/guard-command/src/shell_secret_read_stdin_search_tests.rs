@@ -131,7 +131,6 @@ fn a_whole_command_floors_only_an_unfed_lone_dotpath_search() {
         "rg ~/.secrets/key.txt",
         "cd /tmp && fgrep /home/agent/.secrets/key.txt",
         "grep '/home/agent/.config/a<b'",
-
     ] {
         assert!(
             crate::pretool::lone_home_dotpath_search(&model(command), context),
