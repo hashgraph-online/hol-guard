@@ -38,6 +38,12 @@ fn attached_after(byte: u8) -> bool {
 // Interpret only these escaped format bytes; echo (without -e) is untouched.
 // Octal and hex forms must not conceal a printed SSN from the review floor.
 fn decode_printf_escapes(text: &str, percent_b: bool) -> String {
+    decode_printf_escapes_with_stop(text, percent_b).0
+}
+
+// In a Bash %b operand, \\c stops the entire printf before any later
+// conversions or repeated formats. Format-string \\c remains literal.
+fn decode_printf_escapes_with_stop(text: &str, percent_b: bool) -> (String, bool) {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
     while let Some(ch) = chars.next() {
@@ -55,6 +61,7 @@ fn decode_printf_escapes(text: &str, percent_b: bool) -> String {
             Some('v') => out.push('\x0b'),
             Some('e') => out.push('\x1b'),
             Some('\\') => out.push('\\'),
+            Some('c') if percent_b => return (out, true),
             Some('x') => {
                 let mut hex = String::new();
                 while hex.len() < 2 && chars.peek().is_some_and(char::is_ascii_hexdigit) {
@@ -104,7 +111,7 @@ fn decode_printf_escapes(text: &str, percent_b: bool) -> String {
             None => out.push('\\'),
         }
     }
-    out
+    (out, false)
 }
 
 // Render the simple Bash printf conversions this guard rule supports.
@@ -234,7 +241,15 @@ fn render_printf(format: &str, args: &[String]) -> String {
             let numeric = matches!(spec, 'd' | 'i' | 'u' | 'x' | 'X' | 'o');
             let mut rendered = match spec {
                 's' => operand.to_string(),
-                'b' => decode_printf_escapes(operand, true),
+                'b' => {
+                    let (prefix, stopped) = decode_printf_escapes_with_stop(operand, true);
+                    if stopped {
+                        // Bash does not evaluate, render, or pad later output.
+                        printed.push_str(&prefix);
+                        return printed;
+                    }
+                    prefix
+                },
                 'd' | 'i' | 'u' => printf_decimal(operand),
                 'x' | 'X' | 'o' => {
                     let decimal = printf_decimal(operand);
