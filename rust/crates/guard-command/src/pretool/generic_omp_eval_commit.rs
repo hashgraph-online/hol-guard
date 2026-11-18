@@ -135,8 +135,7 @@ impl Parser {
             return None;
         }
         self.eat_ident("of")?;
-        // The body runs once per item, so each run counts toward the call
-        // budget. An empty list runs nothing this grammar needs to answer for.
+        // Each item runs the body once against the call budget.
         let runs = match self.literal(0)? {
             Value::Array(items) if !items.is_empty() && items.iter().all(Value::is_string) => {
                 items.len()
@@ -284,9 +283,8 @@ impl Parser {
                 .then_some(())?;
                 self.push(repo.as_deref(), "git status --short")
             }
-            // Both print file content, so they are judged as the diff they
-            // read: a configured textconv or external diff program and the
-            // content screens apply exactly as they do to a direct `git diff`.
+            // Both print file content: judged as the diff they read, helpers
+            // and content screens included.
             "show" | "diff" => {
                 let path = match (method.as_str(), args.first()) {
                     ("show", Some(Value::String(path))) if plain_path(path) => Some(path.clone()),
@@ -444,9 +442,8 @@ fn repository_literal(repo: &str) -> bool {
         && !climbs_after_descending(repo)
 }
 
-/// `scratch/../project`: the prelude normalizes the text before it opens the
-/// repository, while the filesystem walks through `scratch`, so the two can
-/// name different directories. Leading `..` climbs read the same both ways.
+/// `scratch/../project`: the prelude normalizes the text, the filesystem
+/// walks `scratch`, so the two can name different directories.
 fn climbs_after_descending(path: &str) -> bool {
     let mut descended = false;
     path.split('/').any(|part| match part {
@@ -476,8 +473,8 @@ pub(super) fn parse_commit_program(code: &str) -> Option<Vec<Call>> {
     if code.len() > MAX_CODE_BYTES {
         return None;
     }
-    // The subject and body never reach the projected `git commit`, so text
-    // holding a literal secret keeps the unknown-program review.
+    // The projected `git commit` drops the subject and body, so a literal
+    // secret keeps the unknown-program review.
     if crate::pretool::literal_secrets::holds_literal_secret(code) {
         return None;
     }
