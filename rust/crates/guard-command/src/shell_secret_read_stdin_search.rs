@@ -161,18 +161,10 @@ fn pattern_is_quoted(text: &str, pattern: &str) -> bool {
     // Only accept the precise single-quoted marker followed by the full
     // suffix. An unquoted occurrence of the complete pattern is rejected
     // above, so an option value cannot shield a real expanding pattern.
-    let split = if let Some(suffix) = pattern.strip_prefix("$HOME") {
-        Some(("$HOME", suffix))
-    } else if let Some(suffix) = pattern.strip_prefix("${HOME}") {
-        Some(("${HOME}", suffix))
-    } else if let Some(suffix) = pattern.strip_prefix('~') {
-        Some(("~", suffix))
-    } else {
-        None
-    };
-    split.is_some_and(|(marker, suffix)| {
-        visible.contains(&format!("'{marker}'{suffix}"))
-    })
+    let split = ["$HOME", "${HOME}", "~"]
+        .into_iter()
+        .find_map(|marker| pattern.strip_prefix(marker).map(|suffix| (marker, suffix)));
+    split.is_some_and(|(marker, suffix)| visible.contains(&format!("'{marker}'{suffix}")))
 }
 
 /// A quoted or escaped '<' is argument text, not input redirection.
