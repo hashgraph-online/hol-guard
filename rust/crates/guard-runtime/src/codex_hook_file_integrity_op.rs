@@ -41,7 +41,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         }
         "validate" => {
             let (path, role, executable_required) = target(args)?;
-            admit(&path, role, executable_required, &roots).map(|_| Value::Null)
+            validate(&path, role, executable_required, &roots).map(|_| Value::Null)
         }
         "describe_regular" => {
             let (path, role, executable_required) = target(args)?;
@@ -111,6 +111,53 @@ fn package_roots(args: &Map<String, Value>) -> Result<Vec<PathBuf>, &'static str
 
 fn refused(role: &str, kind: &str) -> String {
     format!("codex_hook_{role}_{kind}")
+}
+
+/// What a path's `lstat` says about the file it names, for telling a file that
+/// was replaced while it was judged from one that was not.
+#[cfg(unix)]
+fn fingerprint(metadata: &fs::Metadata) -> Vec<u64> {
+    use std::os::unix::fs::MetadataExt;
+    vec![
+        metadata.dev(),
+        metadata.ino(),
+        metadata.size(),
+        (metadata.mtime() as u64).wrapping_mul(1_000_000_000) + metadata.mtime_nsec() as u64,
+        u64::from(metadata.mode()),
+        u64::from(metadata.uid()),
+    ]
+}
+
+/// Off POSIX the volume and file index are not stable Rust API; the size,
+/// last write, creation time and attributes still change when a file is replaced.
+#[cfg(windows)]
+fn fingerprint(metadata: &fs::Metadata) -> Vec<u64> {
+    use std::os::windows::fs::MetadataExt;
+    vec![
+        metadata.file_size(),
+        metadata.last_write_time(),
+        metadata.creation_time(),
+        u64::from(metadata.file_attributes()),
+    ]
+}
+
+/// `validate_regular_file`, bracketed: the name's `lstat` before the checks
+/// must still describe it after them, so a file replaced while it was judged
+/// is `codex_hook_{role}_hash_mismatch`, and one that vanished
+/// `codex_hook_{role}_missing`.
+fn validate(
+    path: &Path,
+    role: &str,
+    executable_required: bool,
+    package_roots: &[PathBuf],
+) -> Result<(), String> {
+    let before = fs::symlink_metadata(path).ok().map(|m| fingerprint(&m));
+    admit(path, role, executable_required, package_roots)?;
+    let after = fs::symlink_metadata(path).map_err(|_| refused(role, "missing"))?;
+    if before != Some(fingerprint(&after)) {
+        return Err(refused(role, "hash_mismatch"));
+    }
+    Ok(())
 }
 
 /// `validate_regular_file`: `path` names a regular file, not a symlink, that

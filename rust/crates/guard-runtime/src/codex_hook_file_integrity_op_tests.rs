@@ -149,3 +149,26 @@ fn malformed_requests_are_refused() {
         Err(ERR_INVALID)
     );
 }
+
+#[test]
+fn a_replaced_file_no_longer_matches_the_fingerprint_taken_before_the_checks() {
+    let root = tempfile::tempdir().expect("a temporary directory");
+    let path = hook_file(root.path(), 0o600);
+    let print = |path: &Path| fingerprint(&fs::symlink_metadata(path).expect("the file exists"));
+    let before = print(&path);
+    assert_eq!(
+        before,
+        print(&path),
+        "an untouched file keeps its fingerprint"
+    );
+
+    fs::write(&path, b"print('replaced hook')\n").expect("fixture rewritten");
+    assert_ne!(before, print(&path), "new content must change it");
+
+    let roots: Vec<PathBuf> = Vec::new();
+    assert!(validate(&path, "hook", false, &roots).is_ok());
+    assert_eq!(
+        validate(&root.path().join("absent.py"), "hook", false, &roots),
+        Err("codex_hook_hook_missing".to_owned())
+    );
+}
