@@ -98,6 +98,27 @@ fn printf_substitutions_and_percent_b_octal_keep_the_ssn_review_floor() {
 }
 
 #[test]
+fn printf_width_numeric_conversions_and_raw_escapes_preserve_the_floor() {
+    for command in [
+        r"printf '%03d-%02d-%04d' 123 45 6789",
+        r"printf '%3s-%s-%s' 123 45 6789",
+        r"printf '%u-%u-%u' 123 45 6789",
+        r"printf '%s-%d-%s' 123 055 6789",
+        r"printf '\045%s ' 123-45-6789",
+        r"printf '\x25%s ' 123-45-6789",
+    ] {
+        assert!(echoes_ssn(command), "{command} prints an SSN");
+    }
+    for command in [
+        r"printf '%8.5s\n' 123-45-6789",
+        r"printf '%03d-%02d-%04d' 000 45 6789",
+        r"printf 'literal %%s\n' 123-45-6789",
+    ] {
+        assert!(!echoes_ssn(command), "{command} does not print an SSN");
+    }
+}
+
+#[test]
 fn other_numbers_and_shapes_pass() {
     for command in [
         "echo 000-12-3456",
