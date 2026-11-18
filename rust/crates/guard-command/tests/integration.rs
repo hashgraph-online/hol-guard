@@ -248,6 +248,7 @@ pub mod pretool_omp_artifact_search;
 pub mod pretool_omp_bash_cwd;
 pub mod pretool_omp_device_docs;
 pub mod pretool_omp_eval_bash_cwd;
+pub mod pretool_omp_eval_commit_prelude;
 pub mod pretool_omp_eval_contained_bash;
 pub mod pretool_omp_eval_content;
 pub mod pretool_omp_eval_read_helpers;

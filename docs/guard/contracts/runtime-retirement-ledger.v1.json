@@ -7761,7 +7761,7 @@
   },
   {
    "old_node": "tests/test_native_approval_bridge.py::test_decoders_reject_floor_lowering_unknown_fields_duplicate_json_and_unknown_errors",
-   "new_node": "tests/test_native_response_decoder.py::test_approval_decoders_reject_floor_lowering_and_tampering",
+   "new_node": "tests/test_native_transport_error.py::test_approval_decoders_reject_floor_lowering_and_tampering",
    "reason": "Decoder floor-lowering and tamper negatives cover the live native_approval_protocol surface; bridge-specific assertions were retired."
   },
   {

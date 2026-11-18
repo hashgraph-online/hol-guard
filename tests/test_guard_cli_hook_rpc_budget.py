@@ -188,7 +188,9 @@ def _run_hook(fixture: BenignFixture, store: GuardStore, index: int) -> None:
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "git status --short"},
+        # Two commands in turn: the same command six times in a row within a
+        # session is a stuck loop, which Guard stops on purpose.
+        "tool_input": {"command": ("git status --short", "git diff --stat")[index % 2]},
         "session_id": "cli-hook-rpc-budget",
         "tool_call_id": f"cli-rpc-{index}",
         "cwd": str(cwd),

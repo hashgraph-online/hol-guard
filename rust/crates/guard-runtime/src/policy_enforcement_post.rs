@@ -71,6 +71,7 @@ pub(crate) fn apply_post_tool_policy_for_hook(
     response: HookReviewResponseV1,
     origin_store: Option<&crate::policy_store::PolicySnapshotStore>,
     recording_only: bool,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Result<HookReviewResponseV1, String> {
     let delivery = origin_store.and_then(|store| crate::bash_post_delivery::verify(request, store));
     // Guard's own approval wait on this hook's Guard home passed `PreToolUse`
@@ -86,14 +87,14 @@ pub(crate) fn apply_post_tool_policy_for_hook(
                     )
                 }))
     };
-    apply_post_tool_policy_with_witness(
+    post_tool_policy(
         snapshot,
         request,
         payload_kind,
         response,
-        delivery.as_ref(),
-        admitted_call,
+        (delivery.as_ref(), admitted_call),
         recording_only,
+        execution_environment,
     )
 }
 
@@ -112,14 +113,38 @@ pub(crate) fn own_approval_wait(request: &NativeHookRequestV1) -> bool {
 /// (`native_admitted_call`). Asked only when an overridable execution floor
 /// would hold a clean, fully scanned output, so ordinary calls never read
 /// the store.
+#[cfg(test)]
 pub(crate) fn apply_post_tool_policy_with_witness(
     snapshot: &AdmittedPolicySnapshot,
     request: &NativeHookRequestV1,
     payload_kind: GuardHookPayloadKindV2,
-    mut response: HookReviewResponseV1,
+    response: HookReviewResponseV1,
     delivery: Option<&VerifiedBashDelivery>,
     admitted_call: impl FnOnce() -> bool,
     recording_only: bool,
+) -> Result<HookReviewResponseV1, String> {
+    post_tool_policy(
+        snapshot,
+        request,
+        payload_kind,
+        response,
+        (delivery, admitted_call),
+        recording_only,
+        None,
+    )
+}
+
+/// The policy join, with the execution environment the hook stamped. An
+/// Oh My Pi eval's output is classified by rechecking the program as its
+/// `PreToolUse` judged it, which some proofs cannot do without it.
+fn post_tool_policy(
+    snapshot: &AdmittedPolicySnapshot,
+    request: &NativeHookRequestV1,
+    payload_kind: GuardHookPayloadKindV2,
+    mut response: HookReviewResponseV1,
+    (delivery, admitted_call): (Option<&VerifiedBashDelivery>, impl FnOnce() -> bool),
+    recording_only: bool,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Result<HookReviewResponseV1, String> {
     if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
         return Err("native_policy_mode_invalid".to_owned());
@@ -158,7 +183,13 @@ pub(crate) fn apply_post_tool_policy_with_witness(
     let task_metadata = payload_kind == GuardHookPayloadKindV2::Inline
         && guard_command::pretool::bounded_task_metadata_output(&request.payload, &request.harness);
     let omp_output_action = (payload_kind == GuardHookPayloadKindV2::Inline)
-        .then(|| eval_output::bounded_output_action(request))
+        .then(|| {
+            eval_output::bounded_output_action_in(
+                request,
+                snapshot.command_extensions.as_ref(),
+                execution_environment,
+            )
+        })
         .flatten();
     let classified_action = post_action::post_action_type(request, payload_kind)?;
     let action_type = if task_metadata {

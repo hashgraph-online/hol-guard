@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -152,6 +153,13 @@ DOCTL_STUB_PYTHON = (
 
 
 VENV = ".venv"
+# A lane may name the installed interpreter fixture environments are built
+# from. The Windows ARM64 lane runs Guard in an emulated x64 Python, which
+# cannot start inside Guard's AppContainer, so its environments use the
+# machine's native all-users Python instead.
+FIXTURE_BASE_PYTHON = "GUARD_GAUNTLET_FIXTURE_BASE_PYTHON"
+
+
 def base_interpreter() -> Path:
     """The real interpreter a ``uv venv`` links its own ``bin/python`` to.
 
@@ -159,7 +167,11 @@ def base_interpreter() -> Path:
     installed interpreter; the stand-ins below only look like the ones a
     developer works in if they point at a real one.
     """
-    base = getattr(sys, "_base_executable", None) or sys.executable
+    # The override only picks the interpreter. The package layout and the
+    # recorded version still come from the running one, which matches it only
+    # on the Windows lane that sets it.
+    override = os.environ.get(FIXTURE_BASE_PYTHON) if os.name == "nt" else None
+    base = override or getattr(sys, "_base_executable", None) or sys.executable
     return Path(base).resolve()
 
 
@@ -283,11 +295,22 @@ def venv_pytest_module(venv: Path) -> str:
     version, so both spellings have to find the same suite. It refuses to report
     a pass unless the environment's own interpreter imported it.
     """
+    # Guard's Windows contained pytest runs a credential-filtered copy of the
+    # workspace, so there the environment's own interpreter reports the copy's
+    # `.venv` as its prefix rather than this path. The module moves with that
+    # copy, so its own `Lib/site-packages` names the environment it belongs to.
+    own_prefix = (
+        "os.path.normcase(os.path.normpath(sys.prefix)) != "
+        "os.path.normcase(os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..')))"
+        if os.name == "nt"
+        else f"sys.prefix != {str(venv)!r}"
+    )
     return (
         '"""Synthetic stand-in for the installed pytest: no network, no writes."""\n'
+        "import os\n"
         "import sys\n"
         "\n"
-        f"if sys.prefix != {str(venv)!r}:\n"
+        f"if {own_prefix}:\n"
         '    sys.stderr.write("pytest stand-in: not the virtualenv interpreter\\n")\n'
         "    raise SystemExit(1)\n"
         'print(".....")\n'
@@ -397,5 +420,32 @@ def add_worktree_venv(worktree: Path) -> None:
         _link(venv / "bin" / name, base)
     _write(venv / "bin/pytest", venv_pytest_stub(venv), 0o755)
     write_windows_launcher(venv / "bin", "pytest", VENV_PYTEST_STUB_PYTHON)
-    packages = venv / f"lib/python{sys.version_info[0]}.{sys.version_info[1]}/site-packages"
+    _copy_windows_interpreter(venv, base)
+    packages = venv / (
+        "Lib/site-packages"
+        if os.name == "nt"
+        else f"lib/python{sys.version_info[0]}.{sys.version_info[1]}/site-packages"
+    )
     _write(packages / "pytest.py", venv_pytest_module(venv))
+
+
+def _copy_windows_interpreter(venv: Path, base: Path) -> None:
+    """Copy the launcher ``python -m venv`` gives a Windows environment.
+
+    It reads the ``pyvenv.cfg`` above its directory and starts the base
+    interpreter that file names, so the environment holds an interpreter of its
+    own, which Guard's Windows contained pytest runs inside its copy. The
+    launcher comes from that base install, so both run on the same machine type.
+    """
+    if os.name != "nt":
+        return
+    scripts = base.parent / "Lib" / "venv" / "scripts" / "nt"
+    # CPython 3.13 renamed the launcher it ships here to `venvlauncher.exe`.
+    launcher = next(
+        (path for path in (scripts / "python.exe", scripts / "venvlauncher.exe") if path.is_file()),
+        None,
+    )
+    if launcher is None:
+        raise FileNotFoundError(f"base Python has no venv launcher in {scripts}")
+    (venv / "bin").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(launcher, venv / "bin" / "python.exe")

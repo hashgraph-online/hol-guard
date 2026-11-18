@@ -346,6 +346,9 @@ fn evaluate_validated_envelope<Lease>(
             let evaluated = runtime_risk::apply_to_envelope(&envelope, policy_snapshot, evaluated);
             let evaluated = exact_review::apply_to_envelope(&envelope, policy_snapshot, evaluated);
             let evaluated = crate::policy_enforcement::deferred_prompt_review(evaluated);
+            let call = (event_name.as_str(), harness.as_str());
+            let evaluated =
+                crate::edge_session_cascade::apply(&envelope, policy_snapshot, call, evaluated);
             let value = serde_json::to_value(evaluated)
                 .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;
             edge_result_check::validate_pre_tool_result(&value)?;
@@ -387,6 +390,7 @@ fn evaluate_validated_envelope<Lease>(
                     native,
                     origin_store,
                     envelope.recording_only,
+                    envelope.source.execution_environment.as_ref(),
                 )?
             } else {
                 native

@@ -63,6 +63,23 @@ pub(in crate::pretool) fn repository_hidden_directory(
     repository_hidden_below(&canonical, home_dir, cwd, false)
 }
 
+/// Whether a missing name may be probed below `parent`, an existing hidden
+/// directory of a repository such as `.next`, `.github` or
+/// `.git/worktrees/<name>`. A listing of `parent` is already allowed, and the
+/// probe says no more than that listing: whether one name is there. A
+/// package store under `node_modules` keeps its review, also when a `.git`
+/// symlink spells it, unless the directory is the repository's Git directory.
+pub(in crate::pretool) fn absent_probe_hidden_ancestor(
+    parent: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    std::fs::canonicalize(parent).is_ok_and(|target| {
+        let named = |name: &str| target.components().any(|part| part.as_os_str() == name);
+        named(".git") || !named("node_modules")
+    }) && repository_hidden_directory(parent, home_dir, cwd)
+}
+
 /// Whether `canonical` names an existing document of the repository's own
 /// content that happens to sit below a hidden directory.
 ///
