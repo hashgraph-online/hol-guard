@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .harness.native_harness import NativeHarnessAdapter
     from .harness_context import HarnessContext
 
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
@@ -45,19 +44,11 @@ def claude_facts(guard_home: Path) -> str:
     return json.dumps({"daemon_url": load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home)})
 
 
-def _claude_adapter() -> NativeHarnessAdapter:
-    from .harness.native_harness import NativeHarnessAdapter
-    from .harness.registry import get_adapter
-
-    adapter = get_adapter(_HARNESS)
-    if not isinstance(adapter, NativeHarnessAdapter):
-        raise RuntimeError("claude-code adapter is not registered")
-    return adapter
-
-
 def claude_argv(which: str, context: HarnessContext) -> tuple[str, ...]:
     """One of Claude's hook argv (``hook``, ``daemon``, ``session_start``) as an install writes it."""
-    return tuple(str(part) for part in _claude_adapter().run_op("argv", context, which=which)["argv"])
+    from .native_harness_client import run_op
+
+    return tuple(str(part) for part in run_op(_HARNESS, "argv", context, which=which)["argv"])
 
 
 def claude_hook_command(context: HarnessContext) -> str:
@@ -67,17 +58,23 @@ def claude_hook_command(context: HarnessContext) -> str:
     return _shell_command(claude_argv("hook", context))
 
 
-def _refresh_owned(adapter: NativeHarnessAdapter, context: HarnessContext) -> None:
-    from .native_owned import owned_adapter_mutation
+def _refresh_owned(context: HarnessContext) -> None:
+    from .native_harness_client import run_op
+    from .native_owned import codex_install_transaction
+    from .runtime_transition import assert_transition_mutation_allowed
 
     # The native SessionStart lane hands off to this refresh whenever its
     # recorded runtime build differs from the installed one, which is true
     # after every package upgrade. The runtime rewrites the entries, which
     # moves the next session back onto the native lane.
-    def refresh_runtime_hook_urls(adapter: NativeHarnessAdapter, context: HarnessContext) -> None:
-        adapter.run_op("refresh", context)
-
-    owned_adapter_mutation(refresh_runtime_hook_urls)(adapter, context)
+    assert_transition_mutation_allowed(context.guard_home)
+    with codex_install_transaction(
+        context.guard_home,
+        context.guard_home / "managed",
+        actor=f"adapter.{_HARNESS}.refresh_runtime_hook_urls",
+        check_pending=True,
+    ):
+        run_op(_HARNESS, "refresh", context)
 
 
 def refresh_claude_hooks(*, home_dir: Path, workspace_dir: Path | None, guard_home: Path) -> None:
@@ -85,7 +82,7 @@ def refresh_claude_hooks(*, home_dir: Path, workspace_dir: Path | None, guard_ho
     from .harness_context import HarnessContext
 
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
-    _refresh_owned(_claude_adapter(), context)
+    _refresh_owned(context)
 
 
 def _run_session_start_from_argv(argv: Sequence[str]) -> int:

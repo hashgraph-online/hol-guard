@@ -7,10 +7,22 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from ..harness.base import HarnessAdapter
-from ..harness.registry import get_adapter, list_adapters
 from ..harness_context import HarnessContext
 from ..native_harness_client import ask as native_ask
+from ..native_harness_client import canonical_harness
+from ..native_harness_ops import (
+    detect,
+    diagnostic_warnings,
+    list_harnesses,
+    repair_steps,
+    setup_contract,
+    setup_steps,
+    verify_steps,
+)
+from ..native_harness_ops import diagnostics as harness_diagnostics
+from ..native_harness_ops import (
+    runtime_probe as harness_runtime_probe,
+)
 from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore
 from .claude_settings_target import claude_settings_target
@@ -36,19 +48,19 @@ _HARNESS_OBSERVED_COPY = {
 }
 
 
-def _selected_surface(adapter: HarnessAdapter, context: HarnessContext, surface: str | None) -> str | None:
-    """The surface an adapter mutation uses, honoring the capabilities its contract declares."""
+def _selected_surface(harness: str, context: HarnessContext, surface: str | None) -> str | None:
+    """The surface a harness mutation uses, honoring the capabilities its contract declares."""
 
     if surface is None:
-        return cursor_install_surface(None, context) if adapter.harness == "cursor" else None
-    setup_contract = adapter.setup_contract()
-    if surface not in setup_contract.surface_capabilities:
-        raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
-    if adapter.harness == "cursor":
+        return cursor_install_surface(None, context) if harness == "cursor" else None
+    contract = setup_contract(harness)
+    if surface not in contract.surface_capabilities:
+        raise ValueError(f"Unsupported {contract.display_name} surface: {surface}")
+    if harness == "cursor":
         return cursor_install_surface(surface, context)
-    if adapter.harness == "cline":
+    if harness == "cline":
         return surface
-    raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
+    raise ValueError(f"Unsupported {contract.display_name} surface: {surface}")
 
 
 def apply_managed_install(
@@ -65,14 +77,15 @@ def apply_managed_install(
     # The native runtime installs each app, records its row and journals every write in one installation
     # transaction over the Guard home; this process only names the targets and the facts it alone knows.
     assert_transition_mutation_allowed(context.guard_home)
-    adapters = [
-        get_adapter(harness) for harness in _resolve_targets(command, requested_harness, install_all, context, store)
+    harnesses = [
+        canonical_harness(harness)
+        for harness in _resolve_targets(command, requested_harness, install_all, context, store)
     ]
     active = command == "install"
     targets: list[dict[str, object]] = []
-    for adapter in adapters:
-        selected = _selected_surface(adapter, context, surface)
-        target: dict[str, object] = {"harness": adapter.harness}
+    for harness in harnesses:
+        selected = _selected_surface(harness, context, surface)
+        target: dict[str, object] = {"harness": harness}
         if selected is not None:
             target["surface"] = selected
         targets.append(target)
@@ -104,8 +117,8 @@ def apply_managed_install(
 
 def list_harness_setup_items(context: HarnessContext, store: GuardStore | None = None) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
-    for adapter in list_adapters():
-        detection = _safe_setup_detection(adapter, context, store, use_fleet_check=True)
+    for harness in list_harnesses():
+        detection = _safe_setup_detection(harness, context, store, use_fleet_check=True)
         detected = detection["installed"] or detection["command_available"] or bool(detection["config_paths"])
         if detection["needs_repair"]:
             status = "needs_repair"
@@ -118,14 +131,14 @@ def list_harness_setup_items(context: HarnessContext, store: GuardStore | None =
         observed_copy = _HARNESS_OBSERVED_COPY[status]
         items.append(
             {
-                "harness": adapter.harness,
+                "harness": harness,
                 "status": status,
                 "observed_copy": observed_copy,
                 "installed": detection["installed"],
                 "command_available": detection["command_available"],
                 "config_paths": detection["config_paths"],
                 "artifact_count": 0,
-                **adapter.setup_contract().to_dict(),
+                **setup_contract(harness).to_dict(),
             }
         )
     return items
@@ -139,16 +152,16 @@ def build_harness_setup_plan(
     dry_run: bool,
     surface: str | None = None,
 ) -> dict[str, object]:
-    adapter = get_adapter(requested_harness)
-    contract = adapter.setup_contract()
+    harness = canonical_harness(requested_harness)
+    contract = setup_contract(harness)
     if action == "repair":
-        steps = adapter.repair_steps()
+        steps = repair_steps(harness)
     elif action == "uninstall":
         steps = ()
     else:
-        steps = adapter.setup_steps()
+        steps = setup_steps(harness)
     payload: dict[str, object] = {
-        "harness": adapter.harness,
+        "harness": harness,
         "action": action,
         "dry_run": dry_run,
         "contract": contract.to_dict(),
@@ -158,29 +171,29 @@ def build_harness_setup_plan(
     if dry_run and action in {"connect", "repair"}:
         payload["dry_run_effect"] = (
             "No app config was changed and Guard Cloud was not connected. "
-            f"Run hol-guard apps {action} {adapter.harness} without --dry-run to finish setup."
+            f"Run hol-guard apps {action} {harness} without --dry-run to finish setup."
         )
-    if adapter.harness == "claude-code" and action in {"connect", "repair"}:
+    if harness == "claude-code" and action in {"connect", "repair"}:
         payload["settings_target"] = claude_settings_target(context)
     if action == "uninstall":
-        confirmation_phrase = uninstall_confirmation_token(adapter.harness)
+        confirmation_phrase = uninstall_confirmation_token(harness)
         payload["confirmation_phrase"] = confirmation_phrase
-        payload["confirm_command"] = f"hol-guard apps disconnect {adapter.harness} --confirm {confirmation_phrase}"
+        payload["confirm_command"] = f"hol-guard apps disconnect {harness} --confirm {confirmation_phrase}"
         payload["steps"] = [
             {
                 "step_id": "disconnect",
                 "title": f"Disconnect {contract.display_name}",
                 "body": (
                     "Remove Paseo's receipt and launcher. Shared native provider protection remains installed."
-                    if adapter.harness == "paseo"
+                    if harness == "paseo"
                     else "Remove Guard managed config for this app."
                 ),
-                "command": ["hol-guard", "apps", "disconnect", adapter.harness],
+                "command": ["hol-guard", "apps", "disconnect", harness],
                 "writes_config": True,
                 "requires_confirmation": True,
             }
         ]
-    if adapter.harness == "cursor":
+    if harness == "cursor":
         payload["cursor_action"] = cursor_local_action_payload(
             action=action,
             surface=surface,
@@ -197,8 +210,8 @@ def build_harness_verification(
     surface: str | None = None,
     action: str = "test",
 ) -> dict[str, object]:
-    adapter = get_adapter(requested_harness)
-    detection = _safe_setup_detection(adapter, context, store)
+    harness = canonical_harness(requested_harness)
+    detection = _safe_setup_detection(harness, context, store)
     verification: dict[str, object] = {
         "checked": True,
         "writes_config": False,
@@ -207,16 +220,16 @@ def build_harness_verification(
         "config_paths": detection["config_paths"],
         "artifact_count": 0,
         "warnings": [],
-        "steps": [step.to_dict() for step in adapter.verify_steps()],
+        "steps": [step.to_dict() for step in verify_steps(harness)],
     }
-    if adapter.harness == "opencode":
+    if harness == "opencode":
         verification.update(_opencode_protection_checks(context, store))
-    if adapter.harness == "grok":
+    if harness == "grok":
         verification.update(_grok_protection_checks(context))
-    if adapter.harness == "cline":
-        runtime_probe = adapter.runtime_probe(context)
+    if harness == "cline":
+        runtime_probe = harness_runtime_probe(harness, context)
         verification["runtime"] = runtime_probe or {}
-        verification["warnings"] = adapter.diagnostic_warnings(adapter.detect(context), runtime_probe)
+        verification["warnings"] = diagnostic_warnings(harness, detect(harness, context), runtime_probe)
         active_transport = runtime_probe.get("active_transport") if isinstance(runtime_probe, dict) else None
         requested_transport = surface if surface in {"hooks", "plugin"} else active_transport
         state_key = "plugin" if requested_transport == "plugin" else "native_hooks"
@@ -229,12 +242,12 @@ def build_harness_verification(
             and runtime_state.get("ready") is True
         )
     payload: dict[str, object] = {
-        "harness": adapter.harness,
+        "harness": harness,
         "safe": True,
-        "contract": adapter.setup_contract().to_dict(),
+        "contract": setup_contract(harness).to_dict(),
         "verification": verification,
     }
-    if adapter.harness == "cursor":
+    if harness == "cursor":
         payload["cursor_action"] = cursor_local_action_payload(
             action=action,
             surface=surface,
@@ -253,7 +266,7 @@ def uninstall_confirmation_token(harness: str) -> str:
 
 
 def _safe_setup_detection(
-    adapter: HarnessAdapter,
+    harness: str,
     context: HarnessContext,
     store: GuardStore | None,
     *,
@@ -268,12 +281,12 @@ def _safe_setup_detection(
         "store_home": None if store is None else str(store.guard_home),
         "use_fleet_check": use_fleet_check,
     }
-    if adapter.harness == "paseo":
-        diagnostics = adapter.diagnostics(context)
+    if harness == "paseo":
+        diagnostics = harness_diagnostics(harness, context)
         fields["diagnostics"] = {
             key: diagnostics[key] for key in ("setup_status", "command_available", "config_paths") if key in diagnostics
         }
-    return native_ask("setup_detection", context, harness=adapter.harness, **fields)
+    return native_ask("setup_detection", context, harness=harness, **fields)
 
 
 _SKILLS_TIMEOUT_SECONDS = 60.0

@@ -27,8 +27,7 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from ... import version as package_version
-from ..codex_harness_client import codex_native_hook_state
-from ..codex_harness_lifecycle import CodexHarnessAdapter
+from ..codex_harness_client import codex_native_hook_state, codex_paths
 from ..config import load_guard_config, resolve_guard_home
 from ..cursor_hook_ops import cursor_native_hook_state
 from ..harness_context import HarnessContext
@@ -3204,7 +3203,7 @@ def _codex_repair_target(context: HarnessContext, store: GuardStore) -> tuple[Ha
 
 def _codex_backup_repair_target(context: HarnessContext) -> tuple[HarnessContext, str | None] | None:
     for repair_context in _codex_backup_repair_contexts(context):
-        if not CodexHarnessAdapter._backup_path(repair_context).is_file():
+        if not codex_paths(repair_context).backup.is_file():
             continue
         repair_workspace = str(repair_context.workspace_dir) if repair_context.workspace_dir is not None else None
         return repair_context, repair_workspace

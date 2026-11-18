@@ -3952,7 +3952,7 @@ def _build_fleet_posture_for_sync(
 
     try:
         from ..config import load_guard_config
-        from ..harness.registry import list_adapters
+        from ..native_harness_ops import list_harnesses
 
         guard_home = store.guard_home
         try:
@@ -3967,7 +3967,7 @@ def _build_fleet_posture_for_sync(
         runtime = "python"
         return build_fleet_posture_state(
             store,
-            list_adapters(),
+            list_harnesses(),
             FleetPostureSettings(context=context, guard_config=guard_config, runtime=runtime),
             acknowledgement=_sync_context_acknowledgement(sync_context),
         )

@@ -118,10 +118,9 @@ def _build_capability_summary(
     context: HarnessContext,
     no_root: bool,
 ) -> dict[str, object]:
-    from ..harness.registry import get_adapter
+    from ..native_harness_ops import setup_contract
 
-    adapter = get_adapter(runtime)
-    contract = adapter.setup_contract()
+    contract = setup_contract(runtime)
     contract_payload = contract.to_dict()
     return {
         "runtime": runtime,

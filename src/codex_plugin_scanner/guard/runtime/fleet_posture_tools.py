@@ -106,9 +106,11 @@ def _latest_activity(store: GuardStore, harness: str) -> str | None:
     return timestamp if isinstance(timestamp, str) else None
 
 
-def _coverage(adapter: Any) -> dict[str, object]:
+def _coverage(harness: str) -> dict[str, object]:
     try:
-        coverage = adapter.setup_contract().coverage
+        from ..native_harness_ops import setup_contract
+
+        coverage = setup_contract(harness).coverage
     except Exception:
         return {}
     return {
@@ -122,13 +124,12 @@ def _coverage(adapter: Any) -> dict[str, object]:
 
 def tool_row(
     *,
-    adapter: Any,
+    harness: str,
     diagnostics: Mapping[str, object],
     store: GuardStore,
     config: GuardConfig | None,
 ) -> dict[str, object]:
     """One AI tool's collected facts; the native build derives its protection state and shapes its row."""
-    harness = str(adapter.harness)
     override: str | None = None
     if config is not None:
         from ..harness_posture import harness_posture_override
@@ -139,7 +140,7 @@ def tool_row(
         "setupStatus": str(diagnostics.get("setup_status")),
         "hasConfigPaths": diagnostics.get("has_config_paths") is True,
         "toolVersion": diagnostics.get("tool_version"),
-        "coverage": _coverage(adapter),
+        "coverage": _coverage(harness),
         "lastActivityAt": _latest_activity(store, harness),
         "paused": _effectively_paused(config, harness),
         "configured": config is not None,
@@ -165,7 +166,7 @@ def _summarize_diagnostics(diagnostics: Mapping[str, object]) -> dict[str, objec
 class DiagnosticsCache:
     """Short-lived cache of per-tool diagnostics.
 
-    ``adapter.diagnostics`` can launch the tool's CLI to probe it, which is too slow
+    The harness diagnostics can launch the tool's CLI to probe it, which is too slow
     to repeat on every receipt sync (and again on the policy follow-up).
     """
 
@@ -177,15 +178,16 @@ class DiagnosticsCache:
         self._entries: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
         self._dirty = False
 
-    def lookup(self, adapter: Any, context: Any) -> dict[str, object] | None:
-        harness = str(adapter.harness)
+    def lookup(self, harness: str, context: Any) -> dict[str, object] | None:
         entry = self._entries.get(harness)
         if isinstance(entry, dict) and isinstance(entry.get("diagnostics"), dict):
             fetched = parse_timestamp(entry.get("at"))
             if fetched is not None and 0 <= (self._now - fetched).total_seconds() < self._ttl:
                 return entry["diagnostics"]
         try:
-            diagnostics = adapter.diagnostics(context)
+            from ..native_harness_ops import diagnostics as harness_diagnostics
+
+            diagnostics = harness_diagnostics(harness, context)
         except Exception:
             _LOGGER.debug("fleet posture: diagnostics failed for %s", harness, exc_info=True)
             return None

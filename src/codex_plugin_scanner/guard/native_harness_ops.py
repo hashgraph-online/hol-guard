@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .harness_context import HarnessContext
 from .models import HarnessDetection
@@ -26,9 +26,8 @@ from .native_harness_client import (
     run_op,
 )
 from .native_harness_steps import detection_from
-
-if TYPE_CHECKING:
-    from .inventory_contract import GuardAgentInventorySnapshot
+from .setup_contract_models import HarnessSetupContract, HarnessSetupStep
+from .setup_contracts import setup_contract_for
 
 # Room for every CLI probe one harness runs, each bounded at five seconds.
 _PROBE_RUNTIME_TIMEOUT_SECONDS = 60.0
@@ -325,36 +324,22 @@ def current_hook_command(harness: str, context: HarnessContext) -> str:
     return _text(run(harness, "hook_candidates", context, hook_argv=hook_argv(harness, context)), "hook_command")
 
 
-def inventory_snapshot(
-    harness: str,
-    context: HarnessContext,
-    *,
-    generated_at: str,
-    cisco_mcp_scan: str = "off",
-    cisco_skill_scan: str = "off",
-    cisco_timeout_seconds: float | None = None,
-) -> GuardAgentInventorySnapshot:
-    """A normalized inventory snapshot built from ``harness``'s detection."""
-    from .inventory_cisco import run_cisco_inventory_scans
-    from .inventory_contract import inventory_snapshot_from_detection
-    from .native_context import bound_context_digest_home
-
+def setup_contract(harness: str) -> HarnessSetupContract:
+    """The guided setup contract the runtime renders for ``harness``."""
     name = canonical_harness(harness)
-    detection = detect(name, context)
-    cisco_runs = run_cisco_inventory_scans(
-        harness=name,
-        context=context,
-        detection=detection,
-        mcp_mode=cisco_mcp_scan,
-        skill_mode=cisco_skill_scan,
-        timeout_seconds=cisco_timeout_seconds,
-    )
-    # Redaction asks the resident of this context's home.
-    with bound_context_digest_home(getattr(context, "guard_home", None)):
-        return inventory_snapshot_from_detection(
-            detection,
-            generated_at=generated_at,
-            home_dir=context.home_dir,
-            workspace_dir=context.workspace_dir,
-            cisco_runs=cisco_runs,
-        )
+    contract = setup_contract_for(name)
+    if contract is None:
+        raise ValueError(f"Unsupported harness setup contract: {name}")
+    return contract
+
+
+def setup_steps(harness: str) -> tuple[HarnessSetupStep, ...]:
+    return setup_contract(harness).setup_steps
+
+
+def verify_steps(harness: str) -> tuple[HarnessSetupStep, ...]:
+    return setup_contract(harness).verify_steps
+
+
+def repair_steps(harness: str) -> tuple[HarnessSetupStep, ...]:
+    return setup_contract(harness).repair_steps

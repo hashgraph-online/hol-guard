@@ -43,7 +43,6 @@ from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
 )
-from .harness.registry import get_adapter
 from .harness_context import HarnessContext
 from .harness_posture import harness_posture_summary
 from .local_dashboard_session import (
@@ -67,6 +66,7 @@ from .native_approval_resolution import (
 from .native_approval_scope import UNAVAILABLE as APPROVAL_SCOPE_UNAVAILABLE
 from .native_approval_scope import ApprovalScopeUnavailableError
 from .native_daemon_manage import load_guard_daemon_auth_token
+from .native_harness_ops import approval_flow
 from .native_package_workspace_scope import NativePackageWorkspaceScopeError
 from .native_protection_health import NativeProtectionHealthError
 from .package_execution_context import package_execution_context_from_scanner_evidence
@@ -1242,7 +1242,7 @@ def approval_prompt_flow(
     managed_install: dict[str, object] | None = None,
 ) -> dict[str, object]:
     try:
-        flow = get_adapter(harness).approval_flow(managed_install=managed_install)
+        flow = approval_flow(harness, managed_install=managed_install)
     except ValueError:
         flow = {}
     return {

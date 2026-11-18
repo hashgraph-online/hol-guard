@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..harness.registry import get_adapter
 from ..harness_context import HarnessContext
 from ..native_detected import detected_harnesses
+from ..native_harness_client import canonical_harness as resolve_harness
 from ..store import GuardStore
 
 
@@ -25,7 +25,7 @@ def _resolve_targets(
     if requested and not install_all:
         targets: list[str] = []
         for item in requested:
-            canonical = get_adapter(item).harness
+            canonical = resolve_harness(item)
             if canonical not in targets:
                 targets.append(canonical)
         return targets

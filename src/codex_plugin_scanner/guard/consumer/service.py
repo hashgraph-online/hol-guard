@@ -463,9 +463,9 @@ def detect_all(context: HarnessContext) -> list[HarnessDetection]:
 def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
     """Detect a single harness."""
 
-    from ..harness.registry import get_adapter
+    from ..native_harness_ops import detect
 
-    return get_adapter(harness).detect(context)
+    return detect(harness, context)
 
 
 def evaluate_detection(

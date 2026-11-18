@@ -25,9 +25,9 @@ _REFRESH_WAIT_SECONDS = 0.5
 @lru_cache(maxsize=128)
 def _canonical_managed_harness_cached(harness: str) -> str:
     try:
-        from ..harness.registry import get_adapter
+        from ..native_harness_client import canonical_harness
 
-        return get_adapter(harness).harness
+        return canonical_harness(harness)
     except (ValueError, ImportError):
         return harness.strip().lower().replace("_", "-")
 

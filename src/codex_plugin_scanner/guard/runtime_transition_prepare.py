@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from .codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline
-from .harness.registry import get_adapter
 from .harness_context import HarnessContext
+from .native_harness_install_ops import prepare_install
 from .native_owned import require_codex_install_owner
 from .native_transition_files import pin_executable, prepare_request, require_deadline
 from .runtime_transition import (
@@ -134,8 +134,7 @@ def prepare_runtime_transition(
                     workspace_override_explicit=manifest.get("hook_workspace_explicit") is True,
                 )
                 require_deadline(deadline)
-                adapter = get_adapter(harness)
-                prepared = adapter.prepare_install(adapter_context)
+                prepared = prepare_install(harness, adapter_context)
                 require_deadline(deadline)
                 for change in prepared.files:
                     if change.kind != "binding":
