@@ -253,9 +253,14 @@ pub(super) fn without_plain_awk(shell: &str) -> String {
             if *operator {
                 return true;
             }
-            let flagged = word.starts_with('-');
-            if flagged {
-                return word.starts_with("-F") || word.starts_with("-v");
+            // The shell removes quoting before awk reads its options, so
+            // `'-f' prog.awk` is the program-file flag too.
+            let bare: String = word
+                .chars()
+                .filter(|character| !matches!(character, '\'' | '"' | '\\'))
+                .collect();
+            if bare.starts_with('-') {
+                return bare.starts_with("-F") || bare.starts_with("-v");
             }
             let lowered = word.to_ascii_lowercase();
             !["system", "getline", "popen", "|", "`", "$(", "@", "${"]

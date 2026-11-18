@@ -10,12 +10,13 @@ const FAILED: &str = "native_command_extension_evaluation_failed";
 fn a_plain_awk_inside_a_substitution_reads_like_one_outside() {
     let command = r#"echo "$(shasum -a 256 f | awk '{print $1}')""#;
     let bounded = bounded_substitutions(command).unwrap();
-    for program in ["echo", "shasum"] {
+    // The filter still runs, so an extension owning `awk` still judges it.
+    for program in ["echo", "shasum", "awk"] {
         assert!(bounded.programs.contains(program), "{program}: {command}");
     }
     let command = r#"actual=$(shasum -a 256 f | awk -F' ' '{print $1}'); test "$actual" = x"#;
     let bounded = reviewable_substitutions(command).unwrap();
-    for program in ["shasum", "test"] {
+    for program in ["shasum", "test", "awk"] {
         assert!(bounded.programs.contains(program), "{program}: {command}");
     }
 }
@@ -26,11 +27,26 @@ fn an_awk_that_could_run_or_write_anything_stays_refused_in_a_substitution() {
         r#"x=$(awk '{system("rm -rf build")}' f)"#,
         r#"x=$(awk 'BEGIN { "date" | getline d; print d }')"#,
         r#"x=$(awk -f prog.awk f)"#,
+        // The shell removes the quoting before awk reads its options.
+        r#"echo $(awk '-f' payload.awk)"#,
+        r#"echo $(awk "-f" payload.awk)"#,
+        r#"echo $(awk \-f payload.awk)"#,
         r#"x=$(awk '{print > "out.txt"}' f)"#,
         r#"x=$(awk '{print | "sh"}' f)"#,
         r#"echo "$(awk '{system("id")}' f)""#,
     ] {
         assert!(bounded_substitutions(command).is_none(), "{command}");
+        assert!(reviewable_substitutions(command).is_none(), "{command}");
+    }
+}
+
+#[test]
+fn a_quoted_keyword_is_a_program_receiving_the_assignment() {
+    for command in [
+        r#""do" x=$(cat f)"#,
+        r#"'then' x=$(cat f)"#,
+        r#"\else x=$(cat f)"#,
+    ] {
         assert!(reviewable_substitutions(command).is_none(), "{command}");
     }
 }

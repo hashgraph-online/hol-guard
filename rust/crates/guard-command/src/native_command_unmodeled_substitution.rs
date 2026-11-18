@@ -102,6 +102,10 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
     // is the target of a redirect.
     let mut words: Vec<String> = Vec::new();
     let mut word = String::new();
+    // Whether each finished word, and the one being read, held quoting or
+    // an escape: a quoted `"do"` is a program name, not a keyword.
+    let mut quoted: Vec<bool> = Vec::new();
+    let mut word_quoted = false;
     let mut redirect_target = false;
     // The names standalone assignments gave a substitution's output.
     let mut assigned: BTreeSet<String> = BTreeSet::new();
@@ -138,6 +142,7 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
             };
             let receiver = receiving_program(
                 &words,
+                &quoted,
                 &word,
                 redirect_target,
                 flow,
@@ -175,6 +180,7 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
             let close = closing_parenthesis(&chars, index + 2)?;
             let receiver = receiving_program(
                 &words,
+                &quoted,
                 &word,
                 redirect_target,
                 flow,
@@ -214,16 +220,27 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
         out.push(character);
         index += 1;
         match character {
-            '\\' => escaped = true,
-            '\'' if !double => single = true,
-            '"' => double = !double,
+            '\\' => {
+                escaped = true;
+                word_quoted = true;
+            }
+            '\'' if !double => {
+                single = true;
+                word_quoted = true;
+            }
+            '"' => {
+                double = !double;
+                word_quoted = true;
+            }
             _ if double => word.push(character),
             '<' | '>' => {
                 // `2>` names a descriptor, not an argument.
                 if !word.is_empty() && !word.chars().all(|value| value.is_ascii_digit()) {
                     words.push(std::mem::take(&mut word));
+                    quoted.push(word_quoted);
                 }
                 word.clear();
+                word_quoted = false;
                 redirect_target = true;
                 // `>&`, `>>`, `>|` and `<>` are one operator.
                 while let Some(&next) = chars.get(index) {
@@ -237,6 +254,8 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
             ';' | '&' | '|' | '(' | ')' | '{' | '}' | '\n' => {
                 words.clear();
                 word.clear();
+                quoted.clear();
+                word_quoted = false;
                 redirect_target = false;
             }
             _ if character.is_whitespace() => {
@@ -246,7 +265,9 @@ fn scan(text: &str, flow: ValueFlow) -> Option<BoundedSubstitutions> {
                         redirect_target = false;
                     } else {
                         words.push(finished);
+                        quoted.push(word_quoted);
                     }
+                    word_quoted = false;
                 }
             }
             _ => word.push(character),
@@ -513,6 +534,7 @@ fn statements(text: &str) -> Option<Vec<String>> {
 /// as shell code, exactly as `source` does, so it is refused the same way.
 fn receiving_program(
     words: &[String],
+    quoted: &[bool],
     word: &str,
     redirect_target: bool,
     flow: ValueFlow,
@@ -528,12 +550,13 @@ fn receiving_program(
         // assignment hands the value straight to the program the rest of this
         // command names and `env NAME=` and `make NAME=` are settings whatever
         // program receives them.
-        // `do`, `then`, `else` and `elif` open the body of a loop or a
+        // A bare `do`, `then`, `else` or `elif` opens the body of a loop or a
         // conditional, so `for e in a; do sum=$(...); done` keeps the value
-        // exactly as the same assignment on its own does. They run nothing.
-        let standalone = words
-            .iter()
-            .all(|word| matches!(word.as_str(), "do" | "then" | "else" | "elif"));
+        // exactly as the same assignment on its own does. Quoted or escaped,
+        // the same word is a program receiving the assignment as an argument.
+        let standalone = words.iter().zip(quoted).all(|(word, quoted)| {
+            !quoted && matches!(word.as_str(), "do" | "then" | "else" | "elif")
+        });
         return (flow == ValueFlow::Assignments && standalone && !followed).then_some(None);
     }
     let receiver = words
@@ -597,6 +620,17 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     // original text, so a program that writes a file or runs one stays
     // refused.
     let stripped = super::without_plain_awk(inner);
+    // The filter still runs, so an extension that owns it still judges it.
+    let filters: Vec<String> = if stripped == inner {
+        Vec::new()
+    } else {
+        let named = named_words(inner);
+        ["awk", "gawk", "mawk", "nawk"]
+            .into_iter()
+            .filter(|name| named.contains(*name))
+            .map(str::to_owned)
+            .collect()
+    };
     let inner = stripped.as_str();
     let mut programs = Vec::new();
     let mut plain = inner.to_owned();
@@ -691,6 +725,7 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     {
         return None;
     }
+    programs.extend(filters);
     (!programs.is_empty()).then_some(programs)
 }
 
