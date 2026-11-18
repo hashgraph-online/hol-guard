@@ -177,6 +177,9 @@ def _native_context(context: HarnessContext) -> HarnessContext:
 class NativeHarnessAdapter(HarnessAdapter):
     """One harness the ``harness_adapter`` kind answers."""
 
+    #: Install and uninstall run whole in the runtime, which holds the locks for the op's own duration.
+    native_owned_mutation = True
+
     def __init__(self, harness: str, aliases: tuple[str, ...], launcher_name: str) -> None:
         self.harness = harness
         self.aliases = aliases
@@ -385,9 +388,11 @@ class NativeHarnessAdapter(HarnessAdapter):
         The owner this thread holds is named by its token, so the runtime journals every write under it.
         """
         from ..native_owned import owner_request
-        from .native_install_facts import adapter_manifest, ensure_store, install_facts
+        from ..runtime_transition import assert_transition_mutation_allowed
+        from .native_install_facts import adapter_manifest, install_facts
 
-        ensure_store(context)
+        assert_transition_mutation_allowed(context.guard_home)
+        self.preflight_management(context, operation="install" if op == "adapter_install" else "uninstall")
         answer = self._owned_ask(
             op,
             context,

@@ -347,7 +347,7 @@ def test_every_registered_adapter_rejects_pending_transition(tmp_path: Path, har
     adapter = next(adapter for adapter in list_adapters() if adapter.harness == harness)
     method = getattr(adapter, operation)
     # Check the contract before running real adapter code in this fixture.
-    assert getattr(method, "_guard_mutation_owned", False)
+    assert getattr(method, "_guard_mutation_owned", False) or getattr(adapter, "native_owned_mutation", False)
     ctx = context(tmp_path)
     record = ctx.guard_home / "managed/runtime-transition.json"
     record.parent.mkdir(parents=True)

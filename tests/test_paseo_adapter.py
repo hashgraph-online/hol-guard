@@ -41,6 +41,8 @@ def context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HarnessContext:
     for harness in (*PASEO_NATIVE_HARNESSES.values(), "paseo"):
         # The actual installers run; only discovery of paid/authenticated CLIs is faked.
         monkeypatch.setattr(get_adapter(harness), "resolved_executable", lambda _context: sys.executable)
+    # The command layer opens the store before it calls the native install; the runtime never creates one.
+    GuardStore(tmp_path / "guard")
     return HarnessContext(
         home, workspace, tmp_path / "guard", home_override_explicit=True, workspace_override_explicit=True
     )

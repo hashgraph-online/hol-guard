@@ -151,6 +151,9 @@ class HarnessAdapter:
         super().__init_subclass__(**kwargs)
         # Apply the shared mutation contract to overrides as well as defaults.
         # Direct adapter callers must not bypass CLI transition ownership.
+        if cls.__dict__.get("native_owned_mutation"):
+            # The native runtime takes the locks, journals and publishes inside the one op.
+            return
         for name in ("install", "uninstall"):
             method = cls.__dict__.get(name)
             if method is not None:

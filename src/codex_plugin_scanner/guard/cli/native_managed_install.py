@@ -16,7 +16,7 @@ from typing import Any
 from ..harness.base import HarnessContext
 from ..harness.native_harness import ask, describe
 from ..harness.native_harness_steps import HookOwnershipError
-from ..harness.native_install_facts import ensure_store, install_facts
+from ..harness.native_install_facts import install_facts
 from ..native_owned import owner_request
 from ..native_runner_authority import NativeRunnerAuthorityError
 
@@ -56,6 +56,16 @@ def native_row(row: dict[str, Any]) -> dict[str, object]:
         "manifest": manifest,
         "updated_at": str(row["updated_at"]),
     }
+
+
+def ensure_store(context: HarnessContext) -> None:
+    """Open the Guard store, creating its file and schema, before a native install op writes into it.
+
+    The store is the command layer's: the runtime opens an existing store and never creates one.
+    """
+    from ..store import GuardStore
+
+    GuardStore(context.guard_home)
 
 
 def ask_managed(
