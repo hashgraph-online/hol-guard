@@ -136,19 +136,12 @@ pub(super) fn ensure(
         current,
     };
     let home = context.home().to_path_buf();
-    let initial_pending = records::load_pending(&home);
-    let initial_progress = load_progress(&home);
-    // Recorded start progress and an abandoned launch receipt are settled
-    // under the start lock, where an expired launch, or a daemon holding the
-    // receipt open, is retired instead of blocking every later start.
-    if initial_progress.is_none()
-        && records::is_generation_bound(initial_pending.as_ref())
-        && !retire::pending_is_abandoned(initial_pending.as_ref())
-        && !records::pending_is_resolved(&home)
-        && !retire::resolve_abandoned(caller, initial_pending.as_ref())
-    {
-        return Err(runtime(PREVIOUS_LAUNCH));
-    }
+    // A launch receipt and recorded start progress are settled only under
+    // the start lock. A receipt whose launcher is still alive is, most of the
+    // time, another starter handing off its daemon while it holds that lock;
+    // waiting for the lock lets that handoff clear the receipt instead of
+    // failing this start. An expired launch, or a daemon holding an abandoned
+    // receipt open, is retired there rather than blocking every later start.
     if let Some(url) = live_or_newer(&context) {
         return Ok(url);
     }
