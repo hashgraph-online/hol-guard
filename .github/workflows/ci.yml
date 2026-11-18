@@ -940,14 +940,13 @@ jobs:
           echo "Bundle JS: ${js_size:-unknown}, CSS: ${css_size:-unknown}"
 
   dashboard-integration-wheel:
-    # Guard serves its extension catalog only from an installed release: a
-    # native wheel whose runtime, command-pack bundle and manifests name one
-    # source commit. The evaluator binaries are shared across commits and carry
-    # no such identity, so build a runtime stamped with this checkout and seal
-    # it into a wheel, in parallel with the evaluator build.
-    needs: [plan]
+    # Guard serves its extension catalog only from an installed release. Reuse
+    # the verified current-SHA evaluator artifacts instead of compiling the
+    # same Linux binaries a second time in this consumer.
+    needs: [plan, native-command-evaluators]
     if: >-
       !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-24.04
@@ -960,28 +959,18 @@ jobs:
         with:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
-      - uses: ./.github/actions/setup-rust
+      - name: Download verified native evaluator artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          cache-key: pytest-native-command
-      - name: Install content-addressed compiler cache
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
-        with:
-          version: v0.18.0
-      - name: Build the source compiler and a runtime stamped with this checkout
-        env:
-          RUSTC_WORKSPACE_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "on"
-          SCCACHE_GHA_VERSION: pytest-native-command
-          SCCACHE_GHA_RW_MODE: READ_ONLY
-          SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+          name: pytest-native-command-evaluators
+          path: rust/target/release
+      - name: Prepare downloaded evaluator artifacts
+        run: chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
+      - name: Resolve wheel identity
         run: |
           set -euo pipefail
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
-          # The bundle build names `git rev-parse HEAD`; the runtime must match it.
           SOURCE_SHA=$(git rev-parse HEAD)
-          HOL_GUARD_PACKAGE_VERSION="$VERSION" HOL_GUARD_BUILD_SHA="$SOURCE_SHA" \
-            cargo build --manifest-path rust/Cargo.toml --locked --release \
-            -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
       - name: Seal the native wheel

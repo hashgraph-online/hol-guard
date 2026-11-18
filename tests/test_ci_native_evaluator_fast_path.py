@@ -96,3 +96,17 @@ def test_native_replay_shards_are_complete_and_required() -> None:
     required = jobs["required"]
     assert "native-gates" in required["needs"]
     assert '"native-gates"' in required["steps"][0]["run"]
+
+
+def test_dashboard_wheel_consumes_verified_linux_evaluator_artifacts() -> None:
+    jobs = _jobs()
+    job = jobs["dashboard-integration-wheel"]
+    assert "native-command-evaluators" in job["needs"]
+    assert "needs.native-command-evaluators.result == 'success'" in job["if"]
+    downloads = [
+        step.get("with", {}).get("name")
+        for step in job["steps"]
+        if step.get("uses", "").startswith("actions/download-artifact@")
+    ]
+    assert "pytest-native-command-evaluators" in downloads
+    assert not any("cargo build" in step.get("run", "") for step in job["steps"])
