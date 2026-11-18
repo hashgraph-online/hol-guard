@@ -110,7 +110,7 @@ fn segment_breaks(
     // The command model unwraps a leading `env` and drops its options, so
     // a segment that starts with one is read from its source words: `env -C`
     // moves the folder and `env -u` clears a switch.
-    if let Some(words) = guard_command::contained_execution::shlex_split(raw) {
+    if let Some(words) = crate::git_rules_state::split_words(raw) {
         let words: Vec<&str> = words.iter().map(String::as_str).collect();
         let at = words
             .iter()

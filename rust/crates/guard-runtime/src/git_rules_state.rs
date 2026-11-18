@@ -176,3 +176,61 @@ pub(crate) fn assignment(token: &str) -> Option<(&str, &str)> {
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
     valid.then_some((name, value))
 }
+
+/// A command's words as the shell splits them, with quotes and backslashes
+/// removed. `None` when a quote is left open.
+pub(crate) fn split_words(text: &str) -> Option<Vec<String>> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut started = false;
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\'' => {
+                started = true;
+                loop {
+                    match chars.next()? {
+                        '\'' => break,
+                        c => word.push(c),
+                    }
+                }
+            }
+            '"' => {
+                started = true;
+                loop {
+                    match chars.next()? {
+                        '"' => break,
+                        '\\' => {
+                            let next = chars.next()?;
+                            if !matches!(next, '"' | '\\' | '$' | '`') {
+                                word.push('\\');
+                            }
+                            word.push(next);
+                        }
+                        c => word.push(c),
+                    }
+                }
+            }
+            '\\' => {
+                started = true;
+                if let Some(next) = chars.next().filter(|next| *next != '\n') {
+                    word.push(next);
+                }
+            }
+            c if c.is_whitespace() => {
+                if started {
+                    words.push(std::mem::take(&mut word));
+                    started = false;
+                }
+            }
+            c => {
+                started = true;
+                word.push(c);
+            }
+        }
+    }
+    if started {
+        words.push(word);
+    }
+    Some(words)
+}

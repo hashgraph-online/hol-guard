@@ -22,9 +22,7 @@ from ci.gauntlet.git_rules_cases import (
     git_rules_checks,
     stage_git_rules_cases,
 )
-from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
-from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
-from codex_plugin_scanner.guard.store import GuardStore
+from tests.live_hook_review_support import live_hook_review
 
 pytestmark = pytest.mark.skipif(not hasattr(os, "geteuid"), reason="POSIX git fixtures")
 
@@ -59,27 +57,13 @@ def _stage(root: Path, monkeypatch: pytest.MonkeyPatch, scenario_id: str) -> tup
 
 
 def _review(home: Path, workspace: Path, guard_home: Path, command: str) -> dict[str, object]:
-    store = GuardStore(guard_home, source="default", prime_policy_integrity=False, allow_system_keyring=False)
-    worker = HookWorker(store=store, workspace=workspace)
-    try:
-        return worker.review_http_payload(
-            payload={
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Bash",
-                "tool_input": {"command": command},
-                "session_id": "gauntlet-git-rules",
-                "tool_call_id": "git-rules-1",
-                "cwd": str(workspace),
-                "guard_execution_environment": collect_hook_execution_environment(),
-            },
-            params={},
-            default_harness="claude-code",
-            home_dir=home,
-            guard_home=guard_home,
-            workspace=workspace,
-        )
-    finally:
-        worker.close()
+    return live_hook_review(
+        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}},
+        harness="claude-code",
+        home_dir=home,
+        cwd=workspace,
+        guard_home=guard_home,
+    )
 
 
 def _denied(result: dict[str, object]) -> bool:

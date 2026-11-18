@@ -40,6 +40,17 @@ struct Rule {
     reason: &'static str,
 }
 
+/// Exact-command review, then the user's git rules on its result.
+pub(crate) fn after_exact_review(
+    envelope: &GuardHookEnvelopeV2,
+    policy_snapshot: Option<&AdmittedPolicySnapshot>,
+    result: PreToolResultV1,
+) -> PreToolResultV1 {
+    let result =
+        crate::edge_exact_command_review::apply_to_envelope(envelope, policy_snapshot, result);
+    apply(envelope, policy_snapshot, result)
+}
+
 pub(crate) fn apply(
     envelope: &GuardHookEnvelopeV2,
     policy_snapshot: Option<&AdmittedPolicySnapshot>,

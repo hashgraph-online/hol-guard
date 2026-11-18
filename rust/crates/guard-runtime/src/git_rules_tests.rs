@@ -406,3 +406,20 @@ fn the_agent_folder_below_the_top_is_not_the_whole_tree() {
     assert!(breaks("cd ../.. && git add .", Some(&ui)).stage_all);
     assert!(breaks("git add .", Some(&repo)).stage_all);
 }
+
+#[test]
+fn words_split_like_the_shell() {
+    use crate::git_rules_state::split_words;
+    assert_eq!(
+        split_words(r#"env -S 'git add -A' "a \"b\"" c\ d"#),
+        Some(vec![
+            "env".to_owned(),
+            "-S".to_owned(),
+            "git add -A".to_owned(),
+            "a \"b\"".to_owned(),
+            "c d".to_owned(),
+        ])
+    );
+    assert_eq!(split_words("''"), Some(vec![String::new()]));
+    assert_eq!(split_words("git commit -m 'open"), None);
+}
