@@ -11,9 +11,11 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard import native_caller
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter, ask
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard import native_harness_install_ops as harness_install_ops
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
+from tests import harness_ops_support as harness_support
 from tests.native_bounded_runtime import durable_copy, use_bounded_runtime
 
 CommandFactory = Callable[[HarnessContext], tuple[str, ...]]
@@ -46,17 +48,13 @@ def _copilot_command(context: HarnessContext) -> tuple[str, ...]:
 
 def _native_command(harness: str) -> CommandFactory:
     def command(context: HarnessContext) -> tuple[str, ...]:
-        adapter = get_adapter(harness)
-        assert isinstance(adapter, NativeHarnessAdapter)
-        return tuple(adapter._hook_argv(context))  # pyright: ignore[reportPrivateUsage]
+        return tuple(harness_ops.hook_argv(harness, context))  # pyright: ignore[reportPrivateUsage]
 
     return command
 
 
 def _planned_pretool_payload(harness: str, context: HarnessContext) -> dict[str, object]:
-    adapter = get_adapter(harness)
-    assert isinstance(adapter, NativeHarnessAdapter)
-    prepared = NativeHarnessAdapter.prepare_install(adapter, context)
+    prepared = harness_install_ops.prepare_install(harness, context)
     pretool = next(change for change in prepared.files if change.path.name == "pretool-hook.json")
     assert pretool.after is not None
     return cast(dict[str, object], json.loads(pretool.after))
@@ -68,7 +66,7 @@ def openclaw_pretool_payload(*, context: HarnessContext) -> dict[str, object]:
 
 def hermes_pretool_payload(*, context: HarnessContext) -> dict[str, object]:
     # Hermes refuses a bare plan; its install publishes the native plan directly.
-    get_adapter("hermes").install(context)
+    harness_support.install("hermes", context)
     return cast(dict[str, object], json.loads((context.guard_home / "hermes" / "pretool-hook.json").read_text()))
 
 

@@ -17,8 +17,9 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli.commands_router import run_guard_command
 from codex_plugin_scanner.guard.cli.doctor_incident import run_codex_incident_export
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.codex_hook_paths_support import hook_manifest_path
 
 
@@ -63,7 +64,7 @@ def test_incident_export_is_independent_of_guard_store(tmp_path: Path, monkeypat
 
 def test_incident_export_reports_authenticated_config_without_loaded_claim(tmp_path: Path) -> None:
     context = _context(tmp_path)
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
 
     report = codex_incident_report(context)
 
@@ -93,7 +94,7 @@ def test_incident_export_rejects_oversized_config_without_reading_it(tmp_path: P
 
 def test_incident_export_reports_legacy_hooks_when_toml_config_is_missing(tmp_path: Path) -> None:
     context = _context(tmp_path)
-    hooks_path = CodexHarnessAdapter._hooks_path(context)
+    hooks_path = codex_paths(context).hooks
     hooks_path.parent.mkdir()
     hooks_path.write_text(json.dumps({"hooks": {"PreToolUse": [{"hooks": []}]}}), encoding="utf-8")
 
@@ -108,7 +109,7 @@ def test_incident_export_reports_legacy_hooks_when_toml_config_is_missing(tmp_pa
 
 def test_incident_export_counts_duplicate_configured_hooks_without_exposing_commands(tmp_path: Path, capsys) -> None:
     context = _context(tmp_path)
-    hooks_path = CodexHarnessAdapter._hooks_path(context)
+    hooks_path = codex_paths(context).hooks
     hooks_path.parent.mkdir()
     hooks_path.write_text(
         json.dumps(
@@ -157,7 +158,7 @@ def test_incident_export_counts_duplicate_configured_hooks_without_exposing_comm
 
 def test_incident_export_does_not_count_malformed_group_or_handler_entries(tmp_path: Path) -> None:
     context = _context(tmp_path)
-    hooks_path = CodexHarnessAdapter._hooks_path(context)
+    hooks_path = codex_paths(context).hooks
     hooks_path.parent.mkdir()
     hooks_path.write_text(
         json.dumps(
@@ -186,7 +187,7 @@ def test_incident_cli_reports_selected_workspace_hooks_without_authenticating_th
     context = _context(tmp_path)
     workspace = tmp_path / "workspace"
     project_context = HarnessContext(home_dir=context.home_dir, workspace_dir=workspace, guard_home=context.guard_home)
-    project_config = CodexHarnessAdapter._config_hook_pairs(project_context)[1][0]
+    project_config = codex_paths(project_context).sources[1].config
     project_config.parent.mkdir(parents=True)
     project_config.write_text('[hooks]\nPreToolUse = [{ matcher = ".*", hooks = [] }]\n', encoding="utf-8")
 
@@ -217,8 +218,8 @@ def test_incident_cli_reports_selected_workspace_hooks_without_authenticating_th
 
 def test_incident_export_does_not_expose_identity_from_tampered_manifest(tmp_path: Path) -> None:
     context = _context(tmp_path)
-    CodexHarnessAdapter().install(context)
-    manifest_path = hook_manifest_path(context.guard_home, CodexHarnessAdapter._hook_config_path(context))
+    harness_support.install("codex", context)
+    manifest_path = hook_manifest_path(context.guard_home, codex_paths(context).config)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["package_version"] = "forged-version"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -259,7 +260,7 @@ def test_incident_cli_expands_home_shorthand(tmp_path: Path, capsys, monkeypatch
     context = _context(tmp_path)
     monkeypatch.setenv("HOME", str(context.home_dir))
     monkeypatch.setenv("USERPROFILE", str(context.home_dir))
-    config_path = CodexHarnessAdapter._hook_config_path(context)
+    config_path = codex_paths(context).config
     config_path.parent.mkdir()
     config_path.write_text("[features]\nhooks = true\n", encoding="utf-8")
 

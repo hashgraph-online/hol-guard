@@ -12,6 +12,7 @@ pub(super) const RESERVED: &[&str] = &[
     "console",
     "Promise",
     "JSON",
+    "Object",
     "await",
     "async",
     "const",

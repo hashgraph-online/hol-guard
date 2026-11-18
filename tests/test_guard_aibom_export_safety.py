@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import aibom_cli
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 @pytest.mark.security_critical

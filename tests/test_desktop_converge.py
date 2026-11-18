@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.desktop_foreign_installs import (
     DESKTOP_PATH_SHIM_MARKER,
     inventory_foreign_installs,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mdm import runtime_request
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX venv and bin layout")

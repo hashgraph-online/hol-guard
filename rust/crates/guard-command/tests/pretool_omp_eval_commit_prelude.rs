@@ -31,6 +31,13 @@ const AGENT_PROGRAMS: &[&str] = &[
     "const d=await commit.draft(); return await d.take(['index.html','style.css','game.js']);",
     "const d = await commit.draft(); await d.take('docs/environment.md'); await d.commit('Document local development environment', ['Add verified details.']);",
     "const d = await commit.draft(); await d.drop('notes.md'); print(await d.diff()); return await d.commit('Add report', {body: 'One line.', fixes: [12], noVerify: true});",
+    r#"const d = await commit.draft(); return await d.commit({body:"Fix sum to include first value\n\nStart iteration at index 0."});"#,
+    r#"const d = await commit.draft(); return await d.commit({subject: "docs: document the environment", body: ["- Add Node and npm details."]});"#,
+    // After a failed commit, agents look at the draft to learn its API.
+    "const d = await commit.draft(); return {type:typeof d, keys:Object.keys(d), commit:typeof d.commit};",
+    "const d = await commit.draft(); return d.commit.toString();",
+    "const d = await commit.draft(); return d.details;",
+    "const d = await commit.draft(); return { keys: Object.keys(d), proto: Object.getOwnPropertyNames(Object.getPrototypeOf(d)) };",
 ];
 
 /// With no hook, filter, fsmonitor or signing program configured, the draft
@@ -81,8 +88,9 @@ fn a_commit_draft_that_would_start_a_configured_program_stays_reviewed() {
 }
 
 /// A program the grammar does not model keeps the unknown-program review:
-/// `amend`, a loop, an import, computed arguments, unknown options, and draft
-/// methods on anything but an awaited draft.
+/// `amend`, a loop, an import, computed arguments, unknown options, draft
+/// methods on anything but an awaited draft, and a draft method reached
+/// through `call`, `bind` or the prototype.
 #[test]
 fn a_commit_program_outside_the_grammar_stays_reviewed() {
     let session = session("omp-eval-commit-refused");
@@ -98,6 +106,21 @@ fn a_commit_program_outside_the_grammar_stays_reviewed() {
         "const d = await commit.draft(); const e = d; return await e.commit('x');",
         "return await commit.run('x');",
         "const d = await commit.draft(); return await d.commit('x', {body: 'y', hooks: false});",
+        "const d = await commit.draft(); return await d.commit({subject: 'x', amend: true});",
+        "const d = await commit.draft(); return await d.commit({subject: 1, body: 'y'});",
+        "const d = await commit.draft(); return await d.commit({subject: 'x', hooks: false});",
+        "const d = await commit.draft(); return await d.commit.call(d, 'x', {amend: true});",
+        "const d = await commit.draft(); return d.commit.bind(d)('x');",
+        "const d = await commit.draft(); return d.constructor;",
+        "const d = await commit.draft(); return Object.assign(d, {});",
+        "const d = await commit.draft(); return Object.keys(globalThis);",
+        "const d = await commit.draft(); const p = Object.getPrototypeOf(d); return await p.commit.call(d, 'x');",
+        "const d = await commit.draft(); return typeof d.commit('x', {amend: true});",
+        "const d = await commit.draft(); return {then: d.commit};",
+        "const d = await commit.draft(); return JSON.stringify({toJSON: d.drop});",
+        "const d = await commit.draft(); return d.commit;",
+        "const d = await commit.draft(); return typeof d.commit.call(d, 'x', {amend: true});",
+        "const Object = 'x'; const d = await commit.draft(); return Object.keys(d);",
     ] {
         let result = eval(&session, code);
         assert_ne!(result.minimum_action, "allow", "{code}");

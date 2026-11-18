@@ -41,7 +41,7 @@
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.harness.bounded_cli_hook_bridge",
+        "module": "codex_plugin_scanner.guard.bounded_cli_hook_bridge",
         "surface": "hook_http_and_cli_events"
       },
       {
@@ -498,7 +498,14 @@
     ],
     "reviewed_runtime": [
       {
-        "path": "src/codex_plugin_scanner/guard/harness/extension_runtime.py",
+        "path": [
+          "src/codex_plugin_scanner/guard/resident_evidence_client.py",
+          "src/codex_plugin_scanner/guard/route_metrics.py"
+        ],
+        "reason": "Reviewed generic transport facades: the resident owns evidence persistence and native route decisions, while these callers carry only bounded requests, acknowledgements, counters and sanitized route dimensions. Count the complete adapters in runtime scope rather than treating their Python transport code as a decision implementation."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/extension_runtime.py",
         "reason": "Reviewed process facts for the Pi-family extension render: the Guard process's own hol-guard entry points, native hook runtime, Windows interpreter, contained-run sink and taskkill path, which only that process knows. native_harness.py imports it lazily for render and install ops; the native harness_adapter kind renders the extension and decides everything. Count the complete module in runtime scope."
       },
       {
@@ -541,7 +548,11 @@
           "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
           "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
-          "src/codex_plugin_scanner/guard/harness/*hook*.py",
+          "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
+          "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
+          "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
+          "src/codex_plugin_scanner/guard/muse_hook_render.py",
+          "src/codex_plugin_scanner/guard/native_hook_bridge.py",
           "src/codex_plugin_scanner/guard/native_*.py",
           "src/codex_plugin_scanner/guard/proxy/*",
           "src/codex_plugin_scanner/guard/runtime/restricted_*.py",
@@ -594,7 +605,6 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/codex_harness_client.py",
-          "src/codex_plugin_scanner/guard/codex_harness_lifecycle.py",
           "src/codex_plugin_scanner/guard/native_owned.py",
           "src/codex_plugin_scanner/guard/codex_remote_client.py",
           "src/codex_plugin_scanner/guard/mcp_server_client.py",
@@ -681,10 +691,13 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/claude_hook_entry.py",
-          "src/codex_plugin_scanner/guard/harness/cursor_client.py",
-          "src/codex_plugin_scanner/guard/harness/native_extension.py",
-          "src/codex_plugin_scanner/guard/harness/native_harness.py",
-          "src/codex_plugin_scanner/guard/harness/native_harness_steps.py",
+          "src/codex_plugin_scanner/guard/cursor_hook_ops.py",
+          "src/codex_plugin_scanner/guard/diagnostics_bridge.py",
+          "src/codex_plugin_scanner/guard/native_detected.py",
+          "src/codex_plugin_scanner/guard/native_extension.py",
+          "src/codex_plugin_scanner/guard/native_harness_steps.py",
+          "src/codex_plugin_scanner/guard/native_install_facts.py",
+          "src/codex_plugin_scanner/guard/cli/native_managed_install.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
         "reason": "Reviewed: adapter implementations behind the harness registry. Adapters normalize harness payloads into hook requests, so they sit on the hook path, and hook-path authority is never excluded. Install and setup methods that have a function_exclusions entry are excluded as install_config, not hook path; install helpers without an entry (for example in the Cline support modules) stay counted, which understates the Rust share."
@@ -812,9 +825,7 @@
       ]
     },
     "adapters": {
-      "path": [
-        "src/codex_plugin_scanner/guard/harness/*.py"
-      ]
+      "path": []
     },
     "vendored": {
       "path": []
@@ -1032,52 +1043,6 @@
         "evidence": "The retained reference closure of every symbol other modules import from render.py (emit_guard_payload) contains none of the excluded symbols except through emit_guard_payload, whose as_json=True branch (which writes JSON through _redact_payload and _render_redacted_json_payload; the hook protocol's redacted document is printed by the resident's cli_hook_emit op, not by render.py) never reads them. The excluded symbols are reached only from emit_guard_payload's as_json=False branch through the _RENDERERS and _PLAIN_TEXT_RENDERERS tables. The report validates this reference closure on every run."
       },
       {
-        "id": "adapter-base-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/harness/base.py",
-        "symbols": [
-          "HarnessAdapter.prepare_install",
-          "HarnessAdapter.install",
-          "HarnessAdapter.uninstall"
-        ],
-        "entry_points": [],
-        "reason": "HarnessAdapter default install, prepare_install and uninstall implementations used when an adapter does not override them.",
-        "evidence": "The default prepare_install, install and uninstall are invoked only from the excluded install, uninstall and repair command dispatchers. No retained runtime code reads these attributes. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
-        "id": "adapter-codex-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/codex_harness_lifecycle.py",
-        "symbols": [
-          "_plan_report",
-          "_located",
-          "CodexHarnessAdapter.prepare_install",
-          "CodexHarnessAdapter._prepare_plan",
-          "CodexHarnessAdapter._plan_request",
-          "CodexHarnessAdapter._planned",
-          "CodexHarnessAdapter.install",
-          "CodexHarnessAdapter._install_owned",
-          "CodexHarnessAdapter.uninstall",
-          "CodexHarnessAdapter._uninstall_owned",
-          "CodexHarnessAdapter._target_config_path",
-          "CodexHarnessAdapter._backup_path"
-        ],
-        "entry_points": [],
-        "reason": "Codex config.toml and hooks.json install, uninstall, migration, alternate-config cleanup and shell-guard cleanup, plus the helpers only they use; the shell-guard block ranges and the Guard proxy recognition they act on run in the native codex_install_plan runner-authority kind.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. Launch, detect, diagnostics and the runtime hook-state readers stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
-        "id": "adapter-codex-client-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/codex_harness_client.py",
-        "symbols": [
-          "_install_manifest"
-        ],
-        "entry_points": [],
-        "reason": "The Codex install, uninstall and repair manifest request, sent to the native harness_adapter runner-authority kind.",
-        "evidence": "Only CodexHarnessAdapter install, prepare_install and uninstall call it, and those are excluded install, uninstall and repair paths. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
         "id": "runtime-policy-admin-payloads",
         "category": "cli_only",
         "path": "src/codex_plugin_scanner/guard/cli/commands_support_runtime_policy.py",
@@ -1126,23 +1091,11 @@
         "evidence": "run_helper, the sign_* functions, require_machine_context and the canonical-claims validators are called only from mdm/device_key.py, which is reached only through mdm/integrity.py, mdm/continuity.py and mdm/health_*.py (the periodic MDM health and lease reporter, already excluded by mdm-health) and cli/commands_dispatch_mdm.py. The only in-scope importer of this module is native_policy_snapshot_windows_support._windows_owner_sid, a lazy import of windows_current_user_sid, which asks the runtime for this process's token user."
       },
       {
-        "id": "adapter-inventory-snapshot",
-        "category": "offline_reporting",
-        "path": "src/codex_plugin_scanner/guard/harness/base.py",
-        "symbols": [
-          "HarnessAdapter.inventory_snapshot"
-        ],
-        "entry_points": [],
-        "reason": "HarnessAdapter.inventory_snapshot assembles the AIBOM inventory snapshot (including optional Cisco scans) for export and cloud inventory upload.",
-        "evidence": "No production code calls inventory_snapshot: the only references are the method definition and tests/test_guard_aibom_detection.py, which test the method directly. The AIBOM collection, upload and CLI modules (aibom_collection, aibom_commands, aibom_cli, aibom_content_upload) are already excluded by aibom-inventory and build snapshots through their own path. Its lazy imports of inventory_contract and inventory_cisco were the only in-scope edge to the inventory_contract assembly modules (items, metadata, redaction, scans, mcp, models, constants) and, through them, skill_document_evidence and trust_metadata_boundary. aibom_detection now imports fingerprint_mapping and fingerprint_text straight from inventory_contract_fingerprints, which stay in scope because adapter detect() hashes MCP server content synchronously during launch."
-      },
-      {
         "id": "adapter-cursor-setup",
         "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/harness/cursor_client.py",
+        "path": "src/codex_plugin_scanner/guard/cursor_hook_ops.py",
         "symbols": [
           "install_cursor_hooks",
-          "_install_hooks",
           "rebind_stale_cursor_hooks"
         ],
         "entry_points": [],
@@ -1556,35 +1509,16 @@
         "evidence": "discover_shared_workspace_aibom_artifacts is called only from inventory_contract.py, which is outside runtime scope. The role grammar this entry used to cover now lives in the resident's aibom_paths.rs and reaches Python only as the inventory_source_evidence answer. The retained adapter detection, Codex skill discovery and MCP metadata enrichment do not reference it, and the report validates this reference closure on every run."
       },
       {
-        "id": "adapter-native-harness-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/harness/native_harness.py",
-        "symbols": [
-          "NativeHarnessAdapter.prepare_install",
-          "NativeHarnessAdapter.install",
-          "NativeHarnessAdapter.uninstall",
-          "NativeHarnessAdapter._hook_argv",
-          "NativeHarnessAdapter._apply_install",
-          "NativeHarnessAdapter._apply_uninstall",
-          "NativeHarnessAdapter._install_delegated",
-          "NativeHarnessAdapter.current_hook_command"
-        ],
-        "entry_points": [],
-        "reason": "Install and uninstall for the harnesses the native harness_adapter kind answers (Devin, Antigravity, Gemini, Kimi, OpenClaw, Paseo and Muse): the launcher shim, the bounded hook argv, publishing the native file plan and Paseo's delegated provider installs.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_argv, _apply_install, _apply_uninstall and _install_delegated are called only from them; current_hook_command is called only by the excluded update repair, to tell an up-to-date hook from an old one. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
         "id": "adapter-native-harness-detected-rebind",
         "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/harness/native_harness_steps.py",
+        "path": "src/codex_plugin_scanner/guard/native_harness_steps.py",
         "symbols": [
-          "install_delegated",
           "prepared_from_detection",
           "prepared_surfaces"
         ],
         "entry_points": [],
         "reason": "The rebind Copilot plans from what the native runtime detected: the launcher shim, the enrolled state key dependency and the native file plan, and the delegated install that installs each provider and binds its proof.",
-        "evidence": "prepared_from_detection is called only from NativeHarnessAdapter.prepare_install, which is excluded by adapter-native-harness-setup and invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "prepared_from_detection is called only from native_harness_install_ops.prepare_install, which is invoked only by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       }
     ],
     "dynamic_imports": []

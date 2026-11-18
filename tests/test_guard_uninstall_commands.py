@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import uninstall_commands, update_retirement
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_resident_update_lock import NativeResidentUpdateLockError
 from codex_plugin_scanner.guard.store import GuardStore
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..models import HarnessDetection
 from ..store import GuardStore
 from . import runner_native_authority as _authority

@@ -270,7 +270,7 @@ fn grok_hooks_in_a_file_that_is_not_utf8_are_a_refusal() {
     );
 }
 
-fn plugin() -> Value {
+pub(super) fn plugin() -> Value {
     let vectors: Value = serde_json::from_str(include_str!(
         "../../../testdata/opencode/plugin_render_vectors.json"
     ))
@@ -284,7 +284,7 @@ fn opencode_refresh(home: &Home) -> Value {
     home.ask("opencode", "update_refresh", json!({"plugin": plugin()}))
 }
 
-fn plugin_paths(home: &Home) -> Vec<PathBuf> {
+pub(super) fn plugin_paths(home: &Home) -> Vec<PathBuf> {
     let plan = home.ask("opencode", "plugin_refresh", json!({"plugin": plugin()}));
     plan["paths"]
         .as_array()

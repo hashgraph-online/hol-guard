@@ -7394,6 +7394,16 @@
     }
   }
 
+  .focus\:ring-brand-blue\/40:focus {
+    --tw-ring-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus\:ring-brand-blue\/40:focus {
+      --tw-ring-color: color-mix(in oklab, var(--brand-blue) 40%, transparent);
+    }
+  }
+
   .focus\:ring-rose-600\/30:focus {
     --tw-ring-color: #e700444d;
   }
@@ -8695,6 +8705,10 @@
 
     .lg\:grid-cols-\[1fr_340px\] {
       grid-template-columns: 1fr 340px;
+    }
+
+    .lg\:grid-cols-\[240px_minmax\(0\,1fr\)\] {
+      grid-template-columns: 240px minmax(0, 1fr);
     }
 
     .lg\:grid-cols-\[340px_minmax\(0\,1fr\)\] {

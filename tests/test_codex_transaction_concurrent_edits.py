@@ -8,13 +8,14 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_harness_client as adapter_module
 from codex_plugin_scanner.guard import codex_hook_rollback as rollback
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import atomic_write_text
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 from tests import codex_hook_publication_helpers as publication_helpers
 from tests import codex_publication_steps as publication_steps
+from tests import harness_ops_support as harness_support
 from tests.codex_hook_paths_support import hook_manifest_path, hook_secret_path
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.transition_fault_support import interrupt_publication_at
@@ -41,10 +42,9 @@ def test_config_edit_during_failed_write_survives_rollback(
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    adapter = CodexHarnessAdapter()
     if existing_installation:
-        adapter.install(context)
-    config_path = adapter._hook_config_path(context)
+        harness_support.install("codex", context)
+    config_path = codex_paths(context).config
     concurrent_text = 'model = "user-selected-model"\n'
     injected = False
     transaction_files: dict[Path, bytes] = {}
@@ -61,7 +61,7 @@ def test_config_edit_during_failed_write_survives_rollback(
 
     _interrupt_config_write(monkeypatch, config_path, concurrent_edit)
     with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
-        adapter.install(context)
+        harness_support.install("codex", context)
 
     assert injected
     assert config_path.is_file()
@@ -80,8 +80,7 @@ def test_deleted_config_after_publish_preserves_pending_manifest_and_secret(
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    adapter = CodexHarnessAdapter()
-    config_path = adapter._hook_config_path(context)
+    config_path = codex_paths(context).config
     manifest_path = hook_manifest_path(context.guard_home, config_path)
     secret_path = hook_secret_path(context.guard_home)
     use_stepwise_publication(monkeypatch)
@@ -101,7 +100,7 @@ def test_deleted_config_after_publish_preserves_pending_manifest_and_secret(
 
     monkeypatch.setattr(publication_steps, "readback", deleting_readback)
     with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
-        adapter.install(context)
+        harness_support.install("codex", context)
 
     assert injected
     assert not config_path.exists()
@@ -122,9 +121,8 @@ def test_failed_write_preserves_substituted_config_targets(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, substitution: str
 ) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = CodexHarnessAdapter()
-    adapter.install(context)
-    config_path = adapter._hook_config_path(context)
+    harness_support.install("codex", context)
+    config_path = codex_paths(context).config
     target = config_path.parent / "user-target.toml"
     target.write_bytes(b'owner = "other-writer"\n')
     injected = False
@@ -140,7 +138,7 @@ def test_failed_write_preserves_substituted_config_targets(
 
     _interrupt_config_write(monkeypatch, config_path, substitute)
     with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
-        adapter.install(context)
+        harness_support.install("codex", context)
 
     assert injected
     assert target.read_bytes() == b'owner = "other-writer"\n'
@@ -158,10 +156,9 @@ def test_matching_replacement_is_not_owned_by_the_failed_transaction(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, existing_installation: bool
 ) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = CodexHarnessAdapter()
     if existing_installation:
-        adapter.install(context)
-    config_path = adapter._hook_config_path(context)
+        harness_support.install("codex", context)
+    config_path = codex_paths(context).config
     replacement: bytes | None = None
     replacement_identity = None
 
@@ -173,7 +170,7 @@ def test_matching_replacement_is_not_owned_by_the_failed_transaction(
 
     _interrupt_config_write(monkeypatch, config_path, matching_replacement)
     with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
-        adapter.install(context)
+        harness_support.install("codex", context)
     assert replacement is not None
     assert config_path.read_bytes() == replacement
     assert config_path.stat().st_ino == replacement_identity
@@ -184,10 +181,9 @@ def test_matching_replacement_after_completed_write_is_preserved(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, existing_installation: bool
 ) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = CodexHarnessAdapter()
     if existing_installation:
-        adapter.install(context)
-    config_path = adapter._hook_config_path(context)
+        harness_support.install("codex", context)
+    config_path = codex_paths(context).config
     use_stepwise_publication(monkeypatch)
     replacement: bytes | None = None
     replacement_identity = None
@@ -203,7 +199,7 @@ def test_matching_replacement_after_completed_write_is_preserved(
 
     monkeypatch.setattr(publication_steps, "readback", replaced_readback)
     with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
-        adapter.install(context)
+        harness_support.install("codex", context)
     assert replacement is not None
     assert config_path.read_bytes() == replacement
     assert config_path.stat().st_ino == replacement_identity
@@ -213,9 +209,8 @@ def test_invalid_utf8_snapshot_is_rejected_before_manifest_or_secret_writes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = CodexHarnessAdapter()
-    adapter.install(context)
-    config_path = adapter._hook_config_path(context)
+    harness_support.install("codex", context)
+    config_path = codex_paths(context).config
     manifest_path = hook_manifest_path(context.guard_home, config_path)
     secret_path = hook_secret_path(context.guard_home)
     manifest_before, secret_before = manifest_path.read_bytes(), secret_path.read_bytes()
@@ -249,9 +244,8 @@ def test_matching_bytes_and_inode_with_changed_timestamp_are_not_original_state(
 def test_substituted_target_during_snapshot_is_reported_as_invalid_not_conflict(tmp_path: Path) -> None:
     """The native target snapshot refuses a config another file links to."""
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = CodexHarnessAdapter()
-    adapter.install(context)
-    config_path = adapter._hook_config_path(context)
+    harness_support.install("codex", context)
+    config_path = codex_paths(context).config
     target = config_path.parent / "other-owner.toml"
     target.write_bytes(b'owner = "other-writer"\n')
     config_path.unlink()

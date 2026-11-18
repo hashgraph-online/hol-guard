@@ -17,6 +17,8 @@ use super::super::tokens::Token;
 use super::{Call, Lit, Parser, MAX_CALLS, MAX_DEPTH};
 use serde_json::{json, Map, Value};
 
+const DRAFT_METHODS: &[&str] = &["take", "drop", "only", "show", "diff", "commit"];
+
 impl Parser {
     /// Whether `await commit.draft` starts at the cursor.
     pub(super) fn draft_ahead(&self) -> bool {
@@ -61,14 +63,18 @@ impl Parser {
         Some(())
     }
 
-    /// A name bound to a draft: shown as is, or one of its methods called
-    /// with literal arguments. The draft's repository is already recorded.
+    /// A name bound to a draft: shown as is, one of its fields, one of its
+    /// methods called with literal arguments, or a method itself, uncalled or
+    /// shown with `toString()`. The draft's repository is already recorded.
     pub(super) fn draft_use(&mut self) -> Option<()> {
         if !self.at('.') {
             return Some(());
         }
         self.pos += 1;
         let method = self.ident()?;
+        if !self.at('(') {
+            return self.draft_member(&method);
+        }
         let args = self.literal_args()?;
         let silent = |value: &Value| object_keys(value, &["silent"]);
         let selection = |value: &Value| object_keys(value, &["units", "grep", "silent"]);
@@ -89,9 +95,48 @@ impl Parser {
             ("commit", [Value::String(subject), options]) => {
                 !subject.trim().is_empty() && commit_options(options)
             }
+            ("commit", [Value::Object(options)]) => subject_in_options(options),
             _ => false,
         };
         valid.then_some(())
+    }
+
+    /// `draft.id`, `draft.details` and `draft.text` are plain fields the
+    /// prelude sets. A method named without a call is taken only as its
+    /// source text through `toString()`, never as a value: placed under
+    /// `then` or `toJSON`, the host would call it with arguments no literal
+    /// check saw. `typeof draft.method` is read before this.
+    fn draft_member(&mut self, name: &str) -> Option<()> {
+        match name {
+            "id" | "details" | "text" => Some(()),
+            name if DRAFT_METHODS.contains(&name) => {
+                self.eat('.')?;
+                self.eat_ident("toString")?;
+                self.eat('(')?;
+                self.eat(')')
+            }
+            _ => None,
+        }
+    }
+
+    /// `typeof draft.method`, which names the method without reading it as
+    /// a value anything could call.
+    pub(super) fn typeof_draft_method(&mut self) -> bool {
+        let ident = |offset: usize| match self.tokens.get(self.pos + offset) {
+            Some(Token::Ident(ident)) => Some(ident.as_str()),
+            _ => None,
+        };
+        let found = ident(0).is_some_and(|name| self.drafts.contains(name))
+            && self.tokens.get(self.pos + 1) == Some(&Token::Punct('.'))
+            && ident(2).is_some_and(|name| DRAFT_METHODS.contains(&name))
+            && !matches!(
+                self.tokens.get(self.pos + 3),
+                Some(Token::Punct('(' | '.' | '['))
+            );
+        if found {
+            self.pos += 3;
+        }
+        found
     }
 
     /// `(literal, ...)`: strings, numbers, booleans, `null`, and arrays and
@@ -191,6 +236,22 @@ fn object_keys(value: &Value, allowed: &[&str]) -> bool {
                 _ => false,
             }
     })
+}
+
+/// `commit({subject, body, ...})`: the subject passed inside the options
+/// instead of first. Oh My Pi rejects a subject that is not a non-empty string
+/// before Git runs, so the call commits nothing, but the eval is still judged
+/// as the draft's commit. The keys are the ones `commit(subject, options)`
+/// takes, plus `subject`; `amend` keeps its review.
+fn subject_in_options(options: &Map<String, Value>) -> bool {
+    let subject = options.get("subject");
+    let rest: Map<String, Value> = options
+        .iter()
+        .filter(|(key, _)| key.as_str() != "subject")
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    subject.is_none_or(|subject| subject.as_str().is_some_and(|text| !text.trim().is_empty()))
+        && commit_options(&Value::Object(rest))
 }
 
 /// `commit(subject, options)`: a body as a string or lines, `fixes`,

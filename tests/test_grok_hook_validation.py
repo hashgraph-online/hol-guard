@@ -12,7 +12,8 @@ from codex_plugin_scanner.guard.cli.native_install_checks import (
     _grok_hook_command_is_guard,
     _grok_protection_checks,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.native_bounded_runtime import use_bounded_runtime
 
 from .grok_test_support import grok_hook_command_parts

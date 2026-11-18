@@ -7441,6 +7441,36 @@
       "expect": "allow"
     },
     {
+      "id": "omp-eval-commit-draft-subject-in-options",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); await d.take('README.md'); return await d.commit({subject: 'docs: record the lane', body: ['Add the lane note.']});",
+        "language": "js",
+        "title": "Commit the lane note"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-eval-commit-draft-introspection",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); return { keys: Object.keys(d), proto: Object.getOwnPropertyNames(Object.getPrototypeOf(d)), commit: typeof d.commit, details: d.details };",
+        "language": "js",
+        "title": "Inspect the commit draft"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "omp-eval-commit-prelude-docs",
       "fix_area": "omp",
       "harnesses": [
@@ -14542,6 +14572,40 @@
       "tool": "shell",
       "tool_input": {
         "command": "cd ${TMP_ORG_WT} && git status --short | head -5; git rev-parse HEAD"
+      },
+      "cwd": "tmp_org",
+      "expect": "allow"
+    },
+    {
+      "id": "or-fallback-prefix-then-cd-git-check-ignore",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "lsof -iTCP:3000 -sTCP:LISTEN 2>/dev/null | head -3; echo \"---\"; ls ${TMP_ORG}/missing.tsbuildinfo 2>/dev/null || echo \"none\"; echo \"---\"; cd ${TMP_ORG}/app && git check-ignore tsconfig.tsbuildinfo && echo \"ignored\" || echo \"not ignored\""
+      },
+      "cwd": "tmp_org",
+      "expect": "allow"
+    },
+    {
+      "id": "or-fallback-prefix-then-cd-git-status",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${TMP_ORG}/missing.tsbuildinfo 2>/dev/null || echo \"none\"; cd ${TMP_ORG}/app && git status --short"
       },
       "cwd": "tmp_org",
       "expect": "allow"
@@ -28275,6 +28339,22 @@
       "tool": "shell",
       "tool_input": {
         "command": "rg -n route ${HOME}/Code/ignore-rules/web-console"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "ls-absent-file-in-sibling-repo-hidden-folder",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/Code/ignore-rules/web-console/.vscode/launch.json 2>/dev/null || echo \"no launch config\""
       },
       "cwd": "org_app",
       "expect": "allow"

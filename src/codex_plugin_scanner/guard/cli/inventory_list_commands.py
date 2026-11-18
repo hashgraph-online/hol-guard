@@ -19,7 +19,7 @@ from ..runtime.fleet_posture_aibom import fleet_inventory_rows
 from ..runtime.fleet_posture_inventory import reportable_inventory_rows, store_home
 
 if TYPE_CHECKING:
-    from ..harness.base import HarnessContext
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
 
 # Guard command name -> (parser attribute naming the subcommand, inventory kind, kinds listed).

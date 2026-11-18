@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ...version import __version__
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..store import GuardStore
 from .command_capability import (
     CommandCapabilityError,

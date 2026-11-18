@@ -27,12 +27,10 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from ... import version as package_version
-from ..codex_harness_client import codex_native_hook_state
-from ..codex_harness_lifecycle import CodexHarnessAdapter
+from ..codex_harness_client import codex_native_hook_state, codex_paths
 from ..config import load_guard_config, resolve_guard_home
-from ..harness.base import HarnessContext
-from ..harness.cursor_client import cursor_native_hook_state
-from ..harness.native_extension import extension_is_current, legacy_omp_extension_is_verified
+from ..cursor_hook_ops import cursor_native_hook_state
+from ..harness_context import HarnessContext
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
@@ -41,6 +39,7 @@ from ..native_daemon_peer import (
 )
 from ..native_daemon_peer import retained_desktop_owner_note, retained_desktop_owner_payload
 from ..native_daemon_peer import retained_newer_runtime_payload as _verified_newer_guard_daemon
+from ..native_extension import extension_is_current, legacy_omp_extension_is_verified
 from ..native_resident_update_lock import (
     NativeResidentUpdateLock,
     NativeResidentUpdateLockError,
@@ -194,7 +193,7 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.shims import package_shim_status, repair_package_shims
 
 
@@ -300,7 +299,7 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.cli.update_commands import _repair_supported_harnesses_in_process
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -3204,7 +3203,7 @@ def _codex_repair_target(context: HarnessContext, store: GuardStore) -> tuple[Ha
 
 def _codex_backup_repair_target(context: HarnessContext) -> tuple[HarnessContext, str | None] | None:
     for repair_context in _codex_backup_repair_contexts(context):
-        if not CodexHarnessAdapter._backup_path(repair_context).is_file():
+        if not codex_paths(repair_context).backup.is_file():
             continue
         repair_workspace = str(repair_context.workspace_dir) if repair_context.workspace_dir is not None else None
         return repair_context, repair_workspace

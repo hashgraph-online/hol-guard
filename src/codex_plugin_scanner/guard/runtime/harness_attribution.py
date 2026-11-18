@@ -31,7 +31,7 @@ def _environment(env: Mapping[str, str] | None) -> dict[str, str]:
     """The marker variables of this process, or of the mapping a caller names."""
     if env is not None:
         return {key: value for key, value in env.items() if isinstance(value, str)}
-    from ..harness.native_harness import request_environment
+    from ..native_harness_client import request_environment
 
     return request_environment()
 

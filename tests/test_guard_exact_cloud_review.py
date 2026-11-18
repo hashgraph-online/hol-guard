@@ -14,7 +14,7 @@ import pytest
 from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args, main
 from codex_plugin_scanner.guard.cli import commands_dispatch_cloud_review as cloud_review_dispatch
 from codex_plugin_scanner.guard.codex_live_decision import resolve_codex_live_allow_authority
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_command_capability import CommandCapabilityUnavailableError
 from codex_plugin_scanner.guard.review_contracts import (
     GuardReviewContractError,

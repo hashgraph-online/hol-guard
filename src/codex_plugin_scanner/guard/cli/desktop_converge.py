@@ -26,7 +26,7 @@ from ..desktop_foreign_installs import (
     inventory_foreign_installs,
     remove_foreign_installs,
 )
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..stable_guard_cli import durable_desktop_current_hol_guard
 from ..store import GuardStore
 

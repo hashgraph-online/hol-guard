@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import ask
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 
 _PLUGIN_FILE = "hol-guard-pretool.ts"
 
@@ -51,5 +51,5 @@ def install_pretool_plugin(context: HarnessContext) -> dict[str, str]:
 def config_uses_guard_proxy(context: HarnessContext, config: Path) -> bool:
     # The native op detects the loaded configs itself; OPENCODE_CONFIG points it at this one.
     with patch.dict(os.environ, {"OPENCODE_CONFIG": str(config)}):
-        answer = ask("protection", context, harness="opencode", managed_active=True)
+        answer = ask("protection", context, harness="opencode")
     return bool(json.loads(str(answer["checks"]))["mcp_proxy_configured"])

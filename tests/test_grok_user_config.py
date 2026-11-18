@@ -11,9 +11,9 @@ from codex_plugin_scanner.guard.cli.native_install_checks import (
     grok_protection,
     grok_runtime_hooks_verified,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.shims import PreparedGuardShim
+from tests import harness_ops_support as harness_support
 
 from .grok_test_support import grok_paths
 
@@ -43,8 +43,7 @@ def test_vendor_refresh_cannot_remove_durable_protection(tmp_path: Path, monkeyp
     vendor.parent.mkdir(parents=True)
     enterprise = '# Enterprise settings\nmodel="synthetic-enterprise-model"\n'
     vendor.write_text(enterprise)
-    adapter = get_adapter("grok")
-    manifest = adapter.install(context)
+    manifest = harness_support.install("grok", context)
     artifacts = manifest["protection_artifact_paths"]
     assert isinstance(artifacts, list)
     assert str(grok_paths(context)["config"]) in artifacts
@@ -77,7 +76,7 @@ def test_legacy_backup_hooks_migrate_without_changing_vendor_settings(
     vendor.parent.mkdir(parents=True)
     enterprise = '# Enterprise settings\nmodel="synthetic-enterprise-model"\n'
     vendor.write_text(enterprise + _LEGACY_MANAGED_BLOCK)
-    get_adapter("grok").install(context)
+    harness_support.install("grok", context)
     assert tomllib.loads(vendor.read_text()) == tomllib.loads(enterprise)
     assert "old guard hook" not in vendor.read_text()
 
@@ -96,14 +95,13 @@ def test_malformed_config_leaves_uninstall_artifacts_intact(tmp_path: Path, monk
     )
     remove_shim = Mock()
     monkeypatch.setattr("codex_plugin_scanner.guard.shims.remove_guard_shim", remove_shim)
-    adapter = get_adapter("grok")
-    adapter.install(context)
+    harness_support.install("grok", context)
     hooks = grok_paths(context)["pretool"]
     before = hooks.read_bytes()
     config = grok_paths(context)["config"]
     config.write_text("[permission\n")
     with pytest.raises(ValueError):
-        adapter.uninstall(context)
+        harness_support.uninstall("grok", context)
     remove_shim.assert_not_called()
     assert shim.is_file() and hooks.read_bytes() == before
     assert config.read_text() == "[permission\n"
@@ -119,12 +117,11 @@ def test_missing_ownership_warns_without_deleting_user_settings(
         lambda *args, **kwargs: PreparedGuardShim((), {"notes": []}),
     )
     monkeypatch.setattr("codex_plugin_scanner.guard.shims.remove_guard_shim", lambda *args, **kwargs: {})
-    adapter = get_adapter("grok")
-    adapter.install(context)
+    harness_support.install("grok", context)
     config = grok_paths(context)["config"]
     before = config.read_bytes()
     grok_paths(context)["state"].unlink()
-    result = adapter.uninstall(context)
+    result = harness_support.uninstall("grok", context)
     assert config.read_bytes() == before
     assert not grok_paths(context)["pretool"].exists()
     notes = result["notes"]

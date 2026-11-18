@@ -7,10 +7,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.codex_hook_paths_support import hook_manifest_path
+from tests.codex_install_flow_support import current_launch
 from tests.codex_toml_support import dump_toml
 
 _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
@@ -27,8 +28,8 @@ def test_guard_codex_install_rejects_ambiguous_foreign_direct_hook(tmp_path: Pat
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-    config_path = CodexHarnessAdapter._hook_config_path(context)
-    foreign_command = shlex.join(codex_adapter._current_launch(context)["fallback"])
+    config_path = codex_paths(context).config
+    foreign_command = shlex.join(current_launch(context)["fallback"])
     foreign_group = {
         "matcher": _CODEX_GUARD_TOOL_MATCHER,
         "hooks": [
@@ -46,7 +47,7 @@ def test_guard_codex_install_rejects_ambiguous_foreign_direct_hook(tmp_path: Pat
 
     original_config = config_path.read_bytes()
     with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
-        CodexHarnessAdapter().install(context)
+        harness_support.install("codex", context)
     assert config_path.read_bytes() == original_config
     assert not hook_manifest_path(context.guard_home, config_path).exists()
 

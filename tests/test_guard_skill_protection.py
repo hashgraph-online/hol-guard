@@ -377,36 +377,39 @@ def _one_docs_skill(tmp_path: Path) -> tuple[Path, GuardStore]:
     return skills_dir, _make_store(tmp_path)
 
 
-def test_scan_workspace_skills_tells_the_runtime_what_the_store_holds(
+def test_scan_workspace_skills_names_the_workspace_and_the_store_to_the_runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    skills_dir, store = _one_docs_skill(tmp_path)
-    skill = str(skills_dir / "SKILL.md")
-    store.save_snapshot(
-        "skill_scan", f"skill-path:{skill}", {"identity_hash": "hash-1"}, "hash-1", "2024-01-01T00:00:00"
-    )
-    requests: list[dict[str, object]] = []
+    _skills_dir, store = _one_docs_skill(tmp_path)
+    asked: list[tuple[str, dict[str, object]]] = []
 
-    def _answer(request: dict[str, object]) -> dict[str, object]:
-        requests.append(request)
-        if request["op"] == "list":
-            return {"skills": [skill]}
-        return {"results": [], "snapshots": []}
+    def _ask(op: str, context: object, **fields: object) -> dict[str, object]:
+        asked.append((op, fields))
+        return {"skill_scan": []}
 
-    monkeypatch.setattr(install_commands_module, "_skills_answer", _answer)
+    monkeypatch.setattr(install_commands_module, "native_ask", _ask)
 
     assert scan_workspace_skills(tmp_path, store, "2024-01-01T00:00:00") == []
-    assert [request["op"] for request in requests] == ["list", "scan"]
-    assert requests[1]["stored"] == {skill: "hash-1"}
+    assert [op for op, _fields in asked] == ["workspace_skills_scan"]
+    fields = asked[0][1]
+    assert fields["workspace_dir"] == str(tmp_path)
+    assert fields["now"] == "2024-01-01T00:00:00"
+    assert fields["source"] == store.guard_source
 
 
 def test_scan_workspace_skills_reports_unscanned_skill_when_the_runtime_does_not_answer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+
     skills_dir, store = _one_docs_skill(tmp_path)
-    monkeypatch.setattr(install_commands_module, "_skills_answer", lambda request: None)
+
+    def _ask(op: str, context: object, **fields: object) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native owner unavailable")
+
+    monkeypatch.setattr(install_commands_module, "native_ask", _ask)
 
     result = scan_workspace_skills(tmp_path, store, "2024-01-01T00:00:00")
 
@@ -417,12 +420,11 @@ def test_scan_workspace_skills_reports_unscanned_skill_when_the_runtime_does_not
     assert store.get_snapshot("skill_scan", f"skill-path:{skills_dir / 'SKILL.md'}") is None
 
 
-def test_scan_workspace_skills_passes_the_runtime_unscanned_rows_without_a_snapshot(
+def test_scan_workspace_skills_passes_the_runtime_rows_through(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    skills_dir, store = _one_docs_skill(tmp_path)
-    skill = str(skills_dir / "SKILL.md")
+    _skills_dir, store = _one_docs_skill(tmp_path)
     row = {
         "skill_path": ".codex/skills/docs/SKILL.md",
         "identity_hash": None,
@@ -432,18 +434,9 @@ def test_scan_workspace_skills_passes_the_runtime_unscanned_rows_without_a_snaps
         "signal_ids": [],
         "scan_error": "native_mcp_tool_evidence_unavailable",
     }
+    monkeypatch.setattr(install_commands_module, "native_ask", lambda op, context, **fields: {"skill_scan": [row]})
 
-    def _answer(request: dict[str, object]) -> dict[str, object]:
-        if request["op"] == "list":
-            return {"skills": [skill]}
-        return {"results": [row], "snapshots": []}
-
-    monkeypatch.setattr(install_commands_module, "_skills_answer", _answer)
-
-    result = scan_workspace_skills(tmp_path, store, "2024-01-01T00:00:00")
-
-    assert result == [row]
-    assert store.get_snapshot("skill_scan", f"skill-path:{skill}") is None
+    assert scan_workspace_skills(tmp_path, store, "2024-01-01T00:00:00") == [row]
 
 
 def test_skill_scan_panel_shows_unscanned_skills_apart_from_risky_ones() -> None:

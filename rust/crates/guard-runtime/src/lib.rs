@@ -246,6 +246,8 @@ mod codex_proxy;
 mod codex_remote_launch;
 #[path = "adapters/codex_remote_prepare.rs"]
 mod codex_remote_prepare;
+#[path = "adapters/codex_remote_run.rs"]
+mod codex_remote_run;
 mod codex_request_resume_busy;
 mod codex_request_resume_capabilities;
 mod codex_request_resume_live;
@@ -462,6 +464,7 @@ mod edge_exact_command_spelling;
 mod edge_git_push;
 mod edge_receipt;
 mod edge_review_evidence;
+mod edge_session_cascade;
 mod edge_structured;
 mod encrypted_secret_store;
 mod evaluation_contract;
@@ -518,6 +521,8 @@ mod grok_user_config_op;
 #[cfg(all(test, unix))]
 #[path = "adapters/detection/grok_user_config_tests.rs"]
 mod grok_user_config_tests;
+#[cfg(unix)]
+mod group_write_trust;
 mod guard_config_coerce;
 mod guard_config_harness;
 mod guard_config_iso;

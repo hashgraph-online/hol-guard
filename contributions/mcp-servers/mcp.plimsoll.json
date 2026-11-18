@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.plimsoll",
+  "version": "1.0.0",
+  "name": "plimsoll",
+  "description": "Tells a coding agent what its change did to a local git repository since a base revision: new dependencies, import rings, overly complex functions, committed planning files. Local stdio server from julianzh0/plimsoll; Guard matches only the executable plimsoll. It runs read-only git commands, fetches nothing, sends nothing over the network and writes nothing into the repository. Without a base or a default base in .plimsoll.toml, a question is refused, not guessed. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.julianzh0",
+    "displayName": "julianzh0",
+    "url": "https://github.com/julianzh0/plimsoll"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0F2A44"
+  },
+  "homepage": "https://github.com/julianzh0/plimsoll",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "plimsoll"
+  },
+  "riskClasses": [
+    "local-source-read"
+  ],
+  "tools": [
+    {
+      "name": "status",
+      "state": "inherit"
+    },
+    {
+      "name": "report",
+      "state": "inherit"
+    },
+    {
+      "name": "explain",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/julianzh0/plimsoll",
+    "https://github.com/julianzh0/plimsoll/blob/main/docs/guarantees.md",
+    "https://github.com/julianzh0/plimsoll/blob/main/internal/mcpserver/tools.go",
+    "https://github.com/julianzh0/plimsoll/blob/main/internal/gitrepo/git.go",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.julianzh0/plimsoll"
+  ],
+  "saferAlternatives": [
+    "Keep the contribution off until a local administrator enables it; plimsoll needs only read access to the repository it is asked about.",
+    "Point plimsoll only at repositories an agent may read in full, including their Git history; for a repository that holds restricted files or history, keep the contribution off."
+  ]
+}
