@@ -128,6 +128,11 @@ fn a_whole_command_floors_only_an_unfed_lone_dotpath_search() {
         "rg ''$HOME/.ssh/id_rsa",
         // Empty quotes do not prevent the later expansion.
         "grep ''$HOME/.config/example",
+        // Quoted decoys in assignments and option values must not disguise
+        // an independently expanding HOME pattern.
+        "X='$HOME'/.ssh/id_rsa grep \"$HOME\"/.ssh/id_rsa",
+        "rg --glob='$HOME'/.ssh/id_rsa \"$HOME\"/.ssh/id_rsa",
+        "grep -A '$HOME'/.ssh/id_rsa \"$HOME\"/.ssh/id_rsa",
         "grep $HOME/.ssh/id_rsa #'$HOME/.ssh/id_rsa",
         "rg '/home/agent/.ssh/id_rsa'",
     ] {
