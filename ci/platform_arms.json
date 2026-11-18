@@ -1028,11 +1028,11 @@
   },
   {
    "file": "rust/crates/guard-runtime/src/aibom_skills.rs",
-   "item": "mod native",
-   "verdict": "windows-unsupported",
-   "note": "Skill discovery returns `native_runner_authority_aibom_skills_unsupported` off Unix; directory identity walks natively on every platform.",
+   "item": "fn path_from_bytes -- non-Unix block",
+   "verdict": "windows-equivalent",
+   "note": "Discovery records a relative skill path as the UTF-8 spelling of the Windows name joined with `/`, so the Windows arm decodes those bytes into a `PathBuf` where Unix rebuilds the raw `OsString`; a document whose name is not valid UTF-8 is reported as an invalid-path-encoding issue before this arm runs, and an issue path with such a name only loses its unpaired surrogate to a replacement character in the reported path. `aibom_skills_tests.rs` runs the native walk on the Windows CI jobs.",
    "cfg": "not(unix)",
-   "body": "11a0b78bed08"
+   "body": "64bcd9c10c5c"
   },
   {
    "file": "rust/crates/guard-runtime/src/approval_enrollment.rs",
