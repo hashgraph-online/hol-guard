@@ -170,6 +170,15 @@ def request_policy(stage: str, **fields: object) -> Mapping[str, object]:
     return value if isinstance(value, Mapping) else {}
 
 
+def runtime_compare(stage: str, **fields: object) -> None:
+    """One comparison of a native-runtime inspection; the runtime raises on a mismatch.
+
+    ``stage`` is ``probe``, ``capabilities``, ``version`` or ``generation``.
+    """
+
+    _ask({"op": "publication_runtime_compare", "stage": stage, **fields}, context=False)
+
+
 def authorize_plan(kind: str, expires_at: str, deadline: float) -> Mapping[str, object]:
     """The forward ``deadline`` and grant retirement the runtime allows an authorization.
 
@@ -236,5 +245,6 @@ __all__ = [
     "publish_files",
     "request_policy",
     "require_deadline",
+    "runtime_compare",
     "write_file",
 ]
