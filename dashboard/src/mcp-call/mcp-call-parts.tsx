@@ -1,31 +1,9 @@
 import { useCallback, useState } from "react";
 import type { IconType } from "react-icons";
 import {
-  FaCloudflare,
-  FaDiscord,
-  FaDropbox,
-  FaFacebook,
-  FaFigma,
-  FaGithub,
-  FaGitlab,
-  FaGoogle,
-  FaHubspot,
-  FaInstagram,
-  FaJira,
-  FaLinkedin,
-  FaMicrosoft,
-  FaReddit,
-  FaSalesforce,
-  FaShopify,
-  FaSlack,
-  FaStripe,
-  FaTrello,
-  FaTwitter,
-  FaYoutube,
-} from "react-icons/fa";
-import {
   HiMiniCommandLine,
   HiMiniComputerDesktop,
+  HiMiniCursorArrowRays,
   HiMiniExclamationTriangle,
   HiMiniInformationCircle,
   HiMiniLink,
@@ -47,42 +25,9 @@ const EFFECT_ICONS: Record<McpEffectKind, IconType> = {
   delete: HiMiniTrash,
   "run-code": HiMiniCommandLine,
   connect: HiMiniLink,
+  "act-as-you": HiMiniCursorArrowRays,
   unknown: HiMiniQuestionMarkCircle,
 };
-
-// Marks for services people know on sight. Anything else gets its first letter.
-const BRAND_ICONS = new Map<string, IconType>([
-  ["github", FaGithub],
-  ["gitlab", FaGitlab],
-  ["slack", FaSlack],
-  ["discord", FaDiscord],
-  ["linkedin", FaLinkedin],
-  ["stripe", FaStripe],
-  ["xtwitter", FaTwitter],
-  ["dropbox", FaDropbox],
-  ["figma", FaFigma],
-  ["jira", FaJira],
-  ["trello", FaTrello],
-  ["reddit", FaReddit],
-  ["youtube", FaYoutube],
-  ["shopify", FaShopify],
-  ["hubspot", FaHubspot],
-  ["salesforce", FaSalesforce],
-  ["facebook", FaFacebook],
-  ["instagram", FaInstagram],
-  ["cloudflare", FaCloudflare],
-  ["outlook", FaMicrosoft],
-  ["gmail", FaGoogle],
-]);
-
-const MARK_TINTS = [
-  "border-sky-200 bg-sky-50 text-sky-800",
-  "border-emerald-200 bg-emerald-50 text-emerald-800",
-  "border-violet-200 bg-violet-50 text-violet-800",
-  "border-amber-200 bg-amber-50 text-amber-800",
-  "border-rose-200 bg-rose-50 text-rose-800",
-  "border-teal-200 bg-teal-50 text-teal-800",
-];
 
 const CONSEQUENCE_TONES: Record<McpConsequence["tone"], string> = {
   calm: "border-slate-200 bg-slate-50",
@@ -91,32 +36,6 @@ const CONSEQUENCE_TONES: Record<McpConsequence["tone"], string> = {
 };
 
 const LONG_VALUE_CHARS = 140;
-
-function brandIconFor(name: string): IconType | null {
-  const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (key.startsWith("google")) return FaGoogle;
-  return BRAND_ICONS.get(key) ?? null;
-}
-
-function tintFor(name: string): string {
-  let hash = 0;
-  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) % MARK_TINTS.length;
-  return MARK_TINTS[hash];
-}
-
-/** The service's own mark when Guard knows it, else its first letter on a steady colour. */
-export function ConnectorMark({ name }: { name: string }) {
-  const Brand = brandIconFor(name);
-  const letter = name.trim().charAt(0).toUpperCase() || "?";
-  return (
-    <span
-      aria-hidden="true"
-      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-lg font-semibold ${tintFor(name)}`}
-    >
-      {Brand !== null ? <Brand className="h-5 w-5" /> : letter}
-    </span>
-  );
-}
 
 export function EffectPill({ effect }: { effect: McpEffectKind }) {
   const Icon = EFFECT_ICONS[effect];
@@ -143,10 +62,12 @@ export function ConsequenceNote({ explanation }: { explanation: McpCallExplanati
         <div className="min-w-0">
           <p className="text-sm font-medium leading-snug text-brand-dark">{consequence.text}</p>
           {aside !== null && <p className="mt-1 text-sm leading-snug text-brand-dark/75">{aside}</p>}
-          <p className="mt-1.5 flex items-center gap-1 text-xs leading-snug text-muted-foreground">
-            <HiMiniInformationCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            {effectBasis}
-          </p>
+          {effectBasis.length > 0 && (
+            <p className="mt-1.5 flex items-center gap-1 text-xs leading-snug text-muted-foreground">
+              <HiMiniInformationCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {effectBasis}
+            </p>
+          )}
         </div>
       </div>
     </div>

@@ -43,11 +43,17 @@ const SERVICE_NAMES = new Map<string, string>([
   ["perplexity", "Perplexity"],
   ["firecrawl", "Firecrawl"],
   ["context7", "Context7"],
-  ["playwright", "Playwright"],
-  ["filesystem", "Filesystem"],
+  ["playwright", "Playwright browser"],
+  ["puppeteer", "Puppeteer browser"],
+  ["claudebrowser", "Claude's browser"],
+  ["claudeinchrome", "Chrome"],
+  ["chromedevtools", "Chrome"],
+  ["computeruse", "Computer control"],
+  ["filesystem", "Files"],
   ["postgres", "Postgres"],
   ["sqlite", "SQLite"],
   ["brave", "Brave Search"],
+  ["bravesearch", "Brave Search"],
   ["exa", "Exa"],
   ["tavily", "Tavily"],
 ]);
@@ -87,6 +93,18 @@ export function splitToolSlug(slug: string): { app: string | null; action: strin
     app: serviceDisplayName(words.slice(0, split).join("_")),
     action: capitalize(words.slice(split).join(" ")),
   };
+}
+
+/**
+ * A tool's name as a short action, without the service's own name in front:
+ * `brave_web_search` on Brave Search is `Web search`, not `Brave web search`.
+ */
+export function toolTitle(service: string, tool: string): string {
+  const serviceWords = new Set(nameWords(service));
+  const words = nameWords(tool);
+  let start = 0;
+  while (start < words.length - 1 && serviceWords.has(words[start])) start += 1;
+  return start === 0 ? sentenceCase(tool) : capitalize(words.slice(start).join(" "));
 }
 
 export type McpServerRef = { server: string; tool: string };

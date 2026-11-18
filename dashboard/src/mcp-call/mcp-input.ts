@@ -16,6 +16,10 @@ const KEY_PATTERN = /^[A-Za-z0-9_.-]{1,60}$/;
 // Core cuts every recorded string at its limit, so a row can show all that was kept.
 const VALUE_CHARS = CORE_STRING_LIMIT;
 const MAX_FACTS = 8;
+// Fields that only point a tool at a tab, a spot on screen or a session. They mean nothing to a person, so they stay in the exact input.
+const POINTER_FIELDS = new Set([
+  "tabid", "tab_id", "coordinate", "coordinates", "start_coordinate", "request_id", "requestid", "session_id", "sessionid", "trace_id",
+]);
 const MAX_LIST_ITEMS = 6;
 // Everything except tab and newline, plus bidirectional overrides that could reorder code on screen.
 const UNSAFE_CODE_CHARACTERS = new RegExp(
@@ -159,9 +163,40 @@ function escapeBidi(text: string): string {
   return text.replace(BIDI_CONTROLS, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+const DAY_FORMAT: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric", year: "numeric" };
+
+/**
+ * `2026-11-20T09:00:00` as `Fri, Nov 20, 2026, 9:00 AM`. A time with no zone is
+ * shown as written; one with a zone is shown in the viewer's time with the zone
+ * named. Anything that is not a whole date stays as it was.
+ */
+export function readableDate(text: string): string | null {
+  const match = ISO_DATE.exec(text.trim());
+  if (match === null) return null;
+  const [, year, month, day, hour, minute, second, zone] = match;
+  const y = Number(year);
+  const m = Number(month) - 1;
+  const d = Number(day);
+  if (hour === undefined) {
+    const date = new Date(Date.UTC(y, m, d));
+    if (date.getUTCMonth() !== m) return null;
+    return new Intl.DateTimeFormat("en-US", { ...DAY_FORMAT, timeZone: "UTC" }).format(date);
+  }
+  const time: Intl.DateTimeFormatOptions = { ...DAY_FORMAT, hour: "numeric", minute: "2-digit" };
+  if (zone !== undefined) {
+    const date = new Date(text.trim());
+    if (Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat("en-US", { ...time, timeZoneName: "short" }).format(date);
+  }
+  const date = new Date(y, m, d, Number(hour), Number(minute), Number(second ?? 0));
+  if (Number.isNaN(date.getTime()) || date.getMonth() !== m) return null;
+  return new Intl.DateTimeFormat("en-US", time).format(date);
+}
+
 /** A value short enough for a one-line row, or null when it needs the full input to make sense. */
 export function scalarText(value: unknown): string | null {
-  if (typeof value === "string") return textOf(value);
+  if (typeof value === "string") return readableDate(value) ?? textOf(value);
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (Array.isArray(value) && value.length > 0) {
@@ -192,6 +227,10 @@ export function scalarFacts(
   let hidden = 0;
   for (const [key, value] of Object.entries(input)) {
     if (skip.has(key) || promoted.has(key)) continue;
+    if (POINTER_FIELDS.has(key.toLowerCase())) {
+      hidden += 1;
+      continue;
+    }
     const text = KEY_PATTERN.test(key) ? scalarText(value) : null;
     if (text === null || text.length === 0 || facts.length >= max) {
       hidden += value === null || value === "" ? 0 : 1;
