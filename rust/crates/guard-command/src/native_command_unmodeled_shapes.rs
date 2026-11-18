@@ -198,6 +198,28 @@ fn shell_pieces(text: &str) -> Option<Vec<(String, bool)>> {
     Some(pieces)
 }
 
+/// Whether the shell expands something in `word`: a `$` outside single
+/// quotes that no backslash escapes.
+fn expands(word: &str) -> bool {
+    let mut single = false;
+    let mut double = false;
+    let mut escaped = false;
+    for character in word.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match character {
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            '\\' if !single => escaped = true,
+            '$' if !single => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
 /// An `awk` whose program only filters and prints cannot start a program:
 /// it names no `system`, `getline`, pipe or command substitution, loads no
 /// program file or extension, and takes only `-F` and `-v` options. Such a
@@ -260,6 +282,11 @@ pub(super) fn without_plain_awk(shell: &str) -> String {
         let plain = pieces[index + 1..end].iter().all(|(word, operator)| {
             if *operator {
                 return true;
+            }
+            // `$'\x2df'`, `$"-f"`, `$opt` and `"$prog"` all hand awk text
+            // the command does not show, so a word that expands is refused.
+            if expands(word) {
+                return false;
             }
             let option = decoded(word);
             if option.starts_with('-') {

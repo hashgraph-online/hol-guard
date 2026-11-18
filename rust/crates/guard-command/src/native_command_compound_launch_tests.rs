@@ -170,6 +170,11 @@ fn an_awk_that_can_run_a_program_inside_a_substitution_stays_refused() {
         "x=$(echo a | mawk -f prog.awk)",
         "x=$(echo a | nawk -f prog.awk)",
         "x=$(echo a | awk '{sys'\"tem(\\$1)}\")",
+        // Expansions hand awk text the command does not show.
+        "x=$(echo a | awk $'\\x2df' prog.awk)",
+        "x=$(echo a | awk $\"-f\" prog.awk)",
+        "x=$(echo a | awk $opt prog.awk)",
+        "x=$(echo a | awk \"$prog\")",
     ] {
         let result = evaluate_in(&binding, command, home.path(), &project);
         assert_ne!(result.minimum_action, "allow", "{command}");
