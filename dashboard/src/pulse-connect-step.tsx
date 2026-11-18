@@ -2,6 +2,7 @@ import { useEffect, useRef, type Ref } from "react";
 import QRCode from "react-qr-code";
 import { ActionButton } from "./approval-center-primitives";
 import { PULSE_FACE_SCAN_OPTIONS, type PulseMinTier } from "./pulse-approval";
+import { browserView, focusWithoutScrolling, isFullyVisible, pulseInitialFocusTarget } from "./pulse-initial-focus";
 import {
   ErrorNote,
   Field,
@@ -18,27 +19,6 @@ export function pulseCooldownFromSeconds(seconds: number): PulseCooldown {
   if (seconds === 900) return 900;
   if (seconds === 3600) return 3600;
   return 0;
-}
-
-/** Tailwind's `lg` breakpoint: from here the QR code sits beside the key field instead of above it. */
-export const PULSE_SIDE_BY_SIDE_QUERY = "(min-width: 1024px)";
-
-/**
- * Where focus goes when the step opens. Side by side the key field is always in view, so it takes
- * focus. Stacked, the field can sit below the fold of a short window: focusing it would either scroll
- * the QR code away or leave focus on a field nobody can see, so focus starts on the QR panel and
- * the next Tab reaches the field.
- */
-export function pulseInitialFocusTarget(sideBySide: boolean): "key" | "qr" {
-  return sideBySide ? "key" : "qr";
-}
-
-/**
- * Focus without scrolling, so opening the step never carries the QR code out of view before the
- * user can scan it.
- */
-export function focusWithoutScrolling(element: { focus: (options?: FocusOptions) => void } | null): void {
-  element?.focus({ preventScroll: true });
 }
 
 /** Agent keys start with `yak_`. A hint, not a gate: Guard's refusal is the source of truth. */
@@ -66,7 +46,7 @@ export function PulseQrPanel(props: { panelRef?: Ref<HTMLDivElement> }) {
       role="group"
       aria-label="Scan the YID app code"
       tabIndex={-1}
-      className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.08] via-white to-white p-4 text-center outline-none"
+      className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.08] via-white to-white p-4 text-center focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
     >
       {/* react-qr-code draws to the edge of the symbol; 20px is about the four-module quiet zone at 160px. */}
       <div className="mx-auto flex w-fit rounded-2xl border border-white bg-white p-5 shadow-sm">
@@ -114,8 +94,9 @@ export function PulseConnectStep(props: {
   const keyInput = useRef<HTMLInputElement>(null);
   const qrPanel = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const sideBySide = typeof window.matchMedia === "function" && window.matchMedia(PULSE_SIDE_BY_SIDE_QUERY).matches;
-    focusWithoutScrolling(pulseInitialFocusTarget(sideBySide) === "key" ? keyInput.current : qrPanel.current);
+    const field = keyInput.current;
+    const target = pulseInitialFocusTarget(field !== null && isFullyVisible(field, browserView()));
+    focusWithoutScrolling(target === "key" ? field : qrPanel.current);
   }, []);
   return (
     <div className="grid gap-6 p-6 lg:grid-cols-[240px_minmax(0,1fr)]">

@@ -2324,6 +2324,30 @@ function TotpEnrollmentQrPanel({ enrollment }) {
     ] })
   ] }) });
 }
+function boxWithin(inner, outer) {
+  return inner.top >= outer.top && inner.bottom <= outer.bottom;
+}
+function isFullyVisible(element, view) {
+  let clip = { top: 0, bottom: view.innerHeight };
+  for (let node = element.parentElement; node !== null; node = node.parentElement) {
+    if (view.overflowY(node) === "visible") continue;
+    const rect = node.getBoundingClientRect();
+    clip = { top: Math.max(clip.top, rect.top), bottom: Math.min(clip.bottom, rect.bottom) };
+  }
+  return boxWithin(element.getBoundingClientRect(), clip);
+}
+function pulseInitialFocusTarget(keyFieldVisible) {
+  return keyFieldVisible ? "key" : "qr";
+}
+function focusWithoutScrolling(element) {
+  element?.focus({ preventScroll: true });
+}
+function browserView() {
+  return {
+    innerHeight: window.innerHeight,
+    overflowY: (node) => window.getComputedStyle(node).overflowY
+  };
+}
 const PULSE_SITE_URL = "https://pulse.yanez.ai/?referrer_id=holguard";
 const PULSE_LABEL_CLASS = "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500";
 const PULSE_INPUT_CLASS = "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20";
@@ -2348,13 +2372,6 @@ function pulseCooldownFromSeconds(seconds) {
   if (seconds === 3600) return 3600;
   return 0;
 }
-const PULSE_SIDE_BY_SIDE_QUERY = "(min-width: 1024px)";
-function pulseInitialFocusTarget(sideBySide) {
-  return sideBySide ? "key" : "qr";
-}
-function focusWithoutScrolling(element) {
-  element?.focus({ preventScroll: true });
-}
 function pulseAgentKeyHint(value) {
   const key2 = value.trim();
   if (key2.length === 0 || key2.startsWith("yak_")) return null;
@@ -2373,7 +2390,7 @@ function PulseQrPanel(props) {
       role: "group",
       "aria-label": "Scan the YID app code",
       tabIndex: -1,
-      className: "rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.08] via-white to-white p-4 text-center outline-none",
+      className: "rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.08] via-white to-white p-4 text-center focus:outline-none focus:ring-2 focus:ring-brand-blue/40",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto flex w-fit rounded-2xl border border-white bg-white p-5 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           QRCode,
@@ -2404,8 +2421,9 @@ function PulseConnectStep(props) {
   const keyInput = reactExports.useRef(null);
   const qrPanel = reactExports.useRef(null);
   reactExports.useEffect(() => {
-    const sideBySide = typeof window.matchMedia === "function" && window.matchMedia(PULSE_SIDE_BY_SIDE_QUERY).matches;
-    focusWithoutScrolling(pulseInitialFocusTarget(sideBySide) === "key" ? keyInput.current : qrPanel.current);
+    const field = keyInput.current;
+    const target = pulseInitialFocusTarget(field !== null && isFullyVisible(field, browserView()));
+    focusWithoutScrolling(target === "key" ? field : qrPanel.current);
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 p-6 lg:grid-cols-[240px_minmax(0,1fr)]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(PulseQrPanel, { panelRef: qrPanel }),

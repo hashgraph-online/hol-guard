@@ -5,12 +5,17 @@ import QRCode from "react-qr-code";
 import {
   PulseConnectStep,
   PulseQrPanel,
-  focusWithoutScrolling,
   pulseAgentKeyHint,
   pulseApprovalSettingsSummary,
   pulseCooldownFromSeconds,
-  pulseInitialFocusTarget,
 } from "./pulse-connect-step";
+import {
+  type PulseMeasurable,
+  boxWithin,
+  focusWithoutScrolling,
+  isFullyVisible,
+  pulseInitialFocusTarget,
+} from "./pulse-initial-focus";
 import { PULSE_SITE_URL } from "./pulse-setup-modal";
 import { buildTotpQrImageOptions } from "./totp-enrollment-qr-panel";
 
@@ -120,9 +125,41 @@ function focusingTheKeyFieldNeverScrollsTheQrCodeOutOfView(): void {
   assert(calls.length === 1 && calls[0]?.preventScroll === true, "PULSE-QR-5: the key field is focused with preventScroll");
   focusWithoutScrolling(null);
   assert(calls.length === 1, "PULSE-QR-5: no field yet, nothing to focus");
-  assert(pulseInitialFocusTarget(true) === "key", "PULSE-QR-5: side by side, the key field is in view and takes focus");
+  assert(pulseInitialFocusTarget(true) === "key", "PULSE-QR-5: a visible key field takes focus");
   assert(pulseInitialFocusTarget(false) === "qr",
-    "PULSE-QR-5: stacked, focus starts on the QR panel so it never lands on a field below the fold");
+    "PULSE-QR-5: a key field out of view never takes focus; the QR panel does");
+}
+
+function stand(top: number, bottom: number, parent: PulseMeasurable | null, overflowY = "visible"):
+  PulseMeasurable & { overflowY: string } {
+  return { getBoundingClientRect: () => ({ top, bottom }), parentElement: parent, overflowY };
+}
+
+function theKeyFieldOnlyTakesFocusWhenTheUserCanSeeIt(): void {
+  assert(boxWithin({ top: 10, bottom: 20 }, { top: 0, bottom: 20 }) && !boxWithin({ top: 10, bottom: 21 }, { top: 0, bottom: 20 }),
+    "PULSE-QR-5: a box must sit wholly inside the span");
+  const view = (innerHeight: number) => ({
+    innerHeight,
+    overflowY: (node: PulseMeasurable) => (node as PulseMeasurable & { overflowY: string }).overflowY,
+  });
+  const modalScroll = stand(100, 500, null, "auto");
+  const inView = stand(300, 340, modalScroll);
+  const belowTheFold = stand(520, 560, modalScroll);
+  assert(isFullyVisible(inView, view(900)), "PULSE-QR-5: a field inside the modal's scroll area is visible");
+  assert(!isFullyVisible(belowTheFold, view(900)),
+    "PULSE-QR-5: a field below the modal's scroll area is not visible even in a tall window");
+  assert(!isFullyVisible(inView, view(320)), "PULSE-QR-5: a field below the window is not visible");
+  assert(!isFullyVisible(stand(90, 130, modalScroll), view(900)), "PULSE-QR-5: a field above the scroll area is not visible");
+  const noScroller = stand(0, 5000, null);
+  assert(isFullyVisible(stand(300, 340, noScroller), view(900)),
+    "PULSE-QR-5: ancestors that do not clip never hide the field");
+  assert(!isFullyVisible(stand(300, 340, stand(0, 5000, null, "hidden")), view(320)),
+    "PULSE-QR-5: a clipping ancestor taller than the window still leaves the window as the limit");
+}
+
+function theFocusedQrPanelShowsAVisibleIndicator(): void {
+  const panel = renderToStaticMarkup(createElement(PulseQrPanel));
+  assert(panel.includes("focus:ring-2"), "PULSE-QR-5: the panel focus indicator is a ring, not removed");
 }
 
 function theCooldownSelectMapsBackToTheThreeChoices(): void {
@@ -138,5 +175,7 @@ stepTwoKeepsTheKeyFieldFirstAndTheSettingsCollapsed();
 theAgentKeyHintOnlyAppearsForAKeyThatDoesNotLookRight();
 theCollapsedRowShowsTheCurrentChoices();
 focusingTheKeyFieldNeverScrollsTheQrCodeOutOfView();
+theKeyFieldOnlyTakesFocusWhenTheUserCanSeeIt();
+theFocusedQrPanelShowsAVisibleIndicator();
 theCooldownSelectMapsBackToTheThreeChoices();
 console.log("pulse-connect-step tests passed");

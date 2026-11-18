@@ -7394,6 +7394,16 @@
     }
   }
 
+  .focus\:ring-brand-blue\/40:focus {
+    --tw-ring-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus\:ring-brand-blue\/40:focus {
+      --tw-ring-color: color-mix(in oklab, var(--brand-blue) 40%, transparent);
+    }
+  }
+
   .focus\:ring-rose-600\/30:focus {
     --tw-ring-color: #e700444d;
   }
