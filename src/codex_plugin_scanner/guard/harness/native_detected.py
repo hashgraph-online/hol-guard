@@ -16,10 +16,9 @@ def _ask_every_harness(op: str, context: HarnessContext) -> dict[str, Any]:
     from .native_harness import ask, describe
 
     count = sum(1 for adapter in describe()["adapters"] if isinstance(adapter, dict))
+    fields: dict[str, Any] = codex_native_request(context)
     try:
-        answer = ask(
-            op, context, timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS * count, **codex_native_request(context)
-        )
+        answer = ask(op, context, timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS * count, **fields)
     except NativeRunnerAuthorityError as error:
         raise NativeAibomError(str(error)) from error
     if "untrusted" in answer:
