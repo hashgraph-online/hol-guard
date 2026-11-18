@@ -14,12 +14,15 @@ use serde_json::{json, Map, Value};
 
 #[path = "cloud_actions_host_config_url.rs"]
 mod address;
+#[path = "cloud_actions_host_config_fields.rs"]
+mod fields;
 #[path = "cloud_actions_host_config_json.rs"]
 mod json_text;
 #[path = "cloud_actions_host_config_toml.rs"]
 mod toml_text;
 
 use self::address::{display_url, points_at};
+use self::fields::{guard_fields, Fields};
 use self::json_text::{dump_like, is_blank, json_root, lookup, parse_json, set, upsert, Node};
 use self::toml_text::{toml_edit_entry, toml_remove_entry};
 
@@ -171,107 +174,6 @@ pub(crate) fn undo_text(
 
 fn tool(slug: &str) -> Option<&'static Tool> {
     TOOLS.iter().find(|tool| tool.slug == slug)
-}
-
-/// The fields of an entry Guard writes: the bridge launch, or the
-/// address-only entry an earlier alpha wrote.
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Fields {
-    Url(String),
-    Bridge { command: String, args: Vec<String> },
-}
-
-impl Fields {
-    fn from_request(entry: &Value) -> Option<Self> {
-        let entry = entry.as_object()?;
-        let keys: Vec<&str> = entry.keys().map(String::as_str).collect();
-        match keys.as_slice() {
-            ["url"] => Some(Self::Url(entry["url"].as_str()?.to_owned())),
-            ["args", "command"] => Some(Self::Bridge {
-                command: entry["command"].as_str()?.to_owned(),
-                args: strings(&entry["args"])?,
-            }),
-            _ => None,
-        }
-    }
-
-    /// The fields as an object, without the transport type.
-    fn value(&self) -> Value {
-        Value::Object(
-            self.entry(None)
-                .into_iter()
-                .map(|(k, v)| (k.to_owned(), v))
-                .collect(),
-        )
-    }
-
-    /// The entry in writing order, typed for an AI tool that wants a type.
-    fn entry(&self, tool: Option<&Tool>) -> Vec<(&'static str, Value)> {
-        let mut entry = Vec::new();
-        if tool.is_some_and(|tool| tool.typed) {
-            let kind = if matches!(self, Self::Url(_)) {
-                "http"
-            } else {
-                "stdio"
-            };
-            entry.push(("type", json!(kind)));
-        }
-        match self {
-            Self::Url(url) => entry.push(("url", json!(url))),
-            Self::Bridge { command, args } => {
-                entry.push(("command", json!(command)));
-                entry.push(("args", json!(args)));
-            }
-        }
-        entry
-    }
-
-    fn wanted(&self, tool: &Tool) -> Value {
-        Value::Object(
-            self.entry(Some(tool))
-                .into_iter()
-                .map(|(k, v)| (k.to_owned(), v))
-                .collect(),
-        )
-    }
-}
-
-fn strings(value: &Value) -> Option<Vec<String>> {
-    value
-        .as_array()?
-        .iter()
-        .map(|item| item.as_str().map(str::to_owned))
-        .collect()
-}
-
-fn guard_fields(tool: &Tool, entry: &Map<String, Value>) -> Option<Fields> {
-    let has_url = entry.contains_key("url");
-    match (tool.typed, entry.get("type")) {
-        (true, kind) => {
-            let wanted = if has_url { "http" } else { "stdio" };
-            if kind.and_then(Value::as_str) != Some(wanted) {
-                return None;
-            }
-        }
-        (false, Some(_)) => return None,
-        (false, None) => {}
-    }
-    let keys: Vec<&str> = entry
-        .keys()
-        .map(String::as_str)
-        .filter(|key| *key != "type")
-        .collect();
-    match keys.as_slice() {
-        ["url"] => Some(Fields::Url(entry["url"].as_str()?.to_owned())),
-        ["args", "command"] => {
-            let command = entry["command"].as_str()?.to_owned();
-            let args = strings(&entry["args"])?;
-            let bridge = [BRIDGE_ARGS[0], BRIDGE_ARGS[1], tool.slug];
-            let bridged = args.windows(3).any(|window| window == bridge);
-            bridged.then_some(Fields::Bridge { command, args })
-        }
-        _ => None,
-    }
 }
 
 fn plan(tool: &Tool, before: Option<&str>, wanted: &Fields, url: &str) -> Value {

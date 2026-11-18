@@ -27,6 +27,8 @@ const MAX_DIRS: usize = 16;
 const MAX_WAIT: Duration = Duration::from_secs(600);
 const INVALID: Failure = Failure::Transition("native_transition_invalid");
 
+const LOCK_MESSAGE: &str = "codex_lifecycle_lock_invalid: lifecycle lock changed during ownership";
+
 struct Entry {
     owner: Owner,
     leases: Vec<String>,
@@ -34,9 +36,17 @@ struct Entry {
 
 static OWNERS: Mutex<Option<HashMap<String, Entry>>> = Mutex::new(None);
 
-/// Forget the owners whose locks were reaped with their client process.
+/// Forget the owners whose locks were reaped with their client process. An
+/// owner that lost any lock gives up the rest too: a lock it still holds would
+/// otherwise stay held with nobody left to end it.
 fn prune(owners: &mut HashMap<String, Entry>) {
-    owners.retain(|_, entry| entry.leases.iter().all(|lease| lease::held(lease)));
+    owners.retain(|_, entry| {
+        if entry.leases.iter().all(|lease| lease::held(lease)) {
+            return true;
+        }
+        entry.leases.iter().for_each(|lease| lease::release(lease));
+        false
+    });
 }
 
 fn text<'a>(args: &'a Map<String, Value>, key: &str) -> Result<&'a str, &'static str> {
@@ -200,10 +210,20 @@ fn record(args: &Map<String, Value>) -> KindResult {
     })
 }
 
+/// `owned_recover`: recover as the owner. An owner the resident no longer
+/// knows lost its locks (its client exited or its lock files changed), so the
+/// caller must not go on as though it still held them.
 fn recovered(args: &Map<String, Value>, budget: &Budget) -> KindResult {
-    with_entry(args, |entry| match recover(&mut entry.owner, budget) {
-        Ok(()) => json!({ "ok": true, "recorded": true }),
-        Err(failure) => failure.to_json(),
+    let id = text(args, "owner")?;
+    let mut guard = OWNERS.lock().unwrap_or_else(PoisonError::into_inner);
+    let owners = guard.get_or_insert_with(HashMap::new);
+    prune(owners);
+    Ok(match owners.get_mut(id) {
+        Some(entry) => match recover(&mut entry.owner, budget) {
+            Ok(()) => json!({ "ok": true, "recorded": true }),
+            Err(failure) => failure.to_json(),
+        },
+        None => Failure::Runtime(LOCK_MESSAGE.to_owned()).to_json(),
     })
 }
 
@@ -213,13 +233,16 @@ fn end(args: &Map<String, Value>) -> KindResult {
     let mut guard = OWNERS.lock().unwrap_or_else(PoisonError::into_inner);
     let owners = guard.get_or_insert_with(HashMap::new);
     prune(owners);
-    if let Some(mut entry) = owners.remove(id) {
-        entry
-            .owner
-            .mark(if committed { "committed" } else { "failed" });
-        entry.leases.iter().for_each(|lease| lease::release(lease));
-    }
-    Ok(json!({ "ok": true }))
+    // `ended: false` tells the caller its owner was already gone, so it can
+    // release the leases it still holds by token.
+    let Some(mut entry) = owners.remove(id) else {
+        return Ok(json!({ "ok": true, "ended": false }));
+    };
+    entry
+        .owner
+        .mark(if committed { "committed" } else { "failed" });
+    entry.leases.iter().for_each(|lease| lease::release(lease));
+    Ok(json!({ "ok": true, "ended": true }))
 }
 
 /// `owned_call`: one publication op as the owner, journaled and ended here.

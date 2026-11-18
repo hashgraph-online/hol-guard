@@ -379,3 +379,22 @@ fn a_request_without_its_fields_is_invalid() {
     assert!(dispatch(&json!({ "op": "owned_end" })).is_err());
     assert!(dispatch(&json!({ "op": "owned_nothing" })).is_err());
 }
+
+#[cfg(unix)]
+#[test]
+fn a_trailing_parent_after_a_missing_name_pops_it_like_path_resolve() {
+    let root = TempDir::new().unwrap();
+    let actual = fs::canonicalize(root.path()).unwrap().join("target");
+    fs::create_dir(&actual).unwrap();
+    let link = root.path().join("link");
+    std::os::unix::fs::symlink(&actual, &link).unwrap();
+    assert_eq!(resolve_lenient(&link.join("missing/..")), actual);
+    assert_eq!(
+        resolve_lenient(&link.join("missing/../other")),
+        actual.join("other")
+    );
+    assert_eq!(
+        resolve_lenient(&link.join("missing/.")),
+        actual.join("missing")
+    );
+}

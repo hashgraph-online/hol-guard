@@ -253,8 +253,12 @@ def record_codex_mutation_identities(mutations: list[dict[str, object]]) -> None
 
 def _finish(owner: CodexInstallOwner, leases: list[str], *, committed: bool) -> None:
     try:
-        _call("owned_end", owner=owner.token, committed=committed)
+        answer = _call("owned_end", owner=owner.token, committed=committed)
     except Exception:  # never mask the first error
+        _release(leases)
+        return
+    if answer.get("ended") is not True:
+        # The resident had already forgotten this owner: the leases it held may remain.
         _release(leases)
 
 

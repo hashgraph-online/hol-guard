@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness import muse_hook_render
+from codex_plugin_scanner.guard.harness import hook_failure_bridge, muse_hook_render
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.harness.muse_hook_render import muse_bridge_response
 from codex_plugin_scanner.guard.harness.native_harness import NativeHarnessAdapter, ask
@@ -372,3 +372,39 @@ class TestMuseHookRender:
             event_name=event_name,
             guard_home=tmp_path / "guard-home",
         ) == ("", "HOL Guard blocked this action.", 2)
+
+    @pytest.mark.parametrize(
+        ("event_name", "expected"),
+        [
+            ("PreToolUse", ("", hook_failure_bridge.RUNTIME_MISSING, 2)),
+            ("PermissionRequest", ("", hook_failure_bridge.RUNTIME_MISSING, 2)),
+            ("UserPromptSubmit", ("", hook_failure_bridge.RUNTIME_MISSING, 2)),
+            ("PostToolUse", ("", "", 0)),
+            ("SessionStart", ("", "", 0)),
+            ("Stop", ("", "", 0)),
+        ],
+    )
+    def test_the_outage_table_applies_with_both_native_calls_unavailable(
+        self,
+        event_name: str,
+        expected: tuple[str, str, int],
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """No render and no ``hook_failure`` answer: the same table runs in this process."""
+
+        from codex_plugin_scanner.guard import native_runner_authority as authority
+
+        def unavailable(*_args: object, **_kwargs: object) -> None:
+            raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+        monkeypatch.setattr(muse_hook_render, "native_muse_bridge", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+        assert (
+            muse_bridge_response(
+                {"policy_action": "allow", "reason": "ok"},
+                event_name=event_name,
+                guard_home=tmp_path / "guard-home",
+            )
+            == expected
+        )

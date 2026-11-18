@@ -28,7 +28,8 @@ use serde_json::{json, Value};
 
 use crate::hook_process_spawn::{
     isolated_daemon_start_command, isolated_guard_cli_command, isolated_hook_environment,
-    private_hook_runtime_cwd, run_isolated_hook_process_extended, settle_quarantine, LaunchExtras,
+    private_hook_runtime_cwd, quarantined_pids, run_isolated_hook_process_extended,
+    settle_quarantine, LaunchExtras,
 };
 
 pub(crate) const COMMAND: &str = "hook-launch";
@@ -197,6 +198,13 @@ fn answer(request: Request, stop: Arc<AtomicBool>) -> Value {
             // one-shot process exits, so settle it inside the same answer.
             let quarantine_settled =
                 !result.containment_failed || settle_quarantine(QUARANTINE_SETTLE_WINDOW);
+            // The one-shot process exits next, so name what it could not stop: the
+            // client keeps the latch until each of these is confirmed gone.
+            let survivors = if quarantine_settled {
+                Vec::new()
+            } else {
+                quarantined_pids()
+            };
             let hex = |bytes: &[u8]| {
                 raw_output.then(|| {
                     bytes
@@ -216,6 +224,7 @@ fn answer(request: Request, stop: Arc<AtomicBool>) -> Value {
                 "containment_failed": result.containment_failed,
                 "capture_incomplete": outcome.capture_incomplete,
                 "quarantine_settled": quarantine_settled,
+                "survivors": survivors,
             })
         }
         Request::GuardCliCommand {

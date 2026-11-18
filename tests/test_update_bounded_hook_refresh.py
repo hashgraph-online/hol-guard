@@ -60,6 +60,23 @@ def test_refresh_moves_an_old_client_to_the_native_runtime(tmp_path: Path, runti
     assert f"{runtime} bounded-hook-bridge" in _zcode_hook_commands(context)
 
 
+def test_an_unavailable_resident_is_a_note_not_an_abort(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.cli import update_bounded_hook_refresh
+    from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(update_bounded_hook_refresh, "ask", unavailable)
+    context = _context(tmp_path)
+
+    refreshed, warnings = _refresh(context, GuardStore(context.guard_home))
+
+    assert refreshed == []
+    assert len(warnings) == 1
+    assert "native_runner_authority_unavailable" in warnings[0]
+
+
 def test_refresh_without_an_old_client_does_nothing(tmp_path: Path) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)

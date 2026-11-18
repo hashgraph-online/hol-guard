@@ -37,9 +37,14 @@ _SHORT_OP_TIMEOUT_SECONDS = 10.0
 _STOP_POLL_SECONDS = 0.02
 _CREATE_NO_WINDOW = 0x08000000
 
-# Set when a launch reported a survivor the launcher could not settle; cleared
-# by the next launch that contained its child.
-_HOOK_PROCESS_CONTAINMENT_FAILED = threading.Event()
+# Survivors a launch reported that the launcher could not settle, by pid. A
+# later launch that contained its own child says nothing about them, so an entry
+# leaves only once its process is confirmed gone (the old quarantine kept the
+# handle and cleared only when the retry reaped it). ``_UNKNOWN_SURVIVOR`` is a
+# survivor the launcher could not name: nothing can confirm it stopped.
+_UNKNOWN_SURVIVOR = -1
+_HOOK_PROCESS_SURVIVORS: set[int] = set()
+_HOOK_PROCESS_SURVIVORS_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,7 +65,38 @@ class BoundedHookProcessResult:
 def hook_processes_contained(*, deadline_monotonic: float | None = None) -> bool:
     """Whether no launch left a survivor the native launcher could not settle."""
     del deadline_monotonic
-    return not _HOOK_PROCESS_CONTAINMENT_FAILED.is_set()
+    return not _containment_failed()
+
+
+def _process_stopped(pid: int) -> bool:
+    """Whether ``pid`` is confirmed gone. Only a POSIX probe is safe: ``os.kill`` terminates on Windows."""
+    if pid <= 0 or os.name == "nt":
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
+def _containment_failed() -> bool:
+    """Whether an unsettled survivor is still tracked; confirmed-stopped ones are dropped."""
+    with _HOOK_PROCESS_SURVIVORS_LOCK:
+        _HOOK_PROCESS_SURVIVORS.difference_update([pid for pid in _HOOK_PROCESS_SURVIVORS if _process_stopped(pid)])
+        return bool(_HOOK_PROCESS_SURVIVORS)
+
+
+def _track_survivors(answer: Mapping[str, object] | None) -> None:
+    named = answer.get("survivors") if answer is not None else None
+    pids = (
+        [pid for pid in named if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0]
+        if isinstance(named, list)
+        else []
+    )
+    with _HOOK_PROCESS_SURVIVORS_LOCK:
+        _HOOK_PROCESS_SURVIVORS.update(pids or [_UNKNOWN_SURVIVOR])
 
 
 def native_launcher_path(launcher: str | os.PathLike[str] | None = None) -> str | None:
@@ -405,9 +441,10 @@ def run_isolated_hook_process(
     else:
         deadline = deadline_monotonic
     if time.monotonic() >= deadline:
-        return BoundedHookProcessResult(
-            None, "", False, True, containment_failed=_HOOK_PROCESS_CONTAINMENT_FAILED.is_set()
-        )
+        return BoundedHookProcessResult(None, "", False, True, containment_failed=_containment_failed())
+    if _containment_failed():
+        # An earlier survivor is not confirmed stopped: refuse the launch, as the in-process quarantine did.
+        return BoundedHookProcessResult(None, "", False, False, containment_failed=True)
     path = native_launcher_path(launcher)
     if path is None:
         return BoundedHookProcessResult(None, "", False, False)
@@ -438,13 +475,11 @@ def run_isolated_hook_process(
         return BoundedHookProcessResult(None, "", False, False)
     if answer is None and time.monotonic() >= deadline + _ANSWER_GRACE_SECONDS:
         # The launcher itself stopped answering: nothing vouches for its child.
-        _HOOK_PROCESS_CONTAINMENT_FAILED.set()
+        _track_survivors(None)
         return BoundedHookProcessResult(None, "", False, True, containment_failed=True)
     result, settled = _result_from_answer(answer)
     if result.containment_failed and not settled:
-        _HOOK_PROCESS_CONTAINMENT_FAILED.set()
-    elif not result.containment_failed and answer is not None:
-        _HOOK_PROCESS_CONTAINMENT_FAILED.clear()
+        _track_survivors(answer)
     return result
 
 

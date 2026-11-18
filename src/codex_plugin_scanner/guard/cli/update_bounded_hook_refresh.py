@@ -28,7 +28,12 @@ def refresh_bounded_hook_clients(
 
     refreshed: list[dict[str, object]] = []
     warnings: list[str] = []
-    for script in ask("bounded_hook_scripts", context)["scripts"]:
+    try:
+        scripts = ask("bounded_hook_scripts", context)["scripts"]
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError) as error:
+        # An unavailable, old or slow resident must not stop the repairs after this one.
+        return refreshed, [f"Could not check bounded hook clients for the native runtime during update: {error}"]
+    for script in scripts:
         harness = str(script["harness"])
         display_name = str(script["display_name"])
         try:

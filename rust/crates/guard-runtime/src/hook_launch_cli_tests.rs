@@ -239,6 +239,7 @@ fn holding_a_job_is_unavailable_off_windows() {
 fn a_launch_answer_reports_the_quarantine_as_settled() {
     let answered = launch(&["/bin/echo", "ok"], "", 5000, "");
     assert_eq!(answered["quarantine_settled"], true);
+    assert_eq!(answered["survivors"], serde_json::json!([]));
     assert_eq!(answered["containment_failed"], false);
 }
 

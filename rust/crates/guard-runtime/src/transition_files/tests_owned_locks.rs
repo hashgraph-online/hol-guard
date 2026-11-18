@@ -176,3 +176,63 @@ fn an_owner_keeps_its_directories_locked_until_it_ends() {
     dispatch(&json!({ "op": "owned_end", "owner": started["owner"], "committed": true })).unwrap();
     release(&leases(&lock(&[&dir], json!({}))));
 }
+
+fn begin_owner(home: &Path, dir: &Path) -> Value {
+    let started = dispatch(&json!({
+        "op": "owned_begin", "guard_home": home.to_string_lossy(),
+        "target": dir.join("config.toml").to_string_lossy(), "actor": "test",
+        "process_identity": "p", "client_pid": std::process::id(), "thread": 1,
+        "deadline_ms": 2000, "dirs": [dir.to_string_lossy()],
+    }))
+    .unwrap();
+    assert_eq!(started["ok"], true, "{started}");
+    started
+}
+
+#[test]
+fn an_owner_that_lost_one_lock_gives_up_all_of_them() {
+    let root = TempDir::new().unwrap();
+    let home = root.path().join("guard");
+    let dir = root.path().join("home/.codex");
+    let started = begin_owner(&home, &dir);
+    let held = started["leases"].as_array().unwrap().clone();
+    assert!(held.len() >= 2, "{started}");
+    // One lease goes; the owner's next request prunes it and the rest.
+    release(&held[..1]);
+    let late =
+        dispatch(&json!({ "op": "owned_end", "owner": started["owner"], "committed": true }))
+            .unwrap();
+    assert_eq!(late["ended"], false);
+    release(&leases(&lock(&[&dir], json!({}))));
+    let install = dispatch(&json!({
+        "op": "lease_acquire", "lock": "install",
+        "guard_home": home.to_string_lossy(), "client_pid": std::process::id(),
+    }))
+    .unwrap();
+    assert_eq!(install["ok"], true, "{install}");
+    release(&[install["lease"].clone()]);
+}
+
+#[test]
+fn recovery_for_an_owner_that_lost_its_locks_fails_closed() {
+    let root = TempDir::new().unwrap();
+    let home = root.path().join("guard");
+    let dir = root.path().join("home/.codex");
+    let started = begin_owner(&home, &dir);
+    release(&started["leases"].as_array().unwrap()[..1]);
+    let answer = dispatch(&json!({ "op": "owned_recover", "owner": started["owner"] })).unwrap();
+    assert_eq!(answer["ok"], false, "{answer}");
+    assert_eq!(answer["failure"]["kind"], "runtime");
+    assert_eq!(
+        answer["failure"]["message"],
+        "codex_lifecycle_lock_invalid: lifecycle lock changed during ownership"
+    );
+}
+
+#[test]
+fn ending_an_owner_that_is_gone_says_so() {
+    let answer =
+        dispatch(&json!({ "op": "owned_end", "owner": "missing", "committed": true })).unwrap();
+    assert_eq!(answer["ok"], true);
+    assert_eq!(answer["ended"], false);
+}
