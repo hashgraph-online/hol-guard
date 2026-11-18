@@ -87,13 +87,36 @@ fn diagnose(command: &str) -> String {
         Err(error) => (Some(error.clone()), String::new(), String::new()),
     };
     let fixed = super::xargs::with_fixed_home(&normalized);
+    let looked = super::without_lookups(&normalized);
+    let shell = match super::data_heredocs(&looked) {
+        Some((shell, _)) => shell,
+        None => super::shell_text(&looked),
+    };
+    let bare = super::without_plain_awk(&super::without_redirections(&shell));
+    let shell = super::without_plain_awk(&shell);
+    let interpreted = super::named_words(&super::joined_quotes(&bare));
+    let commanded = super::named_words(&super::joined_quotes(&super::text_in_command_positions(
+        &bare,
+    )));
+    let hits: Vec<&str> = super::INTERPRETERS
+        .iter()
+        .copied()
+        .filter(|name| interpreted.contains(*name) && commanded.contains(*name))
+        .collect();
     format!(
-        "reason={reason:?} confidence={confidence} names={} input={} fixed_rejects={} named_pipeline={} moves={} normalized={normalized:?}",
+        "reason={reason:?} confidence={confidence} names={} input={} fixed_rejects={} named_pipeline={} moves={} brace={} ansi={} synth={} hits={hits:?} xargs={:?} xinput={} exec={:?} fd={:?} shell={shell:?} normalized={normalized:?}",
         xargs_names_its_program(&normalized),
         xargs_input_is_named(&normalized),
         fixed.contains(['<', '`', '$', '\n']),
         super::named_xargs_pipeline(&normalized),
         super::moves_data(&super::unquoted_literal(&normalized)),
+        crate::parser_brace_command::brace_runs_a_command_unquoted(&looked),
+        shell.contains("$'") || shell.contains("$\""),
+        super::synthesizes_program(&super::unquoted_literal(&shell), false),
+        super::xargs_programs(&shell),
+        xargs_input_is_named(&shell),
+        super::find_exec_programs(&shell),
+        super::fd_exec_programs(&shell),
     )
 }
 
