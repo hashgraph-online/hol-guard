@@ -41,7 +41,7 @@ mod managed;
 mod readiness;
 use envelopes::{capacity_reason, envelope, fail_safe, refusal};
 #[cfg(test)]
-use envelopes::{fill, ENVELOPES};
+use envelopes::{event_kind, fill, ENVELOPES};
 
 /// `availability_harness_response`'s reason for a hook the worker never reviewed.
 const WORKER_UNAVAILABLE_REASON: &str =
