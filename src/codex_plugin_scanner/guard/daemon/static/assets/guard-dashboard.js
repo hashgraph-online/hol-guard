@@ -14125,23 +14125,32 @@ function readableDate(text2) {
   const y = Number(year);
   const m = Number(month) - 1;
   const d = Number(day);
+  const dayOnly = new Date(Date.UTC(y, m, d));
+  if (dayOnly.getUTCFullYear() !== y || dayOnly.getUTCMonth() !== m || dayOnly.getUTCDate() !== d) return null;
   if (hour === void 0) {
-    const date2 = new Date(Date.UTC(y, m, d));
-    if (date2.getUTCMonth() !== m) return null;
-    return new Intl.DateTimeFormat("en-US", { ...DAY_FORMAT, timeZone: "UTC" }).format(date2);
+    return new Intl.DateTimeFormat("en-US", { ...DAY_FORMAT, timeZone: "UTC" }).format(dayOnly);
   }
+  const h = Number(hour);
+  const min = Number(minute);
+  const s = Number(second ?? 0);
+  if (h > 23 || min > 59 || s > 59) return null;
   const time = { ...DAY_FORMAT, hour: "numeric", minute: "2-digit" };
   if (zone !== void 0) {
-    const date2 = new Date(text2.trim());
-    if (Number.isNaN(date2.getTime())) return null;
-    return new Intl.DateTimeFormat("en-US", { ...time, timeZoneName: "short" }).format(date2);
+    const date = new Date(text2.trim());
+    if (Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat("en-US", { ...time, timeZoneName: "short" }).format(date);
   }
-  const date = new Date(y, m, d, Number(hour), Number(minute), Number(second ?? 0));
-  if (Number.isNaN(date.getTime()) || date.getMonth() !== m) return null;
-  return new Intl.DateTimeFormat("en-US", time).format(date);
+  return new Intl.DateTimeFormat("en-US", { ...time, timeZone: "UTC" }).format(new Date(Date.UTC(y, m, d, h, min, s)));
 }
-function scalarText(value) {
-  if (typeof value === "string") return readableDate(value) ?? textOf(value);
+const DATE_KEY = /(date|time|_at$|At$|^at$|start|end|due|deadline|until|since|when|day|scheduled|expires?)/i;
+function isDateKey(key) {
+  return key !== void 0 && DATE_KEY.test(key);
+}
+function scalarText(value, key) {
+  if (typeof value === "string") {
+    const date = isDateKey(key) ? readableDate(value) : null;
+    return date ?? textOf(value);
+  }
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (Array.isArray(value) && value.length > 0) {
@@ -14167,7 +14176,7 @@ function scalarFacts(input, options = {}) {
       hidden += 1;
       continue;
     }
-    const text2 = KEY_PATTERN.test(key) ? scalarText(value) : null;
+    const text2 = KEY_PATTERN.test(key) ? scalarText(value, key) : null;
     if (text2 === null || text2.length === 0 || facts.length >= max) {
       hidden += value === null || value === "" ? 0 : 1;
       continue;
@@ -14176,8 +14185,8 @@ function scalarFacts(input, options = {}) {
   }
   return { facts, hidden };
 }
-function fieldText(value, kind) {
-  if (kind !== "code" || typeof value !== "string") return scalarText(value);
+function fieldText(value, kind, key) {
+  if (kind !== "code" || typeof value !== "string") return scalarText(value, key);
   const code = codeOf(value);
   if (code === null) return null;
   const chars = Array.from(code);
@@ -14193,7 +14202,7 @@ function promotedFacts(input, skip, tool, max) {
     for (const candidate of field.keys) {
       const key = keysByLowerCase.get(candidate);
       if (key === void 0 || skip.has(key) || facts.some((fact2) => fact2.key === key)) continue;
-      const text2 = KEY_PATTERN.test(key) ? fieldText(input[key], field.kind) : null;
+      const text2 = KEY_PATTERN.test(key) ? fieldText(input[key], field.kind, key) : null;
       if (text2 === null || text2.length === 0) continue;
       facts.push({ label: field.label, value: text2, kind: field.kind ?? valueKindOf(text2), key });
       break;
@@ -14335,8 +14344,13 @@ function multiExecute({ harness, input }) {
     code: null,
     // The row leads with the app people know (Gmail), not the service in between.
     queueTitle: `${apps.length === 1 ? apps[0] : "Composio"} · ${first?.action ?? "Run actions"}${count2 > 1 ? ` and ${count2 - 1} more` : ""}`,
-    queueDetail: apps.length === 1 ? firstDetail(first) : apps.length > 1 ? joinList(apps) : null
+    queueDetail: batchQueueDetail(first, apps)
   };
+}
+function batchQueueDetail(first, apps) {
+  if (apps.length === 1) return firstDetail(first);
+  if (apps.length > 1) return joinList(apps);
+  return null;
 }
 function batchPhrase(first, count2, where) {
   if (count2 === 1 && first !== void 0 && first.app !== null) {
@@ -38171,7 +38185,14 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                   "aria-label": iconLabel,
                   className: `group/icon relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
                   children: [
-                    extensionId && category.id !== "guard_bypass" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionBrandMark, { extension_id: extensionId, size: "sm" }) : mcpMarkName2 !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(McpAppMark, { name: mcpMarkName2, size: "sm" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      QueueItemIcon,
+                      {
+                        extensionId: extensionId && category.id !== "guard_bypass" ? extensionId : null,
+                        mcpMarkName: mcpMarkName2,
+                        CategoryIcon
+                      }
+                    ),
                     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100", children: iconLabel })
                   ]
                 }
@@ -38254,6 +38275,19 @@ function queueItemPreview(item) {
   const listedMcp = listedMcpPreview(item);
   if (listedMcp !== null) return listedMcp;
   return envelope?.command ?? item.queue_preview ?? item.raw_command_text ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? resolveStoppedCommandText(item);
+}
+function QueueItemIcon({
+  extensionId,
+  mcpMarkName: mcpMarkName2,
+  CategoryIcon
+}) {
+  if (extensionId !== null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionBrandMark, { extension_id: extensionId, size: "sm" });
+  }
+  if (mcpMarkName2 !== null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(McpAppMark, { name: mcpMarkName2, size: "sm" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" });
 }
 const QUEUE_PAGE_SIZE$1 = 10;
 function ReviewHeader({

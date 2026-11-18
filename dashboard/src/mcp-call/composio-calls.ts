@@ -160,8 +160,15 @@ function multiExecute({ harness, input }: ComposioContext): McpCallBody {
     code: null,
     // The row leads with the app people know (Gmail), not the service in between.
     queueTitle: `${apps.length === 1 ? apps[0] : "Composio"} · ${first?.action ?? "Run actions"}${count > 1 ? ` and ${count - 1} more` : ""}`,
-    queueDetail: apps.length === 1 ? firstDetail(first) : apps.length > 1 ? joinList(apps) : null,
+    queueDetail: batchQueueDetail(first, apps),
   };
+}
+
+/** One app: the first step's main detail. Several apps: their names. None: nothing. */
+function batchQueueDetail(first: McpStep | undefined, apps: string[]): string | null {
+  if (apps.length === 1) return firstDetail(first);
+  if (apps.length > 1) return joinList(apps);
+  return null;
 }
 
 /** "send email in Gmail" for one action, "take 3 actions in Gmail and Slack" for several. */

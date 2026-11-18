@@ -156,6 +156,15 @@ const call = (server: string, tool: string, input: unknown) => request(envelope(
   );
   const details = event?.steps[0]?.details ?? [];
   assert(details.some((fact) => fact.value === "Fri, Nov 20, 2026, 9:00 AM"), "T-APP-42: an event start reads as a day and time");
+  assert(readableDate("2026-11-20T99:00") === null && readableDate("2026-11-20T10:75") === null, "T-APP-45: an impossible time is left as written");
+  assert(readableDate("2026-03-08T02:30:00") === "Sun, Mar 8, 2026, 2:30 AM", "T-APP-46: a clock change does not move a written time");
+  const mail = explainMcpCall(
+    call("composio", "COMPOSIO_MULTI_EXECUTE_TOOL", {
+      tools: [{ tool_slug: "GMAIL_SEND_EMAIL", arguments: { recipient_email: "ann@example.com", subject: "2026-11-20", body: "2026-11-20" } }],
+    }),
+  );
+  const mailDetails = mail?.steps[0]?.details ?? [];
+  assert(mailDetails.length > 0 && mailDetails.every((fact) => !fact.value.includes("Nov 20")), "T-APP-47: a subject or message that looks like a date is shown as written");
 }
 
 // A tool's title does not repeat the service's name.

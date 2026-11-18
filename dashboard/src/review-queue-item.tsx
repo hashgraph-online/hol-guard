@@ -181,13 +181,11 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
               active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
             }`}
           >
-            {extensionId && category.id !== "guard_bypass" ? (
-              <ExtensionBrandMark extension_id={extensionId} size="sm" />
-            ) : mcpMarkName !== null ? (
-              <McpAppMark name={mcpMarkName} size="sm" />
-            ) : (
-              <CategoryIcon className="h-4 w-4" aria-hidden="true" />
-            )}
+            <QueueItemIcon
+              extensionId={extensionId && category.id !== "guard_bypass" ? extensionId : null}
+              mcpMarkName={mcpMarkName}
+              CategoryIcon={CategoryIcon}
+            />
             <span className="pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100">
               {iconLabel}
             </span>
@@ -278,4 +276,23 @@ export function queueItemPreview(item: GuardApprovalRequest): string {
     envelope?.package_name ??
     resolveStoppedCommandText(item)
   );
+}
+
+/** An extension's mark, else the MCP app's mark, else the queue category's icon. */
+function QueueItemIcon({
+  extensionId,
+  mcpMarkName,
+  CategoryIcon,
+}: {
+  extensionId: string | null;
+  mcpMarkName: string | null;
+  CategoryIcon: ReturnType<typeof iconForQueueCategory>;
+}) {
+  if (extensionId !== null) {
+    return <ExtensionBrandMark extension_id={extensionId} size="sm" />;
+  }
+  if (mcpMarkName !== null) {
+    return <McpAppMark name={mcpMarkName} size="sm" />;
+  }
+  return <CategoryIcon className="h-4 w-4" aria-hidden="true" />;
 }

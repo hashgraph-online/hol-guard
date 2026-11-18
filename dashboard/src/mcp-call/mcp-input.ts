@@ -168,8 +168,9 @@ const DAY_FORMAT: Intl.DateTimeFormatOptions = { weekday: "short", month: "short
 
 /**
  * `2026-11-20T09:00:00` as `Fri, Nov 20, 2026, 9:00 AM`. A time with no zone is
- * shown as written; one with a zone is shown in the viewer's time with the zone
- * named. Anything that is not a whole date stays as it was.
+ * shown exactly as written, with no clock change applied; one with a zone is
+ * shown in the viewer's time with the zone named. Anything that is not a whole,
+ * valid date and time stays as it was.
  */
 export function readableDate(text: string): string | null {
   const match = ISO_DATE.exec(text.trim());
@@ -178,25 +179,38 @@ export function readableDate(text: string): string | null {
   const y = Number(year);
   const m = Number(month) - 1;
   const d = Number(day);
+  const dayOnly = new Date(Date.UTC(y, m, d));
+  if (dayOnly.getUTCFullYear() !== y || dayOnly.getUTCMonth() !== m || dayOnly.getUTCDate() !== d) return null;
   if (hour === undefined) {
-    const date = new Date(Date.UTC(y, m, d));
-    if (date.getUTCMonth() !== m) return null;
-    return new Intl.DateTimeFormat("en-US", { ...DAY_FORMAT, timeZone: "UTC" }).format(date);
+    return new Intl.DateTimeFormat("en-US", { ...DAY_FORMAT, timeZone: "UTC" }).format(dayOnly);
   }
+  const h = Number(hour);
+  const min = Number(minute);
+  const s = Number(second ?? 0);
+  if (h > 23 || min > 59 || s > 59) return null;
   const time: Intl.DateTimeFormatOptions = { ...DAY_FORMAT, hour: "numeric", minute: "2-digit" };
   if (zone !== undefined) {
     const date = new Date(text.trim());
     if (Number.isNaN(date.getTime())) return null;
     return new Intl.DateTimeFormat("en-US", { ...time, timeZoneName: "short" }).format(date);
   }
-  const date = new Date(y, m, d, Number(hour), Number(minute), Number(second ?? 0));
-  if (Number.isNaN(date.getTime()) || date.getMonth() !== m) return null;
-  return new Intl.DateTimeFormat("en-US", time).format(date);
+  // Formatted in UTC so the viewer's clock changes cannot move the written time.
+  return new Intl.DateTimeFormat("en-US", { ...time, timeZone: "UTC" }).format(new Date(Date.UTC(y, m, d, h, min, s)));
+}
+
+// Fields whose name says they hold a date or time. Only these are reformatted; a subject or a message stays as written.
+const DATE_KEY = /(date|time|_at$|At$|^at$|start|end|due|deadline|until|since|when|day|scheduled|expires?)/i;
+
+function isDateKey(key: string | undefined): boolean {
+  return key !== undefined && DATE_KEY.test(key);
 }
 
 /** A value short enough for a one-line row, or null when it needs the full input to make sense. */
-export function scalarText(value: unknown): string | null {
-  if (typeof value === "string") return readableDate(value) ?? textOf(value);
+export function scalarText(value: unknown, key?: string): string | null {
+  if (typeof value === "string") {
+    const date = isDateKey(key) ? readableDate(value) : null;
+    return date ?? textOf(value);
+  }
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (Array.isArray(value) && value.length > 0) {
@@ -231,7 +245,7 @@ export function scalarFacts(
       hidden += 1;
       continue;
     }
-    const text = KEY_PATTERN.test(key) ? scalarText(value) : null;
+    const text = KEY_PATTERN.test(key) ? scalarText(value, key) : null;
     if (text === null || text.length === 0 || facts.length >= max) {
       hidden += value === null || value === "" ? 0 : 1;
       continue;
@@ -242,8 +256,8 @@ export function scalarFacts(
 }
 
 /** Code keeps its lines, which a query needs to be read; other values become one line. Both stay within the row limit. */
-function fieldText(value: unknown, kind: McpFact["kind"]): string | null {
-  if (kind !== "code" || typeof value !== "string") return scalarText(value);
+function fieldText(value: unknown, kind: McpFact["kind"], key: string): string | null {
+  if (kind !== "code" || typeof value !== "string") return scalarText(value, key);
   const code = codeOf(value);
   if (code === null) return null;
   const chars = Array.from(code);
@@ -260,7 +274,7 @@ function promotedFacts(input: Record<string, unknown>, skip: Set<string>, tool: 
     for (const candidate of field.keys) {
       const key = keysByLowerCase.get(candidate);
       if (key === undefined || skip.has(key) || facts.some((fact) => fact.key === key)) continue;
-      const text = KEY_PATTERN.test(key) ? fieldText(input[key], field.kind) : null;
+      const text = KEY_PATTERN.test(key) ? fieldText(input[key], field.kind, key) : null;
       if (text === null || text.length === 0) continue;
       facts.push({ label: field.label, value: text, kind: field.kind ?? valueKindOf(text), key });
       break;
