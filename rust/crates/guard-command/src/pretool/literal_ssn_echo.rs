@@ -246,7 +246,7 @@ fn render_printf(format: &str, args: &[String]) -> String {
                     let (prefix, stopped) = decode_printf_escapes_with_stop(operand, true);
                     stop_after_percent_b = stopped;
                     prefix
-                },
+                }
                 'd' | 'i' | 'u' => printf_decimal(operand),
                 'x' | 'X' | 'o' => {
                     let decimal = printf_decimal(operand);
