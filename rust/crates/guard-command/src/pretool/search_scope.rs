@@ -22,6 +22,9 @@ pub(super) use claude::claude_grep_directory_scope_proven;
 #[path = "search_scope_grok.rs"]
 mod grok;
 pub(super) use grok::grok_grep_directory_scope_proven;
+#[path = "search_scope_cursor.rs"]
+mod cursor;
+pub(super) use cursor::cursor_grep_directory_scope_proven;
 #[path = "search_scope_grep_include.rs"]
 mod grep_include;
 pub(super) use grep_include::{grep_include_scope_proven, grep_include_walk_proven};

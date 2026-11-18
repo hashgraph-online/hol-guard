@@ -483,7 +483,7 @@ fn evaluate_envelope(
         && event == "PreToolUse"
         && omp::strict_tool_input(payload)
             .is_some_and(|input| github::read_only_call(input, signals.tool_name.as_deref()));
-    // A search pattern is data, not a command: a proven Claude or Grok `Grep`
+    // A search pattern is data, not a command: a proven Claude, Grok or Cursor `Grep`
     // scope skips the command authority but still passes the command controls
     // below.
     let search_scope_proven = event == "PreToolUse"
@@ -497,6 +497,9 @@ fn evaluate_envelope(
             }
             ("grok", Some("Grep" | "grep")) => {
                 super::search_scope::grok_grep_directory_scope_proven(payload, home_dir, cwd)
+            }
+            ("cursor", Some("Grep")) => {
+                super::search_scope::cursor_grep_directory_scope_proven(payload, home_dir, cwd)
             }
             _ => false,
         };

@@ -59,7 +59,7 @@ _SHELL_TOOL = {
 }
 _READ_TOOL = {"zcode": "Read", "claude-code": "Read", "omp": "read", "cursor": "Read"}
 _GLOB_TOOL = {"claude-code": "Glob", "omp": "glob"}
-_GREP_TOOL = {"claude-code": "Grep", "omp": "grep", "grok": "grep"}
+_GREP_TOOL = {"claude-code": "Grep", "omp": "grep", "grok": "grep", "cursor": "Grep"}
 _WRITE_TOOL = {"zcode": "Write", "claude-code": "Write", "omp": "write", "cursor": "Write"}
 _FIXED_TOOLS = {
     "eval": "eval",
@@ -191,6 +191,10 @@ def _tool_input(case: GateCase, fixture: BenignFixture) -> dict[str, object]:
         resolved = {"file_path": resolved["path"]}
     if case.harness == "cursor" and case.tool == "read":
         resolved = {"file_path": resolved["path"], "path": resolved["path"]}
+    if case.harness == "cursor" and case.tool == "grep":
+        # Cursor's hook names the searched folder file_path.
+        folder = {"file_path": resolved["path"]} if "path" in resolved else {}
+        resolved = {**{k: v for k, v in resolved.items() if k != "path"}, **folder}
     if case.harness in {"claude-code", "zcode", "cursor"} and case.tool == "write":
         resolved = {"file_path": resolved["path"], "content": resolved["content"]}
     return resolved
