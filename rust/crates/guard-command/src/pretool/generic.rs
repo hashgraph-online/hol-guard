@@ -1051,7 +1051,7 @@ fn evaluate_envelope(
     {
         let header = omp::strict_tool_input(payload)
             .and_then(|input| input.get("input")?.as_str())
-            .and_then(|input| super::omp_hashline_recovery::missing_unplain_header(input, cwd));
+            .and_then(|input| super::omp_hashline_recovery::missing_tagged_header(input, cwd));
         if let Some(header) = header {
             result = generic_result(
                 generic_action(

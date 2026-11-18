@@ -41,12 +41,14 @@ pub(super) struct MissingHeader {
     pub(super) path: String,
 }
 
-/// The first header in `input` that `omp_hashline_writes` rejects and that
-/// Oh My Pi reads as a tagged path with nothing behind it. `None` when the
+/// The first header in `input` that Oh My Pi reads as a tagged path with
+/// nothing behind it. The hashline write proof already stops plain missing
+/// paths; this also covers headers it rejects and plain ones whose path holds
+/// characters such as `?` or `[` that its missing-path check leaves unproven. `None` when the
 /// session folder is unknown, when any header line is one Oh My Pi refuses
 /// outright, or when every unproven header names a file that exists, is
 /// sensitive or is protected.
-pub(super) fn missing_unplain_header(input: &str, cwd: Option<&str>) -> Option<MissingHeader> {
+pub(super) fn missing_tagged_header(input: &str, cwd: Option<&str>) -> Option<MissingHeader> {
     if input.len() > crate::MAX_COMMAND_BYTES || input.contains('\0') {
         return None;
     }
@@ -61,7 +63,7 @@ pub(super) fn missing_unplain_header(input: &str, cwd: Option<&str>) -> Option<M
             continue;
         }
         let (path, tagged) = omp_header(line)?;
-        if found.is_some() || !tagged || super::omp_hashline_writes::plain_header(line) {
+        if found.is_some() || !tagged {
             continue;
         }
         if missing_target(&path, &workspace) {

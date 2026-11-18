@@ -1,4 +1,4 @@
-use super::{missing_header_reason, missing_unplain_header};
+use super::{missing_header_reason, missing_tagged_header};
 
 struct Workspace(std::path::PathBuf);
 
@@ -21,7 +21,7 @@ fn workspace(name: &str) -> Workspace {
 }
 
 fn missing_path(input: &str, root: &Workspace) -> Option<String> {
-    missing_unplain_header(input, root.0.to_str()).map(|header| header.path)
+    missing_tagged_header(input, root.0.to_str()).map(|header| header.path)
 }
 
 // Edits Oh My Pi models sent with their reasoning leaked into the header
@@ -51,6 +51,8 @@ fn leaked_reasoning_headers_read_as_missing_files() {
         // path is looked up.
         ("[*** Update File: src/b.py#0AC4]\nPUT 1.=1:\n+x\n", "src/b.py"),
         ("[\"src/b.py\"#0AC4]\nPUT 1.=1:\n+x\n", "src/b.py"),
+        // A plain missing path is read the same way.
+        ("[src/missing.py#0AC4]\nPUT 1.=1:\n+x\n", "src/missing.py"),
     ] {
         assert_eq!(missing_path(input, &root).as_deref(), Some(path), "{input}");
     }
@@ -60,8 +62,6 @@ fn leaked_reasoning_headers_read_as_missing_files() {
 fn other_headers_keep_their_review() {
     let root = workspace("kept");
     for input in [
-        // Plain headers are judged by the hashline write proof.
-        "[src/missing.py#0AC4]\nPUT 1.=1:\n+x\n",
         // Oh My Pi opens these, so a person decides.
         "[*** Update File: src/a.py#0AC4]\nPUT 1.=1:\n+x\n",
         "['src/a.py'#0AC4]\nPUT 1.=1:\n+x\n",
@@ -84,7 +84,7 @@ fn other_headers_keep_their_review() {
         assert_eq!(missing_path(input, &root), None, "{input}");
     }
     assert_eq!(
-        missing_unplain_header("[FILE: src/a.py#0AC4]\nPUT 1.=1:\n+x\n", None),
+        missing_tagged_header("[FILE: src/a.py#0AC4]\nPUT 1.=1:\n+x\n", None),
         None
     );
 }
@@ -93,7 +93,7 @@ fn other_headers_keep_their_review() {
 fn the_reason_shows_the_header_and_how_to_write_it() {
     let root = workspace("reason");
     let header =
-        missing_unplain_header("[FILE: src/a.py#0AC4]\nPUT 1.=1:\n+x\n", root.0.to_str()).unwrap();
+        missing_tagged_header("[FILE: src/a.py#0AC4]\nPUT 1.=1:\n+x\n", root.0.to_str()).unwrap();
     let reason = missing_header_reason(&header);
     assert!(reason.contains("`[FILE: src/a.py#0AC4]`"), "{reason}");
     assert!(
@@ -102,7 +102,7 @@ fn the_reason_shows_the_header_and_how_to_write_it() {
     );
     assert!(reason.contains("[src/app.py#1A2B]"), "{reason}");
     let long = format!("[gone/{} [src/a.py#0AC4]\nPUT 1.=1:\n+x\n", "x".repeat(300));
-    let header = missing_unplain_header(&long, root.0.to_str()).unwrap();
+    let header = missing_tagged_header(&long, root.0.to_str()).unwrap();
     let reason = missing_header_reason(&header);
     assert!(reason.contains("...`"), "{reason}");
     assert!(reason.contains("as a file that does not exist"), "{reason}");
