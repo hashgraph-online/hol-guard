@@ -155,16 +155,42 @@ fn pattern_is_quoted(text: &str, pattern: &str) -> bool {
     if literal_match {
         return true;
     }
-    // Shell quote removal can join a literal home marker with an unquoted
-    // suffix: grep '$HOME'/.config/example. Its canonical pattern contains
-    // "$HOME/.config/example", but those bytes are not contiguous in source.
-    // Only accept the precise single-quoted marker followed by the full
-    // suffix. An unquoted occurrence of the complete pattern is rejected
-    // above, so an option value cannot shield a real expanding pattern.
-    let split = ["$HOME", "${HOME}", "~"]
+    // A single-quoted home marker can join an unquoted suffix into one
+    // literal shell word: grep '$HOME'/.config/example. Do not match that
+    // spelling as a substring of an assignment or option value: an unrelated
+    // quoted decoy must never shield the actual expanding search argument.
+    let Some((marker, suffix)) = ["$HOME", "${HOME}", "~"]
         .into_iter()
-        .find_map(|marker| pattern.strip_prefix(marker).map(|suffix| (marker, suffix)));
-    split.is_some_and(|(marker, suffix)| visible.contains(&format!("'{marker}'{suffix}")))
+        .find_map(|marker| pattern.strip_prefix(marker).map(|suffix| (marker, suffix)))
+    else {
+        return false;
+    };
+    let joined = format!("'{marker}'{suffix}");
+    let mut words = Vec::new();
+    let mut start = None;
+    let mut scan = crate::shell_structure::ShellScanState::new();
+    let mut cursor = 0;
+    while cursor < chars.len() {
+        if scan.is_top_level() && chars[cursor].is_whitespace() {
+            if let Some(begin) = start.take() {
+                words.push(chars[begin..cursor].iter().collect::<String>());
+            }
+        } else if start.is_none() {
+            start = Some(cursor);
+        }
+        cursor = scan.advance(&chars, cursor).max(cursor + 1);
+    }
+    if let Some(begin) = start {
+        words.push(chars[begin..].iter().collect::<String>());
+    }
+    // A second home-bearing word could be the real expanding pattern while
+    // the joined literal was consumed as an option value or assignment.
+    // Resolve that ambiguity fail-closed instead of granting an exact allow.
+    let home_words: Vec<&String> = words
+        .iter()
+        .filter(|word| word.contains("$HOME") || word.contains("${HOME}") || word.contains('~'))
+        .collect();
+    home_words.len() == 1 && home_words[0] == &joined
 }
 
 /// A quoted or escaped '<' is argument text, not input redirection.
