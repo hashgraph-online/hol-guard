@@ -10,11 +10,18 @@
 
 use std::path::Path;
 
+use base64::{
+    alphabet,
+    engine::general_purpose::{GeneralPurpose, GeneralPurposeConfig, STANDARD},
+    Engine,
+};
 use serde_json::{json, Map, Value};
 
+use super::inspect::MAX_SNAPSHOT;
 use super::publication::Call;
-use super::publication_repair_plan::{payload, ACTION, SCHEMA};
-use super::{Fault, Step};
+use super::publication_repair_plan::{canonical_uuid, payload, ACTION, SCHEMA};
+use super::python_equal::python_equal;
+use super::{resolve_lenient, Fault, Step};
 
 const MAX_FILES: usize = 128;
 const PLAN_INVALID: Fault = Fault::Transition("authority_repair_request_plan_invalid");
@@ -30,6 +37,65 @@ const KEYS: [&str; 8] = [
     "native_runtime",
     "verification_workspace",
 ];
+
+const FILE_FIELDS: [&str; 7] = [
+    "path",
+    "before",
+    "after",
+    "before_mode",
+    "after_mode",
+    "kind",
+    "no_follow",
+];
+const FILE_OPTIONAL: [&str; 3] = [
+    "expected_digest",
+    "artifact_identity",
+    "invocation_identity",
+];
+
+/// Python decodes a snapshot with `validate=True`, which accepts trailing
+/// bits a canonical encoder never writes.
+fn tolerant() -> GeneralPurpose {
+    GeneralPurpose::new(
+        &alphabet::STANDARD,
+        GeneralPurposeConfig::new().with_decode_allow_trailing_bits(true),
+    )
+}
+
+/// A snapshot the caller decodes and encodes again must read back as written.
+/// What cannot be decoded, or is over the snapshot cap, is the caller's own
+/// `snapshot_invalid` / `snapshot_too_large` refusal, not this one.
+fn snapshot_stable(value: Option<&Value>) -> bool {
+    let Some(Value::String(text)) = value else {
+        return true;
+    };
+    match tolerant().decode(text) {
+        Ok(bytes) if bytes.len() <= MAX_SNAPSHOT => STANDARD.encode(bytes) == *text,
+        _ => true,
+    }
+}
+
+/// `plan.payload() != value`, per file: a file the caller decodes into a
+/// transition file and writes out again must come back exactly as reviewed:
+/// its path already resolved, `no_follow` spelled, no null optional pin and
+/// each snapshot in canonical base64.
+pub(super) fn normalized(item: &Value) -> bool {
+    let Some(object) = item.as_object() else {
+        return false;
+    };
+    let Some(path) = object.get("path").and_then(Value::as_str) else {
+        return false;
+    };
+    Path::new(path).is_absolute()
+        && resolve_lenient(Path::new(path)).to_string_lossy() == path
+        && FILE_FIELDS.iter().all(|key| object.contains_key(*key))
+        && object.iter().all(|(key, value)| {
+            FILE_FIELDS.contains(&key.as_str())
+                || (FILE_OPTIONAL.contains(&key.as_str()) && !value.is_null())
+        })
+        && snapshot_stable(object.get("before"))
+        && snapshot_stable(object.get("after"))
+}
 
 /// The runtime a plan names: exactly its path, size, mtime and digest.
 fn native_shape(value: Option<&Value>) -> bool {
@@ -65,6 +131,7 @@ pub(super) fn plan(call: &mut Call<'_>) -> Step<Value> {
     match call.text("kind")? {
         "repair" => repair(call, value),
         "inverse" => inverse(value),
+        "inverse_bound" => bound(call, value),
         _ => Err(FILES_INVALID),
     }
 }
@@ -75,13 +142,23 @@ fn inverse(value: &Value) -> Step<Value> {
         return Err(PLAN_INVALID);
     };
     let text = |key: &str| object.get(key).is_some_and(Value::is_string);
+    let operation = object.get("operation_id").and_then(Value::as_str);
     if !native_shape(object.get("native_runtime"))
-        || !text("operation_id")
+        || !operation.is_some_and(canonical_uuid)
         || !text("verification_workspace")
     {
         return Err(PLAN_INVALID);
     }
     Ok(Value::Null)
+}
+
+/// `_inverse_from_payload`'s last check: the plan the caller rebuilt from its
+/// own journal, bound as the request names, is exactly the reviewed payload.
+fn bound(call: &Call<'_>, value: &Value) -> Step<Value> {
+    match call.args.get("bound") {
+        Some(rebuilt) if python_equal(rebuilt, value) => Ok(Value::Null),
+        _ => Err(PLAN_INVALID),
+    }
 }
 
 /// `_plan_from_payload`: answers which of the files is the manifest change.
@@ -136,7 +213,7 @@ fn repair(call: &Call<'_>, value: &Value) -> Step<Value> {
         field(object, "verification_workspace"),
     );
     // Refuse normalization that silently changes a reviewed payload.
-    if Value::Object(payload(&args)?) != *value {
+    if !python_equal(&Value::Object(payload(&args)?), value) || !files.iter().all(normalized) {
         return Err(PLAN_INVALID);
     }
     Ok(json!({ "change": index }))

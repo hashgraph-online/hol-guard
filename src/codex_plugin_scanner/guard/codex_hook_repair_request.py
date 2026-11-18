@@ -10,7 +10,6 @@ from __future__ import annotations
 import base64
 import math
 import time
-import uuid
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
@@ -62,8 +61,6 @@ def _inverse_from_payload(
     native = cast(dict[str, object], value["native_runtime"])
     operation = cast(str, value["operation_id"])
     workspace = cast(str, value["verification_workspace"])
-    if str(uuid.UUID(operation)) != operation:
-        raise TransitionError("authority_repair_request_plan_invalid")
     with inverse_recovery_budget(deadline), hook_validation_deadline(deadline):
         fresh = prepare_authenticated_hook_publication_inverse(spec)
         bound = bind_codex_publication_inverse_verification(
@@ -77,8 +74,8 @@ def _inverse_from_payload(
             workspace=Path(workspace),
             deadline_monotonic=deadline,
         )
-    if bound.payload() != value:
-        raise TransitionError("authority_repair_request_plan_invalid")
+    # The runtime compares the reviewed payload with the plan rebuilt here.
+    publication("repair_request_plan", spec.guard_home, kind="inverse_bound", payload=value, bound=bound.payload())
     return bound
 
 
@@ -112,9 +109,7 @@ def _plan_from_payload(value: object, *, home: Path, config: Path) -> PreparedCo
         ),
         Path(cast(str, value["verification_workspace"])),
     )
-    # Refuse normalization that silently changes a reviewed payload.
-    if plan.payload() != value:
-        raise TransitionError("authority_repair_request_plan_invalid")
+    # The runtime already refused any normalization that would change a reviewed payload.
     return plan
 
 
@@ -126,9 +121,11 @@ def _compare(plan: RepairPlan, deadline: float) -> None:
             _check_deadline(deadline)
             return
         RuntimeTransition._compare(plan.payload(), "before")
-        receipt = load_hook_authority_receipt(plan.guard_home, plan.config_path)
-        if receipt.manifest_bytes != plan.manifest_change.after:
-            raise TransitionError("authority_repair_request_plan_invalid")
+        load_hook_authority_receipt(
+            plan.guard_home,
+            plan.config_path,
+            require_manifest=(plan.manifest_change.after, "authority_repair_request_plan_invalid"),
+        )
         RuntimeTransition._compare(plan.payload(), "before")
     _check_deadline(deadline)
 

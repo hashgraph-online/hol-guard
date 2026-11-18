@@ -42,6 +42,7 @@ mod publication_observe_check;
 mod publication_observe_legacy;
 mod publication_observe_run;
 mod publication_observer;
+mod publication_proof;
 mod publication_receipt;
 mod publication_repair_files;
 mod publication_repair_plan;
@@ -49,6 +50,7 @@ mod publication_repair_prepare;
 mod publication_repair_request;
 mod publication_request;
 mod publication_target;
+mod python_equal;
 mod repair_claims;
 #[cfg(test)]
 mod tests;
@@ -60,6 +62,8 @@ mod tests_owned_locks;
 mod tests_publication_inverse_plan;
 #[cfg(test)]
 mod tests_publication_repair_plan;
+#[cfg(test)]
+mod tests_publication_proof;
 #[cfg(test)]
 mod tests_publication_repair_request;
 #[cfg(test)]

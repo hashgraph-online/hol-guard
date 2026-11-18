@@ -10,7 +10,6 @@ diagnostic/export material.
 from __future__ import annotations
 
 import base64
-import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,15 +35,26 @@ class AuthenticatedHookAuthorityReceipt:
     config_bytes: bytes
 
 
-def load_hook_authority_receipt(home: Path, config: Path) -> AuthenticatedHookAuthorityReceipt:
+def load_hook_authority_receipt(
+    home: Path,
+    config: Path,
+    *,
+    require_manifest: tuple[bytes | None, str] | None = None,
+) -> AuthenticatedHookAuthorityReceipt:
     """Read exact retained authority under the caller's validation deadline.
+
+    `require_manifest` names the manifest bytes the receipt must retain and the
+    refusal the runtime raises when it retains others.
 
     Authentication alone cannot authorize restoration. A repair planner must
     additionally pin these files/key, validate package and registration, and
     obtain fresh exact lifecycle approval before publishing anything.
     """
     check_hook_validation_deadline()
-    answer = _publication("receipt_load", home, config=_path_text(config))
+    fields: dict[str, object] = {}
+    if require_manifest is not None:
+        fields = {"expect_manifest": _encode(require_manifest[0]), "mismatch": require_manifest[1]}
+    answer = _publication("receipt_load", home, config=_path_text(config), **fields)
     if not isinstance(answer, dict):
         raise _error("receipt_invalid")
     manifest, receipt, config_bytes = (_decode(answer.get(key)) for key in ("manifest", "receipt", "config"))
@@ -241,18 +251,16 @@ def _commit_verified_hook_repair_publication(
     pending.compare("after")
     plan = pending.authorization.plan
     observation = verified_admission_payload(proof)
-    observed = observation.get("observed_monotonic")
-    if (
-        type(started_monotonic) not in (float, int)
-        or not math.isfinite(started_monotonic)
-        or not isinstance(observed, (float, int))
-        or isinstance(observed, bool)
-        or not math.isfinite(observed)
-        or not pending.publication_monotonic <= started_monotonic <= observed <= time.monotonic()
-    ):
-        raise _error("repair_native_verification_invalid")
     pending.compare("after")
-    _publication("commit_repair", plan.guard_home, observation=observation)
+    # The runtime checks the proof's timing and that it is this publication's.
+    _publication(
+        "commit_repair",
+        plan.guard_home,
+        observation=observation,
+        publication=pending.publication_monotonic,
+        started=started_monotonic,
+        now=time.monotonic(),
+    )
     _remove_record(plan.guard_home)
 
 

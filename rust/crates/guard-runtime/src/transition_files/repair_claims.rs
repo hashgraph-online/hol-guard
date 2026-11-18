@@ -96,6 +96,14 @@ pub(super) fn claim(call: &mut Call<'_>) -> Step<Value> {
 pub(super) fn check(call: &mut Call<'_>) -> Step<Value> {
     let grant = grant(call)?;
     let subject = call.text("subject").map_err(|_| INVALID)?;
+    // The subject the plan derives now must still be the one approved.
+    if call
+        .args
+        .get("current_subject")
+        .is_some_and(|current| current.as_str() != Some(subject))
+    {
+        return Err(INVALID);
+    }
     let owner_operation_id = call.text("owner_operation_id").map_err(|_| INVALID)?;
     let owner_pid = call
         .args
@@ -225,6 +233,7 @@ mod tests {
             ("owner_operation_id", json!("other")),
             ("owner_pid", json!(8)),
             ("deadline", json!(13.0)),
+            ("current_subject", json!("other")),
         ] {
             let error = check(field, value).unwrap_err();
             assert!(

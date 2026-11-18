@@ -187,7 +187,10 @@ fn commit_repair(call: &mut Call<'_>) -> Step<Value> {
     let home = call.home()?;
     let mut payload = call.load(&home, false)?;
     let observation = field(call.args, "observation").clone();
-    if !observation.is_object() || !Call::proof_matches(&home, &payload, &observation)? {
+    if !observation.is_object()
+        || !super::publication_proof::ordered(call, &observation)
+        || !Call::proof_matches(&home, &payload, &observation)?
+    {
         return Err(recovery("repair_native_verification_invalid"));
     }
     payload.insert("native_verification".to_owned(), observation);
@@ -284,6 +287,7 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_inverse_restore" => super::publication_inverse_publish::restore_op(call),
         "publication_request_create" => super::publication_request::create_op(call),
         "publication_request_read" => super::publication_request::read_op(call),
+        "publication_inverse_proof" => super::publication_proof::inverse(call),
         "publication_repair_claim" => super::repair_claims::claim(call),
         "publication_repair_claim_check" => super::repair_claims::check(call),
         "publication_repair_publish" => super::repair_claims::publish(call),

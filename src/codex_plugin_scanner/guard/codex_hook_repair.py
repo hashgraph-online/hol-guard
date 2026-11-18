@@ -149,15 +149,15 @@ class CodexHookRepairAuthorization:
         ).resolve(strict=False)
         if expected_home != self.authority_home:
             raise TransitionError("approval_authority_mismatch")
-        if self.plan.subject() != self.approved_subject:
-            raise TransitionError("authority_repair_authorization_invalid")
-        # The resident holds the claim: it must be this grant's, for this
-        # subject, owner and deadline, and for the one publication named here.
+        # The runtime holds the claim: it must be this grant's, for this subject
+        # (still the one the plan derives), owner and deadline, and for the one
+        # publication named here.
         publication_record(
             "repair_claim_check",
             self.plan.guard_home,
             grant_id=self.grant.grant_id,
             subject=self.approved_subject,
+            current_subject=self.plan.subject(),
             owner_operation_id=self.owner_operation_id,
             owner_pid=self.owner_pid,
             deadline=self.deadline_monotonic,
@@ -315,9 +315,9 @@ def publish_codex_hook_repair(authorization: CodexHookRepairAuthorization) -> Pe
     authorization.compare_before()
     plan = authorization.plan
     with hook_validation_deadline(authorization.deadline_monotonic):
-        receipt = load_hook_authority_receipt(plan.guard_home, plan.config_path)
-    if receipt.manifest_bytes != plan.manifest_change.after:
-        raise TransitionError("generation_changed")
+        receipt = load_hook_authority_receipt(
+            plan.guard_home, plan.config_path, require_manifest=(plan.manifest_change.after, "generation_changed")
+        )
     authorization.compare_before()
     publication_time = time.monotonic()
     publication_record(

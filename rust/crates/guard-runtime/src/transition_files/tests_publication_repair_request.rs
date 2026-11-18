@@ -172,3 +172,81 @@ fn an_unknown_kind_is_refused() {
     let home = Home::new();
     refused(&home, "other", json!({}), "files_invalid");
 }
+
+#[test]
+fn a_file_that_would_not_read_back_as_reviewed_is_not_normalized() {
+    use super::publication_repair_request::normalized;
+
+    let home = Home::new();
+    let good = home.change();
+    assert!(normalized(&good));
+    let outside = format!("{}/../manifest", home.guard().display());
+    for (key, value) in [
+        ("no_follow", json!(null)),
+        ("expected_digest", json!(null)),
+        // `e30L` decodes to `{}` but is not how `{}` is written.
+        ("after", json!("e30L")),
+        ("path", json!("relative/file")),
+        ("path", json!(outside)),
+    ] {
+        let mut file = good.clone();
+        file[key] = value;
+        assert!(!normalized(&file), "{file}");
+    }
+    let mut without = good.clone();
+    without.as_object_mut().unwrap().remove("no_follow");
+    assert!(!normalized(&without));
+    // Bytes that do not decode are the caller's snapshot refusal.
+    let mut undecodable = good;
+    undecodable["after"] = json!("not base64!");
+    assert!(normalized(&undecodable));
+}
+
+#[test]
+fn an_inverse_request_must_match_the_plan_rebuilt_from_the_journal() {
+    let home = Home::new();
+    let payload = json!({"operation_id": "1b4e28ba-2fa1-41d2-883f-0016d3cca427", "n": 1});
+    let ask_bound = |bound: Option<Value>| {
+        let mut request = json!({
+            "op": "publication_repair_request_plan",
+            "home": home.guard().to_string_lossy(),
+            "kind": "inverse_bound",
+            "payload": payload,
+        });
+        if let Some(bound) = bound {
+            request["bound"] = bound;
+        }
+        dispatch(&request).unwrap()
+    };
+    assert_eq!(ask_bound(Some(payload.clone()))["value"], json!(null));
+    let mut spelled_as_float = payload.clone();
+    spelled_as_float["n"] = json!(1.0);
+    assert_eq!(ask_bound(Some(spelled_as_float))["value"], json!(null));
+    for bound in [None, Some(json!({"operation_id": "other"}))] {
+        let answer = ask_bound(bound);
+        assert!(
+            answer["error"]
+                .to_string()
+                .contains("authority_repair_request_plan_invalid"),
+            "{answer}"
+        );
+    }
+}
+
+#[test]
+fn an_inverse_binding_names_its_operation_as_a_canonical_uuid() {
+    let home = Home::new();
+    for operation in ["not-a-uuid", "1B4E28BA-2FA1-41D2-883F-0016D3CCA427"] {
+        let payload = json!({
+            "native_runtime": native(),
+            "operation_id": operation,
+            "verification_workspace": "/workspace",
+        });
+        refused(
+            &home,
+            "inverse",
+            payload,
+            "authority_repair_request_plan_invalid",
+        );
+    }
+}

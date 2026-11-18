@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import math
 import os
 import threading
 import time
@@ -164,6 +163,10 @@ def _record_answer(answer: object) -> tuple[dict[str, object], str, tuple[int, i
     return record, sha256, identity
 
 
+def _encoded(value: bytes | None) -> str | None:
+    return None if value is None else base64.b64encode(value).decode("ascii")
+
+
 def publish_codex_publication_inverse(
     authorization: CodexPublicationInverseAuthorization,
 ) -> PendingCodexPublicationInverse:
@@ -262,23 +265,21 @@ def verify_and_retire_codex_publication_inverse(
         )
         pending.compare()
         observation = verified_admission_payload(proof)
-        evidence = observation.get("installed_hook_evidence")
-        observed = observation.get("observed_monotonic")
-        if (
-            not isinstance(observed, (int, float))
-            or isinstance(observed, bool)
-            or not math.isfinite(observed)
-            or not pending.publication_monotonic <= started <= observed <= time.monotonic()
-            or observation.get("operation_id") != plan.operation_id
-            or observation.get("generation") != generation
-            or observation.get("guard_home") != str(plan.guard_home)
-            or observation.get("runtime_identity") != plan.payload()["native_runtime"]
-            or not isinstance(evidence, dict)
-            or evidence.get("harness") != "codex"
-            or evidence.get("config_sha256") != hashlib.sha256(plan.changes[0].after or b"").hexdigest()
-            or evidence.get("manifest_sha256") != hashlib.sha256(plan.changes[1].after or b"").hexdigest()
-        ):
-            raise TransitionError("publication_inverse_native_verification_invalid")
+        # The runtime decides whether this proof is fresh and is this inverse's.
+        native_transition_files.publication(
+            "inverse_proof",
+            plan.guard_home,
+            observation=observation,
+            publication=pending.publication_monotonic,
+            started=started,
+            now=time.monotonic(),
+            operation_id=plan.operation_id,
+            generation=generation,
+            guard_home=str(plan.guard_home),
+            runtime_identity=plan.payload()["native_runtime"],
+            config_after=_encoded(plan.changes[0].after),
+            manifest_after=_encoded(plan.changes[1].after),
+        )
         pending._write_record(phase="verified", observation=observation)
         pending.compare()
         _remove_record(plan.guard_home)
