@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import _build_parser
-from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.cli import install_commands
 from codex_plugin_scanner.guard.cli.commands_support_interaction import _apps_disconnect_confirm_command
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_verification
 from codex_plugin_scanner.guard.harness_context import HarnessContext
@@ -389,7 +389,7 @@ def test_cline_safe_verification_reports_live_plugin_readiness(tmp_path: Path, m
         "mcp": {"configured": False, "ready": True},
         "duplicate_managed_transports": False,
     }
-    monkeypatch.setattr(harness_ops, "runtime_probe", lambda _harness, _context: runtime)
+    monkeypatch.setattr(install_commands, "harness_runtime_probe", lambda _harness, _context: runtime)
 
     payload = build_harness_verification("cline", context, surface="plugin")
 
@@ -415,7 +415,7 @@ def test_cline_safe_verification_does_not_trust_inactive_plugin(
         "mcp": {"configured": False, "ready": True},
         "duplicate_managed_transports": True,
     }
-    monkeypatch.setattr(harness_ops, "runtime_probe", lambda _harness, _context: runtime)
+    monkeypatch.setattr(install_commands, "harness_runtime_probe", lambda _harness, _context: runtime)
 
     payload = build_harness_verification("cline", context, surface="plugin")
 

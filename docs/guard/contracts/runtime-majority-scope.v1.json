@@ -1502,22 +1502,6 @@
         "evidence": "discover_shared_workspace_aibom_artifacts is called only from inventory_contract.py, which is outside runtime scope. The role grammar this entry used to cover now lives in the resident's aibom_paths.rs and reaches Python only as the inventory_source_evidence answer. The retained adapter detection, Codex skill discovery and MCP metadata enrichment do not reference it, and the report validates this reference closure on every run."
       },
       {
-        "id": "adapter-native-harness-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/native_harness_install_ops.py",
-        "symbols": [
-          "preflight_management",
-          "_shim_names",
-          "prepare_install",
-          "_mutation",
-          "install",
-          "uninstall"
-        ],
-        "entry_points": [],
-        "reason": "Install and uninstall for the harnesses the native harness_adapter kind answers: the launcher shim, the bounded hook argv, publishing the native file plan and Paseo's delegated provider installs.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall, repair and runtime-transition dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
         "id": "adapter-native-harness-detected-rebind",
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/native_harness_steps.py",
@@ -1527,7 +1511,7 @@
         ],
         "entry_points": [],
         "reason": "The rebind Copilot plans from what the native runtime detected: the launcher shim, the enrolled state key dependency and the native file plan, and the delegated install that installs each provider and binds its proof.",
-        "evidence": "prepared_from_detection is called only from native_harness_install_ops.prepare_install, which is excluded by adapter-native-harness-setup and invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "prepared_from_detection is called only from native_harness_install_ops.prepare_install, which is invoked only by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       }
     ],
     "dynamic_imports": []

@@ -25,6 +25,10 @@ def install(harness: str, context: HarnessContext, *, surface: str | None = None
     return _install_ops.install(harness, context, owner=_owner(harness, context, "adapter_install"), surface=surface)
 
 
+def prepare_install(harness: str, context: HarnessContext, *, surface: str | None = None) -> object:
+    return _install_ops.prepare_install(harness, context, surface=surface)
+
+
 def uninstall(harness: str, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
     return _install_ops.uninstall(
         harness, context, owner=_owner(harness, context, "adapter_uninstall"), surface=surface

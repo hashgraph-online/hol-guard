@@ -536,7 +536,12 @@ def test_guard_run_rejects_opencode_overlay_environment_changed_after_saved_clai
         return claimed
 
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    use_native_launch(monkeypatch)
+    # The run is for "codex"; the launch answers come from OpenCode's own native ops.
+    for name in ("preview_launch_commands", "launch_command_from_authorized_plan", "prepare_launch_environment"):
+        native_op = getattr(harness_ops, name)
+        monkeypatch.setattr(
+            guard_run_launch, name, lambda _harness, *args, _op=native_op, **kwargs: _op("opencode", *args, **kwargs)
+        )
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_mutate_overlay)
     monkeypatch.setattr(
         wrapper_run_finish.subprocess,

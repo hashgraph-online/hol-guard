@@ -138,7 +138,7 @@ class TestPiDetect:
         monkeypatch.setenv("PATH", str(tmp_path / "empty-path"))
 
         result = harness_ops.detect("omp", ctx)
-        warnings = harness_ops.diagnostic_warnings("omp", result, runtime_probe=None)
+        warnings = harness_ops.diagnostic_warnings("omp", result, None)
 
         assert any("omp command" in warning for warning in warnings)
 
