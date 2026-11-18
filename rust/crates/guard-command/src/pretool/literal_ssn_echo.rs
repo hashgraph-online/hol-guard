@@ -34,9 +34,12 @@ fn attached_after(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'/' | b':')
 }
 
+// Decode the printable escapes supported by shell printf format strings.
+// Interpret only these escaped format bytes; echo (without -e) is untouched.
+// Octal and hex forms must not conceal a printed SSN from the review floor.
 fn decode_printf_escapes(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars();
+    let mut chars = text.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch != '\\' {
             out.push(ch);
@@ -47,6 +50,26 @@ fn decode_printf_escapes(text: &str) -> String {
             Some('r') => out.push('\r'),
             Some('t') => out.push('\t'),
             Some('\\') => out.push('\\'),
+            Some('x') => {
+                let mut hex = String::new();
+                while hex.len() < 2 && chars.peek().is_some_and(char::is_ascii_hexdigit) {
+                    hex.push(chars.next().expect("peeked hexadecimal digit"));
+                }
+                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                    out.push(char::from(byte));
+                } else {
+                    out.push('\\');
+                    out.push('x');
+                }
+            }
+            Some(digit @ '0'..='7') => {
+                let mut octal = digit.to_string();
+                while octal.len() < 3 && chars.peek().is_some_and(|c| ('0'..='7').contains(c)) {
+                    octal.push(chars.next().expect("peeked octal digit"));
+                }
+                let byte = u16::from_str_radix(&octal, 8).expect("octal digits") as u8;
+                out.push(char::from(byte));
+            }
             Some(other) => {
                 out.push('\\');
                 out.push(other);
