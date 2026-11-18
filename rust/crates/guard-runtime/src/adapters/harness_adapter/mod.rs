@@ -96,6 +96,7 @@ mod describe_env;
 mod desktop_core;
 mod durable_runtime;
 mod files;
+mod firewall;
 mod grok;
 mod grok_hook_command;
 mod grok_hook_files;
@@ -162,6 +163,9 @@ mod codex_owners_tests;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "tests_firewall.rs"]
+mod tests_firewall;
 #[cfg(test)]
 #[path = "tests_mcp_launch.rs"]
 mod tests_mcp_launch;

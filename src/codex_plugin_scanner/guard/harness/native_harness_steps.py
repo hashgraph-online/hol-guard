@@ -102,10 +102,6 @@ def detection_from(harness: str, context: HarnessContext, answer: dict[str, Any]
     from ..aibom_detection import _artifacts_from_payload, extend_detection_with_workspace_aibom
 
     artifacts = _artifacts_from_payload(answer)
-    if answer.get("firewall") is True:
-        from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
-
-        artifacts = tuple(enrich_artifact_with_mcp_skill_firewall(artifact) for artifact in artifacts)
     detection = HarnessDetection(
         harness=harness,
         installed=answer.get("installed") is True,

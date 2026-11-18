@@ -110,7 +110,12 @@ fn detect_reads_jsonc_comments_and_skips_empty_configs() {
     );
     write(&global(&home).join("opencode.json"), "{}");
     let answer = home.ask("opencode", "detect", json!({}));
-    assert_eq!(answer["firewall"], json!(true));
+    assert!(answer.get("firewall").is_none());
+    assert!(answer["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|artifact| artifact["artifact_type"] == json!("mcp_server")));
     let paths = answer["config_paths"].as_array().unwrap();
     assert!(paths.contains(&json!(global(&home).join("opencode.jsonc"))));
     assert!(!paths.contains(&json!(global(&home).join("opencode.json"))));
