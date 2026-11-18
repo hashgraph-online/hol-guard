@@ -90,12 +90,31 @@ pub(super) fn base_outside_install_roots(
         .any(|root| base.starts_with(root))
 }
 
-/// [`base_outside_install_roots`] against the machine's Program Files folders.
+/// [`base_outside_install_roots`] for the pytest run inside a wrapped
+/// command, such as `cd api && .venv/bin/pytest -q` or a run piped into
+/// `head`, read in the same core and directory the containment route uses.
+pub(super) fn wrapped_base_outside_install_roots(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+    roots: &[PathBuf],
+) -> bool {
+    super::restricted_test_commands::package_script::pytest_core(model, context).is_some_and(
+        |(core, cwd)| {
+            base_outside_install_roots(&core, cwd.as_deref().and_then(Path::to_str), roots)
+        },
+    )
+}
+
+/// [`wrapped_base_outside_install_roots`] against the machine's Program Files
+/// folders.
 #[cfg(windows)]
-pub(super) fn base_outside_program_files(model: &CanonicalCommandV1, cwd: Option<&str>) -> bool {
-    base_outside_install_roots(
+pub(super) fn base_outside_program_files(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    wrapped_base_outside_install_roots(
         model,
-        cwd,
+        context,
         &guard_runtime_windows_process::trusted_install_roots(),
     )
 }
@@ -103,7 +122,10 @@ pub(super) fn base_outside_program_files(model: &CanonicalCommandV1, cwd: Option
 /// Only the Windows planner reads the base install; other hosts run the
 /// environment's interpreter wherever it was installed.
 #[cfg(not(windows))]
-pub(super) fn base_outside_program_files(_model: &CanonicalCommandV1, _cwd: Option<&str>) -> bool {
+pub(super) fn base_outside_program_files(
+    _model: &CanonicalCommandV1,
+    _context: super::PathContext<'_>,
+) -> bool {
     false
 }
 

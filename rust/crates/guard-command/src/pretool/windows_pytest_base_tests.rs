@@ -1,4 +1,4 @@
-use super::base_outside_install_roots;
+use super::{base_outside_install_roots, wrapped_base_outside_install_roots};
 use std::path::{Path, PathBuf};
 
 fn parsed(command: &str) -> crate::CanonicalCommandV1 {
@@ -98,4 +98,53 @@ fn an_unmarked_directory_is_left_to_the_planner() {
     let fixture = fixture("unmarked", "per-user");
     std::fs::remove_file(fixture.root.join("workspace/.venv/pyvenv.cfg")).unwrap();
     assert!(!outside(&fixture, ".venv/bin/pytest -q"));
+}
+
+fn wrapped_outside(fixture: &Fixture, command: &str) -> bool {
+    let home = fixture.root.canonicalize().unwrap();
+    let workspace = home.join("workspace");
+    std::fs::create_dir_all(workspace.join(".git")).unwrap();
+    std::fs::write(workspace.join(".git/config"), "[core]\n\tbare = false\n").unwrap();
+    wrapped_base_outside_install_roots(
+        &parsed(command),
+        crate::pretool::PathContext {
+            home_dir: home.to_str(),
+            cwd: workspace.to_str(),
+            cdpath_unset: true,
+            ..Default::default()
+        },
+        &[fixture.root.join("all-users")],
+    )
+}
+
+/// The containment route reads pytest inside a piped run or after a `cd`, so
+/// the base Python is read from that same core and directory.
+#[test]
+fn a_wrapped_run_reads_the_base_of_its_core() {
+    let per_user = fixture("wrapped", "per-user");
+    let workspace = per_user.root.join("workspace");
+    std::fs::create_dir_all(workspace.join("api/.venv/bin")).unwrap();
+    for file in [
+        ".venv/bin/python.exe",
+        ".venv/bin/pytest",
+        ".venv/pyvenv.cfg",
+    ] {
+        std::fs::copy(workspace.join(file), workspace.join("api").join(file)).unwrap();
+    }
+    assert!(wrapped_outside(&per_user, ".venv/bin/pytest -q"));
+    assert!(wrapped_outside(&per_user, ".venv/bin/pytest -q | head -40"));
+    // An absolute `cd` is peeled on every host; Windows also peels a relative
+    // one inside the workspace.
+    let api = crate::runtime_read_paths::strip_verbatim_prefix(
+        workspace.join("api").canonicalize().unwrap(),
+    );
+    assert!(wrapped_outside(
+        &per_user,
+        &format!("cd {} && .venv/bin/pytest -q", api.display())
+    ));
+    let all_users = fixture("wrapped-all-users", "all-users");
+    assert!(!wrapped_outside(
+        &all_users,
+        ".venv/bin/pytest -q | head -40"
+    ));
 }

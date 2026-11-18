@@ -1205,7 +1205,14 @@ fn evaluate_envelope(
             // environment of a per-user one keeps its review.
             && !(contained_test_reason == Some("native_pytest_readonly_containment_required")
                 && command_model.is_some_and(|model| {
-                    super::windows_pytest_base::base_outside_program_files(model, cwd)
+                    super::windows_pytest_base::base_outside_program_files(
+                        model,
+                        super::PathContext {
+                            home_dir,
+                            cwd,
+                            ..context
+                        },
+                    )
                 }));
     // Linux runs the same read-only profiles under a bubblewrap mount, from
     // the same POSIX sink command, so no harness is narrowed out here the way
