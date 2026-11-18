@@ -51,6 +51,9 @@ fn pure_python_is_allowed_and_reaching_python_is_reviewed() {
 fn browser_driving_and_module_attribute_chains_are_reviewed() {
     let s = session("omp-eval-browser");
     let cwd = s.org.to_str().unwrap();
+    // The workspace-file proof canonicalizes the target, so create the
+    // harmless HTML fixture before asserting that the browser may open it.
+    std::fs::write(s.org.join("index.html"), "<!doctype html><title>Fixture</title>").unwrap();
     // Opening and closing a workspace page is the modeled page check.
     let workspace_page = format!(
         "const tab = await browser.open({{name:'t', url:'file://{cwd}/index.html'}}); await tab.close();"
