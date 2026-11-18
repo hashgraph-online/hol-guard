@@ -64,9 +64,43 @@ fn a_loop_that_keeps_a_value_and_runs_no_interpreter_reaches_review() {
         "set -eu\nfor file in a.js b.tgz; do\n  path=\"$HOME/Downloads/w/$file\"\n  hash=$(shasum -a 256 \"$path\" | awk '{print $1}')\n  grep -F \"| \\`$file\\` | \\`$hash\\` |\" docs/notes.md >/dev/null\ndone\nprintf 'ok\\n'",
     ] {
         let (action, code) = decision(&controls, command);
-        assert_ne!(code, FAILED, "{command}");
+        assert_ne!(code, FAILED, "{command}\n{}", diagnose(command));
         assert_ne!(action, "block", "{command}: {code}");
     }
+}
+
+/// What each step of the substitution arm answered, for a failure message.
+fn diagnose(command: &str) -> String {
+    let request = crate::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: crate::default_dialect(),
+        transport: crate::default_transport(),
+        extraction_provenance: crate::default_provenance(),
+    };
+    let Ok(parsed) = crate::parse_command(&request) else {
+        return String::from("parse failed");
+    };
+    let looked = super::substitution::without_escaped_backticks(&super::without_lookups(
+        &parsed.normalized_text,
+    ));
+    let bounded = bounded_substitutions(&looked).map(|found| found.text);
+    let kept = reviewable_substitutions(&looked).map(|found| found.text);
+    let shape = |text: &Option<String>| {
+        text.as_ref().map(|text| {
+            (
+                super::plain_sequence(text),
+                super::interpreter_free(text),
+                super::plain_after_heredocs(text),
+            )
+        })
+    };
+    format!(
+        "reason={:?} confidence={} bounded={:?} kept={:?} looked={looked:?} kept_text={kept:?}",
+        parsed.uncertainty_reason,
+        parsed.confidence,
+        shape(&bounded),
+        shape(&kept),
+    )
 }
 
 #[test]
