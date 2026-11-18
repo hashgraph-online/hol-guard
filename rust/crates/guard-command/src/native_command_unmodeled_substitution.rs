@@ -42,7 +42,7 @@ const LOOKUPS: &[&str] = &["command", "which", "type", "whence", "where", "hash"
 
 /// Launchers the unmodeled reader does not list as interpreters. Each runs
 /// the program named by a later word.
-const LAUNCHERS: &[&str] = &[
+pub(super) const LAUNCHERS: &[&str] = &[
     "pkexec",
     "runuser",
     "unshare",
@@ -582,6 +582,16 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     {
         return None;
     }
+    // An `awk` that only filters and prints starts no program, so it reads as
+    // `true` here exactly as it does outside a substitution. Its program text
+    // is the only place `{`, `}` and `$1` appear in the ordinary
+    // `$(shasum -a 256 f | awk '{print $1}')`, which otherwise blocked with no
+    // approval left to give while the same pipeline outside the substitution
+    // ran. The redirect and substitution checks above already read the
+    // original text, so a program that writes a file or runs one stays
+    // refused.
+    let stripped = super::without_plain_awk(inner);
+    let inner = stripped.as_str();
     let mut programs = Vec::new();
     let mut plain = inner.to_owned();
     // An `-exec` action runs a program only this reader names, whatever

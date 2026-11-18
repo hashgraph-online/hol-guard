@@ -842,8 +842,9 @@ fn reviewable_structure(
             let looked = without_lookups(&command.normalized_text);
             bounded_substitutions(&looked)
                 .or_else(|| {
-                    reviewable_substitutions(&looked)
-                        .filter(|bounded| plain_sequence(&bounded.text))
+                    reviewable_substitutions(&looked).filter(|bounded| {
+                        plain_sequence(&bounded.text) || interpreter_free(&bounded.text)
+                    })
                 })
                 .is_some_and(|bounded| {
                     let text = bounded.text;
@@ -982,6 +983,26 @@ fn plain_sequence(text: &str) -> bool {
         )
     });
     !construct
+}
+
+/// A loop or conditional, read with each substitution as the word it prints,
+/// that puts no interpreter or launcher in a command position. Its body runs
+/// only programs the text names, so the owners below bound it the way they
+/// bound the same loop with no substitution, which reaches review. Until this
+/// was read, `for e in a b; do sum=$(shasum -a 256 "$e"); test "$sum" = x;
+/// done` blocked with no approval left to give, while the same loop holding
+/// a plain value reviewed. An interpreter in the body still keeps the
+/// evaluation failure: the value a substitution keeps may become the text it
+/// runs.
+fn interpreter_free(text: &str) -> bool {
+    let bare = without_plain_awk(&without_redirections(&shell_text(text)));
+    let commanded = named_words(&joined_quotes(&text_in_command_positions(&bare)));
+    // `trap` and `.` run text they are handed, as the interpreters do.
+    !INTERPRETERS
+        .iter()
+        .chain(substitution::LAUNCHERS)
+        .chain(&["trap", "."])
+        .any(|name| commanded.contains(*name))
 }
 
 /// Every word the shell could read as a program name or keyword token, with
@@ -1609,3 +1630,7 @@ mod quoted_angle_tests;
 #[cfg(test)]
 #[path = "native_command_unmodeled_substitution_tests.rs"]
 mod substitution_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_substitution_loop_tests.rs"]
+mod substitution_loop_tests;
