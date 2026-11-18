@@ -57,7 +57,7 @@ impl Owner {
     }
 
     /// Journal the `mutation` records an answer's `events` carry.
-    pub(super) fn record_events(&mut self, answer: &Value) {
+    pub(crate) fn record_events(&mut self, answer: &Value) {
         let mutations: Vec<Value> = answer
             .get("events")
             .and_then(Value::as_array)

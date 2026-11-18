@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Sequence
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
 from ..harness.base import HarnessAdapter, HarnessContext
+from ..harness.native_harness import NativeHarnessAdapter
 from ..harness.native_harness import ask as native_ask
 from ..harness.registry import get_adapter, list_adapters
 from ..native_owned import codex_install_transaction
@@ -22,11 +25,11 @@ from .cursor_actions import (
 )
 from .install_targets import _resolve_targets
 from .managed_install_payload import managed_install_payload as _managed_install_payload
-from .managed_install_record import _native_install_ask, _record_managed_install
 from .native_install_checks import _grok_hook_command_is_guard as _grok_hook_command_is_guard
 from .native_install_checks import _grok_protection_checks as _grok_protection_checks
 from .native_install_checks import _opencode_protection_checks as _opencode_protection_checks
 from .native_install_checks import grok_hooks_protection_ready as grok_hooks_protection_ready
+from .native_managed_install import native_managed_install
 
 _HARNESS_OBSERVED_COPY = {
     "protected": "Active Guard protection is installed.",
@@ -36,38 +39,40 @@ _HARNESS_OBSERVED_COPY = {
 }
 
 
-def _apply_adapter_management(
+def _selected_surface(adapter: HarnessAdapter, context: HarnessContext, surface: str | None) -> str | None:
+    """The surface an adapter mutation uses, honoring the capabilities its contract declares."""
+
+    if surface is None:
+        return cursor_install_surface(None, context) if adapter.harness == "cursor" else None
+    setup_contract = adapter.setup_contract()
+    if surface not in setup_contract.surface_capabilities:
+        raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
+    if adapter.harness == "cursor":
+        return cursor_install_surface(surface, context)
+    if adapter.harness == "cline":
+        return surface
+    raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
+
+
+def _apply_python_adapter(
     adapter: HarnessAdapter,
     context: HarnessContext,
     *,
     active: bool,
     surface: str | None,
 ) -> dict[str, object]:
-    """Apply one adapter mutation while honoring declared surface capabilities."""
+    """Run one adapter the native runtime cannot, under the owner this thread holds."""
 
-    if surface is None:
-        if adapter.harness == "cursor":
-            selected_surface = cursor_install_surface(None, context)
-            return (
-                adapter.install(context, surface=selected_surface)
-                if active
-                else adapter.uninstall(context, surface=selected_surface)
-            )
-        return adapter.install(context) if active else adapter.uninstall(context)
+    options = {} if surface is None else {"surface": surface}
+    return adapter.install(context, **options) if active else adapter.uninstall(context, **options)
 
-    setup_contract = adapter.setup_contract()
-    if surface not in setup_contract.surface_capabilities:
-        raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
-    if adapter.harness == "cursor":
-        selected_surface = cursor_install_surface(surface, context)
-        return (
-            adapter.install(context, surface=selected_surface)
-            if active
-            else adapter.uninstall(context, surface=selected_surface)
-        )
-    if adapter.harness == "cline":
-        return adapter.install(context, surface=surface) if active else adapter.uninstall(context, surface=surface)
-    raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
+
+def _python_held(adapter: HarnessAdapter, *, active: bool) -> bool:
+    """Whether the adapter's install reads state only this process holds: Codex's own, and Paseo's delegation."""
+
+    if not isinstance(adapter, NativeHarnessAdapter):
+        return True
+    return active and adapter.delegates_install
 
 
 def apply_managed_install(
@@ -81,48 +86,41 @@ def apply_managed_install(
     *,
     surface: str | None = None,
 ) -> dict[str, object]:
-    # The adapter's publication and the corresponding store proof belong to
-    # the same home-wide ownership interval, including multi-app operations.
-    with codex_install_transaction(context.guard_home, context.guard_home / "managed", actor=f"managed.{command}"):
-        return _apply_managed_install_owned(
-            command, requested_harness, install_all, context, store, workspace, now, surface=surface
-        )
-
-
-def _apply_managed_install_owned(
-    command: str,
-    requested_harness: str | Sequence[str] | None,
-    install_all: bool,
-    context: HarnessContext,
-    store: GuardStore,
-    workspace: str | None,
-    now: str,
-    *,
-    surface: str | None = None,
-) -> dict[str, object]:
+    # The native runtime installs each app, records its row and journals every write in one installation
+    # transaction over the Guard home. Only the adapters whose state lives in this process run here first,
+    # under the owner the runtime then reuses.
     assert_transition_mutation_allowed(context.guard_home)
-    targets = _resolve_targets(command, requested_harness, install_all, context, store)
+    adapters = [
+        get_adapter(harness) for harness in _resolve_targets(command, requested_harness, install_all, context, store)
+    ]
     active = command == "install"
-    managed_installs: list[dict[str, object]] = []
-    for harness in targets:
-        adapter = get_adapter(harness)
-        manifest = _apply_adapter_management(
-            adapter,
-            context,
-            active=active,
-            surface=surface,
+    targets: list[dict[str, object]] = []
+    with ExitStack() as ownership:
+        if any(_python_held(adapter, active=active) for adapter in adapters):
+            ownership.enter_context(
+                codex_install_transaction(
+                    context.guard_home, context.guard_home / "managed", actor=f"managed.{command}"
+                )
+            )
+        for adapter in adapters:
+            selected = _selected_surface(adapter, context, surface)
+            target: dict[str, object] = {"harness": adapter.harness}
+            if selected is not None:
+                target["surface"] = selected
+            if _python_held(adapter, active=active):
+                manifest = _apply_python_adapter(adapter, context, active=active, surface=selected)
+                target["manifest"] = json.dumps(manifest, default=lambda _: None)
+            targets.append(target)
+        rows, guidance = native_managed_install(
+            command, targets, context, workspace=workspace, now=now, source=store.guard_source
         )
-        row = _record_managed_install(command, adapter.harness, manifest, context, store, workspace, now)
-        if row is not None:
-            managed_installs.append(_managed_install_payload(row))
+    managed_installs = [_managed_install_payload(row) for row in rows]
     payload: dict[str, object] = {
         "managed_installs": managed_installs,
         "auto_detected": requested_harness is None or install_all,
     }
-    if managed_installs:
-        guidance = _native_install_ask("managed_install_guidance", context, command=command, source=store.guard_source)
-        if guidance.get("guidance") is not None:
-            payload["agent_safety_guidance"] = guidance["guidance"]
+    if guidance is not None:
+        payload["agent_safety_guidance"] = guidance
     if len(managed_installs) == 1:
         payload["managed_install"] = managed_installs[0]
     if active and context.workspace_dir is not None:

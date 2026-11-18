@@ -223,6 +223,24 @@ def require_codex_install_owner(guard_home: Path) -> CodexInstallOwner:
     return owner
 
 
+def owner_request(guard_home: Path, *, actor: str, deadline_seconds: float = 5.0) -> dict[str, object]:
+    """The fields a native install op needs to run as, or to become, the owner of ``guard_home``.
+
+    The owner this thread already holds is named by its token, so the op journals under it; otherwise the op
+    takes the locks itself and journals its own begin and commit.
+    """
+    owner = _OWNER.get()
+    if owner is not None and _bound(owner, guard_home):
+        return {"owner": owner.token, "client_pid": owner.pid, "thread": owner.thread_id}
+    return {
+        "client_pid": os.getpid(),
+        "thread": threading.get_ident(),
+        "actor": actor,
+        "process_identity": _process_identity,
+        "deadline_ms": int(deadline_seconds * 1000),
+    }
+
+
 def record_codex_mutation(operation: str, path: Path, before: bytes | None, after: bytes | None) -> None:
     """Record identities only; never write command/config/key contents."""
     record_codex_mutation_identities(

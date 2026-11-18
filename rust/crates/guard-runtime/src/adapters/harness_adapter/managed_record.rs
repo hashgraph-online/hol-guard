@@ -63,7 +63,7 @@ fn store_call(ctx: &Ctx, source: &str, method: &str, args: Value) -> Step<Value>
 
 /// `assert_transition_mutation_allowed`: no install writes while a runtime
 /// transition is pending.
-fn transition_pending(guard_home: &Path) -> bool {
+pub(super) fn transition_pending(guard_home: &Path) -> bool {
     let home = std::fs::canonicalize(guard_home).unwrap_or_else(|_| guard_home.to_path_buf());
     let path = home.join("managed").join("runtime-transition.json");
     path.symlink_metadata().is_ok()

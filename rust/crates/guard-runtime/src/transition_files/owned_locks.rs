@@ -42,7 +42,7 @@ pub(crate) enum Failure {
 }
 
 impl Failure {
-    pub(super) fn to_json(&self) -> Value {
+    pub(crate) fn to_json(&self) -> Value {
         let failure = match self {
             Self::Timeout(message) => json!({ "kind": "timeout", "message": message }),
             Self::Runtime(message) => json!({ "kind": "runtime", "message": message }),

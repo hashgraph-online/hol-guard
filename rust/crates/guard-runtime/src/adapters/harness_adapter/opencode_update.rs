@@ -101,7 +101,7 @@ const WORKSPACE_INVALID: &str = "managed install workspace path is invalid";
 /// `managed_install_context`: the context with the install's recorded
 /// workspace, resolved as `Path.resolve()` would, or none when it records
 /// none.
-fn rebind(ctx: &Ctx, recorded: Option<&Value>) -> Result<Ctx, &'static str> {
+pub(super) fn rebind(ctx: &Ctx, recorded: Option<&Value>) -> Result<Ctx, &'static str> {
     let mut rebound = ctx.clone();
     rebound.workspace = None;
     let Some(text) = recorded

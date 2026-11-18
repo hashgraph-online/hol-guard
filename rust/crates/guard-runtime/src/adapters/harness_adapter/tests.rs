@@ -37,6 +37,8 @@ mod hook_config_family;
 mod install_apply_family;
 #[path = "tests_live_hook_verification.rs"]
 mod live_hook_verification_family;
+#[path = "managed_install_tests.rs"]
+mod managed_install_family;
 #[path = "tests_mcp_servers.rs"]
 mod mcp_servers_family;
 #[path = "tests_opencode.rs"]
@@ -235,7 +237,7 @@ fn describe_names_the_hermes_and_copilot_preparation_and_hook_ownership() {
         .starts_with("Guard could not read which Copilot hooks"));
     assert_eq!(
         copilot["hook_ownership"]["ops"].as_array().unwrap().len(),
-        4
+        7
     );
     assert_eq!(find("cursor")["hook_ownership"], Value::Null);
 }

@@ -48,11 +48,14 @@ pub(crate) const PASEO_DELEGATES: [&str; 6] =
     ["claude-code", "codex", "copilot", "opencode", "pi", "omp"];
 
 /// Copilot ops that read or rewrite Guard's hook entries.
-const COPILOT_HOOK_OPS: [&str; 4] = [
+const COPILOT_HOOK_OPS: [&str; 7] = [
     "install_detection",
     "prepare_install",
     "apply_install",
     "apply_uninstall",
+    "adapter_install",
+    "adapter_uninstall",
+    "managed_install",
 ];
 
 pub(crate) use super::describe_env::{ENV_NAMES, ENV_PREFIXES};
@@ -404,6 +407,16 @@ pub(crate) fn resolve(name: &str) -> Option<&'static Spec> {
 }
 
 impl Spec {
+    /// Cline picks its hook transport from whether the runtime is frozen.
+    pub(crate) fn frozen_fact(&self) -> bool {
+        self.harness == "cline"
+    }
+
+    /// The Pi family renders an extension that runs this Guard process.
+    pub(crate) fn extension(&self) -> bool {
+        matches!(self.harness, "pi" | "omp")
+    }
+
     /// The default approval flow, as `HarnessAdapter.approval_flow` answers it.
     pub(crate) fn approval_flow(&self) -> Value {
         json!({
@@ -462,7 +475,7 @@ impl Spec {
             // Cline answers its own doctor warnings, needs the frozen-runtime
             // fact to pick a transport, and runs probes inside its install.
             "warnings_op": self.harness == "cline",
-            "frozen_fact": self.harness == "cline",
+            "frozen_fact": self.frozen_fact(),
             "install_timeout": if self.harness == "cline" { json!(INSTALL_PROBE_TIMEOUT) } else { Value::Null },
             // OpenCode launches through its own runner kind, which renders the
             // inline config overlay and the argv around the caller's arguments.
@@ -481,7 +494,7 @@ impl Spec {
             // Paseo and the Pi family add to the generic doctor report.
             "diagnostics": matches!(self.harness, "paseo" | "pi" | "omp" | "claude-code" | "hermes"),
             // The Pi family renders an extension that runs this Guard process.
-            "extension": matches!(self.harness, "pi" | "omp"),
+            "extension": self.extension(),
             "delegates": if self.install == Install::Delegated {
                 json!(PASEO_DELEGATES)
             } else {

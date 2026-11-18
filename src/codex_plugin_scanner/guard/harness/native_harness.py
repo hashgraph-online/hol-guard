@@ -3,9 +3,10 @@ Grok, ZCode, Pi, Oh My Pi, OpenCode, Cline, Copilot, Cursor, Claude Code, Hermes
 
 The ``harness_adapter`` runner-authority kind owns their paths, detection, command lookup, install and
 uninstall plans, manifests, launch environment, runtime probe fields, approval flow, Paseo's delegated
-install steps and the Pi-family extension. This class keeps what must run in the Guard process: the
-ownership locks the base class wraps around install and uninstall, the launcher shim, the bounded hook
-argv, the transition journal that publishes a plan, the probe subprocess and the managed-install records.
+install steps and the Pi-family extension. Install and uninstall run whole in the runtime (``adapter_install``,
+``adapter_uninstall``), which publishes the launcher and the plan and journals every write under the owner this
+process holds. This class keeps what must run in the Guard process: the ownership the base class wraps around
+install and uninstall, the facts only this process knows, and the probe subprocess.
 """
 
 from __future__ import annotations
@@ -130,6 +131,11 @@ def ask(
     if harness is not None:
         request["harness"] = harness
     answer = native_runner_authority(_KIND, request, timeout_seconds=timeout_seconds)
+    if answer.get("ok") is False and "failure" in answer:
+        # An install op that ran as the owner of the Guard home answers its failure in the owned shape.
+        from ..native_owned import _failure
+
+        raise _failure(answer)
     if len(answer) == 1:
         raise_failure(answer)
     return answer
@@ -184,6 +190,11 @@ class NativeHarnessAdapter(HarnessAdapter):
     @property
     def legacy_launcher_names(self) -> tuple[str, ...]:
         return tuple(str(name) for name in self._spec.get("legacy_launchers", ()))
+
+    @property
+    def delegates_install(self) -> bool:
+        """Whether installing runs other adapters from this process, as Paseo's receipt does."""
+        return self._spec.get("install") == "delegated"
 
     @property
     def command_absence_proves_uninstalled(self) -> bool:
@@ -341,73 +352,46 @@ class NativeHarnessAdapter(HarnessAdapter):
             self._delegated_targets(context)
 
     def install(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
-        mode = self._spec.get("install")
-        if mode == "delegated":
+        from ..native_transition_files import PUBLISH_TIMEOUT_SECONDS
+
+        if self._spec.get("install") == "delegated":
             return self._install_delegated(context)
-        if mode == "shim":
-            from ..shims import install_guard_shim
-
-            shim = install_guard_shim(self.harness, context)
-            return {"harness": self.harness, "active": True, "config_path": shim["shim_path"], **shim}
-        return self._apply_install(context, **_surface(surface))
-
-    def _apply_install(self, context: HarnessContext, **options: object) -> dict[str, object]:
-        """Prepare the shim and the plan and publish both in one native call."""
-        from .. import native_transition_files
-        from ..native_owned import require_codex_install_owner
-        from ..runtime_transition import assert_transition_mutation_allowed
-        from ..shims import shell_profile_facts, shim_interpreter
-
-        require_codex_install_owner(context.guard_home)
-        assert_transition_mutation_allowed(context.guard_home)
-        fields: dict[str, object] = {}
-        if self._spec.get("hook") is not None:
-            fields["hook_argv"] = self._hook_argv(context)
-        if self._spec.get("frozen_fact"):
-            from ..frozen_runtime_commands import is_frozen_guard_runtime
-
-            fields["frozen"] = is_frozen_guard_runtime()
-        answer = self._ask(
-            "apply_install",
+        return self._native_mutation(
+            "adapter_install",
             context,
-            # The plan and its publish run in this one call, so it gets the
-            # budget the separate `transition_files` publish had, or more.
-            timeout_seconds=self._spec.get("install_timeout") or native_transition_files.PUBLISH_TIMEOUT_SECONDS,
-            **self._shim_names(),
-            interpreter=shim_interpreter(),
-            shell_profile=shell_profile_facts(context),
-            transition=native_transition_files.transition_context(),
-            **fields,
-            **options,
+            timeout_seconds=self._spec.get("install_timeout") or PUBLISH_TIMEOUT_SECONDS,
+            **_surface(surface),
         )
-        raise_failure(answer)
-        # Each earlier publish is journaled before the last one, then any
-        # failure the runtime met after a publish that succeeded.
-        for published in answer.get("published") or ():
-            native_transition_files.settle(published)
-        native_transition_files.settle(answer.get("publish"))
-        raise_failure(answer.get("failure") or {})
-        return json.loads(_text(answer, "manifest"))
 
     def uninstall(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
-        return self._apply_uninstall(context, **_surface(surface))
+        from ..native_transition_files import PUBLISH_TIMEOUT_SECONDS
 
-    def _apply_uninstall(self, context: HarnessContext, **options: object) -> dict[str, object]:
-        from .. import native_transition_files
-        from ..runtime_transition import assert_transition_mutation_allowed
-
-        assert_transition_mutation_allowed(context.guard_home)
-        # The runtime prepares the plan, removes the launchers and applies the
-        # plan; the managed writes it made come back for the journal.
-        answer = self._ask(
-            "apply_uninstall",
+        return self._native_mutation(
+            "adapter_uninstall",
             context,
-            timeout_seconds=native_transition_files.PUBLISH_TIMEOUT_SECONDS,
+            timeout_seconds=PUBLISH_TIMEOUT_SECONDS,
+            **_surface(surface),
+        )
+
+    def _native_mutation(
+        self, op: str, context: HarnessContext, *, timeout_seconds: float, **options: object
+    ) -> dict[str, object]:
+        """Prepare, publish and journal the install or uninstall in one native call.
+
+        The owner this thread holds is named by its token, so the runtime journals every write under it.
+        """
+        from ..native_owned import owner_request
+        from .native_install_facts import adapter_manifest, install_facts
+
+        answer = self._owned_ask(
+            op,
+            context,
+            timeout_seconds=timeout_seconds,
+            **owner_request(context.guard_home, actor=f"adapter.{self.harness}.{op}"),
+            **install_facts(context, (self.harness,)),
             **options,
         )
-        native_transition_files._replay(answer.pop("events", None), None, None)
-        raise_failure(answer)
-        return json.loads(_text(answer, "manifest"))
+        return adapter_manifest(answer)
 
     def _own_warnings(
         self,

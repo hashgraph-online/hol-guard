@@ -268,6 +268,38 @@ fn call(args: &Map<String, Value>, budget: &Budget) -> KindResult {
     })
 }
 
+/// Run `work` as the live owner `token` names, for the client process and
+/// thread that began it. The entry leaves the registry while the work runs, so
+/// a long mutation does not hold every other client's owned ops, and goes back
+/// when it ends. An owner this resident no longer knows, or one begun by
+/// another process or thread, lost the locks the caller thinks it holds.
+pub(crate) fn with_registered<T>(
+    token: &str,
+    pid: u32,
+    thread: u64,
+    work: impl FnOnce(&mut Owner) -> Result<T, Failure>,
+) -> Result<T, Failure> {
+    let mut entry = {
+        let mut guard = OWNERS.lock().unwrap_or_else(PoisonError::into_inner);
+        let owners = guard.get_or_insert_with(HashMap::new);
+        prune(owners);
+        match owners.get(token) {
+            Some(known) if known.owner.pid == pid && known.owner.thread == thread => {}
+            _ => return Err(Failure::Runtime(LOCK_MESSAGE.to_owned())),
+        }
+        match owners.remove(token) {
+            Some(entry) => entry,
+            None => return Err(Failure::Runtime(LOCK_MESSAGE.to_owned())),
+        }
+    };
+    let result = work(&mut entry.owner);
+    let mut guard = OWNERS.lock().unwrap_or_else(PoisonError::into_inner);
+    guard
+        .get_or_insert_with(HashMap::new)
+        .insert(token.to_owned(), entry);
+    result
+}
+
 pub(super) fn dispatch(op: &str, args: &Map<String, Value>, budget: &Budget) -> KindResult {
     match op {
         "owned_locks" => locks(args),

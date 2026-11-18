@@ -59,6 +59,9 @@ def _exception(fault: object) -> BaseException:
     runtime = fault.get("runtime")
     if isinstance(runtime, str):
         return RuntimeError(runtime)
+    adapter = fault.get("adapter")
+    if isinstance(adapter, Mapping):
+        return _adapter_exception(adapter)
     if isinstance(transition, str):
         detail = fault.get("detail")
         return TransitionError(transition, detail) if isinstance(detail, str) else TransitionError(transition)
@@ -69,6 +72,28 @@ def _exception(fault: object) -> BaseException:
         if isinstance(number, int) and not isinstance(number, bool):
             return OSError(number, os_message)
         return OSError(os_message)
+    return TransitionError(_INVALID)
+
+
+def _adapter_exception(adapter: Mapping[str, object]) -> BaseException:
+    """The exception an adapter step raised, from the one-key answer the native install op carried it in."""
+    from .codex_hook_recovery import _error
+    from .runtime_transition import TransitionError
+
+    if len(adapter) != 1:
+        return TransitionError(_INVALID)
+    ((key, value),) = adapter.items()
+    message = str(value)
+    if key == "refusal":
+        return ValueError(message)
+    if key == "os_error":
+        return OSError(message)
+    if key == "not_found":
+        return FileNotFoundError(message)
+    if key == "runtime_error":
+        return RuntimeError(message)
+    if key == "integrity":
+        return _error(message)
     return TransitionError(_INVALID)
 
 

@@ -102,6 +102,9 @@ use crate::runner_authority_op::{KindResult, ERR_INVALID};
 pub(crate) use inspect::resolve_lenient;
 pub(crate) use lease::{hold_install_lock, hold_opencode_lock};
 pub(crate) use output::{managed_write, remove_no_follow, write_no_follow};
+pub(crate) use owned::{with_owned, Owner, Spec as OwnedSpec};
+pub(crate) use owned_locks::Failure as OwnedFailure;
+pub(crate) use owned_ops::with_registered;
 
 /// The plan sizes `_record_files` accepts, with room for an install that
 /// publishes beside them.
@@ -157,7 +160,7 @@ pub(crate) struct Budget {
 }
 
 impl Budget {
-    fn parse(value: Option<&Value>) -> Result<Self, &'static str> {
+    pub(crate) fn parse(value: Option<&Value>) -> Result<Self, &'static str> {
         let fields = match value {
             None | Some(Value::Null) => return Ok(Self::none()),
             Some(Value::Object(fields)) => fields,

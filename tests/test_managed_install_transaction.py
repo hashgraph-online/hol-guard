@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli import managed_install_record
-from codex_plugin_scanner.guard.cli.install_commands import _apply_managed_install_owned, apply_managed_install
+from codex_plugin_scanner.guard.cli import native_managed_install
+from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 
 PROBE = r"""
@@ -26,9 +26,8 @@ except TimeoutError:
 """
 
 
-@pytest.mark.parametrize("whole_operation", [False, True])
-def test_installer_ownership_extends_through_store_proof_publication(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, whole_operation: bool
+def test_python_held_adapters_run_under_the_owner_the_native_install_reuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     home = tmp_path / "home"
     (home / ".codex").mkdir(parents=True)
@@ -38,11 +37,14 @@ def test_installer_ownership_extends_through_store_proof_publication(
     context = HarnessContext(home_dir=home, guard_home=home / ".hol-guard", workspace_dir=None)
     observations = []
 
-    def native_record(op, _context, **fields):
-        assert op == "managed_install_record" and fields["target"] == "codex"
-        # The runtime binds the protection proof itself inside this op. The
-        # manifest travels as `json.dumps` text so the row keeps its key order.
-        assert isinstance(json.loads(fields["manifest"]), dict)
+    def native_install(op, _context, **fields):
+        assert op == "managed_install"
+        # Codex's own state lives in this process, so its adapter ran first under this process's owner and
+        # the runtime is told which owner to journal under, with the manifest the adapter produced.
+        assert isinstance(fields["owner"], str)
+        [target] = fields["targets"]
+        assert target["harness"] == "codex"
+        assert isinstance(json.loads(target["manifest"]), dict)
         result = subprocess.run(
             [sys.executable, "-c", PROBE, str(context.guard_home)],
             env={**os.environ, "HOME": str(home), "USERPROFILE": str(home)},
@@ -51,19 +53,13 @@ def test_installer_ownership_extends_through_store_proof_publication(
         )
         assert result.returncode == 0, result.stderr.decode(errors="replace")
         observations.append(result.stdout.strip())
-        return {"row": None}
+        return {"ok": True, "rows": [], "guidance": None}
 
     class StoreProbe:
         guard_home = context.guard_home
         path = context.guard_home / "guard.db"
-        guard_source = None
+        guard_source = "default"
 
-        def get_managed_install(self, _harness):
-            return None
-
-    monkeypatch.setattr(managed_install_record, "_native_install_ask", native_record)
-    # The native record takes the installer owner itself, so even the inner
-    # body alone keeps a competitor out while the row and proof are written.
-    install = apply_managed_install if whole_operation else _apply_managed_install_owned
-    install("install", "codex", False, context, StoreProbe(), None, "2026-09-30T00:00:00Z")
+    monkeypatch.setattr(native_managed_install, "ask", native_install)
+    apply_managed_install("install", "codex", False, context, StoreProbe(), None, "2026-09-30T00:00:00Z")
     assert observations == [b"excluded"]

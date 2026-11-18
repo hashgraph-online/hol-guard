@@ -119,9 +119,12 @@ mod install_apply;
 mod isolated_python;
 mod kimi;
 mod live_hook_verification;
+mod managed_install;
+mod managed_install_target;
 mod managed_record;
 mod managed_servers;
 mod managed_store;
+mod managed_update;
 mod mcp_servers;
 mod openclaw;
 mod opencode;
@@ -357,17 +360,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     if op == "proof_verify" || op == "proof_bind" {
         return answer(proof::dispatch(op, &ctx, fields));
     }
-    if op == "managed_install_record" {
-        return answer(managed_record::record(&ctx, fields));
-    }
-    if op == "managed_install_guidance" {
-        return answer(managed_record::guidance_after(&ctx, fields));
-    }
-    if op == "bounded_hook_scripts" {
-        return answer(update_bounded::scripts(&ctx));
-    }
-    if op == "remove_bounded_hook_script" {
-        return answer(update_bounded::remove(&ctx, fields));
+    if let Some(done) = managed_install::route(op, &ctx, fields) {
+        return done;
     }
     if op == "prepare_guard_shim" {
         return answer(guard_shim::prepare(&ctx, fields));
@@ -386,6 +380,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         .and_then(Value::as_str)
         .ok_or(ERR_INVALID)?;
     let spec = describe::spec(harness).ok_or(ERR_INVALID)?;
+    if op == "adapter_install" || op == "adapter_uninstall" {
+        return managed_install::adapter(op, spec, &ctx, fields);
+    }
     if op == "apply_uninstall" {
         return uninstall_apply::apply(spec, &ctx, fields);
     }
