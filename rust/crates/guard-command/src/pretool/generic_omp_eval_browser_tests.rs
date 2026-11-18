@@ -260,12 +260,13 @@ fn a_workspace_page_in_the_own_browser_is_modeled() {
         assert!(loopback_browser_program(code, None, Some(cwd)), "{code}");
     }
 
-    // A direct child of / (typically /tmp) must also be a valid workspace.
+    // A top-level shared directory (such as /tmp) is not a workspace root.
+    // Even a page physically beneath it must not be silently allowed.
     let direct_child = workspace.path().parent().unwrap().to_str().unwrap();
     // Linux often uses /tmp; macOS temp directories may be several levels
     // deep, so check this special case only when the fixture has that shape.
     if direct_child.matches('/').count() == 1 {
-        assert!(super::lex::workspace_file_url(
+        assert!(!super::lex::workspace_file_url(
             &format!("file://{}", safe.display()),
             Some(direct_child)
         ));
