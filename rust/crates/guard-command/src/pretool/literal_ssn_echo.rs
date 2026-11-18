@@ -67,6 +67,25 @@ fn decode_printf_escapes(text: &str, percent_b: bool) -> String {
                     out.push('x');
                 }
             }
+            Some(kind @ ('u' | 'U')) => {
+                // Bash printf emits Unicode scalars for four- and eight-digit
+                // escapes in both the format and %b operands. In particular,
+                // U+002D is the ASCII hyphen used in an SSN.
+                let limit = if kind == 'u' { 4 } else { 8 };
+                let mut hex = String::new();
+                while hex.len() < limit && chars.peek().is_some_and(char::is_ascii_hexdigit) {
+                    hex.push(chars.next().expect("peeked Unicode hex digit"));
+                }
+                if let Ok(value) = u32::from_str_radix(&hex, 16) {
+                    if let Some(scalar) = char::from_u32(value) {
+                        out.push(scalar);
+                        continue;
+                    }
+                }
+                out.push('\\');
+                out.push(kind);
+                out.push_str(&hex);
+            }
             Some(digit @ '0'..='7') => {
                 let mut octal = digit.to_string();
                 // Bash `%b` treats \0 plus up to three octal digits as one byte.
@@ -133,13 +152,14 @@ fn render_printf(format: &str, args: &[String]) -> String {
                     break;
                 };
                 escape.push(next);
-                let extra = if next == 'x' || ('0'..='7').contains(&next) {
-                    2
-                } else {
-                    0
+                let extra = match next {
+                    'x' | '0'..='7' => 2,
+                    'u' => 4,
+                    'U' => 8,
+                    _ => 0,
                 };
                 for _ in 0..extra {
-                    let valid = if next == 'x' {
+                    let valid = if matches!(next, 'x' | 'u' | 'U') {
                         chars.peek().is_some_and(char::is_ascii_hexdigit)
                     } else {
                         chars.peek().is_some_and(|c| ('0'..='7').contains(c))
