@@ -528,7 +528,13 @@ fn receiving_program(
         // assignment hands the value straight to the program the rest of this
         // command names and `env NAME=` and `make NAME=` are settings whatever
         // program receives them.
-        return (flow == ValueFlow::Assignments && words.is_empty() && !followed).then_some(None);
+        // `do`, `then`, `else` and `elif` open the body of a loop or a
+        // conditional, so `for e in a; do sum=$(...); done` keeps the value
+        // exactly as the same assignment on its own does. They run nothing.
+        let standalone = words
+            .iter()
+            .all(|word| matches!(word.as_str(), "do" | "then" | "else" | "elif"));
+        return (flow == ValueFlow::Assignments && standalone && !followed).then_some(None);
     }
     let receiver = words
         .iter()
