@@ -57,6 +57,50 @@ pub(super) fn trusted_kubeconfig(value: &str, context: crate::pretool::PathConte
     outside_agent_trees(&canonical, &metadata, context)
 }
 
+/// `KUBECONFIG=~/<path>` at the front of the command. In an assignment the
+/// shell expands a leading unquoted `~/` to its HOME, so the setting names
+/// `<path>` under the declared home whenever the shell's HOME is that home,
+/// and the kubeconfig there passes the same trust check as any other. A quoted
+/// or escaped tilde stays literal and names a `~` directory below the working
+/// directory, which the agent can create, so the text has to spell the setting
+/// exactly as the parser read it, with no quote or backslash anywhere in it.
+pub(super) fn trusted_home_kubeconfig_setting(
+    text: &str,
+    value: &str,
+    context: crate::pretool::PathContext<'_>,
+) -> bool {
+    let Some(rest) = value.strip_prefix("~/") else {
+        return false;
+    };
+    if cfg!(windows)
+        || !context.shell_home_matches
+        || rest.is_empty()
+        // `~//absolute` is still below shell HOME; Path::join would replace HOME.
+        || rest.starts_with('/')
+        || rest.contains(['~', '\'', '"', '\\', ' ', '\t'])
+    {
+        return false;
+    }
+    let spelled = format!("KUBECONFIG={value}");
+    if !text
+        .trim_start()
+        .strip_prefix(spelled.as_str())
+        .is_some_and(|after| after.starts_with([' ', '\t']))
+    {
+        return false;
+    }
+    let Some(home) = context
+        .home_dir
+        .filter(|home| Path::new(home).is_absolute())
+    else {
+        return false;
+    };
+    Path::new(home)
+        .join(rest)
+        .to_str()
+        .is_some_and(|path| trusted_kubeconfig(path, context))
+}
+
 fn outside_agent_trees(
     path: &Path,
     metadata: &fs::Metadata,

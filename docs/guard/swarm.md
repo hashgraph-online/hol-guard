@@ -30,9 +30,27 @@ whether Guard can control it. Text accompanies status colors. Recent activity
 and approvals take precedence over decorative metrics. Unknown progress,
 unreported token usage, and unavailable CIGAR usage stay unknown.
 
-**New agent** opens a task composer: installed harness, project directory,
-task, optional model, and a clear preview of how it will run. Launches use the
-harness's normal protection and credential setup. The composer explains missing
+**New agent** opens a task composer. The user types the command to run
+(`codex` or `claude`, optionally with `--model`); Swarm starts that CLI in the
+background in the project directory with its own fixed options, and the new
+agent appears on the map. Any other flag is refused rather than dropped, so a
+command cannot turn off the CLI's safety checks. The work is defined in parts:
+a required goal, and optional files in scope, a "done when" check, and things
+it must not do. Swarm sends these as the first prompt, goal first, and the map
+card shows the goal.
+
+The composer also says what the agent can open. For Claude Code the user can
+list project folders or files it can't open, and a switch (on by default)
+keeps `.env`, `.pem` and `.key` files closed. Swarm passes these to Claude Code
+as `--disallowedTools` `Read(...)` and `Edit(...)` rules on every turn, so its
+file tools cannot read or change them; shell commands still go through Guard's
+usual checks. Each rule names the project folder by its full path, so it still
+matches after the agent changes directory. Paths must stay inside the project
+(no absolute paths, `~`, `..` or `-` prefixes, at most 32), and a project folder
+whose path has brackets or wildcards can't have blocked paths. Codex has no matching control, so a Codex launch
+with blocked paths is refused and the composer says so. The inspector lists the
+paths under "File tools can't open" and the card shows how many there are. Launches use
+the harness's normal protection and credential setup. The composer explains missing
 setup and concurrent work in the same directory. It never adds permission
 bypass flags or silently creates shared worktrees. The user can launch agents
 in separate existing worktrees to isolate simultaneous edits.
@@ -196,8 +214,9 @@ above.
   expose no task text or controls; they may be idle or serve multiple sessions.
 - Managed Codex uses `exec --json` and exact-session `exec resume`; Claude Code
   uses `-p --output-format stream-json --verbose` and exact-session `--resume`.
-  Tasks travel over stdin. Neither adapter changes CLI settings, permissions,
-  sandbox policy, hooks, credentials, or context grants. Noninteractive CLI
+  Tasks travel over stdin. Neither adapter changes CLI settings, sandbox
+  policy, hooks, credentials, or context grants; the only permission change is
+  the Claude Code deny list for blocked paths, which can only narrow access. Noninteractive CLI
   permission limits still apply; inspect activity and continue in the native
   harness when a tool needs permissions the CLI cannot request in this mode.
   The daemon supplies its own PATH through the bound native request; browser

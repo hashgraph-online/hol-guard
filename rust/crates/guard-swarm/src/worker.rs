@@ -216,20 +216,59 @@ fn prepare(registry: &Arc<Mutex<Registry>>, id: &str) -> Option<(Command, String
     ] {
         command.env_remove(key);
     }
+    #[cfg(unix)]
+    account(&mut command);
     adapter::configure(
         &mut command,
         &run.agent.harness,
         run.session.as_deref(),
         run.agent.model.as_deref(),
+        run.agent.workspace.as_deref()?,
+        &run.agent.blocked,
     );
     run.controls();
     Some((command, prompt, run.agent.harness.clone()))
+}
+
+/// Guard's runtime runs with a trimmed environment that has no USER or
+/// LOGNAME. Claude Code on macOS looks its login up in the keychain under
+/// USER, so without it every Swarm launch reports "Not logged in". Name the
+/// account that owns this process; never take it from the request.
+#[cfg(unix)]
+fn account(command: &mut Command) {
+    if let Ok(Some(user)) = nix::unistd::User::from_uid(nix::unistd::getuid()) {
+        command.env("USER", &user.name).env("LOGNAME", &user.name);
+    }
 }
 
 fn update(registry: &Arc<Mutex<Registry>>, id: &str, f: impl FnOnce(&mut crate::service::Run)) {
     if let Ok(mut state) = registry.lock() {
         if let Some(run) = state.runs.get_mut(id) {
             f(run);
+        }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod account_tests {
+    #[test]
+    fn children_get_the_account_name_the_runtime_lacks() {
+        let mut command = std::process::Command::new("true");
+        command.env_clear();
+        super::account(&mut command);
+        let name = nix::unistd::User::from_uid(nix::unistd::getuid())
+            .unwrap()
+            .unwrap()
+            .name;
+        let envs: std::collections::BTreeMap<_, _> = command
+            .get_envs()
+            .map(|(k, v)| (k.to_os_string(), v.map(|v| v.to_os_string())))
+            .collect();
+        for key in ["USER", "LOGNAME"] {
+            assert_eq!(
+                envs.get(std::ffi::OsStr::new(key)),
+                Some(&Some(name.clone().into()))
+            );
         }
     }
 }
