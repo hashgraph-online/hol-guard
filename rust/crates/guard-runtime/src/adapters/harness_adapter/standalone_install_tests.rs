@@ -150,7 +150,7 @@ fn a_workspace_without_skills_scans_to_nothing() {
 #[test]
 fn a_skills_scan_without_a_workspace_is_invalid() {
     let home = Home::new();
-    let answer = crate::adapters::harness_adapter::dispatch(&json!({
+    let answer = crate::harness_adapter::dispatch(&json!({
         "harness": "gemini",
         "op": "workspace_skills_scan",
         "context": home.context(json!({"PATH": ""})),
