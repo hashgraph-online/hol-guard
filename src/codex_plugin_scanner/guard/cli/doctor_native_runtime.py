@@ -390,7 +390,7 @@ def _background_loops(guard_home: Path | None) -> list[dict[str, object]] | None
 
     if guard_home is None:
         return None
-    if skipped_command_probe(["hol-guard-runtime", "background-loop-gate", "--stdin"]) is not None:
+    if not command_probes_enabled():
         return None
     from ..runtime_health.background_loop_gate import loop_status
 
