@@ -160,6 +160,16 @@ def require_deadline(deadline: float) -> None:
     _ask({"op": "publication_deadline", "deadline": deadline, "now": time.monotonic()}, context=False)
 
 
+def request_policy(stage: str, **fields: object) -> Mapping[str, object]:
+    """The review artifact's lifetime policy: ``stamp``, ``plan`` or ``window``.
+
+    The runtime decides; ``plan`` and ``window`` raise ``TransitionError`` on refusal.
+    """
+
+    value = _ask({"op": "publication_request_policy", "stage": stage, **fields}, context=False).get("value")
+    return value if isinstance(value, Mapping) else {}
+
+
 def authorize_plan(kind: str, expires_at: str, deadline: float) -> Mapping[str, object]:
     """The forward ``deadline`` and grant retirement the runtime allows an authorization.
 
@@ -224,6 +234,7 @@ __all__ = [
     "authorize_plan",
     "compare_files",
     "publish_files",
+    "request_policy",
     "require_deadline",
     "write_file",
 ]

@@ -28,7 +28,7 @@ from .codex_publication_inverse_plan import (
     prepare_authenticated_hook_publication_inverse,
 )
 from .native_runtime import NativeRuntimeIdentity
-from .native_transition_files import publication, require_deadline
+from .native_transition_files import publication, request_policy, require_deadline
 from .runtime_transition import (
     RuntimeTransition,
     TransitionError,
@@ -37,11 +37,6 @@ from .runtime_transition import (
 
 _SCHEMA = "hol-guard.codex-authority-repair-request.v1"
 _PURPOSE = "codex-authority-repair-request"
-_MAX_REQUEST = 8 * 1024 * 1024
-_REVIEW_SECONDS = 300.0
-# Canonical JSON preserves each timestamp. Subtracting the loaded values can
-# exceed the signed window by a few ulps; the runtime allows one microsecond.
-_REVIEW_TIMESTAMP_SLACK_SECONDS = 1e-6
 _INVERSE_SCHEMA = "hol-guard.codex-publication-inverse-request.v1"
 _INVERSE_PURPOSE = "codex-publication-inverse-request"
 RepairPlan = PreparedCodexHookRepair | PreparedCodexPublicationInverse
@@ -146,14 +141,14 @@ def write_codex_hook_repair_request(
         plan = _plan_from_payload(plan.payload(), home=plan.guard_home, config=plan.config_path)
     _compare(plan, deadline_monotonic)
     material = load_hook_secret(plan.guard_home)
-    created = time.monotonic()
+    stamp = request_policy("stamp", now=time.monotonic())
     payload: dict[str, object] = {
         "schema": _INVERSE_SCHEMA if inverse else _SCHEMA,
         "guard_home": str(plan.guard_home),
         "config_path": str(plan.config_path),
         "installation_id": material.installation_id,
-        "created_monotonic": created,
-        "expires_monotonic": created + _REVIEW_SECONDS,
+        "created_monotonic": stamp["created"],
+        "expires_monotonic": stamp["expires"],
         "plan": plan.payload(),
         "subject": plan.subject(),
     }
@@ -163,9 +158,6 @@ def write_codex_hook_repair_request(
         )
     except AuthorityRecordRefusedError as exc:
         raise TransitionError(f"authority_repair_request_{exc.reason}") from exc
-    if len(encoded) > _MAX_REQUEST:
-        # The read-back below is capped at the same size.
-        raise TransitionError("authority_repair_request_too_large")
     _compare(plan, deadline_monotonic)
     with inverse_recovery_budget(deadline_monotonic):
         digest = publication(
@@ -208,18 +200,26 @@ def load_codex_hook_repair_request(
         )
     except AuthorityRecordRefusedError as exc:
         raise TransitionError(f"authority_repair_request_{exc.reason}") from exc
-    created, expires = cast(float, payload["created_monotonic"]), cast(float, payload["expires_monotonic"])
     plan = (
         _inverse_from_payload(payload["plan"], inverse_spec, deadline_monotonic)
         if inverse_spec is not None
         else _plan_from_payload(payload["plan"], home=home, config=config)
     )
-    if signed_at != plan.operation_id or payload["subject"] != plan.subject():
-        raise TransitionError("authority_repair_request_plan_invalid")
+    request_policy(
+        "plan",
+        signed_at=signed_at,
+        operation_id=plan.operation_id,
+        subject=payload["subject"],
+        plan_subject=plan.subject(),
+    )
     _compare(plan, deadline_monotonic)
     if _read(path, guard_home, expected_sha256, deadline_monotonic) != raw:
         raise TransitionError("authority_repair_request_changed")
-    if not created <= time.monotonic() < expires:
-        raise TransitionError("authority_repair_request_expired")
+    request_policy(
+        "window",
+        created=payload["created_monotonic"],
+        expires=payload["expires_monotonic"],
+        now=time.monotonic(),
+    )
     require_deadline(deadline_monotonic)
     return plan

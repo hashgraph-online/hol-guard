@@ -44,9 +44,9 @@ pub(super) fn deadline(call: &mut Call<'_>) -> Step<Value> {
 }
 
 /// `publication_authorize`: `{deadline, retirement_seconds, retirement}` for
-/// a grant (the deadline was already judged by `publication_deadline`) that expires at `expires_at`, given the caller's `deadline`, its
-/// monotonic `now`, the `wall` clock in epoch seconds and the action `kind`
-/// (`repair` or `inverse`). `retirement_seconds` is what remains of the grant,
+/// a grant that expires at `expires_at`, given the caller's `deadline` (already
+/// judged by `publication_deadline`), its monotonic `now`, the `wall` clock in
+/// epoch seconds and the action `kind` (`repair` or `inverse`). `retirement_seconds` is what remains of the grant,
 /// `retirement` that moment on the caller's monotonic clock.
 pub(super) fn plan(call: &mut Call<'_>) -> Step<Value> {
     let cap = match call.text("kind")? {

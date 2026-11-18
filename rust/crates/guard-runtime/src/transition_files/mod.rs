@@ -50,6 +50,7 @@ mod publication_repair_plan;
 mod publication_repair_prepare;
 mod publication_repair_request;
 mod publication_request;
+mod publication_request_policy;
 mod publication_target;
 mod python_equal;
 mod repair_claims;
@@ -69,6 +70,8 @@ mod tests_publication_proof;
 mod tests_publication_repair_plan;
 #[cfg(test)]
 mod tests_publication_repair_request;
+#[cfg(test)]
+mod tests_publication_request_policy;
 #[cfg(test)]
 mod tests_publication_target;
 

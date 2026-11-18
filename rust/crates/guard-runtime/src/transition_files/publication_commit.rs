@@ -288,6 +288,7 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_inverse_restore" => super::publication_inverse_publish::restore_op(call),
         "publication_request_create" => super::publication_request::create_op(call),
         "publication_request_read" => super::publication_request::read_op(call),
+        "publication_request_policy" => super::publication_request_policy::policy_op(call),
         "publication_inverse_proof" => super::publication_proof::inverse(call),
         "publication_deadline" => super::publication_authorize::deadline(call),
         "publication_authorize" => super::publication_authorize::plan(call),
