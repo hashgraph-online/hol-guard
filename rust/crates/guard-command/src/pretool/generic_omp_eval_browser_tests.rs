@@ -237,7 +237,6 @@ fn a_workspace_page_in_the_own_browser_is_modeled() {
         "const tab = await browser.open({name:'game', url:'file:///work/projects/game/index.html', app:'own'}); return await tab.screenshot({fullPage:true})",
         "const tab=browser.tab('game'); return {canvas: await tab.count('#game'), score: await tab.text('#score'), errors: (await tab.errors()).entries}",
         "const tab=browser.tab('game'); await tab.click('#game'); await tab.waitFor(100); return {message: await tab.text('#message')}",
-        "const tab=browser.tab('game'); await tab.press('body','Space'); await tab.waitFor(100); return {message: await tab.text('#message')}",
         "const tab=browser.tab('game'); await tab.press('Space',{selector:'body'}); await tab.run(async ({wait})=>{await wait(100);}); return {message: await tab.text('#message')}",
     ] {
         assert!(loopback_browser_program(code, None, cwd), "{code}");
@@ -250,6 +249,8 @@ fn a_workspace_page_in_the_own_browser_is_modeled() {
         "const tab = await browser.open({url:'file:///work/projects/game/.env'});",
         "const tab = await browser.open({url:'file:///work/projects/game/a%2e%2e/index.html'});",
         "const tab = await browser.open({url:'file:///work/projects/game/index.html?x=1'});",
+        // OMP tab.press takes a key and optional selector object, not two strings.
+        "const tab=browser.tab('game'); await tab.press('body','Space'); await tab.waitFor(100); return {message: await tab.text('#message')}",
         // Another browser of the user's.
         "const tab = await browser.open({url:'http://localhost:3000/', app:'chrome'});",
         "const tab = await browser.open({url:'http://localhost:3000/', app:'own', app:'own'});",
