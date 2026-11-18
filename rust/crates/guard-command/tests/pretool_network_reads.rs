@@ -284,7 +284,11 @@ fn a_home_tilde_kubeconfig_setting_reads_like_the_spelled_out_path() {
     std::fs::write(&real, PLUGIN_KUBECONFIG).unwrap();
     let command = format!("KUBECONFIG=~/{} kubectl get pods", decoy.display());
     let result = decide(&space, &command);
-    assert_ne!(result.decision, "allow", "{command}: {}", result.reason_code);
+    assert_ne!(
+        result.decision, "allow",
+        "{command}: {}",
+        result.reason_code
+    );
 
     // When the shell's HOME is some other directory, `~` names that one.
     let home = space.home.to_str();
