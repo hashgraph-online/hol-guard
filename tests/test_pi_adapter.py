@@ -380,7 +380,7 @@ class TestPiInstall:
             "return reviewedToolResult(reviewedContent, event.details, event.isError === true, hookDeadlineAt);" in text
         )
 
-    def test_watch_does_not_bypass_tool_readiness_containment_or_denials(self, tmp_path: Path) -> None:
+    def test_watch_records_output_findings_without_bypassing_protected_tool_checks(self, tmp_path: Path) -> None:
         source = managed_extension_source(
             guard_home=tmp_path / "guard-home",
             home_dir=tmp_path,
@@ -394,8 +394,11 @@ class TestPiInstall:
         assert "Running without containment (Watch)." not in tool_call
         assert "if (response.observe_mode === true) return undefined;" in tool_call
         tool_result = source.split('  pi.on("tool_result", async (event, ctx) => {', 1)[1]
+        assert "watchPostureActive && response.decision === \"deny\"" in tool_result
+        assert "'output_secret_match', 'sensitive_path', 'model_output_action'" in tool_result
         assert "WATCH_WITHHELD_OUTPUT_CODES" in tool_result
-        assert "response.observe_mode === true && WATCH_WITHHELD_OUTPUT_CODES.has(response.reason_code)" in tool_result
+        assert "response.observe_mode === true &&" in tool_result
+        assert "WATCH_WITHHELD_OUTPUT_CODES.has(response.reason_code ?? \"\")" in tool_result
         assert "The protected text was not shown to the model." in tool_result
         assert (
             "return reviewedToolResult([{ type: 'text', text: watchNotice }], event.details, false, hookDeadlineAt);"

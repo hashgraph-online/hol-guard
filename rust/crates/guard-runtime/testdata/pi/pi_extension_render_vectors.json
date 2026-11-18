@@ -37,8 +37,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 168281,
-   "sha256": "9c7cf325493750406c7efd0df8c4192181bc1e1d87b83e59c80e13322e0e281f"
+   "chars": 168834,
+   "sha256": "20e51f0932bdc0146660fc486e44176cc2f71040b33cc41ab171b5897230bfc2"
   },
   {
    "name": "active_pi_posix",
@@ -76,8 +76,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 160296,
-   "sha256": "b2f81a4244ab98024e4f5c49e2812d2fbf5b4f13f33674b9e4bf090ab6ed8f6f"
+   "chars": 160849,
+   "sha256": "01bf279f45841308b611fbf603272490aa9ba0ad9ab004a7d0609c0d09de02f9"
   },
   {
    "name": "previous_omp_posix",
@@ -171,8 +171,8 @@
     "contained_sink_command": [],
     "contained_request_root": ""
    },
-   "chars": 168194,
-   "sha256": "a89c3e3e161c3e0915a6f77c5e9421b31a9bfe151a53742d418749b09724b5f3"
+   "chars": 168747,
+   "sha256": "4fcad54d076339245f3c85f3bd8486bb6581af0f7880ad9d7ea29493e12c367f"
   },
   {
    "name": "previous_pi_windows",
@@ -236,8 +236,8 @@
     ],
     "contained_request_root": "/guard-vectors/é/r"
    },
-   "chars": 160378,
-   "sha256": "16973bfc80967e76885720c6cc1988c15fddabe085c127c775e2db0ff7fb84bc"
+   "chars": 160931,
+   "sha256": "fc98ecb7a67e38d2dbf94014abd0792cf206cf72450287369b0b768388a54826"
   },
   {
    "name": "previous_omp_non_ascii",
@@ -306,8 +306,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 168320,
-   "sha256": "73b96d0d303c2608fa3e55ff91604a596eb980f35111f55ab616237c5c894a50"
+   "chars": 168873,
+   "sha256": "e8910c1cc70a8fa3aedf88499b5cef597ab4f54ac9f41b567ed9b23a4b0f18a0"
   },
   {
    "name": "active_pi_default_home_fixture_name",
@@ -342,8 +342,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 160283,
-   "sha256": "87f1d77153823d1d54bbab0bdc567574416d824a8d2cccf2a008c27142b6e9aa"
+   "chars": 160836,
+   "sha256": "c204e85f3f026bea3a72a1f158607c278d66d3e120b03d56a7072202164437ea"
   },
   {
    "name": "previous_omp_default_home_large_version",
