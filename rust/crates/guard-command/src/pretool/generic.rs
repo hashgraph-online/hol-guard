@@ -1185,8 +1185,7 @@ fn evaluate_envelope(
     // sink command names only the profile, so every profile routes the same
     // way. Only harnesses that rewrite into the contained sink get the
     // receipt; others would see a bare deny.
-    let windows_contained =
-        matches!(
+    let windows_contained = matches!(
             contained_test_reason,
             Some(
                 "native_python_eval_readonly_containment_required"
@@ -1195,7 +1194,20 @@ fn evaluate_envelope(
                     | "native_node_eval_readonly_containment_required"
                     | "native_pytest_readonly_containment_required"
             )
-        ) && matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi");
+        ) && matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi")
+            // The AppContainer runs only a Program Files Python; a virtual
+            // environment of a per-user one keeps its review.
+            && !(contained_test_reason == Some("native_pytest_readonly_containment_required")
+                && command_model.is_some_and(|model| {
+                    super::windows_pytest_base::base_outside_program_files(
+                        model,
+                        super::PathContext {
+                            home_dir,
+                            cwd,
+                            ..context
+                        },
+                    )
+                }));
     // Linux runs the same read-only profiles under a bubblewrap mount, from
     // the same POSIX sink command, so no harness is narrowed out here the way
     // Windows narrows the shells whose quoting the sink command is written
