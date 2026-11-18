@@ -40,7 +40,6 @@ from tests import codex_hook_publication_helpers as publication_helpers
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
 
-@pytest.fixture(autouse=True)
 def _ordinary_codex_launch(monkeypatch: pytest.MonkeyPatch) -> None:
     """The runtime starts no app-server: the launch stays the ordinary command."""
     ask = codex_remote_control._ask  # pyright: ignore[reportPrivateUsage]
@@ -51,6 +50,7 @@ def _ordinary_codex_launch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(codex_remote_control, "_ask", without_remote)
 
 
+@pytest.fixture(autouse=True)
 def _stable_guard_run_launch_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep consumer precedence tests independent from real harness startup."""
 
