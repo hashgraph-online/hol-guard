@@ -27,6 +27,7 @@ use crate::sfrs_read_only_filters::{
 };
 use crate::sfrs_static_safety::which_for_execution_cwd;
 use crate::shell_command_wrappers::is_trusted_absolute_command_path;
+use crate::shell_secret_read_stdin_search::lone_search_pattern_names_home_dotpath;
 use crate::shell_secret_read_support::search_operands_are_safe;
 
 const SEARCH_FILE_INPUT_FLAGS: [&str; 3] = ["-f", "--file", "--ignore-file"];
@@ -152,6 +153,9 @@ pub(crate) fn read_only_lookup_search_args_are_safe(
             .is_some_and(|value| !py_strip(value).is_empty())
         && !option_args.iter().any(|arg| arg == "--no-config")
     {
+        return false;
+    }
+    if lone_search_pattern_names_home_dotpath(command, args, home_dir) {
         return false;
     }
     let file_flags = file_backed_flags(command);

@@ -222,6 +222,7 @@ mod ci_workflow_writes;
 mod data_heredocs;
 mod install_script_writes;
 mod literal_secrets;
+mod literal_ssn_echo;
 mod lockfile_install;
 mod omp_file_url;
 mod omp_hashline_writes;
@@ -395,6 +396,28 @@ pub(crate) fn removes_a_root(command: &str) -> bool {
 /// a secret file, and Git configuration that runs a program Guard cannot
 /// read. An unproven model has no segments to screen, so it is a floor itself
 /// rather than passing every screen.
+/// `grep ~/.secrets/key.txt` names no file: the path is the pattern and the
+/// search reads stdin, so no search proof ever sees the read it meant. The
+/// shape is no search an agent needs, so nothing vouches for it and no Allow
+/// settles it. A search fed by a pipe or an input redirect has real input.
+pub(crate) fn lone_home_dotpath_search(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> bool {
+    let home = context.home_dir.map(std::path::Path::new);
+    model.segments.iter().any(|segment| {
+        segment.pipeline_index == 0
+            && !segment.text.contains('<')
+            && segment.executable.as_deref().is_some_and(|executable| {
+                crate::shell_secret_read_stdin_search::lone_search_pattern_names_home_dotpath(
+                    executable_basename(executable),
+                    &segment.arguments,
+                    home,
+                )
+            })
+    })
+}
+
 pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
     model.confidence != "exact"
         || model.segments.is_empty()
@@ -416,6 +439,8 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
         // A spelled-out key, token or password is in the transcript and the
         // shell history the moment the command runs, whatever the program.
         || literal_secrets::holds_literal_secret(&model.normalized_text)
+        // So is a printed Social Security number.
+        || literal_ssn_echo::echoes_ssn(&model.normalized_text)
 }
 
 /// A Git alias, hook or config value can carry a program the parser never
@@ -898,6 +923,9 @@ fn exact_safe_command_with_context(
     if !safe_scalar::bounded_total_sleep(model)
         || !chain_temporary::absent_reads_bounded(model, context)
     {
+        return false;
+    }
+    if lone_home_dotpath_search(model, context) {
         return false;
     }
     // `$((PATH=10))` assigns as it expands, so a later step could run a

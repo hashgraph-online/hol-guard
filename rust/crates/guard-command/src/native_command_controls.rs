@@ -608,6 +608,7 @@ impl CompiledNativeCommandControls {
         observations.evaluation_error.is_none()
             && !crate::pretool::fixed_command_floor(command)
             && !crate::pretool::protected_checkout_destination(command, context)
+            && !crate::pretool::lone_home_dotpath_search(command, context)
             && self.explicit_permissions_cover_command(
                 command,
                 &observations.observations,

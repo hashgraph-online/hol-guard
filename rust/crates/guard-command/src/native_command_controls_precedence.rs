@@ -100,6 +100,7 @@ impl CompiledNativeCommandControls {
             && command.is_some_and(|model| {
                 !crate::pretool::fixed_command_floor(model)
                     && !crate::pretool::protected_checkout_destination(model, context)
+                    && !crate::pretool::lone_home_dotpath_search(model, context)
                     && (!enabled_uncertainty
                         || model
                             .segments
