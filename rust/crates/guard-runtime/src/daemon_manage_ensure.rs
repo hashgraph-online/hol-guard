@@ -377,7 +377,15 @@ fn runtime_matches_current(current: &Map<String, Value>, payload: &Map<String, V
         return true;
     }
     if payload.get("source_root") == current_root {
-        return false;
+        // One install, two identities: one side predates the tree on disk.
+        // A process that cached its identity before an in-place upgrade must
+        // not retire the daemon the upgrade started, or the two retire each
+        // other's daemons in turn.
+        return crate::runtime_fingerprint::runs_installed_tree(
+            text(payload, "source_root"),
+            text(payload, "package_version"),
+            fingerprint,
+        );
     }
     if same_version {
         return true;
@@ -1176,3 +1184,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "daemon_manage_ensure_same_install_tests.rs"]
+mod same_install_tests;
