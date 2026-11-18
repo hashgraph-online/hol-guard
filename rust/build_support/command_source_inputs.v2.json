@@ -399,6 +399,7 @@
       "src/pretool/generic_omp_eval_browser_flow.rs",
       "src/pretool/generic_omp_eval_browser_lex.rs",
       "src/pretool/generic_omp_eval_browser_page.rs",
+      "src/pretool/generic_omp_eval_commit.rs",
       "src/pretool/generic_omp_eval_parser.rs",
       "src/pretool/generic_omp_eval_parser_vocabulary.rs",
       "src/pretool/generic_omp_eval_pure.rs",
