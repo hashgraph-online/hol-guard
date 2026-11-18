@@ -252,22 +252,15 @@ def test_codex_install_fails_closed_if_native_hook_reconciliation_is_unavailable
     use_stepwise_publication(monkeypatch)
     monkeypatch.setattr(flow, "ask", _without_hooks)
 
-    result = main(
-        [
-            "guard",
-            "install",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--json",
-        ]
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=home_dir,
+        home_override_explicit=True,
     )
-    captured = capsys.readouterr()
+    with pytest.raises(RuntimeError, match="codex_authoritative_hook_unavailable"):
+        CodexHarnessAdapter().install(context)
 
-    assert result == 1
-    assert "codex_authoritative_hook_unavailable" in captured.err
     assert (home_dir / "bin" / "guard-codex").exists() is False
 
 

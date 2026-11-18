@@ -12,7 +12,6 @@ import pytest
 
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install, build_harness_setup_plan
 from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import ask
 from codex_plugin_scanner.guard.harness.registry import get_adapter
 from codex_plugin_scanner.guard.inventory_contract import (
     inventory_snapshot_from_detection,
@@ -421,12 +420,12 @@ def test_native_managed_artifacts_participate_in_paseo_proofs(context: HarnessCo
 def test_child_drift_before_receipt_publication_rejects_install(context: HarnessContext) -> None:
     """Reject success when an earlier child's proof no longer verifies as the composite receipt is written."""
     configure(context, {"claude": {"enabled": True}, "pi": {"enabled": True}})
-    prepared = ask("prepare_install", context, harness="paseo", delegates={"claude": True, "pi": True})
+    adapter = get_adapter("paseo")
+    prepared = adapter._delegated_targets(context)
     with pytest.raises(ValueError, match="Native protection changed"):
-        ask(
+        adapter._ask(
             "delegate_receipt",
             context,
-            harness="paseo",
             providers=prepared["providers"],
             proofs={"claude": "{}", "pi": "{}"},
         )
