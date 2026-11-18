@@ -311,7 +311,11 @@ impl Parser {
                 };
                 (rest.len() <= 1 && options_ok(rest.first(), &["silent"])).then_some(())?;
                 let command = match path {
-                    Some(path) => format!("git diff HEAD -- {path}"),
+                    // Git pathspecs are relative to cwd unless anchored. OMP matches
+                    // draft.show() paths from the repository root, even when
+                    // the session starts in a nested directory. The top magic
+                    // prevents Guard from projecting a different file.
+                    Some(path) => format!("git diff HEAD -- ':(top){path}'"),
                     None => "git diff HEAD".to_owned(),
                 };
                 self.push(repo.as_deref(), &command)
