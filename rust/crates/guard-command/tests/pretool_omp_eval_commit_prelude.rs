@@ -37,6 +37,7 @@ const AGENT_PROGRAMS: &[&str] = &[
     "const d = await commit.draft(); return {type:typeof d, keys:Object.keys(d), commit:typeof d.commit};",
     "const d = await commit.draft(); return d.commit.toString();",
     "const d = await commit.draft(); return d.details;",
+    r#"const d = await commit.draft(); await d.take("scripts/check.sh"); return await d.commit("Add release check script", "Mirror the release checklist steps.");"#,
     "const d = await commit.draft(); return { keys: Object.keys(d), proto: Object.getOwnPropertyNames(Object.getPrototypeOf(d)) };",
 ];
 
