@@ -629,7 +629,7 @@ def native_context_digest(
             reason="native_context_digest_result_invalid",
         )
         return _digest_failed(f"native_context_digest_result_invalid:response_not_json bytes={len(output)}")
-    error_code = _native_error(payload)
+    error_code = _native_error(payload, deadline_monotonic=deadline_monotonic)
     if error_code is not None:
         # A resident that answers with its own error envelope is not an invalid
         # result: it is a request the resident refused, and its code is both the
