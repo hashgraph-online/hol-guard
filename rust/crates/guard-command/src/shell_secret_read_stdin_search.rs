@@ -125,7 +125,8 @@ fn pattern_is_quoted(text: &str, pattern: &str) -> bool {
     let mut quoted_match = false;
     for (index, _) in text.match_indices(pattern) {
         let before = text[..index].chars().next_back();
-        let literal = before == Some('\\') || before == Some('\'') || (tilde && before == Some('"'));
+        let literal =
+            before == Some('\\') || before == Some('\'') || (tilde && before == Some('"'));
         if !literal {
             return false;
         }
