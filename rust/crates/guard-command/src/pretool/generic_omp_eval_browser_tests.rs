@@ -255,6 +255,12 @@ fn a_workspace_page_in_the_own_browser_is_modeled() {
         "const tab = await browser.open({url:'http://localhost:3000/', app:'own', app:'own'});",
         // `wait` takes a number, and `entries` is the only other read.
         "const tab=browser.tab('game'); await tab.run(async ({wait})=>{await wait('x');});",
+        // An unbound prelude helper is not the harmless callback pause.
+        "const tab=browser.tab('game'); await tab.run(async ({page})=>{await wait(100);});",
+        "const tab=browser.tab('game'); await tab.run(async ({wait})=>{await page.click('#game');});",
+        "const tab=browser.tab('game'); await tab.run(async ({wait})=>{const text=await page.title();});",
+        // Shadowing wait in the outer eval must not make an unbound helper trusted.
+        "const wait=100; const tab=browser.tab('game'); await tab.run(async ({page})=>{await wait(100);});",
         "const tab=browser.tab('game'); await tab.run(async ({page, page})=>{});",
         "const tab=browser.tab('game'); return (await tab.errors()).constructor",
     ] {
