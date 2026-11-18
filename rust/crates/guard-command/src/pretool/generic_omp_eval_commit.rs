@@ -433,6 +433,10 @@ pub(super) fn parse_commit_program(code: &str) -> Option<Vec<Call>> {
         return None;
     }
     let lexed = tokenize_lines(code)?;
+    // An empty program runs nothing the tool grammar would have answered for.
+    if lexed.tokens.is_empty() {
+        return None;
+    }
     let mut parser = Parser {
         tokens: lexed.tokens,
         breaks: lexed.breaks,

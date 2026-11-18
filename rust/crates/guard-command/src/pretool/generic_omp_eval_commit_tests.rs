@@ -95,6 +95,8 @@ fn programs_outside_the_grammar_are_rejected() {
         "const d = await commit.draft(); for (const p of [x]) await d.take(p);",
         "const d = await commit.draft();\nreturn\nawait d.commit('x');",
         "const d = await commit.draft(); return await d.commit('x'); await d.take('y');",
+        "",
+        "   ",
     ] {
         assert_eq!(commands(code), None, "{code}");
     }

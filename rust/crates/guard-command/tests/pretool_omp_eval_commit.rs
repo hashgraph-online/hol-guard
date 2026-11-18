@@ -37,7 +37,12 @@ fn a_commit_draft_is_allowed_when_its_git_commit_is() {
         "bash",
         json!({"command": "git add -A && git commit -q -m commit"}),
     );
-    assert_eq!(direct.minimum_action, "allow", "{direct:?}");
+    // A direct call may be contained instead; the prelude raises no hook a
+    // sandbox could take, so the eval needs the proof that settles it bare.
+    assert!(
+        matches!(direct.minimum_action.as_str(), "allow" | "sandbox-required"),
+        "{direct:?}"
+    );
     for code in [
         "const d = await commit.draft(); return await d.commit('Fix sum', ['Start at index 0.']);",
         "const d = await commit.draft({ agents: 'self' }); await d.take('tracked.txt'); return await d.commit('Fix sum', {body: ['- Start at index 0.']});",

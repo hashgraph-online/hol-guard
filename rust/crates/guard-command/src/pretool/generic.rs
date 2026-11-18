@@ -1231,6 +1231,7 @@ fn evaluate_envelope(
             harness,
             "omp" | "oh-my-pi" | "pi" | "zcode" | "claude-code" | "codex"
         ) || super::workspace_contained::cursor_shell_route(harness, payload))
+        && !super::workspace_contained::eval_shell_bridge(payload)
         && cwd.is_some()
         && (result.action.action_type == PreToolActionTypeV1::Command
             || (matches!(

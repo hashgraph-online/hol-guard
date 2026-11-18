@@ -98,7 +98,14 @@ fn standalone_payload(call: &Call, context: &OmpContext<'_>) -> Option<Value> {
     if !required.is_empty() && !input.contains_key(required) {
         return None;
     }
-    Some(json!({"tool_name": call.tool, "tool_input": Value::Object(input)}))
+    let mut envelope = json!({"tool_name": call.tool, "tool_input": Value::Object(input)});
+    if call.shell_helper {
+        // The eval shell bridge raises no `bash` hook, so nothing could route
+        // this call into the workspace sandbox. Judge it as a host without
+        // one would, where the proofs that settle a command uncontained answer.
+        envelope[crate::pretool::workspace_contained::EVAL_SHELL_BRIDGE] = Value::Bool(true);
+    }
+    Some(envelope)
 }
 
 /// A JavaScript eval that only drives OMP's isolated browser against
