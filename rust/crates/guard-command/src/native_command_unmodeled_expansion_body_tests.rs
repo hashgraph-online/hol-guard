@@ -17,6 +17,11 @@ fn value_forms_are_inert() {
         "echo ${NAME%%.*}",
         "ls ${DIR}/src ${OTHER}",
         "echo plain",
+        // A literal index reads a value the shell already holds.
+        "test ${PIPESTATUS[0]} -eq 0",
+        "echo ${ITEMS[12]}",
+        "echo ${ITEMS[@]} ${ITEMS[*]}",
+        "echo ${#ITEMS[@]}",
     ] {
         assert!(expansions_are_inert(text), "{text}");
     }
@@ -34,6 +39,10 @@ fn evaluating_forms_are_not_inert() {
         "echo ${NAME:1:2}",
         "echo ${ARRAY[INDEX]}",
         "echo ${ARRAY[@]:I}",
+        "echo ${ARRAY[$(id)]}",
+        "echo ${ARRAY[1+I]}",
+        "echo ${ARRAY[]}",
+        "echo ${ARRAY[0]/a/b}",
         // Indirection names a second variable.
         "echo ${!NAME}",
         // Assignment changes shell state, PATH included.
