@@ -63,6 +63,25 @@ fn tracked_target(value: &str, leading: &[String], context: super::PathContext<'
         && super::search_scope_tracked::names::resolves_to_tracked(value, context.cwd)
 }
 
+/// Only the OMP show() projection's literal, root-anchored diff path is
+/// understood. Other Git magic pathspecs (glob, exclude, icase, attr, etc.)
+/// stay under review because their possible read targets are not bounded.
+fn plain_root_anchored_diff_pathspec(arguments: &[String], index: usize, value: &str) -> bool {
+    let Some(path) = value.strip_prefix(":(top)") else {
+        return false;
+    };
+    index == 3
+        && matches!(arguments, [verb, rev, separator, _]
+            if verb == "diff" && rev == "HEAD" && separator == "--")
+        && !path.is_empty()
+        && path.len() <= 512
+        && path.split('/').all(|part| !part.is_empty() && part != "." && part != "..")
+        && path
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-' | b'/'))
+        && !super::sensitive_read_path_argument(path)
+}
+
 pub(super) fn safe_git_arguments(
     arguments: &[String],
     allow_helper_context: bool,
@@ -147,7 +166,9 @@ pub(super) fn safe_git_arguments(
     if arguments.iter().enumerate().any(|(index, value)| {
         !search_text.contains(&index)
             && replacement != Some(index)
-            && ((value.starts_with(':') && !index_objects.contains(&index))
+            && ((value.starts_with(':')
+                && !index_objects.contains(&index)
+                && !plain_root_anchored_diff_pathspec(arguments, index, value))
                 || (super::sensitive_read_path_argument(value)
                     && listed.is_none_or(|start| index < start)))
     }) {
