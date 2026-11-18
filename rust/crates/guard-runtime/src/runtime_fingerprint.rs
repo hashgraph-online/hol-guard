@@ -23,11 +23,9 @@
 //! tree rewrites it. A cache that cannot be read or written, or a
 //! `cache_dir` that cannot hold one, only costs the content hash.
 
-use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
 
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -93,32 +91,67 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     .into_bytes())
 }
 
-/// The fingerprint `version` has over the tree installed at `source_root`
-/// now, the same value `runtime-fingerprint` answers with. A daemon whose
-/// identity equals it runs the installed tree, whatever the asking process
-/// cached before an in-place upgrade. Memoised per tree signature, so a
-/// repeat costs one metadata walk.
-pub(crate) fn installed_fingerprint(source_root: &Path, version: &str) -> String {
-    type Memo = HashMap<(PathBuf, String), (String, String)>;
-    static MEMO: OnceLock<Mutex<Memo>> = OnceLock::new();
-    let paths = identity_paths(source_root);
-    let tree_sig = tree_signature(source_root, version, &paths);
-    let key = (source_root.to_path_buf(), version.to_owned());
-    let memo = MEMO.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Some((signature, fingerprint)) = memo
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .get(&key)
-    {
-        if *signature == tree_sig {
-            return fingerprint.clone();
+/// Whether `fingerprint`, a daemon's identity, is the one `version` has over
+/// the tree now installed at `source_root`. A long-lived caller that cached
+/// its own identity before an in-place upgrade asks this before retiring the
+/// daemon the upgrade started. A tree with a file that cannot be read is
+/// never a match.
+pub(crate) fn runs_installed_tree(
+    source_root: Option<&str>,
+    version: Option<&str>,
+    fingerprint: &str,
+) -> bool {
+    let (Some(source_root), Some(version)) = (
+        source_root.filter(|root| !root.trim().is_empty()),
+        version.filter(|version| !version.trim().is_empty()),
+    ) else {
+        return false;
+    };
+    let root = Path::new(source_root);
+    root.is_absolute()
+        && root.join(PACKAGE).is_dir()
+        && installed_fingerprint(source_root, version, default_cache_dir().as_deref())
+            .is_some_and(|installed| installed == fingerprint)
+}
+
+/// The cache directory the Python caller names in its requests,
+/// `Path.home() / ".hol-guard" / "runtime-fingerprint-cache"`, so a check
+/// from a new `daemon-manage` process reuses the hash a starting process
+/// already paid for. Tests never touch the user's.
+fn default_cache_dir() -> Option<PathBuf> {
+    if cfg!(test) {
+        return None;
+    }
+    crate::claude_hook_bridge::home_directory()
+        .map(|home| home.join(".hol-guard").join("runtime-fingerprint-cache"))
+}
+
+/// The `runtime-fingerprint` answer for the installed tree, or `None` when
+/// a file could not be read; such a digest is neither returned nor cached.
+pub(crate) fn installed_fingerprint(
+    source_root: &str,
+    version: &str,
+    cache_dir: Option<&Path>,
+) -> Option<String> {
+    let root = Path::new(source_root);
+    let cache = cache_dir
+        .and_then(|directory| directory.to_str())
+        .and_then(|directory| CacheFile::new(directory, source_root));
+    let paths = identity_paths(root);
+    let tree_sig = tree_signature(root, version, &paths);
+    if let Some(cached) = cache.as_ref().and_then(CacheFile::load) {
+        if cached.tree_sig == tree_sig {
+            return Some(cached.fingerprint);
         }
     }
-    let fingerprint = content_fingerprint(source_root, version, &paths);
-    memo.lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .insert(key, (tree_sig, fingerprint.clone()));
-    fingerprint
+    let (fingerprint, complete) = content_fingerprint(root, version, &paths);
+    if !complete {
+        return None;
+    }
+    if let Some(cache) = cache {
+        cache.store(&tree_sig, &fingerprint);
+    }
+    Some(fingerprint)
 }
 
 fn invalid() -> String {
@@ -139,8 +172,8 @@ fn answer(
     let (fingerprint, reused) = match reused {
         Some(cached) => (cached.fingerprint, true),
         None => {
-            let fingerprint = content_fingerprint(source_root, version, &paths);
-            if let Some(cache) = cache {
+            let (fingerprint, complete) = content_fingerprint(source_root, version, &paths);
+            if let (Some(cache), true) = (cache, complete) {
                 cache.store(&tree_sig, &fingerprint);
             }
             (fingerprint, false)
@@ -411,32 +444,55 @@ fn tree_signature(source_root: &Path, version: &str, paths: &[PathBuf]) -> Strin
     hex::encode(digest.finalize())
 }
 
-/// Path, size and bytes of each file. A file that stops reading part way
-/// still contributes what was read.
-fn content_fingerprint(source_root: &Path, version: &str, paths: &[PathBuf]) -> String {
+/// Path, size and bytes of each file, and whether every file was read in
+/// full. A file that stops reading part way still contributes what was
+/// read; such a digest is answered but never cached. An entry that is not a
+/// regular file contributes its path and size only, and is opened without
+/// blocking, so a named pipe cannot hold the answer.
+fn content_fingerprint(source_root: &Path, version: &str, paths: &[PathBuf]) -> (String, bool) {
     let mut digest = Sha256::new();
     digest.update(version.as_bytes());
     let mut chunk = vec![0_u8; CHUNK_BYTES];
+    let mut complete = true;
     for path in paths {
         let Ok(metadata) = fs::metadata(path) else {
+            complete = false;
             continue;
         };
         digest.update(relative(source_root, path).as_bytes());
         digest.update(metadata.len().to_string().as_bytes());
-        let Ok(mut file) = File::open(path) else {
+        let Ok(mut file) = open_identity_file(path) else {
+            complete = false;
             continue;
         };
+        if !file.metadata().is_ok_and(|opened| opened.is_file()) {
+            continue;
+        }
         loop {
             match file.read(&mut chunk) {
                 Ok(0) => break,
                 Ok(read) => digest.update(&chunk[..read]),
                 // A signal mid-read is not the end of the file.
                 Err(error) if error.kind() == ErrorKind::Interrupted => {}
-                Err(_) => break,
+                Err(_) => {
+                    complete = false;
+                    break;
+                }
             }
         }
     }
-    hex::encode(digest.finalize())
+    (hex::encode(digest.finalize()), complete)
+}
+
+fn open_identity_file(path: &Path) -> std::io::Result<File> {
+    let mut options = File::options();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK | libc::O_CLOEXEC);
+    }
+    options.open(path)
 }
 
 #[cfg(test)]

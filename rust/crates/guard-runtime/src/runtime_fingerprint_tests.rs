@@ -375,23 +375,86 @@ fn a_symlinked_cache_file_is_ignored() {
     assert_eq!(answer["fingerprint"], expected["fingerprint"]);
 }
 
+fn installed(root: &Path, version: &str, cache_dir: Option<&Path>) -> Option<String> {
+    installed_fingerprint(root.to_str().unwrap(), version, cache_dir)
+}
+
 #[test]
 fn installed_fingerprint_is_the_command_answer_and_follows_the_tree() {
-    let root = tempfile::tempdir().expect("root");
-    let package = root.path().join(PACKAGE);
-    std::fs::create_dir_all(&package).expect("package");
-    std::fs::write(package.join("a.py"), "x = 1\n").expect("module");
-    let request = serde_json::json!({
-        "schema": SCHEMA,
-        "source_root": root.path().to_str().expect("utf-8"),
-        "version": "2.0.0",
+    let root = tree();
+    let first = installed(root.path(), VERSION, None).expect("readable");
+    assert_eq!(
+        run(root.path(), None)["fingerprint"].as_str(),
+        Some(first.as_str())
+    );
+    assert_ne!(installed(root.path(), "9.9.10", None).unwrap(), first);
+    fs::write(root.path().join(PACKAGE).join("a.py"), b"x = 22\n").unwrap();
+    assert_ne!(installed(root.path(), VERSION, None).unwrap(), first);
+}
+
+/// Every `daemon-manage` request is a new process, so the installed check
+/// reuses the cache file a starting process left rather than rehashing.
+#[cfg(unix)]
+#[test]
+fn installed_fingerprint_reuses_the_command_cache_file() {
+    let root = tree();
+    let (_home, cache_dir) = private_cache_dir();
+    let answer = run_with_cache_dir(root.path(), &cache_dir);
+    let planted = "e".repeat(64);
+    let body = json!({
+        "content_fingerprint": planted,
+        "source_root": root.path().to_str().unwrap(),
+        "tree_sig": answer["tree_sig"],
     });
-    let answer: serde_json::Value =
-        serde_json::from_slice(&run_command(request.to_string().as_bytes()).expect("answer"))
-            .expect("json");
-    let first = installed_fingerprint(root.path(), "2.0.0");
-    assert_eq!(answer["fingerprint"].as_str(), Some(first.as_str()));
-    assert_ne!(installed_fingerprint(root.path(), "2.0.1"), first);
-    std::fs::write(package.join("a.py"), "x = 22\n").expect("edit");
-    assert_ne!(installed_fingerprint(root.path(), "2.0.0"), first);
+    plant_cache(&cache_dir, root.path(), body.to_string().as_bytes(), 0o600);
+    assert_eq!(
+        installed(root.path(), VERSION, Some(&cache_dir)),
+        Some(planted)
+    );
+}
+
+/// A file that cannot be read is no installed fingerprint, and neither the
+/// installed check nor the command caches the partial digest, so the next
+/// check after the file is readable again hashes it in full.
+#[cfg(unix)]
+#[test]
+fn a_partial_read_is_neither_installed_nor_cached() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tree();
+    let full = installed(root.path(), VERSION, None).unwrap();
+    let module = root.path().join(PACKAGE).join("a.py");
+    fs::set_permissions(&module, fs::Permissions::from_mode(0o000)).unwrap();
+    if File::open(&module).is_ok() {
+        // Running as root: permissions cannot make the file unreadable.
+        return;
+    }
+    let (_home, cache_dir) = private_cache_dir();
+    assert_eq!(installed(root.path(), VERSION, Some(&cache_dir)), None);
+    let partial = run_with_cache_dir(root.path(), &cache_dir);
+    assert_ne!(partial["fingerprint"].as_str(), Some(full.as_str()));
+    assert!(!cache_file(&cache_dir, root.path()).exists());
+    fs::set_permissions(&module, fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(
+        installed(root.path(), VERSION, Some(&cache_dir)),
+        Some(full)
+    );
+}
+
+/// A named pipe with a module's name is not opened for a blocking read.
+#[cfg(unix)]
+#[test]
+fn a_named_pipe_in_the_tree_does_not_hold_the_answer() {
+    let root = tree();
+    let status = std::process::Command::new("mkfifo")
+        .arg(root.path().join(PACKAGE).join("pipe.py"))
+        .status()
+        .expect("mkfifo runs");
+    assert!(status.success(), "the fixture pipe");
+    assert!(relative_names(root.path()).contains(&format!("{PACKAGE}/pipe.py")));
+    let answer = run(root.path(), None);
+    assert_eq!(
+        installed(root.path(), VERSION, None).as_deref(),
+        answer["fingerprint"].as_str()
+    );
 }
