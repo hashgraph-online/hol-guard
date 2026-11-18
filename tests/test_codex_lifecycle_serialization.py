@@ -4,7 +4,6 @@ import multiprocessing
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Event
 
 import pytest
 
@@ -52,30 +51,19 @@ def test_nested_core_configuration_ownership_preserves_the_first_io_error(tmp_pa
 
 
 @pytest.mark.parametrize("competing_operation", ("install", "uninstall"))
-def test_competing_lifecycle_call_is_rejected_before_discovery(tmp_path, monkeypatch, competing_operation):
+def test_competing_lifecycle_call_is_rejected_before_discovery(tmp_path, competing_operation):
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
-    entered = Event()
-    release = Event()
-    calls = []
 
-    def paused_discovery(self, current_context, **_kwargs):
-        calls.append(current_context)
-        entered.set()
-        assert release.wait(5), "test owner was not released"
-        raise RuntimeError("test_discovery_complete")
+    def competing():
+        return getattr(CodexHarnessAdapter(), competing_operation)(context)
 
-    monkeypatch.setattr(CodexHarnessAdapter, "detect", paused_discovery)
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        first = executor.submit(CodexHarnessAdapter().install, context)
-        try:
-            assert entered.wait(5), "test owner did not enter discovery"
-            with pytest.raises(RuntimeError, match="codex_lifecycle_busy"):
-                getattr(CodexHarnessAdapter(), competing_operation)(context)
-            assert calls == [context]
-        finally:
-            release.set()
-        with pytest.raises(RuntimeError, match="test_discovery_complete"):
-            first.result(timeout=5)
+    with (
+        codex_lifecycle_locks(context),
+        ThreadPoolExecutor(max_workers=1) as executor,
+        pytest.raises(RuntimeError, match="codex_lifecycle_busy"),
+    ):
+        executor.submit(competing).result(timeout=5)
+    assert not context.guard_home.exists(), "a refused lifecycle call must not write the Guard home"
 
 
 def _hold_process_lock(home, guard_home, connection):

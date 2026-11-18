@@ -471,17 +471,12 @@ def test_apps_connect_keeps_install_payload_when_cloud_launch_fails(
     assert payload["cloud_app"]["error"] == "daemon did not start"
 
 
-def test_apps_inventory_uses_adapter_command_resolution(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_apps_inventory_uses_adapter_command_resolution(tmp_path: Path) -> None:
     context = _context(tmp_path)
-    adapter = get_adapter("claude-code")
-
-    def resolved_executable(_context: HarnessContext) -> str | None:
-        return str(tmp_path / "home" / ".claude" / "local" / "claude")
-
-    monkeypatch.setattr(adapter, "resolved_executable", resolved_executable)
+    local = tmp_path / "home" / ".claude" / "local" / "claude"
+    local.parent.mkdir(parents=True)
+    local.write_text("#!/bin/sh\n", encoding="utf-8")
+    local.chmod(0o755)
 
     items = list_harness_setup_items(context, GuardStore(tmp_path / "guard-home"))
 

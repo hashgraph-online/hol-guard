@@ -137,16 +137,10 @@ pub(super) fn baseline(ctx: &Ctx, facts: &Facts<'_>, spec: &Value) -> Owned<Opti
         ),
     )?;
     if let Some(untrusted) = value.get("untrusted") {
-        let text = |key: &str| {
-            untrusted
-                .get(key)
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        };
-        return Err(OwnedFailure::Integrity(
-            text("reason").ok_or(INVALID)?,
-            text("message").ok_or(INVALID)?,
-        ));
+        for key in ["reason", "message"] {
+            untrusted.get(key).and_then(Value::as_str).ok_or(INVALID)?;
+        }
+        return Err(OwnedFailure::Untrusted(untrusted.clone()));
     }
     match value.get("manifest") {
         Some(Value::Null) => Ok(None),

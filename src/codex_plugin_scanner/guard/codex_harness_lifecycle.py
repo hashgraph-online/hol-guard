@@ -112,9 +112,14 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
     def prepare_install(self, context: HarnessContext, *, surface: str | None = None) -> PreparedHarnessInstall:
         """The enrolled native installation, including retirements, planned without publication."""
         from .native_transition_files import _exception
+        from .shims import shim_interpreter
 
         answer = self._ask(
-            "prepare_install", context, timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **codex_native_request(context)
+            "prepare_install",
+            context,
+            timeout_seconds=_PUBLISH_TIMEOUT_SECONDS,
+            interpreter=shim_interpreter(),
+            **codex_native_request(context),
         )
         if "untrusted" in answer:
             raise_untrusted(answer["untrusted"])

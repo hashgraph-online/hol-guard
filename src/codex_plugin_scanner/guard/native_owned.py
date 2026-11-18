@@ -79,7 +79,11 @@ def _failure(answer: Mapping[str, object]) -> BaseException:
         return RuntimeError(message)
     code = failure.get("code")
     if kind == "integrity" and isinstance(code, str) and isinstance(message, str):
-        return CodexHookIntegrityError(code, message)
+        error = CodexHookIntegrityError(code, message)
+        cause = failure.get("cause")
+        if isinstance(cause, str):
+            error.__cause__ = CodexHookIntegrityError(cause, cause)
+        return error
     reason = failure.get("reason")
     if kind == "transition" and isinstance(reason, str):
         return TransitionError(reason)

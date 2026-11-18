@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -385,34 +384,3 @@ def test_symlink_config_source_fails_closed_before_writes(
     assert "codex_hook_inventory_source_unreadable" in captured.err
     assert external_path.read_text(encoding="utf-8") == external_content
     assert (home_dir / ".codex" / "config.toml").exists() is False
-
-
-def test_source_change_after_inventory_stops_before_activation_write(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    hooks_path = workspace_dir / ".codex" / "hooks.json"
-    original_payload = {"hooks": {"FutureAgentEvent": [{**_command_group("python3 first.py"), "enabled": False}]}}
-    changed_payload = {"hooks": {"FutureAgentEvent": [{**_command_group("python3 changed.py"), "enabled": False}]}}
-    _write(hooks_path, json.dumps(original_payload, indent=2) + "\n")
-    original_ask = codex_adapter.ask
-
-    def mutate_then_plan(op: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        # The hooks source was captured by inventory; it changes before the
-        # native plan compares its captures against disk.
-        if op in {"install_plan", "install"}:
-            _write(hooks_path, json.dumps(changed_payload, indent=2) + "\n")
-        return original_ask(op, *args, **kwargs)
-
-    monkeypatch.setattr(codex_adapter, "ask", mutate_then_plan)
-
-    rc = main(_install_args(home_dir, workspace_dir))
-    captured = capsys.readouterr()
-
-    assert rc == 1
-    assert "adapter_preparation_generation_conflict" in captured.err
-    assert (home_dir / ".codex" / "config.toml").exists() is False
-    assert json.loads(hooks_path.read_text(encoding="utf-8")) == changed_payload

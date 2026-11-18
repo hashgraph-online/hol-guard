@@ -33,6 +33,11 @@ fn failure_message(failure: &OwnedFailure) -> String {
     match failure {
         OwnedFailure::Timeout(message) => (*message).to_owned(),
         OwnedFailure::Runtime(message) | OwnedFailure::Integrity(_, message) => message.clone(),
+        OwnedFailure::Untrusted(untrusted) => untrusted
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
         OwnedFailure::Transition(reason) => format!("{TRANSITION_PREFIX}{reason}"),
         OwnedFailure::Fault(fault) => fault_message(fault),
     }

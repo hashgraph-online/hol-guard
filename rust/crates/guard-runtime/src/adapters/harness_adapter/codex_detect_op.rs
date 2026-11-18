@@ -19,6 +19,9 @@ pub(super) fn detect(spec: &Spec, ctx: &Ctx, request: &Map<String, Value>) -> St
     let spec_value = spec_of(ctx, &facts).map_err(|_| Failure::Invalid)?;
     let previous = match baseline(ctx, &facts, &spec_value) {
         Ok(previous) => previous,
+        Err(OwnedFailure::Untrusted(untrusted)) => {
+            return Ok(json!({ "untrusted": untrusted }));
+        }
         Err(OwnedFailure::Integrity(reason, message)) => {
             return Ok(json!({ "untrusted": { "reason": reason, "message": message } }));
         }

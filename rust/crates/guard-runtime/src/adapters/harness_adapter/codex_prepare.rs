@@ -116,6 +116,7 @@ fn prepared(spec: &Spec, ctx: &Ctx, request: &Map<String, Value>) -> Owned<Value
 pub(super) fn prepare_install(spec: &Spec, ctx: &Ctx, request: &Map<String, Value>) -> Step<Value> {
     match prepared(spec, ctx, request) {
         Ok(answer) => Ok(answer),
+        Err(OwnedFailure::Untrusted(untrusted)) => Ok(json!({ "untrusted": untrusted })),
         Err(OwnedFailure::Integrity(reason, message)) => {
             Ok(json!({ "untrusted": { "reason": reason, "message": message } }))
         }

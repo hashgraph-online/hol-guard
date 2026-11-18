@@ -21,8 +21,11 @@ def _facts(
     harnesses: Sequence[str],
     *,
     workspaces: Mapping[str, Path | None] | None = None,
+    uninstall: bool = False,
 ) -> dict[str, object]:
     """The process facts a native install op takes for ``harnesses``.
+
+    A removal renders no hook, so it asks the Guard daemon nothing: ``uninstall`` leaves out the daemon facts.
 
     ``workspaces`` names the workspace each harness installs into when it is not the context's own, as an update
     repair reinstalls from the install record's workspace.
@@ -55,7 +58,7 @@ def _facts(
 
         facts["runtime"] = extension_runtime()
     harness_facts: dict[str, object] = {}
-    if "claude-code" in harnesses:
+    if "claude-code" in harnesses and not uninstall:
         from ..claude_hook_entry import claude_facts
 
         harness_facts["claude-code"] = claude_facts(context.guard_home)
@@ -72,6 +75,7 @@ def install_facts(
     harnesses: Sequence[str],
     *,
     workspaces: Mapping[str, Path | None] | None = None,
+    uninstall: bool = False,
 ) -> dict[str, object]:
     """The process facts a native install op takes for ``harnesses``, and for the providers a harness delegates to.
 
@@ -92,11 +96,11 @@ def install_facts(
         if descriptions.get(harness, {}).get("install") == "delegated"
         for name in descriptions[harness].get("delegates", ())
     ]
-    facts = _facts(context, harnesses, workspaces=workspaces)
+    facts = _facts(context, harnesses, workspaces=workspaces, uninstall=uninstall)
     if not delegates:
         return facts
     native = _native_context(context)
-    providers = _facts(native, [name for name in delegates if name not in harnesses])
+    providers = _facts(native, [name for name in delegates if name not in harnesses], uninstall=uninstall)
     for group in ("workspace_skills", "facts"):
         merged: dict[str, object] = dict(cast("dict[str, object]", providers[group]))
         merged.update(cast("dict[str, object]", facts[group]))

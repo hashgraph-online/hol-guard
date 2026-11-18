@@ -70,7 +70,12 @@ def ask_managed(
     """One install op of the native runtime, naming a hook-ownership failure as the harness's spec words it."""
     request: dict[str, Any] = {
         **owner_request(context.guard_home, actor=actor),
-        **install_facts(context, harnesses, workspaces=workspaces),
+        **install_facts(
+            context,
+            harnesses,
+            workspaces=workspaces,
+            uninstall=op == "adapter_uninstall" or fields.get("command") == "uninstall",
+        ),
         **fields,
     }
     timeout = _PER_TARGET_SECONDS * max(1, len(harnesses) + _delegated_count(harnesses)) + _OVERHEAD_SECONDS

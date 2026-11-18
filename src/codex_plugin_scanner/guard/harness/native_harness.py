@@ -392,7 +392,7 @@ class NativeHarnessAdapter(HarnessAdapter):
             context,
             timeout_seconds=timeout_seconds,
             **owner_request(context.guard_home, actor=f"adapter.{self.harness}.{op}"),
-            **install_facts(context, (self.harness,)),
+            **install_facts(context, (self.harness,), uninstall=op == "adapter_uninstall"),
             **options,
         )
         return adapter_manifest(answer)
