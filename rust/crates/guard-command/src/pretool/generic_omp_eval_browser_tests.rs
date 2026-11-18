@@ -241,7 +241,11 @@ fn a_workspace_page_in_the_own_browser_is_modeled() {
     let safe = workspace.path().join("index.html");
     std::fs::write(&safe, "<html>project</html>").unwrap();
     std::fs::write(outside.path().join("secrets.html"), "<html>private</html>").unwrap();
-    symlink(outside.path().join("secrets.html"), workspace.path().join("escape.html")).unwrap();
+    symlink(
+        outside.path().join("secrets.html"),
+        workspace.path().join("escape.html"),
+    )
+    .unwrap();
     symlink(outside.path(), workspace.path().join("outside")).unwrap();
 
     let safe_page = format!(
