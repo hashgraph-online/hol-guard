@@ -1,0 +1,88 @@
+//! Hook commands that fall back to Python name a module and a function in
+//! their `-c` code. Python files move as code ports to the native runtime,
+//! and a command naming a module that is gone fails on every run with an
+//! import error (Claude Code's SessionStart hook showed one at each session
+//! start). These checks read the Rust source that writes those commands and
+//! the Python package beside it, so a move breaks the build instead.
+
+use std::path::{Path, PathBuf};
+
+/// Every `from codex_plugin_scanner.<module> import <name>` in `source`,
+/// including ones split over a Rust string continuation.
+fn imports(source: &str) -> Vec<(String, String)> {
+    const PREFIX: &str = "from codex_plugin_scanner.";
+    let mut found = Vec::new();
+    let mut rest = source;
+    while let Some(start) = rest.find(PREFIX) {
+        rest = &rest[start + PREFIX.len()..];
+        let Some(split) = rest.find(" import") else {
+            break;
+        };
+        let module = rest[..split].to_owned();
+        let after = rest[split + " import".len()..].trim_start_matches(['\\', ' ', '\n', '\r']);
+        let name: String = after
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        found.push((module, name));
+    }
+    found
+}
+
+fn package_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../src/codex_plugin_scanner")
+}
+
+/// Whether the Python package defines `name` in `module`.
+fn defined(module: &str, name: &str) -> bool {
+    let base = package_root().join(module.replace('.', "/"));
+    let file = [base.with_extension("py"), base.join("__init__.py")]
+        .into_iter()
+        .find(|path| path.is_file());
+    let Some(file) = file else {
+        return false;
+    };
+    let text = std::fs::read_to_string(file).unwrap_or_default();
+    text.lines().any(|line| {
+        line.starts_with(&format!("def {name}("))
+            || line.starts_with(&format!("class {name}("))
+            || line.starts_with(&format!("class {name}:"))
+    })
+}
+
+fn assert_resolves(writer: &str, source: &str) {
+    let found = imports(source);
+    assert!(!found.is_empty(), "{writer} writes no Python import");
+    for (module, name) in found {
+        assert!(
+            defined(&module, &name),
+            "{writer} writes `from codex_plugin_scanner.{module} import {name}`, \
+             which the Python package does not define"
+        );
+    }
+}
+
+#[test]
+fn claude_session_start_fallback_imports_a_defined_function() {
+    assert_resolves(
+        "claude_argv.rs",
+        include_str!("harness_adapter/claude_argv.rs"),
+    );
+}
+
+#[test]
+fn cursor_daemon_recovery_imports_a_defined_function() {
+    assert_resolves(
+        "cursor_hook_script.rs",
+        include_str!("cursor_hook_script.rs"),
+    );
+}
+
+#[test]
+fn import_reader_follows_a_string_continuation() {
+    let source = "\"x;from codex_plugin_scanner.guard.mod_a import \\\n             run_it;\"";
+    assert_eq!(
+        imports(source),
+        vec![("guard.mod_a".to_owned(), "run_it".to_owned())]
+    );
+}
