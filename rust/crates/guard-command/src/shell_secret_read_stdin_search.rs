@@ -111,14 +111,18 @@ pub(crate) fn lone_home_dotpath_search(
     })
 }
 
-/// The search pattern itself is literal text when quoted or escaped. Quotes
-/// in unrelated option values do not change the shell meaning of the pattern.
+/// Whether quoting keeps the shell from expanding the pattern's home word,
+/// so the search looks for the literal text `~/...` or `$HOME/...`. An
+/// absolute path means the same quoted or not, double quotes still expand
+/// `$HOME`, and quotes in other words do not change the pattern.
 fn pattern_is_quoted(text: &str, pattern: &str) -> bool {
+    let tilde = pattern.starts_with('~');
+    if !tilde && !pattern.starts_with('$') {
+        return false;
+    }
     text.match_indices(pattern).any(|(index, _)| {
         let before = text[..index].chars().next_back();
-        let after = text[index + pattern.len()..].chars().next();
-        matches!((before, after), (Some('\''), Some('\'')) | (Some('"'), Some('"')))
-            || before == Some('\\')
+        before == Some('\\') || before == Some('\'') || (tilde && before == Some('"'))
     })
 }
 

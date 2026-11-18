@@ -118,6 +118,8 @@ fn a_whole_command_floors_only_an_unfed_lone_dotpath_search() {
         "rg ~/.secrets/key.txt",
         "cd /tmp && fgrep /home/agent/.secrets/key.txt",
         "grep '/home/agent/.config/a<b'",
+        "grep \"$HOME/.ssh/id_rsa\"",
+        "rg '/home/agent/.ssh/id_rsa'",
     ] {
         assert!(
             crate::shell_secret_read_stdin_search::lone_home_dotpath_search(
