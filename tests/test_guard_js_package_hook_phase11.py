@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,6 +18,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 from codex_plugin_scanner import install_integrity
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.codex_hook_launch_runtime import LAUNCHER_ARGS
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
@@ -230,7 +232,12 @@ def test_guard_hook_blocks_js_exec_flows_before_subprocess(
 
     monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
 
-    def fail_subprocess(*args: object, **kwargs: object) -> object:
+    real_run = subprocess.run
+
+    def fail_subprocess(command: object, *args: object, **kwargs: object) -> object:
+        # The native launcher answers the isolated-command question; it is not the blocked flow.
+        if isinstance(command, list) and tuple(command[1:]) == LAUNCHER_ARGS:
+            return real_run(command, *args, **kwargs)  # type: ignore[call-overload]
         raise AssertionError("blocked exec flow must not launch a subprocess")
 
     monkeypatch.setattr(guard_commands_module.subprocess, "run", fail_subprocess)

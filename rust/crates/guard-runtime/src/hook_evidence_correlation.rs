@@ -383,7 +383,7 @@ fn read_key(path: &Path) -> io::Result<InstallationCorrelationKey> {
 }
 
 /// `_parse_key` (:184-208).
-fn parse_key(raw: &str) -> io::Result<InstallationCorrelationKey> {
+pub(crate) fn parse_key(raw: &str) -> io::Result<InstallationCorrelationKey> {
     let Ok(Value::Object(payload)) = serde_json::from_str::<Value>(raw) else {
         return Err(invalid(
             "invalid command activity correlation key file shape",
@@ -502,7 +502,7 @@ fn base64_decode(encoded: &str) -> Option<Vec<u8>> {
     Base64::decode_vec(encoded).ok()
 }
 
-fn hmac_hex(material: &[u8], framed: &[u8]) -> String {
+pub(crate) fn hmac_hex(material: &[u8], framed: &[u8]) -> String {
     let mut mac = <HmacSha256 as Mac>::new_from_slice(material).expect("hmac accepts any key");
     mac.update(framed);
     hex::encode(mac.finalize().into_bytes())

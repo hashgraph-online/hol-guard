@@ -32,7 +32,6 @@ import secrets
 from collections.abc import Mapping
 from pathlib import Path
 
-from .harness_posture import runtime_harness_key
 from .native_policy_snapshot_codec import derive_native_policy_verifier_key
 from .native_policy_snapshot_constants import NativePolicySnapshotError
 from .protection_posture import VALID_PROTECTION_POSTURES
@@ -278,21 +277,3 @@ def binding_with_harness_postures(binding: dict[str, object], postures: Mapping[
     if verified:
         binding[HARNESS_POSTURES_BINDING_KEY] = dict(verified)
     return binding
-
-
-def recording_only_for_binding(binding: Mapping[str, object] | None, harness: object) -> bool:
-    """Watch decision for one harness from an ACKed binding.
-
-    ``None`` (no ACK) never grants recording-only authority. A per-harness
-    override wins over the snapshot mode in both directions: Watch records
-    under an enforcing snapshot, and Protected/Extra careful keeps stopping
-    under a Watch snapshot.
-    """
-
-    if binding is None:
-        return False
-    key = runtime_harness_key(harness)
-    override = valid_harness_postures(binding.get(HARNESS_POSTURES_BINDING_KEY)).get(key) if key is not None else None
-    if override is not None:
-        return override == "watch"
-    return binding.get("mode") == "observe"

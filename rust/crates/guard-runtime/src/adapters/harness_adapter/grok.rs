@@ -23,7 +23,7 @@ const HOOKS_DIR: &str = "hooks";
 pub(super) const PRETOOL_FILE: &str = "hol-guard-pretooluse.json";
 pub(super) const PROMPT_FILE: &str = "hol-guard-prompt.json";
 const MANAGED_BEGIN: &str = "# BEGIN HOL GUARD MANAGED GROK";
-const HOOK_INTERNAL_TIMEOUT_SECONDS: i64 = 85;
+pub(super) const HOOK_INTERNAL_TIMEOUT_SECONDS: i64 = 85;
 const SYSTEM_POLICY_PATHS: [&str; 2] = [
     "/etc/grok/managed_config.toml",
     "/etc/grok/requirements.toml",
@@ -315,6 +315,14 @@ fn detect(spec: &Spec, ctx: &Ctx) -> Step<Value> {
     detection(spec, answer, resolution.executable.is_some())
 }
 
+/// The `guard hook` arguments Grok's hook runs: `--json` asks for the answer
+/// Grok reads.
+pub(super) fn hook_cli_args(ctx: &Ctx, harness: &str) -> Vec<String> {
+    let mut cli_args = guard_hook_args(ctx, harness);
+    cli_args.push("--json".to_owned());
+    cli_args
+}
+
 pub(crate) fn dispatch(
     spec: &Spec,
     op: &str,
@@ -345,11 +353,11 @@ pub(crate) fn dispatch(
         }
         "preview_launch" => argv(found(resolve(ctx))?.0, fields),
         "sanitize_env" => sanitize_env(ctx, fields),
-        "hook_spec" => {
-            let mut cli_args = guard_hook_args(ctx, spec.harness);
-            cli_args.push("--json".to_owned());
-            Ok(json!({"cli_args": cli_args, "timeout_seconds": HOOK_INTERNAL_TIMEOUT_SECONDS}))
-        }
+        "hook_spec" => Ok(json!({
+            "cli_args": hook_cli_args(ctx, spec.harness),
+            "timeout_seconds": HOOK_INTERNAL_TIMEOUT_SECONDS,
+        })),
+        "hooks_current" => super::grok_update::hooks_current(spec, ctx),
         // What the CLI's protection checks and update repair compare against.
         "protection" => {
             let hooks = hooks_dir(ctx);

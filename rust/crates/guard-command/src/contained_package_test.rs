@@ -267,6 +267,7 @@ pub(crate) fn script_tokens(
 /// alone. Whether that tool is installed where the sink resolves it is a
 /// question about a directory this module never sees, so the body comes back
 /// out for the route to answer.
+#[cfg(unix)]
 pub(crate) fn script_tool_body(
     manager: &str,
     arguments: &[String],

@@ -15,7 +15,7 @@ use serde_json::{json, Map, Value};
 
 use super::codex::{config_path, hooks_path};
 use super::codex_incident_read::{read_hook_files, status as fields_of, HookRead};
-use super::codex_live_state::verified_state;
+use super::codex_live_state::verified_live_state;
 use super::codex_spec::with_spec;
 use super::{caller, Ctx, Step};
 use crate::pyjson::PyVal;
@@ -137,7 +137,7 @@ fn integrity(
             .get("spec")
             .and_then(Value::as_object)
             .ok_or(super::Failure::Invalid)?;
-        verified_state(
+        verified_live_state(
             ctx,
             spec,
             request.as_ref(),

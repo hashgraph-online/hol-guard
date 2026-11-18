@@ -13,17 +13,18 @@ from codex_plugin_scanner.guard import codex_hook_integrity, codex_hook_recovery
 from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import (
+from codex_plugin_scanner.guard.codex_hook_recovery import recover_hook_publication
+from codex_plugin_scanner.guard.codex_hook_rollback import rollback_file_identity
+from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
+from tests.codex_hook_integrity_fixtures import restore_private_file
+from tests.codex_hook_paths_support import (
     canonical_manifest_bytes,
+    hook_authority_receipt_path,
     hook_manifest_path,
     hook_secret_path,
 )
-from codex_plugin_scanner.guard.codex_hook_recovery import recover_hook_publication
-from codex_plugin_scanner.guard.codex_hook_rollback import rollback_file_identity
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
-from tests.codex_hook_integrity_fixtures import restore_private_file
 from tests.codex_publication_steps import use_stepwise_publication
 from tests.transition_fault_support import STEPWISE_PUBLICATION
 
@@ -173,7 +174,7 @@ from codex_plugin_scanner.guard import codex_hook_recovery as recovery
 from codex_plugin_scanner.guard import codex_harness_client as codex
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
 from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
+from tests.codex_hook_paths_support import hook_manifest_path, hook_secret_path
 home, substitution = Path(sys.argv[1]), sys.argv[2]
 config = home / '.codex/config.toml'
 from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
@@ -182,7 +183,7 @@ original_write = RuntimeTransition._write_file
 def competing_write(*args):
     if args[1] != 'after' or Path(str(args[0]['path'])) != config:
         return original_write(*args)
-    manifest = codex.hook_manifest_path(home / '.hol-guard', config)
+    manifest = hook_manifest_path(home / '.hol-guard', config)
     receipt = manifest.with_name(manifest.name.replace('.manifest.json', '.authority-receipt.json'))
     participants = [manifest, receipt, hook_secret_path(home / '.hol-guard')]
     hashes = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in participants}
@@ -521,7 +522,7 @@ def test_first_install_crash_restores_absence_without_retaining_new_key(
         assert recover_hook_publication(context.guard_home)
     assert config.read_bytes() == before_config
     assert not hook_manifest_path(context.guard_home, config).exists()
-    assert not codex_hook_integrity.hook_authority_receipt_path(context.guard_home, config).exists()
+    assert not hook_authority_receipt_path(context.guard_home, config).exists()
     assert not hook_secret_path(context.guard_home).exists()
     CodexHarnessAdapter().install(context)
     assert codex_native_hook_state(context)["protection_active"]
@@ -531,7 +532,7 @@ def test_first_install_crash_restores_absence_without_retaining_new_key(
 def test_recovery_preserves_foreign_edit_before_restoring_either_file(installed, edited):
     context, config, manifest = installed
     crash(context, "manifest")
-    receipt = codex_hook_integrity.hook_authority_receipt_path(context.guard_home, config)
+    receipt = hook_authority_receipt_path(context.guard_home, config)
     target = config if edited == "config" else receipt
     target.write_bytes(target.read_bytes() + b"\n# a later user edit\n")
     current = config.read_bytes(), manifest.read_bytes(), receipt.read_bytes()
@@ -547,7 +548,7 @@ def test_recovery_preserves_foreign_edit_before_restoring_either_file(installed,
 
 def test_uninstall_revokes_retained_authority_receipt(installed):
     context, config, _manifest = installed
-    receipt = codex_hook_integrity.hook_authority_receipt_path(context.guard_home, config)
+    receipt = hook_authority_receipt_path(context.guard_home, config)
     assert receipt.exists()
     CodexHarnessAdapter().uninstall(context)
     assert not receipt.exists()

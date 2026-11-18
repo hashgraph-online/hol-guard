@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 from .harness_attribution import resolve_environment_harness, resolve_parent_process_harness
 
 LOCAL_SUPPLY_CHAIN_HARNESS = "guard-cli"
@@ -20,7 +18,7 @@ def resolve_local_supply_chain_harness() -> str:
     cannot influence.
     """
 
-    return resolve_environment_harness(os.environ) or resolve_parent_process_harness() or LOCAL_SUPPLY_CHAIN_HARNESS
+    return resolve_environment_harness() or resolve_parent_process_harness() or LOCAL_SUPPLY_CHAIN_HARNESS
 
 
 __all__ = ["LOCAL_SUPPLY_CHAIN_HARNESS", "resolve_local_supply_chain_harness"]

@@ -7,10 +7,10 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
-from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer
 from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionError
 from tests import codex_plan_segments as segments
+from tests.codex_toml_support import dump_toml
 
 from .test_codex_publication_preparation import _context, _tree
 from .test_runtime_transition import begin, transition  # noqa: F401 -- shared pytest fixture

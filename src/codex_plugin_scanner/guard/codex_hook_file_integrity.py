@@ -147,55 +147,36 @@ def _python_package_roots() -> tuple[Path, ...]:
     return tuple(sorted(roots, key=str))
 
 
-def _is_installed_python_package_file(path: Path) -> bool:
-    """Return whether a file is under a package root for this interpreter."""
-
-    try:
-        canonical = path.expanduser().resolve(strict=False)
-    except (OSError, RuntimeError):
-        return False
-    for root in _python_package_roots():
-        try:
-            relative = canonical.relative_to(root)
-        except ValueError:
-            continue
-        if relative.parts:
-            return True
-    return False
-
-
-def canonical_path(path: Path) -> str:
-    """Return the non-strict canonical absolute spelling used in identities."""
-
-    check_hook_validation_deadline()
-    result = str(path.expanduser().resolve(strict=False))
-    check_hook_validation_deadline()
-    return result
-
-
 _IO_REASON = "codex_hook_integrity_io_error"
 _IO_MESSAGE = "Guard could not verify the Codex hook installation; run repair and inspect file permissions."
 _TIMEOUT_SECONDS = 30.0
 
 
-def _native(op: str, **fields: object) -> dict[str, object]:
-    """One ``codex_hook_file_integrity`` op, refused as the runtime refuses it."""
+def _native(op: str, *, deadline_bound: bool = True, **fields: object) -> dict[str, object]:
+    """One ``codex_hook_file_integrity`` op, refused as the runtime refuses it.
+
+    The hook validation deadline bounds the call unless ``deadline_bound`` is
+    false, for a verdict on a child that already ran under its own limits.
+    """
 
     from .native_runner_authority import native_runner_authority
 
-    check_hook_validation_deadline()
+    if deadline_bound:
+        check_hook_validation_deadline()
     request = {"op": op, "package_roots": [str(root) for root in _python_package_roots()], **fields}
     try:
         answer = native_runner_authority(
             "codex_hook_file_integrity",
             request,
             timeout_seconds=_TIMEOUT_SECONDS,
-            deadline_monotonic=active_hook_validation_deadline(),
+            deadline_monotonic=active_hook_validation_deadline() if deadline_bound else None,
         )
     except (OSError, ValueError) as exc:
-        check_hook_validation_deadline()
+        if deadline_bound:
+            check_hook_validation_deadline()
         raise CodexHookIntegrityError(_IO_REASON, _IO_MESSAGE) from exc
-    check_hook_validation_deadline()
+    if deadline_bound:
+        check_hook_validation_deadline()
     error = answer.get("error")
     if isinstance(error, dict):
         reason, message = error.get("reason"), error.get("message")
@@ -249,47 +230,26 @@ def _wire(identity: object) -> object:
     return identity if isinstance(identity, dict) else None
 
 
-def _fingerprint(metadata: os.stat_result) -> tuple[int, ...]:
-    return (
-        metadata.st_dev,
-        metadata.st_ino,
-        metadata.st_size,
-        metadata.st_mtime_ns,
-        metadata.st_mode,
-        metadata.st_uid,
-    )
-
-
 def validate_regular_file(path: Path, *, role: str, executable_required: bool) -> os.stat_result:
-    """The runtime's verdict on ``path``, bound to the metadata it judged.
+    """The runtime's verdict on ``path``, with the metadata it judged.
 
-    The metadata read before the native check must still describe the file
-    after it, so a file replaced while the runtime judged it is refused.
+    The runtime brackets its own check with the file's ``lstat``, so a file
+    replaced while it judged is refused there; this returns the metadata the
+    caller binds its descriptor to.
     """
 
-    try:
-        before = path.lstat()
-    except OSError:
-        before = None
     _native("validate", path=str(path), role=role, executable_required=executable_required)
     try:
-        after = path.lstat()
+        return path.lstat()
     except OSError as exc:
         raise CodexHookIntegrityError(
             f"codex_hook_{role}_missing",
             f"The Codex hook {role} is missing; repair the installation.",
         ) from exc
-    if before is None or _fingerprint(before) != _fingerprint(after):
-        raise CodexHookIntegrityError(
-            f"codex_hook_{role}_hash_mismatch",
-            f"The Codex hook {role} content changed; repair the installation.",
-        )
-    return after
 
 
 __all__ = [
     "CodexHookIntegrityError",
-    "canonical_path",
     "describe_executable_file",
     "describe_regular_file",
     "validate_regular_file",

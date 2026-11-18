@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.harness.base import HarnessContext, PreparedHarnessInstall
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError, TransitionFile
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -131,7 +131,7 @@ def test_preparation_composes_real_codex_and_claude_adapters_without_writes(prep
 
 def _unowned_publication(monkeypatch) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.codex_install_transaction.require_codex_install_owner",
+        "codex_plugin_scanner.guard.native_owned.require_codex_install_owner",
         lambda _home: None,
     )
     monkeypatch.setattr(

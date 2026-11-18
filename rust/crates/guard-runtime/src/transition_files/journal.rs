@@ -23,12 +23,12 @@ const MAX_MUTATIONS: usize = 1024;
 const PRIVATE_KEY_NAME: &str = "hook-manifest.key";
 
 /// The transaction the lines belong to, as the owning process holds it.
-struct Owner<'a> {
-    operation_id: &'a str,
-    config_target_id: &'a str,
-    actor: &'a str,
-    pid: u64,
-    process_identity: &'a str,
+pub(super) struct Owner<'a> {
+    pub(super) operation_id: &'a str,
+    pub(super) config_target_id: &'a str,
+    pub(super) actor: &'a str,
+    pub(super) pid: u64,
+    pub(super) process_identity: &'a str,
 }
 
 fn text<'a>(fields: &'a Map<String, Value>, key: &str) -> Result<&'a str, &'static str> {
@@ -172,16 +172,40 @@ fn append(journal: &Path, line: &str) -> std::io::Result<()> {
     handle.write_all(line.as_bytes())
 }
 
-/// `op: "journal"`: append each mutation in order. A line that cannot be
-/// written is counted, and the count carried into the next line, as the
-/// Python journal's process-wide `_dropped_events` did.
+/// Append each mutation in order. A line that cannot be written is counted,
+/// and the count carried into the next line, as the Python journal's
+/// process-wide `_dropped_events` did. Answers the running count.
+pub(super) fn append_all(
+    guard_home: &Path,
+    owner: &Owner<'_>,
+    mutations: &[Value],
+    mut dropped: u64,
+) -> Result<u64, &'static str> {
+    if mutations.len() > MAX_MUTATIONS {
+        return Err(ERR_INVALID);
+    }
+    let journal = guard_home
+        .join("managed")
+        .join("codex")
+        .join("authority-mutations.jsonl");
+    for mutation in mutations {
+        let mutation = mutation.as_object().ok_or(ERR_INVALID)?;
+        let rendered = line(owner, mutation, dropped)?;
+        if append(&journal, &rendered).is_err() {
+            dropped += 1;
+        }
+    }
+    Ok(dropped)
+}
+
+/// `op: "journal"`: append each mutation of a caller-described owner.
 pub(super) fn dispatch(args: &Map<String, Value>) -> KindResult {
     let guard_home = PathBuf::from(text(args, "guard_home")?);
     let owner = args
         .get("owner")
         .and_then(Value::as_object)
         .ok_or(ERR_INVALID)?;
-    let mut dropped = owner
+    let dropped = owner
         .get("dropped_events")
         .and_then(Value::as_u64)
         .ok_or(ERR_INVALID)?;
@@ -198,18 +222,7 @@ pub(super) fn dispatch(args: &Map<String, Value>) -> KindResult {
     let mutations = args
         .get("mutations")
         .and_then(Value::as_array)
-        .filter(|items| items.len() <= MAX_MUTATIONS)
         .ok_or(ERR_INVALID)?;
-    let journal = guard_home
-        .join("managed")
-        .join("codex")
-        .join("authority-mutations.jsonl");
-    for mutation in mutations {
-        let mutation = mutation.as_object().ok_or(ERR_INVALID)?;
-        let rendered = line(&owner, mutation, dropped)?;
-        if append(&journal, &rendered).is_err() {
-            dropped += 1;
-        }
-    }
+    let dropped = append_all(&guard_home, &owner, mutations, dropped)?;
     Ok(serde_json::json!({ "ok": true, "dropped_events": dropped }))
 }

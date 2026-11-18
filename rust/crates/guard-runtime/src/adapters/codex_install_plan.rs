@@ -143,6 +143,11 @@ pub(crate) fn shell_block_ranges(original: &[u8]) -> Vec<[usize; 2]> {
 /// is no command, and an argument that is not text is dropped.
 fn guard_proxies(servers: &Value) -> KindResult {
     let servers = servers.as_object().ok_or(ERR_INVALID)?;
+    Ok(json!({ "names": proxy_names(servers) }))
+}
+
+/// The servers of a table whose launch is a Guard MCP proxy.
+pub(crate) fn proxy_names(servers: &serde_json::Map<String, Value>) -> Vec<String> {
     let mut names = Vec::new();
     for (name, server) in servers {
         let Some(args) = server.get("args").and_then(Value::as_array) else {
@@ -157,7 +162,7 @@ fn guard_proxies(servers: &Value) -> KindResult {
             names.push(name.clone());
         }
     }
-    Ok(json!({ "names": names }))
+    names
 }
 
 #[cfg(test)]

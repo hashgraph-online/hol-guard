@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 import tomlkit
 
-from codex_plugin_scanner.guard.cli.grok_hook_validation import is_missing_grok_hook_command
 from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
 from tests.grok_test_support import prepare_user_config_text
 from tests.native_bounded_runtime import hook_config_argv, use_bounded_runtime
@@ -76,20 +75,6 @@ def test_repair_preserves_other_hooks(tmp_path: Path, variant: str) -> None:
     for groups in tomlkit.parse(repaired)["hooks"].values():
         assert len(groups) == 2
         assert groups[0]["hooks"][0]["command"] == stale
-
-
-def test_missing_client_is_not_operational_hook_evidence(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_command
-
-    stale = command(tmp_path / "deleted")
-    assert is_missing_grok_hook_command(stale, command(tmp_path / "current"))
-    assert not is_grok_hook_command(stale)
-
-
-def test_workspace_fallback_changes_do_not_retain_missing_global_client(tmp_path: Path) -> None:
-    assert is_missing_grok_hook_command(
-        command(tmp_path / "old"), command(tmp_path / "new", workspace=tmp_path / "project")
-    )
 
 
 @pytest.mark.parametrize("frozen", [False, True])

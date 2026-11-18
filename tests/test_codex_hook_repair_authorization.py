@@ -20,7 +20,7 @@ from codex_plugin_scanner.guard.approval_gate import (
 )
 from codex_plugin_scanner.guard.cli import commands_lifecycle_gate as lifecycle
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
 from .test_codex_hook_recovery import installed  # noqa: F401 -- shared isolated fixture

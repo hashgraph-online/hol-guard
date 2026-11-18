@@ -24,17 +24,3 @@ def command_probes_enabled() -> bool:
     """Whether this caller lets a harness CLI probe run."""
 
     return _COMMAND_PROBES_ENABLED.get()
-
-
-def skipped_command_probe(command: list[str]) -> dict[str, object] | None:
-    if _COMMAND_PROBES_ENABLED.get():
-        return None
-    return {
-        "command": command,
-        "ok": None,
-        "return_code": None,
-        "stdout": "",
-        "stderr": "",
-        "skipped": True,
-        "skip_reason": "global_doctor_passive_checks",
-    }

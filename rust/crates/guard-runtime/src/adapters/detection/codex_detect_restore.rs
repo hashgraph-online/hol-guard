@@ -2,9 +2,83 @@
 //! reads the sources at their anchored (absolute) paths; the reply names them
 //! as the context spelled them.
 
-use serde_json::{Map, Value};
+use std::borrow::Cow;
+use std::path::Path;
+
+use serde_json::{json, Map, Value};
 
 use super::ERR_INVALID;
+
+/// `anchor_to_process_directory`: a relative path joined to `cwd`, with no
+/// normalization.
+fn anchored(cwd: &str, text: &str) -> String {
+    let path = Path::new(text);
+    if path.is_absolute() {
+        text.to_owned()
+    } else {
+        Path::new(cwd).join(path).to_string_lossy().into_owned()
+    }
+}
+
+/// The request over `pairs` the caller's context named (`config`, `hooks`
+/// and `scope` each), as the `sources`, `restore` and anchored `contents`
+/// the detection reads. `cwd` is the process directory the sources are
+/// anchored to, and `authenticated_config` the one config whose hooks the
+/// authenticated bindings cover. A request without `pairs` passes through.
+pub(super) fn expand(
+    args: &Map<String, Value>,
+) -> Result<Cow<'_, Map<String, Value>>, &'static str> {
+    let Some(pairs) = args.get("pairs") else {
+        return Ok(Cow::Borrowed(args));
+    };
+    let text = |key: &str| args.get(key).and_then(Value::as_str).ok_or(ERR_INVALID);
+    let (cwd, authenticated_config) = (text("cwd")?, text("authenticated_config")?);
+    let mut sources = Vec::new();
+    let mut restore: Vec<(String, &str)> = Vec::new();
+    for pair in pairs.as_array().ok_or(ERR_INVALID)? {
+        let pair = pair.as_object().ok_or(ERR_INVALID)?;
+        let field = |key: &str| pair.get(key).and_then(Value::as_str).ok_or(ERR_INVALID);
+        let (config, hooks, scope) = (field("config")?, field("hooks")?, field("scope")?);
+        for original in [config, hooks] {
+            let spelled = anchored(cwd, original);
+            if spelled != original {
+                match restore.iter().position(|(known, _)| *known == spelled) {
+                    Some(index) => restore[index].1 = original,
+                    None => restore.push((spelled, original)),
+                }
+            }
+        }
+        sources.push(json!({
+            "config_path": anchored(cwd, config),
+            "hooks_path": anchored(cwd, hooks),
+            "config_scope": scope,
+            "hooks_scope": scope,
+            "authenticated": config == authenticated_config,
+        }));
+    }
+    let mut expanded = args.clone();
+    expanded.remove("pairs");
+    expanded.insert("sources".to_owned(), Value::Array(sources));
+    expanded.insert(
+        "restore".to_owned(),
+        restore
+            .into_iter()
+            .map(|(spelled, original)| json!([spelled, original]))
+            .collect(),
+    );
+    match args.get("contents") {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(captured)) => {
+            let keyed: Map<String, Value> = captured
+                .iter()
+                .map(|(path, data)| (anchored(cwd, path), data.clone()))
+                .collect();
+            expanded.insert("contents".to_owned(), Value::Object(keyed));
+        }
+        Some(_) => return Err(ERR_INVALID),
+    }
+    Ok(Cow::Owned(expanded))
+}
 
 /// The `[anchored, original]` spellings the caller's context used, in order.
 pub(super) fn restorations(args: &Map<String, Value>) -> Result<Vec<(&str, &str)>, &'static str> {

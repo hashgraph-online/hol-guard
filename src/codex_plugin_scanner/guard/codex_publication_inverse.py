@@ -7,8 +7,6 @@ installer grant nor a serialized native assertion can retire this journal.
 from __future__ import annotations
 
 import base64
-import hashlib
-import math
 import os
 import threading
 import time
@@ -17,10 +15,10 @@ from typing import TYPE_CHECKING
 
 from . import native_transition_files
 from .codex_hook_file_integrity import hook_validation_deadline
-from .codex_hook_recovery import _load_record, _record_path, _remove_record
+from .codex_hook_recovery import _load_record, _remove_record
 from .codex_hook_rollback import rollback_file_identity
 from .codex_publication_inverse_authorization import CodexPublicationInverseAuthorization
-from .codex_publication_inverse_plan import _journal_bytes, _predecessor_dependencies, _with_native_dependency
+from .codex_publication_inverse_plan import native_runtime_wire, workspace_wire
 from .runtime_transition import RuntimeTransition, TransitionError, inverse_recovery_budget
 from .runtime_transition_admission import verified_admission_payload
 
@@ -64,24 +62,23 @@ class PendingCodexPublicationInverse:
                 authorization.deadline_monotonic,
             ),
         ):
-            journal = _record_path(plan.guard_home)
-            if (
-                rollback_file_identity(journal) != self._journal_identity
-                or hashlib.sha256(_journal_bytes(journal)).hexdigest() != self._journal_sha256
-                or _load_record(plan.guard_home, live_config_conflict=True) != self._record
-                or rollback_file_identity(journal) != self._journal_identity
-            ):
-                raise TransitionError("publication_inverse_journal_changed")
+            native_transition_files.publication(
+                "inverse_journal",
+                plan.guard_home,
+                journal_identity=list(self._journal_identity),
+                journal_sha256=self._journal_sha256,
+                record=self._record,
+            )
             predecessor = plan.changes[1].after
             assert predecessor is not None
-            dependencies = _with_native_dependency(
-                _predecessor_dependencies(plan.guard_home, predecessor),
-                plan.native_runtime,
-                plan.verification_workspace,
+            native_transition_files.publication(
+                "inverse_pinned",
+                plan.guard_home,
+                manifest_text=predecessor.decode("utf-8"),
+                dependencies=[item.payload() for item in plan.dependencies],
+                native_runtime=native_runtime_wire(plan.native_runtime),
+                verification_workspace=workspace_wire(plan.verification_workspace),
             )
-            if [item.payload() for item in dependencies] != [item.payload() for item in plan.dependencies]:
-                raise TransitionError("publication_inverse_dependencies_invalid")
-            RuntimeTransition._compare({"files": [item.payload() for item in dependencies]}, "before")
             for index, (change, identity) in enumerate(zip(plan.changes, self._identities, strict=True)):
                 generation = "after" if index in self._restored else "before"
                 if rollback_file_identity(change.path) != identity:
@@ -164,6 +161,10 @@ def _record_answer(answer: object) -> tuple[dict[str, object], str, tuple[int, i
     return record, sha256, identity
 
 
+def _encoded(value: bytes | None) -> str | None:
+    return None if value is None else base64.b64encode(value).decode("ascii")
+
+
 def publish_codex_publication_inverse(
     authorization: CodexPublicationInverseAuthorization,
 ) -> PendingCodexPublicationInverse:
@@ -187,14 +188,11 @@ def publish_codex_publication_inverse(
             plan.change_identities,
         )
         with _publications_guard:
-            now = time.monotonic()
-            for identifier, previous in tuple(_publications.items()):
-                if previous.authorization.deadline_monotonic <= now:
-                    del _publications[identifier]
-            if authorization.grant.grant_id in _publications:
-                raise TransitionError("publication_inverse_publication_claimed")
-            if len(_publications) >= 128:
-                raise TransitionError("publication_inverse_publication_capacity")
+            # The runtime decides who is admitted; this keeps only the handles.
+            for identifier in native_transition_files.register_inverse(
+                authorization.grant.grant_id, authorization.deadline_monotonic
+            ):
+                _publications.pop(identifier, None)
             _publications[authorization.grant.grant_id] = pending
         # Persist the reviewed current generation before changing any target.
         pending._write_record(phase="restoring")
@@ -246,39 +244,43 @@ def verify_and_retire_codex_publication_inverse(
         ),
     ):
         pending.compare()
-        if set(pending._restored) != {0, 1, 2} or plan.native_runtime is None or plan.verification_workspace is None:
+        generation = native_transition_files.artifact_generation(
+            "inverse",
+            plan.subject(),
+            bound=plan.native_runtime is not None and plan.verification_workspace is not None,
+            restored=pending._restored,
+        )
+        native_runtime, workspace = plan.native_runtime, plan.verification_workspace
+        if native_runtime is None or workspace is None:
             raise TransitionError("publication_inverse_not_restored")
         started = time.monotonic()
-        generation = "codex-publication-inverse-" + plan.subject().rsplit(":", 1)[1]
         proof = observe_configured_codex_hook(
             operation_id=plan.operation_id,
             artifact_generation=generation,
-            expected_runtime=plan.native_runtime,
+            expected_runtime=native_runtime,
             guard_home=plan.guard_home,
             config_path=plan.config_path,
-            workspace=plan.verification_workspace,
+            workspace=workspace,
             deadline_monotonic=authorization.deadline_monotonic,
             receipt_store=receipt_store,
         )
         pending.compare()
         observation = verified_admission_payload(proof)
-        evidence = observation.get("installed_hook_evidence")
-        observed = observation.get("observed_monotonic")
-        if (
-            not isinstance(observed, (int, float))
-            or isinstance(observed, bool)
-            or not math.isfinite(observed)
-            or not pending.publication_monotonic <= started <= observed <= time.monotonic()
-            or observation.get("operation_id") != plan.operation_id
-            or observation.get("generation") != generation
-            or observation.get("guard_home") != str(plan.guard_home)
-            or observation.get("runtime_identity") != plan.payload()["native_runtime"]
-            or not isinstance(evidence, dict)
-            or evidence.get("harness") != "codex"
-            or evidence.get("config_sha256") != hashlib.sha256(plan.changes[0].after or b"").hexdigest()
-            or evidence.get("manifest_sha256") != hashlib.sha256(plan.changes[1].after or b"").hexdigest()
-        ):
-            raise TransitionError("publication_inverse_native_verification_invalid")
+        # The runtime decides whether this proof is fresh and is this inverse's.
+        native_transition_files.publication(
+            "inverse_proof",
+            plan.guard_home,
+            observation=observation,
+            publication=pending.publication_monotonic,
+            started=started,
+            now=time.monotonic(),
+            operation_id=plan.operation_id,
+            generation=generation,
+            guard_home=str(plan.guard_home),
+            runtime_identity=plan.payload()["native_runtime"],
+            config_after=_encoded(plan.changes[0].after),
+            manifest_after=_encoded(plan.changes[1].after),
+        )
         pending._write_record(phase="verified", observation=observation)
         pending.compare()
         _remove_record(plan.guard_home)

@@ -124,7 +124,7 @@ fn a_plan_adds_only_the_guard_entry() {
         // Planning the planned file again changes nothing.
         let again = plan_of(ai_tool, Some(after(&plan)), bridge(ai_tool));
         assert_eq!(again["action"], "unchanged", "{ai_tool}");
-        assert_eq!(again["after"], Value::Null);
+        assert_eq!(again["after"], json!(after(&plan)), "{ai_tool}");
     }
 }
 

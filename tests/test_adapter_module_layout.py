@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard import harness as harness_package
 from codex_plugin_scanner.guard.harness import registry
-from codex_plugin_scanner.guard.harness.contracts import HARNESS_CONTRACTS
+from codex_plugin_scanner.guard.harness.contract_registry import harness_contracts
 from scripts.ci.hook_data_plane_ownership_contract import load_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +22,7 @@ def test_harness_search_path_contains_only_the_public_package() -> None:
 
 def test_public_adapter_registry_and_aliases_remain_unchanged() -> None:
     registered = registry.list_adapters()
-    assert {adapter.harness for adapter in registered} == {contract.harness for contract in HARNESS_CONTRACTS}
+    assert {adapter.harness for adapter in registered} == {contract.harness for contract in harness_contracts()}
     for adapter in registered:
         assert registry.get_adapter(adapter.harness) is adapter
         for alias in adapter.aliases:

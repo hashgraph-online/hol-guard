@@ -22,6 +22,7 @@ use super::{
 use crate::pyjson::{self, PyVal};
 
 pub(super) use super::cursor_ask::{Ask, Attestation, Facts};
+use super::cursor_surfaces;
 
 #[path = "cursor_cli_manifest.rs"]
 mod cli_manifest;
@@ -192,12 +193,12 @@ pub(super) fn cli_entry(ask: &Ask) -> Step<Option<CliEntry>> {
 }
 
 /// `cursor_cli_command_available`.
-fn cli_available(ask: &Ask) -> Step<bool> {
+pub(super) fn cli_available(ask: &Ask) -> Step<bool> {
     Ok(cli_entry(ask)?.is_some()
         || which::user_directory_command(ask.ctx, "cursor-agent", &ask.ctx.home, &[]).is_some())
 }
 
-fn shim_installed(ctx: &Ctx) -> bool {
+pub(super) fn shim_installed(ctx: &Ctx) -> bool {
     let bin = ctx.absolute(&ctx.guard_home.join("bin"));
     SHIM_COMMANDS.iter().any(|name| bin.join(name).exists())
 }
@@ -418,8 +419,10 @@ pub(crate) fn dispatch(
             })),
             Some(stdout) => Ok(json!({ "reported_artifacts": reported_artifacts(stdout) })),
         },
-        "cli_shim_installed" => Ok(json!({ "value": shim_installed(ctx) })),
-        "cli_detected" => Ok(json!({ "value": cli_available(&ask)? || shim_installed(ctx) })),
+        "install_surface"
+        | "protected_surfaces"
+        | "protected_surfaces_from_store"
+        | "local_action" => cursor_surfaces::dispatch(op, &ask),
         "cli_manifest" => cli_manifest(ctx, fields),
         "cli_uninstalled" => {
             let mut doc = Doc::default();

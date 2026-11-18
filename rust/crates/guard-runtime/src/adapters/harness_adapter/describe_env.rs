@@ -1,7 +1,7 @@
 //! The request environment the adapters this kind owns may read.
 
 /// Every variable a request's `env` may carry.
-pub(crate) const ENV_NAMES: [&str; 50] = [
+pub(crate) const ENV_NAMES: [&str; 66] = [
     "PATH",
     "PATHEXT",
     "NoDefaultCurrentDirectoryInExePath",
@@ -57,6 +57,24 @@ pub(crate) const ENV_NAMES: [&str; 50] = [
     // The import path a managed MCP proxy launcher keeps
     // (`merge_guard_launcher_env`).
     "PYTHONPATH",
+    // The presence-only markers a harness runtime injects into the commands
+    // it runs (`harness_attribution`).
+    "HOL_GUARD_ORIGIN_HARNESS",
+    "CLAUDECODE",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CURSOR_VERSION",
+    "CURSOR_PROJECT_DIR",
+    "CURSOR_TRACE_ID",
+    "CURSOR_SESSION_ID",
+    "CURSOR_TRANSCRIPT_PATH",
+    "CODEX_SANDBOX",
+    "CODEX_THREAD_ID",
+    "GROK_AGENT",
+    "GROK_SESSION_ID",
+    "OPENCODE_CONFIG_CONTENT",
+    "DEVIN_PROJECT_DIR",
+    "MUSE_SESSION_ID",
+    "MUSE_THREAD_ID",
 ];
 
 /// Prefixes of the variables that redirect Paseo's native runtimes.

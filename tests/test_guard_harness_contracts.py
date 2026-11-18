@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.contracts import HARNESS_CONTRACTS, HarnessProtectionContract, contract_for
+from codex_plugin_scanner.guard.harness.contract_registry import harness_contracts
+from codex_plugin_scanner.guard.harness.contracts import HarnessProtectionContract, contract_for
 
 
 class TestHarnessProtectionContract:
@@ -42,7 +43,7 @@ class TestHarnessProtectionContract:
 
 class TestHarnessRegistry:
     def test_all_harnesses_present(self) -> None:
-        names = {c.harness for c in HARNESS_CONTRACTS}
+        names = {c.harness for c in harness_contracts()}
         assert "codex" in names
         assert "claude-code" in names
         assert "opencode" in names
@@ -53,26 +54,26 @@ class TestHarnessRegistry:
         assert "openclaw" in names
 
     def test_every_contract_has_smoke_command(self) -> None:
-        for c in HARNESS_CONTRACTS:
+        for c in harness_contracts():
             assert c.smoke_command.strip(), f"{c.harness} missing smoke_command"
 
     def test_every_contract_has_known_blind_spots(self) -> None:
-        for c in HARNESS_CONTRACTS:
+        for c in harness_contracts():
             assert c.known_blind_spots.strip(), f"{c.harness} missing known_blind_spots"
 
     def test_every_contract_states_native_approval(self) -> None:
-        for c in HARNESS_CONTRACTS:
+        for c in harness_contracts():
             assert isinstance(c.native_approval, bool), f"{c.harness} native_approval must be bool"
 
     def test_every_contract_has_at_least_one_alias(self) -> None:
-        for c in HARNESS_CONTRACTS:
+        for c in harness_contracts():
             assert len(c.install_aliases) > 0, f"{c.harness} must have at least one install alias"
 
     def test_all_aliases_are_unique(self) -> None:
         from collections import Counter
 
         all_aliases: list[str] = []
-        for c in HARNESS_CONTRACTS:
+        for c in harness_contracts():
             all_aliases.extend(c.install_aliases)
         counts = Counter(all_aliases)
         duplicates = {alias: count for alias, count in counts.items() if count > 1}
@@ -158,7 +159,7 @@ class TestContractAliasesMatchAdapter:
     def test_all_install_aliases_are_resolvable(self) -> None:
         from codex_plugin_scanner.guard.harness.registry import get_adapter
 
-        for contract in HARNESS_CONTRACTS:
+        for contract in harness_contracts():
             for alias in contract.install_aliases:
                 try:
                     get_adapter(alias)

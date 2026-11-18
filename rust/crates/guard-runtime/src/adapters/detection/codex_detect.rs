@@ -34,7 +34,7 @@ use super::zcode_artifacts::{pair_value, Fields, Scope};
 #[path = "codex_detect_restore.rs"]
 mod restore;
 
-use restore::{restorations, restore_paths};
+use restore::{expand, restorations, restore_paths};
 
 const HARNESS: &str = "codex";
 
@@ -390,7 +390,8 @@ fn source_pairs(
 }
 
 pub(crate) fn detect(args: &Value) -> KindResult {
-    let args = args_object(args)?;
+    let args = expand(args_object(args)?)?;
+    let args = &*args;
     if args.get("harness").and_then(Value::as_str) != Some(HARNESS) {
         return Err(ERR_INVALID);
     }

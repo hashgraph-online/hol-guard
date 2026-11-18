@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-use super::{restorations, restore_paths};
+use super::{expand, restorations, restore_paths};
 
 #[test]
 fn restores_config_paths_metadata_found_paths_and_warning_text() {
@@ -39,4 +39,67 @@ fn a_missing_restore_is_empty_and_a_malformed_one_is_refused() {
         let args: Value = json!({ "restore": bad });
         assert!(restorations(args.as_object().unwrap()).is_err());
     }
+}
+
+fn expanded(args: Value) -> Result<Value, &'static str> {
+    expand(args.as_object().unwrap()).map(|map| Value::Object(map.into_owned()))
+}
+
+#[cfg(unix)]
+#[test]
+fn pairs_become_anchored_sources_with_their_restorations() {
+    let args = json!({
+        "harness": "codex",
+        "cwd": "/w",
+        "authenticated_config": "/h/.codex/config.toml",
+        "pairs": [
+            {"config": "/h/.codex/config.toml", "hooks": "/h/.codex/hooks.json", "scope": "global"},
+            {"config": ".codex/config.toml", "hooks": ".codex/hooks.json", "scope": "workspace"},
+        ],
+        "contents": {".codex/config.toml": "ab", "/h/.codex/hooks.json": null},
+    });
+    let out = expanded(args).unwrap();
+    assert!(out.get("pairs").is_none());
+    assert_eq!(out["harness"], "codex");
+    assert_eq!(
+        out["sources"],
+        json!([
+            {
+                "config_path": "/h/.codex/config.toml", "hooks_path": "/h/.codex/hooks.json",
+                "config_scope": "global", "hooks_scope": "global", "authenticated": true,
+            },
+            {
+                "config_path": "/w/.codex/config.toml", "hooks_path": "/w/.codex/hooks.json",
+                "config_scope": "workspace", "hooks_scope": "workspace", "authenticated": false,
+            },
+        ])
+    );
+    assert_eq!(
+        out["restore"],
+        json!([
+            ["/w/.codex/config.toml", ".codex/config.toml"],
+            ["/w/.codex/hooks.json", ".codex/hooks.json"],
+        ])
+    );
+    assert_eq!(
+        out["contents"],
+        json!({"/w/.codex/config.toml": "ab", "/h/.codex/hooks.json": null})
+    );
+}
+
+#[test]
+fn a_request_without_pairs_passes_through_and_a_malformed_one_is_refused() {
+    let plain = json!({"sources": [], "restore": []});
+    assert_eq!(expanded(plain.clone()).unwrap(), plain);
+    let base = json!({"cwd": "/w", "authenticated_config": "/c"});
+    for bad in [
+        json!({"pairs": [], "authenticated_config": "/c"}),
+        json!({"pairs": [], "cwd": "/w"}),
+        json!({"pairs": "x", "cwd": "/w", "authenticated_config": "/c"}),
+        json!({"pairs": [{"config": "/c", "hooks": "/h"}], "cwd": "/w", "authenticated_config": "/c"}),
+        json!({"pairs": [], "cwd": "/w", "authenticated_config": "/c", "contents": 3}),
+    ] {
+        assert!(expanded(bad).is_err());
+    }
+    assert!(expanded(json!({"pairs": [], "cwd": base["cwd"], "authenticated_config": base["authenticated_config"]})).is_ok());
 }

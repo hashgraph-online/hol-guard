@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.approval_gate import (
     update_settings,
 )
 from codex_plugin_scanner.guard.claude_hook_entry import refresh_claude_hooks
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity
 from codex_plugin_scanner.guard.runtime_transition import (
     RuntimeTransition,
@@ -2164,7 +2164,7 @@ import os, sys, time
 from pathlib import Path
 from codex_plugin_scanner.guard import runtime_transition as module
 from codex_plugin_scanner.guard.cli import commands_lifecycle_gate
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 root = Path(sys.argv[1])
 phase = sys.argv[2]
 home = root / "guard-home"

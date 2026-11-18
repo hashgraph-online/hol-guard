@@ -217,6 +217,12 @@ pub(super) fn target(ctx: &Ctx, settings: &Path) -> Value {
             path_text(&workspace.join(".claude"))
         )
     });
+    let command = rollback_command(ctx);
+    let command_text = command
+        .iter()
+        .map(|word| shell_word(word, ctx.windows))
+        .collect::<Vec<_>>()
+        .join(" ");
     json!({
         "scope": "user",
         "settings_path": path_text(settings),
@@ -230,7 +236,11 @@ pub(super) fn target(ctx: &Ctx, settings: &Path) -> Value {
             machine and read the same user settings. Cloud sessions (Claude Code on the web) run \
             elsewhere, do not read this file, and Guard does not cover them.",
         "rollback": {
-            "command": rollback_command(ctx),
+            "command": command,
+            // The command for the shell that will run it, so the caller shows
+            // it as is: PowerShell on Windows, POSIX sh elsewhere.
+            "command_text": command_text,
+            "shell": if ctx.windows { "powershell" } else { "sh" },
             "path": path_text(settings),
             "effect": "Removes only Guard's hook entries from this file and leaves every other \
                 setting. It makes no backup; `hol-guard hooks remove --all` backs the file up \

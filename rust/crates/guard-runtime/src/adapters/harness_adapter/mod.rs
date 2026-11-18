@@ -46,16 +46,19 @@ mod codex;
 mod codex_alternate_plan;
 mod codex_config_hooks;
 mod codex_detect_legacy;
+mod codex_failure;
 mod codex_files;
 mod codex_hook_state;
 mod codex_incident;
 mod codex_incident_read;
 mod codex_install;
 mod codex_install_plan;
+mod codex_install_request;
 mod codex_live_hooks;
 mod codex_live_read;
 mod codex_live_state;
 mod codex_main_plan;
+mod codex_manifest_verify;
 mod codex_merge;
 mod codex_migration;
 mod codex_owner_home;
@@ -65,6 +68,7 @@ mod codex_publish;
 mod codex_python_hook;
 mod codex_python_imports;
 mod codex_python_values;
+mod codex_repair_verify;
 mod codex_servers;
 mod codex_sources;
 mod codex_spec;
@@ -72,6 +76,7 @@ mod codex_uninstall;
 mod codex_uninstall_config;
 mod codex_uninstall_op;
 mod codex_uninstall_plan;
+mod contract_config_paths;
 mod copilot;
 mod copilot_install;
 mod copilot_mcp;
@@ -87,13 +92,19 @@ mod cursor_hooks_plan;
 mod cursor_hooks_uninstall;
 mod cursor_rebind;
 mod cursor_state;
+mod cursor_surfaces;
 mod describe;
 mod describe_env;
 mod desktop_core;
 mod durable_runtime;
 mod files;
 mod grok;
+mod grok_hook_command;
+mod grok_hook_files;
+mod grok_hook_op;
 mod grok_install;
+mod grok_protection_checks;
+mod grok_update;
 mod guard_shim;
 mod guard_shim_text;
 mod hermes;
@@ -106,6 +117,7 @@ mod hook_render;
 mod install_apply;
 mod isolated_python;
 mod kimi;
+mod live_hook_verification;
 mod managed_record;
 mod managed_servers;
 mod mcp_servers;
@@ -115,6 +127,7 @@ mod opencode_build;
 mod opencode_checks;
 mod opencode_install;
 mod opencode_servers;
+mod opencode_update;
 mod opencode_workspace;
 mod paseo;
 mod paseo_install;
@@ -130,9 +143,13 @@ mod shim_remove;
 mod shims_apply;
 mod simple;
 mod uninstall_apply;
+mod update_bounded;
+mod update_support;
 mod which;
 mod zcode;
 mod zcode_desktop_keys;
+
+pub(crate) use codex_repair_verify::{verify_captured, Verdict};
 
 #[cfg(test)]
 #[path = "tests.rs"]
@@ -318,6 +335,18 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         return answer(mcp_servers::dispatch(op, fields));
     }
     let ctx = Ctx::parse(fields.get("context"))?;
+    if grok_protection_checks::handles(op) {
+        return answer(grok_protection_checks::dispatch(op, &ctx));
+    }
+    if contract_config_paths::handles(op) {
+        return answer(contract_config_paths::dispatch(&ctx, fields));
+    }
+    if live_hook_verification::handles(op) {
+        return answer(live_hook_verification::dispatch(&ctx, fields));
+    }
+    if grok_hook_op::handles(op) {
+        return answer(grok_hook_op::dispatch(op, &ctx, fields));
+    }
     if op == "proof_verify" || op == "proof_bind" {
         return answer(proof::dispatch(op, &ctx, fields));
     }
@@ -326,6 +355,12 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     }
     if op == "managed_install_guidance" {
         return answer(managed_record::guidance_after(&ctx, fields));
+    }
+    if op == "bounded_hook_scripts" {
+        return answer(update_bounded::scripts(&ctx));
+    }
+    if op == "remove_bounded_hook_script" {
+        return answer(update_bounded::remove(&ctx, fields));
     }
     if op == "prepare_guard_shim" {
         return answer(guard_shim::prepare(&ctx, fields));

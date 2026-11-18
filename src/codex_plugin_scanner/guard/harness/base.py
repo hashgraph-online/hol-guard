@@ -3,26 +3,22 @@
 from __future__ import annotations
 
 import os
-import shlex
-import subprocess
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import ExitStack
 from dataclasses import dataclass, field
-from functools import cached_property, wraps
+from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
-from ...path_support import resolves_within_root
 from ..harness.contracts import HarnessCoverageSummary, HarnessSetupContract, HarnessSetupStep, setup_contract_for
-from ..harness.diagnostic_probes import skipped_command_probe
+from ..harness.diagnostic_probes import command_probes_enabled
 from ..harness.harness_diagnostics_bridge import (
-    _detection_request,
-    _diagnostic_setup_status,
-    _harness_diagnostics,
-    _launcher_artifact,
     artifacts_use_guard,
+    guard_warnings,
+    native_diagnostics,
 )
+from ..harness.harness_diagnostics_bridge import shell_command as _shell_command
 from ..models import GuardArtifact, HarnessDetection
+from ..native_owned import owned_adapter_mutation
 
 if TYPE_CHECKING:
     from ..inventory_contract import GuardAgentInventorySnapshot
@@ -61,7 +57,7 @@ class PreparedHarnessInstall:
         journals the plan itself passes ``rollback=False`` and recovers from its
         own record; ``on_write`` sees each file just after it is written.
         """
-        from ..codex_install_transaction import require_codex_install_owner
+        from ..native_owned import require_codex_install_owner
         from ..native_transition_files import publish_files
         from ..runtime_transition import assert_transition_mutation_allowed
 
@@ -69,40 +65,6 @@ class PreparedHarnessInstall:
         assert_transition_mutation_allowed(guard_home)
         publish_files(self.files, removals=removals, rollback=rollback, on_write=on_write)
         return self.manifest
-
-
-def detection_request(harness: str, context: HarnessContext) -> dict[str, object]:
-    """The home and workspace a native detection kind reads, as Python holds them.
-
-    The working directory always travels with the request: relative paths,
-    including ones read from harness-written files, resolve against Python's
-    cwd and never the resident's.
-
-    ``cwd`` is a fact of the calling Python process, so it travels with the
-    request until the resident request envelope stamps it.
-    """
-
-    workspace = context.workspace_dir
-    request: dict[str, object] = {
-        "harness": harness,
-        "home": str(context.home_dir),
-        "workspace": None if workspace is None else str(workspace),
-    }
-    try:
-        request["cwd"] = os.getcwd()
-    except OSError:
-        if not context.home_dir.is_absolute() or (workspace is not None and not workspace.is_absolute()):
-            raise
-    return request
-
-
-def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:
-    """Return a shell-escaped command string appropriate for the target OS."""
-
-    is_windows = os.name == "nt" if windows is None else windows
-    if is_windows:
-        return subprocess.list2cmdline(list(command))
-    return shlex.join(command)
 
 
 #: The caller environment a harness CLI probe runs with.
@@ -140,11 +102,11 @@ def _run_command_probe(
     envelope stamps them.
     """
 
-    skipped = skipped_command_probe(command)
-    if skipped is not None:
-        return skipped
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
+    if not command_probes_enabled():
+        # The runtime answers the record that says nothing ran.
+        return native_runner_authority("command_probe", {"command": [str(part) for part in command], "probes": False})
     request = {
         "command": [str(part) for part in command],
         "cwd": str((cwd or Path.cwd()).absolute()),
@@ -156,40 +118,6 @@ def _run_command_probe(
     except NativeRunnerAuthorityError:
         # A diagnostic probe never fails the doctor; it reports that nothing ran.
         return {"command": command, "ok": False, "return_code": None, "stdout": "", "stderr": "probe unavailable"}
-
-
-def _ensure_path_within_root(root: Path, path: Path, *, label: str) -> None:
-    if not resolves_within_root(root, path):
-        raise ValueError(f"{label} settings path escapes the managed root")
-
-
-_MutationResult = TypeVar("_MutationResult")
-
-
-def _owned_adapter_mutation(method: Callable[..., _MutationResult]) -> Callable[..., _MutationResult]:
-    @wraps(method)
-    def owned(self: HarnessAdapter, context: HarnessContext, *args: object, **kwargs: object) -> _MutationResult:
-        from ..codex_install_transaction import _home_owner_lock, codex_install_transaction
-        from ..runtime_transition import assert_transition_mutation_allowed
-
-        with ExitStack() as ownership:
-            if self.harness == "codex":
-                from ..codex_lifecycle_lock import codex_lifecycle_locks
-
-                ownership.enter_context(codex_lifecycle_locks(context))
-            ownership.enter_context(_home_owner_lock(context.guard_home))
-            assert_transition_mutation_allowed(context.guard_home)
-            self.preflight_management(context, operation=method.__name__)
-            with codex_install_transaction(
-                context.guard_home,
-                context.guard_home / "managed",
-                actor=f"adapter.{self.harness}.{method.__name__}",
-            ):
-                assert_transition_mutation_allowed(context.guard_home)
-                return method(self, context, *args, **kwargs)
-
-    owned.__dict__["_guard_mutation_owned"] = True
-    return owned
 
 
 class HarnessAdapter:
@@ -226,7 +154,7 @@ class HarnessAdapter:
         for name in ("install", "uninstall"):
             method = cls.__dict__.get(name)
             if method is not None:
-                setattr(cls, name, _owned_adapter_mutation(method))
+                setattr(cls, name, owned_adapter_mutation(method))
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         raise NotImplementedError
@@ -287,7 +215,7 @@ class HarnessAdapter:
                 cisco_runs=cisco_runs,
             )
 
-    @_owned_adapter_mutation
+    @owned_adapter_mutation
     def install(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         from ..shims import install_guard_shim
 
@@ -299,7 +227,7 @@ class HarnessAdapter:
             **shim_manifest,
         }
 
-    @_owned_adapter_mutation
+    @owned_adapter_mutation
     def uninstall(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         from ..shims import remove_guard_shim
 
@@ -412,29 +340,31 @@ class HarnessAdapter:
             "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
         }
 
+    def _own_warnings(
+        self,
+        detection: HarnessDetection,
+        runtime_probe: dict[str, object] | None,
+    ) -> list[str] | None:
+        """The final warnings a harness words itself, or ``None`` for the ones Guard words."""
+
+        del detection, runtime_probe
+        return None
+
     def diagnostic_warnings(
         self,
         detection: HarnessDetection,
         runtime_probe: dict[str, object] | None,
     ) -> list[str]:
-        added = _harness_diagnostics(
-            "warnings",
-            lambda value: isinstance(value, list) and all(isinstance(item, str) for item in value),
-            harness=self.harness,
-            executable=self.executable,
-            command_absence_proves_uninstalled=self.command_absence_proves_uninstalled,
-            runtime_probe=None
-            if runtime_probe is None
-            else {
-                "timed_out": runtime_probe.get("timed_out") is True,
-                "failed": runtime_probe.get("ok") is False,
-                "reported_no_artifacts": runtime_probe.get("reported_artifacts") == 0,
-                "managed_install_present": runtime_probe.get("managed_install_present") is True,
-                "runtime_hook_registered": runtime_probe.get("runtime_hook_registered") is True,
-            },
-            detection=_detection_request(detection),
+        own = self._own_warnings(detection, runtime_probe)
+        if own is not None:
+            return own
+        return guard_warnings(
+            self.harness,
+            self.executable,
+            self.command_absence_proves_uninstalled,
+            detection,
+            runtime_probe,
         )
-        return [*detection.warnings, *added]
 
     def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
         del managed_install
@@ -447,48 +377,17 @@ class HarnessAdapter:
         }
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
-        detection = self._detection_with_guard_launcher(context, self.detect(context))
+        detection = self.detect(context)
         runtime_probe = self.runtime_probe(context)
-        warnings = self.diagnostic_warnings(detection, runtime_probe)
-        return {
-            "harness": self.harness,
-            "installed": detection.installed,
-            "setup_status": _diagnostic_setup_status(
-                detection,
-                warnings,
-                command_absence_proves_uninstalled=self.command_absence_proves_uninstalled,
-            ),
-            "command_available": detection.command_available,
-            "config_paths": list(detection.config_paths),
-            "artifacts": [artifact.to_dict() for artifact in detection.artifacts],
-            "runtime_probe": runtime_probe,
-            "warnings": warnings,
-        }
-
-    def _detection_with_guard_launcher(
-        self,
-        context: HarnessContext,
-        detection: HarnessDetection,
-    ) -> HarnessDetection:
-        # The caller's working directory, for a relative Guard home, is not in the
-        # resident request envelope yet, so a relative home is refused natively.
-        artifact = _harness_diagnostics(
-            "launcher_artifact",
-            lambda value: value is None or isinstance(value, dict),
+        return native_diagnostics(
             harness=self.harness,
-            guard_home=str(context.guard_home),
-            names=[self.launcher_name or self.harness, *self.legacy_launcher_names],
-        )
-        if artifact is None:
-            return detection
-        launcher = _launcher_artifact(artifact)
-        return HarnessDetection(
-            harness=detection.harness,
-            installed=True,
-            command_available=detection.command_available,
-            config_paths=detection.config_paths,
-            artifacts=(*detection.artifacts, launcher),
-            warnings=detection.warnings,
+            executable=self.executable,
+            command_absence_proves_uninstalled=self.command_absence_proves_uninstalled,
+            guard_home=context.guard_home,
+            launcher_names=[self.launcher_name or self.harness, *self.legacy_launcher_names],
+            detection=detection,
+            runtime_probe=runtime_probe,
+            warnings=self._own_warnings(detection, runtime_probe),
         )
 
 
@@ -496,7 +395,7 @@ __all__ = [
     "GuardArtifact",
     "HarnessAdapter",
     "HarnessContext",
-    "_ensure_path_within_root",
     "_run_command_probe",
+    "_shell_command",
     "artifacts_use_guard",
 ]

@@ -10,10 +10,10 @@ from typing import Final, cast, final
 from typing_extensions import override
 
 from .command_activity_contract import (
-    COMMAND_ACTIVITY_HARNESSES,
     COMMAND_ACTIVITY_SCHEMA_VERSION,
     CorrelationHandle,
     CorrelationKind,
+    command_activity_harnesses,
 )
 
 COMMAND_ACTIVITY_CORRELATION_VERSION: Final = "guard.command-activity-correlation.v1"
@@ -119,5 +119,5 @@ def _require_stable_id(value: object, label: str) -> None:
 
 
 def _require_harness(value: object) -> None:
-    if not isinstance(value, str) or value not in COMMAND_ACTIVITY_HARNESSES:
+    if not isinstance(value, str) or value not in command_activity_harnesses():
         raise ValueError("harness must identify a supported Guard harness")

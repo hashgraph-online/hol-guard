@@ -103,7 +103,7 @@ def install_guard_shim(
     display_name: str | None = None,
 ) -> dict[str, object]:
     """Publish the same prepared launcher bytes used by runtime transitions."""
-    from .codex_install_transaction import codex_install_transaction
+    from .native_owned import codex_install_transaction
     from .runtime_transition import assert_transition_mutation_allowed
 
     with codex_install_transaction(context.guard_home, context.guard_home / "bin", actor="harness-shim.install"):
@@ -160,7 +160,7 @@ def remove_guard_shim(
     display_name: str | None = None,
 ) -> dict[str, object]:
     """Remove a previously installed Guard launcher shim."""
-    from .codex_install_transaction import codex_install_transaction
+    from .native_owned import codex_install_transaction
     from .runtime_transition import assert_transition_mutation_allowed
 
     with codex_install_transaction(context.guard_home, context.guard_home / "bin", actor="harness-shim.uninstall"):
@@ -237,7 +237,7 @@ def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardSh
 
 def ensure_guard_shim_path_in_shell_profile(context: HarnessContext) -> dict[str, object]:
     """Prepend the harness launcher shim dir in the user's normal shell profile."""
-    from .codex_install_transaction import codex_install_transaction
+    from .native_owned import codex_install_transaction
     from .runtime_transition import assert_transition_mutation_allowed
 
     prepared = prepare_guard_shim_shell_profile(context)

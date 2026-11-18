@@ -36,7 +36,7 @@ def _windows_facts(platform_name: str = os.name) -> dict[str, object] | None:
     """The sink, request root and ``taskkill`` path the Windows route uses."""
     if platform_name != "nt":
         return None
-    from ..codex_hook_windows_job import windows_system_executable_path
+    from ..codex_hook_launch_runtime import windows_system_executable_path
     from ..contained_sink_command import contained_sink_command_prefix
     from ..windows_paths import trusted_windows_local_temp
 

@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, NamedTuple, TypeGuard, cast
 
 from .config_file_io import ConfigFileTrustError
-from .harness.contracts import HARNESS_CONTRACTS, contract_for
+from .harness.contracts import contract_for, harness_names
 from .native_guard_config import resolve_native_guard_config
 from .protection_posture import (
     VALID_PROTECTION_POSTURES,
@@ -43,7 +43,7 @@ _VIEW_FIELDS = ("posture", "mode", "security_level")
 
 
 def known_harness_ids() -> tuple[str, ...]:
-    return tuple(contract.harness for contract in HARNESS_CONTRACTS)
+    return harness_names()
 
 
 def canonical_harness_id(value: object) -> str | None:

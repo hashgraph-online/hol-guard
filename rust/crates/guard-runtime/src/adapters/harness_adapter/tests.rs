@@ -19,10 +19,14 @@ mod cline_family;
 mod cline_opencode_apply_family;
 #[path = "tests_codex.rs"]
 mod codex_family;
+#[path = "tests_contract_config_paths.rs"]
+mod contract_config_paths_family;
 #[path = "tests_copilot.rs"]
 mod copilot_family;
 #[path = "tests_cursor.rs"]
 mod cursor_family;
+#[path = "tests_cursor_surfaces.rs"]
+mod cursor_surfaces_family;
 #[path = "tests_grok_zcode.rs"]
 mod grok_zcode;
 #[path = "tests_hermes.rs"]
@@ -31,6 +35,8 @@ mod hermes_family;
 mod hook_config_family;
 #[path = "tests_install_apply.rs"]
 mod install_apply_family;
+#[path = "tests_live_hook_verification.rs"]
+mod live_hook_verification_family;
 #[path = "tests_mcp_servers.rs"]
 mod mcp_servers_family;
 #[path = "tests_opencode.rs"]
@@ -45,6 +51,8 @@ mod round_trip;
 mod shim_family;
 #[path = "tests_shims_apply.rs"]
 mod shims_apply_family;
+#[path = "update_tests.rs"]
+mod update_family;
 
 struct Home {
     _dir: TempDir,

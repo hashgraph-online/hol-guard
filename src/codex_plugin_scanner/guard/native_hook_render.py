@@ -96,7 +96,7 @@ def native_render_cli(
     # ceiling can still read what this call offers.
     if kind == "cli_hook_emit":
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CLI_HOOK_EMIT_MAX_REQUEST_BYTES)
-    elif kind == "cursor_shell_route":
+    elif kind in {"cursor_shell_route", "binding_recording_only"}:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES)
     elif kind in {"hermes_bridge", "muse_bridge"}:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_DAEMON_REPLY_MAX_REQUEST_BYTES)
@@ -233,7 +233,25 @@ def native_evaluation_has_terminal_policy_action(
     return value if isinstance(value, bool) else None
 
 
-# The payload fields the observer-event rule reads to name an attested event.
+def native_recording_only_for_binding(
+    binding: Mapping[str, object] | None,
+    harness: object,
+    *,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+) -> bool:
+    """Whether the resident reads this acknowledged binding as recording only.
+
+    The resident reads the snapshot mode and the per-harness posture map. A
+    resident that cannot answer reads as ``False``: the call is then treated as
+    enforcing, so an unanswered question stops a call rather than letting it
+    record.
+    """
+
+    params: dict[str, object] = {"binding": None if binding is None else dict(binding), "harness": harness}
+    rendered = native_render_cli("binding_recording_only", "codex", params, guard_home=guard_home, deadline=deadline)
+    value = rendered[1].get("value") if rendered is not None and rendered[1] is not None else None
+    return value is True
 
 
 def native_render_pre_tool(
@@ -260,6 +278,7 @@ __all__ = [
     "HOOK_RENDER_FEATURE",
     "native_cli_hook_emit",
     "native_evaluation_has_terminal_policy_action",
+    "native_recording_only_for_binding",
     "native_render_cli",
     "native_render_pre_tool",
     "native_render_recording_only_pre_tool",

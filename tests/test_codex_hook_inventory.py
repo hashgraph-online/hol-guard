@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,6 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_adapter_lifecycle
-from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
 from codex_plugin_scanner.guard.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_MALFORMED_GROUP,
     CODEX_HOOK_INVENTORY_UNKNOWN_HANDLER,
@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.codex_hook_inventory import (
     enumerate_codex_hooks,
 )
 from codex_plugin_scanner.guard.harness.base import HarnessContext
+from tests.codex_toml_support import dump_toml, read_toml_payload
 
 
 def _write(path: Path, content: str) -> None:
@@ -244,7 +245,7 @@ def test_disabled_unmanaged_entry_and_metadata_only_event_are_preserved_without_
     trusted_interpreter = tmp_path / "trusted-python"
     _write(trusted_interpreter, "fixture interpreter\n")
     trusted_interpreter.chmod(0o700)
-    monkeypatch.setattr(codex_adapter.sys, "executable", str(trusted_interpreter))
+    monkeypatch.setattr(sys, "executable", str(trusted_interpreter))
     _write(
         hooks_path,
         json.dumps(

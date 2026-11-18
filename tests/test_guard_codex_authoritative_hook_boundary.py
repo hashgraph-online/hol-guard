@@ -16,12 +16,12 @@ import tomllib
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
-from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
 from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
 from codex_plugin_scanner.guard.harness.base import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import codex_plan_segments as segments
 from tests.codex_publication_steps import use_stepwise_publication
+from tests.codex_toml_support import dump_toml, read_toml_payload
 from tests.conftest import guard_commands_module
 
 SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"

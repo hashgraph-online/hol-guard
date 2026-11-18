@@ -4,7 +4,7 @@
 //! another account owns, and answers the open handle with its path.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use super::inspect::{resolve_lenient, sha256_hex};
 
@@ -173,6 +173,7 @@ pub(super) fn install_lock(guard_home: &Path) -> Result<(fs::File, PathBuf), Ref
     Ok((file, path))
 }
 
+#[cfg_attr(test, allow(dead_code))]
 fn account_home() -> std::io::Result<PathBuf> {
     #[cfg(unix)]
     {
@@ -193,9 +194,36 @@ fn account_home() -> std::io::Result<PathBuf> {
     }
 }
 
+/// Where the lifecycle locks live. Tests keep them out of the real account.
+fn lifecycle_base() -> std::io::Result<PathBuf> {
+    #[cfg(test)]
+    {
+        let parent =
+            std::env::temp_dir().join(format!("hol-guard-lifecycle-locks-{}", std::process::id()));
+        fs::create_dir_all(&parent)?;
+        Ok(parent.join(LIFECYCLE_BASE))
+    }
+    #[cfg(not(test))]
+    {
+        Ok(account_home()?.join(LIFECYCLE_BASE))
+    }
+}
+
 /// `os.path.normcase(str(directory.resolve()))`.
-fn configuration_identity(directory: &Path) -> String {
-    let resolved = resolve_lenient(directory).to_string_lossy().into_owned();
+pub(super) fn configuration_identity(directory: &Path) -> String {
+    // `Path.resolve()` folds `.` and `..` that follow a missing component;
+    // nothing missing can be a link, so folding them lexically matches it.
+    let mut folded = PathBuf::new();
+    for component in resolve_lenient(directory).components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                folded.pop();
+            }
+            other => folded.push(other),
+        }
+    }
+    let resolved = folded.to_string_lossy().into_owned();
     if cfg!(windows) {
         resolved.replace('/', "\\").to_lowercase()
     } else {
@@ -217,9 +245,7 @@ fn lifecycle_identity(path: &Path) -> Result<Option<(u64, u64)>, Refusal> {
 
 /// `codex_lifecycle_lock._target_lock`: open and check one lifecycle lock.
 pub(super) fn lifecycle_lock(directory: &Path) -> Result<(fs::File, PathBuf), Refusal> {
-    let base = account_home()
-        .map_err(|error| Refusal::lifecycle("directory", &error))?
-        .join(LIFECYCLE_BASE);
+    let base = lifecycle_base().map_err(|error| Refusal::lifecycle("directory", &error))?;
     lifecycle_lock_in(&base, directory)
 }
 
@@ -228,6 +254,7 @@ fn lifecycle_lock_in(base: &Path, directory: &Path) -> Result<(fs::File, PathBuf
         "{}.lock",
         sha256_hex(configuration_identity(directory).as_bytes())
     ));
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
     {

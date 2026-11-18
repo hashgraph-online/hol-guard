@@ -11,7 +11,7 @@ from ..evidence_drains.hook_evidence_dispatch import run_hook_evidence
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
-from ..native_policy_snapshot_harness_postures import recording_only_for_binding
+from ..native_hook_render import native_recording_only_for_binding
 from ..native_resident_client import (
     native_resident_client_failure_code,
     record_native_resident_client_failure_code,
@@ -337,7 +337,9 @@ class HookWorkerNativeMixin:
             # The tool already ran; review its result once under the binding
             # that replaced ours instead of answering PostToolUse fail-safe.
             policy_snapshot = refreshed
-            recording_only = recording_only_for_binding(refreshed, harness)
+            recording_only = native_recording_only_for_binding(
+                refreshed, harness, guard_home=guard_home, deadline=deadline
+            )
             record_native_resident_client_failure_code(None)
         if edge is None:
             failure = native_resident_client_failure_code()

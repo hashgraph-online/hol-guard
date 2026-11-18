@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -34,7 +35,7 @@ def test_guard_install_codex_adopts_equivalent_package_with_relocated_interprete
         interpreter.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         interpreter.chmod(0o755)
 
-    monkeypatch.setattr(codex_adapter.sys, "executable", str(first_interpreter))
+    monkeypatch.setattr(sys, "executable", str(first_interpreter))
     adapter = CodexHarnessAdapter()
     config_path = context.home_dir / ".codex" / "config.toml"
     config_path.parent.mkdir(parents=True)
@@ -45,7 +46,7 @@ def test_guard_install_codex_adopts_equivalent_package_with_relocated_interprete
     adapter.install(context)
     first_proxy = tomllib.loads(config_path.read_text(encoding="utf-8"))["mcp_servers"]["browser"]
 
-    monkeypatch.setattr(codex_adapter.sys, "executable", str(second_interpreter))
+    monkeypatch.setattr(sys, "executable", str(second_interpreter))
     installed = adapter.install(context)
     state = codex_adapter.codex_native_hook_state(context)
     second_proxy = tomllib.loads(config_path.read_text(encoding="utf-8"))["mcp_servers"]["browser"]

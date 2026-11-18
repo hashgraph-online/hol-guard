@@ -14,6 +14,7 @@ use super::inspect::{decode, sha256_hex};
 use super::publication::{Call, MAX_RECORD};
 use super::publication_io::{read_private, rollback_identity};
 use super::publication_repair_plan::canonical_uuid;
+use super::python_equal::python_equal;
 use super::{Fault, Step};
 use crate::codex_hook_authority_record::python_json::python_canonical_json;
 use crate::runtime_transition_record::check_change;
@@ -231,6 +232,33 @@ pub(super) fn check_op(call: &mut Call<'_>) -> Step<Value> {
         .get("before_manifest")
         .cloned()
         .unwrap_or(Value::Null))
+}
+
+/// `PendingCodexPublicationInverse.compare`'s journal check: the journal still
+/// has the identity and SHA-256 the pending inverse captured, and the record
+/// it loads is the one the inverse holds. Answers `null`.
+pub(super) fn journal_op(call: &mut Call<'_>) -> Step<Value> {
+    let home = call.home()?;
+    let args = call.args;
+    let journal = Call::record_path(&home);
+    let captured = args.get("journal_identity").ok_or(PLAN_INVALID)?;
+    let changed = Fault::Transition("publication_inverse_journal_changed");
+    call.budget.hook()?;
+    if rollback_identity(&journal)?.as_ref() != Some(captured) {
+        return Err(changed);
+    }
+    let raw = read_private(&journal, MAX_RECORD, true)
+        .ok_or(Fault::Transition("publication_inverse_journal_missing"))?;
+    call.budget.hook()?;
+    if Some(sha256_hex(&raw).as_str()) != args.get("journal_sha256").and_then(Value::as_str) {
+        return Err(changed);
+    }
+    let held = args.get("record").ok_or(PLAN_INVALID)?;
+    let record = Value::Object(call.load(&home, true)?);
+    if !python_equal(&record, held) || rollback_identity(&journal)?.as_ref() != Some(captured) {
+        return Err(changed);
+    }
+    Ok(Value::Null)
 }
 
 fn check_record(home: &Path, record: &Map<String, Value>, args: &Map<String, Value>) -> Step<()> {

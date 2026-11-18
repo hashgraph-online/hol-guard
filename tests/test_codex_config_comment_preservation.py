@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
-from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
+from tests.codex_toml_support import dump_toml, read_toml_payload
 
 from .test_codex_publication_preparation import _context
 

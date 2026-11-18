@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Any, TypeVar
 
 from ..models import GuardArtifact, HarnessDetection
@@ -12,14 +14,19 @@ _T = TypeVar("_T")
 # The native request parser refuses any JSON array wider than 4096 entries, so
 # every list crosses in chunks that the runtime joins back in order.
 _NATIVE_JSON_WIDTH = 4096
-_SETUP_STATUSES = ("active", "broken", "partial", "not_found")
 
 
 def _chunks(items: Sequence[_T]) -> list[list[_T]]:
     return [list(items[start : start + _NATIVE_JSON_WIDTH]) for start in range(0, len(items), _NATIVE_JSON_WIDTH)]
 
 
-def _artifacts_request(artifacts: Sequence[GuardArtifact]) -> list[list[dict[str, object]]]:
+def _shown(artifact: GuardArtifact) -> dict[str, object]:
+    serialized: dict[str, Any] = artifact.to_dict()
+    serialized["args"] = _chunks(serialized.get("args") or [])
+    return serialized
+
+
+def _artifacts_request(artifacts: Sequence[GuardArtifact], *, shown: bool = False) -> list[list[dict[str, object]]]:
     return _chunks(
         [
             {
@@ -27,6 +34,7 @@ def _artifacts_request(artifacts: Sequence[GuardArtifact]) -> list[list[dict[str
                 "command": artifact.command,
                 "args": _chunks(artifact.args),
                 "harness": artifact.harness,
+                **({"serialized": _shown(artifact)} if shown else {}),
             }
             for artifact in artifacts
         ]
@@ -41,6 +49,10 @@ def _detection_request(detection: HarnessDetection) -> dict[str, object]:
     }
 
 
+def _runtime_probe_request(runtime_probe: dict[str, object] | None) -> object:
+    return None if runtime_probe is None else json.loads(json.dumps(runtime_probe, default=str))
+
+
 def _harness_diagnostics(op: str, valid: Callable[[object], bool], **fields: object) -> Any:
     """The native ``harness_diagnostics`` answer to ``op``, which it returns under the op's own name."""
 
@@ -52,46 +64,74 @@ def _harness_diagnostics(op: str, valid: Callable[[object], bool], **fields: obj
     return value
 
 
-def _launcher_artifact(payload: dict[str, Any]) -> GuardArtifact:
-    """The Guard launcher artifact the native ``launcher_artifact`` answer describes."""
+def guard_warnings(
+    harness: str,
+    executable: str,
+    command_absence_proves_uninstalled: bool,
+    detection: HarnessDetection,
+    runtime_probe: dict[str, object] | None,
+) -> list[str]:
+    """The detection's own warnings followed by the ones the native runtime adds."""
 
-    from ..native_runner_authority import NativeRunnerAuthorityError
-
-    keys = ("artifact_id", "name", "harness", "artifact_type", "source_scope", "config_path", "command")
-    texts: list[str] = []
-    for key in keys:
-        value = payload.get(key)
-        if not isinstance(value, str):
-            raise NativeRunnerAuthorityError("harness diagnostics answer is malformed")
-        texts.append(value)
-    metadata = payload.get("metadata")
-    if not isinstance(metadata, dict):
-        raise NativeRunnerAuthorityError("harness diagnostics answer is malformed")
-    artifact_id, name, harness, artifact_type, source_scope, config_path, command = texts
-    return GuardArtifact(
-        artifact_id=artifact_id,
-        name=name,
+    added = _harness_diagnostics(
+        "warnings",
+        lambda value: isinstance(value, list) and all(isinstance(item, str) for item in value),
         harness=harness,
-        artifact_type=artifact_type,
-        source_scope=source_scope,
-        config_path=config_path,
-        command=command,
-        metadata=metadata,
+        executable=executable,
+        command_absence_proves_uninstalled=command_absence_proves_uninstalled,
+        runtime_probe=_runtime_probe_request(runtime_probe),
+        detection=_detection_request(detection),
+    )
+    return [*detection.warnings, *added]
+
+
+def native_diagnostics(
+    *,
+    harness: str,
+    executable: str,
+    command_absence_proves_uninstalled: bool,
+    guard_home: Path,
+    launcher_names: Sequence[str],
+    detection: HarnessDetection,
+    runtime_probe: dict[str, object] | None,
+    warnings: Sequence[str] | None,
+) -> dict[str, object]:
+    """The doctor report the native runtime builds for one detected harness.
+
+    ``warnings`` is the final list a harness words itself, or ``None`` for the
+    warnings the runtime words from the detection.
+    """
+
+    # The caller's working directory, for a relative Guard home, is not in the
+    # resident request envelope yet, so a relative home is refused natively.
+    return _harness_diagnostics(
+        "diagnostics",
+        lambda value: isinstance(value, dict),
+        harness=harness,
+        executable=executable,
+        command_absence_proves_uninstalled=command_absence_proves_uninstalled,
+        guard_home=str(guard_home),
+        names=list(launcher_names),
+        warnings=None if warnings is None else _chunks(warnings),
+        runtime_probe=_runtime_probe_request(runtime_probe),
+        detection={
+            "installed": detection.installed,
+            "command_available": detection.command_available,
+            "config_paths": _chunks(detection.config_paths),
+            "artifacts": _artifacts_request(detection.artifacts, shown=True),
+            "warnings": _chunks(detection.warnings),
+        },
     )
 
 
-def _diagnostic_setup_status(
-    detection: HarnessDetection,
-    warnings: list[str],
-    *,
-    command_absence_proves_uninstalled: bool = True,
-) -> str:
+def shell_command(command: Sequence[str], *, windows: bool | None = None) -> str:
+    """The shell command line the native runtime escapes ``command`` into."""
+
     return _harness_diagnostics(
-        "setup_status",
-        lambda value: value in _SETUP_STATUSES,
-        command_absence_proves_uninstalled=command_absence_proves_uninstalled,
-        detection=_detection_request(detection),
-        warnings=_chunks(warnings),
+        "shell_command",
+        lambda value: isinstance(value, str),
+        command=list(command),
+        windows=windows,
     )
 
 

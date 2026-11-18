@@ -14,8 +14,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .approval_gate import ApprovalGateGrant
-from .codex_install_transaction import codex_install_transaction
-from .codex_lifecycle_lock import codex_publication_locks
+from .native_owned import codex_install_transaction, codex_publication_locks
 from .runtime_transition import (
     RuntimeTransition,
     TransitionError,

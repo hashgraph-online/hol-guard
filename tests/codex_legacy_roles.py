@@ -32,10 +32,8 @@ def without_package_roles(monkeypatch: pytest.MonkeyPatch, roles: Collection[str
         launch = fields.get("launch")
         if isinstance(launch, dict):
             spec = trimmed(real("manifest_spec", context, harness="codex", launch=launch)["spec"])
-            fields = {key: value for key, value in fields.items() if key != "launch"}
-            fields["spec"] = spec
-            if isinstance(fields.get("generation"), dict):
-                fields["generation"] = {**fields["generation"], "spec": spec}
+            # The runtime keeps the spec a request names and still completes the rest from its launch.
+            fields = {**fields, "spec": spec}
         return real(op, context, **fields)
 
     with monkeypatch.context() as patch:

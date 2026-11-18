@@ -84,7 +84,7 @@ def _description(harness: str) -> dict[str, Any]:
     raise ValueError(f"Unsupported harness: {harness}")
 
 
-def _environment() -> dict[str, str]:
+def request_environment() -> dict[str, str]:
     """The variables the runtime reads, and nothing else from this process."""
     description = describe()
     names = set(description.get("env_names", ()))
@@ -108,7 +108,7 @@ def wire_context(context: HarnessContext) -> dict[str, object]:
         "home_override_explicit": bool(getattr(context, "home_override_explicit", False)),
         "cwd": cwd,
         "user_home": str(Path.home()),
-        "env": _environment(),
+        "env": request_environment(),
         "executable_overrides": dict(getattr(context, "executable_overrides", {}) or {}),
         "caller": caller_identity(),
         "probes": command_probes_enabled(),
@@ -327,8 +327,6 @@ class NativeHarnessAdapter(HarnessAdapter):
         fields: dict[str, object] = {"shim": json.dumps(shim.manifest)}
         if self._spec.get("hook") is not None:
             fields["hook_argv"] = self._hook_argv(context)
-        if self._spec.get("retired_hooks"):
-            fields["retired_commands"] = self._retired_hooks(context, fields["hook_argv"])
         answer = self._ask("prepare_install", context, **fields)
         files = planned_files(answer)
         return PreparedHarnessInstall((*shim.files, *files), json.loads(_text(answer, "manifest")))
@@ -337,16 +335,6 @@ class NativeHarnessAdapter(HarnessAdapter):
         """The hook command an install would write now, as the harness config spells it."""
 
         return _text(self._ask("hook_candidates", context, hook_argv=self._hook_argv(context)), "hook_command")
-
-    def _retired_hooks(self, context: HarnessContext, hook_argv: object) -> list[str]:
-        """Generated hook clients the config names whose client is gone; the CLI's validator decides."""
-        from ..cli.grok_hook_validation import is_missing_grok_hook_command
-
-        answer = self._ask("hook_candidates", context, hook_argv=hook_argv)
-        hook_command = _text(answer, "hook_command")
-        return [
-            str(command) for command in answer["commands"] if is_missing_grok_hook_command(str(command), hook_command)
-        ]
 
     def preflight_management(self, context: HarnessContext, *, operation: str) -> None:
         if operation == "install" and self._spec.get("install") == "delegated":
@@ -366,7 +354,7 @@ class NativeHarnessAdapter(HarnessAdapter):
     def _apply_install(self, context: HarnessContext, **options: object) -> dict[str, object]:
         """Prepare the shim and the plan and publish both in one native call."""
         from .. import native_transition_files
-        from ..codex_install_transaction import require_codex_install_owner
+        from ..native_owned import require_codex_install_owner
         from ..runtime_transition import assert_transition_mutation_allowed
         from ..shims import shell_profile_facts, shim_interpreter
 
@@ -375,8 +363,6 @@ class NativeHarnessAdapter(HarnessAdapter):
         fields: dict[str, object] = {}
         if self._spec.get("hook") is not None:
             fields["hook_argv"] = self._hook_argv(context)
-        if self._spec.get("retired_hooks"):
-            fields["retired_commands"] = self._retired_hooks(context, fields["hook_argv"])
         if self._spec.get("frozen_fact"):
             from ..frozen_runtime_commands import is_frozen_guard_runtime
 
@@ -423,13 +409,13 @@ class NativeHarnessAdapter(HarnessAdapter):
         raise_failure(answer)
         return json.loads(_text(answer, "manifest"))
 
-    def diagnostic_warnings(
+    def _own_warnings(
         self,
         detection: HarnessDetection,
         runtime_probe: dict[str, object] | None,
-    ) -> list[str]:
+    ) -> list[str] | None:
         if not self._spec.get("warnings_op"):
-            return super().diagnostic_warnings(detection, runtime_probe)
+            return None
         from .native_harness_steps import native_warnings
 
         return native_warnings(self, detection, runtime_probe)

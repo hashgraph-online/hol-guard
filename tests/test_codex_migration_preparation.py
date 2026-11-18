@@ -9,9 +9,9 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_harness_client as adapter
 from codex_plugin_scanner.guard import codex_hook_self_binding
-from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from tests import codex_plan_segments as segments
+from tests.codex_toml_support import parse_toml_object
 
 from .test_codex_publication_preparation import _context, _tree
 from .test_runtime_transition import begin, transition  # noqa: F401 -- imported pytest fixture

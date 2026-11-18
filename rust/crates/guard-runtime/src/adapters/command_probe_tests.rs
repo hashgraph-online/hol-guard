@@ -156,3 +156,26 @@ fn a_malformed_probe_request_is_refused() {
         assert!(dispatch(&args).is_err(), "{args}");
     }
 }
+
+#[test]
+fn a_passive_check_skips_the_probe_without_running_it() {
+    assert_eq!(
+        dispatch(&json!({"command": ["cli", "--help"], "probes": false})).unwrap(),
+        json!({
+            "command": ["cli", "--help"],
+            "ok": null,
+            "return_code": null,
+            "stdout": "",
+            "stderr": "",
+            "skipped": true,
+            "skip_reason": "global_doctor_passive_checks",
+        })
+    );
+    for args in [
+        json!({"probes": false}),
+        json!({"command": "cli", "probes": false}),
+        json!({"command": ["cli"], "probes": false, "cwd": std::env::temp_dir()}),
+    ] {
+        assert!(dispatch(&args).is_err(), "{args}");
+    }
+}
