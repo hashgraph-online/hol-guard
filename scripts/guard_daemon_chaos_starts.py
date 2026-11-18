@@ -374,6 +374,17 @@ def _mixed_runtime_starts(
     for index in range(1, MIXED_STARTERS):
         starts.append(_runtime_start(guard_home, home, older if index % 2 == 0 else ""))
         time.sleep(STARTER_SPACING_SECONDS)
+
+    def current_serves() -> bool:
+        state = load_authenticated_daemon_state(guard_home)
+        return state is not None and state.get("runtime_fingerprint") == current
+
+    # The older starters above can all settle on the first daemon before a current one replaces it, so one more
+    # older start waits for the current daemon and must leave it serving.
+    if _wait_for(current_serves, START_TIMEOUT_SECONDS):
+        starts.append(_runtime_start(guard_home, home, older))
+    else:
+        result.failures.append(f"no current-runtime daemon published within {START_TIMEOUT_SECONDS}s")
     answers: list[str] = []
     errors: list[str] = []
     for start in starts:
