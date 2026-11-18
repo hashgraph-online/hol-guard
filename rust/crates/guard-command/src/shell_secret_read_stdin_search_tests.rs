@@ -106,6 +106,15 @@ fn search_lane_stops_vouching_for_a_lone_home_dotpath() {
 }
 
 #[test]
+fn quoted_and_escaped_less_than_are_not_input_redirects() {
+    use crate::shell_secret_read_stdin_search::has_input_redirect_syntax;
+    assert!(!has_input_redirect_syntax("grep '/home/agent/.config/a<b'"));
+    assert!(!has_input_redirect_syntax(r"grep /home/agent/.config/a\<b"));
+    assert!(!has_input_redirect_syntax("grep /home/agent/.config/tool # < ignored"));
+    assert!(has_input_redirect_syntax("grep /home/agent/.config/tool < notes.txt"));
+}
+
+#[test]
 fn a_whole_command_floors_only_an_unfed_lone_dotpath_search() {
     let model = |command: &str| {
         crate::parse_command(
@@ -121,6 +130,8 @@ fn a_whole_command_floors_only_an_unfed_lone_dotpath_search() {
         "grep /home/agent/.secrets/key.txt",
         "rg ~/.secrets/key.txt",
         "cd /tmp && fgrep /home/agent/.secrets/key.txt",
+        "grep '/home/agent/.config/a<b'",
+
     ] {
         assert!(
             crate::pretool::lone_home_dotpath_search(&model(command), context),
