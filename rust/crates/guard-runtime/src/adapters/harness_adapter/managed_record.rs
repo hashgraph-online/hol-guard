@@ -36,7 +36,7 @@ const GUIDANCE_SCHEMA: &str = "agent-safety-guidance.v1";
 
 /// One store call under the shared storage gate, as `_native_store_call`
 /// makes it.
-fn store_call(ctx: &Ctx, source: &str, method: &str, args: Value) -> Step<Value> {
+pub(super) fn store_call(ctx: &Ctx, source: &str, method: &str, args: Value) -> Step<Value> {
     let Value::Object(args) = args else {
         return Err(Failure::Invalid);
     };

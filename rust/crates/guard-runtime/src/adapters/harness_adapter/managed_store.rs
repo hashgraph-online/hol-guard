@@ -6,22 +6,55 @@
 //! no store yet has no rows and no payloads, as a freshly created store would
 //! answer, and nothing is created or migrated by asking.
 
+use std::ops::Deref;
 use std::path::Path;
+use std::time::Duration;
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use super::{Failure, Step};
 use crate::guard_store_db::{int, is_null, query_all, query_one, text, Row};
+use crate::hook_evidence_store_gate::{hold_storage_gate, StorageGateHold};
 use crate::local_store_read::{open_read_only, table_exists, STORE_FILE_NAME};
 
 fn unavailable() -> Failure {
     Failure::Runtime("Guard store is unavailable.".to_owned())
 }
 
+/// How long a read waits for an exclusive maintenance hold on the store.
+const GATE_WAIT: Duration = Duration::from_secs(5);
+
+/// A read-only connection and the shared storage gate held for as long as it
+/// lives. Recovery holds the gate exclusively while it moves `guard.db` and
+/// its sidecars, so a read waits for it rather than finding no store.
+pub(super) struct Reader {
+    connection: Connection,
+    _gate: StorageGateHold,
+}
+
+impl Deref for Reader {
+    type Target = Connection;
+
+    fn deref(&self) -> &Connection {
+        &self.connection
+    }
+}
+
 /// The store's read-only connection, or `None` when the home has no store.
-fn open(home: &Path) -> Step<Option<Connection>> {
-    open_read_only(&home.join(STORE_FILE_NAME)).map_err(|_| unavailable())
+fn open(home: &Path) -> Step<Option<Reader>> {
+    let path = home.join(STORE_FILE_NAME);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let gate = hold_storage_gate(home, GATE_WAIT).map_err(|_| unavailable())?;
+    // The store is looked at again under the gate: recovery may have moved it.
+    Ok(open_read_only(&path)
+        .map_err(|_| unavailable())?
+        .map(|connection| Reader {
+            connection,
+            _gate: gate,
+        }))
 }
 
 /// `_managed_install_row`: the row with its manifest decoded.

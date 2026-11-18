@@ -2,13 +2,10 @@
 //! Devin, Muse, OpenClaw, Paseo, Grok, ZCode, Pi, Oh My Pi, OpenCode,
 //! Cline, Copilot, Cursor, Claude Code, Hermes and Codex harness adapters.
 //!
-//! Python keeps one generic adapter class that holds the ownership locks,
-//! prepares and removes the launcher shim, builds the bounded hook argv and
-//! publishes the file plans this kind returns through the runtime transition
-//! journal. Everything else is answered here: the adapter descriptions, policy
-//! and config paths, detection and command lookup, the install and uninstall
-//! plans with their manifests, the launch environment, the runtime probe
-//! fields, the approval flow and Paseo's delegated native installs.
+//! The runtime answers the adapter descriptions, paths, detection, install and
+//! uninstall plans, their publication under one installation transaction, the
+//! managed-install records, the update repairs and Paseo's delegated native
+//! installs. The caller supplies only the facts of its own process.
 //!
 //! Every request carries `harness`, `op` and a `context` object:
 //! `{home, workspace, guard_home, home_override_explicit, cwd, user_home,
@@ -148,6 +145,8 @@ mod shim_profile;
 mod shim_remove;
 mod shims_apply;
 mod simple;
+mod skills_scan;
+mod standalone_install;
 mod uninstall_apply;
 mod update_bounded;
 mod update_support;

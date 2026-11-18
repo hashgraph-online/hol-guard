@@ -311,22 +311,7 @@ def _safe_setup_detection(
     return native_ask("setup_detection", context, harness=adapter.harness, **fields)
 
 
-_SKILLS_FEATURE = "native-workspace-skills-scan-v1"
-_SKILLS_COMMAND = "workspace-skills-scan"
 _SKILLS_TIMEOUT_SECONDS = 60.0
-_SKILLS_OUTPUT_LIMIT = 8 * 1024 * 1024
-
-
-def _skills_answer(request: dict[str, object]) -> dict[str, object] | None:
-    from ..mdm.runtime_request import runtime_answer
-
-    return runtime_answer(
-        _SKILLS_FEATURE,
-        _SKILLS_COMMAND,
-        request,
-        output_limit=_SKILLS_OUTPUT_LIMIT,
-        timeout_seconds=_SKILLS_TIMEOUT_SECONDS,
-    )
 
 
 def _skills_unavailable() -> list[dict[str, object]]:
@@ -352,31 +337,26 @@ def scan_workspace_skills(
 ) -> list[dict[str, object]]:
     """Scan SKILL.md files in workspace and return risk summaries for any findings.
 
-    The runtime finds, describes and scans the skills; this holds the snapshot
-    store: it tells the runtime what it stored for each skill and saves the
-    identity the runtime reports for those that changed."""
-    workspace = os.path.abspath(workspace_dir)
-    listing = _skills_answer({"op": "list", "workspace_dir": workspace})
-    skills = listing.get("skills") if listing is not None else None
-    if not isinstance(skills, list) or not all(isinstance(path, str) for path in skills):
+    The native runtime finds, describes and scans the skills, reads what the store holds for each and saves the
+    identity of those that changed. This only names the workspace and the store."""
+    from ..native_runner_authority import NativeRunnerAuthorityError
+
+    workspace = Path(os.path.abspath(workspace_dir))
+    context = HarnessContext(home_dir=Path.home(), workspace_dir=workspace, guard_home=store.guard_home)
+    try:
+        answer = native_ask(
+            "workspace_skills_scan",
+            context,
+            timeout_seconds=_SKILLS_TIMEOUT_SECONDS,
+            workspace_dir=str(workspace),
+            now=now,
+            source=store.guard_source,
+        )
+    except NativeRunnerAuthorityError:
         return _skills_unavailable()
-    if not skills:
-        return []
-    stored: dict[str, str] = {}
-    for path in skills:
-        snapshot = store.get_snapshot("skill_scan", f"skill-path:{path}")
-        stored_hash = snapshot.get("identity_hash") if snapshot else None
-        if isinstance(stored_hash, str):
-            stored[path] = stored_hash
-    answer = _skills_answer({"op": "scan", "workspace_dir": workspace, "stored": stored})
-    results = answer.get("results") if answer is not None else None
-    snapshots = answer.get("snapshots") if answer is not None else None
-    if not isinstance(results, list) or not isinstance(snapshots, list):
+    results = answer.get("skill_scan")
+    if not isinstance(results, list):
         return _skills_unavailable()
-    for row in snapshots:
-        if not isinstance(row, dict):
-            return _skills_unavailable()
-        store.save_snapshot("skill_scan", row["artifact_id"], row["payload"], row["identity_hash"], now)
     return [dict(result) for result in results if isinstance(result, dict)]
 
 

@@ -55,6 +55,9 @@ mod setup_detection_family;
 mod shim_family;
 #[path = "tests_shims_apply.rs"]
 mod shims_apply_family;
+#[cfg(unix)]
+#[path = "standalone_install_tests.rs"]
+mod standalone_install_family;
 #[path = "update_tests.rs"]
 mod update_family;
 #[path = "update_store_tests.rs"]

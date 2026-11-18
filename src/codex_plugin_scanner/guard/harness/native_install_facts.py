@@ -9,13 +9,23 @@ the Windows workspace skills.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 from .base import HarnessContext
 
 
-def install_facts(context: HarnessContext, harnesses: Sequence[str]) -> dict[str, object]:
-    """The process facts a native install op takes for ``harnesses``."""
+def install_facts(
+    context: HarnessContext,
+    harnesses: Sequence[str],
+    *,
+    workspaces: Mapping[str, Path | None] | None = None,
+) -> dict[str, object]:
+    """The process facts a native install op takes for ``harnesses``.
+
+    ``workspaces`` names the workspace each harness installs into when it is not the context's own, as an update
+    repair reinstalls from the install record's workspace.
+    """
     from .. import native_transition_files
     from ..aibom_detection import portable_workspace_skills
     from ..frozen_runtime_commands import is_frozen_guard_runtime
@@ -33,7 +43,10 @@ def install_facts(context: HarnessContext, harnesses: Sequence[str]) -> dict[str
         "runtime": None,
         "facts": {},
         "workspace_skills": {
-            harness: portable_workspace_skills(harness, context.workspace_dir) for harness in harnesses
+            harness: portable_workspace_skills(
+                harness, context.workspace_dir if workspaces is None else workspaces.get(harness)
+            )
+            for harness in harnesses
         },
     }
     if any(descriptions.get(harness, {}).get("extension") for harness in harnesses):

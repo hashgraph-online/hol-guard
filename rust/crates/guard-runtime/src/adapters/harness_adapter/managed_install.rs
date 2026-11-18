@@ -29,7 +29,7 @@ use serde_json::{json, Map, Value};
 use super::describe::{self, Install};
 use super::managed_install_target::{install, stopped, uninstall, Owned, INVALID};
 use super::managed_record::{guidance_after, record, transition_pending};
-use super::{answer, managed_update, update_bounded, Ctx, Spec};
+use super::{answer, managed_update, skills_scan, standalone_install, update_bounded, Ctx, Spec};
 use crate::runner_authority_op::KindResult;
 use crate::transition_files::{
     with_owned, with_registered, Budget, OwnedFailure, OwnedSpec, Owner,
@@ -87,7 +87,7 @@ pub(super) fn within<T>(
     with_owned(&spec, &budget, work)
 }
 
-fn finish(done: Owned<Value>) -> KindResult {
+pub(super) fn finish(done: Owned<Value>) -> KindResult {
     Ok(match done {
         Ok(answer) => answer,
         Err(failure) => failure.to_json(),
@@ -203,6 +203,10 @@ pub(super) fn route(op: &str, ctx: &Ctx, fields: &Map<String, Value>) -> Option<
         "managed_install_guidance" => answer(guidance_after(ctx, fields)),
         "bounded_hook_scripts" => answer(update_bounded::scripts(ctx)),
         "remove_bounded_hook_script" => answer(update_bounded::remove(ctx, fields)),
+        "shim_install" => standalone_install::shim(ctx, fields),
+        "profile_install" => standalone_install::profile(ctx, fields),
+        "cursor_hooks_install" => standalone_install::cursor_hooks(ctx, fields),
+        "workspace_skills_scan" => answer(skills_scan::dispatch(ctx, fields)),
         _ => return None,
     })
 }

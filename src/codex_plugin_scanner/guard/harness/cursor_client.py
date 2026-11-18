@@ -30,33 +30,15 @@ def _manifest(answer: dict[str, Any]) -> dict[str, object]:
     return json.loads(str(answer["manifest"]))
 
 
-def _install_hooks(context: HarnessContext, op: str) -> dict[str, object]:
-    """Publish the plan, then require the hooks Cursor now reads to be Guard's."""
-    from .. import native_transition_files
-    from ..native_owned import require_codex_install_owner
-    from ..runtime_transition import assert_transition_mutation_allowed
-
-    require_codex_install_owner(context.guard_home)
-    assert_transition_mutation_allowed(context.guard_home)
-    # The plan also retires the project-local hooks an older install wrote.
-    answer = _cursor_ask(
-        "apply_plan",
-        context,
-        plan_op=op,
-        removals=True,
-        transition=native_transition_files.transition_context(),
-    )
-    native_transition_files.settle(answer.get("publish"))
-    _cursor_ask("verify", context)
-    return _manifest(answer)
-
-
 def install_cursor_hooks(context: HarnessContext, *, actor: str = "cursor-hooks") -> dict[str, object]:
-    """Install only Cursor's native hooks and the script they run."""
-    from ..native_owned import codex_install_transaction
+    """Install only Cursor's native hooks and the script they run.
 
-    with codex_install_transaction(context.guard_home, context.guard_home / "managed", actor=actor):
-        return _install_hooks(context, "hooks_install")
+    The native runtime holds the installation transaction, publishes the plan, then requires the hooks Cursor
+    now reads to be Guard's.
+    """
+    from ..cli.native_managed_install import ask_managed
+
+    return _manifest(ask_managed("cursor_hooks_install", context, [], actor=actor))
 
 
 def rebind_stale_cursor_hooks(guard_home: Path, *, home_dir: Path) -> dict[str, object]:

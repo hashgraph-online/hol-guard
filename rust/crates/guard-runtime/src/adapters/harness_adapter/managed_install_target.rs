@@ -65,7 +65,7 @@ fn adapter_fault(answer: &Value) -> Option<OwnedFailure> {
 
 /// `native_transition_files.settle`: journal what a publish wrote under the
 /// owner, then raise the fault it ended with.
-fn published(owner: &mut Owner, publish: Option<&Value>) -> Owned<()> {
+pub(super) fn published(owner: &mut Owner, publish: Option<&Value>) -> Owned<()> {
     let Some(publish) = publish.filter(|publish| publish.is_object()) else {
         return Err(INVALID);
     };
