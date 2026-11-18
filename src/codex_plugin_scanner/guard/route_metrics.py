@@ -15,7 +15,7 @@ _ROUTES = {"native_resident", "native_oneshot", "native_fail_safe", "native_degr
 
 
 @final
-class HookMetricsRecorder:
+class RouteMetricsRecorder:
     """Thread-safe in-memory metrics recorder.
 
     Never stores raw output, prompts, decrypted payloads, or secret samples.
@@ -60,4 +60,4 @@ class HookMetricsRecorder:
             self._increment(f"failure:{safe_stage}:{safe_exception[:80]}")
 
 
-__all__ = ["HookMetricsRecorder"]
+__all__ = ["RouteMetricsRecorder"]

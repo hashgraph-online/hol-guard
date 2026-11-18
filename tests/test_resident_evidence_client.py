@@ -8,10 +8,10 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard import native_hook_evidence_writer
-from codex_plugin_scanner.guard.native_hook_evidence_writer import (
-    NativeHookEvidenceWriter,
-    NativeHookEvidenceWriterUnavailableError,
+from codex_plugin_scanner.guard import resident_evidence_client
+from codex_plugin_scanner.guard.resident_evidence_client import (
+    ResidentEvidenceClient,
+    ResidentEvidenceUnavailableError,
 )
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnknownMemberType=false
@@ -51,7 +51,7 @@ def _answer(payload: dict[str, Any], *, status: str = "ok", code: str = "ok") ->
 
     def respond(*, request: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
         sent.append(request)
-        digest = "sha256:" + native_hook_evidence_writer._canonical_request_sha256(request)
+        digest = "sha256:" + resident_evidence_client._canonical_request_sha256(request)
         return {
             "schema": "guard-hook-evidence-writer-result.v1",
             "request_id": request["request_id"],
@@ -87,7 +87,7 @@ def _resident_holding_a_fatal_store(payload: dict[str, Any]) -> Any:
         return {
             "schema": "guard-hook-evidence-writer-result.v1",
             "request_id": request["request_id"],
-            "request_sha256": "sha256:" + native_hook_evidence_writer._canonical_request_sha256(request),
+            "request_sha256": "sha256:" + resident_evidence_client._canonical_request_sha256(request),
             "status": "ok",
             "code": "ok",
             "payload": body,
@@ -98,20 +98,20 @@ def _resident_holding_a_fatal_store(payload: dict[str, Any]) -> Any:
 
 
 @pytest.fixture
-def writer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> NativeHookEvidenceWriter:
-    monkeypatch.setattr(native_hook_evidence_writer, "ensure_resident_prerequisite", lambda _home: True)
-    monkeypatch.setattr(native_hook_evidence_writer, "native_runtime_status", lambda: _Status())
-    monkeypatch.setattr(native_hook_evidence_writer, "native_record_resident_success", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(native_hook_evidence_writer, "native_record_resident_failure", lambda *_args, **_kwargs: None)
-    return NativeHookEvidenceWriter(store=_Store(tmp_path / "guard-home"))
+def writer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ResidentEvidenceClient:
+    monkeypatch.setattr(resident_evidence_client, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(resident_evidence_client, "native_runtime_status", lambda: _Status())
+    monkeypatch.setattr(resident_evidence_client, "native_record_resident_success", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(resident_evidence_client, "native_record_resident_failure", lambda *_args, **_kwargs: None)
+    return ResidentEvidenceClient(store=_Store(tmp_path / "guard-home"))
 
 
 def _install(monkeypatch: pytest.MonkeyPatch, respond: Any) -> None:
-    monkeypatch.setattr(native_hook_evidence_writer, "_resident_request", respond)
+    monkeypatch.setattr(resident_evidence_client, "_resident_request", respond)
 
 
 def test_a_command_activity_submission_sends_the_flat_writer_request(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     respond = _answer({"queued": True})
     _install(monkeypatch, respond)
@@ -140,7 +140,7 @@ def test_a_command_activity_submission_sends_the_flat_writer_request(
 
 
 def test_a_reply_bound_to_another_request_is_never_read_as_queued(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def respond(*, request: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
         return {
@@ -153,12 +153,12 @@ def test_a_reply_bound_to_another_request_is_never_read_as_queued(
 
     _install(monkeypatch, respond)
 
-    with pytest.raises(NativeHookEvidenceWriterUnavailableError):
+    with pytest.raises(ResidentEvidenceUnavailableError):
         writer.submit_native_decision_receipt({"receipt": "shaped"})
 
 
 def test_a_resident_error_raises_the_store_exception_its_code_names(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _install(
         monkeypatch,
@@ -174,7 +174,7 @@ def test_a_resident_error_raises_the_store_exception_its_code_names(
 
 
 def test_reading_counters_strips_the_resident_signals(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _install(monkeypatch, _answer({"running": True, "policy_mutations": 2, "store_fatal": None}))
 
@@ -187,7 +187,7 @@ def test_reading_counters_strips_the_resident_signals(
 
 
 def test_a_reported_fatal_store_runs_the_store_recovery_once(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     respond = _resident_holding_a_fatal_store({"running": True, "policy_mutations": 0})
     _install(monkeypatch, respond)
@@ -212,7 +212,7 @@ def test_a_reported_fatal_store_runs_the_store_recovery_once(
 
 
 def test_an_ordinary_counter_read_never_recovers_the_store(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _install(monkeypatch, _answer({"running": True, "policy_mutations": 0, "store_fatal": None}))
 
@@ -222,7 +222,7 @@ def test_an_ordinary_counter_read_never_recovers_the_store(
 
 
 def test_stopping_sends_its_own_drain_budget_rather_than_either_default(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     respond = _answer({"drained": True, "policy_mutations": 1, "store_fatal": None})
     _install(monkeypatch, respond)
@@ -232,7 +232,7 @@ def test_stopping_sends_its_own_drain_budget_rather_than_either_default(
 
 
 def test_a_recovery_that_fails_is_retried_rather_than_acknowledged(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     attempts: list[BaseException] = []
 
@@ -262,7 +262,7 @@ def test_a_recovery_that_fails_is_retried_rather_than_acknowledged(
 
 
 def test_a_failure_reported_on_a_submission_recovers_without_a_counter_read(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _install(monkeypatch, _resident_holding_a_fatal_store({"queued": True, "policy_mutations": 3}))
 
@@ -272,7 +272,7 @@ def test_a_failure_reported_on_a_submission_recovers_without_a_counter_read(
 
 
 def test_a_drain_result_survives_a_recovery_that_raises(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def recover(_error: BaseException, **_kwargs: Any) -> bool:
         raise OSError("quarantine failed")
@@ -286,18 +286,18 @@ def test_a_drain_result_survives_a_recovery_that_raises(
 
 
 def test_a_writer_refusal_raises_the_writer_error_not_a_store_failure(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _install(monkeypatch, _answer({"message": "no writer"}, status="error", code="writer_unavailable"))
 
-    with pytest.raises(NativeHookEvidenceWriterUnavailableError) as raised:
+    with pytest.raises(ResidentEvidenceUnavailableError) as raised:
         writer.submit_native_decision_receipt({"decision_id": "d-1"})
 
-    assert raised.value.reason == "native_hook_evidence_writer_writer_unavailable"
+    assert raised.value.reason == "resident_evidence_client_writer_unavailable"
 
 
 def test_a_start_builds_the_writer_before_any_hook_submits(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     respond = _answer({"running": True, "policy_mutations": 0, "store_fatal": None})
     _install(monkeypatch, respond)
@@ -310,7 +310,7 @@ def test_a_start_builds_the_writer_before_any_hook_submits(
 
 
 def test_a_start_the_resident_refuses_is_reported_rather_than_raised(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _install(monkeypatch, _answer({"message": "no writer"}, status="error", code="writer_unavailable"))
 
@@ -321,7 +321,7 @@ def test_a_start_the_resident_refuses_is_reported_rather_than_raised(
 
 
 def test_a_start_recovers_a_store_failure_the_resident_is_holding(
-    writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
+    writer: ResidentEvidenceClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _install(monkeypatch, _resident_holding_a_fatal_store({"running": True, "policy_mutations": 1}))
 
@@ -333,7 +333,7 @@ def test_a_start_recovers_a_store_failure_the_resident_is_holding(
 
 
 def test_an_unreachable_resident_reads_as_a_writer_that_stopped_running() -> None:
-    stats = native_hook_evidence_writer.unreachable_writer_stats()
+    stats = resident_evidence_client.unreachable_writer_stats()
 
     # A health reader treats a started writer that is not running as a fault.
     # A resident nobody can reach is that fault, not a reason to refuse the

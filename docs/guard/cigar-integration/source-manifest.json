@@ -156,7 +156,7 @@
           "sha256": "04e69c2da493dd3c3154e15672453419aa20ba72979b1cdac4640b2c9b769004"
         },
         {
-          "path": "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py",
+          "path": "src/codex_plugin_scanner/guard/resident_evidence_client.py",
           "git_blob_sha1": "2bb38d5f0e729b3ebfd50645afadf0e768e30502",
           "sha256": "dbfc3adef4f98f9eeaaf85e82d3cf410bc5a0a2bd8fd8cbf9ba9cc9eae6f095e"
         },

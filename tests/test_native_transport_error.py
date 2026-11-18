@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.native_response_decoder import native_error
+from codex_plugin_scanner.guard.native_transport_error import native_error
 from tests.native_approval_protocol_support import (
     decode_native_approval_challenge,
     decode_native_approval_result,

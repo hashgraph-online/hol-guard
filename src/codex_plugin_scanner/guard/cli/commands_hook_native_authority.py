@@ -23,8 +23,8 @@ from ..hook_review.hook_fail_closed import fail_closed_response
 from ..hook_review.hook_request_parsing import runtime_hook_event_name
 from ..hook_review.hook_worker import HookWorker
 from ..hook_review.hook_worker_structured import withhold_structured_destination, withholds_structured_destination
-from ..native_hook_evidence_writer import NativeHookEvidenceWriter
 from ..native_hook_render import native_cli_hook_emit, native_hermes_bridge
+from ..resident_evidence_client import ResidentEvidenceClient
 from ..runtime_health.diagnostics import DaemonDiagnostics
 from ..store import GuardStore
 from .commands_support_runtime_resolution import _canonical_harness_name
@@ -154,7 +154,7 @@ def try_native_hook_authority(
         # not silently downgrade a hook to a fail-safe allow.
         worker = HookWorker(
             store=store,
-            activity_writer=NativeHookEvidenceWriter(store=store),
+            activity_writer=ResidentEvidenceClient(store=store),
         )
         return worker.review_http_payload(
             payload=payload,
