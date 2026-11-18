@@ -115,7 +115,7 @@ const SEARCH_INPUT = {
   assert(markup.includes("In the agent&#x27;s own words") || markup.includes("In the agent's own words"), "T-MCP-15: the quote is attributed to the agent");
   assert(markup.includes("See the exact input") && markup.includes("known_fields"), "T-MCP-16: the exact input stays one click away");
   assert(
-    markup.includes("Allow once and Always allow both match these exact inputs"),
+    markup.includes("Allow once and Always allow both cover only these exact inputs"),
     "T-MCP-17: the card says approvals match the exact inputs",
   );
   assert(!markup.includes("MCP SERVER / TOOL"), "T-MCP-18: the raw terminal label is gone from the default view");
@@ -134,7 +134,7 @@ const SEARCH_INPUT = {
   );
   const explained = explainMcpCall(item);
   assert(explained?.steps.length === 2, "T-MCP-19: each action in a batch is listed");
-  assert(explained?.steps[0].action === "Fetch emails" && explained?.steps[0].app === "Gmail", "T-MCP-20: a slug splits into app and action");
+  assert(explained?.steps[0].action === "Get emails" && explained?.steps[0].app === "Gmail", "T-MCP-20: a slug splits into app and action");
   assert(explained?.steps[0].effect === "read" && explained?.steps[1].effect === "send", "T-MCP-21: each action has its own effect");
   assert(explained?.effect === "send", "T-MCP-22: a batch takes its most serious effect");
   assert(explained?.headline === "ZCode wants to take 2 actions in Gmail", "T-MCP-23: the batch title counts the actions and names the app");

@@ -13945,11 +13945,17 @@ function splitToolSlug(slug) {
   if (split <= 0) {
     return { app: null, action: sentenceCase(slug) };
   }
+  const action2 = words.slice(split);
+  action2[0] = PLAIN_VERBS.get(action2[0]) ?? action2[0];
   return {
     app: serviceDisplayName(words.slice(0, split).join("_")),
-    action: capitalize(words.slice(split).join(" "))
+    action: capitalize(action2.join(" "))
   };
 }
+const PLAIN_VERBS = /* @__PURE__ */ new Map([
+  ["fetch", "get"],
+  ["retrieve", "get"]
+]);
 function toolTitle(service, tool) {
   const serviceWords = new Set(nameWords(service));
   const words = nameWords(tool);
@@ -14210,6 +14216,66 @@ function promotedFacts(input, skip, tool, max) {
   }
   return facts;
 }
+const CALL = /\b(?:run_composio_tool|execute_action|tools\.execute)\s*\(\s*(?:(["'])([A-Za-z][A-Za-z0-9_]{2,119})\1)?/g;
+const PAIR = /(?:(["'])([A-Za-z_][A-Za-z0-9_]{0,59})\1\s*:|\b([A-Za-z_][A-Za-z0-9_]{0,59})\s*=(?!=))\s*(?:(["'])((?:\\.|(?!\4)[^\\\n]){0,400})\4|(-?\d+(?:\.\d+)?)\b|(True|False|None|true|false|null)\b)/g;
+const STEP_LIMIT = 10;
+const ARG_REACH = 1200;
+function readComposioCode(code) {
+  const calls = [...code.matchAll(CALL)];
+  const steps = [];
+  let unnamedCalls = 0;
+  calls.forEach((match, index) => {
+    const slug = match[2];
+    if (slug === void 0) {
+      unnamedCalls += 1;
+      return;
+    }
+    if (steps.length >= STEP_LIMIT) return;
+    const start = (match.index ?? 0) + match[0].length;
+    const args = literalArguments(code.slice(start, callEnd(code, start)));
+    const { app, action: action2 } = splitToolSlug(slug.toUpperCase());
+    const { facts, hidden } = scalarFacts(args, { max: 4, tool: slug.toUpperCase() });
+    steps.push({
+      id: `code-${index}-${slug}`,
+      app,
+      action: action2,
+      effect: classifyMcpEffect(slug),
+      details: facts,
+      hiddenDetails: hidden
+    });
+  });
+  return { steps, unnamedCalls };
+}
+function callEnd(code, start) {
+  const limit = Math.min(code.length, start + ARG_REACH);
+  let depth = 1;
+  let quote = null;
+  for (let at = start; at < limit; at += 1) {
+    const char = code[at];
+    if (quote !== null) {
+      if (char === "\\") at += 1;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === "'" || char === '"') quote = char;
+    else if (char === "(") depth += 1;
+    else if (char === ")") {
+      depth -= 1;
+      if (depth === 0) return at;
+    }
+  }
+  return limit;
+}
+function literalArguments(text2) {
+  const args = {};
+  for (const match of text2.matchAll(PAIR)) {
+    const key = match[2] ?? match[3];
+    if (key === void 0 || key in args) continue;
+    if (match[5] !== void 0) args[key] = match[5].replace(/\\(["'\\])/g, "$1");
+    else if (match[6] !== void 0) args[key] = Number(match[6]);
+  }
+  return args;
+}
 const NAME_BASIS = "Read from the tool's name. Guard has not checked what it does.";
 const STEP_BASIS = "Read from the action names. Guard has not checked what they do.";
 const SEPARATE_CALL = "Running a tool is a separate call, and Guard reviews that call too.";
@@ -14237,7 +14303,7 @@ function explainComposioTool(shortTool, context) {
     case "multi_execute_tool":
       return multiExecute(context);
     case "remote_workbench":
-      return remoteCode(context, TITLES.remote_workbench, "code_to_execute", "Code");
+      return workbenchCode(context) ?? remoteCode(context, TITLES.remote_workbench, "code_to_execute", "Code");
     case "remote_bash_tool":
       return remoteCode(context, TITLES.remote_bash_tool, "command", "Command");
     default:
@@ -14386,6 +14452,37 @@ function toStep(tool, index) {
     details: facts,
     hiddenDetails: hidden
   };
+}
+function workbenchCode({ harness, input }) {
+  const code = codeOf(input?.code_to_execute);
+  if (code === null) return null;
+  const { steps, unnamedCalls } = readComposioCode(code);
+  if (steps.length === 0) return null;
+  const apps = unique(steps.map((step) => step.app).filter((app) => app !== null));
+  const first = steps[0];
+  const count2 = steps.length;
+  const thought = textOf(input?.thought, 300);
+  const lines = code.split("\n").length;
+  return {
+    headline: `${harness} wants to ${batchPhrase(first, count2, apps.length > 0 ? joinList(apps) : "Composio")}, using code`,
+    title: batchTitle(first, count2, apps),
+    aside: codeAside(apps, unnamedCalls),
+    effect: "run-code",
+    effectBasis: "Read from the action names in the code. Guard has not run or checked it.",
+    facts: [],
+    steps,
+    stepsCaption: count2 === 1 ? "What the code asks for" : "What the code asks for, in order",
+    effectApps: apps,
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    code: { label: `The code (${lines} ${lines === 1 ? "line" : "lines"})`, text: code, collapsed: true },
+    queueTitle: `${apps.length === 1 ? apps[0] : "Composio"} · ${first.action}${count2 > 1 ? ` and ${count2 - 1} more` : ""}`,
+    queueDetail: batchQueueDetail(first, apps)
+  };
+}
+function codeAside(apps, unnamedCalls) {
+  const account = apps.length > 0 ? `your connected ${accountPhrase(apps)}` : "your connected accounts";
+  const unnamed = unnamedCalls > 0 ? " It also calls actions Guard could not name." : "";
+  return `The agent wrote code that Composio runs with ${account}.${unnamed}`;
 }
 function remoteCode(context, title, field, label) {
   const code = codeOf(context.input?.[field]);
@@ -14695,7 +14792,10 @@ function consequenceFor(effect, where) {
     case "delete":
       return { tone: "danger", text: `Deletes something in ${where}. It may not be possible to recover.` };
     case "run-code":
-      return { tone: "danger", text: "Runs code. It can do anything this tool's access allows, so read it first." };
+      return {
+        tone: "danger",
+        text: `Runs code that can use ${where}. Code can do more than it says, so open it if anything looks wrong.`
+      };
     case "connect":
       return { tone: "care", text: `Checks or changes which accounts are linked to ${where}, and may ask you to link another.` };
     case "act-as-you":
@@ -35138,10 +35238,29 @@ function subtitleOf(explanation, app) {
   if (explanation.builtIn === true) return `Built into ${explanation.connector}`;
   return app === explanation.connector ? `Tool from ${explanation.connector}` : `${app}, through ${explanation.connector}`;
 }
+const GENERIC_REASON = /needs your approval before this action can run/i;
+function scopeNote(item, connector) {
+  if (item.scope_restrictions?.includes("provider_account_unverified_once_only") === true) {
+    return `You can allow this once, for these exact inputs. Guard cannot save it for next time, because it cannot confirm which ${connector} account it uses.`;
+  }
+  return "Allow once and Always allow both cover only these exact inputs. If the inputs change, Guard asks again.";
+}
+function CodePanel({ requestId, code }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    LoggedActionPanel,
+    {
+      label: code.collapsed === true ? "Code" : code.label,
+      text: code.text,
+      copyAriaLabel: "Copy the code to clipboard"
+    },
+    `${requestId}-code`
+  );
+}
 function McpCallCard({ item, explanation }) {
   const watchOnly = isWatchOnlyObservation(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
-  const reason = plainMcpReason(item, buildPrimaryReviewAction(item).detail) ?? explanation.whyAsked;
+  const coreReason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
+  const reason = coreReason !== null && !GENERIC_REASON.test(coreReason) ? coreReason : explanation.whyAsked;
   const app = actingApp(explanation);
   const facts = [
     ...explanation.facts,
@@ -35158,15 +35277,23 @@ function McpCallCard({ item, explanation }) {
     ] }),
     watchOnly && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-4 mb-3 text-sm font-medium text-brand-dark sm:mx-5", children: "Watch let this call through. Guard would have stopped it." }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(ConsequenceNote, { explanation }),
-    showsSteps(explanation) && /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "border-t border-slate-100", "aria-label": "Actions in this call", children: [
-      explanation.steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(StepRow, { step, position: index + 1, total: explanation.steps.length }, step.id)),
-      (explanation.hiddenSteps ?? 0) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "border-t border-slate-100 px-4 py-3 text-xs text-muted-foreground sm:px-5", children: [
-        explanation.hiddenSteps,
-        " more ",
-        explanation.hiddenSteps === 1 ? "action" : "actions",
-        " in the exact input"
-      ] })
-    ] }),
+    showsSteps(explanation) && explanation.stepsCaption !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "border-t border-slate-100 px-4 pt-3 text-xs font-medium uppercase tracking-wide text-brand-dark/60 sm:px-5", children: explanation.stepsCaption }),
+    showsSteps(explanation) && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "ol",
+      {
+        className: explanation.stepsCaption !== void 0 ? "" : "border-t border-slate-100",
+        "aria-label": explanation.stepsCaption ?? "Actions in this call",
+        children: [
+          explanation.steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(StepRow, { step, position: index + 1, total: explanation.steps.length }, step.id)),
+          (explanation.hiddenSteps ?? 0) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "border-t border-slate-100 px-4 py-3 text-xs text-muted-foreground sm:px-5", children: [
+            explanation.hiddenSteps,
+            " more ",
+            explanation.hiddenSteps === 1 ? "action" : "actions",
+            " in the exact input"
+          ] })
+        ]
+      }
+    ),
     facts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-4 py-3.5 sm:px-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FactList, { facts }) }),
     explanation.quotes !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("figure", { className: "mx-4 mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 sm:mx-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("figcaption", { className: "text-xs font-medium text-brand-dark/70", children: explanation.quotes.caption }),
@@ -35177,15 +35304,15 @@ function McpCallCard({ item, explanation }) {
       ] }, text2)),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[11px] leading-snug text-muted-foreground", children: "In the agent's own words. Guard has not checked this, so decide from what the call does." })
     ] }),
-    explanation.code !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-4 mb-4 sm:mx-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      LoggedActionPanel,
-      {
-        label: explanation.code.label,
-        text: explanation.code.text,
-        copyAriaLabel: `Copy ${explanation.code.label.toLowerCase()} to clipboard`
-      },
-      `${item.request_id}-code`
-    ) }),
+    explanation.code !== null && explanation.code.collapsed !== true && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-4 mb-4 sm:mx-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) }),
+    explanation.code !== null && explanation.code.collapsed === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: [
+        "See ",
+        explanation.code.label.charAt(0).toLowerCase(),
+        explanation.code.label.slice(1)
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) })
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "See the exact input" }),
       explanation.rawInput !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -35207,7 +35334,7 @@ function McpCallCard({ item, explanation }) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 border-t border-slate-100 px-4 py-3 text-xs leading-snug text-muted-foreground sm:px-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: reason }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
-        "Allow once and Always allow both match these exact inputs. If the agent asks again with different inputs, Guard asks again.",
+        scopeNote(item, explanation.connector),
         explanation.truncated ? " Long text is shown shortened here." : ""
       ] })
     ] })
@@ -37760,7 +37887,7 @@ function ReviewDecisionCard(props) {
       !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
       nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, item.request_id),
       resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: retryCannotReuseApprovalHint(item, harnessName) }) : null,
-      item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
+      mcpCall === null && item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           HiMiniExclamationTriangle,

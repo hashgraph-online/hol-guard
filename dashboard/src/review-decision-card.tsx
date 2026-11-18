@@ -282,7 +282,8 @@ export function ReviewDecisionCard(props: {
             {retryCannotReuseApprovalHint(item, harnessName)}
           </p>
         ) : null}
-        {item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (
+        {/* An MCP card says this itself, next to what the approval covers. */}
+        {mcpCall === null && item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
             Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable.
           </p>
