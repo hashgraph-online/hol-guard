@@ -192,11 +192,6 @@ class NativeHarnessAdapter(HarnessAdapter):
         return tuple(str(name) for name in self._spec.get("legacy_launchers", ()))
 
     @property
-    def delegates_install(self) -> bool:
-        """Whether installing runs other adapters from this process, as Paseo's receipt does."""
-        return self._spec.get("install") == "delegated"
-
-    @property
     def command_absence_proves_uninstalled(self) -> bool:
         return self._spec.get("absence_proves_uninstalled") is not False
 
@@ -364,12 +359,11 @@ class NativeHarnessAdapter(HarnessAdapter):
     def install(self, context: HarnessContext, *, surface: str | None = None) -> dict[str, object]:
         from ..native_transition_files import PUBLISH_TIMEOUT_SECONDS
 
-        if self._spec.get("install") == "delegated":
-            return self._install_delegated(context)
+        providers = len(self._spec.get("delegates", ())) if self._spec.get("install") == "delegated" else 0
         return self._native_mutation(
             "adapter_install",
             context,
-            timeout_seconds=self._spec.get("install_timeout") or PUBLISH_TIMEOUT_SECONDS,
+            timeout_seconds=(self._spec.get("install_timeout") or PUBLISH_TIMEOUT_SECONDS) * (1 + providers),
             **_surface(surface),
         )
 
@@ -446,12 +440,6 @@ class NativeHarnessAdapter(HarnessAdapter):
 
     def _delegated_targets(self, context: HarnessContext) -> dict[str, Any]:
         return self._ask("prepare_install", context, **self._delegate_fields(context))
-
-    def _install_delegated(self, context: HarnessContext) -> dict[str, object]:
-        """Install each native provider, bind its proof, then publish the receipt."""
-        from .native_harness_steps import install_delegated
-
-        return install_delegated(self, context)
 
 
 __all__ = [

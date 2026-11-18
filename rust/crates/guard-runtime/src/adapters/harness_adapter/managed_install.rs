@@ -26,7 +26,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
-use super::describe::{self, Install};
+use super::describe;
 use super::managed_install_target::{install, stopped, uninstall, Owned, INVALID};
 use super::managed_record::{guidance_after, record, transition_pending};
 use super::{answer, managed_update, skills_scan, standalone_install, update_bounded, Ctx, Spec};
@@ -177,9 +177,6 @@ pub(super) fn managed(ctx: &Ctx, fields: &Map<String, Value>) -> KindResult {
 pub(super) fn adapter(op: &str, spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> KindResult {
     let target = ctx.guard_home.join("bin");
     let installing = op == "adapter_install";
-    if installing && spec.install == Install::Delegated {
-        return finish(Err(INVALID));
-    }
     let done = surface(fields).and_then(|surface| {
         within(ctx, fields, &target, |owner| {
             let manifest = if installing {

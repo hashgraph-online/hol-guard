@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import Sequence
-from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
 from ..harness.base import HarnessAdapter, HarnessContext
-from ..harness.native_harness import NativeHarnessAdapter
 from ..harness.native_harness import ask as native_ask
 from ..harness.registry import get_adapter, list_adapters
-from ..native_owned import codex_install_transaction
 from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore
 from .claude_settings_target import claude_settings_target
@@ -54,27 +50,6 @@ def _selected_surface(adapter: HarnessAdapter, context: HarnessContext, surface:
     raise ValueError(f"Unsupported {setup_contract.display_name} surface: {surface}")
 
 
-def _apply_python_adapter(
-    adapter: HarnessAdapter,
-    context: HarnessContext,
-    *,
-    active: bool,
-    surface: str | None,
-) -> dict[str, object]:
-    """Run one adapter the native runtime cannot, under the owner this thread holds."""
-
-    options = {} if surface is None else {"surface": surface}
-    return adapter.install(context, **options) if active else adapter.uninstall(context, **options)
-
-
-def _python_held(adapter: HarnessAdapter, *, active: bool) -> bool:
-    """Whether the adapter's install reads state only this process holds: Paseo's delegation."""
-
-    if not isinstance(adapter, NativeHarnessAdapter):
-        return True
-    return active and adapter.delegates_install
-
-
 def apply_managed_install(
     command: str,
     requested_harness: str | Sequence[str] | None,
@@ -87,33 +62,22 @@ def apply_managed_install(
     surface: str | None = None,
 ) -> dict[str, object]:
     # The native runtime installs each app, records its row and journals every write in one installation
-    # transaction over the Guard home. Only the adapters whose state lives in this process run here first,
-    # under the owner the runtime then reuses.
+    # transaction over the Guard home; this process only names the targets and the facts it alone knows.
     assert_transition_mutation_allowed(context.guard_home)
     adapters = [
         get_adapter(harness) for harness in _resolve_targets(command, requested_harness, install_all, context, store)
     ]
     active = command == "install"
     targets: list[dict[str, object]] = []
-    with ExitStack() as ownership:
-        if any(_python_held(adapter, active=active) for adapter in adapters):
-            ownership.enter_context(
-                codex_install_transaction(
-                    context.guard_home, context.guard_home / "managed", actor=f"managed.{command}"
-                )
-            )
-        for adapter in adapters:
-            selected = _selected_surface(adapter, context, surface)
-            target: dict[str, object] = {"harness": adapter.harness}
-            if selected is not None:
-                target["surface"] = selected
-            if _python_held(adapter, active=active):
-                manifest = _apply_python_adapter(adapter, context, active=active, surface=selected)
-                target["manifest"] = json.dumps(manifest, default=lambda _: None)
-            targets.append(target)
-        rows, guidance = native_managed_install(
-            command, targets, context, workspace=workspace, now=now, source=store.guard_source
-        )
+    for adapter in adapters:
+        selected = _selected_surface(adapter, context, surface)
+        target: dict[str, object] = {"harness": adapter.harness}
+        if selected is not None:
+            target["surface"] = selected
+        targets.append(target)
+    rows, guidance = native_managed_install(
+        command, targets, context, workspace=workspace, now=now, source=store.guard_source
+    )
     managed_installs = [_managed_install_payload(row) for row in rows]
     payload: dict[str, object] = {
         "managed_installs": managed_installs,

@@ -15,7 +15,7 @@ from pathlib import Path
 from .base import HarnessContext
 
 
-def install_facts(
+def _facts(
     context: HarnessContext,
     harnesses: Sequence[str],
     *,
@@ -63,6 +63,45 @@ def install_facts(
 
         harness_facts["codex"] = codex_install_facts(context)
     facts["facts"] = harness_facts
+    return facts
+
+
+def install_facts(
+    context: HarnessContext,
+    harnesses: Sequence[str],
+    *,
+    workspaces: Mapping[str, Path | None] | None = None,
+) -> dict[str, object]:
+    """The process facts a native install op takes for ``harnesses``, and for the providers a harness delegates to.
+
+    Paseo installs the native providers it delegates to for the daemon user, not for the caller's worktree, so
+    their facts come from the context without a workspace, with which provider runtimes this host has.
+    """
+    from datetime import datetime, timezone
+
+    from .native_harness import _native_context, describe
+    from .registry import get_adapter
+
+    descriptions = {
+        str(adapter.get("harness")): adapter for adapter in describe()["adapters"] if isinstance(adapter, dict)
+    }
+    delegates = [
+        str(name)
+        for harness in harnesses
+        if descriptions.get(harness, {}).get("install") == "delegated"
+        for name in descriptions[harness].get("delegates", ())
+    ]
+    facts = _facts(context, harnesses, workspaces=workspaces)
+    if not delegates:
+        return facts
+    native = _native_context(context)
+    providers = _facts(native, [name for name in delegates if name not in harnesses])
+    for group in ("workspace_skills", "facts"):
+        facts[group] = {**providers[group], **facts[group]}  # type: ignore[dict-item]
+    facts["runtime"] = facts["runtime"] or providers["runtime"]
+    facts["delegates"] = {name: get_adapter(name).resolved_executable(native) is not None for name in delegates}
+    facts["now"] = datetime.now(timezone.utc).isoformat()
+    facts["source"] = "default"
     return facts
 
 

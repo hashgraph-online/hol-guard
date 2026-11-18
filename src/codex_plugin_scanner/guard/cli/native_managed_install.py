@@ -35,6 +35,15 @@ def _ownership_messages(harnesses: Sequence[str], op: str) -> dict[str, bool]:
     return messages
 
 
+def _delegated_count(harnesses: Sequence[str]) -> int:
+    """How many provider installs the harnesses' delegated installs run on top of their own."""
+    return sum(
+        len(adapter.get("delegates", ()))
+        for adapter in describe()["adapters"]
+        if isinstance(adapter, dict) and adapter.get("harness") in harnesses and adapter.get("install") == "delegated"
+    )
+
+
 def native_row(row: dict[str, Any]) -> dict[str, object]:
     """A store row the runtime answered, with its manifest decoded as the store read does."""
     manifest = row.get("manifest")
@@ -64,7 +73,7 @@ def ask_managed(
         **install_facts(context, harnesses, workspaces=workspaces),
         **fields,
     }
-    timeout = _PER_TARGET_SECONDS * max(1, len(harnesses)) + _OVERHEAD_SECONDS
+    timeout = _PER_TARGET_SECONDS * max(1, len(harnesses) + _delegated_count(harnesses)) + _OVERHEAD_SECONDS
     try:
         return ask(op, context, timeout_seconds=timeout, **request)
     except NativeRunnerAuthorityError as error:

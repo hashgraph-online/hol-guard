@@ -16,6 +16,9 @@
 
 use serde_json::{json, Map, Value};
 
+#[path = "paseo_delegated.rs"]
+mod paseo_delegated;
+
 use super::describe::{Hook, Install};
 use super::files::{render, text, Doc};
 use super::{
@@ -156,9 +159,9 @@ fn plan_fields(
     Ok(fields)
 }
 
-/// A shim-only harness's install: its launchers, and the manifest naming
-/// them under `harness`, `active` and `config_path`.
-fn shim_install(
+/// The launchers a harness's install publishes, and the manifest text that
+/// names them.
+fn publish_shim(
     spec: &Spec,
     ctx: &Ctx,
     request: &Map<String, Value>,
@@ -175,13 +178,25 @@ fn shim_install(
     }
     let applied = shims_apply::apply_guard_shims(ctx, &fields).map_err(stopped)?;
     published(owner, applied.get("publish"))?;
-    let rendered = applied
+    applied
         .get("shims")
         .and_then(Value::as_array)
         .and_then(|manifests| manifests.first())
         .and_then(Value::as_str)
-        .ok_or(INVALID)?;
-    let Ok(PyVal::Dict(shim)) = pyjson::parse(rendered) else {
+        .map(str::to_owned)
+        .ok_or(INVALID)
+}
+
+/// A shim-only harness's install: its launchers, and the manifest naming
+/// them under `harness`, `active` and `config_path`.
+fn shim_install(
+    spec: &Spec,
+    ctx: &Ctx,
+    request: &Map<String, Value>,
+    owner: &mut Owner,
+) -> Owned<String> {
+    let rendered = publish_shim(spec, ctx, request, owner)?;
+    let Ok(PyVal::Dict(shim)) = pyjson::parse(&rendered) else {
         return Err(INVALID);
     };
     let config = shim
@@ -198,8 +213,7 @@ fn shim_install(
 }
 
 /// `NativeHarnessAdapter.install`: the manifest text of the installed
-/// harness, every publish journaled under `owner`. Paseo's delegated install
-/// runs other adapters from Python and is not answered here.
+/// harness, every publish journaled under `owner`.
 pub(super) fn install(
     spec: &Spec,
     ctx: &Ctx,
@@ -211,7 +225,7 @@ pub(super) fn install(
         return codex::codex_managed::install(spec, ctx, request, owner);
     }
     match spec.install {
-        Install::Delegated => Err(INVALID),
+        Install::Delegated => paseo_delegated::install_paseo(spec, ctx, request, owner),
         Install::Shim => shim_install(spec, ctx, request, owner),
         Install::Plan => {
             let fields = plan_fields(spec, ctx, request, surface).map_err(stopped)?;

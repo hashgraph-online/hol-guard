@@ -103,29 +103,16 @@ def test_claude_preserves_user_hooks_and_installs_pretool_for_all_workspaces(con
     assert str(context.workspace_dir) not in json.dumps(managed)
 
 
-def test_shared_profiles_install_once_and_repeat_install_is_idempotent(
-    context: HarnessContext, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_shared_profiles_install_once_and_repeat_install_is_idempotent(context: HarnessContext) -> None:
     """Share one native installation across profiles without duplicating hooks during repair."""
     configure(context, {"pi": {"enabled": True}, "pi-work": {"extends": "pi", "label": "Work"}})
-    native = get_adapter("pi")
-    original_install = native.install
-    calls: list[HarnessContext] = []
-
-    def record_install(native_context: HarnessContext) -> dict[str, object]:
-        """Record each real native install and the context it received."""
-        calls.append(native_context)
-        return original_install(native_context)
-
-    monkeypatch.setattr(native, "install", record_install)
     adapter = get_adapter("paseo")
     first = adapter.install(context)
     extension = context.home_dir / ".pi/agent/extensions/hol-guard.ts"
     original = extension.read_bytes()
     second = adapter.install(context)
-    assert len(calls) == 2
-    assert all(call.workspace_dir is None and not call.workspace_override_explicit for call in calls)
     assert extension.read_bytes() == original
+    assert not list(context.workspace_dir.rglob("*"))
     assert statuses(first)["pi-work"] == statuses(second)["pi-work"] == "native-hooks-installed"
     assert len(read_receipt(context)["native_proofs"]) == 1
 

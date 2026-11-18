@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -164,48 +163,6 @@ def runner_launch_argv(runner: str, context: HarnessContext, passthrough_args: l
     if not isinstance(argv, str) or not isinstance(count, int) or len(command := argv.split("\0")) != count:
         raise NativeRunnerAuthorityError("native_opencode_launch_invalid")
     return command
-
-
-def install_delegated(adapter: NativeHarnessAdapter, context: HarnessContext) -> dict[str, object]:
-    """Install each native provider, bind its proof, then publish the receipt."""
-    from ..codex_hook_integrity import atomic_write_text
-    from ..shims import install_guard_shim
-    from ..store import GuardStore
-    from .native_harness import _native_context, _text
-    from .registry import get_adapter
-
-    # Repeat preparation under the shared owner; the earlier read-only
-    # check does not authorize mutation.
-    delegates = adapter._delegate_fields(context)
-    prepared = adapter._delegated_targets(context)
-    native = _native_context(context)
-    proofs: dict[str, str] = {}
-    for target in prepared["targets"]:
-        adapter._ask("delegate_preflight", context, target=target, **delegates)
-        manifest = get_adapter(target).install(native)
-        bound = adapter._ask(
-            "delegate_bind",
-            context,
-            target=target,
-            manifest=json.dumps(manifest, default=lambda _: None),
-            **delegates,
-        )
-        GuardStore(context.guard_home).set_managed_install(
-            target, True, None, json.loads(_text(bound, "bound")), datetime.now(timezone.utc).isoformat()
-        )
-        proofs[target] = _text(bound, "proof")
-    receipt = adapter._ask("delegate_receipt", context, providers=prepared["providers"], proofs=proofs, **delegates)
-    shim = install_guard_shim(adapter.harness, native)
-    atomic_write_text(Path(_text(receipt, "path")), _text(receipt, "text"))
-    answer = adapter._ask(
-        "finish_install",
-        context,
-        shim=json.dumps(shim),
-        providers=prepared["providers"],
-        receipt=_text(receipt, "text"),
-        **delegates,
-    )
-    return json.loads(_text(answer, "manifest"))
 
 
 def _decoded(value: object) -> bytes | None:
