@@ -123,7 +123,7 @@ fn nested_shell_quote_state_never_hides_unescaped_backticks() {
     let commands = [
         r#"v="$(printf "'")"; echo `printf launched` # '"#.to_owned(),
         format!(
-            r#"echo {}\'\''; echo `printf launched` # '"#,
+            r#"echo {}'\''; echo `printf launched` # '"#,
             char::from(36u8)
         ),
     ];
