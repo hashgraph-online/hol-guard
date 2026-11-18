@@ -216,6 +216,7 @@ fn prepare(registry: &Arc<Mutex<Registry>>, id: &str) -> Option<(Command, String
     ] {
         command.env_remove(key);
     }
+    #[cfg(unix)]
     account(&mut command);
     adapter::configure(
         &mut command,
@@ -233,13 +234,11 @@ fn prepare(registry: &Arc<Mutex<Registry>>, id: &str) -> Option<(Command, String
 /// LOGNAME. Claude Code on macOS looks its login up in the keychain under
 /// USER, so without it every Swarm launch reports "Not logged in". Name the
 /// account that owns this process; never take it from the request.
+#[cfg(unix)]
 fn account(command: &mut Command) {
-    #[cfg(unix)]
     if let Ok(Some(user)) = nix::unistd::User::from_uid(nix::unistd::getuid()) {
         command.env("USER", &user.name).env("LOGNAME", &user.name);
     }
-    #[cfg(not(unix))]
-    let _ = command;
 }
 
 fn update(registry: &Arc<Mutex<Registry>>, id: &str, f: impl FnOnce(&mut crate::service::Run)) {
