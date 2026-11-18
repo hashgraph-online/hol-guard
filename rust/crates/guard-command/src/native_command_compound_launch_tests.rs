@@ -195,4 +195,3 @@ fn a_loop_whose_kept_value_reaches_a_launcher_or_conditional_stays_refused() {
         );
     }
 }
-
