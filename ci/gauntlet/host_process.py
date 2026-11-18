@@ -11,7 +11,8 @@ from contextlib import suppress
 from pathlib import Path
 
 from .evidence import TRANSCRIPT_LIMIT
-from .workspace_runner_fixtures import home_bun_bin, without_package_shims
+from .host_shims import prepend_path, without_package_shims
+from .workspace_runner_fixtures import home_bun_bin
 
 # Set by a ``--jobs`` case worker so its parent can reap agent sessions that the
 # worker could not reap itself (for example after a forced kill).
@@ -81,7 +82,7 @@ def clean_environment(home: Path, agent_dir: Path, canary: str) -> dict[str, str
     # would review the agent launch itself, prompt included, before the case
     # Guard sees anything.
     host_path = without_package_shims(environment.get("PATH", ""))
-    environment["PATH"] = str(Path(sys.executable).parent) + os.pathsep + host_path
+    environment["PATH"] = prepend_path(str(Path(sys.executable).parent), host_path)
     if shim := python_shim(agent_dir.parent / "python-bin", environment["PATH"]):
         environment["PATH"] = shim + os.pathsep + environment["PATH"]
     if os.name == "nt":

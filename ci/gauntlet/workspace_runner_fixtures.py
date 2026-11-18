@@ -19,6 +19,8 @@ import subprocess
 from pathlib import Path
 from typing import NamedTuple
 
+from .host_shims import without_package_shims
+
 WORKSPACE_JEST_CASE = "omp-native-workspace-npx-jest"
 # The same install, launched the way a Node project's own scripts name it: the
 # installed entry point relative to the workspace root rather than through
@@ -910,18 +912,6 @@ def home_bun_bin(home: Path) -> Path | None:
     """
     directory = home / _BUN_BIN
     return directory if (directory / "bun").is_file() else None
-
-
-def without_package_shims(path: str) -> str:
-    """``path`` without the host Guard's package-shim directories.
-
-    A shim is a script that hands the launch to the host's own Guard runtime.
-    A case is judged by the Guard the fixture installed, so a host shim in
-    front of Bun, npm or pip would put the host's Guard in the way of the
-    case's own launches and of every package command the agent runs.
-    """
-    entries = path.split(os.pathsep)
-    return os.pathsep.join(entry for entry in entries if Path(entry).parts[-2:] != ("package-shims", "bin"))
 
 
 def _host_bun() -> str | None:
