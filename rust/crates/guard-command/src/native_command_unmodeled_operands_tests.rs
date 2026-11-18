@@ -81,7 +81,7 @@ fn only_a_bare_operand_leaves_the_command_positions() {
         ("rg 'node' src", "rg 'node'"),
         ("rg \"node\" src", "rg \"node\""),
         // A quoted literal path is an operand like the unquoted one.
-        ("find \"/home/.nvm/versions/node\" -type d", "find"),
+        ("find \"/home/.nvm/versions/node\" -type d", "find -type d"),
         // A test runs nothing, so none of its operands is a program.
         ("[ -d \"$HOME/.nvm/versions/node\" ]", "["),
         ("test -x node", "test"),
