@@ -122,29 +122,79 @@ fn wrapped_outside(fixture: &Fixture, command: &str) -> bool {
 #[test]
 fn a_wrapped_run_reads_the_base_of_its_core() {
     let per_user = fixture("wrapped", "per-user");
-    let workspace = per_user.root.join("workspace");
-    std::fs::create_dir_all(workspace.join("api/.venv/bin")).unwrap();
-    for file in [
-        ".venv/bin/python.exe",
-        ".venv/bin/pytest",
-        ".venv/pyvenv.cfg",
-    ] {
-        std::fs::copy(workspace.join(file), workspace.join("api").join(file)).unwrap();
-    }
     assert!(wrapped_outside(&per_user, ".venv/bin/pytest -q"));
     assert!(wrapped_outside(&per_user, ".venv/bin/pytest -q | head -40"));
-    // An absolute `cd` is peeled on every host; Windows also peels a relative
-    // one inside the workspace.
-    let api = crate::runtime_read_paths::strip_verbatim_prefix(
-        workspace.join("api").canonicalize().unwrap(),
-    );
-    assert!(wrapped_outside(
-        &per_user,
-        &format!("cd {} && .venv/bin/pytest -q", api.display())
-    ));
     let all_users = fixture("wrapped-all-users", "all-users");
     assert!(!wrapped_outside(
         &all_users,
         ".venv/bin/pytest -q | head -40"
     ));
+    // The session environment is trusted and `api` holds a per-user one, so
+    // only a reading taken in the `cd` target keeps the review. An absolute
+    // `cd` is peeled on every host; Windows also peels a relative one.
+    let workspace = all_users.root.join("workspace");
+    std::fs::create_dir_all(workspace.join("api/.venv/bin")).unwrap();
+    for file in [".venv/bin/python.exe", ".venv/bin/pytest"] {
+        std::fs::copy(workspace.join(file), workspace.join("api").join(file)).unwrap();
+    }
+    std::fs::write(
+        workspace.join("api/.venv/pyvenv.cfg"),
+        format!(
+            "home = {}\n",
+            all_users.root.join("per-user/Python312").display()
+        ),
+    )
+    .unwrap();
+    let api = crate::runtime_read_paths::strip_verbatim_prefix(
+        workspace.join("api").canonicalize().unwrap(),
+    );
+    assert!(wrapped_outside(
+        &all_users,
+        &format!("cd '{}' && .venv/bin/pytest -q", api.display())
+    ));
+}
+
+/// A `home` on a share is refused without being opened, so a repository's
+/// `pyvenv.cfg` cannot make the hook reach out to a host it names.
+#[test]
+fn a_network_base_keeps_the_review() {
+    let fixture = fixture("network", "all-users");
+    for home in [
+        r"\\attacker\share\Python312",
+        r"\\?\UNC\attacker\share",
+        "relative/Python312",
+    ] {
+        std::fs::write(
+            fixture.root.join("workspace/.venv/pyvenv.cfg"),
+            format!("home = {home}\n"),
+        )
+        .unwrap();
+        assert!(outside(&fixture, ".venv/bin/pytest -q"), "{home}");
+    }
+}
+
+/// A `pyvenv.cfg` past the size limit is not read as one.
+#[test]
+fn an_oversized_config_keeps_the_review() {
+    let fixture = fixture("oversized", "all-users");
+    let config = fixture.root.join("workspace/.venv/pyvenv.cfg");
+    let mut text = std::fs::read_to_string(&config).unwrap();
+    text.push_str(&"# padding\n".repeat(8 * 1024));
+    std::fs::write(&config, text).unwrap();
+    assert!(outside(&fixture, ".venv/bin/pytest -q"));
+}
+
+/// A launcher reached through a link is read at the environment it names.
+#[cfg(unix)]
+#[test]
+fn a_linked_launcher_is_read_at_its_target() {
+    let fixture = fixture("linked", "per-user");
+    let workspace = fixture.root.join("workspace");
+    std::fs::create_dir_all(workspace.join("tools")).unwrap();
+    std::os::unix::fs::symlink(
+        workspace.join(".venv/bin/pytest"),
+        workspace.join("tools/pytest"),
+    )
+    .unwrap();
+    assert!(outside(&fixture, "./tools/pytest -q"));
 }

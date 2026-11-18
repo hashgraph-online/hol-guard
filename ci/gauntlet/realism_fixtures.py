@@ -167,7 +167,11 @@ def base_interpreter() -> Path:
     installed interpreter; the stand-ins below only look like the ones a
     developer works in if they point at a real one.
     """
-    base = os.environ.get(FIXTURE_BASE_PYTHON) or getattr(sys, "_base_executable", None) or sys.executable
+    # The override only picks the interpreter. The package layout and the
+    # recorded version still come from the running one, which matches it only
+    # on the Windows lane that sets it.
+    override = os.environ.get(FIXTURE_BASE_PYTHON) if os.name == "nt" else None
+    base = override or getattr(sys, "_base_executable", None) or sys.executable
     return Path(base).resolve()
 
 
@@ -293,9 +297,11 @@ def venv_pytest_module(venv: Path) -> str:
     """
     # Guard's Windows contained pytest runs a credential-filtered copy of the
     # workspace, so there the environment's own interpreter reports the copy's
-    # `.venv` as its prefix rather than this path.
+    # `.venv` as its prefix rather than this path. The module moves with that
+    # copy, so its own `Lib/site-packages` names the environment it belongs to.
     own_prefix = (
-        f"sys.prefix == sys.base_prefix or os.path.basename(sys.prefix) != {VENV!r}"
+        "os.path.normcase(os.path.normpath(sys.prefix)) != "
+        "os.path.normcase(os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..')))"
         if os.name == "nt"
         else f"sys.prefix != {str(venv)!r}"
     )
@@ -434,6 +440,7 @@ def _copy_windows_interpreter(venv: Path, base: Path) -> None:
     if os.name != "nt":
         return
     launcher = base.parent / "Lib" / "venv" / "scripts" / "nt" / "python.exe"
-    if launcher.is_file():
-        (venv / "bin").mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(launcher, venv / "bin" / "python.exe")
+    if not launcher.is_file():
+        raise FileNotFoundError(f"base Python has no venv launcher: {launcher}")
+    (venv / "bin").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(launcher, venv / "bin" / "python.exe")

@@ -27,16 +27,37 @@ const BINARY_DIRECTORIES: [&str; 2] = ["Scripts", "bin"];
 
 /// The `home` a virtual environment's `pyvenv.cfg` records.
 fn recorded_home(environment: &Path) -> Option<PathBuf> {
-    let mut file = std::fs::File::open(environment.join("pyvenv.cfg")).ok()?;
-    if file.metadata().ok()?.len() > PYVENV_CFG_MAX_BYTES {
+    let file = std::fs::File::open(environment.join("pyvenv.cfg")).ok()?;
+    // The limit holds for the read itself, so a file that grows after it is
+    // opened is still refused.
+    let mut text = String::new();
+    file.take(PYVENV_CFG_MAX_BYTES + 1)
+        .read_to_string(&mut text)
+        .ok()?;
+    if text.len() as u64 > PYVENV_CFG_MAX_BYTES {
         return None;
     }
-    let mut text = String::new();
-    file.read_to_string(&mut text).ok()?;
     text.lines()
         .filter_map(|line| line.split_once('='))
         .find(|(key, _)| key.trim().eq_ignore_ascii_case("home"))
         .map(|(_, value)| PathBuf::from(value.trim()))
+}
+
+/// Whether `home` is an absolute path on a local drive, read without touching
+/// the filesystem: a UNC share, a device namespace or a relative path is not.
+fn local_absolute(home: &Path) -> bool {
+    use std::path::{Component, Prefix};
+    if !home.is_absolute() {
+        return false;
+    }
+    match home.components().next() {
+        Some(Component::Prefix(prefix)) => {
+            matches!(prefix.kind(), Prefix::Disk(_) | Prefix::VerbatimDisk(_))
+        }
+        // Hosts without drive prefixes start an absolute path at the root.
+        Some(Component::RootDir) => !cfg!(windows),
+        _ => false,
+    }
 }
 
 /// The environment a launcher path belongs to: `<environment>/<Scripts|bin>/<name>`.
@@ -44,7 +65,20 @@ fn environment_of(executable: &str, cwd: &Path) -> Option<PathBuf> {
     if !executable.contains(['/', '\\']) {
         return None;
     }
-    let launcher = cwd.join(executable.replace('\\', "/"));
+    let spelled = cwd.join(executable.replace('\\', "/"));
+    // The planner follows a link to the launcher it names, so a link into an
+    // environment is read at its target. The link is read, not resolved, so a
+    // target on a share is never opened from here.
+    let launcher = match std::fs::read_link(&spelled) {
+        Ok(target) => {
+            let target = spelled.parent()?.join(target);
+            if !local_absolute(&target) {
+                return None;
+            }
+            target
+        }
+        Err(_) => spelled,
+    };
     let binaries = launcher.parent()?;
     let named = binaries.file_name()?.to_str()?;
     if !BINARY_DIRECTORIES
@@ -78,9 +112,12 @@ pub(super) fn base_outside_install_roots(
     else {
         return false;
     };
-    // The planner refuses an environment whose base it cannot resolve.
-    let Some(base) =
-        recorded_home(&environment).and_then(|home| home.join("python.exe").canonicalize().ok())
+    // The planner refuses an environment whose base it cannot resolve. A
+    // network or device `home` is refused before anything opens it, so a
+    // repository's `pyvenv.cfg` cannot make the hook reach out to a share.
+    let Some(base) = recorded_home(&environment)
+        .filter(|home| local_absolute(home))
+        .and_then(|home| home.join("python.exe").canonicalize().ok())
     else {
         return true;
     };
