@@ -12,9 +12,9 @@ import {
 import {
   type PulseMeasurable,
   boxWithin,
-  focusWithoutScrolling,
+  focusForPlan,
   isFullyVisible,
-  pulseInitialFocusTarget,
+  pulseInitialFocusPlan,
 } from "./pulse-initial-focus";
 import { PULSE_SITE_URL } from "./pulse-setup-modal";
 import { buildTotpQrImageOptions } from "./totp-enrollment-qr-panel";
@@ -119,15 +119,25 @@ function theCollapsedRowShowsTheCurrentChoices(): void {
     "PULSE-QR-4: the one hour choice shows on the closed row");
 }
 
-function focusingTheKeyFieldNeverScrollsTheQrCodeOutOfView(): void {
+function focusingFollowsWhatTheUserCanSee(): void {
   const calls: Array<FocusOptions | undefined> = [];
-  focusWithoutScrolling({ focus: (options) => calls.push(options) });
-  assert(calls.length === 1 && calls[0]?.preventScroll === true, "PULSE-QR-5: the key field is focused with preventScroll");
-  focusWithoutScrolling(null);
-  assert(calls.length === 1, "PULSE-QR-5: no field yet, nothing to focus");
-  assert(pulseInitialFocusTarget(true) === "key", "PULSE-QR-5: a visible key field takes focus");
-  assert(pulseInitialFocusTarget(false) === "qr",
-    "PULSE-QR-5: a key field out of view never takes focus; the QR panel does");
+  const element = { focus: (options?: FocusOptions) => { calls.push(options); } };
+  focusForPlan(element, false);
+  assert(calls.length === 1 && calls[0]?.preventScroll === true, "PULSE-QR-5: a visible target is focused with preventScroll");
+  focusForPlan(element, true);
+  assert(calls.length === 2 && calls[1]?.preventScroll === false, "PULSE-QR-5: a target out of view is focused with scrolling");
+  focusForPlan(null, true);
+  assert(calls.length === 2, "PULSE-QR-5: no element yet, nothing to focus");
+  const keyVisible = pulseInitialFocusPlan(true, true);
+  assert(keyVisible.target === "key" && !keyVisible.scroll, "PULSE-QR-5: a visible key field takes focus, no scroll");
+  const keyOnly = pulseInitialFocusPlan(true, false);
+  assert(keyOnly.target === "key" && !keyOnly.scroll, "PULSE-QR-5: a visible key field never scrolls, even with the panel out of view");
+  const qrVisible = pulseInitialFocusPlan(false, true);
+  assert(qrVisible.target === "qr" && !qrVisible.scroll,
+    "PULSE-QR-5: a key field out of view never takes focus; the visible QR panel does, without scrolling");
+  const nothingVisible = pulseInitialFocusPlan(false, false);
+  assert(nothingVisible.target === "qr" && nothingVisible.scroll,
+    "PULSE-QR-5: with neither in view the QR panel takes focus and is scrolled into view");
 }
 
 function stand(top: number, bottom: number, parent: PulseMeasurable | null, overflowY = "visible"):
@@ -174,7 +184,7 @@ theQrCodeEncodesOnlyTheYidAppPage();
 stepTwoKeepsTheKeyFieldFirstAndTheSettingsCollapsed();
 theAgentKeyHintOnlyAppearsForAKeyThatDoesNotLookRight();
 theCollapsedRowShowsTheCurrentChoices();
-focusingTheKeyFieldNeverScrollsTheQrCodeOutOfView();
+focusingFollowsWhatTheUserCanSee();
 theKeyFieldOnlyTakesFocusWhenTheUserCanSeeIt();
 theFocusedQrPanelShowsAVisibleIndicator();
 theCooldownSelectMapsBackToTheThreeChoices();

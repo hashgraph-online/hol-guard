@@ -2,7 +2,7 @@ import { useEffect, useRef, type Ref } from "react";
 import QRCode from "react-qr-code";
 import { ActionButton } from "./approval-center-primitives";
 import { PULSE_FACE_SCAN_OPTIONS, type PulseMinTier } from "./pulse-approval";
-import { browserView, focusWithoutScrolling, isFullyVisible, pulseInitialFocusTarget } from "./pulse-initial-focus";
+import { browserView, focusForPlan, isFullyVisible, pulseInitialFocusPlan } from "./pulse-initial-focus";
 import {
   ErrorNote,
   Field,
@@ -95,8 +95,13 @@ export function PulseConnectStep(props: {
   const qrPanel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const field = keyInput.current;
-    const target = pulseInitialFocusTarget(field !== null && isFullyVisible(field, browserView()));
-    focusWithoutScrolling(target === "key" ? field : qrPanel.current);
+    const panel = qrPanel.current;
+    const view = browserView();
+    const plan = pulseInitialFocusPlan(
+      field !== null && isFullyVisible(field, view),
+      panel !== null && isFullyVisible(panel, view),
+    );
+    focusForPlan(plan.target === "key" ? field : panel, plan.scroll);
   }, []);
   return (
     <div className="grid gap-6 p-6 lg:grid-cols-[240px_minmax(0,1fr)]">

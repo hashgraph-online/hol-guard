@@ -2336,11 +2336,12 @@ function isFullyVisible(element, view) {
   }
   return boxWithin(element.getBoundingClientRect(), clip);
 }
-function pulseInitialFocusTarget(keyFieldVisible) {
-  return keyFieldVisible ? "key" : "qr";
+function pulseInitialFocusPlan(keyFieldVisible, qrPanelVisible) {
+  if (keyFieldVisible) return { target: "key", scroll: false };
+  return { target: "qr", scroll: !qrPanelVisible };
 }
-function focusWithoutScrolling(element) {
-  element?.focus({ preventScroll: true });
+function focusForPlan(element, scroll) {
+  element?.focus({ preventScroll: !scroll });
 }
 function browserView() {
   return {
@@ -2422,8 +2423,13 @@ function PulseConnectStep(props) {
   const qrPanel = reactExports.useRef(null);
   reactExports.useEffect(() => {
     const field = keyInput.current;
-    const target = pulseInitialFocusTarget(field !== null && isFullyVisible(field, browserView()));
-    focusWithoutScrolling(target === "key" ? field : qrPanel.current);
+    const panel = qrPanel.current;
+    const view = browserView();
+    const plan = pulseInitialFocusPlan(
+      field !== null && isFullyVisible(field, view),
+      panel !== null && isFullyVisible(panel, view)
+    );
+    focusForPlan(plan.target === "key" ? field : panel, plan.scroll);
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 p-6 lg:grid-cols-[240px_minmax(0,1fr)]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(PulseQrPanel, { panelRef: qrPanel }),

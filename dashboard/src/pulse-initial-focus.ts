@@ -31,18 +31,24 @@ export function isFullyVisible(element: PulseMeasurable, view: PulseView): boole
   return boxWithin(element.getBoundingClientRect(), clip);
 }
 
+/** Where focus goes when the connect step opens, and whether the browser may scroll to get it there. */
+export type PulseFocusPlan = { target: "key" | "qr"; scroll: boolean };
+
 /**
- * Where focus goes when the connect step opens. The key field takes it when the user can see the field.
- * Otherwise focus starts on the QR panel, which is at the top, and the next Tab reaches the field:
- * focusing a field nobody can see leaves keyboard users typing blind.
+ * The key field takes focus when the user can see it. Otherwise focus starts on the QR panel at the top
+ * of the step, and the next Tab reaches the field: focusing a field nobody can see leaves keyboard users
+ * typing blind. The panel is focused without scrolling while it is in view, so opening the step never
+ * carries the QR code away before it can be scanned. When it is not in view, such as a very short window
+ * or a modal that kept its scroll position from the last step, focusing scrolls it into view.
  */
-export function pulseInitialFocusTarget(keyFieldVisible: boolean): "key" | "qr" {
-  return keyFieldVisible ? "key" : "qr";
+export function pulseInitialFocusPlan(keyFieldVisible: boolean, qrPanelVisible: boolean): PulseFocusPlan {
+  if (keyFieldVisible) return { target: "key", scroll: false };
+  return { target: "qr", scroll: !qrPanelVisible };
 }
 
-/** Focus without scrolling, so opening the step never carries the QR code out of view before it can be scanned. */
-export function focusWithoutScrolling(element: { focus: (options?: FocusOptions) => void } | null): void {
-  element?.focus({ preventScroll: true });
+/** Focus an element, scrolling only when the plan says the user cannot see it yet. */
+export function focusForPlan(element: { focus: (options?: FocusOptions) => void } | null, scroll: boolean): void {
+  element?.focus({ preventScroll: !scroll });
 }
 
 /** The browser's view, for the real call. */
