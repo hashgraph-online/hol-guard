@@ -54,7 +54,7 @@ from .hook_worker_readiness import prepare_workspace_policy
 
 if TYPE_CHECKING:
     from ..config import GuardConfig
-    from ..evidence_drains.hook_direct_evidence_drain import DirectHookEvidenceDrain
+    from ..resident_evidence_drain import ResidentEvidenceDrain
     from ..store import GuardStore
 
 
@@ -136,7 +136,7 @@ class HookWorker(HookWorkerNativeMixin):
 
         _ = list_adapters()
         self._owns_policy_snapshot_publisher = publish_native_policy
-        self._direct_evidence_drain: DirectHookEvidenceDrain | None = None
+        self._direct_evidence_drain: ResidentEvidenceDrain | None = None
         if self._owns_policy_snapshot_publisher and start_native_policy:
             bind_daemon_home = getattr(self.policy_snapshot_publisher, "bind_direct_lane_daemon_home", None)
             if home_dir is not None and callable(bind_daemon_home):
@@ -227,9 +227,9 @@ class HookWorker(HookWorkerNativeMixin):
         enable = getattr(self.policy_snapshot_publisher, "enable_direct_evidence_drain", None)
         if self.activity_writer is None or not callable(enable):
             return
-        from ..evidence_drains.hook_direct_evidence_drain import DirectHookEvidenceDrain
+        from ..resident_evidence_drain import ResidentEvidenceDrain
 
-        self._direct_evidence_drain = DirectHookEvidenceDrain(self)
+        self._direct_evidence_drain = ResidentEvidenceDrain(self)
         enable(True)
         self._direct_evidence_drain.start()
 

@@ -500,9 +500,11 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/resident_evidence_client.py",
-          "src/codex_plugin_scanner/guard/route_metrics.py"
+          "src/codex_plugin_scanner/guard/route_metrics.py",
+          "src/codex_plugin_scanner/guard/resident_evidence_drain.py",
+          "src/codex_plugin_scanner/guard/resident_evidence_fallback.py"
         ],
-        "reason": "Reviewed generic transport facades: the resident owns evidence persistence and native route decisions, while these callers carry only bounded requests, acknowledgements, counters and sanitized route dimensions. Count the complete adapters in runtime scope rather than treating their Python transport code as a decision implementation."
+        "reason": "Reviewed generic evidence adapters: the resident owns normal evidence persistence and native route decisions, while these callers carry bounded requests, acknowledgements, counters, sanitized route dimensions, and a lossless fallback only for records the resident explicitly leaves to the daemon. Count the complete adapters in runtime scope rather than treating their Python transport code as a decision implementation."
       },
       {
         "path": "src/codex_plugin_scanner/guard/harness/extension_runtime.py",
