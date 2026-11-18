@@ -358,7 +358,16 @@ pub(super) fn workspace_file_url(url: &str, cwd: Option<&str>) -> bool {
     let (Ok(root), Ok(target)) = (std::fs::canonicalize(cwd), std::fs::canonicalize(path)) else {
         return false;
     };
-    root != std::path::Path::new("/") && target.starts_with(&root) && target.is_file()
+    // A contained symlink may still point to a non-HTML secret (for example
+    // index.html -> .env). Screen the resolved target as well as the URL.
+    let target_is_html = target
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| matches!(extension, "html" | "htm"));
+    root != std::path::Path::new("/")
+        && target.starts_with(&root)
+        && target.is_file()
+        && target_is_html
 }
 
 /// An `http(s)` URL whose host is the loopback interface, with no userinfo.
