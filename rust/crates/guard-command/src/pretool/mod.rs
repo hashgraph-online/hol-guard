@@ -391,32 +391,10 @@ pub(crate) fn removes_a_root(command: &str) -> bool {
     root_removal::removes_a_root(&normalized_haystack(command))
 }
 
-/// `grep ~/.secrets/key.txt` names no file: the path is the pattern and the
-/// search reads stdin, so no search proof ever sees the read it meant. The
-/// shape is no search an agent needs, so nothing vouches for it and no Allow
-/// settles it. A search fed by a pipe or an input redirect has real input.
-pub(crate) fn lone_home_dotpath_search(
-    model: &CanonicalCommandV1,
-    context: PathContext<'_>,
-) -> bool {
-    let home = context.home_dir.map(std::path::Path::new);
-    model.segments.iter().any(|segment| {
-        segment.pipeline_index == 0
-            && !crate::shell_secret_read_stdin_search::has_input_redirect_syntax(&segment.text)
-            && segment.executable.as_deref().is_some_and(|executable| {
-                crate::shell_secret_read_stdin_search::lone_search_pattern_names_home_dotpath(
-                    executable_basename(executable),
-                    &segment.arguments,
-                    home,
-                )
-            })
-    })
-}
-
 /// Floors no extension permission can settle: Guard self-protection, secret
 /// exfiltration, a spelled-out key, token or password, a glob that could name
-/// a secret file, and Git configuration that runs a program Guard cannot
-/// read. An unproven model has no segments to screen, so it is a floor itself
+/// a secret file, a printed Social Security number, and Git configuration
+/// that runs a program Guard cannot read. An unproven model has no segments to screen, so it is a floor itself
 /// rather than passing every screen.
 pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
     model.confidence != "exact"
@@ -925,7 +903,7 @@ fn exact_safe_command_with_context(
     {
         return false;
     }
-    if lone_home_dotpath_search(model, context) {
+    if crate::shell_secret_read_stdin_search::lone_home_dotpath_search(model, context.home_dir) {
         return false;
     }
     // `$((PATH=10))` assigns as it expands, so a later step could run a

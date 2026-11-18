@@ -18,7 +18,7 @@
 //!
 //! Only a search with no other input counts, so a fed search such as
 //! `ps aux | grep ~/.ssh/id_rsa` or `grep ~/.ssh/id_rsa < notes.txt` is
-//! never asked. `pretool::lone_home_dotpath_search` applies the rule to a
+//! never asked. [`lone_home_dotpath_search`] applies the rule to a
 //! whole command: no exact-safe proof vouches for it, and an enabled
 //! extension permission cannot settle the review it keeps.
 
@@ -65,6 +65,38 @@ const RG_VALUE_OPTIONS: &[&str] = &[
     "--type",
     "--type-not",
 ];
+
+/// Whether a command's first pipeline stage runs `grep`/`rg` with a home
+/// dotfile's path as its only word and nothing feeding it.
+///
+/// `grep ~/.secrets/key.txt` names no file: the path is the pattern and the
+/// search reads stdin, so no search proof ever sees the read it meant. The
+/// shape is no search an agent needs, so nothing vouches for it and no Allow
+/// settles it. A search fed by a pipe or an input redirect has real input,
+/// and a quoted `~` or `$HOME` is literal text to look for, so neither counts.
+pub(crate) fn lone_home_dotpath_search(
+    model: &crate::CanonicalCommandV1,
+    home_dir: Option<&str>,
+) -> bool {
+    let home = home_dir.map(Path::new);
+    model.segments.iter().any(|segment| {
+        segment.pipeline_index == 0
+            && !has_input_redirect_syntax(&segment.text)
+            && !quotes_home_word(&segment.text)
+            && segment.executable.as_deref().is_some_and(|executable| {
+                let name = executable.rsplit(['/', '\\']).next().unwrap_or(executable);
+                lone_search_pattern_names_home_dotpath(name, &segment.arguments, home)
+            })
+    })
+}
+
+/// The shell expands `~` and `$HOME` only unquoted; quoted, they are the
+/// literal text a search looks for.
+fn quotes_home_word(text: &str) -> bool {
+    ["'~", "\"~", "'$HOME", "'${HOME"]
+        .iter()
+        .any(|quoted| text.contains(quoted))
+}
 
 /// A quoted or escaped '<' is argument text, not input redirection.
 /// Respect shell structure and mask comments before reading the operators.
