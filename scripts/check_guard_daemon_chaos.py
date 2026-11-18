@@ -8,18 +8,17 @@ one fault, and checks the result:
   (``daemon-manage recover``), as a harness hook does. The daemon passes when
   hooks are reviewed again within ``--max-recovery-seconds``, exactly one
   daemon serves the home afterwards, the killed daemon has an
-  ``unclean_exit_detected`` record from its successor, and no hook was
-  answered without a decision at any point.
+  ``unclean_exit_detected`` record from its successor, no hook was answered
+  without a decision, and no connection failed outside the outage.
 * ``sigterm-is-recorded``: the daemon is sent SIGTERM. It must record
   ``exiting`` with reason ``signal_term`` before it stops, and recovery must
   serve again within the same limit with exactly one daemon.
 * ``closed-stderr-launch``: the runtime is started with stdout and stderr
   pipes whose read ends are already closed, as a departed caller leaves them,
   using a subcommand that fails. It must exit with code 2, not die on a
-  signal, and leave exactly one record in ``logs/runtime-failures.jsonl``.
+  signal, and leave exactly one readable record in ``logs/runtime-failures.jsonl``.
 
-CI has no Desktop app, so recovery here comes only from the hook recovery
-path. Scenarios for later reliability fixes are added as those fixes land.
+CI has no Desktop app, so recovery here comes only from the hook recovery path.
 """
 
 from __future__ import annotations
@@ -94,13 +93,8 @@ class ChaosResult:
 
 
 def _processes() -> list[tuple[int, list[str]]]:
-    listing = subprocess.run(
-        ("ps", "-axo", "pid=,command="),
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    ).stdout
+    command = ("ps", "-axo", "pid=,command=")
+    listing = subprocess.run(command, check=True, capture_output=True, text=True, timeout=10).stdout
     processes: list[tuple[int, list[str]]] = []
     for line in listing.splitlines():
         pid, _, command = line.strip().partition(" ")
@@ -124,11 +118,7 @@ def _daemon_pids(guard_home: Path) -> list[int]:
 
 
 def _scenario_processes(root: Path) -> list[int]:
-    """Pids whose command line names this scenario's private temporary root.
-
-    The root is a fresh ``mkdtemp`` directory, so only processes this check
-    started can name it.
-    """
+    """Pids naming this scenario's fresh ``mkdtemp`` root, which only this check's processes can name."""
 
     own = os.getpid()
     marker = str(root)
@@ -153,11 +143,8 @@ def _wait_for_exit(pid: int, timeout: float) -> bool:
 
 
 def _events_for(guard_home: Path, pid: int) -> list[dict[str, object]]:
-    return [
-        event
-        for event in load_daemon_lifecycle_events(guard_home, limit=LIFECYCLE_EVENT_LIMIT)
-        if event.get("pid") == pid
-    ]
+    events = load_daemon_lifecycle_events(guard_home, limit=LIFECYCLE_EVENT_LIMIT)
+    return [event for event in events if event.get("pid") == pid]
 
 
 def _exit_records(guard_home: Path, pid: int) -> list[str]:
@@ -230,6 +217,7 @@ class _HookTraffic:
         self.recoveries = 0
         self.fail_safe_reasons: Counter[str] = Counter()
         self.recovery_errors: Counter[str] = Counter()
+        self.stray_failures: Counter[str] = Counter()
         self.fault_at: float | None = None
         self.stopped_at: float | None = None
         self.served_again_at: float | None = None
@@ -291,6 +279,11 @@ class _HookTraffic:
                 after_stop = self.stopped_at is not None and sent_at > self.stopped_at
                 if kind == "reviewed" and after_stop and self.served_again_at is None:
                     self.served_again_at = time.monotonic()
+                # Only the outage may break a connection: not before the fault or after serving again.
+                served = self.served_again_at
+                outside = self.fault_at is None or (served is not None and sent_at > served)
+                if kind.startswith("connection:") and outside:
+                    self.stray_failures[kind] += 1
             if kind.startswith("connection:"):
                 self._recover()
 
@@ -321,6 +314,8 @@ def _check_recovered(
         result.failures.append(f"hooks were answered without a decision: {undecided}")
     if traffic.recovery_errors:
         result.failures.append(f"hook recovery failed: {dict(traffic.recovery_errors)}")
+    if traffic.stray_failures:
+        result.failures.append(f"connections failed outside the outage: {dict(traffic.stray_failures)}")
     time.sleep(SETTLE_SECONDS)
     daemons = _daemon_pids(guard_home)
     result.daemons_after = len(daemons)
@@ -413,7 +408,8 @@ def _failure_code(line: str) -> str:
         record = json.loads(line)
     except ValueError:
         return "unreadable"
-    return str(record.get("code")) if isinstance(record, dict) else "unreadable"
+    code = record.get("code") if isinstance(record, dict) else None
+    return code if isinstance(code, str) and code else "unreadable"
 
 
 def _closed_stderr_launch(runtime: Path, result: ScenarioResult) -> None:
@@ -445,6 +441,8 @@ def _closed_stderr_launch(runtime: Path, result: ScenarioResult) -> None:
         result.exit_records = [_failure_code(line) for line in lines]
         if len(lines) != 1:
             result.failures.append(f"{len(lines)} failed-launch records, expected exactly one")
+        elif result.exit_records == ["unreadable"]:
+            result.failures.append("the failed-launch record has no readable code")
 
 
 def run_chaos(runtime: Path, *, max_recovery_seconds: float) -> ChaosResult:
