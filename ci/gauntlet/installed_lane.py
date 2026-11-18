@@ -25,7 +25,7 @@ from .installed_registration import (
     read_config,
     stop_daemon,
 )
-from .installed_replay import argv_for_event, registered_argv, replay_harness
+from .installed_replay import EXPECTATIONS, argv_for_event, registered_argv, replay_harness
 from .installed_restore import restore_pass
 from .installed_runtime import InstalledRuntime, InstalledRuntimeError, resolve_runtime
 from .installed_startup import startup_timeline
@@ -265,10 +265,17 @@ def run_lane(
             "no harness declares replay_events for "
             f"{', '.join(undeclared)}; a case no harness replays is coverage the lane does not have"
         )
+    unexpected = sorted(case["id"] for case in contract["replay_cases"] if case.get("expect") not in EXPECTATIONS)
+    if unexpected:
+        raise InstalledRuntimeError(
+            f"{', '.join(unexpected)} expect an outcome the lane cannot judge; "
+            f"use one of {', '.join(sorted(EXPECTATIONS))}"
+        )
     unreplayed = unreplayed_cases(contract)
     if unreplayed:
         raise InstalledRuntimeError(
-            f"no replayable harness runs {', '.join(unreplayed)}; a case no harness replays is coverage the lane does not have"
+            f"no replayable harness runs {', '.join(unreplayed)}; "
+            "a case no harness replays is coverage the lane does not have"
         )
     output.mkdir(parents=True, exist_ok=True)
     root = work_root or (output / "work")

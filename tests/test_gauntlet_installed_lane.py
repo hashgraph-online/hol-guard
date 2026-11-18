@@ -168,7 +168,15 @@ def test_zcode_requires_current_events_layout_and_replays_its_registered_command
     assert registered_argv(tmp_path, expectation, config) == ([str(hook)] if nested else None)
 
 
-_CLAUDE_EVENTS = ("PreToolUse", "PermissionRequest", "PostToolUse", "Notification", "Stop", "SessionStart")
+_CLAUDE_EVENTS = (
+    "PreToolUse",
+    "PermissionRequest",
+    "PostToolUse",
+    "Notification",
+    "Stop",
+    "SessionStart",
+    "UserPromptSubmit",
+)
 
 _STUB_HEAD = """#!/usr/bin/env python3
 import json, os, sys
@@ -210,7 +218,18 @@ def install():
 
 
 def hook():
-    sys.stdin.read()
+    payload = json.loads(sys.stdin.read() or "{{}}")
+    event = payload.get("hook_event_name")
+    if event == "UserPromptSubmit":
+        notice = "Guard flagged this prompt." if ".ssh/id_rsa" in json.dumps(payload) else None
+        answer = {{"hookSpecificOutput": {{"hookEventName": event}}}}
+        if notice:
+            answer["systemMessage"] = notice
+        print(json.dumps(answer))
+        return 0
+    if event == "PermissionRequest":
+        print(json.dumps({{"guard_permission_passthrough": True, "hookSpecificOutput": {{"hookEventName": event}}}}))
+        return 0
     seen = int(COUNTER.read_text()) if COUNTER.exists() else 0
     COUNTER.write_text(str(seen + 1))
     decision = VERDICTS[seen % len(VERDICTS)]
@@ -746,7 +765,9 @@ def hook():
     payload = json.loads(sys.stdin.read() or "{{}}")
     if payload.get("hook_event_name") == "UserPromptSubmit":
         if PROMPT_DECISION == "allow":
-            print(json.dumps({{"decision": "allow"}}))
+            flagged = ".ssh/id_rsa" in json.dumps(payload)
+            notice = {{"systemMessage": "Guard flagged this prompt."}} if flagged else {{}}
+            print(json.dumps({{"hookSpecificOutput": {{"hookEventName": "UserPromptSubmit"}}, **notice}}))
         else:
             print(
                 json.dumps(
@@ -855,22 +876,70 @@ def test_a_declared_prompt_hook_the_install_never_registered_is_a_failure() -> N
     assert any("no runnable UserPromptSubmit hook" in failure for failure in result["failures"])
 
 
-def test_a_harness_with_no_prompt_hook_skips_the_prompt_cases_rather_than_failing(tmp_path: Path) -> None:
-    """Guard prunes Claude Code's UserPromptSubmit group on purpose.
-
-    There is no prompt hook there to replay, so the cases must be recorded as
-    skipped against the contract rather than counted against the build.
-    """
+def test_claude_codes_prompt_and_permission_hooks_are_replayed(tmp_path: Path) -> None:
+    """Claude Code registers UserPromptSubmit and PermissionRequest, so both are replayed, not skipped."""
 
     runtime = _stub(tmp_path / "hol-guard", register=True, verdicts=["allow", "allow"])
     evidence = _run(tmp_path, runtime)
     replay = evidence["harnesses"]["claude-code"]["replay"]
-    assert [entry["id"] for entry in replay["skipped"]] == [
-        "benign-prompt-submit",
-        "benign-prompt-submit-names-a-file",
-        "benign-prompt-submit-wire-encoding",
-    ]
-    assert all("prompt" not in failure for failure in evidence["failures"])
+    replayed = {case["id"]: case for case in replay["cases"]}
+    assert replayed["flagged-prompt-asks-for-private-key"]["failures"] == []
+    assert replayed["permission-dialog-for-key-exfiltration-stays-claudes"]["failures"] == []
+    assert replayed["permission-dialog-for-key-exfiltration-stays-claudes"]["runs"][0]["decision"] == "defer"
+    assert all("prompt" not in failure and "permission dialog" not in failure for failure in evidence["failures"])
+
+
+def test_a_permission_answer_reads_its_behaviour_and_a_bare_event_defers() -> None:
+    """A dict ``decision.behavior`` used to fall through to a quiet allow, even a deny."""
+
+    from ci.gauntlet.installed_replay import _decision_from
+
+    def answer(decision: object | None) -> dict:
+        output: dict = {"hookEventName": "PermissionRequest"}
+        if decision is not None:
+            output["decision"] = decision
+        return {"hookSpecificOutput": output}
+
+    assert _decision_from(answer({"behavior": "deny", "message": "no"}))[0] == "deny"
+    assert _decision_from(answer({"behavior": "allow"}))[0] == "allow"
+    assert _decision_from(answer(None))[0] == "defer"
+    assert _decision_from(answer({"behavior": 3}))[0] == "unknown"
+
+
+def test_a_permission_dialog_settled_by_the_hook_fails_a_defer_case(tmp_path: Path) -> None:
+    case = {"id": "defer", "event": "PermissionRequest", "expect": "defer", "payload": {}}
+    hook = tmp_path / "hook.py"
+    hook.write_text(
+        "import json\nprint(json.dumps({'hookSpecificOutput': {'hookEventName': 'PermissionRequest', "
+        "'decision': {'behavior': 'allow'}}}))\n",
+        encoding="utf-8",
+    )
+    result = replay_case(
+        [sys.executable, str(hook)], case, home=tmp_path, guard_home=tmp_path, workspace=tmp_path, repeat=1
+    )
+    assert any("permission dialog was not left to the harness" in failure for failure in result["failures"])
+
+
+def test_a_flagged_prompt_sent_silently_fails_a_notice_case(tmp_path: Path) -> None:
+    case = {"id": "notice", "event": "UserPromptSubmit", "expect": "notice", "payload": {}}
+    hook = tmp_path / "hook.py"
+    hook.write_text(
+        "import json\nprint(json.dumps({'hookSpecificOutput': {'hookEventName': 'UserPromptSubmit'}}))\n",
+        encoding="utf-8",
+    )
+    result = replay_case(
+        [sys.executable, str(hook)], case, home=tmp_path, guard_home=tmp_path, workspace=tmp_path, repeat=1
+    )
+    assert any("not let through with a notice" in failure for failure in result["failures"])
+
+
+def test_a_case_with_an_unknown_expectation_refuses_to_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    contract = load_contract()
+    contract["replay_cases"].append({"id": "maybe", "expect": "maybe", "payload": {}})
+    monkeypatch.setattr(installed_lane, "load_contract", lambda: contract)
+    runtime = _stub(tmp_path / "hol-guard", register=True, verdicts=["allow"])
+    with pytest.raises(InstalledRuntimeError, match="maybe expect an outcome"):
+        _run(tmp_path, runtime)
 
 
 def test_a_case_no_harness_replays_refuses_to_run() -> None:
@@ -888,14 +957,17 @@ def test_a_case_no_harness_replays_refuses_to_run() -> None:
 
 
 def test_the_contract_declares_the_prompt_hook_for_the_harnesses_that_have_one() -> None:
-    """zcode and Codex register UserPromptSubmit; Claude Code deliberately does not."""
+    """zcode, Codex and Claude Code register UserPromptSubmit.
+
+    Ordinary prompts go through quietly. A prompt asking for credentials goes through with a
+    notice: Guard screens prompts and stops the tool call that would read the secret.
+    """
 
     contract = load_contract()
-    assert "UserPromptSubmit" in contract["harnesses"]["zcode"]["replay_events"]
-    assert "UserPromptSubmit" in contract["harnesses"]["codex"]["replay_events"]
-    assert "replay_events" not in contract["harnesses"]["claude-code"]
+    for harness in ("zcode", "codex", "claude-code"):
+        assert "UserPromptSubmit" in contract["harnesses"][harness]["replay_events"], harness
     prompt_cases = [case for case in contract["replay_cases"] if case.get("event") == "UserPromptSubmit"]
-    assert prompt_cases and all(case["expect"] == "allow" for case in prompt_cases)
+    assert {case["expect"] for case in prompt_cases} == {"allow", "notice"}
 
 
 def test_every_contract_case_is_replayed_by_some_harness() -> None:
@@ -910,13 +982,25 @@ def test_a_case_limited_to_harnesses_that_never_replay_it_is_refused() -> None:
     contract = load_contract()
     contract["replay_cases"] = [
         {"id": "omp-only", "expect": "allow", "harnesses": ["omp"], "payload": {}},
-        {"id": "prompt-on-claude-tool-only", "event": "Stop", "expect": "allow", "harnesses": ["claude-code"], "payload": {}},
+        {
+            "id": "prompt-on-claude-tool-only",
+            "event": "Stop",
+            "expect": "allow",
+            "harnesses": ["claude-code"],
+            "payload": {},
+        },
         {"id": "everywhere", "expect": "allow", "payload": {}},
     ]
     assert unreplayed_cases(contract) == ["omp-only", "prompt-on-claude-tool-only"]
 
 
-def test_claude_code_replays_every_tool_family_it_claims_with_an_allow_and_a_block() -> None:
+def test_claude_code_replays_every_tool_family_it_claims() -> None:
+    """An allow and a block for each tool family, and the dialog and prompt outcomes Guard gives.
+
+    An MCP tool nobody has reviewed is reviewed on first use under the default policy, so its
+    read is not a quiet allow; a permission dialog with no Guard review pending stays Claude's.
+    """
+
     contract = load_contract()
     claude = [case for case in contract["replay_cases"] if "claude-code" in case.get("harnesses", ["claude-code"])]
     by_tool: dict[str, set[str]] = {}
@@ -926,6 +1010,9 @@ def test_claude_code_replays_every_tool_family_it_claims_with_an_allow_and_a_blo
         if case.get("event") == "PermissionRequest":
             key = "PermissionRequest"
         by_tool.setdefault(key.split("__")[0], set()).add(case["expect"])
-    for family in ("Bash", "Read", "Grep", "Write", "Edit", "MultiEdit", "mcp", "PermissionRequest", "UserPromptSubmit"):
+    for family in ("Bash", "Read", "Grep", "Write", "Edit", "MultiEdit"):
         assert by_tool.get(family) == {"allow", "not-allow"}, family
+    assert by_tool["mcp"] == {"not-allow"}
+    assert by_tool["PermissionRequest"] == {"defer"}
+    assert by_tool["UserPromptSubmit"] == {"allow", "notice"}
     assert by_tool["WebFetch"] == {"allow"} and by_tool["WebSearch"] == {"allow"}
