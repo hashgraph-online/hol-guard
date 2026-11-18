@@ -159,7 +159,9 @@ fn display_name_cannot_break_generated_javascript() {
 fn watch_output_findings_are_record_only_and_monitor_failures_are_visible() {
     let rendered = source(&case_args("active_omp_posix"));
     assert!(rendered.contains("watchPostureActive && response.decision === \"deny\""));
-    assert!(rendered.contains("'output_secret_match', 'sensitive_path', 'model_output_action'"));
+    assert!(rendered.contains(
+        "'output_secret_match', 'source_secret_match', 'sensitive_path', 'model_output_action'"
+    ));
     let post_tool = &rendered[rendered
         .find("pi.on(\"tool_result\", async (event, ctx) => {")
         .expect("post-tool handler")..];

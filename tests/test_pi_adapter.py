@@ -395,7 +395,7 @@ class TestPiInstall:
         assert "if (response.observe_mode === true) return undefined;" in tool_call
         tool_result = source.split('  pi.on("tool_result", async (event, ctx) => {', 1)[1]
         assert "watchPostureActive && response.decision === \"deny\"" in tool_result
-        assert "'output_secret_match', 'sensitive_path', 'model_output_action'" in tool_result
+        assert "'output_secret_match', 'source_secret_match', 'sensitive_path', 'model_output_action'" in tool_result
         assert "WATCH_WITHHELD_OUTPUT_CODES" in tool_result
         assert "response.observe_mode === true &&" in tool_result
         assert "WATCH_WITHHELD_OUTPUT_CODES.has(response.reason_code ?? \"\")" in tool_result
