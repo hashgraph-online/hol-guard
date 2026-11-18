@@ -37,7 +37,7 @@ fn attached_after(byte: u8) -> bool {
 // Decode the printable escapes supported by shell printf format strings.
 // Interpret only these escaped format bytes; echo (without -e) is untouched.
 // Octal and hex forms must not conceal a printed SSN from the review floor.
-fn decode_printf_escapes(text: &str) -> String {
+fn decode_printf_escapes(text: &str, percent_b: bool) -> String {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
     while let Some(ch) = chars.next() {
@@ -69,7 +69,10 @@ fn decode_printf_escapes(text: &str) -> String {
             }
             Some(digit @ '0'..='7') => {
                 let mut octal = digit.to_string();
-                while octal.len() < 3 && chars.peek().is_some_and(|c| ('0'..='7').contains(c)) {
+                // Bash `%b` treats \0 plus up to three octal digits as one byte.
+                // Format-string escapes keep their existing three-digit limit.
+                let limit = if percent_b && digit == '0' { 4 } else { 3 };
+                while octal.len() < limit && chars.peek().is_some_and(|c| ('0'..='7').contains(c)) {
                     octal.push(chars.next().expect("peeked octal digit"));
                 }
                 let byte = u16::from_str_radix(&octal, 8).expect("octal digits") as u8;
@@ -83,6 +86,48 @@ fn decode_printf_escapes(text: &str) -> String {
         }
     }
     out
+}
+
+// Render the simple Bash printf conversions this guard rule supports.
+// Unlike concatenating operands with spaces, substitutions can form a number.
+// Preserve literal backslashes in %s operands; only %b expands their escapes.
+// Repeating the format handles extra operands, as Bash printf does.
+fn render_printf(format: &str, args: &[String]) -> String {
+    let format = decode_printf_escapes(format, false);
+    let mut printed = String::new();
+    let mut next_arg = 0;
+    loop {
+        let previous_arg = next_arg;
+        let mut chars = format.chars();
+        while let Some(ch) = chars.next() {
+            if ch != '%' {
+                printed.push(ch);
+                continue;
+            }
+            match chars.next() {
+                Some('%') => printed.push('%'),
+                Some(spec @ ('s' | 'b' | 'd' | 'i')) => {
+                    let operand = args.get(next_arg).map(String::as_str).unwrap_or("");
+                    next_arg += 1;
+                    if spec == 'b' {
+                        printed.push_str(&decode_printf_escapes(operand, true));
+                    } else {
+                        printed.push_str(operand);
+                    }
+                }
+                Some(other) => {
+                    // Do not invent the output of unsupported conversions.
+                    printed.push('%');
+                    printed.push(other);
+                }
+                None => printed.push('%'),
+            }
+        }
+        if next_arg >= args.len() || next_arg == previous_arg {
+            break;
+        }
+    }
+    printed
 }
 
 // Parse only a single literal print. Shell quote removal can join fragments:
@@ -189,18 +234,7 @@ pub(super) fn echoes_ssn(command: &str) -> bool {
         let Some(format) = words.get(format_index) else {
             return false;
         };
-        let mut printed = decode_printf_escapes(format);
-        // %b expands escapes in its operand the way the format string does.
-        let decode_operands = format.contains("%b");
-        for argument in words.iter().skip(format_index + 1) {
-            printed.push(' ');
-            if decode_operands {
-                printed.push_str(&decode_printf_escapes(argument));
-            } else {
-                printed.push_str(argument);
-            }
-        }
-        printed
+        render_printf(format, &words[format_index + 1..])
     } else {
         words.join(" ")
     };
