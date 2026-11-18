@@ -229,24 +229,29 @@ fn a_start_waits_for_another_starter_still_handing_off_its_launch() {
     let Ok(lock) = start_lock(home.path(), deadline) else {
         panic!("the start lock could not be taken");
     };
-    let hold = Duration::from_millis(800);
-    let first = {
+    // The second starter begins while the first holds the lock and its
+    // receipt names a live launcher.
+    let (answered, answer) = std::sync::mpsc::channel();
+    let second = {
         let home = home.path().to_path_buf();
+        let gone = u32::try_from(dead_pid()).unwrap();
         std::thread::spawn(move || {
-            std::thread::sleep(hold);
-            // The first starter's handoff clears its receipt, then it
-            // releases the start lock.
-            fs::remove_file(home.join("daemon-launch-pending.json")).unwrap();
-            drop(lock);
+            let _ = answered.send(ensure(&home, gone));
         })
     };
-    let waited = Instant::now();
-    let gone = u32::try_from(dead_pid()).unwrap();
-    let answer = ensure(home.path(), gone);
-    first.join().unwrap();
+    let early = answer.recv_timeout(Duration::from_millis(800));
+    assert!(
+        early.is_err(),
+        "the start answered while another starter held the lock: {early:?}"
+    );
+    // The first starter's handoff clears its receipt, then it releases the
+    // start lock.
+    fs::remove_file(home.path().join("daemon-launch-pending.json")).unwrap();
+    drop(lock);
+    let answer = answer.recv_timeout(Duration::from_secs(10)).unwrap();
+    second.join().unwrap();
     let error = answer["error"].as_str().unwrap_or_default();
     assert!(!error.contains(PREVIOUS_LAUNCH), "{answer}");
-    assert!(waited.elapsed() >= hold, "the start did not wait: {answer}");
     assert!(
         home.path().join("launch-sentinel").exists(),
         "no launch after the first starter finished: {answer}"
