@@ -22,6 +22,7 @@ from .event_exports import public_events as public_events
 from .extension_adapters import extension_adapter
 from .file_write_cases import FILE_WRITE_CHECK, FILE_WRITE_ORACLE
 from .task_brief_cases import TASK_BRIEF_ORACLE
+from .repeat_cases import REPEAT_ORACLE, assess_repeat
 from .output_cases import OUTPUT_ORACLE, assess_output_block
 from .input_evidence import Redaction, redact_value
 from .interruptions import case_interruptions, describe
@@ -358,6 +359,8 @@ def _assess_observed(
             )
             if not stopped_on_prefix:
                 return "not-exercised", "required commands were omitted, duplicated, substituted or reordered"
+    if scenario.oracle == REPEAT_ORACLE:
+        return assess_repeat(scenario.commands, calls, by_id)
     if scenario.oracle == "blocked-memory-note" and (len(calls) != 1 or calls[0]["name"] != "learn"):
         return "not-exercised", "expected one native learn attempt"
     if scenario.oracle == TASK_BRIEF_ORACLE and (len(calls) != 1 or calls[0]["name"] != "task"):
