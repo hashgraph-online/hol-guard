@@ -223,6 +223,16 @@ def test_connector_facts_bridge_rejects_malformed_resident_reply(
             "result": {"connector_lookup": {"command": "lanectl status"}},
         },
     )
+    assert (
+        native_payload_facts.native_connector_lookup(
+            _payload(tmp_path),
+            tmp_path / "guard",
+            reason_code="native_command_review_required",
+            workspace=tmp_path,
+            home_dir=None,
+        )
+        is None
+    )
 
 
 def test_connector_facts_bridge_skips_risk_reviews_without_resident_round_trip(
@@ -257,6 +267,7 @@ def test_connector_facts_bridge_skips_risk_reviews_without_resident_round_trip(
         )
         is None
     )
+    assert called is True
 
 
 def test_the_queue_call_renders_the_silent_block_with_its_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

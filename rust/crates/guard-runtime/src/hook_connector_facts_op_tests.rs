@@ -121,12 +121,13 @@ fn relative_or_missing_directory_has_no_lookup() {
 
 #[test]
 fn non_recognition_is_required_for_a_connector_lookup() {
+    let workspace = std::env::current_dir().expect("workspace");
     let request = HookConnectorFactsRequestV1 {
         schema: REQUEST_SCHEMA.to_owned(),
         request_id: "connector-2".to_owned(),
         payload: json!({"tool_input": {"command": "lanectl status"}}),
         reason_code: "native_network_review".to_owned(),
-        workspace: None,
+        workspace: Some(workspace.to_string_lossy().into_owned()),
         home_dir: None,
         user_home: "/synthetic/home".to_owned(),
         env: BTreeMap::new(),
