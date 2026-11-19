@@ -10,6 +10,9 @@ use guard_contracts::{is_action_bearing_key, GuardAction};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
+use guard_command::cloud_scrub::cloud_scrub_text;
+
+use crate::cloud_sync_privacy::sanitize_text;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreResult};
 use crate::guard_store_json::dumps_default;
 use crate::guard_store_receipt_decision::{inconsistent, json_object, normalized};
@@ -26,6 +29,9 @@ fn receipt_idempotency_key(receipt_id: &str) -> String {
     format!("receipt.created:{receipt_id}")
 }
 
+/// Stands in for a summary whose text could not leave the machine.
+const WITHHELD_SUMMARY: &str = "Summary withheld.";
+
 /// `build_receipt_event(...).to_dict()`.
 pub(crate) fn build_receipt_event(
     receipt: &Map<String, Value>,
@@ -33,6 +39,17 @@ pub(crate) fn build_receipt_event(
     workspace_id: Option<&str>,
 ) -> Value {
     let field = |key: &str| receipt.get(key).cloned().unwrap_or(Value::Null);
+    // The event is uploaded to Guard Cloud as queued. Its free-text summaries
+    // can hold the command or source the receipt describes, so they get the
+    // same scrub `cloud_sync_receipt_payloads` gives a synced receipt.
+    let summary = |key: &str| match receipt.get(key) {
+        Some(Value::String(text)) => {
+            // Decision-neutral: a pending event's `policyDecision` can still be
+            // rewritten after queueing, and the summary must not contradict it.
+            Value::String(sanitize_text(&cloud_scrub_text(text), WITHHELD_SUMMARY))
+        }
+        _ => field(key),
+    };
     let receipt_id = receipt
         .get("receipt_id")
         .and_then(Value::as_str)
@@ -57,9 +74,9 @@ pub(crate) fn build_receipt_event(
             "artifactName": field("artifact_name"),
             "sourceScope": field("source_scope"),
             "policyDecision": field("policy_decision"),
-            "capabilitiesSummary": field("capabilities_summary"),
+            "capabilitiesSummary": summary("capabilities_summary"),
             "changedCapabilities": field("changed_capabilities"),
-            "provenanceSummary": field("provenance_summary"),
+            "provenanceSummary": summary("provenance_summary"),
             "userOverride": field("user_override"),
         },
     })
@@ -350,4 +367,57 @@ pub(crate) fn reconcile_pending_events(connection: &rusqlite::Connection) -> Sto
         reconcile_pending_event(connection, text(row, "receipt_id"), policy)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod scrub_tests {
+    use serde_json::{json, Value};
+
+    use super::{build_receipt_event, WITHHELD_SUMMARY};
+
+    fn event_payload(receipt: Value) -> Value {
+        build_receipt_event(receipt.as_object().unwrap(), None, None)["payload"].clone()
+    }
+
+    #[test]
+    fn a_queued_receipt_event_never_carries_a_secret_or_source_excerpt() {
+        let secret = "EXAMPLESECRETVALUE0123";
+        let payload = event_payload(json!({
+            "receipt_id": "receipt-1",
+            "policy_decision": "allow",
+            "provenance_summary": format!("deploy-tool push --api-key {secret}"),
+            "capabilities_summary": "bun -e 'const m = await import(\"./x.js\"); console.log(m)'",
+        }));
+        let text = payload.to_string();
+        assert!(!text.contains(secret), "{text}");
+        assert!(payload["provenanceSummary"]
+            .as_str()
+            .unwrap()
+            .starts_with("deploy-tool push --api-key"));
+        assert_eq!(payload["capabilitiesSummary"], WITHHELD_SUMMARY);
+    }
+
+    #[test]
+    fn a_withheld_summary_names_no_decision() {
+        // `set_pending_event_decision` may still rewrite `policyDecision`
+        // after queueing; the stand-in must not contradict the final one.
+        let payload = event_payload(json!({
+            "receipt_id": "receipt-1",
+            "policy_decision": "allow",
+            "capabilities_summary": "bun -e 'console.log(1)'",
+        }));
+        let summary = payload["capabilitiesSummary"].as_str().unwrap();
+        assert!(!summary.contains("allow"), "{summary}");
+    }
+
+    #[test]
+    fn a_plain_summary_and_a_missing_one_are_kept() {
+        let payload = event_payload(json!({
+            "receipt_id": "receipt-1",
+            "policy_decision": "review",
+            "provenance_summary": "npm install left-pad",
+        }));
+        assert_eq!(payload["provenanceSummary"], "npm install left-pad");
+        assert_eq!(payload["capabilitiesSummary"], Value::Null);
+    }
 }
