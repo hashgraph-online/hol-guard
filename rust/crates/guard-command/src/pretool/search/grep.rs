@@ -455,7 +455,7 @@ fn scan_into(
                     // above answers the same question without it.
                     || (!dereference && includes.narrows(target, context))
             };
-            missing::recursive_targets_proven(&targets, proven, absent.recursive.then_some(context))
+            missing::recursive_targets_proven(&targets, proven, context, absent.recursive)
         })
 }
 

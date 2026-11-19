@@ -65,7 +65,7 @@ pub(in crate::pretool) fn safe_literal_bracket_read_target(
 /// directory named `S` rather than reach the literal route. A class holding a
 /// range is left to review, because the shell expands the range in the
 /// locale's collating sequence, which neither matcher models.
-pub(super) fn inert_bracket_class(value: &str, context: ReadContext<'_>) -> bool {
+pub(in crate::pretool) fn inert_bracket_class(value: &str, context: ReadContext<'_>) -> bool {
     value.contains('[')
         && !value.contains(['*', '?', '!'])
         && !super::super::glob_class::bracket_fallback_unsafe(value)

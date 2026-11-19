@@ -8,7 +8,10 @@
 //! the bracketed name now has to clear the search screen itself.
 //!
 //! The same screen lets a recursive grep of a route folder or route file
-//! through, as `grep -n` and `rg` of that path already were.
+//! through, as `grep -n` and `rg` of that path already were. Under `nullglob`
+//! an unquoted bracket class that matches nothing disappears, and `grep -r`
+//! with no path left walks the working directory, so that directory has to
+//! pass the screen as well.
 #![cfg(unix)]
 
 use crate::pretool_home_layout_reads::{assert_decision, layout, write};
@@ -16,9 +19,9 @@ use crate::pretool_home_layout_reads::{assert_decision, layout, write};
 #[test]
 fn a_recursive_grep_of_a_route_folder_is_allowed() {
     let layout = layout("grep-bracket-route");
-    let portal = layout.org.join("app-portal");
+    let project = layout.org.join("service-api");
     write(
-        portal.join("app/api/groups/[slug]/route.ts"),
+        project.join("app/api/groups/[slug]/route.ts"),
         "export {};\n",
     );
     for command in [
@@ -27,18 +30,18 @@ fn a_recursive_grep_of_a_route_folder_is_allowed() {
         r"grep -rn foo app/api/groups/\[slug\]",
         "grep -rln foo app/api/groups/[slug]",
     ] {
-        assert_decision(&portal, &layout.home, command, true);
+        assert_decision(&project, &layout.home, command, true);
     }
 }
 
 #[test]
 fn a_bracketed_search_root_is_screened_where_it_leads() {
     let layout = layout("grep-bracket-link");
-    let portal = layout.org.join("app-portal");
+    let project = layout.org.join("service-api");
     write(layout.home.join(".ssh/id_ed25519"), "fixture\n");
-    write(portal.join("trap/k/a.txt"), "ordinary fixture\n");
-    std::os::unix::fs::symlink(layout.home.join(".ssh"), portal.join("trap/[k]")).unwrap();
-    assert_decision(&portal, &layout.home, "grep -rn foo trap/k", true);
+    write(project.join("trap/k/a.txt"), "ordinary fixture\n");
+    std::os::unix::fs::symlink(layout.home.join(".ssh"), project.join("trap/[k]")).unwrap();
+    assert_decision(&project, &layout.home, "grep -rn foo trap/k", true);
     // The literal `trap/[k]` is a link to the credential store, while the
     // pattern `trap/[k]` matches the ordinary `trap/k`.
     for command in [
@@ -50,6 +53,32 @@ fn a_bracketed_search_root_is_screened_where_it_leads() {
         r"rg foo trap/\[k\]",
         "rg foo 'trap/[k]'",
     ] {
-        assert_decision(&portal, &layout.home, command, false);
+        assert_decision(&project, &layout.home, command, false);
+    }
+}
+
+#[test]
+fn an_unquoted_route_root_needs_the_working_directory_proven_too() {
+    let layout = layout("grep-bracket-nullglob");
+    let project = layout.org.join("service-api");
+    write(
+        project.join("app/api/groups/[slug]/route.ts"),
+        "export {};\n",
+    );
+    write(project.join("id_ed25519"), "fixture\n");
+    // The quote map shows the word quoted, so it stays the one root.
+    assert_decision(
+        &project,
+        &layout.home,
+        "grep -rn foo 'app/api/groups/[slug]'",
+        true,
+    );
+    // Unquoted or escaped, the screen cannot rule out `nullglob` dropping the
+    // word and leaving `grep -r` to walk the key file beside it.
+    for command in [
+        "grep -rln foo app/api/groups/[slug]",
+        r"grep -rn foo app/api/groups/\[slug\]",
+    ] {
+        assert_decision(&project, &layout.home, command, false);
     }
 }
