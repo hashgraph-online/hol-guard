@@ -124,7 +124,43 @@ fn an_unknown_request_field_is_refused() {
         "body": "{}",
         "timeoutSeconds": 1.0,
         "retryTimeoutSeconds": 1.0,
-        "method": "DELETE",
+        "headers": {"Authorization": "x"},
     }));
     assert!(parsed.is_err());
+}
+
+#[test]
+fn only_get_and_post_are_accepted() {
+    let parse = |method: &str| {
+        serde_json::from_value::<JsonRequest>(json!({
+            "url": "https://hol.org/x",
+            "method": method,
+            "timeoutSeconds": 1.0,
+            "retryTimeoutSeconds": 1.0,
+        }))
+    };
+    assert_eq!(parse("GET").unwrap().method, Method::Get);
+    assert_eq!(parse("POST").unwrap().method, Method::Post);
+    assert!(parse("DELETE").is_err());
+    assert!(parse("get").is_err());
+}
+
+#[test]
+fn a_post_needs_a_body_and_a_get_carries_none() {
+    let auth = auth("https://hol.org/api/guard/receipts/sync");
+    for (method, body) in [("POST", None), ("GET", Some("{}"))] {
+        let request: JsonRequest = serde_json::from_value(json!({
+            "url": "https://hol.org/api/guard/policy/delivery",
+            "method": method,
+            "body": body,
+            "timeoutSeconds": 1.0,
+            "retryTimeoutSeconds": 1.0,
+        }))
+        .unwrap();
+        let answer = send(Some(&auth), &request);
+        assert!(
+            matches!(answer, Err(SyncError::Failed(_))),
+            "{method}: {answer:?}"
+        );
+    }
 }

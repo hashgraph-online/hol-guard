@@ -1,7 +1,8 @@
-//! The `request` action of `cloud-event-sync`: one authenticated JSON POST to
-//! Guard Cloud for a caller that already resolved the sign-in and built the
-//! endpoint and body (the command queue, the Cloud Review event batches and
-//! the workspace-review enrollment).
+//! The `request` action of `cloud-event-sync`: one authenticated JSON GET or
+//! POST to Guard Cloud for a caller that already resolved the sign-in and built
+//! the endpoint and body (the command queue, the Cloud Review event batches,
+//! the workspace-review enrollment, Cloud exception requests, the insights
+//! share and the policy delivery status).
 //!
 //! The runtime signs the request (DPoP included), runs the shared retry
 //! machine under the machine's managed network policy and reports what came
@@ -21,13 +22,34 @@ use crate::cloud_event_sync::trusted_base;
 const REQUEST_BUDGET_SECONDS: f64 = 300.0;
 const INVALID_RESPONSE: &str = "Guard Cloud sync returned an invalid response payload.";
 
+/// The two methods a Guard Cloud JSON request uses.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub(crate) enum Method {
+    Get,
+    #[default]
+    Post,
+}
+
+impl Method {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+        }
+    }
+}
+
 /// What the caller built.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct JsonRequest {
     url: String,
-    /// The exact body, sent byte for byte.
-    body: String,
+    #[serde(default)]
+    method: Method,
+    /// The exact body, sent byte for byte. A POST carries one and a GET none.
+    #[serde(default)]
+    body: Option<String>,
     timeout_seconds: f64,
     retry_timeout_seconds: f64,
 }
@@ -45,11 +67,25 @@ pub(crate) fn send(
         SyncError::NotConfigured("A Guard Cloud request needs a resolved sign-in.".to_owned())
     })?;
     check_endpoint(auth, &request.url)?;
+    let body = match (request.method, request.body.as_deref()) {
+        (Method::Post, Some(body)) => Some(body.as_bytes()),
+        (Method::Get, None) => None,
+        (Method::Post, None) => {
+            return Err(SyncError::Failed(
+                "A Guard Cloud POST needs a body.".to_owned(),
+            ))
+        }
+        (Method::Get, Some(_)) => {
+            return Err(SyncError::Failed(
+                "A Guard Cloud GET carries no body.".to_owned(),
+            ))
+        }
+    };
     let signed = gst::guard_sync_request(
         &Value::Object(auth.clone()),
         &request.url,
-        "POST",
-        Some(request.body.as_bytes()),
+        request.method.as_str(),
+        body,
         None,
         None,
     )

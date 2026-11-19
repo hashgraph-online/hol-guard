@@ -24,7 +24,7 @@ CLOUD_BUNDLE_SYNC_FEATURE = "cloud-bundle-sync-v1"
 CLOUD_EVENT_SYNC_COMMAND = "cloud-event-sync"
 CLOUD_EVENT_SYNC_FEATURE = "cloud-event-sync-v1"
 CLOUD_RECEIPT_UPLOAD_FEATURE = "cloud-receipt-upload-v1"
-CLOUD_JSON_REQUEST_FEATURE = "cloud-json-request-v1"
+CLOUD_JSON_REQUEST_FEATURE = "cloud-json-request-v2"
 # One fetch may take five minutes with retries; a sync is an index, its
 # partitions, the full bundle and the network bundle.
 _TIMEOUT_SECONDS = 900.0
@@ -93,11 +93,13 @@ def cloud_json_request(
     auth_context: Mapping[str, object],
     *,
     url: str,
-    body: bytes,
+    body: bytes | None,
     timeout_seconds: float,
     retry_timeout_seconds: float,
 ) -> dict[str, object]:
-    """POST ``body`` to ``url`` with the resolved sign-in and return Guard Cloud's object answer.
+    """POST ``body`` to ``url`` (GET when it is ``None``) with the resolved sign-in.
+
+    Return Guard Cloud's object answer.
 
     The native runtime signs and sends the request under the managed network
     policy. An HTTP refusal is raised as the ``HTTPError`` and a failure with no
@@ -108,10 +110,12 @@ def cloud_json_request(
 
     request: dict[str, object] = {
         "url": url,
-        "body": body.decode("utf-8"),
+        "method": "GET" if body is None else "POST",
         "timeoutSeconds": float(timeout_seconds),
         "retryTimeoutSeconds": float(retry_timeout_seconds),
     }
+    if body is not None:
+        request["body"] = body.decode("utf-8")
     answer = run_native_cloud_sync(
         CLOUD_EVENT_SYNC_COMMAND,
         CLOUD_JSON_REQUEST_FEATURE,

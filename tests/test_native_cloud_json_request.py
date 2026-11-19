@@ -32,6 +32,13 @@ class _CloudHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(answer).encode("utf-8"))
 
+    def do_GET(self) -> None:
+        type(self).bodies.append(b"GET")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"versionNumber": 3, "path": self.path}).encode("utf-8"))
+
     def log_message(self, fmt: str, *args: object) -> None:
         return
 
@@ -58,11 +65,11 @@ def _auth(origin: str) -> dict[str, object]:
     }
 
 
-def _send(origin: str, url: str) -> dict[str, object]:
+def _send(origin: str, url: str, body: bytes | None = b'{"waitMs":0}') -> dict[str, object]:
     return cloud_bundle_sync.cloud_json_request(
         _auth(origin),
         url=url,
-        body=b'{"waitMs":0}',
+        body=body,
         timeout_seconds=5,
         retry_timeout_seconds=5,
     )
@@ -88,3 +95,10 @@ def test_a_request_to_another_origin_is_refused_before_it_is_sent(cloud_origin: 
         _send(cloud_origin, "http://127.0.0.1:9/api/guard/commands/lease")
 
     assert _CloudHandler.bodies == []
+
+
+def test_a_request_without_a_body_is_a_get(cloud_origin: str) -> None:
+    answer = _send(cloud_origin, f"{cloud_origin}/api/guard/policy/delivery", body=None)
+
+    assert answer == {"versionNumber": 3, "path": "/api/guard/policy/delivery"}
+    assert _CloudHandler.bodies == [b"GET"]
