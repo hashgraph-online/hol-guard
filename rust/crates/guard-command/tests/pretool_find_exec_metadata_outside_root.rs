@@ -70,6 +70,22 @@ fn a_metadata_child_may_walk_a_sibling_repository() {
             false,
         ),
         (r"find /etc -type f -exec stat {} \;".to_owned(), false),
+        // A quoted or escaped `~` never reaches the shell as the home
+        // directory. The word stays the literal relative name `~/Code/...`,
+        // which `find` looks for under the working directory, so the home
+        // path this proof would resolve is not the path the command walks.
+        (
+            r"find '~/Code/org/service-api/src' -type f -exec stat {} \;".to_owned(),
+            false,
+        ),
+        (
+            r#"find "~/Code/org/service-api/src" -type f -exec ls -l {} +"#.to_owned(),
+            false,
+        ),
+        (
+            r"find \~/Code/org/service-api/src -type f -exec stat {} \;".to_owned(),
+            false,
+        ),
     ];
     for harness in ["zcode", "codex", "claude-code"] {
         for (command, allowed) in &cases {

@@ -69,7 +69,12 @@ fn roots_contained<R: AsRef<str>>(roots: &[R], context: PathContext<'_>) -> bool
     })
 }
 
-fn producer_allowed(shape: &FindShape<'_>, child: &[String], context: PathContext<'_>) -> bool {
+fn producer_allowed(
+    shape: &FindShape<'_>,
+    producer: &CommandSegmentV1,
+    child: &[String],
+    context: PathContext<'_>,
+) -> bool {
     // A file passes a group of names by matching any one of them, so a group
     // bounds what the child reads only when each of its names does.
     shape.regular_files_only
@@ -83,7 +88,7 @@ fn producer_allowed(shape: &FindShape<'_>, child: &[String], context: PathContex
                 .iter()
                 .any(|names| names.iter().all(|pattern| plain_extension_pattern(pattern))))
         && (contained_roots(shape, context)
-            || (metadata_child(child) && metadata_roots(shape.roots, context)))
+            || (metadata_child(child) && metadata_roots(shape.roots, producer, context)))
 }
 
 /// A child that prints only what the directory entry says about each file:
@@ -106,7 +111,11 @@ fn metadata_child(child: &[String]) -> bool {
 /// directory strictly below the home directory with no hidden component on
 /// the way, so a home dot-directory, the home directory itself and paths
 /// outside home keep review whatever the child.
-fn metadata_roots<R: AsRef<str>>(roots: &[R], context: PathContext<'_>) -> bool {
+fn metadata_roots<R: AsRef<str>>(
+    roots: &[R],
+    producer: &CommandSegmentV1,
+    context: PathContext<'_>,
+) -> bool {
     let (Some(home), Some(cwd)) = (context.home_dir, context.cwd) else {
         return false;
     };
@@ -119,6 +128,14 @@ fn metadata_roots<R: AsRef<str>>(roots: &[R], context: PathContext<'_>) -> bool 
     let Ok(home_root) = std::fs::canonicalize(home) else {
         return false;
     };
+    // A quoted or escaped `~` never reaches the shell as the home directory.
+    // The word stays the literal relative name `~/...`, which `find` looks for
+    // under the working directory -- the one place the agent writes without
+    // review -- so resolving it against home here would prove a path the
+    // command never walks.
+    if !super::directory_targets::home_targets_unquoted(producer) {
+        return false;
+    }
     roots.iter().all(|root| {
         let root = root.as_ref();
         let spelled = match root.strip_prefix("~/") {
@@ -223,7 +240,7 @@ pub(super) fn safe_find_exec(
     plain(segment)
         && words_as_written(segment)
         && fanout::find_exec(&segment.arguments).is_some_and(|exec| {
-            producer_allowed(&exec.shape, exec.child, context)
+            producer_allowed(&exec.shape, segment, exec.child, context)
                 && child_proven(model, segment, exec.child, context)
         })
 }
@@ -289,7 +306,7 @@ pub(super) fn safe_xargs(
     xargs.null_separated
         && (xargs.no_run_if_empty || fanout::bounded_without_operands(xargs.child))
         && shape.print0
-        && producer_allowed(&shape, xargs.child, context)
+        && producer_allowed(&shape, previous, xargs.child, context)
         && child_proven(model, segment, xargs.child, context)
 }
 
