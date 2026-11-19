@@ -283,5 +283,6 @@ pub(crate) fn plan(
         prior_cursor,
         marker,
         batches,
+        projected: Vec::new(),
     })
 }
