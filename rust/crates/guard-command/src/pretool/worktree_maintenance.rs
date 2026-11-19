@@ -53,8 +53,7 @@ pub(super) fn exact_safe_command(
     let Some(repository) = routed_directory(leading, &probe.cwd) else {
         return false;
     };
-    let main_checkout =
-        fs::symlink_metadata(repository.join(".git")).is_ok_and(|m| m.is_dir());
+    let main_checkout = fs::symlink_metadata(repository.join(".git")).is_ok_and(|m| m.is_dir());
     match maintenance {
         // Pruning drops the administrative record of a worktree whose
         // directory has already gone; it opens no checkout and removes no
