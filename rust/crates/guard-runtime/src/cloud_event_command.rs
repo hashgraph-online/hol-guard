@@ -10,6 +10,7 @@ use serde_json::{json, Map, Value};
 use crate::cloud_bundle_command::{failure, store_for};
 use crate::cloud_bundle_fetch::{brokered, SyncError};
 use crate::cloud_event_sync::{event_store, sync_guard_events};
+use crate::cloud_json_request::{send, JsonRequest};
 use crate::cloud_pain_signal_sync::sync_pain_signals;
 use crate::cloud_receipt_upload::{upload_receipts, UploadRequest, UploadState};
 use crate::cloud_runtime_session_sync::sync_runtime_session;
@@ -18,6 +19,8 @@ pub(crate) const COMMAND: &str = "cloud-event-sync";
 pub(crate) const FEATURE: &str = "cloud-event-sync-v1";
 /// The `receipts` action.
 pub(crate) const RECEIPTS_FEATURE: &str = "cloud-receipt-upload-v1";
+/// The `request` action.
+pub(crate) const REQUEST_FEATURE: &str = "cloud-json-request-v1";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -33,6 +36,9 @@ struct Request {
     /// What the caller built for `receipts`.
     #[serde(default)]
     upload: Option<UploadRequest>,
+    /// What the caller built for `request`.
+    #[serde(default)]
+    request: Option<JsonRequest>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,6 +52,8 @@ enum Action {
     RuntimeSession,
     /// `sync_receipts`, up to the Cloud answers.
     Receipts,
+    /// One authenticated JSON request the caller built.
+    Request,
 }
 
 pub(crate) fn run_command(bytes: &[u8]) -> Value {
@@ -54,25 +62,39 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
             "The event sync request was not understood.".to_owned(),
         ));
     };
-    let guard_home = PathBuf::from(request.guard_home);
-    let bundle = store_for(&guard_home, request.auth_context);
-    let store = event_store(&guard_home, &bundle);
     let answer = match request.action {
-        Action::GuardEvents => brokered(|| sync_guard_events(&store)),
-        Action::PainSignals => brokered(|| sync_pain_signals(&store)),
-        Action::RuntimeSession => {
-            let session = request.session.unwrap_or(Value::Null);
-            brokered(|| sync_runtime_session(&store, &session))
-        }
-        Action::Receipts => match request.upload {
-            Some(upload) => {
-                let mut state = UploadState::default();
-                brokered(|| upload_receipts(&store, &upload, &mut state))
-            }
+        // A request carries its own sign-in and endpoint; it reads no store.
+        Action::Request => match &request.request {
+            Some(call) => brokered(|| send(request.auth_context.as_ref(), call)),
             None => Err(SyncError::Failed(
-                "The receipt upload request is missing.".to_owned(),
+                "The Guard Cloud request is missing.".to_owned(),
             )),
         },
+        action => {
+            let guard_home = PathBuf::from(request.guard_home);
+            let bundle = store_for(&guard_home, request.auth_context);
+            let store = event_store(&guard_home, &bundle);
+            match action {
+                Action::GuardEvents => brokered(|| sync_guard_events(&store)),
+                Action::PainSignals => brokered(|| sync_pain_signals(&store)),
+                Action::RuntimeSession => {
+                    let session = request.session.unwrap_or(Value::Null);
+                    brokered(|| sync_runtime_session(&store, &session))
+                }
+                Action::Receipts => match request.upload {
+                    Some(upload) => {
+                        let mut state = UploadState::default();
+                        brokered(|| upload_receipts(&store, &upload, &mut state))
+                    }
+                    None => Err(SyncError::Failed(
+                        "The receipt upload request is missing.".to_owned(),
+                    )),
+                },
+                Action::Request => Err(SyncError::Failed(
+                    "The Guard Cloud request is missing.".to_owned(),
+                )),
+            }
+        }
     };
     match answer {
         Ok(result) => json!({"ok": true, "result": result}),
@@ -89,5 +111,15 @@ mod tests {
         let answer = run_command(b"{\"guardHome\": \"/nonexistent\", \"action\": \"inventory\"}");
         assert_eq!(answer["ok"], json!(false));
         assert_eq!(answer["outcome"], json!("failed"));
+    }
+
+    #[test]
+    fn a_request_without_its_call_is_a_failure() {
+        let answer = run_command(b"{\"guardHome\": \"/nonexistent\", \"action\": \"request\"}");
+        assert_eq!(answer["ok"], json!(false));
+        assert_eq!(
+            answer["error"],
+            json!("The Guard Cloud request is missing.")
+        );
     }
 }

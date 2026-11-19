@@ -3353,16 +3353,13 @@ def _sync_extension_catalog_from_runtime_handshake(
         def send_page(url: str, body: bytes) -> object:
             nonlocal sent
             sent = True
-            request = _guard_sync_request(
-                auth_context,
-                request_url=url,
-                method="POST",
-                data=body,
-                extra_headers=None,
-            )
+            from . import cloud_bundle_sync
+
             try:
-                return _urlopen_json_with_timeout_retry(
-                    request=request,
+                return cloud_bundle_sync.cloud_json_request(
+                    auth_context,
+                    url=url,
+                    body=body,
                     timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
                     retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
                     max_response_bytes=4096,
@@ -3429,16 +3426,13 @@ def _sync_extension_catalog_from_runtime_handshake(
     )
     if upload is None:
         return summary
-    request = _guard_sync_request(
-        auth_context,
-        request_url=upload.url,
-        method="POST",
-        data=upload.body,
-        extra_headers=None,
-    )
+    from . import cloud_bundle_sync
+
     try:
-        response = _urlopen_json_with_timeout_retry(
-            request=request,
+        response = cloud_bundle_sync.cloud_json_request(
+            auth_context,
+            url=upload.url,
+            body=upload.body,
             timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
             retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
         )

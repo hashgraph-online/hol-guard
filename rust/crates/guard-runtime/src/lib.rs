@@ -845,6 +845,7 @@ mod cloud_bundle_network;
 mod cloud_bundle_sync;
 mod cloud_event_command;
 mod cloud_event_sync;
+mod cloud_json_request;
 mod cloud_pain_signal_sync;
 mod cloud_receipt_upload;
 mod cloud_receipt_upload_rows;
