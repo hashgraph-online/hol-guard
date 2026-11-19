@@ -72,7 +72,20 @@ fn origin_is_scheme_and_authority() {
         origin("http://127.0.0.1:8080"),
         Some("http://127.0.0.1:8080".to_owned())
     );
+    assert_eq!(
+        origin("https://hol.org:443/api"),
+        Some("https://hol.org".to_owned())
+    );
+    assert_eq!(
+        origin("http://127.0.0.1:80/api"),
+        Some("http://127.0.0.1".to_owned())
+    );
+    assert_eq!(
+        origin("https://hol.org:8443/api"),
+        Some("https://hol.org:8443".to_owned())
+    );
     assert_eq!(origin("https:///path"), None);
+    assert_eq!(origin("https://:443/path"), None);
     assert_eq!(origin("hol.org/path"), None);
 }
 

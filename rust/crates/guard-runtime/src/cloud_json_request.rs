@@ -98,12 +98,21 @@ fn check_endpoint(auth: &Map<String, Value>, url: &str) -> Result<(), SyncError>
     }
 }
 
-/// `scheme://authority`, lowercased, of an absolute URL.
+/// `scheme://authority`, lowercased, of an absolute URL, without the
+/// scheme's default port, so `https://hol.org:443` and `https://hol.org` match.
 fn origin(url: &str) -> Option<String> {
     let (scheme, rest) = url.split_once("://")?;
-    let authority = rest.split(['/', '?', '#']).next()?;
-    (!scheme.is_empty() && !authority.is_empty())
-        .then(|| format!("{scheme}://{authority}").to_ascii_lowercase())
+    let scheme = scheme.to_ascii_lowercase();
+    let authority = rest.split(['/', '?', '#']).next()?.to_ascii_lowercase();
+    let default_port = match scheme.as_str() {
+        "https" => Some(":443"),
+        "http" => Some(":80"),
+        _ => None,
+    };
+    let authority = default_port
+        .and_then(|port| authority.strip_suffix(port))
+        .unwrap_or(&authority);
+    (!scheme.is_empty() && !authority.is_empty()).then(|| format!("{scheme}://{authority}"))
 }
 
 /// Guard Cloud's answer, which must be an object.
