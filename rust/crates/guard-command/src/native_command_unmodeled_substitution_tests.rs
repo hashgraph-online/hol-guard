@@ -17,7 +17,6 @@ fn apostrophe_in_comment_cannot_erase_live_backticks_on_next_line() {
     );
 }
 
-
 #[test]
 fn a_named_substitution_reads_as_the_words_it_prints() {
     let bounded =
