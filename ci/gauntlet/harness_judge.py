@@ -14,6 +14,7 @@ import shlex
 from typing import Any
 
 from .approval_retry import pinned_retry_outcome, retry_assessment
+from .apply_patch_calls import patch_target
 from .approval_retry_action import PATH_KEYS as _PATH_KEYS
 from .approval_retry_action import WORKSPACE_ROOTS as _WINDOWS_ROOTS
 from .approval_retry_action import pinned_file_tool
@@ -113,14 +114,27 @@ def _request(payload: dict[str, Any]) -> tuple[str | None, str | None]:
         (v for v in (fields.get("command"), fields.get("cmd"), payload.get("command")) if v is not None), None
     )
     if str(payload.get("tool_name", "")).lower() == "apply_patch":
+        target = patch_target(command)
         command = None
-    path = next(
-        (fields.get(key) or payload.get(key) for key in _PATH_KEYS if fields.get(key) or payload.get(key)), None
-    )
+        path = target[1] if target else None
+    else:
+        path = next(
+            (fields.get(key) or payload.get(key) for key in _PATH_KEYS if fields.get(key) or payload.get(key)),
+            None,
+        )
     return (
         command if isinstance(command, str) else None,
         _relative(path) if isinstance(path, str) else None,
     )
+
+
+def _patch_tool(payload: dict[str, Any]) -> str | None:
+    """The catalog write tool an ``apply_patch`` request stands for, if it pins one file."""
+    if str(payload.get("tool_name", "")).lower() != "apply_patch":
+        return None
+    tool_input = payload.get("tool_input")
+    target = patch_target(tool_input.get("command") if isinstance(tool_input, dict) else None)
+    return target[0] if target else None
 
 
 def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EVENTS) -> list[dict[str, Any]]:
@@ -140,6 +154,7 @@ def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EV
             {
                 "event": event,
                 "tool": payload.get("tool_name"),
+                "patch_tool": _patch_tool(payload),
                 "command": command,
                 "path": path,
                 "decision": effective_decision(response),
@@ -365,6 +380,8 @@ def _targets_scenario(case: dict[str, Any], scenario: Scenario, decision: dict[s
         # A read of the pinned path is not the write the case pins, so the tool
         # must be one the case requires as well as the path.
         tool = str(decision.get("tool") or "").strip().lower()
+        if tool == "apply_patch":
+            tool = decision.get("patch_tool") or ""
         required = {str(name).strip().lower() for name in scenario.required_tools}
         return command is None and decision["path"] == scenario.path and tool in required
     expected = {_tokens(c) for c in case.get("expected_commands", [])}
