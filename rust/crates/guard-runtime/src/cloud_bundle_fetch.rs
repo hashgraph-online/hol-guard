@@ -30,18 +30,6 @@ const SYNC_HTTP_RETRY_TIMEOUT_SECONDS: f64 = 120.0;
 const FETCH_BUDGET_SECONDS: f64 = 300.0;
 pub(crate) const GUARD_CLOUD_UNREACHABLE_MESSAGE: &str =
     "Guard Cloud could not be reached. Local Guard keeps protecting this machine.";
-/// I/O failures that clear up on their own, as `_is_network_outage_error`
-/// reads them. TLS failures are not among them.
-const OUTAGE_IO_KINDS: [&str; 8] = [
-    "ConnectionRefused",
-    "ConnectionReset",
-    "ConnectionAborted",
-    "HostUnreachable",
-    "NetworkUnreachable",
-    "NetworkDown",
-    "TimedOut",
-    "NotConnected",
-];
 
 /// Why a bundle sync stopped, in the classes the Python callers raise.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,12 +113,25 @@ pub(crate) fn resolve_auth(
     };
     runner
         .resolve_guard_sync_auth_context(store, false, force_refresh)
-        .map_err(|error| match error {
-            _ if egress_broker::needs_pending() => SyncError::Pending,
-            EvalError::NotFound(message) => SyncError::NotConfigured(message),
-            EvalError::Validation(message) => SyncError::AuthExpired(message),
-            other => SyncError::Failed(other.to_string()),
-        })
+        .map_err(auth_error)
+}
+
+/// Classify a failed sign-in resolution.
+fn auth_error(error: EvalError) -> SyncError {
+    match error {
+        _ if egress_broker::needs_pending() => SyncError::Pending,
+        EvalError::NotFound(message) => SyncError::NotConfigured(message),
+        EvalError::Validation(message) => SyncError::AuthExpired(message),
+        // A refresh that could not reach Guard Cloud is an outage to retry,
+        // not a sign-in to reconnect.
+        EvalError::Internal(message) if message.starts_with(gst::OAUTH_REFRESH_UNREACHABLE) => {
+            SyncError::NotAvailable {
+                message: GUARD_CLOUD_UNREACHABLE_MESSAGE.to_owned(),
+                retryable: true,
+            }
+        }
+        other => SyncError::Failed(other.to_string()),
+    }
 }
 
 /// `_fetch_supply_chain_bundle_payload` for one bundle endpoint.
@@ -220,7 +221,7 @@ fn transport_failure(error: &EvalError) -> SyncError {
         EvalError::Internal(text) => text.as_str(),
         other => return SyncError::Failed(other.to_string()),
     };
-    if is_outage(text) {
+    if gst::is_network_outage_reason(text) {
         return SyncError::NotAvailable {
             message: GUARD_CLOUD_UNREACHABLE_MESSAGE.to_owned(),
             retryable: true,
@@ -232,14 +233,6 @@ fn transport_failure(error: &EvalError) -> SyncError {
     } else {
         format!("Guard sync failed: {reason}")
     })
-}
-
-fn is_outage(text: &str) -> bool {
-    if text.starts_with("timeout:") || text == "host not found" {
-        return true;
-    }
-    text.strip_prefix("io: ")
-        .is_some_and(|kind| OUTAGE_IO_KINDS.contains(&kind.trim()))
 }
 
 /// `http.client.responses`, for the statuses Guard Cloud answers with.

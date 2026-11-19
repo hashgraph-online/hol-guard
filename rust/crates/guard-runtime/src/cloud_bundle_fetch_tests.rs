@@ -18,7 +18,10 @@ fn outages_are_retryable_and_other_transport_failures_are_not() {
         "host not found",
         "timeout: 20s",
     ] {
-        assert!(is_outage(text), "{text}");
+        assert!(
+            guard_command::guard_sync_transport::is_network_outage_reason(text),
+            "{text}"
+        );
         assert_eq!(
             transport_failure(&EvalError::Internal(text.to_owned())),
             SyncError::NotAvailable {
@@ -33,7 +36,10 @@ fn outages_are_retryable_and_other_transport_failures_are_not() {
         "transport",
         "response too large",
     ] {
-        assert!(!is_outage(text), "{text}");
+        assert!(
+            !guard_command::guard_sync_transport::is_network_outage_reason(text),
+            "{text}"
+        );
     }
     assert_eq!(
         transport_failure(&EvalError::Internal("tls".to_owned())),
@@ -88,5 +94,28 @@ fn an_unauthorized_fetch_fails_once_it_reaches_the_caller() {
     assert_eq!(
         SyncError::from(FetchError::Unauthorized("refused".to_owned())),
         SyncError::Failed("refused".to_owned())
+    );
+}
+
+#[test]
+fn a_refresh_that_cannot_reach_guard_cloud_is_a_retryable_outage() {
+    let unreachable = EvalError::Internal(format!(
+        "{} io: ConnectionRefused",
+        gst::OAUTH_REFRESH_UNREACHABLE
+    ));
+    assert_eq!(
+        auth_error(unreachable),
+        SyncError::NotAvailable {
+            message: GUARD_CLOUD_UNREACHABLE_MESSAGE.to_owned(),
+            retryable: true,
+        }
+    );
+    assert_eq!(
+        auth_error(EvalError::Validation("reconnect".to_owned())),
+        SyncError::AuthExpired("reconnect".to_owned())
+    );
+    assert_eq!(
+        auth_error(EvalError::Internal("tls: bad certificate".to_owned())),
+        SyncError::Failed("tls: bad certificate".to_owned())
     );
 }

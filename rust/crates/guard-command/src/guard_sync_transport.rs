@@ -1013,6 +1013,9 @@ fn sync_http_eval_error(status: u16, headers: &BTreeMap<String, String>, body: &
 /// Start of the reason reported when Cloudflare in front of Guard Cloud blocked
 /// or challenged a request. Callers match it so an edge block is not reported as
 /// an expired sign-in.
+/// Starts the reason of a sign-in refresh that could not reach Guard Cloud.
+pub const OAUTH_REFRESH_UNREACHABLE: &str =
+    "Guard Cloud could not be reached to refresh the sign-in.";
 pub const CLOUD_EDGE_BLOCK_REASON_PREFIX: &str = "Guard Cloud is unreachable from this network";
 
 /// The edge-block text inside `reason`, which a caller may have prefixed with
@@ -1225,8 +1228,36 @@ pub enum OAuthRefreshOutcome {
     /// `invalid_grant` / consumed-or-revoked — the grant is dead; caller must
     /// record the dead-grant breaker and demand reauthorization.
     DeadGrant,
+    /// Guard Cloud could not be reached (a connection failure, a timeout or a
+    /// 502/503/504): an outage that clears up on its own, not a sign-in that
+    /// needs reconnecting.
+    Unreachable(String),
     /// Any other transport or payload failure — reauthorizable.
     Failed(String),
+}
+
+/// I/O failures that clear up on their own (`_is_network_outage_error`). TLS
+/// failures are not among them.
+const OUTAGE_IO_KINDS: [&str; 8] = [
+    "ConnectionRefused",
+    "ConnectionReset",
+    "ConnectionAborted",
+    "HostUnreachable",
+    "NetworkUnreachable",
+    "NetworkDown",
+    "TimedOut",
+    "NotConnected",
+];
+
+/// Whether a transport failure reason names a network outage rather than a
+/// failure that will not clear up on its own.
+pub fn is_network_outage_reason(reason: &str) -> bool {
+    if reason.starts_with("timeout:") || reason == "host not found" {
+        return true;
+    }
+    reason
+        .strip_prefix("io: ")
+        .is_some_and(|kind| OUTAGE_IO_KINDS.contains(&kind.trim()))
 }
 
 /// `urllib.parse.urlencode` parity — percent-encode every byte outside the
@@ -1431,10 +1462,17 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
                     status, &headers, &body,
                 ));
             }
-            OAuthRefreshOutcome::Failed(http_error_reason_message(status, &headers, &body))
+            let message = http_error_reason_message(status, &headers, &body);
+            if matches!(status, 502..=504) {
+                return OAuthRefreshOutcome::Unreachable(message);
+            }
+            OAuthRefreshOutcome::Failed(message)
         }
         Err(SyncHttpError::Timeout(_)) => {
-            OAuthRefreshOutcome::Failed("Guard Cloud token refresh timed out.".to_owned())
+            OAuthRefreshOutcome::Unreachable("Guard Cloud token refresh timed out.".to_owned())
+        }
+        Err(SyncHttpError::Other(reason)) if is_network_outage_reason(&reason) => {
+            OAuthRefreshOutcome::Unreachable(reason)
         }
         Err(SyncHttpError::Other(reason)) => OAuthRefreshOutcome::Failed(reason),
     }
