@@ -240,7 +240,7 @@ fn only_a_cigar_change_or_a_reset_hands_settings_to_the_native_service() {
 
 #[test]
 fn only_turning_cigar_on_can_ask_codex_for_short_replies() {
-    assert!(turns_cigar_on(&entries(
+    assert!(short_replies::turns_cigar_on(&entries(
         json!({"context_assistance": {"enabled": true}, "mode": "observe"})
     )));
     for settings in [
@@ -249,10 +249,28 @@ fn only_turning_cigar_on_can_ask_codex_for_short_replies() {
         json!({"context_assistance": {}}),
         json!({"mode": "observe"}),
     ] {
-        assert!(!turns_cigar_on(&entries(settings.clone())), "{settings}");
+        assert!(
+            !short_replies::turns_cigar_on(&entries(settings.clone())),
+            "{settings}"
+        );
     }
-    // A Guard home outside the home folder (every test home) is never handed over.
+    // A Guard home outside the home folder (every test home) never asks.
     let edge = edge("short-replies", "");
-    let home = crate::claude_hook_bridge::home_directory();
-    assert!(!short_replies_first_ask_due(&edge.home, home.as_deref()));
+    let cigar_on = entries(json!({"context_assistance": {"enabled": true}}));
+    assert!(!short_replies::ask_due(&cigar_on, &edge.home));
+}
+
+#[test]
+fn turning_cigar_on_is_saved_by_the_edge() {
+    let edge = edge("cigar-on", "");
+    let answer = post(
+        &edge,
+        json!({"settings": {"context_assistance": {"enabled": true}}}),
+        "invalid_settings",
+    );
+    let (status, body) = answer.expect("the edge answers the save itself");
+    assert_eq!(status, 200, "{body}");
+    let saved = std::fs::read_to_string(edge.home.join("config.toml")).unwrap();
+    assert!(saved.contains("[context_assistance]"), "{saved}");
+    assert!(saved.contains("enabled = true"), "{saved}");
 }

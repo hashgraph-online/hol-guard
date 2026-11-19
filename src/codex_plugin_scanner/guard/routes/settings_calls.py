@@ -68,19 +68,20 @@ def _hand_settings_to_cigar(guard_home: Path) -> None:
         native_context_assistance.control("status", guard_home=guard_home)
 
 
-def _ask_codex_for_short_replies(guard_home: Path, cigar: dict[str, object] | None) -> None:
+def codex_short_replies_ensure(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Turning CIGAR on also asks Codex for short replies, unless the user turned that off.
 
-    Measured on top of CIGAR it cut the Codex bill by 5-14% with no task lost. A Codex
-    config Guard cannot change leaves the saved CIGAR setting as it is.
+    The daemon calls this after it saved a settings change that turns CIGAR on. Measured
+    on top of CIGAR it cut the Codex bill by 5-14% with no task lost. A Codex config Guard
+    cannot change leaves the saved CIGAR setting as it is.
     """
 
-    if not isinstance(cigar, dict) or cigar.get("enabled") is not True:
-        return
+    del args
+    guard_home = store.guard_home
     # A Guard home outside the home folder belongs to a test or a sandbox; the Codex
     # config in the home folder is not its to change.
     if guard_home.resolve().parent != Path.home().resolve():
-        return
+        return _reply({"state": "skipped"})
     import os
 
     from ..codex_lean_sessions import LeanSessionsError
@@ -88,6 +89,8 @@ def _ask_codex_for_short_replies(guard_home: Path, cigar: dict[str, object] | No
 
     with suppress(LeanSessionsError, OSError, RuntimeError, TimeoutError, ValueError):
         ensure(Path.home(), guard_home, os.environ)
+        return _reply({"state": "asked"})
+    return _reply({"state": "failed"})
 
 
 def _requeue_privacy_projection(store: GuardStore, level: str) -> None:
@@ -147,7 +150,6 @@ def _apply_settings(store: GuardStore, payload: dict[str, object], *, missing_er
         return _reply({"error": "invalid_settings", "message": str(error)}, 400)
     if "context_assistance" in config_settings:
         _hand_settings_to_cigar(guard_home)
-        _ask_codex_for_short_replies(guard_home, config.context_assistance)
     return _reply(settings_response_payload(guard_home, editable_guard_settings(config)))
 
 
@@ -207,4 +209,5 @@ def update_channel(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
 SETTINGS_CALLS = {
     "route.approval_gate_setup": approval_gate_setup,
     "route.update_channel": update_channel,
+    "route.codex_short_replies_ensure": codex_short_replies_ensure,
 }

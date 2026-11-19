@@ -23,7 +23,6 @@ use crate::managed_policy_floor::effective_managed_policy;
 use crate::managed_policy_load::{load_managed_policy, ManagedPolicySource};
 use crate::policy_bundle_time::micros_to_utc_isoformat;
 use crate::pyjson::PyVal;
-use crate::transition_files::short_replies_first_ask_due;
 
 const UPDATE_SCHEMA: &str = "guard-config-update.v1";
 const RESET_CONFIRMATION: &str = "reset-local-settings";
@@ -52,12 +51,8 @@ pub(super) fn apply(
         return Some((400, json!({"error": missing_error})));
     };
     let hand_off = hands_off_to_context_assistance(settings);
-    // First CIGAR turn-on: the daemon asks Codex for short replies under its install lock.
     let guard_home = Path::new(&config.guard_home);
-    let user_home = crate::claude_hook_bridge::home_directory();
-    if turns_cigar_on(settings) && short_replies_first_ask_due(guard_home, user_home.as_deref()) {
-        return None;
-    }
+    let ask_codex = short_replies::ask_due(settings, guard_home);
     let gate_payload = json_payload
         .get("settings")
         .and_then(|settings| settings.get("approval_gate"))
@@ -110,13 +105,11 @@ pub(super) fn apply(
                 return Some((status, Value::Object(body)));
             }
         }
-        return Some(after_write(
-            config,
-            reads,
-            &previous,
-            Some(&written),
-            hand_off,
-        ));
+        let answer = after_write(config, reads, &previous, Some(&written), hand_off);
+        if ask_codex {
+            short_replies::ask(config);
+        }
+        return Some(answer);
     }
     let written = match write_settings(config, settings.clone()) {
         Ok(written) => written,
@@ -417,12 +410,6 @@ fn hands_off_to_context_assistance(settings: &[(String, PyVal)]) -> bool {
     settings.iter().any(|(key, _)| key == "context_assistance")
 }
 
-/// Whether the save sets `context_assistance.enabled` to true.
-fn turns_cigar_on(settings: &[(String, PyVal)]) -> bool {
-    matches!(lookup(settings, "context_assistance"), Some(PyVal::Dict(cigar))
-        if matches!(lookup(cigar, "enabled"), Some(PyVal::Bool(true))))
-}
-
 #[cfg(test)]
 thread_local! {
     static HANDOFFS: std::cell::RefCell<Vec<std::path::PathBuf>> =
@@ -493,6 +480,8 @@ fn now_seconds() -> Option<String> {
 
 #[path = "daemon_edge_settings_save_gate.rs"]
 mod save_gate;
+#[path = "daemon_edge_settings_short_replies.rs"]
+mod short_replies;
 use save_gate::{save_change, save_gate_input};
 
 #[cfg(all(test, unix))]
