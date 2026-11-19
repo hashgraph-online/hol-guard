@@ -290,6 +290,7 @@ class HookWorkerNativeMixin:
         claimed_approval_request_id: str | None = None,
         capture_receipts: list[Mapping[str, object]] | None = None,
         defer_accepted_recording: bool = False,
+        deferred_receipts: list[Mapping[str, object]] | None = None,
     ) -> tuple[dict[str, object], bool]:
         from ..runtime_transition_hook_probe import transition_hook_probe
 
@@ -394,6 +395,8 @@ class HookWorkerNativeMixin:
         native_result = cast("Mapping[str, object]", edge["result"])
         raw_receipt = edge.get("receipt")
         accepted_receipt = self._record_native_decision_receipt(raw_receipt)
+        if accepted_receipt is not None and deferred_receipts is not None:
+            deferred_receipts.append(accepted_receipt)
         submit = getattr(self.activity_writer, "submit_native_decision_receipt", None)
         if (
             accepted_receipt is not None
@@ -429,7 +432,9 @@ class HookWorkerNativeMixin:
                 action = str(native_result.get("minimum_action") or "")
                 if action != "allow" or native_result.get("decision") != "allow":
                     return (
-                        _record_native_pre_activity(
+                        _edge_harness_response(edge)
+                        if defer_accepted_recording
+                        else _record_native_pre_activity(
                             self,
                             native_harness,
                             payload,
@@ -469,13 +474,17 @@ class HookWorkerNativeMixin:
             custom_block = edge.get("local_cli_rule")
             if isinstance(custom_block, dict) and custom_block["blocked"] is True:
                 return (
-                    _record_native_pre_activity(
-                        self,
-                        native_harness,
-                        payload,
-                        dict(cast("Mapping[str, object]", custom_block["harness_response"])),
-                        accepted_receipt,
-                        recorded=recorded,
+                    (
+                        dict(cast("Mapping[str, object]", custom_block["harness_response"]))
+                        if defer_accepted_recording
+                        else _record_native_pre_activity(
+                            self,
+                            native_harness,
+                            payload,
+                            dict(cast("Mapping[str, object]", custom_block["harness_response"])),
+                            accepted_receipt,
+                            recorded=recorded,
+                        )
                     ),
                     True,
                 )
@@ -522,7 +531,11 @@ class HookWorkerNativeMixin:
                 )
                 if command_block is not None:
                     return (
-                        _record_native_pre_activity(self, native_harness, payload, command_block, accepted_receipt),
+                        command_block
+                        if defer_accepted_recording
+                        else _record_native_pre_activity(
+                            self, native_harness, payload, command_block, accepted_receipt
+                        ),
                         True,
                     )
             rendered = _edge_harness_response(edge)
@@ -538,13 +551,10 @@ class HookWorkerNativeMixin:
                 error = NativeHookDecisionError(_EDGE_REWRITE_UNAVAILABLE)
                 return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
             return (
-                _record_native_pre_activity(
-                    self,
-                    native_harness,
-                    payload,
-                    rendered,
-                    accepted_receipt,
-                    recorded=recorded,
+                rendered
+                if defer_accepted_recording
+                else _record_native_pre_activity(
+                    self, native_harness, payload, rendered, accepted_receipt, recorded=recorded
                 ),
                 True,
             )

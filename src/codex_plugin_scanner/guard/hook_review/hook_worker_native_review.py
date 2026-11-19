@@ -12,6 +12,7 @@ from ..native_hook_render import native_recording_only_for_binding
 from ..native_payload_facts import native_hook_facts
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_resident_client import native_resident_client_failure_code
+from ..resident_evidence_dispatch import run_resident_evidence
 from .hook_native_review_approval import _native_review_artifact_id
 from .hook_native_review_binding import native_review_settle
 from .hook_native_review_fence import native_review_fence, published_binding_token
@@ -218,6 +219,7 @@ def _review_native_edge_once(
     fenced: bool | None = None
     unleased_binding: tuple[object, ...] | None = None
     capture_receipts: list[Mapping[str, object]] = []
+    deferred_receipts: list[Mapping[str, object]] = []
     try:
         with native_review_fence(
             policy_snapshot=policy_snapshot,
@@ -252,6 +254,7 @@ def _review_native_edge_once(
                 claimed_approval_request_id=claimed_approval_request_id,
                 capture_receipts=capture_receipts,
                 defer_accepted_recording=claimed_saved_allow_hash is not None,
+                deferred_receipts=deferred_receipts,
             )
             # A deadline that passed while this decision was being reached
             # says the host was busy, not that the answer is stale, and
@@ -278,8 +281,12 @@ def _review_native_edge_once(
                 guard_home=guard_home,
                 workspace=workspace,
             )
-        deferred_receipt = capture_receipts[0] if capture_receipts else None
+        deferred_receipt = deferred_receipts[0] if deferred_receipts else None
         if claimed_saved_allow_hash is not None and claim_saved_approval:
+            submit = getattr(worker.activity_writer, "submit_native_decision_receipt", None)
+            if deferred_receipt is not None and callable(submit):
+                with suppress(Exception):
+                    run_resident_evidence(worker, lambda receipt=deferred_receipt: submit(receipt=receipt))
             accepted = response.get("approval_reuse_status") == "accepted"
             if not accepted:
                 from .hook_worker_native import _record_native_pre_activity
