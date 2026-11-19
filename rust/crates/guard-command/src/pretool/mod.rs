@@ -775,10 +775,9 @@ fn arguments_outside_message(
     // Git diff/log/show use -m for merge diffs, not for a message.
     // Filtering its following "--" would hide the pathspec delimiter.
     let merge_diff = crate::command_compatibility::basename(segment) == "git"
-        && matches!(
-            directory_copies::git_subcommand(segment),
-            Some("diff" | "log" | "show")
-        );
+        && crate::command_compatibility::git_command_index(&segment.arguments)
+            .and_then(|index| segment.arguments.get(index))
+            .is_some_and(|command| matches!(command.as_str(), "diff" | "log" | "show"));
     let mut message_value = false;
     segment.arguments.iter().filter(move |argument| {
         let is_message = std::mem::take(&mut message_value);
