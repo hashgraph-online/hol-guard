@@ -33,7 +33,7 @@ def native_hook_review_binding(
     timeout_seconds = 0.25 if deadline is None else min(0.25, deadline - time.monotonic())
     if timeout_seconds <= 0:
         return None
-    request = {
+    request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"hook-review-binding-{uuid.uuid4().hex}",
         "marker": dict(marker),
