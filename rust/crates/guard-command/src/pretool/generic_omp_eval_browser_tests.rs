@@ -239,7 +239,9 @@ fn file_urls_remain_reviewed_even_for_existing_workspace_html() {
     for code in [
         format!("const tab=await browser.open({{url:'file://{cwd}/index.html',app:'own'}});"),
         format!("const tab=await browser.open({{url:'file://{cwd}/private.html'}});"),
-        String::from("const tab=await browser.open({url:'file:///home/alice/.config/private.html'});"),
+        String::from(
+            "const tab=await browser.open({url:'file:///home/alice/.config/private.html'});",
+        ),
         String::from("const tab=await browser.open({url:'file:///etc/passwd'});"),
     ] {
         assert!(!loopback_browser_program(&code, None), "{code}");
