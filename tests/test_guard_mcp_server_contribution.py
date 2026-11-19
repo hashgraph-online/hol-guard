@@ -18,6 +18,7 @@ _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/m
 _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
 _DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
 _REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
+_KRUSCH_SKYLIGHT = _FILESYSTEM.with_name("mcp.krusch-skylight.json")
 
 
 def _filesystem_payload() -> dict[str, object]:
@@ -43,6 +44,24 @@ def _rei_skills_payload() -> dict[str, object]:
     payload = json.loads(_REI_SKILLS.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
+
+
+def _krusch_skylight_payload() -> dict[str, object]:
+    payload = json.loads(_KRUSCH_SKYLIGHT.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def test_krusch_skylight_local_writes_require_review() -> None:
+    """Keep tools that can write local state review-gated even when they look like reads."""
+    payload = _krusch_skylight_payload()
+    validate_mcp_contribution(payload, filename=_KRUSCH_SKYLIGHT.name)
+    declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    assert declared["skylight_status"] == "inherit"
+    assert declared["skylight_list_meals"] == "inherit"
+    for tool_name in ("skylight_list_events", "skylight_pull_chores"):
+        assert declared[tool_name] == "review"
+        assert mcp_tool_state(payload, tool_name) == "review"
 
 
 def test_rei_skills_launch_package_is_version_pinned() -> None:

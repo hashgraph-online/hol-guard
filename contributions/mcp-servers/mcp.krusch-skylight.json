@@ -3,7 +3,7 @@
   "id": "mcp.krusch-skylight",
   "version": "1.0.0",
   "name": "Krusch Skylight Calendar MCP",
-  "description": "Skylight Calendar 2 stdio MCP connector (@krusch/companion-skylight-connector v0.3.0) with opt-in dry-run staging via dryRun: true (writes are live otherwise) and local twin cache support. Read-only status, event, chore, and meal queries inherit Guard policy; event creation, chore assignment, list pushes, meal planning, Sidekick Magic Import, task sync, and unified skylight_calendar calls require review. Off until you turn it on.",
+  "description": "Skylight Calendar 2 stdio MCP connector (@krusch/companion-skylight-connector v0.3.0) with opt-in dry-run staging via dryRun: true (writes are live otherwise) and local twin cache support. Status inspection inherits Guard policy; event listing and chore pulls can write local state when writeBack: true, so they require review. Event creation, chore assignment, list pushes, meal planning, Sidekick Magic Import, task sync, and unified skylight_calendar calls also require review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -34,11 +34,11 @@
     },
     {
       "name": "skylight_list_events",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "skylight_pull_chores",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "skylight_list_meals",
@@ -85,6 +85,6 @@
   ],
   "saferAlternatives": [
     "Pass dryRun: true on mutating Skylight tools to preview proposed family calendar, chore, list, and meal changes before they are pushed to Skylight Cloud; calls without it write live.",
-    "Use skylight_status, skylight_list_events, skylight_pull_chores, and skylight_list_meals for read-only schedule inspection."
+    "Use skylight_status and skylight_list_meals for inspection without local writes; keep skylight_list_events and skylight_pull_chores on Review unless writeBack is disabled upstream."
   ]
 }
