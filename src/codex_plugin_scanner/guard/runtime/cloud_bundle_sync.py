@@ -103,6 +103,7 @@ class ReceiptUploadAnswer:
     review_verification_keys: object
     receipt_cursor_rowid: int | None
     receipt_cursor_backfill: bool
+    receipts_skipped: int = 0
 
     @classmethod
     def from_native(cls, answer: Mapping[str, object]) -> ReceiptUploadAnswer:
@@ -133,6 +134,7 @@ class ReceiptUploadAnswer:
             review_verification_keys=answer.get("review_verification_keys"),
             receipt_cursor_rowid=cursor if isinstance(cursor, int) and not isinstance(cursor, bool) else None,
             receipt_cursor_backfill=answer.get("receipt_cursor_backfill") is True,
+            receipts_skipped=_count(answer.get("receipts_skipped")),
         )
 
 

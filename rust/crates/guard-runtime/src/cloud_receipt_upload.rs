@@ -164,25 +164,27 @@ pub(crate) fn fit_to_broker(request: &UploadRequest, mut plan: Plan) -> Result<P
             ))
         }
     };
-    // The largest context any batch carries: the first adds the posture.
-    let mut context = request.sync_context.clone();
-    if let Some(posture) = &request.fleet_posture {
+    let body_size = |context: &Map<String, Value>| {
+        json!({"receipts": [], "syncContext": context})
+            .to_string()
+            .len()
+    };
+    let overhead = body_size(&request.sync_context);
+    // The first request also carries the posture.
+    let first_overhead = request.fleet_posture.as_ref().map_or(overhead, |posture| {
+        let mut context = request.sync_context.clone();
         context.insert("fleetPosture".to_owned(), posture.payload.clone());
-    }
-    let overhead = json!({"receipts": [], "syncContext": context})
-        .to_string()
-        .len();
-    let projected: Vec<Option<Value>> = payloads
+        body_size(&context)
+    });
+    let (projected, sizes): (Vec<Option<Value>>, Vec<Option<usize>>) = payloads
         .into_iter()
         .map(|payload| {
-            (overhead + payload.to_string().len() <= EVENTS_BODY_LIMIT).then_some(payload)
+            let size = payload.to_string().len();
+            let fits = overhead + size <= EVENTS_BODY_LIMIT;
+            (fits.then_some(payload), fits.then_some(size))
         })
-        .collect();
-    let sizes: Vec<Option<usize>> = projected
-        .iter()
-        .map(|payload| payload.as_ref().map(|payload| payload.to_string().len()))
-        .collect();
-    plan.batches = sized_batches(&sizes, overhead, EVENTS_BODY_LIMIT);
+        .unzip();
+    plan.batches = sized_batches(&sizes, first_overhead, overhead, EVENTS_BODY_LIMIT);
     plan.projected = projected;
     Ok(plan)
 }
@@ -473,7 +475,9 @@ fn finish(store: &EventStore<'_>, state: &UploadState, plan: &Plan) -> Result<Va
     Ok(json!({
         "synced_at": last.get("syncedAt").cloned().unwrap_or(Value::Null),
         "now": now,
-        "receipts": plan.rows.len(),
+        "receipts": plan.projected.iter().flatten().count(),
+        // Receipts too large for any request: the cursor moves past them.
+        "receipts_skipped": plan.projected.iter().filter(|payload| payload.is_none()).count(),
         "receipts_stored": tally.receipts_stored,
         "advisories": tally.advisories,
         "policy_bundle": {

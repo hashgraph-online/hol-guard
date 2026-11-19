@@ -1037,6 +1037,10 @@ def sync_receipts(
         "value_metrics": value_metrics,
         "weekly_digest": weekly_digest,
     }
+    if upload_answer.receipts_skipped:
+        # Too large for any request; the cursor has moved past them.
+        summary["receipts_skipped"] = upload_answer.receipts_skipped
+        _LOGGER.warning("Guard sync skipped %d receipt(s) too large to upload.", upload_answer.receipts_skipped)
     if remote_policy_sync_blocked:
         summary["remote_policy_sync_blocked"] = True
     if review_verification_keys_rejection is not None:

@@ -321,23 +321,23 @@ fn answers_accumulate_across_batches() {
 fn batches_split_before_a_body_goes_over_the_limit() {
     // Overhead 10, limit 40: 12 + 13 (with comma) fits, the third does not.
     let sizes = [Some(12), Some(12), Some(12)];
-    assert_eq!(sized_batches(&sizes, 10, 40), vec![0..2, 2..3]);
-    assert_eq!(sized_batches(&[], 10, 40), one(0..0));
+    assert_eq!(sized_batches(&sizes, 10, 10, 40), vec![0..2, 2..3]);
+    assert_eq!(sized_batches(&[], 10, 10, 40), one(0..0));
 }
 
 #[test]
 fn a_receipt_left_unsent_still_rides_in_its_batch() {
     let sizes = [Some(12), None, Some(12)];
-    assert_eq!(sized_batches(&sizes, 10, 40), one(0..3));
+    assert_eq!(sized_batches(&sizes, 10, 10, 40), one(0..3));
     let sizes = [None, None];
-    assert_eq!(sized_batches(&sizes, 10, 40), one(0..2));
+    assert_eq!(sized_batches(&sizes, 10, 10, 40), one(0..2));
 }
 
 #[test]
 fn sized_batches_still_hold_fifty_rows_at_most() {
     let sizes = vec![Some(1); 120];
     assert_eq!(
-        sized_batches(&sizes, 10, usize::MAX / 2),
+        sized_batches(&sizes, 10, 10, usize::MAX / 2),
         vec![0..50, 50..100, 100..120]
     );
 }
@@ -367,4 +367,12 @@ fn a_receipt_too_large_for_any_request_is_planned_unsent() {
     let state = UploadState::default();
     let (body, _) = batch_body(&request, &plan.projected, 0, &state);
     assert_eq!(body["receipts"].as_array().map(Vec::len), Some(1));
+}
+
+#[test]
+fn a_receipt_that_does_not_fit_beside_the_posture_waits_for_the_next_request() {
+    // The posture takes 20 of the first request's 40 bytes; the receipt fits
+    // only in a request without it.
+    let sizes = [Some(25), Some(4)];
+    assert_eq!(sized_batches(&sizes, 30, 10, 40), vec![0..0, 0..2]);
 }

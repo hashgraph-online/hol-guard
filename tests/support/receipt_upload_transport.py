@@ -242,7 +242,10 @@ def _record_posture(store: object, posture: Mapping[str, object] | None, respons
             _LOGGER.debug("Fleet posture snapshot could not be recorded", exc_info=True)
     request = response.get("fleetPostureRequest")
     if isinstance(request, dict) and request.get("inventory") == "full":
-        fleet_posture.request_full_inventory(store, source="cloud", now=stamp)
+        try:
+            fleet_posture.request_full_inventory(store, source="cloud", now=stamp)
+        except Exception:
+            _LOGGER.debug("Full inventory request could not be recorded", exc_info=True)
 
 
 def upload_receipts(

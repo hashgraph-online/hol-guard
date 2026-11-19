@@ -221,10 +221,13 @@ pub(crate) fn batches(count: usize) -> Vec<Range<usize>> {
 
 /// Split the rows so no request body goes over `limit` bytes. `sizes` holds
 /// each payload's serialized length, `None` for one that is not sent;
-/// `overhead` is the body without any receipts. A batch still holds at most
-/// [`BATCH_SIZE`] rows.
+/// `overhead` is the body without any receipts, and `first_overhead` the
+/// first request's, which also carries the fleet posture. A receipt that does
+/// not fit beside the posture closes the first request, so the posture goes
+/// on its own. A batch still holds at most [`BATCH_SIZE`] rows.
 pub(crate) fn sized_batches(
     sizes: &[Option<usize>],
+    first_overhead: usize,
     overhead: usize,
     limit: usize,
 ) -> Vec<Range<usize>> {
@@ -232,12 +235,15 @@ pub(crate) fn sized_batches(
         return std::iter::once(0..0).collect();
     }
     let mut ranges = Vec::new();
-    let (mut start, mut bytes, mut sent) = (0, overhead, 0_usize);
+    let (mut start, mut bytes, mut sent) = (0, first_overhead, 0_usize);
     for (index, size) in sizes.iter().enumerate() {
         // Each payload after the first adds a separating comma.
         let added = size.map(|size| size + usize::from(sent > 0));
         let full = index - start == BATCH_SIZE
-            || added.is_some_and(|added| sent > 0 && bytes + added > limit);
+            || added.is_some_and(|added| {
+                (sent > 0 || ranges.is_empty() && first_overhead > overhead)
+                    && bytes + added > limit
+            });
         if full {
             ranges.push(start..index);
             (start, bytes, sent) = (index, overhead, 0);
