@@ -15,7 +15,7 @@ from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, CODEX_BROWSE
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_adapter import NativeHookAdapterError, native_review_query
 from ..native_hook_authority_state import hook_authority_integrity_key
-from ..native_payload_facts import native_hook_facts
+from ..native_payload_facts import native_connector_lookup, native_hook_facts
 from .hook_fail_closed import (
     canonical_harness,
     render_accepted_allow,
@@ -28,7 +28,7 @@ from .hook_native_package_review import native_package_review_response
 from .hook_native_review_binding import admit_accepted_call, native_review_policy_binding, native_review_settle
 from .hook_native_saved_approval import native_exact_command_block_response, native_saved_decision_response
 from .native_review_allow_hint import native_review_hint_ask
-from .native_review_connector import native_review_connector_lookup, raise_connector_setup_notice
+from .native_review_connector import raise_connector_setup_notice
 from .native_review_records import native_review_approval_center_url
 
 if TYPE_CHECKING:
@@ -172,12 +172,13 @@ def pause_native_pre_tool_for_approval(
     # The queue call looks up the connector a non-recognition review waits on
     # and answers the agent with its setup text; the row keeps the native
     # reason as evidence.
-    connector_lookup = native_review_connector_lookup(
-        payload=payload,
-        command=facts.command,
-        native_result=native_result,
+    connector_lookup = native_connector_lookup(
+        payload,
+        guard_home,
+        reason_code=native_result.get("reason_code"),
         workspace=workspace,
         home_dir=home_dir,
+        deadline=deadline,
     )
     if not ask or (identity is None and exact_token is None):
         # The agent stays on the silent block. The inbox row is a separate record.
