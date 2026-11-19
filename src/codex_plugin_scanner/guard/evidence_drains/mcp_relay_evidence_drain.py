@@ -43,7 +43,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .mcp_write_result import McpEvidenceWriteResult
+
+@dataclass(frozen=True, slots=True)
+class McpEvidenceWriteResult:
+    accepted: bool
+    committed: bool
+
+    def __bool__(self) -> bool:
+        return self.accepted
+
 
 MCP_TOOL_CALL_EVIDENCE_KIND = "mcp_tool_call"
 # The harnesses whose MCP proxy the relay replaces.

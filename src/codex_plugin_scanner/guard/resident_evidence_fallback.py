@@ -32,7 +32,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Literal, Protocol
 
-from .evidence_drains.mcp_write_result import McpEvidenceWriteResult
+from .evidence_drains.mcp_relay_evidence_drain import McpEvidenceWriteResult
 from .hook_review.hook_policy_fence_window import record_direct_fence_wait
 
 _DIRECT_HARNESSES = frozenset(

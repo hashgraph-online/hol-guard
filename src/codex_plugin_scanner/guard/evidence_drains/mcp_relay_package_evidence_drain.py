@@ -77,6 +77,7 @@ from .mcp_relay_evidence_drain import (
     _NOTICE_KEYS,
     _RELAY_HARNESSES,
     _SAFE_ALTERNATIVE_SOURCE,
+    McpEvidenceWriteResult,
     _decision,
     _ordered_params,
     _queued_approval,
@@ -85,7 +86,6 @@ from .mcp_relay_evidence_drain import (
     _record_unprompted_review,
     _redaction_level,
 )
-from .mcp_write_result import McpEvidenceWriteResult
 
 MCP_PACKAGE_CALL_EVIDENCE_KIND = "mcp_package_call"
 _RECORD_KEYS = frozenset(
