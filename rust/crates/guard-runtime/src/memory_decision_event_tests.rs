@@ -200,3 +200,34 @@ fn malformed_arguments_are_refused() {
         assert_eq!(dispatch(&args), Err(ERR_INVALID), "{args}");
     }
 }
+
+#[test]
+fn a_cloud_memory_event_scrubs_secrets_from_the_command() {
+    let secret = "EXAMPLESECRETVALUE0123";
+    let request = json!({
+        "request_id": "req-1",
+        "raw_command_text": format!("deploy-tool push --api-key {secret}"),
+        "artifact_type": "tool_action_request",
+    });
+    for redaction_enabled in [false, true] {
+        let event = build(request.clone(), "allow", redaction_enabled);
+        let text = event.to_string();
+        assert!(!text.contains(secret), "{text}");
+        assert!(event["command_display"]
+            .as_str()
+            .unwrap()
+            .starts_with("deploy-tool push --api-key"));
+    }
+}
+
+#[test]
+fn a_cloud_memory_event_never_shows_a_source_excerpt() {
+    let request = json!({
+        "request_id": "req-1",
+        "raw_command_text": "bun -e 'const m = await import(\"./x.js\"); console.log(m)'",
+        "artifact_type": "tool_action_request",
+    });
+    let event = build(request, "allow", true);
+    assert_eq!(event["command_display"], "Command withheld");
+    assert_eq!(event["command_raw"], Value::Null);
+}
