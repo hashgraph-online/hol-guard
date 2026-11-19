@@ -44,6 +44,8 @@ const LOOKUPS: &[&str] = &["command", "which", "type", "whence", "where", "hash"
 /// the program named by a later word.
 pub(super) const LAUNCHERS: &[&str] = &[
     "pkexec",
+    "run0",
+    "gsudo",
     "runuser",
     "unshare",
     "nsenter",
