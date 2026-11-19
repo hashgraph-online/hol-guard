@@ -9,8 +9,9 @@
 //!
 //! A Claude `PostToolUse` that answers the HOL Guard approval question is
 //! settled here too. Saving the answer holds the policy-integrity generation
-//! lock across begin, save, finalize, and consume, so an interrupted write
-//! cannot race another signer or consume a pending permission after failure.
+//! lock through the signed row write. Finalization reacquires that lock in its
+//! own library operation, so a timed-out daemon call cannot write after the
+//! coordinator releases the first lock.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -263,48 +264,50 @@ impl Hook<'_> {
         })?;
         match settled(&reply)? {
             Settled::Answered => Some(json!({})),
-            Settled::Save(mut save) => crate::daemon_edge::reads::writes::policy_write::locked_for(
-                self.config,
-                super::budget_left(expires),
-                || {
-                    save.insert("session_id".to_owned(), session_id.into());
-                    let integrity = self.call_by(
-                        "hook.integrity_begin",
-                        json!({"now": now_isoformat()?, "sign": true}),
-                        expires,
-                    )?;
-                    if let Some(generation) = integrity.get("current_generation") {
-                        save.insert("current_generation".to_owned(), generation.clone());
-                    }
-                    let saved = self.authority_op_with_key(
-                        QUESTION_SAVE,
-                        &save,
-                        expires,
-                        &integrity,
-                        |request| {
-                            request.payload = Some(Value::Object(save.clone()));
-                        },
-                    )?;
-                    if saved.get("saved") != Some(&Value::Bool(true)) {
-                        return None;
-                    }
-                    let finalized = self.call_within(
-                        "hook.integrity_finalize_locked",
-                        json!({
-                            "next_control_state": saved.get("next_control_state").cloned().unwrap_or(Value::Null),
-                        }),
-                        super::budget_left(expires),
-                    )?;
-                    if finalized.get("finalized") != Some(&Value::Bool(true)) {
-                        return None;
-                    }
-                    let consumed =
-                        self.authority_op(QUESTION_CONSUME, &save, expires, |request| {
-                            request.payload = Some(Value::Object(save.clone()));
-                        })?;
-                    (consumed.get("consumed") == Some(&Value::Bool(true))).then(|| json!({}))
-                },
-            ),
+            Settled::Save(mut save) => {
+                let (saved, save) = crate::daemon_edge::reads::writes::policy_write::locked_for(
+                    self.config,
+                    super::budget_left(expires),
+                    || {
+                        save.insert("session_id".to_owned(), session_id.into());
+                        let integrity = self.call_by(
+                            "hook.integrity_begin",
+                            json!({"now": now_isoformat()?, "sign": true}),
+                            expires,
+                        )?;
+                        if let Some(generation) = integrity.get("current_generation") {
+                            save.insert("current_generation".to_owned(), generation.clone());
+                        }
+                        let saved = self.authority_op_with_key(
+                            QUESTION_SAVE,
+                            &save,
+                            expires,
+                            &integrity,
+                            |request| {
+                                request.payload = Some(Value::Object(save.clone()));
+                            },
+                        )?;
+                        if saved.get("saved") != Some(&Value::Bool(true)) {
+                            return None;
+                        }
+                        Some((saved, save))
+                    },
+                )?;
+                let finalized = self.call_by(
+                    "hook.integrity_finalize",
+                    json!({
+                        "next_control_state": saved.get("next_control_state").cloned().unwrap_or(Value::Null),
+                    }),
+                    expires,
+                )?;
+                if finalized.get("finalized") != Some(&Value::Bool(true)) {
+                    return None;
+                }
+                let consumed = self.authority_op(QUESTION_CONSUME, &save, expires, |request| {
+                    request.payload = Some(Value::Object(save.clone()));
+                })?;
+                (consumed.get("consumed") == Some(&Value::Bool(true))).then(|| json!({}))
+            }
         }
     }
 

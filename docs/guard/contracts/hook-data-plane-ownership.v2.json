@@ -569,7 +569,7 @@
     "src/codex_plugin_scanner/guard/store_native_decision_receipts.py"
    ],
    "current": "metrics, receipts, activity, and SQLite-backed state",
-   "target": "non-blocking and non-authoritative receipt consumption"
+   "target": "non-blocking and non-authoritative receipt consumption; Python drain deadline checks only bound transport handoff before receipt callbacks and writer-stat recovery"
   },
   {
    "id": "ownership_governance",

@@ -59,7 +59,7 @@ Rust raw envelope
 | Python reference oracle | Python semantic | Differential tests only; never production authority |
 | Resident client and supervisor | Rust transport/lifecycle with a minimal Python process launcher | Rust native edge and launcher |
 | Policy and approval control | Python control | Snapshot publication and approval presentation only; Rust owns approval challenge, validation, replay, and consume |
-| Evidence persistence | Persistence-only | Non-blocking receipt consumption |
+| Evidence persistence | Persistence-only | Non-blocking receipt consumption. The Python drain may apply its transport deadline before invoking the receipt writer or attempting writer-stat recovery. These checks bound handoff work and never classify, admit, or reject a hook decision. |
 | Native command, policy, rules, runtime, scanner | Rust semantic | Complete supported hook authority |
 | Native hook core and secure filesystem | Rust I/O | Complete decision-critical I/O |
 

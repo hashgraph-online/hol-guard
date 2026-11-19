@@ -124,7 +124,8 @@ class PolicySourceFenceWait:
         deadline = self._deadline - DEADLINE_MARGIN_SECONDS
         if not self._attempt_registered and self._guard_home is not None:
             self._attempt_registered = True
-            attempt_until_micros = max(0, int(deadline * 1_000_000))
+            remaining = max(0.0, deadline - self._monotonic())
+            attempt_until_micros = max(0, int((time.time() + remaining) * 1_000_000))
             event = record_policy_fence_window(
                 self._guard_home,
                 action="attempt",
