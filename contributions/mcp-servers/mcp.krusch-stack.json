@@ -3,7 +3,7 @@
   "id": "mcp.krusch-stack",
   "version": "1.3.1",
   "name": "KruschStack Unified Control Plane MCP",
-  "description": "Unified local SQLite control plane MCP server (kruschdev/krusch-stack v1.3.1) combining working memory, Git AST graphs, OS page trees, UI templates, Turn-0 grounding, sealed brick verification, and 2PC diff staging across progressive tool profiles. Pure local reads inherit Guard policy; memory/file/Drive writes, embedding/Drive/HydraDB calls, brick sandboxes, and 2PC execution require review. Off until you turn it on.",
+  "description": "Unified local SQLite control plane MCP server (kruschdev/krusch-stack v1.3.1) for memory, Git AST graphs, OS page trees, UI templates, Turn-0 grounding, sealed bricks, and 2PC diff staging. Read-only inspections (including krusch_context_health: read-only SELECT and file-hash checks, zero DB writes) inherit policy; krusch_tool_call is blocked so deferred calls cannot bypass per-tool rules; writes, embeddings (krusch_context_retrieve), sandboxes, and 2PC require review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -229,7 +229,7 @@
     },
     {
       "name": "krusch_tool_call",
-      "state": "review"
+      "state": "block"
     },
     {
       "name": "hydrascope_traverse_context",
@@ -304,8 +304,8 @@
     "https://registry.modelcontextprotocol.io/v0/servers?search=dev.krusch/krusch-stack"
   ],
   "saferAlternatives": [
-    "Launch with --profile memory-only (5 tools) or --profile coding-agent (19 tools) instead of --profile full (39 tools) when an agent only needs working memory and AST/page reads.",
-    "Keep krusch_tool_call on Review when --defer-tools is enabled so deferred mutating tools cannot bypass per-tool review through the meta-dispatcher.",
+    "Use --profile memory-only (5 tools) or --profile coding-agent (19 tools) instead of --profile full (39 tools); krusch_context_health runs read-only SELECT and file-hash checks without DB writes.",
+    "Keep krusch_tool_call blocked under Guard and run krusch-stack without --defer-tools (or invoke target MCP tools directly) so Guard evaluates each target tool against its own policy rule.",
     "Keep krusch_run, krusch_apply_diff, write_drive_file, krusch_fs_sync, brick_try_local, and brick_adopt on Review because they execute commands, run sandboxes, or write files."
   ]
 }
