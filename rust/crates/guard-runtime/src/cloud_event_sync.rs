@@ -32,13 +32,18 @@ const GUARD_EVENTS_BATCH: usize = 200;
 const EVENT_QUEUE_LIMIT: i64 = 1000;
 const SYNC_HTTP_TIMEOUT_SECONDS: f64 = 20.0;
 const SYNC_HTTP_RETRY_TIMEOUT_SECONDS: f64 = 120.0;
+/// The Guard-events request timeouts.
+pub(crate) const EVENT_TIMEOUTS: Timeouts =
+    (SYNC_HTTP_TIMEOUT_SECONDS, SYNC_HTTP_RETRY_TIMEOUT_SECONDS);
+/// `_PAIN_SIGNAL_TIMEOUT_SECONDS` / `_PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS`.
+pub(crate) const PAIN_SIGNAL_TIMEOUTS: Timeouts = (10.0, 90.0);
+/// One attempt's timeout and the retry's, in seconds.
+pub(crate) type Timeouts = (f64, f64);
 /// Upload bodies stay below the broker's request-body limit
 /// (`EGRESS_MAX_NEED_BODY_BYTES`).
-const EVENTS_BODY_LIMIT: usize = guard_contracts::EGRESS_MAX_NEED_BODY_BYTES - 1024;
+pub(crate) const EVENTS_BODY_LIMIT: usize = guard_contracts::EGRESS_MAX_NEED_BODY_BYTES - 1024;
 /// `{"events":[]}`.
 const EVENTS_BODY_OVERHEAD: usize = 13;
-const PAIN_SIGNAL_TIMEOUT_SECONDS: f64 = 10.0;
-const PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS: f64 = 90.0;
 /// The time one upload, retries and rate-limit waits included, may take.
 const UPLOAD_BUDGET_SECONDS: f64 = 300.0;
 /// `_GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES`.
@@ -69,6 +74,9 @@ pub(crate) struct Progress {
     pub(crate) accepted: i64,
     pub(crate) synced_at: Option<String>,
     pub(crate) pain_signals: usize,
+    /// The warning counts as of the last saved pain-signal cursor, so a
+    /// rerun round resumes the same per-call dedupe instead of starting over.
+    pub(crate) pain_warn_counts: Option<Value>,
 }
 
 impl EventStore<'_> {
@@ -78,6 +86,7 @@ impl EventStore<'_> {
                 "Guard store request is invalid.".to_owned(),
             ));
         };
+        let _gate = self.hold_gate()?;
         crate::guard_store_op::evaluate(&GuardStoreRequestV1 {
             schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
             request_id: "cloud-event-sync".to_owned(),
@@ -90,6 +99,19 @@ impl EventStore<'_> {
         })
         .map(|(payload, _)| payload)
         .map_err(|error| SyncError::Failed(format!("Guard store {method} failed: {error:?}")))
+    }
+
+    /// The shared storage gate, so a store read or write waits out a recovery
+    /// that is moving the database. Held only around local store access, never
+    /// across a network wait.
+    pub(crate) fn hold_gate(
+        &self,
+    ) -> Result<crate::hook_evidence_store_gate::StorageGateHold, SyncError> {
+        crate::hook_evidence_store_gate::hold_storage_gate(
+            &self.home,
+            std::time::Duration::from_millis(STORE_BUSY_TIMEOUT_MS),
+        )
+        .map_err(|error| SyncError::Failed(format!("Guard store is busy: {error}")))
     }
 
     pub(crate) fn store_path(&self) -> PathBuf {
@@ -144,6 +166,7 @@ pub(crate) fn post(
     url: &str,
     body: &Value,
     parse_json: bool,
+    (timeout, retry_timeout): Timeouts,
 ) -> Result<Option<Value>, Result<Refusal, SyncError>> {
     let data = body.to_string().into_bytes();
     let request = gst::guard_sync_request(
@@ -157,21 +180,9 @@ pub(crate) fn post(
     .map_err(|error| Err(SyncError::Failed(error.to_string())))?;
     let budget = SyncBudget::new(UPLOAD_BUDGET_SECONDS);
     let answer = if parse_json {
-        gst::urlopen_json_detailed(
-            &request,
-            SYNC_HTTP_TIMEOUT_SECONDS,
-            SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
-            &budget,
-        )
-        .map(Some)
+        gst::urlopen_json_detailed(&request, timeout, retry_timeout, &budget).map(Some)
     } else {
-        gst::urlopen_detailed(
-            &request,
-            PAIN_SIGNAL_TIMEOUT_SECONDS,
-            PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS,
-            &budget,
-        )
-        .map(|()| None)
+        gst::urlopen_detailed(&request, timeout, retry_timeout, &budget).map(|()| None)
     };
     answer.map_err(|error| {
         if egress_broker::needs_pending() {
@@ -330,8 +341,8 @@ fn guard_events_refusal(
 }
 
 /// The leading events whose upload body fits the egress broker's request limit;
-/// the rest go in the next round. One event always goes, so an oversized event
-/// surfaces as a failed upload instead of stalling the queue silently.
+/// the rest go in the next round. One event always goes; [`too_large_alone`]
+/// tells whether that one can go at all.
 fn batch_within_body_limit(pending: &[Value]) -> Vec<Value> {
     let mut size = EVENTS_BODY_OVERHEAD;
     let mut payloads = Vec::new();
@@ -344,6 +355,23 @@ fn batch_within_body_limit(pending: &[Value]) -> Vec<Value> {
         payloads.push(payload);
     }
     payloads
+}
+
+/// The id of a lone event no upload body can carry: the broker refuses a body
+/// above its limit before any request, so the event could never leave and
+/// would hold back every event queued after it.
+fn too_large_alone(payloads: &[Value]) -> Option<String> {
+    let [payload] = payloads else {
+        return None;
+    };
+    let size = EVENTS_BODY_OVERHEAD + serde_json::to_vec(payload).map_or(0, |bytes| bytes.len());
+    if size <= EVENTS_BODY_LIMIT {
+        return None;
+    }
+    payload
+        .get("eventId")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
 }
 
 /// `sync_guard_events`: push the pending GuardEventV1 envelopes.
@@ -378,7 +406,27 @@ pub(crate) fn sync_guard_events(store: &EventStore<'_>) -> Result<Value, SyncErr
         let listed = pending.len();
         let payloads = batch_within_body_limit(&pending);
         let pending = &pending[..payloads.len()];
-        let answer = match post(&auth, &url, &json!({"events": payloads}), true) {
+        if let Some(event_id) = too_large_alone(&payloads) {
+            // Settled like an event Cloud rejects: it leaves the queue unsent.
+            let settled = store.call(
+                "mark_guard_events_v1_uploaded",
+                json!({"event_ids": [event_id], "uploaded_at": utc_now_iso(), "event_queue_limit": EVENT_QUEUE_LIMIT}),
+            )?;
+            if settled.as_i64().unwrap_or(0) == 0 {
+                // Nothing left the queue, so another round would pick it again.
+                return Err(SyncError::Failed(
+                    "A Guard event is too large to upload.".to_owned(),
+                ));
+            }
+            continue;
+        }
+        let answer = match post(
+            &auth,
+            &url,
+            &json!({"events": payloads}),
+            true,
+            EVENT_TIMEOUTS,
+        ) {
             Ok(answer) => answer.unwrap_or(Value::Null),
             Err(Err(error)) => return Err(error),
             Err(Ok(refusal)) => {

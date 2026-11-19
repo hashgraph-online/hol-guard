@@ -32,3 +32,15 @@ fn pain_signal_candidates_read_only_the_signal_events_after_the_cursor() {
     assert_eq!(after.len(), 1);
     assert_eq!(after[0]["event_name"], json!("install_time_warn"));
 }
+
+#[test]
+fn a_small_pain_signal_batch_covers_every_candidate() {
+    let candidates: Vec<Value> = (1..=3)
+        .map(|id| {
+            json!({"event_id": id, "event_name": "install_time_block", "occurred_at": "t", "payload": {}})
+        })
+        .collect();
+    let (covered, _items, counts) = batch_within_body_limit(&candidates, &json!([])).unwrap();
+    assert_eq!(covered, 3);
+    assert!(counts.is_array());
+}

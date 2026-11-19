@@ -62,3 +62,13 @@ fn an_upload_batch_stops_before_the_broker_body_limit() {
     assert_eq!(batch_within_body_limit(&huge).len(), 1);
     assert_eq!(batch_within_body_limit(&[]).len(), 0);
 }
+
+#[test]
+fn only_a_lone_event_above_the_broker_body_limit_is_too_large() {
+    let huge = vec![json!({"eventId": "evt-huge", "body": "x".repeat(600 * 1024)})];
+    assert_eq!(too_large_alone(&huge).as_deref(), Some("evt-huge"));
+    let small = vec![json!({"eventId": "evt-small", "body": "x"})];
+    assert_eq!(too_large_alone(&small), None);
+    let pair = vec![small[0].clone(), small[0].clone()];
+    assert_eq!(too_large_alone(&pair), None);
+}

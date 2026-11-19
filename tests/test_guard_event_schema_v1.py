@@ -231,6 +231,7 @@ def test_sync_guard_events_normalizes_registry_base_url(tmp_path) -> None:
     assert _EventIngestHandler.requests[0]["path"] == "/api/v1/guard/events"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_receipts_uploads_pending_guard_events(tmp_path) -> None:
     store = GuardStore(tmp_path)
     store.add_receipt(_receipt())
@@ -260,6 +261,7 @@ def test_sync_receipts_uploads_pending_guard_events(tmp_path) -> None:
     assert result["aibom_inventory"]["reason"] == "background_deferred"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_sync_receipts_runs_aibom_when_deep_sync_is_requested(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path)
     store.add_receipt(_receipt())

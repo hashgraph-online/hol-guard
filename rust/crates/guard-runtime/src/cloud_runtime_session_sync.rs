@@ -8,12 +8,14 @@ use serde_json::{json, Value};
 
 use crate::cloud_bundle_fetch::{resolve_auth, unreachable_message, SyncError};
 use crate::cloud_event_sync::{
-    answer_text, post, retry_after_seconds, route_url, trusted_base, EventStore, Refusal,
+    answer_text, post, retry_after_seconds, route_url, trusted_base, EventStore, Refusal, Timeouts,
 };
 
 pub(crate) const RUNTIME_SESSION_SUMMARY_KEY: &str = "runtime_session_summary";
 const ENDPOINT_UNAVAILABLE: &str = "runtime_session_endpoint_unavailable";
 const RATE_LIMITED: &str = "runtime_session_rate_limited";
+/// `_RUNTIME_SYNC_TIMEOUT_SECONDS` / `_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS`.
+const RUNTIME_SESSION_TIMEOUTS: Timeouts = (10.0, 90.0);
 
 /// The summary saved when Cloud has no runtime session route (404) or asks
 /// the device to slow down (429). The session stays local until the next sync.
@@ -49,7 +51,13 @@ pub(crate) fn sync_runtime_session(
     let supplied = store.bundle.auth.as_ref().filter(|auth| !auth.is_empty());
     let auth = resolve_auth(&store.bundle.resident, false, supplied)?;
     let url = route_url("runtime_sessions", &trusted_base(&auth)?)?;
-    let refusal = match post(&auth, &url, &json!({"session": session}), true) {
+    let refusal = match post(
+        &auth,
+        &url,
+        &json!({"session": session}),
+        true,
+        RUNTIME_SESSION_TIMEOUTS,
+    ) {
         Ok(Some(response)) if response.is_object() => {
             return Ok(json!({"status": "synced", "response": response}));
         }

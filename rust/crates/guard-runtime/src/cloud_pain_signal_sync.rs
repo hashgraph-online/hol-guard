@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use crate::cloud_bundle_fetch::{resolve_auth, unreachable_message, SyncError};
 use crate::cloud_event_sync::{
     answer_text, post, route_url, screen_supplied, trusted_base, EventStore, Refusal,
+    EVENTS_BODY_LIMIT, PAIN_SIGNAL_TIMEOUTS,
 };
 
 pub(crate) const PAIN_SIGNAL_CURSOR_KEY: &str = "pain_signal_cursor";
@@ -29,6 +30,8 @@ const PAIN_SIGNAL_EVENTS: [&str; 8] = [
 fn pain_signal_candidates(store: &EventStore<'_>, after: i64) -> Result<Vec<Value>, SyncError> {
     let failed =
         |error: rusqlite::Error| SyncError::Failed(format!("Guard store read failed: {error}"));
+    // Hold the storage gate for the read only, never across the upload.
+    let _gate = store.hold_gate()?;
     let connection = rusqlite::Connection::open_with_flags(
         store.store_path(),
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -97,35 +100,32 @@ pub(crate) fn sync_pain_signals(store: &EventStore<'_>) -> Result<Value, SyncErr
         .and_then(|cursor| cursor.get("event_id").and_then(Value::as_i64))
         .filter(|id| *id > 0)
         .unwrap_or(0);
-    // Batches an earlier broker round uploaded moved the cursor past them.
-    let mut uploaded = store.progress.borrow().pain_signals;
-    let mut warn_counts = json!([]);
+    // Batches an earlier broker round uploaded moved the cursor past them,
+    // and the warning counts as of that cursor carry over with it.
+    let (mut uploaded, mut warn_counts) = {
+        let progress = store.progress.borrow();
+        (
+            progress.pain_signals,
+            progress
+                .pain_warn_counts
+                .clone()
+                .unwrap_or_else(|| json!([])),
+        )
+    };
     loop {
         let candidates = pain_signal_candidates(store, current)?;
-        let Some(last) = candidates.last() else {
+        if candidates.is_empty() {
             break;
-        };
-        let last_processed = last
-            .get("event_id")
-            .and_then(Value::as_i64)
-            .filter(|id| *id != 0)
-            .unwrap_or(current);
-        let batch = crate::runner_sync_signals::pain_signal_batch(&json!({
-            "events": candidates,
-            "warn_counts": warn_counts,
-        }))
-        .map_err(|reason| SyncError::Failed(format!("Guard pain signals failed: {reason}")))?;
-        warn_counts = batch
-            .get("warn_counts")
-            .cloned()
-            .unwrap_or_else(|| json!([]));
-        let items = batch
-            .get("items")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+        }
+        let (covered, items, next_counts) = batch_within_body_limit(&candidates, &warn_counts)?;
         if !items.is_empty() {
-            match post(&auth, &url, &json!({"items": items}), false) {
+            match post(
+                &auth,
+                &url,
+                &json!({"items": items}),
+                false,
+                PAIN_SIGNAL_TIMEOUTS,
+            ) {
                 Ok(_) => uploaded += items.len(),
                 Err(Err(error)) => return Err(error),
                 Err(Ok(Refusal::Http {
@@ -143,18 +143,64 @@ pub(crate) fn sync_pain_signals(store: &EventStore<'_>) -> Result<Value, SyncErr
                 }
             }
         }
-        current = last_processed;
+        warn_counts = next_counts;
+        current = candidates[covered - 1]
+            .get("event_id")
+            .and_then(Value::as_i64)
+            .filter(|id| *id != 0)
+            .unwrap_or(current);
         store.save(
             PAIN_SIGNAL_CURSOR_KEY,
             &json!({"event_id": current}),
             &utc_now_iso(),
         )?;
-        store.progress.borrow_mut().pain_signals = uploaded;
-        if candidates.len() < PAIN_SIGNAL_BATCH {
+        {
+            let mut progress = store.progress.borrow_mut();
+            progress.pain_signals = uploaded;
+            progress.pain_warn_counts = Some(warn_counts.clone());
+        }
+        if covered == candidates.len() && candidates.len() < PAIN_SIGNAL_BATCH {
             break;
         }
     }
     Ok(json!(uploaded))
+}
+
+/// The leading candidates whose upload body fits the egress broker's request
+/// limit, the items built from them and the warning counts after them. The
+/// broker refuses a larger body before any request, so the candidate count is
+/// halved until the body fits. A lone candidate that still does not fit is
+/// passed over with no items, so it cannot hold back the signals after it.
+fn batch_within_body_limit(
+    candidates: &[Value],
+    warn_counts: &Value,
+) -> Result<(usize, Vec<Value>, Value), SyncError> {
+    let mut covered = candidates.len();
+    loop {
+        let batch = crate::runner_sync_signals::pain_signal_batch(&json!({
+            "events": &candidates[..covered],
+            "warn_counts": warn_counts,
+        }))
+        .map_err(|reason| SyncError::Failed(format!("Guard pain signals failed: {reason}")))?;
+        let next_counts = batch
+            .get("warn_counts")
+            .cloned()
+            .unwrap_or_else(|| json!([]));
+        let items = batch
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let size =
+            serde_json::to_vec(&json!({"items": &items})).map_or(usize::MAX, |body| body.len());
+        if size <= EVENTS_BODY_LIMIT {
+            return Ok((covered, items, next_counts));
+        }
+        if covered == 1 {
+            return Ok((1, Vec::new(), next_counts));
+        }
+        covered /= 2;
+    }
 }
 
 #[cfg(test)]
