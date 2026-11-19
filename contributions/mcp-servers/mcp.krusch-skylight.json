@@ -3,7 +3,7 @@
   "id": "mcp.krusch-skylight",
   "version": "1.0.0",
   "name": "Krusch Skylight Calendar MCP",
-  "description": "Skylight Calendar 2 stdio MCP connector (@krusch/companion-skylight-connector v0.3.0) with opt-in dry-run staging via dryRun: true (writes are live otherwise) and local twin cache support. Status inspection inherits Guard policy; event listing and chore pulls can write local state when writeBack: true, so they require review. Event creation, chore assignment, list pushes, meal planning, Sidekick Magic Import, task sync, and unified skylight_calendar calls also require review. Off until you turn it on.",
+  "description": "Skylight Calendar 2 stdio MCP connector (@krusch/companion-skylight-connector v0.3.0) launched as `krusch-skylight mcp`, with opt-in dry-run staging via dryRun: true (writes are live otherwise) and local twin cache support. Status, event listing, chore pulls, and meal listing can create or update local state, so they require review. Event creation, chore assignment, list pushes, meal planning, Sidekick Magic Import, task sync, and unified skylight_calendar calls also require review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -20,7 +20,7 @@
   "license": "MIT",
   "launch": {
     "kind": "direct-command",
-    "command": "krusch-skylight-mcp"
+    "command": "krusch-skylight"
   },
   "riskClasses": [
     "account-calendar-write",
@@ -30,7 +30,7 @@
   "tools": [
     {
       "name": "skylight_status",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "skylight_list_events",
@@ -42,7 +42,7 @@
     },
     {
       "name": "skylight_list_meals",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "skylight_calendar",
@@ -85,6 +85,6 @@
   ],
   "saferAlternatives": [
     "Pass dryRun: true on mutating Skylight tools to preview proposed family calendar, chore, list, and meal changes before they are pushed to Skylight Cloud; calls without it write live.",
-    "Use skylight_status and skylight_list_meals for inspection without local writes; keep skylight_list_events and skylight_pull_chores on Review unless writeBack is disabled upstream."
+    "All Skylight inspection tools can initialize or update the local twin cache; keep them on Review and use dryRun: true for mutating calls."
   ]
 }

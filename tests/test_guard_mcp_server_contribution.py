@@ -236,9 +236,8 @@ def test_krusch_skylight_local_writes_require_review() -> None:
     payload = _krusch_skylight_payload()
     validate_mcp_contribution(payload, filename=_KRUSCH_SKYLIGHT.name)
     declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
-    assert declared["skylight_status"] == "inherit"
-    assert declared["skylight_list_meals"] == "inherit"
-    for tool_name in ("skylight_list_events", "skylight_pull_chores"):
+    assert payload["launch"] == {"kind": "direct-command", "command": "krusch-skylight"}
+    for tool_name in ("skylight_status", "skylight_list_events", "skylight_pull_chores", "skylight_list_meals"):
         assert declared[tool_name] == "review"
         assert mcp_tool_state(payload, tool_name) == "review"
 
