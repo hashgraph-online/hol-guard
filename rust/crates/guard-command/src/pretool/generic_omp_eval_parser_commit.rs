@@ -87,8 +87,8 @@ impl Parser {
             ("only", [globs]) => strings(globs),
             ("only", [globs, options]) => strings(globs) && silent(options),
             ("show", []) => true,
-            ("show", [path]) => strings(path),
-            ("show", [path, options]) => (strings(path) || path.is_null()) && silent(options),
+            ("show", [path]) => plain_paths(path),
+            ("show", [path, options]) => (plain_paths(path) || path.is_null()) && silent(options),
             ("diff", []) => true,
             ("diff", [options]) => silent(options),
             ("commit", [Value::String(subject)]) => !subject.trim().is_empty(),
@@ -205,6 +205,27 @@ impl Parser {
             }
             _ => None,
         }
+    }
+}
+
+/// A `show` path, or an array of them, that names no file Guard keeps out of
+/// a plain read. `show(path)` prints the draft's hunks for exactly that path,
+/// the read `git diff HEAD -- <path>` performs, and Guard reviews that command
+/// when the path names a secret. The prelude's own route follows it, so the
+/// same spelling cannot answer through `eval` what it is refused through
+/// `bash`. `take`, `drop` and `only` select what the commit carries rather
+/// than printing a file, and `show()` with no path is the draft's own summary,
+/// so neither is read through this check.
+fn plain_paths(value: &Value) -> bool {
+    strings(value) && !names_sensitive(value)
+}
+
+/// Whether `value` names a sensitive read target, directly or in an array.
+fn names_sensitive(value: &Value) -> bool {
+    match value {
+        Value::String(path) => crate::pretool::sensitive_read_path_argument(path),
+        Value::Array(items) => items.iter().any(names_sensitive),
+        _ => false,
     }
 }
 

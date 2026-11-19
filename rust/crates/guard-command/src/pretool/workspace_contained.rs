@@ -471,20 +471,7 @@ pub(super) fn host_eligible(harness: &str, event: &str, payload: &Value) -> bool
             harness,
             "omp" | "oh-my-pi" | "pi" | "zcode" | "claude-code" | "codex" | "grok"
         ) || cursor_shell_route(harness, payload))
-        && !eval_shell_bridge(payload)
         && sandbox_available()
-}
-
-/// The envelope key Oh My Pi's eval evaluator sets on a call it bridges for
-/// `sh()` or the `commit` prelude. Those run on the eval shell bridge, which
-/// raises no hook, so no sandbox can take them.
-pub(crate) const EVAL_SHELL_BRIDGE: &str = "guard_eval_shell_bridge";
-
-/// Whether `payload` is a call bridged from an Oh My Pi eval shell helper.
-/// Setting the key only removes the sandbox route, so a payload that carries
-/// it can never gain an answer the bare call would not get.
-pub(crate) fn eval_shell_bridge(payload: &Value) -> bool {
-    payload.get(EVAL_SHELL_BRIDGE).and_then(Value::as_bool) == Some(true)
 }
 
 /// Whether a Cursor call can be rewritten into the contained sink. Cursor

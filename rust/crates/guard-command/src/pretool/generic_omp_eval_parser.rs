@@ -403,11 +403,6 @@ impl Parser {
     }
 }
 
-/// Whether a name is a JavaScript keyword or global the grammars never bind.
-pub(super) fn is_reserved(name: &str) -> bool {
-    RESERVED.contains(&name)
-}
-
 /// Parse a complete program into its ordered tool calls, or `None` when any
 /// byte falls outside the grammar. At least one call is required.
 pub(super) fn parse_program(code: &str) -> Option<Vec<Call>> {

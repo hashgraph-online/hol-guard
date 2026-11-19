@@ -7521,6 +7521,66 @@
       "expect": "allow"
     },
     {
+      "id": "omp-eval-commit-draft-string-body",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); await d.take('README.md'); return await d.commit('docs: record the lane', 'Add the lane note.');",
+        "language": "js",
+        "title": "Commit the lane note"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-eval-commit-draft-show-document",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); return await d.show('README.md');",
+        "language": "js",
+        "title": "Show the lane note hunks"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-eval-commit-draft-show-dotenv",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); return await d.show('.env');",
+        "language": "js",
+        "title": "Show the environment file hunks"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "omp-eval-commit-draft-show-key-beside-document",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); return await d.show(['README.md', 'deploy/id_rsa']);",
+        "language": "js",
+        "title": "Show the release hunks"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "omp-eval-commit-prelude-docs",
       "fix_area": "omp",
       "harnesses": [
@@ -7566,141 +7626,6 @@
       },
       "cwd": "worktree",
       "expect": "allow"
-    },
-    {
-      "id": "omp-eval-commit-draft-commit",
-      "fix_area": "omp",
-      "harnesses": [
-        "omp"
-      ],
-      "tool": "eval",
-      "tool_input": {
-        "code": "const d = await commit.draft(); return await d.commit(\"Fix sum to include first value\", [\"Start iteration at index 0.\"]);",
-        "language": "js",
-        "title": "Commit work"
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
-      "id": "omp-eval-commit-take-paths",
-      "fix_area": "omp",
-      "harnesses": [
-        "omp"
-      ],
-      "tool": "eval",
-      "tool_input": {
-        "code": "const d = await commit.draft({ agents: \"self\" }); await d.take(\"README.md\"); await d.take([\"package.json\"]); return await d.commit('Add notes', {body: ['- Explain the retry window.']});",
-        "language": "js",
-        "title": "Commit work"
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
-      "id": "omp-eval-commit-take-loop",
-      "fix_area": "omp",
-      "harnesses": [
-        "omp"
-      ],
-      "tool": "eval",
-      "tool_input": {
-        "code": "const d = await commit.draft(); for (const p of ['README.md', 'package.json']) await d.take(p); print(await d.commit('Add notes'));",
-        "language": "js",
-        "title": "Commit work"
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
-      "id": "omp-eval-commit-read-docs",
-      "fix_area": "omp",
-      "harnesses": [
-        "omp"
-      ],
-      "tool": "eval",
-      "tool_input": {
-        "code": "return await read('xd://eval/commit');",
-        "language": "js",
-        "title": "Commit work"
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
-      "id": "omp-eval-commit-undeclared-draft",
-      "fix_area": "omp",
-      "harnesses": [
-        "omp"
-      ],
-      "tool": "eval",
-      "tool_input": {
-        "code": "return await d.take();",
-        "language": "js",
-        "title": "Commit work"
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
-      "id": "omp-eval-commit-show-root-anchored-tracked-path",
-      "fix_area": "omp",
-      "harnesses": [
-        "omp"
-      ],
-      "tool": "eval",
-      "tool_input": {
-        "code": "const d = await commit.draft(); return await d.show('tracked.txt');",
-        "language": "js",
-        "title": "Inspect tracked diff"
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
-      "id": "omp-eval-commit-show-sensitive-dotenv-keeps-review",
-      "fix_area": "omp",
-      "harnesses": [
-        "omp"
-      ],
-      "tool": "eval",
-      "tool_input": {
-        "code": "const d = await commit.draft(); return await d.show('.env');",
-        "language": "js",
-        "title": "Inspect sensitive diff"
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
-      "id": "omp-eval-commit-with-shell",
-      "fix_area": "omp",
-      "harnesses": [
-        "omp"
-      ],
-      "tool": "eval",
-      "tool_input": {
-        "code": "const d = await commit.draft(); await sh('rm -rf src'); return await d.commit('Remove sources');",
-        "language": "js",
-        "title": "Commit work"
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
-      "id": "omp-eval-commit-computed-subject",
-      "fix_area": "omp",
-      "harnesses": [
-        "omp"
-      ],
-      "tool": "eval",
-      "tool_input": {
-        "code": "const d = await commit.draft(); const s = 'x'; return await d.commit(s);",
-        "language": "js",
-        "title": "Commit work"
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
     },
     {
       "id": "omp-eval-bash-readonly",

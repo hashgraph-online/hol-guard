@@ -26,8 +26,6 @@ use serde_json::{json, Map, Value};
 
 #[path = "generic_omp_eval_browser.rs"]
 mod browser;
-#[path = "generic_omp_eval_commit.rs"]
-mod commit;
 #[path = "generic_omp_eval_parser.rs"]
 mod parser;
 #[path = "generic_omp_eval_pure.rs"]
@@ -120,14 +118,7 @@ fn standalone_payload(call: &Call, context: &OmpContext<'_>) -> Option<Value> {
     if !required.is_empty() && !input.contains_key(required) {
         return None;
     }
-    let mut envelope = json!({"tool_name": call.tool, "tool_input": Value::Object(input)});
-    if call.shell_helper {
-        // The eval shell bridge raises no `bash` hook, so nothing could route
-        // this call into the workspace sandbox. Judge it as a host without
-        // one would, where the proofs that settle a command uncontained answer.
-        envelope[crate::pretool::workspace_contained::EVAL_SHELL_BRIDGE] = Value::Bool(true);
-    }
-    Some(envelope)
+    Some(json!({"tool_name": call.tool, "tool_input": Value::Object(input)}))
 }
 
 /// A JavaScript eval that only drives OMP's isolated browser against
@@ -211,9 +202,7 @@ pub(super) fn evaluate(
             None => return None,
         }
     } else {
-        // Oh My Pi's `commit` prelude has its own grammar; a program the tool
-        // grammar reads stays with it.
-        parse_program(code).or_else(|| commit::parse_commit_program(code))?
+        parse_program(code)?
     };
     let mut evaluated = Vec::with_capacity(calls.len());
     let mut saw_unmodeled_call = false;

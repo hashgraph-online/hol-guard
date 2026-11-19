@@ -63,27 +63,6 @@ fn tracked_target(value: &str, leading: &[String], context: super::PathContext<'
         && super::search_scope_tracked::names::resolves_to_tracked(value, context.cwd)
 }
 
-/// Only the OMP show() projection's literal, root-anchored diff path is
-/// understood. Other Git magic pathspecs (glob, exclude, icase, attr, etc.)
-/// stay under review because their possible read targets are not bounded.
-fn plain_root_anchored_diff_pathspec(arguments: &[String], index: usize, value: &str) -> bool {
-    let Some(path) = value.strip_prefix(":(top)") else {
-        return false;
-    };
-    index == 3
-        && matches!(arguments, [verb, rev, separator, _]
-            if verb == "diff" && rev == "HEAD" && separator == "--")
-        && !path.is_empty()
-        && path.len() <= 512
-        && path
-            .split('/')
-            .all(|part| !part.is_empty() && part != "." && part != "..")
-        && path
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-' | b'/'))
-        && !super::sensitive_read_path_argument(path)
-}
-
 pub(super) fn safe_git_arguments(
     arguments: &[String],
     allow_helper_context: bool,
@@ -168,9 +147,7 @@ pub(super) fn safe_git_arguments(
     if arguments.iter().enumerate().any(|(index, value)| {
         !search_text.contains(&index)
             && replacement != Some(index)
-            && ((value.starts_with(':')
-                && !index_objects.contains(&index)
-                && !plain_root_anchored_diff_pathspec(arguments, index, value))
+            && ((value.starts_with(':') && !index_objects.contains(&index))
                 || (super::sensitive_read_path_argument(value)
                     && listed.is_none_or(|start| index < start)))
     }) {
@@ -462,3 +439,47 @@ pub(super) fn inspection_writes_nothing(
 #[cfg(test)]
 #[path = "git_reads_config_pattern_tests.rs"]
 mod config_pattern_tests;
+
+#[cfg(test)]
+mod tests {
+    use super::names_refused_option;
+
+    /// Git takes any unambiguous prefix of a long option, so a read that
+    /// disables both helpers in full can turn one back on in an abbreviation
+    /// the screen never compared against.
+    #[test]
+    fn an_abbreviated_helper_names_the_option_it_resolves_to() {
+        for word in [
+            "--textconv",
+            "--textcon",
+            "--textc",
+            "--ext-diff",
+            "--ext-d",
+            "--output",
+            "--outp",
+            "--output=/tmp/changed.patch",
+            "-o",
+        ] {
+            assert!(names_refused_option(word), "{word}");
+        }
+    }
+
+    /// `--text` is the comparison verbs' own "treat the file as text", and
+    /// Git answers an exact spelling with the option that owns it, so reading
+    /// it as a prefix of `--textconv` would refuse an ordinary read.
+    #[test]
+    fn a_word_a_verb_spells_in_full_is_not_an_abbreviation() {
+        for word in [
+            "--text",
+            "--no-textconv",
+            "--no-ext-diff",
+            "--oneline",
+            "--topo-order",
+            "--",
+            "-O",
+            "HEAD",
+        ] {
+            assert!(!names_refused_option(word), "{word}");
+        }
+    }
+}

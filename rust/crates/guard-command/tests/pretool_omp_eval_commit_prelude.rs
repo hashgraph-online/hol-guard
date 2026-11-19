@@ -26,6 +26,9 @@ const AGENT_PROGRAMS: &[&str] = &[
     r#"const d = await commit.draft(); print(d); await d.take("src/config.js"); return await d.commit("Raise widgets request timeout", ["- Documented requestTimeoutMs."]);"#,
     "const d = await commit.draft(); return await d.take('src/sum.js');",
     "const d = await commit.draft(); return await d;",
+    "const d = await commit.draft(); return await d.show();",
+    "const d = await commit.draft(); return await d.show('notes.md');",
+    "const d = await commit.draft(); return await d.show('notes.md', {silent: true});",
     "const d = await commit.draft(); await d.take('**'); return await d.commit('Add temperature conversion CLI', {body:['Implement commands.','Document usage.']});",
     r#"const d = await commit.draft(); print(await d.commit("Fix punctuation in slugs", ["Normalize punctuation."]));"#,
     "const d=await commit.draft(); return await d.take(['index.html','style.css','game.js']);",
@@ -96,6 +99,12 @@ fn a_commit_program_outside_the_grammar_stays_reviewed() {
     let session = session("omp-eval-commit-refused");
     for code in [
         "const d = await commit.draft(); return await d.commit('x', {amend: true});",
+        // `show(path)` prints that path's hunks, the read `git diff HEAD --
+        // <path>` performs and Guard reviews when the path names a secret.
+        "const d = await commit.draft(); return await d.show('.env');",
+        "const d = await commit.draft(); return await d.show('config/.env.local');",
+        "const d = await commit.draft(); return await d.show('deploy/id_rsa', {silent: true});",
+        "const d = await commit.draft(); return await d.show(['notes.md', '.env']);",
         "const d = await commit.draft(); for (const p of ['a']) await d.take(p); return await d.commit('x');",
         "const d = await import('xd://eval/commit'); print(d)",
         "const m = 'x'; const d = await commit.draft(); return await d.commit(m);",
