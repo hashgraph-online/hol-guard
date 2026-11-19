@@ -316,6 +316,7 @@
       "src/pretool/bun_package_entry.rs",
       "src/pretool/chain_directory_copies.rs",
       "src/pretool/chain_literals.rs",
+      "src/pretool/chain_literals_commit_message.rs",
       "src/pretool/chain_literals_git_value.rs",
       "src/pretool/chain_literals_home.rs",
       "src/pretool/chain_literals_inert.rs",
