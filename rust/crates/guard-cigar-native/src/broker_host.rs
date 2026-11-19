@@ -30,11 +30,11 @@ pub(crate) const BROKER_ERRORS: [&str; 15] = [
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 const HANDOFF: &str = "execution_handoff.v1";
 
-/// What a broker reply carries: a result, or a server error code and whether
-/// the command was dispatched before it failed.
+/// What a broker reply carries: a result, or a server error code. The reply's
+/// `dispatched` flag must be a boolean but is not needed by the client.
 pub(crate) enum Outcome {
     Done(Value),
-    Failed(&'static str, bool),
+    Failed(&'static str),
 }
 
 /// Check a broker reply envelope for request `id`. `None` means malformed.
@@ -58,7 +58,8 @@ pub(crate) fn outcome(reply: &Value, id: u64) -> Option<Outcome> {
         Some("error") => {
             let outcome = exact(&reply["outcome"], &["dispatched", "error", "status"])?;
             let code = known(&BROKER_ERRORS, outcome["error"].as_str()?)?;
-            Some(Outcome::Failed(code, outcome["dispatched"].as_bool()?))
+            outcome["dispatched"].as_bool()?;
+            Some(Outcome::Failed(code))
         }
         _ => None,
     }
@@ -74,7 +75,7 @@ fn exact<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a Map<String, Value>> 
 fn decode(reply: &Value, id: u32) -> Result<Value, Option<&'static str>> {
     match outcome(reply, u64::from(id)) {
         Some(Outcome::Done(result)) => Ok(result),
-        Some(Outcome::Failed(code, _)) => Err(Some(code)),
+        Some(Outcome::Failed(code)) => Err(Some(code)),
         None => Err(None),
     }
 }

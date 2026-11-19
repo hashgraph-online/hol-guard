@@ -164,6 +164,11 @@ fn roots(home: &Path, job: &store::Job, paths: &[(&str, &str)]) -> Result<(), St
         let id = option["runtime_id"]
             .as_str()
             .ok_or_else(|| error("installation_invalid"))?;
+        if id == super::super::BUILTIN_ID {
+            // The built-in engine runs from Guard's own executable and owns
+            // no bundle, Python or package folder to protect here.
+            continue;
+        }
         let record = load(home, id)?;
         references.extend([
             record.selection.python,

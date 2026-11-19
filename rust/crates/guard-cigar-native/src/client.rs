@@ -148,7 +148,7 @@ impl Client {
         let reply = serde_json::from_slice::<Value>(&reply).map_err(|_| UNKNOWN)?;
         match outcome(&reply, 1) {
             Some(Outcome::Done(result)) => Ok(result),
-            Some(Outcome::Failed(code, _)) => Err(code),
+            Some(Outcome::Failed(code)) => Err(code),
             None => Err(UNKNOWN),
         }
     }

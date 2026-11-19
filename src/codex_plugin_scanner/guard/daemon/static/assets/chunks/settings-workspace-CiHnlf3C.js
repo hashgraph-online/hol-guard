@@ -4039,7 +4039,8 @@ const versionList = "divide-y divide-brand-dark/[0.07] overflow-hidden rounded-2
 const versionHeading = "text-base font-semibold tracking-[-0.01em] text-brand-dark";
 const versionLead = "mt-1 max-w-[62ch] text-sm leading-6 text-brand-dark/70";
 const versionBytes = (bytes) => (bytes / 1048576).toFixed(1) + " MiB";
-const installationLabel = (qualification2) => qualification2 === "guard_qualified" ? "checked on this computer" : "local development build";
+const installationLabel = (qualification2) => qualification2 === "guard_builtin" ? "built into Guard, no Python needed" : qualification2 === "guard_qualified" ? "checked on this computer" : "local development build";
+const runtimeHostLabel = (python) => python === null ? "Built into Guard" : "Python " + python.join(".");
 const OS = { darwin: "macOS", linux: "Linux", windows: "Windows", win32: "Windows" };
 const ARCH = { arm64: "Apple silicon", aarch64: "Arm", x86_64: "Intel", amd64: "Intel", x64: "Intel" };
 function platformLabel(platform2) {
@@ -4057,7 +4058,7 @@ function describe(id2, installations, selected) {
   if (installations === null) return "Looking up version details";
   if (!selected) return "Picked, but not found on this computer";
   const sdk = selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : "";
-  return sdk + "Python " + selected.python_version.join(".") + " · " + platformLabel(selected.platform);
+  return sdk + runtimeHostLabel(selected.python_version) + " · " + platformLabel(selected.platform);
 }
 function CigarRuntimeSelection(props) {
   const id2 = props.status?.preferences.runtime_id ?? props.value.runtime_id;
@@ -7158,7 +7159,7 @@ function planCigarSetup(data, options) {
   const selected = state.preferences.runtime_id;
   const installed = data.installations;
   const current = selected && installed.some((item) => item.runtime_id === selected) ? selected : null;
-  const reusable = current ?? (installed.find((item) => item.qualification === "guard_qualified") ?? installed[0])?.runtime_id ?? null;
+  const reusable = current ?? (installed.find((item) => item.builtin === true) ?? installed.find((item) => item.qualification === "guard_qualified") ?? installed[0])?.runtime_id ?? null;
   const tail = reusable === current && current !== null ? ["start"] : ["check", "start"];
   if (reusable) {
     return {
@@ -7920,10 +7921,10 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
       meta: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         "Core ",
         item.core_version ?? "not reported",
-        " · Python ",
-        item.python_version.join("."),
         " · ",
-        item.managed ? "Guard managed" : "added outside Guard",
+        runtimeHostLabel(item.python_version),
+        " · ",
+        item.builtin ? "ships with Guard" : item.managed ? "Guard managed" : "added outside Guard",
         " · ",
         installationLabel(item.qualification)
       ] }),

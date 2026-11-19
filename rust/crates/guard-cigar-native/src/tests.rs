@@ -127,7 +127,7 @@ fn broker_replies_must_have_exactly_the_documented_members() {
         &broker_reply(json!({"status": "error", "error": "Stale", "dispatched": true})),
         1,
     );
-    assert!(matches!(failed, Some(Outcome::Failed("Stale", true))));
+    assert!(matches!(failed, Some(Outcome::Failed("Stale"))));
     let mut extra = broker_reply(json!({"status": "ok", "result": 1}));
     extra["more"] = json!(1);
     let mut slow = broker_reply(json!({"status": "ok", "result": 1}));
