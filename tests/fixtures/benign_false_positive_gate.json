@@ -7618,6 +7618,51 @@
       "expect": "allow"
     },
     {
+      "id": "omp-eval-commit-draft-show-document",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); return await d.show('README.md');",
+        "language": "js",
+        "title": "Show the lane note hunks"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-eval-commit-draft-show-dotenv",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); return await d.show('.env');",
+        "language": "js",
+        "title": "Show the environment file hunks"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "omp-eval-commit-draft-show-key-beside-document",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); return await d.show(['README.md', 'deploy/id_rsa']);",
+        "language": "js",
+        "title": "Show the release hunks"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "omp-eval-commit-prelude-docs",
       "fix_area": "omp",
       "harnesses": [
