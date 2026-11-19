@@ -11,9 +11,9 @@ fn request(command: &str) -> CommandModelRequestV1 {
     }
 }
 
-struct Fixture {
-    home: String,
-    workspace: String,
+pub(super) struct Fixture {
+    pub(super) home: String,
+    pub(super) workspace: String,
 }
 
 fn write(root: &std::path::Path, file: &str) {
@@ -24,7 +24,7 @@ fn write(root: &std::path::Path, file: &str) {
 
 static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-fn fixture() -> Fixture {
+pub(super) fn fixture() -> Fixture {
     // Keep the fixture outside $TMPDIR, which canonicalizes under /private/var.
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/pretool-listing-find")
@@ -75,7 +75,7 @@ fn fixture() -> Fixture {
     }
 }
 
-fn allowed_in(fixture: &Fixture, cwd: &str, command: &str) -> bool {
+pub(super) fn allowed_in(fixture: &Fixture, cwd: &str, command: &str) -> bool {
     evaluate_pre_tool_with_context(&request(command), Some(&fixture.home), Some(cwd))
         .is_ok_and(|decision| decision.minimum_action == "allow")
 }
@@ -225,6 +225,10 @@ fn find_admits_only_read_only_predicates() {
         "find src \\( -name '*.ts' -o -name '*.tsx' \\) -type f",
         "find src -type l",
         "find src -path '*/x/*' -prune -o -type f -print",
+        "find src -printf '%p'",
+        "find src -type f -printf '%f\\n'",
+        "find src -type f -printf '%h/%f\\0'",
+        "find src -path '*/lib/*' -type f -print",
     ] {
         assert!(allowed_in(&fixture, ws, command), "{command}");
     }
@@ -239,7 +243,12 @@ fn find_admits_only_read_only_predicates() {
         "find src -fprint out.txt",
         "find src -fprint0 out.txt",
         "find src -fls out.txt",
-        "find src -printf '%p'",
+        "find src -printf '%l\\n'",
+        "find src -printf '%s %p\\n'",
+        "find src -printf '%10f'",
+        "find src -printf '%u'",
+        "find src -printf '\\c'",
+        "find src -printf",
         "find -L src -type f",
         "find src -follow",
         "find src -type x",

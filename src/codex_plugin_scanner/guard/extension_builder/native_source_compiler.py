@@ -299,10 +299,10 @@ def _decode_output(
 
 
 @contextmanager
-def _verified_executable(raw: bytes):  # type: ignore[no-untyped-def]
+def _verified_executable(raw: bytes, sha256: str | None = None):  # type: ignore[no-untyped-def]
     """Materialize exactly the verified bytes in a private execution directory."""
     try:
-        with verified_executable(raw) as path:
+        with verified_executable(raw, sha256) as path:
             yield path
     except ExecutableMaterializationError as exc:
         raise NativeSourceCompilerError("source compiler could not be started") from exc

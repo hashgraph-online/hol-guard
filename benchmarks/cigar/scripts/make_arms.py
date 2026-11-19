@@ -46,12 +46,13 @@ for arm in ("base", "cigar"):
         text += f'\n[hooks]\n{line}\n\n[hooks.state."{key}"]\ntrusted_hash = "{state[1]}"\n'
     (codex_home / "config.toml").write_text(text)
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext  # noqa: E402
-from codex_plugin_scanner.guard.harness.registry import get_adapter  # noqa: E402
+from codex_plugin_scanner.guard.harness_context import HarnessContext  # noqa: E402
+from codex_plugin_scanner.guard.native_harness_install_ops import install as install_harness  # noqa: E402
+from codex_plugin_scanner.guard.native_owned import owner_request  # noqa: E402
 
 # The Claude Code adapter lives in the native runtime; take the prompt hook it installs.
 ctx = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard, home_override_explicit=True)
-get_adapter("claude-code").install(ctx)
+install_harness("claude-code", ctx, owner=owner_request(guard, actor="adapter.claude-code.adapter_install"))
 prompt_hooks = json.loads((home / ".claude" / "settings.json").read_text())["hooks"]["UserPromptSubmit"]
 settings = {
     "sandbox": {"enabled": True, "autoAllowBashIfSandboxed": True, "allowUnsandboxedCommands": False},

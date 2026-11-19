@@ -37,6 +37,13 @@ _QUIET_POLICY_ACTIONS = {"allow", "warn"}
 #: Decisions whose meaning is plain; any other envelope records its field names.
 _DENY_DECISIONS = {"deny", "block"}
 
+#: Claude Code's permission-dialog events, whose answer is a ``decision.behavior``.
+_PERMISSION_EVENTS = {"PermissionRequest", "PermissionRequestV2"}
+
+#: What a case may expect: a quiet allow, anything but an allow, the permission dialog
+#: left to the harness, or an allow that shows a notice.
+EXPECTATIONS = {"allow", "not-allow", "defer", "notice"}
+
 # Fail-closed transport and policy-publication failures are not evidence that
 # the attack was evaluated. Keep these independent of the product's decoder.
 NON_DECISION_REASONS = {
@@ -135,6 +142,8 @@ def _decision_from(response: dict[str, Any]) -> tuple[str, str]:
     """Normalise the several per-harness envelopes into one decision and reason."""
 
     hook_output = response.get("hookSpecificOutput")
+    if isinstance(hook_output, dict) and hook_output.get("hookEventName") in _PERMISSION_EVENTS:
+        return _permission_decision(hook_output)
     if isinstance(hook_output, dict):
         for key in ("permissionDecision", "decision"):
             value = hook_output.get(key)
@@ -154,6 +163,32 @@ def _decision_from(response: dict[str, Any]) -> tuple[str, str]:
     if _no_opinion(response, hook_output, found):
         return "allow", ""
     return found if found is not None else ("unknown", "")
+
+
+def _permission_decision(hook_output: dict[str, Any]) -> tuple[str, str]:
+    """Claude Code's permission-dialog answer: a behaviour, or the dialog left to Claude.
+
+    ``decision.behavior`` settles the dialog. An answer that names only the event has no
+    behaviour, and Claude then shows its own permission dialog to the user: that is neither
+    an approval nor a denial, so it reads as ``defer`` rather than as a quiet allow.
+    """
+
+    decision = hook_output.get("decision")
+    if decision is None:
+        return "defer", ""
+    if isinstance(decision, dict) and isinstance(decision.get("behavior"), str):
+        return decision["behavior"].strip().lower(), str(decision.get("message") or "")[:200]
+    return "unknown", ""
+
+
+def _shows_notice(response: dict[str, Any]) -> bool:
+    """Whether the answer puts text in front of the user or the model, never what it says."""
+
+    hook_output = response.get("hookSpecificOutput")
+    texts = [response.get("systemMessage")]
+    if isinstance(hook_output, dict):
+        texts.append(hook_output.get("additionalContext"))
+    return any(isinstance(text, str) and text.strip() for text in texts)
 
 
 def _no_opinion(response: dict[str, Any], hook_output: Any, found: tuple[str, str] | None) -> bool:
@@ -253,17 +288,20 @@ def verdict(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
             decision == "allow"
             and completed.returncode
             and _no_opinion(response, response.get("hookSpecificOutput"), None)
-        ):
+        ) or (decision == "defer" and completed.returncode):
             # Harnesses read a non-zero exit (Codex and Claude Code block on 2) before an
-            # event-only envelope, so a hook that names its event and then fails is no allow.
+            # event-only envelope, so a hook that names its event and then fails is no allow,
+            # and a permission dialog it fails on was not left to the harness.
             decision, reason = "unknown", (completed.stderr or "").strip()[-200:]
     result = {"decision": decision, "reason": reason, "exit_code": completed.returncode}
     bridge_failure = _native_bridge_failure(completed.stderr or "")
     if bridge_failure is not None:
         result["bridge_failure_reason_code"] = bridge_failure
+    if response is not None:
+        result["notice"] = _shows_notice(response)
     if response is not None and isinstance(response.get("reason_code"), str):
         result["reason_code"] = response["reason_code"]
-    if response is not None and decision not in ALLOW_DECISIONS | _DENY_DECISIONS:
+    if response is not None and decision not in ALLOW_DECISIONS | _DENY_DECISIONS | {"defer"}:
         result["envelope_shape"] = envelope_shape(response)
     return result
 
@@ -324,6 +362,13 @@ def replay_case(
             f"{case['id']}: hook infrastructure failed ({', '.join(sorted(infrastructure))}); "
             "a fail-closed error is not a policy decision"
         )
+    if case["expect"] == "defer" and any(run["decision"] != "defer" for run in runs):
+        failures.append(f"{case['id']}: the permission dialog was not left to the harness ({runs[0]['decision']})")
+    if case["expect"] == "notice" and not all(run["decision"] in ALLOW_DECISIONS and run.get("notice") for run in runs):
+        failures.append(
+            f"{case['id']}: the input was not let through with a notice "
+            f"({runs[0]['decision']}, notice={bool(runs[0].get('notice'))})"
+        )
     if case["expect"] == "allow" and not all(allowed):
         failures.append(f"{case['id']}: ordinary work was not allowed quietly ({runs[0]['decision']})")
     if case["expect"] == "not-allow":
@@ -381,6 +426,10 @@ def replay_harness(
     skipped: list[dict[str, str]] = []
     for case in cases:
         event = case.get("event")
+        only = case.get("harnesses")
+        if only is not None and harness not in only:
+            skipped.append({"id": case["id"], "event": str(event or ""), "reason": "the case names other harnesses"})
+            continue
         if event is not None and event not in registered:
             skipped.append({"id": case["id"], "event": event, "reason": "the contract declares no such event here"})
             continue
@@ -414,6 +463,7 @@ def replay_harness(
 
 __all__ = [
     "ALLOW_DECISIONS",
+    "EXPECTATIONS",
     "NON_ANSWERS",
     "argv_for_event",
     "fill",

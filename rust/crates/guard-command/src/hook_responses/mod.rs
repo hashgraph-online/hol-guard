@@ -6,6 +6,7 @@
 
 use serde_json::{json, Map, Value};
 
+mod claude;
 pub mod cli_documents;
 mod containment;
 pub mod hermes;
@@ -20,7 +21,7 @@ pub type Object = Map<String, Value>;
 const REVIEW_DEFAULT_REASON: &str = "HOL Guard requires native review before execution.";
 const REVIEW_PAUSE_REASON: &str = "HOL Guard requires review before this action can execute.";
 const WATCH_REASON: &str = "Watch recorded this action without stopping it.";
-const POST_BLOCK_REASON: &str =
+pub(super) const POST_BLOCK_REASON: &str =
     "HOL Guard blocked this tool output because it could not be proven safe.";
 const POST_WARN_REASON: &str =
     "HOL Guard raised a non-blocking warning under the installed native policy.";
@@ -298,8 +299,19 @@ pub fn prompt(harness: &str, response: &Object) -> Object {
         if !signals.is_empty() && canonical != "copilot" {
             output.insert("risk_signals".into(), json!(signals));
         }
-        if let Some(notice) = notice.filter(|_| canonical == "claude-code") {
-            output.insert("systemMessage".into(), json!(notice));
+        match (notice, canonical.as_str()) {
+            (Some(notice), "claude-code") => {
+                output.insert("systemMessage".into(), json!(notice));
+            }
+            // Muse shows a prompt hook's additional context and has no
+            // system message.
+            (Some(notice), "muse") => {
+                output.insert(
+                    "hookSpecificOutput".into(),
+                    json!({"hookEventName": "UserPromptSubmit", "additionalContext": notice}),
+                );
+            }
+            _ => {}
         }
         return output;
     }
@@ -405,6 +417,9 @@ pub fn post_tool(harness: &str, response: &Object) -> Object {
             ("policy_action", json!(action)),
             ("hookSpecificOutput", specific),
         ]);
+    }
+    if canonical == "claude-code" {
+        return claude::post_tool_flagged(response);
     }
     post_tool_block(
         &text_or(response, "reason", POST_BLOCK_REASON),

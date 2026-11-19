@@ -355,6 +355,8 @@ mod shell_execution_context_support;
 mod shell_model_limits;
 #[path = "../../guard-command/src/shell_secret_read_glob.rs"]
 mod shell_secret_read_glob;
+#[path = "../../guard-command/src/shell_secret_read_stdin_search.rs"]
+mod shell_secret_read_stdin_search;
 #[path = "../../guard-command/src/shell_secret_read_support.rs"]
 mod shell_secret_read_support;
 #[path = "../../guard-command/src/shell_structure.rs"]

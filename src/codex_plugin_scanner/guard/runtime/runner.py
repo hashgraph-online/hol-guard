@@ -30,7 +30,7 @@ from ..cli.oauth_client import (
 from ..config import VALID_RECEIPT_REDACTION_LEVELS
 from ..dpop_key_binding import signed_dpop_proof
 from ..edge_events import build_runtime_session_event
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..mdm.network import managed_urlopen
 from ..models import PolicyDecision
@@ -3952,7 +3952,7 @@ def _build_fleet_posture_for_sync(
 
     try:
         from ..config import load_guard_config
-        from ..harness.registry import list_adapters
+        from ..native_harness_ops import list_harnesses
 
         guard_home = store.guard_home
         try:
@@ -3967,7 +3967,7 @@ def _build_fleet_posture_for_sync(
         runtime = "python"
         return build_fleet_posture_state(
             store,
-            list_adapters(),
+            list_harnesses(),
             FleetPostureSettings(context=context, guard_config=guard_config, runtime=runtime),
             acknowledgement=_sync_context_acknowledgement(sync_context),
         )

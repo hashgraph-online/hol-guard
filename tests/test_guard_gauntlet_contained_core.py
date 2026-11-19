@@ -68,6 +68,23 @@ def test_shim_links_first_trusted_python3_outside_virtualenvs(tmp_path, trusted)
     assert all(os.readlink(Path(shim) / name) == str(system) for name in ("python", "python3"))
 
 
+def test_shim_uses_the_installations_own_unversioned_python(tmp_path, trusted):
+    """Homebrew ships ``python`` in ``libexec/bin``; no link directory under the work root is needed."""
+    if os.name != "posix":
+        pytest.skip("the shim is POSIX-only")
+    prefix = tmp_path.resolve() / "system/Cellar/python/3.14"
+    framework = _executable(prefix / "Frameworks/Python.framework/Versions/3.14/bin/python3.14")
+    real = prefix / "bin/python3"
+    real.parent.mkdir(parents=True)
+    real.symlink_to(framework)
+    _executable(prefix / "libexec/bin/python")
+    (tmp_path / "system/bin").mkdir(parents=True)
+    (tmp_path / "system/bin/python3").symlink_to(real)
+    shim = python_shim(tmp_path / "shim", str(tmp_path / "system/bin"))
+    assert shim == os.pathsep.join([str(prefix / "libexec/bin"), str(prefix / "bin")])
+    assert not (tmp_path / "shim").exists()
+
+
 def test_shim_is_skipped_without_a_trusted_outside_python3(tmp_path, trusted):
     venv = tmp_path / "system/tool-venv"
     (venv / "pyvenv.cfg").parent.mkdir(parents=True)
@@ -158,6 +175,36 @@ def test_windows_sink_run_passes_and_stays_bound_to_this_installation(fixture, t
     assert assessment["interruptions"]["events"] == []
     posix_home = _contained(fixture, tmp_path, windows=True)
     assert assess_case(SCENARIO, posix_home)["reason"] == "contained wrapper guard-home binding is malformed"
+
+
+def test_windows_sink_under_the_redacted_operator_home_passes(fixture, tmp_path):
+    """Guard's Python and the request file live under the home that evidence redaction hides."""
+    case = _contained(fixture, tmp_path, windows=True, guard_home="{{fixture}}\\guard-home", operator_home=True)
+    assessment = assess_case(SCENARIO, case)
+    assert assessment["outcome"] == "pass", assessment["reason"]
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("'{{operator_home}}\\hgw-gauntlet", "'{{fixture}}\\hgw-gauntlet"),
+        ("'{{operator_home}}\\hgw-gauntlet", "'{{OPERATOR_HOME}}\\hgw-gauntlet"),
+        ("'{{operator_home}}/hgw-gauntlet", "'{{fixture}}/hgw-gauntlet"),
+        ("'{{operator_home}}\\AppData", "'{{workspace}}\\AppData"),
+        ("'{{operator_home}}\\AppData", "'AppData"),
+    ],
+)
+def test_windows_sink_root_must_be_a_drive_or_the_operator_home(fixture, tmp_path, old, new):
+    case = _contained(fixture, tmp_path, windows=True, guard_home="{{fixture}}\\guard-home", operator_home=True)
+    for event in case["events"]:
+        for call in event.get("calls", []):
+            if call["id"] == CALL:
+                call["arguments"]["command"] = call["arguments"]["command"].replace(old, new)
+        if event.get("toolCallId") == CALL and "args" in event:
+            event["args"]["command"] = event["args"]["command"].replace(old, new)
+    assessment = assess_case(SCENARIO, case)
+    assert assessment["outcome"] == "harness-error"
+    assert assessment["reason"].startswith("contained wrapper")
 
 
 @pytest.mark.parametrize(

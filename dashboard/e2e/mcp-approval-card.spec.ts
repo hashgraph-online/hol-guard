@@ -241,3 +241,60 @@ test("a review that recommends the workspace still starts on Just this once, on 
   expect(bodies[0]).toMatchObject({ action: "allow", scope: "artifact" });
   expect(bodies[0].persist_policy).not.toBe(true);
 });
+
+const WORKBENCH = "mcp__composio__COMPOSIO_REMOTE_WORKBENCH";
+const workbenchCode = [
+  "import json",
+  "",
+  "# Search Gmail for episode exports",
+  "result, error = run_composio_tool('GMAIL_FETCH_EMAILS', {",
+  "    'query': 'riverside OR HLX',",
+  "    'max_results': 15,",
+  "    'verbose': False,",
+  "})",
+  "print(json.dumps(result))",
+].join("\n");
+const workbenchRun: GuardApprovalRequest = {
+  ...gmailSend,
+  request_id: "mcp-card-workbench",
+  artifact_id: `tool:${WORKBENCH}`,
+  artifact_name: WORKBENCH,
+  launch_target: WORKBENCH,
+  // Core turns off saved approvals when it cannot confirm the provider account.
+  scope_restrictions: ["provider_account_unverified_once_only"],
+  exact_action_persistence_eligible: false,
+  action_envelope_json: {
+    ...gmailSend.action_envelope_json!,
+    action_id: "mcp-card-workbench",
+    tool_name: WORKBENCH,
+    mcp_tool: "COMPOSIO_REMOTE_WORKBENCH",
+    raw_payload_redacted: {
+      tool_name: WORKBENCH,
+      tool_input: { thought: "Search Gmail via Composio for episode exports", code_to_execute: workbenchCode },
+    },
+  },
+};
+
+for (const width of [1280, 390]) {
+  test(`code for Composio's workspace reads as the Gmail search it asks for, at width ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1100 });
+    await mount(page, [], workbenchRun);
+    await page.goto(`/requests/${workbenchRun.request_id}?${DAEMON}`);
+
+    const card = page.getByRole("region", { name: "What the agent is asking to do" });
+    await expect(card.getByRole("heading", { name: "Get emails in Gmail" })).toBeVisible();
+    await expect(card.getByRole("note")).toContainText("Runs code that can use Gmail");
+    await expect(card.locator("dd").getByText("riverside OR HLX", { exact: true })).toBeVisible();
+    // The code is one click away, not the first thing a person has to read.
+    await expect(card.locator("pre:visible", { hasText: "run_composio_tool" })).toHaveCount(0);
+    await card.getByText("See the code (9 lines)").click();
+    await expect(card.locator("pre:visible", { hasText: "run_composio_tool" })).toHaveCount(1);
+    // Once only is said once, inside the card, and Always allow is not promised.
+    await expect(page.getByText(/You can allow this once/)).toHaveCount(1);
+    await expect(page.getByText("Guard cannot verify this provider account.", { exact: false })).toHaveCount(0);
+    await expect(card.getByText(/Always allow both/)).toHaveCount(0);
+    await expect(page.getByText("Always allow this call")).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    if (process.env.MCP_SHOT_DIR) await page.screenshot({ path: `${process.env.MCP_SHOT_DIR}/workbench-${width}.png`, fullPage: true });
+  });
+}

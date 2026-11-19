@@ -125,6 +125,10 @@ falls back to `native-command-hash-v1`. That hash covers:
 - for any other tool, its whole input as it was sent, including a `command`
   field and any other field, even when the input is not an object (empty only
   when the tool takes none)
+- for an Oh My Pi `eval` made only of `commit` prelude drafts, the
+  repositories the drafts commit to instead of the program text. A draft's
+  subject, body and file selection are literal text that runs nothing, so
+  Always allow holds for the next draft in that repository
 
 Changing any of these produces a new command, and Guard asks again.
 

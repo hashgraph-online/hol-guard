@@ -305,9 +305,9 @@ pub(super) const OPTION_KEYS: &[&str] = &[
     "waitUntil",
 ];
 
-/// `browser.open` keys that only shape a headless page. `app`, `cdp_url`,
-/// `init_scripts`, `downloads`, `allow_file_access`, `persist`,
-/// `user_agent`, `ignore_https_errors` and `allowed_domains` are absent.
+/// `browser.open` keys that only shape a headless page. `app:'own'`
+/// is handled separately; other browser attachments, scripts, profile and
+/// file-access options are not accepted.
 pub(super) const OPEN_KEYS: &[&str] = &[
     "dialogs",
     "headed",
@@ -317,58 +317,6 @@ pub(super) const OPEN_KEYS: &[&str] = &[
     "viewport",
     "wait_until",
 ];
-
-/// A `file://` URL naming a file inside the workspace: the agent's own page,
-/// loaded the way a loopback dev server would serve it. Only an HTML page
-/// counts, so a secret beside it cannot be opened. The path is literal,
-/// absolute and plain, with no query, fragment, escape or `..` step, and the
-/// workspace is a directory below the root.
-pub(super) fn workspace_file_url(url: &str, cwd: Option<&str>) -> bool {
-    let (Some(path), Some(cwd)) = (url.strip_prefix("file://"), cwd) else {
-        return false;
-    };
-    let cwd = cwd.trim_end_matches('/');
-    let plain = |text: &str| {
-        text.starts_with('/')
-            && text.is_ascii()
-            && !text.chars().any(|c| {
-                c.is_ascii_whitespace()
-                    || c.is_ascii_control()
-                    || matches!(c, '\\' | '?' | '#' | '%')
-            })
-            && !text.split('/').any(|step| step == ".." || step == ".")
-    };
-    let page = path.ends_with(".html") || path.ends_with(".htm");
-    // Lexical containment cannot prove what a file:// open will read:
-    // a workspace symlink may point at a file outside the workspace.
-    if !page
-        || !plain(path)
-        || !plain(cwd)
-        // A top-level directory such as /tmp or /home is not a project
-        // workspace: it may contain unrelated users' HTML pages.
-        || cwd.matches('/').count() < 2
-        || !path
-            .strip_prefix(cwd)
-            .is_some_and(|rest| rest.len() > 1 && rest.starts_with('/'))
-    {
-        return false;
-    }
-    // Resolve the actual target (including symlinked intermediate directories)
-    // and fail closed if the page or workspace cannot be verified.
-    let (Ok(root), Ok(target)) = (std::fs::canonicalize(cwd), std::fs::canonicalize(path)) else {
-        return false;
-    };
-    // A contained symlink may still point to a non-HTML secret (for example
-    // index.html -> .env). Screen the resolved target as well as the URL.
-    let target_is_html = target
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| matches!(extension, "html" | "htm"));
-    root != std::path::Path::new("/")
-        && target.starts_with(&root)
-        && target.is_file()
-        && target_is_html
-}
 
 /// An `http(s)` URL whose host is the loopback interface, with no userinfo.
 pub(super) fn loopback_url(url: &str) -> bool {

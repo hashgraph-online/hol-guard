@@ -22,7 +22,7 @@ def harness_setup(store: GuardStore, args: Mapping[str, Any]) -> dict[str, objec
     del args
     from ...version import __version__
     from ..cli.install_commands import list_harness_setup_items
-    from ..harness.base import HarnessContext
+    from ..harness_context import HarnessContext
     from ..harness_version_api import attach_version_compatibility
 
     context = HarnessContext(home_dir=Path.home().resolve(), workspace_dir=None, guard_home=store.guard_home)

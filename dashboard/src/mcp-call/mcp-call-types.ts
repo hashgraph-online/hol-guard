@@ -29,7 +29,12 @@ export type McpStep = {
 /** Text the agent wrote about its own call. A claim, shown quoted and never used in a decision. */
 export type McpAgentQuotes = { caption: string; items: string[] };
 
-export type McpCodeBlock = { label: string; text: string };
+export type McpCodeBlock = {
+  label: string;
+  text: string;
+  /** The card already says what the code does, so the code waits behind a toggle. */
+  collapsed?: boolean;
+};
 
 /** What Guard shows for one MCP tool call, built only from the call's own data. */
 export type McpCallExplanation = {
@@ -52,6 +57,8 @@ export type McpCallExplanation = {
   effectBasis: string;
   facts: McpFact[];
   steps: McpStep[];
+  /** A heading over the action rows, when they were read from somewhere a person would not expect, such as code. */
+  stepsCaption?: string;
   /** Actions past the rows the card lists. They still count toward the title and the effect. */
   hiddenSteps?: number;
   /** The apps whose actions carry the call's effect, read from every action, listed or not. */

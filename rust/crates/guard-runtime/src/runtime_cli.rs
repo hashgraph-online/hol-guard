@@ -98,6 +98,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = oneshot::evaluate_hook_bytes(&bytes)?;
             write_bytes_response(&response)
         }
+        [command, flag] if native_error_code::is_command(command) && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_bytes_response(&native_error_code::run(&bytes)?)
+        }
         [command, flag] if command == "native-bash-host-context" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_bytes_response(&native_exact_action_op::observe_bash_host_bytes(&bytes)?)

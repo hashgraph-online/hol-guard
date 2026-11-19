@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from tests.zcode_test_support import write_cli_config as _write_cli_config
 from tests.zcode_test_support import zcode_context as _ctx
 
@@ -85,7 +85,7 @@ class TestZCodeDetect:
                 "plugins": {"enabledPlugins": {"demo@mp": True}},
             },
         )
-        result = get_adapter("zcode").detect(ctx)
+        result = harness_ops.detect("zcode", ctx)
         assert result.harness == "zcode"
         assert any(".zcode/cli/config.json" in path for path in result.config_paths)
         mcp = [a for a in result.artifacts if a.artifact_type == "mcp_server"]
@@ -100,7 +100,7 @@ class TestZCodeDetect:
         ctx = _ctx(tmp_path)
         _write_cli_config(ctx.home_dir, {})
         _write_plugin_cache(ctx.home_dir, "zcode-plugins-official", "demo-plugin", "1.0.0")
-        result = get_adapter("zcode").detect(ctx)
+        result = harness_ops.detect("zcode", ctx)
         artifacts = result.artifacts
         plugins = [a for a in artifacts if a.artifact_type == "plugin"]
         assert any(a.name == "demo-plugin" for a in plugins)
@@ -122,7 +122,7 @@ class TestZCodeDetect:
             "zcode-plugins-official",
             [{"name": "demo", "version": "1.0.0", "source": "filesystem"}],
         )
-        result = get_adapter("zcode").detect(ctx)
+        result = harness_ops.detect("zcode", ctx)
         marketplaces = [a for a in result.artifacts if a.artifact_type == "marketplace"]
         assert len(marketplaces) == 1
         assert marketplaces[0].name == "zcode-plugins-official"
@@ -131,7 +131,7 @@ class TestZCodeDetect:
     def test_detects_runtime_env_signal_without_config(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setenv("__CFBundleIdentifier", "dev.zcode.app")
-        result = get_adapter("zcode").detect(ctx)
+        result = harness_ops.detect("zcode", ctx)
         assert result.installed is True
         assert any("runtime was detected through process environment" in w for w in result.warnings)
 
@@ -141,7 +141,7 @@ class TestZCodeDetect:
             ctx.home_dir,
             {"mcp": {"servers": {"remote": {"url": "https://example.com/mcp", "transport": "http"}}}},
         )
-        result = get_adapter("zcode").detect(ctx)
+        result = harness_ops.detect("zcode", ctx)
         mcp = [a for a in result.artifacts if a.artifact_type == "mcp_server"]
         assert len(mcp) == 1
         assert mcp[0].transport == "http"
@@ -165,7 +165,7 @@ class TestZCodeDetect:
                 }
             },
         )
-        result = get_adapter("zcode").detect(ctx)
+        result = harness_ops.detect("zcode", ctx)
         hooks = [a for a in result.artifacts if a.artifact_type == "hook"]
         assert len(hooks) == 1
         assert hooks[0].metadata.get("event") == "PreToolUse"
@@ -187,7 +187,7 @@ class TestZCodeDetect:
                 }
             },
         )
-        result = get_adapter("zcode").detect(ctx)
+        result = harness_ops.detect("zcode", ctx)
         hooks = [a for a in result.artifacts if a.artifact_type == "hook"]
         assert len(hooks) == 1
         assert hooks[0].command == "echo legacy-hook"
@@ -205,7 +205,7 @@ class TestZCodeDetect:
                 }
             },
         )
-        result = get_adapter("zcode").detect(ctx)
+        result = harness_ops.detect("zcode", ctx)
         hooks = [a for a in result.artifacts if a.artifact_type == "hook" and a.command == "echo both-layouts"]
         assert len(hooks) == 1
 
@@ -214,7 +214,7 @@ class TestZCodeDetect:
         v2_config = ctx.home_dir / ".zcode" / "v2" / "config.json"
         v2_config.parent.mkdir(parents=True, exist_ok=True)
         v2_config.write_text(json.dumps({"provider": {}}), encoding="utf-8")
-        result = get_adapter("zcode").detect(ctx)
+        result = harness_ops.detect("zcode", ctx)
         assert result.installed is True
         assert any(".zcode/v2/config.json" in path for path in result.config_paths)
 
@@ -226,6 +226,6 @@ class TestZCodeDetect:
             json.dumps({"mcp": {"servers": {"proj-server": {"command": "node"}}}}),
             encoding="utf-8",
         )
-        result = get_adapter("zcode").detect(ctx)
+        result = harness_ops.detect("zcode", ctx)
         project_mcp = [a for a in result.artifacts if a.artifact_type == "mcp_server" and a.source_scope == "project"]
         assert any(a.name == "proj-server" for a in project_mcp)

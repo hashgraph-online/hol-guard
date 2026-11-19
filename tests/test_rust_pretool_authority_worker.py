@@ -12,7 +12,7 @@ import pytest
 
 from codex_plugin_scanner.guard.cli import commands_hook
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.hook_review.hook_native_exact_action import review_evidence_parts
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_route_receipt import (

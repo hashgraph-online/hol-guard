@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import load_guard_config
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..headless_receipts import record_headless_receipt
 from ..local_supply_chain import managed_install_audit_workspace_dirs, resolve_package_firewall_entitlement_with_refresh
 from ..native_daemon_handler import NativeDaemonHandlerError, native_supply_chain_error

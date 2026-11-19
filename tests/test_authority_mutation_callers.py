@@ -13,7 +13,7 @@ from codex_plugin_scanner.guard.cli.bootstrap import _build_bootstrap_install
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
 from codex_plugin_scanner.guard.codex_harness_client import _hook_command_parts, codex_native_hook_state
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_hook_paths_support import hook_manifest_path, hook_secret_path
 

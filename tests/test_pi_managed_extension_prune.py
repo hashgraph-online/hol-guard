@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard import native_harness_install_ops as harness_install_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.pi_managed_extension_client import enable_managed_extension
 
 
@@ -34,7 +34,7 @@ def test_install_prunes_stale_hol_guard_extensions(tmp_path: Path) -> None:
     )
     context = HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=tmp_path / "guard-home")
 
-    prepared = get_adapter("pi").prepare_install(context)
+    prepared = harness_install_ops.prepare_install("pi", context)
 
     planned = next(change for change in prepared.files if change.path == settings_path.resolve())
     extensions = json.loads(planned.after or b"{}")["extensions"]

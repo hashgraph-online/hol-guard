@@ -86,6 +86,97 @@ def test_a_second_new_daemon_fails_the_parallel_starts() -> None:
     assert _judged(["http://127.0.0.1:1"], [], []) == ["0 new daemons published themselves, expected exactly one"]
 
 
+def _judged_mixed(
+    errors: list[str],
+    new_publishers: list[int],
+    retired: list[int],
+    *,
+    current: bool = True,
+    overlapped: bool = True,
+    journal: str = "ok",
+) -> list[str]:
+    from scripts import guard_daemon_chaos_starts as starts
+
+    result = chaos.ScenarioResult(name="mixed-runtime-starts")
+    starts.judge_mixed_starts(
+        result, errors, 10, new_publishers, retired, current=current, overlapped=overlapped, journal=journal
+    )
+    return result.failures
+
+
+def test_mixed_runtime_starts_pass_when_only_the_older_daemon_is_replaced() -> None:
+    assert _judged_mixed([], [41, 42], [41]) == []
+    assert _judged_mixed([], [41], []) == []
+
+
+def test_runtimes_taking_turns_to_replace_daemons_fail_the_mixed_starts() -> None:
+    thrashing = "the starters retired 2 daemons: the two runtimes replaced each other's daemons"
+    assert _judged_mixed([], [41, 42], [41, 42]) == [thrashing]
+    assert _judged_mixed([], [41, 42], [42]) == [
+        "the starters retired 1 daemons: the two runtimes replaced each other's daemons"
+    ]
+    assert _judged_mixed([], [41, 42, 43], [41, 42]) == [
+        "3 new daemons published themselves, expected the older runtime's and at most one more",
+        thrashing,
+    ]
+
+
+def test_a_refused_start_or_an_older_survivor_fails_the_mixed_starts() -> None:
+    assert _judged_mixed(["previous launch refused"], [41], []) == ["1 of 10 starts failed: previous launch refused"]
+    assert _judged_mixed([], [41], [], current=False) == [
+        "the daemon serving the home does not carry the current runtime's identity"
+    ]
+
+
+def test_mixed_starts_that_never_met_the_older_launch_fail() -> None:
+    assert _judged_mixed([], [41, 42], [41], overlapped=False) == [
+        "no current-runtime start overlapped the older runtime's held launch"
+    ]
+
+
+def test_an_unreadable_journal_fails_the_mixed_starts_instead_of_counting_no_retirements() -> None:
+    for status in ("journal_unavailable", "invalid_entries_omitted", "journal_path_unsafe"):
+        assert _judged_mixed([], [41], [], journal=status) == [
+            f"the lifecycle journal could not be read in full ({status}), so retirements are unproven"
+        ]
+
+
+def test_retirements_count_only_the_new_publishers_records() -> None:
+    from scripts import guard_daemon_chaos_starts as starts
+
+    events: list[dict[str, object]] = [
+        {"event": "published", "pid": 41},
+        {"event": "retirement_requested", "pid": 41},
+        {"event": "retirement_requested", "pid": 7},
+        {"event": "retirement_requested", "pid": "41"},
+        {"event": "published", "pid": 42},
+        {"event": "published", "pid": 41},
+    ]
+    assert starts._published(events) == [41, 42]
+    assert starts._retirements(events, [41, 42]) == [41]
+
+
+class _Starter:
+    def __init__(self, returncode: int | None) -> None:
+        self.returncode = returncode
+
+    def poll(self) -> int | None:
+        return self.returncode
+
+
+def test_a_starter_counts_as_meeting_the_held_launch_only_once_it_is_inside_ensure(tmp_path: Path) -> None:
+    from scripts import guard_daemon_chaos_starts as starts
+
+    entered = tmp_path / "1.entered"
+    importing = tmp_path / "3.entered"
+    entered.touch()
+    # Still running but never reached ensure: it may only be importing, so it proves nothing.
+    assert starts._waiting_in_ensure([(_Starter(None), importing)]) is False
+    # Reached ensure, then finished: it did not wait on the held launch.
+    assert starts._waiting_in_ensure([(_Starter(0), entered)]) is False
+    assert starts._waiting_in_ensure([(_Starter(None), importing), (_Starter(None), entered)]) is True
+
+
 def test_only_this_homes_resident_is_the_one_to_kill(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from scripts import guard_daemon_chaos_runtime as runtime_faults
 

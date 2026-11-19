@@ -25,7 +25,10 @@ export function consequenceFor(effect: McpEffectKind, where: string): McpConsequ
     case "delete":
       return { tone: "danger", text: `Deletes something in ${where}. It may not be possible to recover.` };
     case "run-code":
-      return { tone: "danger", text: "Runs code. It can do anything this tool's access allows, so read it first." };
+      return {
+        tone: "danger",
+        text: `Runs code that can use ${where}. Code can do more than it says, so open it if anything looks wrong.`,
+      };
     case "connect":
       return { tone: "care", text: `Checks or changes which accounts are linked to ${where}, and may ask you to link another.` };
     case "act-as-you":

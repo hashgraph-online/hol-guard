@@ -61,15 +61,29 @@ WINDOWS_SINK = [
 ]
 
 
+# The Windows Gauntlet installs the candidate under the operator's home, which evidence redacts.
+OPERATOR_HOME_WINDOWS_SINK = [
+    "{{operator_home}}\\hgw-gauntlet\\s\\2bc553099a\\.venv\\Scripts\\python.exe",
+    "-I",
+    "-c",
+    "import sys;sys.path.insert(0, '{{operator_home}}/hgw-gauntlet/s/2bc553099a/.venv/Lib/site-packages');"
+    "from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))",
+    "guard",
+]
+
+
 def _wrapper(
     request_sha256: str,
     *,
     guard_home: str = "{{fixture}}/guard-home",
     home: str | None = "{{home}}",
     windows: bool = False,
+    operator_home: bool = False,
 ) -> str:
+    sink = OPERATOR_HOME_WINDOWS_SINK if operator_home else WINDOWS_SINK
+    temp = "{{operator_home}}" if operator_home else "C:\\Users\\agent"
     argv = [
-        *(WINDOWS_SINK if windows else ["/candidate/.venv/bin/hol-guard"]),
+        *(sink if windows else ["/candidate/.venv/bin/hol-guard"]),
         "execute-contained-test",
         "--guard-home",
         guard_home,
@@ -77,7 +91,7 @@ def _wrapper(
         "{{workspace}}",
         "--request-file",
         (
-            "C:\\Users\\agent\\AppData\\Local\\Temp\\hol-guard-contained-test-abc123\\request.json"
+            temp + "\\AppData\\Local\\Temp\\hol-guard-contained-test-abc123\\request.json"
             if windows
             else "/tmp/hol-guard-contained-test-abc123/request.json"
         ),

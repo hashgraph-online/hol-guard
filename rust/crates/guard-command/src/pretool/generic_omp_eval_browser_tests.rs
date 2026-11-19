@@ -39,7 +39,7 @@ fn observed_dev_server_checks_are_accepted() {
         "const tab = browser.tab('t'); display(await tab.evaluate(() => { const items = document.querySelectorAll('li'); return items.length >= 1 && items[0].textContent === 'a'; }));",
         "const tab = await browser.open({url: 'http://127.0.0.1:5173/', viewport: {width: 800, height: 600}, wait_until: 'load'});\nawait tab.fill('#name', 'Ada');\nawait tab.evaluate(async (n) => { const el = document.querySelector('#out'); return el ? el.textContent + n : null; }, 2);\nconsole.log(await tab.console({level: 'error'}));\nawait tab.goto('http://localhost:5173/about');\nawait tab.scroll(0, -200);\nawait tab.close()",
     ] {
-        assert!(loopback_browser_program(code, None, None), "{code}");
+        assert!(loopback_browser_program(code, None), "{code}");
     }
 }
 
@@ -53,7 +53,7 @@ fn visibility_checks_pauses_and_negated_reads_are_accepted() {
         "const tab=await browser.open({name:'sky-hop-smoke2',url:'http://127.0.0.1:4173/'}); await tab.press('Space'); await new Promise(r=>setTimeout(r,100)); console.log('overlay hidden after flap',!(await tab.isVisible('.overlay')),'errors',await tab.errors()); await tab.close();",
         "const tab = browser.tab('t'); await new Promise((resolve) => setTimeout(resolve, 250)); display(await tab.count('li'), await tab.attr('#start', 'disabled'), !!(await tab.isEnabled('#start')), await tab.isChecked('#mute'));",
     ] {
-        assert!(loopback_browser_program(code, None, None), "{code}");
+        assert!(loopback_browser_program(code, None), "{code}");
     }
 }
 
@@ -124,7 +124,7 @@ fn other_hosts_options_and_node_code_stay_reviewed() {
         "display('no browser');",
         "",
     ] {
-        assert!(!loopback_browser_program(code, None, None), "{code}");
+        assert!(!loopback_browser_program(code, None), "{code}");
     }
 }
 
@@ -140,7 +140,7 @@ fn local_server_waits_and_page_runs_are_accepted() {
         "const r = await fetch('http://127.0.0.1:8080/health', {method: 'GET'}); display(r.ok, await r.json());",
         "const tab = browser.tab('t'); await tab.run(async ({page}) => { await page.goto('http://localhost:4173/'); await page.waitForSelector('#app', {timeout: 5000}); await page.hover('#a'); return await page.title(); });",
     ] {
-        assert!(loopback_browser_program(code, None, None), "{code}");
+        assert!(loopback_browser_program(code, None), "{code}");
     }
 }
 
@@ -210,7 +210,7 @@ fn other_requests_and_page_methods_stay_reviewed() {
     ] {
         let code = base.replacen(from, to, 1);
         assert_ne!(code, base, "{from}");
-        assert!(!loopback_browser_program(&code, None, None), "{code}");
+        assert!(!loopback_browser_program(&code, None), "{code}");
     }
     for code in [
         "let r; break; r = await fetch('http://localhost:3000/');",
@@ -223,100 +223,52 @@ fn other_requests_and_page_methods_stay_reviewed() {
         "const page = 1; await fetch('http://localhost:3000/');",
         "const tab = browser.tab('t'); await page.click('#a');",
     ] {
-        assert!(!loopback_browser_program(code, None, None), "{code}");
+        assert!(!loopback_browser_program(code, None), "{code}");
     }
 }
 
-/// Checking a static page the agent just wrote: OMP's own browser opens the
-/// workspace file, then the agent reads, clicks, presses keys and returns
-/// what the page reports.
-#[cfg(unix)]
+/// A file URL must not be silently allowed merely because the current
+/// filesystem points it at HTML. The browser opens the path later, and a
+/// symlink or directory entry can change after the pre-tool check.
 #[test]
-fn a_workspace_page_in_the_own_browser_is_modeled() {
-    use std::os::unix::fs::symlink;
-
+fn file_urls_remain_reviewed_even_for_existing_workspace_html() {
     let workspace = tempfile::tempdir().unwrap();
-    let outside = tempfile::tempdir().unwrap();
     let cwd = workspace.path().to_str().unwrap();
-    let safe = workspace.path().join("index.html");
-    std::fs::write(&safe, "<html>project</html>").unwrap();
-    // In-workspace symlinks are allowed only when their resolved targets are HTML.
-    std::fs::write(workspace.path().join(".env"), "SYNTHETIC_TEST_VALUE").unwrap();
-    symlink(&safe, workspace.path().join("alias.html")).unwrap();
-    symlink(
-        workspace.path().join(".env"),
-        workspace.path().join("masquerade.html"),
-    )
-    .unwrap();
-    std::fs::write(outside.path().join("secrets.html"), "<html>private</html>").unwrap();
-    symlink(
-        outside.path().join("secrets.html"),
-        workspace.path().join("escape.html"),
-    )
-    .unwrap();
-    symlink(outside.path(), workspace.path().join("outside")).unwrap();
-
-    assert!(super::lex::workspace_file_url(
-        &format!("file://{cwd}/alias.html"),
-        Some(cwd)
-    ));
-    assert!(!super::lex::workspace_file_url(
-        &format!("file://{cwd}/masquerade.html"),
-        Some(cwd)
-    ));
-
-    let safe_page = format!(
-        "const tab = await browser.open({{name:'game', url:'file://{cwd}/index.html', app:'own'}}); return await tab.screenshot({{fullPage:true}})"
-    );
+    std::fs::write(workspace.path().join("index.html"), "<html>project</html>").unwrap();
+    std::fs::write(workspace.path().join("private.html"), "SYNTHETIC_SECRET").unwrap();
     for code in [
-        safe_page.as_str(),
+        format!("const tab=await browser.open({{url:'file://{cwd}/index.html',app:'own'}});"),
+        format!("const tab=await browser.open({{url:'file://{cwd}/private.html'}});"),
+        String::from(
+            "const tab=await browser.open({url:'file:///home/alice/.config/private.html'});",
+        ),
+        String::from("const tab=await browser.open({url:'file:///etc/passwd'});"),
+    ] {
+        assert!(!loopback_browser_program(&code, None), "{code}");
+    }
+}
+
+#[test]
+fn bounded_browser_callbacks_remain_modeled_without_local_file_opens() {
+    for code in [
         "const tab=browser.tab('game'); return {canvas: await tab.count('#game'), score: await tab.text('#score'), errors: (await tab.errors()).entries}",
         "const tab=browser.tab('game'); await tab.click('#game'); await tab.waitFor(100); return {message: await tab.text('#message')}",
         "const tab=browser.tab('game'); await tab.press('Space',{selector:'body'}); await tab.run(async ({wait})=>{await wait(100);}); return {message: await tab.text('#message')}",
     ] {
-        assert!(loopback_browser_program(code, None, Some(cwd)), "{code}");
+        assert!(loopback_browser_program(code, None), "{code}");
     }
-
-    // A top-level shared directory (such as /tmp) is not a workspace root.
-    // Even a page physically beneath it must not be silently allowed.
-    let direct_child = workspace.path().parent().unwrap().to_str().unwrap();
-    // Linux often uses /tmp; macOS temp directories may be several levels
-    // deep, so check this special case only when the fixture has that shape.
-    if direct_child.matches('/').count() == 1 {
-        assert!(!super::lex::workspace_file_url(
-            &format!("file://{}", safe.display()),
-            Some(direct_child)
-        ));
-    }
-
     for code in [
-        "const tab = await browser.open({url:'file:///etc/passwd'});".to_owned(),
-        format!("const tab = await browser.open({{url:'file://{cwd}-other/index.html'}});"),
-        format!("const tab = await browser.open({{url:'file://{cwd}/../secret/index.html'}});"),
-        format!("const tab = await browser.open({{url:'file://{cwd}/.env'}});"),
-        format!("const tab = await browser.open({{url:'file://{cwd}/a%2e%2e/index.html'}});"),
-        format!("const tab = await browser.open({{url:'file://{cwd}/index.html?x=1'}});"),
-        // A contained alias to a non-HTML secret must also remain non-allow.
-        format!(
-            "const tab = await browser.open({{url:'file://{cwd}/masquerade.html',app:'own'}});"
-        ),
-        // Both final-file and intermediate-directory symlinks escape the workspace.
-        format!("const tab = await browser.open({{url:'file://{cwd}/escape.html',app:'own'}});"),
-        format!("const tab = await browser.open({{url:'file://{cwd}/outside/secrets.html',app:'own'}});"),
-        "const tab=browser.tab('game'); await tab.press('body','Space'); await tab.waitFor(100); return {message: await tab.text('#message')}".to_owned(),
-        "const tab = await browser.open({url:'http://localhost:3000/', app:'chrome'});".to_owned(),
-        "const tab = await browser.open({url:'http://localhost:3000/', app:'own', app:'own'});".to_owned(),
-        "const tab=browser.tab('game'); await tab.run(async ({wait})=>{await wait('x');});".to_owned(),
-        "const tab=browser.tab('game'); await tab.run(async ({page})=>{await wait(100);});".to_owned(),
-        "const tab=browser.tab('game'); await tab.run(async ({wait})=>{await page.click('#game');});".to_owned(),
-        "const tab=browser.tab('game'); await tab.run(async ({wait})=>{const text=await page.title();});".to_owned(),
-        "const wait=100; const tab=browser.tab('game'); await tab.run(async ({page})=>{await wait(100);});".to_owned(),
-        "const tab=browser.tab('game'); await tab.run(async ({page, page})=>{});".to_owned(),
-        "const tab=browser.tab('game'); return (await tab.errors()).constructor".to_owned(),
+        "const tab=browser.tab('game'); await tab.press('body','Space'); await tab.waitFor(100);",
+        "const tab=await browser.open({url:'http://localhost:3000/',app:'chrome'});",
+        "const tab=await browser.open({url:'http://localhost:3000/',app:'own',app:'own'});",
+        "const tab=browser.tab('game'); await tab.run(async ({wait})=>{await wait('x');});",
+        "const tab=browser.tab('game'); await tab.run(async ({page})=>{await wait(100);});",
+        "const tab=browser.tab('game'); await tab.run(async ({wait})=>{await page.click('#game');});",
+        "const tab=browser.tab('game'); await tab.run(async ({wait})=>{const text=await page.title();});",
+        "const wait=100; const tab=browser.tab('game'); await tab.run(async ({page})=>{await wait(100);});",
+        "const tab=browser.tab('game'); await tab.run(async ({page,page})=>{});",
+        "const tab=browser.tab('game'); return (await tab.errors()).constructor",
     ] {
-        assert!(!loopback_browser_program(&code, None, Some(cwd)), "{code}");
+        assert!(!loopback_browser_program(code, None), "{code}");
     }
-    let page = format!("const tab = await browser.open({{url:'file://{cwd}/index.html'}});");
-    assert!(!loopback_browser_program(&page, None, None));
-    assert!(!loopback_browser_program(&page, None, Some("/")));
 }

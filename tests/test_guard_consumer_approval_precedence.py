@@ -15,13 +15,12 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import codex_remote_client as codex_remote_control
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import evaluate_detection
-from codex_plugin_scanner.guard.harness.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import NATIVE_HARNESSES, NativeHarnessAdapter
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
 from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import guard_run_launch as guard_run_launch
@@ -35,26 +34,26 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import codex_hook_publication_helpers as publication_helpers
+from tests.launch_stub_support import use_launch, use_native_launch
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
+
+def _ordinary_codex_launch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The runtime starts no app-server: the launch stays the ordinary command."""
+    ask = codex_remote_control._ask  # pyright: ignore[reportPrivateUsage]
+
+    def without_remote(op: str, fields: dict[str, object], budget: float | None = None) -> dict[str, object]:
+        return {} if op == "run" else ask(op, fields, budget)
+
+    monkeypatch.setattr(codex_remote_control, "_ask", without_remote)
 
 
 @pytest.fixture(autouse=True)
 def _stable_guard_run_launch_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep consumer precedence tests independent from real harness startup."""
 
-    class LaunchAdapter(HarnessAdapter):
-        def launch_command(self, _context: HarnessContext, args: list[str]) -> list[str]:
-            return [sys.executable, "-c", "pass", *args]
-
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
-
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: LaunchAdapter())
+    use_launch(monkeypatch, lambda _context, args: [sys.executable, "-c", "pass", *args])
 
 
 def test_consumer_launch_identity_resolves_dot_slash_from_runtime_cwd(tmp_path: Path) -> None:
@@ -182,7 +181,7 @@ def _write_test_executable(path: Path, body: str = "#!/bin/sh\nexit 0\n") -> Pat
 
 def _install_codex_native_hooks(context: HarnessContext) -> None:
     payload: dict[str, object] = {"features": {"hooks": True}}
-    config_path = CodexHarnessAdapter._hook_config_path(context)
+    config_path = codex_paths(context).config
     publication_helpers.install_config_hooks(payload, context, config_path=config_path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     publication_helpers.write_authenticated_hook_config(
@@ -437,33 +436,20 @@ def test_guard_run_executes_canonical_launch_argv_pinned_after_saved_claim(
     preview_calls: list[tuple[str, ...]] = []
     authority_events: list[str] = []
 
-    class LaunchAdapter(HarnessAdapter):
-        @staticmethod
-        def _command(args: list[str]) -> tuple[str, ...]:
-            return (str(executable_alias), "-c", "pass", *args)
+    def launch_argv(args: list[str]) -> tuple[str, ...]:
+        return (str(executable_alias), "-c", "pass", *args)
 
-        def preview_launch_commands(
-            self,
-            _context: HarnessContext,
-            args: list[str],
-        ) -> tuple[list[str], ...]:
-            command = self._command(args)
-            preview_calls.append(command)
-            authority_events.append("preview")
-            return (list(command),)
+    def preview_launch(_context: HarnessContext, args: list[str]) -> tuple[list[str], ...]:
+        command = launch_argv(args)
+        preview_calls.append(command)
+        authority_events.append("preview")
+        return (list(command),)
 
-        def launch_command(self, _context: HarnessContext, args: list[str]) -> list[str]:
-            command = self._command(args)
-            adapter_calls.append(command)
-            authority_events.append("launch-setup")
-            return list(command)
-
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
+    def launch_command(_context: HarnessContext, args: list[str]) -> list[str]:
+        command = launch_argv(args)
+        adapter_calls.append(command)
+        authority_events.append("launch-setup")
+        return list(command)
 
     launch_calls: list[list[str]] = []
 
@@ -481,7 +467,7 @@ def test_guard_run_executes_canonical_launch_argv_pinned_after_saved_claim(
         return original_claim(decisions, **kwargs)
 
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: LaunchAdapter())
+    use_launch(monkeypatch, launch_command, preview=preview_launch)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_and_record)
     monkeypatch.setattr(wrapper_run_finish.subprocess, "run", launch)
 
@@ -550,7 +536,12 @@ def test_guard_run_rejects_opencode_overlay_environment_changed_after_saved_clai
         return claimed
 
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: get_adapter("opencode"))
+    # The run is for "codex"; the launch answers come from OpenCode's own native ops.
+    for name in ("preview_launch_commands", "launch_command_from_authorized_plan", "prepare_launch_environment"):
+        native_op = getattr(harness_ops, name)
+        monkeypatch.setattr(
+            guard_run_launch, name, lambda _harness, *args, _op=native_op, **kwargs: _op("opencode", *args, **kwargs)
+        )
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_mutate_overlay)
     monkeypatch.setattr(
         wrapper_run_finish.subprocess,
@@ -601,19 +592,15 @@ def test_codex_postclaim_setup_uses_authorized_canonical_prefix_after_symlink_sw
     )
     _install_codex_native_hooks(context)
 
-    class SwapAtAuthorizedSetupAdapter(CodexHarnessAdapter):
-        def launch_command_from_authorized_plan(self, *args, **kwargs) -> list[str]:
-            executable_alias.unlink()
-            executable_alias.symlink_to(attacker_codex)
-            return super().launch_command_from_authorized_plan(*args, **kwargs)
+    def swap_at_authorized_setup(harness: str, *args, **kwargs) -> list[str]:
+        executable_alias.unlink()
+        executable_alias.symlink_to(attacker_codex)
+        return harness_ops.launch_command_from_authorized_plan(harness, *args, **kwargs)
 
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(
-        guard_run_launch,
-        "get_adapter",
-        lambda _harness: SwapAtAuthorizedSetupAdapter(),
-    )
-    monkeypatch.setattr(codex_remote_control, "_prepare_remote", lambda *_args, **_kwargs: False)
+    use_native_launch(monkeypatch)
+    monkeypatch.setattr(guard_run_launch, "launch_command_from_authorized_plan", swap_at_authorized_setup)
+    _ordinary_codex_launch(monkeypatch)
 
     result = wrapper_run.guard_run(
         "codex",
@@ -656,19 +643,15 @@ def test_no_saved_codex_setup_uses_previewed_canonical_prefix_after_symlink_swap
     )
     _install_codex_native_hooks(context)
 
-    class SwapAtAuthorizedSetupAdapter(CodexHarnessAdapter):
-        def launch_command_from_authorized_plan(self, *args, **kwargs) -> list[str]:
-            executable_alias.unlink()
-            executable_alias.symlink_to(attacker_codex)
-            return super().launch_command_from_authorized_plan(*args, **kwargs)
+    def swap_at_authorized_setup(harness: str, *args, **kwargs) -> list[str]:
+        executable_alias.unlink()
+        executable_alias.symlink_to(attacker_codex)
+        return harness_ops.launch_command_from_authorized_plan(harness, *args, **kwargs)
 
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(
-        guard_run_launch,
-        "get_adapter",
-        lambda _harness: SwapAtAuthorizedSetupAdapter(),
-    )
-    monkeypatch.setattr(codex_remote_control, "_prepare_remote", lambda *_args, **_kwargs: False)
+    use_native_launch(monkeypatch)
+    monkeypatch.setattr(guard_run_launch, "launch_command_from_authorized_plan", swap_at_authorized_setup)
+    _ordinary_codex_launch(monkeypatch)
 
     result = wrapper_run.guard_run(
         "codex",
@@ -712,30 +695,18 @@ def test_guard_run_executes_in_previewed_canonical_cwd_after_workspace_symlink_r
     ]
     events: list[str] = []
 
-    class RetargetingAdapter:
-        def preview_launch_commands(
-            self,
-            _context: HarnessContext,
-            _args: list[str],
-        ) -> tuple[list[str], ...]:
-            events.append("preview")
-            return (list(command),)
+    def preview_launch(_context: HarnessContext, _args: list[str]) -> tuple[list[str], ...]:
+        events.append("preview")
+        return (list(command),)
 
-        def launch_command_from_authorized_plan(self, *_args, **_kwargs) -> list[str]:
-            events.append("finalize")
-            workspace_alias.unlink()
-            workspace_alias.symlink_to(attacker_workspace, target_is_directory=True)
-            return list(command)
-
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
+    def finalize_launch(_context: HarnessContext, _args: list[str], **_kwargs) -> list[str]:
+        events.append("finalize")
+        workspace_alias.unlink()
+        workspace_alias.symlink_to(attacker_workspace, target_is_directory=True)
+        return list(command)
 
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: RetargetingAdapter())
+    use_launch(monkeypatch, lambda _context, _args: list(command), preview=preview_launch, from_plan=finalize_launch)
 
     result = wrapper_run.guard_run(
         "codex",
@@ -768,20 +739,11 @@ def test_no_saved_pure_default_finalizer_launches_once_in_canonical_workspace(
     workspace = tmp_path / "workspace"
     command_constructions: list[tuple[str, ...]] = []
 
-    class PureDefaultAdapter(HarnessAdapter):
-        def launch_command(self, _context: HarnessContext, args: list[str]) -> list[str]:
-            command = (sys.executable, "-c", "pass", *args)
-            command_constructions.append(command)
-            return list(command)
+    def launch_command(_context: HarnessContext, args: list[str]) -> list[str]:
+        command = (sys.executable, "-c", "pass", *args)
+        command_constructions.append(command)
+        return list(command)
 
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
-
-    adapter = PureDefaultAdapter()
     executions: list[tuple[list[str], Path]] = []
 
     def execute(command: list[str], *, cwd: Path, **_kwargs) -> subprocess.CompletedProcess[str]:
@@ -789,7 +751,7 @@ def test_no_saved_pure_default_finalizer_launches_once_in_canonical_workspace(
         return subprocess.CompletedProcess(args=command, returncode=0)
 
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: adapter)
+    use_launch(monkeypatch, launch_command)
     monkeypatch.setattr(wrapper_run_finish.subprocess, "run", execute)
 
     result = wrapper_run.guard_run(
@@ -807,38 +769,32 @@ def test_no_saved_pure_default_finalizer_launches_once_in_canonical_workspace(
     assert result["launched"] is True
 
 
-class _RecordingGrokAdapter(NativeHarnessAdapter):
+def _record_grok_launch(
+    monkeypatch: pytest.MonkeyPatch, events: list[str], registration: Path, executable: Path
+) -> None:
     """Grok whose launcher answers stand in for the native trust checks.
 
     The runtime refuses launchers under shared temporary roots, so these answers
     model it: a preview resolves without registering, a launch registers the
     explicit selection.
     """
+    use_native_launch(monkeypatch)
+    ask = harness_ops.run_op
 
-    def __init__(self, events: list[str], registration: Path, executable: Path) -> None:
-        harness, aliases, launcher = next(entry for entry in NATIVE_HARNESSES if entry[0] == "grok")
-        super().__init__(harness, aliases, launcher)
-        self._events = events
-        self._registration = registration
-        self._executable = executable
+    def recording_op(harness: str, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
+        if op == "preview_launch":
+            events.append("preview")
+            assert registration.exists() is False
+        elif op == "launch_command":
+            events.append("launch-setup")
+            events.append("register")
+            registration.parent.mkdir(parents=True, exist_ok=True)
+            registration.write_text("{}\n", encoding="utf-8")
+        else:
+            return ask(harness, op, context, **fields)
+        return {"argv": [str(executable.resolve()), *fields["args"]]}
 
-    def preview_launch_commands(self, context: HarnessContext, passthrough_args: list[str]) -> tuple[list[str], ...]:
-        self._events.append("preview")
-        assert self._registration.exists() is False
-        return super().preview_launch_commands(context, passthrough_args)
-
-    def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
-        self._events.append("launch-setup")
-        return super().launch_command(context, passthrough_args)
-
-    def _ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
-        if op not in {"preview_launch", "launch_command"}:
-            return super()._ask(op, context, **fields)
-        if op == "launch_command":
-            self._events.append("register")
-            self._registration.parent.mkdir(parents=True, exist_ok=True)
-            self._registration.write_text("{}\n", encoding="utf-8")
-        return {"argv": [str(self._executable.resolve()), *fields["args"]]}
+    monkeypatch.setattr(harness_ops, "run_op", recording_op)
 
 
 def test_grok_previews_do_not_register_and_final_setup_registers_once_after_claim(
@@ -868,7 +824,7 @@ def test_grok_previews_do_not_register_and_final_setup_registers_once_after_clai
     _record_once(store, artifact=artifact, context_hash=context_hash, workspace=workspace)
     events: list[str] = []
 
-    adapter = _RecordingGrokAdapter(events, registration, executable)
+    _record_grok_launch(monkeypatch, events, registration, executable)
 
     original_claim = store.claim_approval_reuse_decisions
 
@@ -882,7 +838,6 @@ def test_grok_previews_do_not_register_and_final_setup_registers_once_after_clai
         return subprocess.CompletedProcess(args=command, returncode=0)
 
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: adapter)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_and_record)
     monkeypatch.setattr(wrapper_run_finish.subprocess, "run", execute)
 
@@ -929,14 +884,13 @@ def test_no_saved_grok_preview_registers_once_only_in_authorized_finalizer(
     registration = config.guard_home / "managed" / "grok" / "trusted-executable.json"
     events: list[str] = []
 
-    adapter = _RecordingGrokAdapter(events, registration, executable)
+    _record_grok_launch(monkeypatch, events, registration, executable)
 
     def execute(command, **_kwargs) -> subprocess.CompletedProcess[str]:
         events.append("execute")
         return subprocess.CompletedProcess(args=command, returncode=0)
 
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: adapter)
     monkeypatch.setattr(wrapper_run_finish.subprocess, "run", execute)
 
     result = wrapper_run.guard_run(
@@ -969,18 +923,10 @@ def test_guard_run_rejects_launch_plan_changed_after_saved_claim(
     executable_alias.symlink_to(Path(sys.executable).resolve())
     adapter_calls: list[tuple[str, ...]] = []
 
-    class LaunchAdapter(HarnessAdapter):
-        def launch_command(self, _context: HarnessContext, args: list[str]) -> list[str]:
-            command = (str(executable_alias), "-c", "pass", *args)
-            adapter_calls.append(command)
-            return list(command)
-
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
+    def launch_command(_context: HarnessContext, args: list[str]) -> list[str]:
+        command = (str(executable_alias), "-c", "pass", *args)
+        adapter_calls.append(command)
+        return list(command)
 
     original_claim = store.claim_approval_reuse_decisions
 
@@ -992,7 +938,7 @@ def test_guard_run_rejects_launch_plan_changed_after_saved_claim(
         return claimed
 
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: LaunchAdapter())
+    use_launch(monkeypatch, launch_command)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_then_replace_executable)
     monkeypatch.setattr(
         wrapper_run_finish.subprocess,
@@ -1663,19 +1609,8 @@ def test_guard_run_unverified_preclaim_launch_identity_is_persisted_separately_f
     _record_once(store, artifact=artifact, context_hash=context_hash, workspace=tmp_path / "workspace")
     claim_calls: list[object] = []
 
-    class MissingLaunchAdapter(HarnessAdapter):
-        def launch_command(self, _context: HarnessContext, args: list[str]) -> list[str]:
-            return [str(tmp_path / "missing-harness-executable"), *args]
-
-        def prepare_launch_environment(
-            self,
-            _context: HarnessContext,
-            inherited: dict[str, str],
-        ) -> dict[str, str]:
-            return dict(inherited)
-
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: MissingLaunchAdapter())
+    use_launch(monkeypatch, lambda _context, args: [str(tmp_path / "missing-harness-executable"), *args])
     monkeypatch.setattr(
         store,
         "claim_approval_reuse_decisions",

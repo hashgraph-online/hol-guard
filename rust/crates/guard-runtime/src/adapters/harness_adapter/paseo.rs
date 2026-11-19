@@ -198,7 +198,7 @@ pub(super) fn rows(
 
 /// `preflight_native(harness, context)`: every write target the native
 /// install may touch, before any shared setting changes.
-fn preflight_native(ctx: &Ctx, harness: &str) -> Step<()> {
+pub(super) fn preflight_native(ctx: &Ctx, harness: &str) -> Step<()> {
     for relative in native_configs(harness) {
         let path = ctx.home.join(relative);
         require_local(ctx, &ctx.home, &path, Some(&ctx.home))?;
@@ -226,7 +226,7 @@ fn preflight_native(ctx: &Ctx, harness: &str) -> Step<()> {
 }
 
 /// `_prepare_install_targets`: the providers to install, each preflighted.
-fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+pub(super) fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let (providers, raw) = providers(ctx)?;
     let mut targets: Vec<String> = rows(ctx, fields, &providers, &json!({}))?
         .iter()

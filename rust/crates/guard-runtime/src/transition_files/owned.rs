@@ -37,9 +37,16 @@ pub(crate) struct Owner {
     guard_home: PathBuf,
     target: PathBuf,
     dropped: u64,
+    /// Identities of the lifecycle directories this owner took exclusively.
+    exclusive: Vec<String>,
 }
 
 impl Owner {
+    /// Whether this owner already holds the lifecycle lock of `identity`.
+    pub(super) fn holds(&self, identity: &str) -> bool {
+        self.exclusive.iter().any(|held| held == identity)
+    }
+
     /// Append mutation identities in order. A journal that cannot be written
     /// is counted, never allowed to replace the transaction's own error.
     pub(super) fn record(&mut self, mutations: &[Value]) {
@@ -57,7 +64,7 @@ impl Owner {
     }
 
     /// Journal the `mutation` records an answer's `events` carry.
-    pub(super) fn record_events(&mut self, answer: &Value) {
+    pub(crate) fn record_events(&mut self, answer: &Value) {
         let mutations: Vec<Value> = answer
             .get("events")
             .and_then(Value::as_array)
@@ -83,6 +90,15 @@ impl Owner {
         self.record(&[marker]);
     }
 
+    /// The transaction's id, which a publication it runs names as its owner.
+    pub(crate) fn operation_id(&self) -> &str {
+        &self.operation_id
+    }
+
+    pub(crate) fn guard_home(&self) -> &Path {
+        &self.guard_home
+    }
+
     pub(super) fn dropped(&self) -> u64 {
         self.dropped
     }
@@ -104,6 +120,9 @@ pub(crate) struct Spec<'a> {
     pub(crate) deadline: Instant,
     /// Lifecycle directories to lock; the caller leaves out those it holds.
     pub(crate) lock_dirs: Vec<PathBuf>,
+    /// Lifecycle directories that exclude a competitor: taken first, they
+    /// refuse as busy after the short grace instead of waiting.
+    pub(crate) exclusive_dirs: Vec<PathBuf>,
     pub(crate) check_pending: bool,
     pub(crate) recover: bool,
 }
@@ -118,7 +137,7 @@ fn random_hex() -> Result<String, Failure> {
 }
 
 /// `assert_transition_mutation_allowed`.
-fn pending(home: &Path) -> bool {
+pub(super) fn pending(home: &Path) -> bool {
     fs::symlink_metadata(home.join("managed").join("runtime-transition.json")).is_ok()
 }
 
@@ -162,6 +181,18 @@ pub(super) fn begin(spec: &Spec<'_>, budget: &Budget) -> Result<(Locks, Owner), 
         .collect();
     directories.sort();
     directories.dedup_by(|a, b| a.0 == b.0);
+    let mut exclusive: Vec<(String, &Path)> = spec
+        .exclusive_dirs
+        .iter()
+        .map(|directory| (configuration_identity(directory), directory.as_path()))
+        .collect();
+    exclusive.sort();
+    exclusive.dedup_by(|a, b| a.0 == b.0);
+    let mut taken = Vec::new();
+    for (identity, directory) in exclusive {
+        locks.push(lock_directory(directory, Limit::Grace, None)?);
+        taken.push(identity);
+    }
     for (_, directory) in directories {
         let held = lock_directory(directory, Limit::Until(spec.deadline), Some(spec.deadline))?;
         locks.push(held);
@@ -177,6 +208,7 @@ pub(super) fn begin(spec: &Spec<'_>, budget: &Budget) -> Result<(Locks, Owner), 
         guard_home: home,
         target: spec.target.to_path_buf(),
         dropped: 0,
+        exclusive: taken,
     };
     owner.mark("begin");
     if let Err(failure) = admit(&mut owner, spec, budget) {

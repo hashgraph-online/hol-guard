@@ -16,7 +16,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_resident_health as transport
 from codex_plugin_scanner.guard.cli import doctor_native_runtime as doctor
-from codex_plugin_scanner.guard.harness.diagnostic_probes import without_command_probes
+from codex_plugin_scanner.guard.command_probes import without_command_probes
 
 
 def _counters(**overrides: Any) -> dict[str, Any]:

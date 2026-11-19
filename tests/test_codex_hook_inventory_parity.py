@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.codex_hook_inventory import (
+from tests.python_oracles.codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE,
     CodexHookInventory,
     CodexHookInventoryIssue,

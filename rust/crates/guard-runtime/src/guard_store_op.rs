@@ -410,6 +410,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_guard_sessions"
         | "list_events_after"
         | "get_managed_install"
+        | "get_managed_install_revision"
         | "list_managed_installs"
         | "list_cloud_exceptions"
         | "get_guard_operation"
@@ -573,6 +574,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "rotate_installation_id"
         | "add_event"
         | "set_managed_install"
+        | "bump_managed_install_revision"
         | "add_guard_event_v1"
         | "list_guard_events_v1"
         | "mark_guard_events_v1_uploaded"
@@ -945,6 +947,12 @@ fn dispatch(
         "add_event" => cloud_events::add_event(connection, args),
         "set_managed_install" => crate::guard_store_managed_installs::set(connection, args),
         "get_managed_install" => crate::guard_store_managed_installs::get(connection, args),
+        "get_managed_install_revision" => {
+            crate::guard_store_managed_installs::revision(connection, args)
+        }
+        "bump_managed_install_revision" => {
+            crate::guard_store_managed_installs::bump(connection, args)
+        }
         "list_managed_installs" => crate::guard_store_managed_installs::list(connection, args),
         "list_events_after" => cloud_events::list_after(connection, args),
         "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),

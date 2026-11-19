@@ -4,8 +4,8 @@
 //! Ops (schema `daemon-manage.v1`):
 //! - `retire`: stop every daemon of the home except one on `keep_port`;
 //!   answers `{"retired": [pid, ...]}`.
-//! - `retirement_complete`: whether no signed, pending or enumerable daemon
-//!   remains; answers `{"complete": bool}`.
+//! - `retirement_complete`: whether no signed or pending daemon remains, and
+//!   no enumerable one Guard can prove is its own; answers `{"complete": bool}`.
 //! - `repair_locator`: remove the locator and any untrusted daemon state;
 //!   answers `{"repaired": true, "cleared": [...]}` or `{"error": code}`.
 //! - `ensure`: reuse, adopt or launch the home's daemon; answers
@@ -31,6 +31,11 @@ mod exit_record_tests;
 mod failure;
 #[path = "daemon_manage_host.rs"]
 mod host;
+#[cfg(all(test, unix))]
+#[path = "daemon_manage_leftover_tests.rs"]
+mod leftover_tests;
+#[path = "daemon_manage_leftovers.rs"]
+mod leftovers;
 #[path = "daemon_manage_live_probe.rs"]
 mod live_probe;
 #[cfg(all(test, target_os = "linux"))]
@@ -170,7 +175,9 @@ fn answer(request: &Request, raw: &Map<String, Value>) -> Result<Value, String> 
         "retire" => Ok(
             json!({"retired": retire::retire_all(&caller, request.keep_port, "requested_retire", deadline)}),
         ),
-        "retirement_complete" => Ok(json!({"complete": retire::retirement_is_complete(&caller)})),
+        "retirement_complete" => {
+            Ok(json!({"complete": retire::retirement_is_complete(&caller, deadline)}))
+        }
         "posture" => Ok(json!({"posture": recover::posture(&caller.guard_home)})),
         "repair_locator" => Ok(repair_locator(&caller, deadline)),
         "reliability" => Ok(reliability::report(&caller, &request.args)),

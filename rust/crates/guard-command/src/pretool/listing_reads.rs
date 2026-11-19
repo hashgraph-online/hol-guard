@@ -6,6 +6,7 @@
 //! route directories such as `[slug]`), while an unquoted `*`, `?` or `[` is
 //! expanded by the proof itself and every match is checked.
 
+use super::read_paths::hidden_listing;
 use super::{safe_reads, search};
 
 #[path = "listing_words.rs"]
@@ -187,6 +188,7 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
             Ok(_) => {
                 let private_temporary =
                     super::listing_temporary::private_temporary_ancestor(ancestor, context);
+                let (home, cwd) = (context.home_dir, context.cwd);
                 // A name that is not there prints `No such file or
                 // directory` and nothing else, so what the probe may spell
                 // is whatever a listing of the same path would be allowed to
@@ -195,20 +197,20 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
                 // beside it; so is a tool's own directory in the home
                 // directory, which a present-path listing already allows and
                 // an absent one used to refuse, reporting by the
-                // disagreement whether the tool was set up. `~/.aws`,
+                // disagreement whether the tool was set up; and a hidden
+                // name inside a repository, as `.next` before the first
+                // build, under the same screens as its listing. `~/.aws`,
                 // `~/.config/gh` and the other stores stay refused, because
                 // the answer to a probe for one of them is itself the
                 // account it keeps.
                 let spelled = missing.iter().enumerate().all(|(index, part)| {
                     let name = part.to_string_lossy();
                     !name.starts_with('.') || (index == 0 && name == ".git") || name == ".github"
-                })
-                    || crate::pretool::read_paths::hidden_listing::absent_home_hidden_tool_path(
-                        &expanded,
-                        ancestor,
-                        context.home_dir,
-                    )
-                    || private_temporary;
+                }) || hidden_listing::absent_home_hidden_tool_path(
+                    &expanded, ancestor, home,
+                ) || hidden_listing::absent_repository_hidden_path(
+                    &expanded, ancestor, home, cwd,
+                ) || private_temporary;
                 // The owner's private temporary root itself (`$TMPDIR`) sits
                 // in a location the listing screens deny, but nobody else can
                 // put an entry there, so a missing name below it is enough.
@@ -400,11 +402,8 @@ fn parent_steps_lead(value: &str) -> bool {
 
 /// The nearest existing ancestor must be a directory a listing may name. The
 /// kernel resolves `..` physically, so a spelling with parent steps is judged
-/// by its canonical directory, never by its lexical text. A repository's own
-/// Git directory, such as `.git/worktrees/<name>` or a linked worktree's
-/// `.git` file, counts too: a listing of it is already allowed, so a probe for
-/// `index.lock` or `MERGE_HEAD` below it says no more than that listing. Other
-/// hidden directories, such as a package store under `node_modules`, do not.
+/// by its canonical directory, never by its lexical text. A hidden directory
+/// of a repository counts too; see `absent_probe_hidden_ancestor`.
 fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>) -> bool {
     let parent_steps = ancestor
         .components()
@@ -421,9 +420,7 @@ fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>
         safe_reads::bounded_read_target(parent, context.home_dir, context.cwd, true)
             || (!parent_steps && search::skill_listing_root(parent, context, false))
             || (!parent_steps
-                && std::fs::canonicalize(&resolved)
-                    .is_ok_and(|target| target.components().any(|part| part.as_os_str() == ".git"))
-                && super::read_paths::repository_hidden_directory(
+                && super::read_paths::absent_probe_hidden_ancestor(
                     parent,
                     context.home_dir,
                     context.cwd,

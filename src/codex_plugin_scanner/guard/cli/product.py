@@ -14,10 +14,12 @@ from typing import Any, TypeGuard
 
 from ..config import GuardConfig
 from ..consumer import detect_all
-from ..harness.base import HarnessContext, artifacts_use_guard
-from ..harness.registry import get_adapter
+from ..diagnostics_bridge import artifacts_use_guard
+from ..harness_context import HarnessContext
 from ..models import HarnessDetection
 from ..native_daemon_peer import load_guard_daemon_endpoint_url
+from ..native_harness_client import canonical_harness
+from ..native_harness_ops import approval_flow as harness_approval_flow
 from ..redaction import redact_local_path
 from ..runtime.connector_setup_items import connector_setup_status
 from ..store import GuardStore
@@ -234,7 +236,7 @@ def _summarize_harness(
     home_dir: Path,
 ) -> dict[str, object]:
     managed_install = store.get_managed_install(detection.harness)
-    approval_flow = get_adapter(detection.harness).approval_flow(managed_install=managed_install)
+    approval_flow = harness_approval_flow(detection.harness, managed_install=managed_install)
     review_count = count_review_artifacts(store, detection.artifacts, detection.harness)
     managed = bool(managed_install and managed_install.get("active"))
     from ..native_runner_authority import NativeRunnerAuthorityError
@@ -280,13 +282,13 @@ def _summarize_managed_install(install: dict[str, object], home_dir: Path) -> di
     if not harness:
         return None
     try:
-        adapter = get_adapter(harness)
+        canonical_harness(harness)
     except ValueError:
         return None
     managed = bool(install.get("active"))
     manifest = install.get("manifest")
     shim_path = manifest.get("shim_path") if isinstance(manifest, dict) else None
-    approval_flow = adapter.approval_flow(managed_install=install)
+    approval_flow = harness_approval_flow(harness, managed_install=install)
     warning_count = _managed_install_warning_count(
         managed=managed,
         manifest=manifest if isinstance(manifest, dict) else None,

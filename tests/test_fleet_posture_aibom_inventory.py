@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import store_inventory as naming
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventoryItem, GuardAgentInventorySnapshot
 from codex_plugin_scanner.guard.runtime import fleet_posture as fp
 from codex_plugin_scanner.guard.runtime import fleet_posture_tools as tools

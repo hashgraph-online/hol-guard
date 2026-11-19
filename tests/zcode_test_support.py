@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 
 
 def zcode_context(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:

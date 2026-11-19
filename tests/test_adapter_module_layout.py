@@ -7,26 +7,29 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import harness as harness_package
-from codex_plugin_scanner.guard.harness import registry
-from codex_plugin_scanner.guard.harness.contract_registry import harness_contracts
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.setup_contract_registry import harness_contracts
 from scripts.ci.hook_data_plane_ownership_contract import load_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = Path(harness_package.__file__).parent
+GUARD = ROOT / "src/codex_plugin_scanner/guard"
+HARNESS_MODULES = (
+    "native_harness_client.py",
+    "native_harness_ops.py",
+    "native_codex_ops.py",
+    "native_harness_install_ops.py",
+    "harness_context.py",
+    "bounded_cli_hook_bridge.py",
+    "bounded_cli_hook_native.py",
+)
 
 
-def test_harness_search_path_contains_only_the_public_package() -> None:
-    assert [Path(path).resolve() for path in harness_package.__path__] == [PACKAGE.resolve()]
-
-
-def test_public_adapter_registry_and_aliases_remain_unchanged() -> None:
-    registered = registry.list_adapters()
-    assert {adapter.harness for adapter in registered} == {contract.harness for contract in harness_contracts()}
-    for adapter in registered:
-        assert registry.get_adapter(adapter.harness) is adapter
-        for alias in adapter.aliases:
-            assert registry.get_adapter(alias) is adapter
+def test_harness_ops_lists_every_contract_harness_and_alias() -> None:
+    assert set(harness_ops.list_harnesses()) == {contract.harness for contract in harness_contracts()}
+    for harness in harness_ops.list_harnesses():
+        assert harness_ops.canonical_harness(harness) == harness
+        for alias in harness_ops.aliases_of(harness):
+            assert harness_ops.canonical_harness(alias) == harness
 
 
 def test_adapter_sources_remain_in_native_ownership_contract(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -34,14 +37,14 @@ def test_adapter_sources_remain_in_native_ownership_contract(monkeypatch: pytest
     manifest = load_manifest(ROOT / "docs/guard/contracts/hook-data-plane-ownership.v2.json")
     owner_globs = [pattern for node in manifest["nodes"] for pattern in node.get("paths", [])]
     protected_globs = manifest["protected_change_globs"]
-    for module_file in sorted(PACKAGE.rglob("*.py")):
-        relative = module_file.relative_to(ROOT).as_posix()
+    for module_name in HARNESS_MODULES:
+        relative = (GUARD / module_name).relative_to(ROOT).as_posix()
         assert any(fnmatchcase(relative, pattern) for pattern in owner_globs), relative
         assert any(fnmatchcase(relative, pattern) for pattern in protected_globs), relative
 
 
 def test_native_harness_registry_matches_the_runtime_description() -> None:
-    from codex_plugin_scanner.guard.harness.native_harness import NATIVE_HARNESSES, describe
+    from codex_plugin_scanner.guard.native_harness_client import NATIVE_HARNESSES, describe
 
     described = {entry["harness"]: entry for entry in describe()["adapters"]}
     assert list(described) == [harness for harness, _aliases, _launcher in NATIVE_HARNESSES]

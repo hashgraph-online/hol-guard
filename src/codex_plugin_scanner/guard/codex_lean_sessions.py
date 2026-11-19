@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -138,15 +138,15 @@ def _ask(
 def _locked(guard_home: Path, path: Path) -> Iterator[None]:
     """Hold the same lock Guard's Codex install takes, so the two never write
     the config file at the same time, and finish an interrupted hook install
-    first: its recovery checks the config is as it left it."""
+    first. The runtime takes the lock and runs that recovery in one step, so
+    the config is as the recovery left it before anything here reads it."""
 
     from .codex_hook_file_integrity import CodexHookIntegrityError
-    from .codex_hook_recovery import recover_hook_publication
     from .native_owned import codex_install_transaction
 
-    with codex_install_transaction(guard_home, path, actor="lean-sessions"):
+    with ExitStack() as held:
         try:
-            recover_hook_publication(guard_home)
+            held.enter_context(codex_install_transaction(guard_home, path, actor="lean-sessions", recover=True))
         except CodexHookIntegrityError as error:
             raise LeanSessionsError("codex_hooks_need_recovery") from error
         yield

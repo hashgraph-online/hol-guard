@@ -9,12 +9,12 @@ import pytest
 import tomllib
 
 from codex_plugin_scanner.guard import codex_harness_client as adapter
-from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
 from codex_plugin_scanner.guard import codex_hook_integrity as integrity
 from codex_plugin_scanner.guard import codex_hook_manifest as manifests
 from codex_plugin_scanner.guard import codex_hook_recovery as recovery
 from codex_plugin_scanner.guard import native_caller
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline
+from tests import harness_ops_support as harness_support
 from tests.codex_hook_paths_support import hook_authority_receipt_path, hook_manifest_path
 
 from .test_codex_hook_recovery import installed  # noqa: F401 -- shared isolated fixture
@@ -235,7 +235,7 @@ def test_signed_repair_file_inverse_restores_missing_manifest_state(
 
 @pytest.fixture
 def retained_installation(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     context = HarnessContext(
         home_dir=tmp_path / "home", guard_home=tmp_path / "guard-home", workspace_dir=None, home_override_explicit=True
@@ -257,7 +257,7 @@ def retained_installation(tmp_path, monkeypatch):
             destination.chmod(0o644)
         monkeypatch.setattr(adapter, "__file__", str(root / adapter_relative))
         monkeypatch.setattr(native_caller, "__file__", str(root / "codex_plugin_scanner/guard/native_caller.py"))
-        adapter_lifecycle.CodexHarnessAdapter().install(context)
+        harness_support.install("codex", context)
         bridges.append(root / "codex_plugin_scanner/guard/codex_hook_runtime_trust.py")
     return context, bridges
 
@@ -296,7 +296,7 @@ def test_retained_artifact_loss_refuses_repair_without_publishing(retained_insta
 
 @pytest.mark.usefixtures("frozen_codex_contract")
 def test_frozen_retained_repair_pins_both_physical_executables(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionError
 
     context = HarnessContext(
@@ -309,7 +309,7 @@ def test_frozen_retained_repair_pins_both_physical_executables(tmp_path, monkeyp
         executable.write_bytes(b"generated frozen executable identity")
         executable.chmod(0o700)
         monkeypatch.setattr(sys, "executable", str(executable))
-        adapter_lifecycle.CodexHarnessAdapter().install(context)
+        harness_support.install("codex", context)
         executables.append(executable)
     config = context.home_dir / ".codex/config.toml"
     manifest = hook_manifest_path(context.guard_home, config)

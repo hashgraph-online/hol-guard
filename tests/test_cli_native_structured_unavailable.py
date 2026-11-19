@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as authority
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.hook_review.hook_worker_native import HookWorkerNativeMixin
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -93,7 +93,7 @@ def _emit_unavailable(
     event_name: str,
     config: _Config,
 ) -> tuple[dict[str, object], int]:
-    monkeypatch.setattr(authority, "NativeHookEvidenceWriter", lambda **_kwargs: None)
+    monkeypatch.setattr(authority, "ResidentEvidenceClient", lambda **_kwargs: None)
     monkeypatch.setattr(authority, "HookWorker", lambda **_kwargs: _OverlayWorker(config))
     context = HarnessContext(
         home_dir=tmp_path / "home",
@@ -151,7 +151,7 @@ def test_cli_worker_construction_failure_withholds_posttool_destination(
     def broken_worker(**_kwargs: object) -> None:
         raise RuntimeError("injected worker construction failure")
 
-    monkeypatch.setattr(authority, "NativeHookEvidenceWriter", lambda **_kwargs: None)
+    monkeypatch.setattr(authority, "ResidentEvidenceClient", lambda **_kwargs: None)
     monkeypatch.setattr(authority, "HookWorker", broken_worker)
     context = HarnessContext(
         home_dir=tmp_path / "home",

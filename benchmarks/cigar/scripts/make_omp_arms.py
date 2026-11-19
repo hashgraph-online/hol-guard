@@ -11,17 +11,16 @@ import shutil
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_install_ops import install as install_harness
+from codex_plugin_scanner.guard.native_owned import owner_request
 
 work = Path(sys.argv[1]).resolve()
 home = work / "ghome"
 guard = home / ".hol-guard"
 arms = work / "arms"
-# The omp adapter lives in the native runtime now; the Python object is a thin client of it.
-adapter = get_adapter("omp")
 ctx = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard, home_override_explicit=True)
-adapter.install(ctx)
+install_harness("omp", ctx, owner=owner_request(guard, actor="adapter.omp.adapter_install"))
 extension = home / ".omp" / "agent" / "extensions" / "hol-guard.ts"
 assert extension.is_file(), f"Guard wrote no omp extension at {extension}"
 for arm in ("ompbase", "ompcigar"):

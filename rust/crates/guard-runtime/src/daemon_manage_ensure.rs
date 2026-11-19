@@ -24,6 +24,7 @@ use crate::daemon_policy_authority::{
 };
 
 use super::host::{self, Caller};
+use super::leftovers;
 use super::orphans;
 use super::records::{self, int, text};
 use super::retire::{self, Deadline};
@@ -200,7 +201,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
                 Some(port) if url_port(&url) == Some(port) => return Ok(url),
                 Some(_) => {
                     retire::retire_all(caller, None, "port_change", deadline);
-                    if !retire::retirement_is_complete(caller) {
+                    if !retire::retirement_is_complete(caller, deadline) {
                         return Err(runtime(
                             "Existing Guard daemon could not be retired safely.",
                         ));
@@ -216,7 +217,9 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         && (request.background_maintenance || !records::is_exact_tombstone(&state_path))
     {
         retire::retire_all(caller, None, "untrusted_state", deadline);
-        if !records::is_exact_tombstone(&state_path) && !retire::retirement_is_complete(caller) {
+        if !records::is_exact_tombstone(&state_path)
+            && !retire::retirement_is_complete(caller, deadline)
+        {
             return Err(runtime(
                 "Untrusted Guard daemon state could not be retired safely.",
             ));
@@ -246,7 +249,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
                     return Err(still_starting(&home));
                 }
                 retire::retire_all(caller, None, "unhealthy_published", deadline);
-                if !retire::retirement_is_complete(caller) {
+                if !retire::retirement_is_complete(caller, deadline) {
                     return Err(runtime(IN_PROGRESS));
                 }
             }
@@ -263,7 +266,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
             // `retire_all` never signals a launch whose receipt is open; its
             // marker stays until the window passes and a later start retires it.
             retire::retire_all(caller, None, "stalled_start", deadline);
-            if !retire::retirement_is_complete(caller) {
+            if !retire::retirement_is_complete(caller, deadline) {
                 return Err(still_starting(&home));
             }
             clear_progress(&home);
@@ -279,7 +282,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         }
         if records::is_generation_bound(pending.as_ref())
             && !records::pending_is_resolved(&home)
-            && !retire::resolve_abandoned(caller, pending.as_ref())
+            && !retire::resolve_abandoned(caller, pending.as_ref(), deadline)
         {
             return Err(runtime(PREVIOUS_LAUNCH));
         }
@@ -295,7 +298,8 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         retire::reap_orphaned_workers(caller, deadline);
     }
     orphans::retire_unadopted(caller, deadline);
-    let ports = candidate_ports(context);
+    let ports = leftovers::free_ports(caller, candidate_ports(context), deadline)
+        .map_err(|message| runtime(&message))?;
     for port in &ports {
         if deadline.passed() {
             break;
@@ -651,12 +655,36 @@ fn adopt(context: &Context<'_>) -> Option<String> {
         let (Ok(port16), Ok(pid32)) = (u16::try_from(port), u32::try_from(pid)) else {
             continue;
         };
-        let config = launch_config(context, port16, None)?;
-        if standalone::publish(home, &config, port16, pid32).is_ok() {
+        if publish_adopted(context, port16, pid32)? {
             return Some(format!("http://127.0.0.1:{port}"));
         }
     }
     None
+}
+
+/// Publishes the daemon answering on `port` as this home's daemon, unless the
+/// home's authenticated state already names it there.
+///
+/// A starter that found no live daemon and then waited on the start lock can
+/// reach adoption after another starter's daemon has finished starting. That
+/// daemon has published its own state; writing it again from this caller's
+/// launch configuration would stamp it with this caller's runtime identity,
+/// and an older caller would leave the current daemon looking stale to every
+/// later start. `None` when this caller's launch configuration is invalid.
+fn publish_adopted(context: &Context<'_>, port: u16, pid: u32) -> Option<bool> {
+    let home = context.home();
+    if state_names(home, port, pid) {
+        return Some(true);
+    }
+    let config = launch_config(context, port, None)?;
+    Some(standalone::publish(home, &config, port, pid).is_ok())
+}
+
+/// Whether the home's authenticated state names `pid` serving on `port`.
+fn state_names(home: &Path, port: u16, pid: u32) -> bool {
+    load_authenticated_daemon_identity(home).is_some_and(|(state, _)| {
+        int(&state, "pid") == Some(i64::from(pid)) && int(&state, "port") == Some(i64::from(port))
+    })
 }
 
 /// `_initialize_existing_guard_daemon`: the pid of a current daemon of this
@@ -1188,3 +1216,7 @@ mod tests {
 #[cfg(test)]
 #[path = "daemon_manage_ensure_same_install_tests.rs"]
 mod same_install_tests;
+
+#[cfg(test)]
+#[path = "daemon_manage_ensure_adopt_tests.rs"]
+mod adopt_tests;

@@ -1,4 +1,5 @@
 import type { McpCallExplanation, McpStep } from "./mcp-call-types";
+import { readComposioCode } from "./composio-code";
 import { classifyMcpEffect, worstMcpEffect } from "./mcp-effects";
 import { codeOf, joinList, recordList, recordOf, scalarFacts, textList, textOf, unique } from "./mcp-input";
 import { serviceDisplayName, splitToolSlug } from "./mcp-services";
@@ -44,7 +45,7 @@ export function explainComposioTool(shortTool: string, context: ComposioContext)
     case "multi_execute_tool":
       return multiExecute(context);
     case "remote_workbench":
-      return remoteCode(context, TITLES.remote_workbench, "code_to_execute", "Code");
+      return workbenchCode(context) ?? remoteCode(context, TITLES.remote_workbench, "code_to_execute", "Code");
     case "remote_bash_tool":
       return remoteCode(context, TITLES.remote_bash_tool, "command", "Command");
     default:
@@ -211,6 +212,49 @@ function toStep(tool: Record<string, unknown> | null, index: number): McpStep {
     details: facts,
     hiddenDetails: hidden,
   };
+}
+
+/**
+ * Code for Composio's workspace that names the actions it calls reads as those
+ * actions: "Search emails in Gmail, using code". The code stays one click away,
+ * and the effect stays "runs code", since code can do more than it names.
+ * Returns null when the code names no action, so the code itself is the card.
+ */
+function workbenchCode({ harness, input }: ComposioContext): McpCallBody | null {
+  const code = codeOf(input?.code_to_execute);
+  if (code === null) return null;
+  const { steps: all, unreadable } = readComposioCode(code);
+  if (all.length === 0) return null;
+  // Every call counts toward the title and the apps; only the rows are capped.
+  const steps = all.slice(0, STEP_ROW_LIMIT);
+  const apps = unique(all.map((step) => step.app).filter((app): app is string => app !== null));
+  const first = all[0];
+  const count = all.length;
+  const thought = textOf(input?.thought, 300);
+  const lines = code.split("\n").length;
+  return {
+    headline: `${harness} wants to ${batchPhrase(first, count, apps.length > 0 ? joinList(apps) : "Composio")}, using code`,
+    title: batchTitle(first, count, apps),
+    aside: codeAside(apps, unreadable),
+    effect: "run-code",
+    effectBasis: "Read from the action names in the code. Guard has not run or checked it.",
+    facts: [],
+    steps,
+    hiddenSteps: all.length - steps.length,
+    stepsCaption: count === 1 ? "What the code asks for" : "What the code asks for, in order",
+    effectApps: apps,
+    quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
+    // When part of the code could not be read, the code itself stays in view.
+    code: { label: `The code (${lines} ${lines === 1 ? "line" : "lines"})`, text: code, collapsed: unreadable === 0 },
+    queueTitle: `${apps.length === 1 ? apps[0] : "Composio"} · ${first.action}${count > 1 ? ` and ${count - 1} more` : ""}`,
+    queueDetail: batchQueueDetail(first, apps),
+  };
+}
+
+function codeAside(apps: string[], unreadable: number): string {
+  const account = apps.length > 0 ? `your connected ${accountPhrase(apps)}` : "your connected accounts";
+  const rest = unreadable > 0 ? " Some of it reaches actions in ways Guard cannot read, so read the code below." : "";
+  return `The agent wrote code that Composio runs with ${account}.${rest}`;
 }
 
 function remoteCode(context: ComposioContext, title: string, field: string, label: string): McpCallBody {
