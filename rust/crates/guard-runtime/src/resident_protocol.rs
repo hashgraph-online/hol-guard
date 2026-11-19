@@ -114,6 +114,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::workspace_fix::FEATURE.into(),
         crate::workspace_mcp_config::FEATURE.into(),
         guard_plugin_telemetry::UPDATES_FEATURE.into(),
+        crate::local_cli_discover::FEATURE.into(),
     ];
     features.extend(
         crate::resident_op_features::RESIDENT_OP_FEATURES
