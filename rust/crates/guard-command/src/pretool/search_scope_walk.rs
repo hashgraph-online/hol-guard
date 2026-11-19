@@ -487,7 +487,15 @@ fn walk_scope_inner(
                             || clearance
                                 .is_some_and(|clearance| clearance.clears_secret_manifest(&path))
                     }
-                    Tracked::Unproven => clearance.is_some_and(|clearance| clearance.clears(&path)),
+                    // A committed screenshot is past the document budget by
+                    // the nature of what it is, so the walk proves it as an
+                    // image instead: its chunk layout, then every byte of it
+                    // scanned for text, against the budget images have of
+                    // their own.
+                    Tracked::Unproven => {
+                        tracked.tracked_image(&path)
+                            || clearance.is_some_and(|clearance| clearance.clears(&path))
+                    }
                 }
             {
                 *blocker = Some(path);
