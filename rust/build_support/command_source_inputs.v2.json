@@ -249,7 +249,6 @@
       "src/native_command_unmodeled_functions.rs",
       "src/native_command_unmodeled_heredoc.rs",
       "src/native_command_unmodeled_heredoc_lead.rs",
-      "src/native_command_unmodeled_loop.rs",
       "src/native_command_unmodeled_operands.rs",
       "src/native_command_unmodeled_prefix.rs",
       "src/native_command_unmodeled_redirections.rs",
