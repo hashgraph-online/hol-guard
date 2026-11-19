@@ -107,10 +107,14 @@ fn diagnose(command: &str) -> String {
 fn launchers_that_run_substitution_outputs_cannot_be_inert() {
     // These execute an argument as a command, like sudo and pkexec.
     // Retained substitution values must not make them eligible for review.
+    let controls = controls(github("enabled", None), false);
     for launcher in ["run0", "gsudo"] {
         for executable in [launcher.to_string(), format!("/usr/bin/{launcher}")] {
             let command = format!("for x in a; do {executable} $(printf sh) -c id; done");
             assert!(!super::interpreter_free(&command), "{command}");
+            let (action, reason) = decision(&controls, &command);
+            assert_eq!(reason, FAILED, "{command}: {action}");
+            assert_eq!(action, "block", "{command}: {reason}");
         }
     }
 }
