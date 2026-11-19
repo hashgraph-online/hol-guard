@@ -600,7 +600,8 @@ fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
     // looks like `--name=value`. Git treats it as a pathspec, so discarding
     // its prefix before screening could conceal credential-named files.
     let mut positional = false;
-    // For grep/rg, -e may consume "--" as its literal search pattern.
+    // For grep/rg, -e/-f (or --regexp/--file) consume their next word as
+    // a pattern or pattern-file operand, even when that word is "--".
     let pattern_options = matches!(
         crate::command_compatibility::basename(segment).as_str(),
         "grep" | "rg"
@@ -615,7 +616,7 @@ fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
         if pattern_options
             && !positional
             && !is_pattern_value
-            && matches!(argument.as_str(), "-e" | "--regexp")
+            && matches!(argument.as_str(), "-e" | "--regexp" | "-f" | "--file")
         {
             pattern_value = true;
         }
