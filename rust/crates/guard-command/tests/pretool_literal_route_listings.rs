@@ -8,7 +8,7 @@
 //! escape can also name a link the pattern would not match, so a literal
 //! entry must clear the screen on its own.
 
-use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
+use guard_command::pretool::{evaluate_pre_tool_envelope_with_execution_context, PathContext};
 use guard_contracts::PreToolResultV1;
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -43,7 +43,7 @@ fn fixture() -> Fixture {
     std::fs::create_dir_all(&root).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
     let home = root.join("home");
-    let app = home.join("portal");
+    let app = home.join("webapp");
     std::fs::create_dir_all(app.join(".git")).unwrap();
     write(
         app.join("app/api/groups/[slug]/route.ts"),
@@ -58,15 +58,30 @@ fn fixture() -> Fixture {
 }
 
 fn check(f: &Fixture, command: &str, want_allow: bool) {
-    let cwd = f.home.join("portal");
-    let result: PreToolResultV1 = evaluate_pre_tool_envelope_with_context(
+    check_with_shell_home(f, &f.home, command, want_allow);
+}
+
+/// Evaluates `command` for a shell whose HOME is `shell_home`.
+fn check_with_shell_home(f: &Fixture, shell_home: &Path, command: &str, want_allow: bool) {
+    let cwd = f.home.join("webapp");
+    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap(),
+        environment_digest: "0".repeat(64),
+        home: Some(shell_home.to_str().unwrap().to_owned()),
+        ..Default::default()
+    };
+    let result: PreToolResultV1 = evaluate_pre_tool_envelope_with_execution_context(
         "claude-code",
         "PreToolUse",
         &json!({"tool_name": "Bash", "tool_input": {"command": command}}),
         None,
         None,
-        f.home.to_str(),
-        cwd.to_str(),
+        PathContext {
+            home_dir: f.home.to_str(),
+            cwd: cwd.to_str(),
+            ..PathContext::default()
+        },
+        Some(&environment),
     );
     assert_eq!(
         result.minimum_action,
@@ -80,15 +95,15 @@ fn check(f: &Fixture, command: &str, want_allow: bool) {
 #[test]
 fn a_route_folder_listed_by_its_full_path_is_allowed() {
     let f = fixture();
-    let groups = f.home.join("portal/app/api/groups");
+    let groups = f.home.join("webapp/app/api/groups");
     let groups = groups.to_str().unwrap();
     for command in [
-        format!(r"ls {groups}/\[slug\]/"),
-        format!(r"ls -la {groups}/\[slug\]"),
-        format!(r"ls {groups}/ 2>/dev/null; ls {groups}/\[slug\]/ 2>/dev/null"),
+        format!(r#"ls "{groups}"/\[slug\]/"#),
+        format!(r#"ls -la "{groups}"/\[slug\]"#),
+        format!(r#"ls "{groups}"/ 2>/dev/null; ls "{groups}"/\[slug\]/ 2>/dev/null"#),
         format!(r#"ls "{groups}/[slug]/""#),
         format!("ls '{groups}/[slug]'"),
-        r"ls ~/portal/app/api/groups/\[slug\]/".to_string(),
+        r"ls ~/webapp/app/api/groups/\[slug\]/".to_string(),
         r"ls app/api/groups/\[slug\]/".to_string(),
     ] {
         check(&f, &command, true);
@@ -98,11 +113,11 @@ fn a_route_folder_listed_by_its_full_path_is_allowed() {
 #[test]
 fn a_route_folder_listing_keeps_its_other_screens() {
     let f = fixture();
-    let groups = f.home.join("portal/app/api/groups");
+    let groups = f.home.join("webapp/app/api/groups");
     let groups = groups.to_str().unwrap();
     for command in [
         r"ls ~/.ssh/\[slug\]".to_string(),
-        format!(r"ls -R {groups}/\[slug\]"),
+        format!(r#"ls -R "{groups}"/\[slug\]"#),
     ] {
         check(&f, &command, false);
     }
@@ -111,16 +126,27 @@ fn a_route_folder_listing_keeps_its_other_screens() {
 #[test]
 fn an_escaped_class_that_names_a_key_folder_link_is_reviewed() {
     let f = fixture();
-    let trap = f.home.join("portal/trap");
+    let trap = f.home.join("webapp/trap");
     let trap = trap.to_str().unwrap();
     for command in [
         r"ls trap/\[k\]".to_string(),
         r"ls trap/\[k\]/".to_string(),
-        format!(r"ls {trap}/\[k\]"),
+        format!(r#"ls "{trap}"/\[k\]"#),
         "ls 'trap/[k]'".to_string(),
     ] {
         check(&f, &command, false);
     }
     // Unescaped, the shell matches the class against `k`, the plain folder.
     check(&f, "ls trap/[k]", true);
+}
+
+#[test]
+fn a_home_spelled_route_folder_needs_the_shell_home_to_be_the_declared_one() {
+    let f = fixture();
+    // The shell expands `~` from its own HOME. When that names another
+    // folder, the screen never saw what `ls` would list.
+    let other = f.root.join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    check_with_shell_home(&f, &other, r"ls ~/webapp/app/api/groups/\[slug\]/", false);
+    check_with_shell_home(&f, &f.home, r"ls ~/webapp/app/api/groups/\[slug\]/", true);
 }

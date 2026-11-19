@@ -25,18 +25,20 @@ pub(in crate::pretool) fn safe_literal_bracket_tree(
 /// A plain `ls` operand whose bracket class matches nothing, as in
 /// `ls ~/work/app/api/groups/\[slug\]/`. The shell hands `ls` the word as
 /// typed, so it lists that one route directory, and the path is screened as
-/// a read of a route file is, with a directory admitted. A quoted `~` stays
-/// literal and names `./~`, so a home spelling also needs the working
-/// directory to hold no `~` entry.
+/// a read of a route file is, with a directory admitted. The shell expands
+/// `~` from its own HOME, so a home spelling needs that HOME to be the
+/// declared one. A quoted `~` stays literal and names `./~`, so it also needs
+/// the working directory to hold no `~` entry.
 pub(in crate::pretool) fn safe_literal_bracket_listing_target(
     value: &str,
     context: ReadContext<'_>,
 ) -> bool {
     (!value.starts_with('~')
-        || super::expanded_operand("./~", context).is_some_and(|path| {
-            std::fs::symlink_metadata(path)
-                .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
-        }))
+        || context.shell_home_matches
+            && super::expanded_operand("./~", context).is_some_and(|path| {
+                std::fs::symlink_metadata(path)
+                    .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+            }))
         && inert_bracket_class(value, context)
         && crate::pretool::read_paths::bounded_literal_bracket_target(
             value,
