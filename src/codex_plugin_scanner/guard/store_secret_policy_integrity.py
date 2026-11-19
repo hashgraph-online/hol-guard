@@ -568,7 +568,8 @@ class StoreSecretPolicyIntegrityMixin:
             if strict:
                 raise RuntimeError("policy_integrity_secret_store_unavailable")
             return None
-        payload_json = self._get_policy_integrity_secret_from_store(
+        payload_json = StoreSecretPolicyIntegrityMixin._get_policy_integrity_secret_from_store(
+            self,
             self._policy_integrity_control_ref,
             strict=strict,
         )
