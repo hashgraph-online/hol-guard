@@ -34,15 +34,27 @@ impl Env<'_> {
         let notice_key = notice_key(session_id, tool_name);
         let pending_key = claude_pending_key(session_id, artifact_id);
         let masked = mask_tool_call_command(payload);
-        let payload = masked.as_ref().unwrap_or(payload);
-        if !self.store_signed(&pending_key, payload, &CLAUDE_PENDING) {
+        let mut recorded = masked
+            .as_ref()
+            .and_then(Value::as_object)
+            .cloned()
+            .or_else(|| payload.as_object().cloned())
+            .unwrap_or_default();
+        let mut nonce = [0u8; 16];
+        if getrandom::fill(&mut nonce).is_err() {
+            return;
+        }
+        let pending_id: String = nonce.iter().map(|byte| format!("{byte:02x}")).collect();
+        recorded.insert("pending_id".to_owned(), pending_id.into());
+        let payload = Value::Object(recorded);
+        if !self.store_signed(&pending_key, &payload, &CLAUDE_PENDING) {
             return;
         }
         if !self.append_key(&CLAUDE_FAMILY, session_id, &pending_key) {
             self.delete(&pending_key);
             return;
         }
-        if !self.store_signed(&notice_key, payload, &CLAUDE_NOTICE) {
+        if !self.store_signed(&notice_key, &payload, &CLAUDE_NOTICE) {
             let _ = self.claude_remove_pending(session_id, &pending_key);
         }
     }

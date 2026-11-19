@@ -332,6 +332,7 @@ def route_native_hook(
     """
 
     deadline: float | None = None
+    event_name: str | None = None
     try:
         deadline = _cli_review_deadline(payload)
         event_name = native_hook_event(payload, context.guard_home, deadline=deadline)

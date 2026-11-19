@@ -262,13 +262,26 @@ pub(in crate::daemon_edge) fn locked<T>(
     config: &ReadConfig,
     work: impl FnOnce() -> Option<T>,
 ) -> Option<T> {
-    let file = generation_lock(config.guard_home())?;
+    locked_for(config, LOCK_TIMEOUT, work)
+}
+
+/// Runs `work` while holding the generation lock for at most `wait`.
+pub(in crate::daemon_edge) fn locked_for<T>(
+    config: &ReadConfig,
+    wait: Duration,
+    work: impl FnOnce() -> Option<T>,
+) -> Option<T> {
+    let file = generation_lock_for(config.guard_home(), wait)?;
     let answer = work();
     let _ = fs2::FileExt::unlock(&file);
     answer
 }
 
 fn generation_lock(home: &Path) -> Option<File> {
+    generation_lock_for(home, LOCK_TIMEOUT)
+}
+
+fn generation_lock_for(home: &Path, wait: Duration) -> Option<File> {
     let mut options = OpenOptions::new();
     options.create(true).read(true).append(true);
     #[cfg(unix)]
@@ -282,7 +295,7 @@ fn generation_lock(home: &Path) -> Option<File> {
     if !file.metadata().ok()?.is_file() {
         return None;
     }
-    let deadline = Instant::now().checked_add(LOCK_TIMEOUT)?;
+    let deadline = Instant::now().checked_add(wait)?;
     loop {
         match fs2::FileExt::try_lock_exclusive(&file) {
             Ok(()) => return Some(file),

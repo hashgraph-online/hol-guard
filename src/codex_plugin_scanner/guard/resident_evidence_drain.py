@@ -167,7 +167,7 @@ class ResidentEvidenceDrain:
                 self._handled_epoch = through[0]
                 self._handled_records.clear()
                 self._last_page_keys.clear()
-            handled, current_keys = self._record_page(records)
+            handled, current_keys = self._record_page(records, deadline_monotonic=deadline_monotonic)
             if not handled:
                 self.failures += 1
                 return False
@@ -223,7 +223,11 @@ class ResidentEvidenceDrain:
             )
         except Exception:
             output = None
-        page = _decode_page(output, self._counters, self._recover_writer_store)
+        page = _decode_page(
+            output,
+            self._counters,
+            lambda: self._recover_writer_store(deadline_monotonic),
+        )
         if page is None:
             self.failures += 1
         elif pending_ack is not None and self._ack == pending_ack:
@@ -231,7 +235,9 @@ class ResidentEvidenceDrain:
             self._acknowledged_page = True
         return page
 
-    def _recover_writer_store(self) -> None:
+    def _recover_writer_store(self, deadline_monotonic: float | None = None) -> None:
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+            return
         stats = getattr(self._host.activity_writer, "stats", None)
         if callable(stats):
             _ = stats()
@@ -241,9 +247,16 @@ class ResidentEvidenceDrain:
 
         return record_resident_evidence_fallback(self._host, record)
 
-    def _record_page(self, records: list[_PageRecord]) -> tuple[bool, set[str]]:
+    def _record_page(
+        self,
+        records: list[_PageRecord],
+        *,
+        deadline_monotonic: float | None = None,
+    ) -> tuple[bool, set[str]]:
         current_keys: set[str] = set()
         for item in records:
+            if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+                return False, current_keys
             record = item.value
             if item.key is not None:
                 key = item.key

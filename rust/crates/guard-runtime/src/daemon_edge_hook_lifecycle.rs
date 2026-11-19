@@ -191,9 +191,11 @@ pub(super) fn settled(reply: &Value) -> Option<Settled> {
     if matches!(outcome, "none" | "unseen" | "unanswered") && fields.len() == 1 {
         return (outcome != "none").then_some(Settled::Answered);
     }
+    let has_pending_id = fields.contains_key("pending_id");
     if outcome != "save"
-        || fields.len() != SAVE_FIELDS.len()
+        || fields.len() != SAVE_FIELDS.len() + usize::from(has_pending_id)
         || !SAVE_FIELDS.iter().all(|name| fields.contains_key(*name))
+        || (has_pending_id && fields["pending_id"].as_str().is_none_or(str::is_empty))
     {
         return None;
     }
@@ -261,8 +263,10 @@ impl Hook<'_> {
         })?;
         match settled(&reply)? {
             Settled::Answered => Some(json!({})),
-            Settled::Save(mut save) => {
-                crate::daemon_edge::reads::writes::policy_write::locked(self.config, || {
+            Settled::Save(mut save) => crate::daemon_edge::reads::writes::policy_write::locked_for(
+                self.config,
+                super::budget_left(expires),
+                || {
                     save.insert("session_id".to_owned(), session_id.into());
                     let integrity = self.call_by(
                         "hook.integrity_begin",
@@ -299,8 +303,8 @@ impl Hook<'_> {
                             request.payload = Some(Value::Object(save.clone()));
                         })?;
                     (consumed.get("consumed") == Some(&Value::Bool(true))).then(|| json!({}))
-                })
-            }
+                },
+            ),
         }
     }
 

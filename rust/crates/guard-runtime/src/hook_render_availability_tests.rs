@@ -19,4 +19,12 @@ fn availability_is_resident_owned() {
         .expect("payload")["response"]
         .clone();
     assert_eq!(response["pauses"], false);
+
+    req.cli = Some(json!({"payload": {"hook_event_name": "SubagentEnd"}}));
+    let response = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload")["response"]
+        .clone();
+    assert_eq!(response["event_name"], "SubagentEnd");
+    assert_eq!(response["pauses"], false);
 }

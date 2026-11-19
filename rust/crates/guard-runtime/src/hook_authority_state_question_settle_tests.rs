@@ -99,8 +99,13 @@ fn settles_every_recorded_question() {
                     tilde_home: Some("/home/user".to_owned()),
                 })
                 .unwrap();
+                let mut comparable = reply.clone();
+                comparable
+                    .as_object_mut()
+                    .expect("save reply")
+                    .remove("pending_id");
                 assert_eq!(
-                    reply,
+                    comparable,
                     json!({
                         "outcome": "save",
                         "artifact_id": row["artifact_id"],
@@ -235,6 +240,7 @@ fn question_save_persists_the_plan_and_consumes_pending_state() {
     assert_eq!(reply["outcome"], "save");
     let mut save = reply.as_object().unwrap().clone();
     save.insert("session_id".into(), json!(SESSION));
+    save.insert("current_generation".into(), json!(0));
     let saved = env(&connection)
         .claude_question_save(SESSION, &save)
         .expect("save");

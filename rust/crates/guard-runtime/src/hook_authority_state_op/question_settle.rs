@@ -16,8 +16,10 @@
 //! - `unanswered`: the question carries no answer that maps to an action, or
 //!   the pending permission lacks its artifact identity;
 //! - `save`: the plan to write, with the artifact, reason and source of the
-//!   policy row. The resident save operation writes it and removes the pending
-//!   permission in the same transaction.
+//!   policy row. The resident save operation commits the policy row and audit
+//!   events first. The host finalizes the integrity generation, then a
+//!   separate authority call consumes the pending permission. A failure after
+//!   save does not roll back the committed policy row.
 
 use base64ct::{Base64UrlUnpadded, Encoding};
 use guard_contracts::{NativePermissionPersistInputsV1, NativePermissionPersistPlanV1};
@@ -108,8 +110,8 @@ fn reason(action: &str) -> &'static str {
 }
 
 impl Env<'_> {
-    /// Persists a settled AskUserQuestion plan and consumes its pending
-    /// permission in the same authority-state transaction.
+    /// Persists a settled AskUserQuestion plan. Consumption happens in a
+    /// separate authority transaction after the host finalizes integrity.
     pub(super) fn claude_question_save(
         &self,
         _session_id: &str,
@@ -156,28 +158,22 @@ impl Env<'_> {
         args.insert("reason".to_owned(), json!(reason));
         args.insert("source".to_owned(), json!(source));
         args.insert("now".to_owned(), json!(self.now));
-        let generation = match payload
-            .get("current_generation")
-            .and_then(Value::as_i64)
-            .filter(|generation| *generation >= 0)
-        {
-            Some(generation) => generation,
-            None => self
-                .connection
-                .query_row(
-                    "select coalesce(max(integrity_generation), 0) from policy_decisions",
-                    [],
-                    |row| row.get(0),
-                )
-                .map_err(|_| ERROR_STORE)?,
-        };
-        args.insert("current_generation".to_owned(), json!(generation));
-        if let (Some(key), Some(key_id)) = (self.key.as_ref(), self.key_id) {
-            args.insert(
-                "integrity_key_b64".to_owned(),
-                json!(Base64UrlUnpadded::encode_string(key)),
-            );
-            args.insert("integrity_key_id".to_owned(), json!(key_id));
+        match (self.key.as_ref(), self.key_id) {
+            (None, None) => {}
+            (Some(key), Some(key_id)) => {
+                let generation = payload
+                    .get("current_generation")
+                    .and_then(Value::as_i64)
+                    .filter(|generation| *generation >= 0)
+                    .ok_or(ERROR_STORE)?;
+                args.insert("current_generation".to_owned(), json!(generation));
+                args.insert(
+                    "integrity_key_b64".to_owned(),
+                    json!(Base64UrlUnpadded::encode_string(key)),
+                );
+                args.insert("integrity_key_id".to_owned(), json!(key_id));
+            }
+            _ => return Err(ERROR_INVALID),
         }
         let policy_result = crate::guard_store_policy_upsert::upsert_policy(
             self.connection,
@@ -209,10 +205,18 @@ impl Env<'_> {
         let pending_key = claude_pending_key(session_id, &artifact_id);
         let same_pending = match self.read(&pending_key) {
             Stored::Object(pending) => {
-                opt_str(&pending, "artifact_hash").as_deref()
-                    == Some(pending_artifact_hash.as_str())
+                let artifact_matches = opt_str(&pending, "artifact_hash").as_deref()
+                    == Some(pending_artifact_hash.as_str());
+                let pending_id_matches = match opt_str(payload, "pending_id") {
+                    Some(expected) => {
+                        opt_str(&pending, "pending_id").as_deref() == Some(expected.as_str())
+                    }
+                    None => true,
+                };
+                artifact_matches && pending_id_matches
             }
-            _ => false,
+            Stored::Absent => false,
+            Stored::Unreadable | Stored::InvalidJson | Stored::List => return Err(ERROR_STORE),
         };
         if same_pending && !self.claude_remove_pending(session_id, &pending_key) {
             return Err(ERROR_STORE);
@@ -290,13 +294,17 @@ impl Env<'_> {
             tilde_home: tilde_home.map(str::to_owned),
         })
         .map_err(|_| ERROR_INVALID)?;
-        Ok(json!({
+        let mut reply = json!({
             "outcome": "save",
             "artifact_id": artifact_id,
             "pending_artifact_hash": opt_str(&pending, "artifact_hash").ok_or(ERROR_INVALID)?,
             "reason": reason,
             "source": SOURCE,
             "plan": serde_json::to_value(plan).map_err(|_| ERROR_INVALID)?,
-        }))
+        });
+        if let Some(pending_id) = opt_str(&pending, "pending_id") {
+            reply["pending_id"] = json!(pending_id);
+        }
+        Ok(reply)
     }
 }

@@ -89,6 +89,7 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
                 | "sessionend"
                 | "subagentstart"
                 | "subagentstop"
+                | "subagentend"
                 | "stop"
                 | "notification"
                 | "taskstart"

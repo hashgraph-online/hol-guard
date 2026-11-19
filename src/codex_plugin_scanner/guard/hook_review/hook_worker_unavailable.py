@@ -25,7 +25,7 @@ def unavailable_event_response(
     """Return a fail-safe response after the resident misses event identity."""
 
     fallback_event = canonical_hook_event_name(payload, guard_home=guard_home, deadline=deadline)
-    if fallback_event == "PostToolUse":
+    if fallback_event in {"PostToolUse", "PostToolUseFailure"}:
         from ..cli.commands_support_command_activity import hook_post_succeeded
 
         worker._record_post_tool_activity(

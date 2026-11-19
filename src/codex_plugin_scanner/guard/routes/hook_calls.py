@@ -268,7 +268,15 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
             now=_now(),
             required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
             session_id=session_id,
-            payload={"artifact_id": artifact_id, "pending_artifact_hash": pending_artifact_hash},
+            payload={
+                "artifact_id": artifact_id,
+                "pending_artifact_hash": pending_artifact_hash,
+                **(
+                    {"pending_id": args["pending_id"]}
+                    if isinstance(args.get("pending_id"), str)
+                    else {}
+                ),
+            },
         )
         if not isinstance(consumed, dict) or consumed.get("consumed") is not True:
             return {"valid": False}
