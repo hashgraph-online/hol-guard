@@ -65,7 +65,7 @@
     "https://registry.modelcontextprotocol.io/v0/servers?search=dev.krusch/hydrascope"
   ],
   "saferAlternatives": [
-    "Leave HYDRADB_BASE_URL unset for in-memory local graph operation when you do not want HydraScope to contact a remote HydraDB instance.",
+    "Leave HYDRADB_GRAPH_URL and HYDRADB_BOLT_URI unset for local graph operation when you do not want HydraScope to contact a remote HydraDB instance.",
     "Keep hydrascope_ingest_directory and hydrascope_supersede_decision on Review: ingest_directory reads local repository files and writes graph vertices/edges, and supersede_decision mutates decision lineage."
   ]
 }
