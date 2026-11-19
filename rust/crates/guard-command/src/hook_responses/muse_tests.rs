@@ -233,3 +233,38 @@ fn an_event_name_is_read_however_the_harness_spells_it() {
         (None, 0)
     );
 }
+
+#[test]
+fn a_flagged_prompt_sent_on_carries_its_notice() {
+    let notice = "HOL Guard noticed this prompt asks for sensitive local data.";
+    let (document, exit_code) = render(
+        json!({
+            "policy_action": "warn",
+            "decision": "allow",
+            "reason": notice,
+            "reason_code": "native_sensitive_prompt",
+            "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"},
+        }),
+        "UserPromptSubmit",
+    );
+    assert_eq!(exit_code, 0);
+    assert_eq!(
+        document.expect("document")["hookSpecificOutput"]["additionalContext"],
+        json!(notice)
+    );
+}
+
+#[test]
+fn a_plain_allowed_prompt_stays_silent() {
+    assert_eq!(
+        render(
+            json!({"policy_action": "allow", "reason": "ordinary"}),
+            "UserPromptSubmit"
+        ),
+        (None, 0)
+    );
+    assert_eq!(
+        render(json!({"policy_action": "warn"}), "UserPromptSubmit"),
+        (None, 0)
+    );
+}

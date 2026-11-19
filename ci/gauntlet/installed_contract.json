@@ -394,6 +394,7 @@
     {
       "id": "flagged-prompt-asks-for-private-key",
       "event": "UserPromptSubmit",
+      "harnesses": ["claude-code", "codex", "muse"],
       "expect": "notice",
       "payload": {
         "hook_event_name": "UserPromptSubmit",

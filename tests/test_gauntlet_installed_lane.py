@@ -1016,3 +1016,20 @@ def test_claude_code_replays_every_tool_family_it_claims() -> None:
     assert by_tool["PermissionRequest"] == {"defer"}
     assert by_tool["UserPromptSubmit"] == {"allow", "notice"}
     assert by_tool["WebFetch"] == {"allow"} and by_tool["WebSearch"] == {"allow"}
+
+
+def test_the_flagged_prompt_case_runs_on_every_harness_that_claims_prompt_screening() -> None:
+    """A harness whose generated claim says it screens prompts must show the notice it promises."""
+
+    contract = load_contract()
+    claims_path = Path(__file__).resolve().parents[1] / "docs/guard/generated/harness-claims.v1.json"
+    claims = json.loads(claims_path.read_text())
+    screening = {
+        claim["harness"]
+        for claim in claims["claims"]
+        if claim["event"] == "UserPromptSubmit"
+        and claim["mode"] == "screening"
+        and "UserPromptSubmit" in contract["harnesses"].get(claim["harness"], {}).get("replay_events", [])
+    }
+    flagged = [case for case in contract["replay_cases"] if case["expect"] == "notice"]
+    assert flagged and all(set(case["harnesses"]) == screening for case in flagged)
