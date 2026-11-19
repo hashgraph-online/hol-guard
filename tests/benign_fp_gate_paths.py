@@ -172,6 +172,9 @@ def is_file_like(relative: str) -> bool:
 PROBES_FOR_ABSENCE = frozenset(
     {
         "gauntlet-ls-missing-git-leaf-plain-dir",
+        # A build folder probed before the first build.
+        "ls-missing-build-folder-by-full-path",
+        "ls-missing-build-folder-in-sibling-checkout",
         # Probes for an unfinished operation in a linked worktree: the lock
         # and merge files are absent, and that absence is the whole answer.
         "ls-linked-worktree-git-operation-state",

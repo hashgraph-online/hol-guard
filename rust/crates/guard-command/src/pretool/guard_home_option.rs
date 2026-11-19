@@ -227,6 +227,69 @@ pub fn guard_approval_inspection_command(
         && super::guard_diagnostics::safe_hol_guard_segment(executable, &arguments, cwd, 0)
 }
 
+/// Whether `command` is one plain read of Guard's own safety guide,
+/// `cat ~/.hol-support/SAFETY.md` or the same file named by its absolute path
+/// below `home_dir`, the hook's user home. The tilde form counts only
+/// unquoted, where the shell expands it.
+///
+/// `hol-guard install codex` writes a managed block to the Codex `AGENTS.md`
+/// asking the agent to read that guide before acting, and Codex does, as its
+/// first shell call. The runtime uses this to keep a policy floor such as
+/// `subprocess_action: review` from holding Guard's own instruction behind a
+/// review. Only a single `cat` of that one regular file reaches here: no
+/// other argument, flag, redirect, pipe, wrapper or environment assignment,
+/// and no symbolic link at `.hol-support` or the guide itself.
+pub fn guard_safety_guide_read_command(command: &str, home_dir: &str) -> bool {
+    if command.contains(['<', '>', '|', ';', '&', '$', '`', '\\', '\n']) {
+        return false;
+    }
+    let Ok(model) = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: "posix".to_owned(),
+        transport: "shell_string".to_owned(),
+        extraction_provenance: "guard-shell".to_owned(),
+    }) else {
+        return false;
+    };
+    if model.confidence != "exact"
+        || model.uncertainty_reason.is_some()
+        || model.path_overridden
+        || !model.wrapper_chain.is_empty()
+    {
+        return false;
+    }
+    let [segment] = model.segments.as_slice() else {
+        return false;
+    };
+    let [target] = segment.arguments.as_slice() else {
+        return false;
+    };
+    if segment.executable.as_deref() != Some("cat")
+        || segment.tokens.len() != 2
+        || segment.pipeline_index != 0
+        || !segment.environment_names.is_empty()
+        || !segment.wrapper_chain.is_empty()
+        || segment.path_overridden
+    {
+        return false;
+    }
+    let home = std::path::Path::new(home_dir);
+    if home_dir.is_empty() || !home.is_absolute() {
+        return false;
+    }
+    let directory = home.join(".hol-support");
+    let guide = directory.join("SAFETY.md");
+    // The shell expands only an unquoted tilde; a quoted one names a
+    // `~` directory below the working directory.
+    let tilde = target == "~/.hol-support/SAFETY.md" && !command.contains(['\'', '"']);
+    let named = tilde || std::path::Path::new(target.as_str()) == guide.as_path();
+    named
+        && std::fs::symlink_metadata(&directory)
+            .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
+        && std::fs::symlink_metadata(&guide)
+            .is_ok_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+}
+
 #[cfg(test)]
 #[path = "guard_home_option_tests.rs"]
 mod tests;
