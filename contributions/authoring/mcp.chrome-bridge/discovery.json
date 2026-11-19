@@ -1,0 +1,519 @@
+{
+  "adapter": "mcp",
+  "digest": "db241233ecf33592e077a59e1cb7d034ab5636f3e124822a86d808a2d068b5bf",
+  "limitations": [
+    "mcp-inventory-is-snapshot",
+    "mcp-schemas-fingerprinted-not-executed",
+    "mcp-tool-annotations-untrusted",
+    "metadata-is-not-semantics"
+  ],
+  "metadata": {
+    "description": "The user's real, logged-in Chrome as an MCP server: navigation, page reading, form filling, screenshots and script execution in the browser the user is already signed into.",
+    "executable": "",
+    "homepage": "https://github.com/frsorrentino/chrome-bridge",
+    "kind": "mcp",
+    "launcher": "npx",
+    "license": "MIT",
+    "name": "Chrome Bridge",
+    "package": "chrome-bridge-mcp",
+    "publisher": {
+      "displayName": "frsorrentino",
+      "id": "io.github.frsorrentino"
+    },
+    "slug": "chrome-bridge",
+    "upstreamVersion": "1.32.5"
+  },
+  "operations": [
+    {
+      "evidenceSha256": "aa8f914294c658d9910cd8a461099199da7f0611199d7c70a6a73d51dd250405",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-a738fc23c077986e",
+      "name": "assert",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "42b6878dee15ff23abeab43f1207468e914cdc8b675d4795fccf53dbcfcd4e48",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-0ace702ad783e32a",
+      "name": "audit",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "fe7802e8855b6e6a63d4d17ace0a76b5b5243dc20d4a593dcf6c61fb9a6ed3e6",
+      "flags": [],
+      "hints": [
+        "network-hint"
+      ],
+      "id": "tool-d85c949adaee62c6",
+      "name": "capture_downloads",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "28114f92d91ea1abf8841dd305bd655e71b24c6d2c3848379607885e7383d9d1",
+      "flags": [],
+      "hints": [
+        "network-hint"
+      ],
+      "id": "tool-2e6d11e8b88ee599",
+      "name": "click",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "4fdcf0e18684d813ccaafe7e0ad94f148d1c0b753482da63bf40f69d5658ce4d",
+      "flags": [],
+      "hints": [],
+      "id": "tool-ae82e53493d4c597",
+      "name": "clipboard",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "84f4f915917a8dce33d52c1270477a78b805b0f0441784b54ca188539732e21f",
+      "flags": [],
+      "hints": [
+        "network-hint"
+      ],
+      "id": "tool-ca96200121c1dd87",
+      "name": "create_tab",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "c97490089fbb139bc8176001921ba3eeba6af02debf4f2aa1d9d22288e4afe4f",
+      "flags": [],
+      "hints": [],
+      "id": "tool-78690e7d9f0e42d3",
+      "name": "dismiss_overlays",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "ff06e8bfb6cbb76ad094faeb81eb02688573632e4330c96700da81f3099b0a35",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-80c67e1578d7d8b7",
+      "name": "element_screenshot",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "87dabcc95eddfb4be4c4b8f39147c0754049ff8300a0ec9c88d4e4f5d34d6f34",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "network-hint"
+      ],
+      "id": "tool-3e7726c8bf0bce46",
+      "name": "execute_js",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "37c6fd21d1c62080a634ed66fa53c8086e8f25b3f15de770d18275b1b457e92e",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-0ca3a8b3ac2debd1",
+      "name": "extract",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "65d8ea413dba988a9f898a073be03335b2ebfa2da5aba218bcad0a12dd2b9c73",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-7a21d98402d16330",
+      "name": "extract_table",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "f2b8152854fa36793d2b37667068e569fb28a1a1abe3bd3cf51c7259f40c4a61",
+      "flags": [],
+      "hints": [],
+      "id": "tool-7e95af1180ad7e9e",
+      "name": "fill_form",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "cecf0f39f683e6e98b4f68e936a69fbb3513b9004b2590e232148a074e5ccc8c",
+      "flags": [],
+      "hints": [],
+      "id": "tool-a943fe5ac1bb8dab",
+      "name": "find_setting",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "c6d0688d36a843f07ba9a774016ea9c4387c409262225d896baec6891b49ac51",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-72fefb70839899b7",
+      "name": "find_text",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "6fa084d65baeccf62bf303deb54d6c6ac483e02f9920978c3f2af7ab5e292c8c",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-75640bed96fab73e",
+      "name": "full_page_screenshot",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "1d64c60e1bae03c549792fcd393705556e4afb8d5c0aa2e25f9d44aa4310921f",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-a2e27c122355e44c",
+      "name": "get_css_styles",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "c984c378dd57affa43b909997cb05bf3a72a98061232ca6372293ca5c734a835",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-1e3589c8d40d8e45",
+      "name": "get_frames",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "bd55887ff8eae89131ff6a7dd72244b363a414f1143a7da5ad3138e1c8f78063",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-7dc3894f1c3d0ed0",
+      "name": "get_interactives",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "87198483814dc121258cd16e87deb7fdbcf1dd17b2e9f13b79369c8f48413fe4",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-e52de3feba973af1",
+      "name": "get_page_info",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "0c8a937e37a955bb53cb30eacfe562fbd53e3c7ba6da941231db66d99f089f16",
+      "flags": [],
+      "hints": [
+        "read-name"
+      ],
+      "id": "tool-022db4abb1ca793f",
+      "name": "get_status",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "66842f1cd4f194680e1b0f1e418f3cfd2abd434bc493033805a4ed7f464f186e",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-5aeb9c58b0458ed4",
+      "name": "get_tabs",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "a8f099cf0799a422d564b6f1d5a0670412c6e8965437af89137f2db50e06b7e3",
+      "flags": [],
+      "hints": [],
+      "id": "tool-4b7f0532da179eb0",
+      "name": "handle_dialogs",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "361c4efc31672e2e761d5f02f2ea06db30c6606dd371b70579a8d20c9bfa067c",
+      "flags": [],
+      "hints": [],
+      "id": "tool-50e80af1d8457338",
+      "name": "handoff",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "8a5f219765750813b3ea9688cff377b79d6bb49bf2fcb06d3db6a2ad66ca5106",
+      "flags": [],
+      "hints": [],
+      "id": "tool-91674019d7378633",
+      "name": "hover",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "a0d5e82e248fb7745c90404cdfee756256dde1dc6233a8eb5d81166cca9a8c7d",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "network-hint"
+      ],
+      "id": "tool-0395cbf6caf79c52",
+      "name": "http_request",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "bc65f6fccba6d0e67bd1596ecfca36779fd869bae95324cf071cda29919c230b",
+      "flags": [],
+      "hints": [
+        "network-hint",
+        "read-only-hint"
+      ],
+      "id": "tool-d126574e5cdcc99b",
+      "name": "monitor_network",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "4f2d8d3e486b7748689342758f4c88bdbb89cc11d801c1051af05a33a749c3c9",
+      "flags": [],
+      "hints": [],
+      "id": "tool-7e8b6df774b8f2c6",
+      "name": "move_tab",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "ed2b22bccb62b3d6d7c998981ef5750d819e1657383fda948e5fcb297ee9c3f7",
+      "flags": [],
+      "hints": [
+        "network-hint"
+      ],
+      "id": "tool-aedbdee47d723193",
+      "name": "navigate",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "12caee3e8e8e0ce5c4553613f753539d0af80a3bef5eca2c12146eeb0c7ace85",
+      "flags": [],
+      "hints": [
+        "network-hint"
+      ],
+      "id": "tool-52b7de18206131d7",
+      "name": "network_rules",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "0eb3bceae666a2306bbaa1fd63a001b1f5b4da1196fcfab105f9078ca6666104",
+      "flags": [],
+      "hints": [],
+      "id": "tool-c4ad7c064691d019",
+      "name": "press_key",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "72eb4cc99e37971b7385cb49bc5ed95ee5f989bcdcf5eadce049c0b71cf731e4",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-3a35a9db16c3f431",
+      "name": "query_dom",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "af933be68a8a12bb30c6adbcc09d0a6cb6b19fc4f96a29cdca169b87616b3983",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "read-name"
+      ],
+      "id": "tool-d083dc1e2c2424e3",
+      "name": "read_console",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "d936c22f693b8e161aea3732c8093fd6412b9b8bc382bdcdc99d9b03afe794d7",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-cf0f59a585d4b3bd",
+      "name": "read_form",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "3eb1dda3f659b56ff2db3e6b044b945144bc586142f101d22334c00a734e6998",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-ff8e6aff5a8926ed",
+      "name": "read_page",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "ef4bb8a6c62d1f89b9a469c50fc80c645483f97a5ce9e4c9361dee41caee21c4",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-38bff288d23b074f",
+      "name": "screenshot",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "8a5a0c0b5e23016dc8811fec586f3a9295fce3392d2ffab049db394f74467db1",
+      "flags": [],
+      "hints": [],
+      "id": "tool-ab509eea427fc39d",
+      "name": "screenshot_diff",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "7925f8f2f1b4e87dce92017360a800f53d60907d936248f08b93528ff1e50091",
+      "flags": [],
+      "hints": [],
+      "id": "tool-fc96fa74a596761d",
+      "name": "scroll",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "dacfa3705c7d5ceb05af9270324d0bc9f33716199ca4c32d99ea1d99744f6a18",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "network-hint"
+      ],
+      "id": "tool-01c4db21a69400af",
+      "name": "tab_action",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "384e81c9ffb58751916000478e3221850edcf83f9e7246f681d783c27ef6b86b",
+      "flags": [],
+      "hints": [],
+      "id": "tool-c845f84b5401e190",
+      "name": "tile_windows",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "64efb8cddd830cb358af54355ec9b15634526bef003cf1dd854388fbfae5f6f3",
+      "flags": [],
+      "hints": [],
+      "id": "tool-e7f1d273322df34b",
+      "name": "type_text",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "c3d044b3c381ddff622aecfb81c2d372e4828143726f7753ca4d2ed7ca541ede",
+      "flags": [],
+      "hints": [],
+      "id": "tool-1dd8daa7a61dea7b",
+      "name": "upload_file",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "925c6e7470b7f0f30aab3200a152ea5b2a977933cad33693a36357854c6fe28a",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-acef6cd8d0f722f4",
+      "name": "wait_for",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "34483e4b4363417bfe707e915d05974846b23397230bafd94f67e3b9368bfb24",
+      "flags": [],
+      "hints": [],
+      "id": "tool-61790fe6bf42db3a",
+      "name": "watch",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "0598b8587ea95832c4f1d42c172c4960665b5eac7e65cfae22be11ee2448a343",
+      "flags": [],
+      "hints": [
+        "destructive-hint",
+        "network-hint"
+      ],
+      "id": "tool-5e8f0fcec3f2987e",
+      "name": "webmcp_call",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "169856b80c52b5dc75baf0eb56ee4a3b6bb07cf7ad539d980d8d63e3602ffec2",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-098980c94e2143fc",
+      "name": "webmcp_tools",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "e64429c0439f17536d790a90ec0bd5a91465494c1c7b9c5c812c29a4965888c0",
+      "flags": [],
+      "hints": [
+        "destructive-hint"
+      ],
+      "id": "tool-19b396ff00bdcbc9",
+      "name": "window_layout",
+      "optionsWithValues": [],
+      "path": []
+    }
+  ],
+  "schemaVersion": "guard.extension-discovery.v1",
+  "sourceSha256": "0c73d3173f5820303df01bb5033517b30a13e13df8b752d99073c0cb0d93f651"
+}

@@ -1,0 +1,13 @@
+{
+  "builderVersion": "1.0.0",
+  "contributionId": "mcp.chrome-bridge",
+  "managedFiles": {
+    "contributions/authoring/mcp.chrome-bridge/README.md": "9d3192f3d46137a386d13119657275891c383d5cbb5122744d136318fd29bdbc",
+    "contributions/authoring/mcp.chrome-bridge/discovery.json": "50bb55278e839cee2dc913594b85cc7ba9699c53f723df74b32ea293cdd960d4",
+    "contributions/authoring/mcp.chrome-bridge/report.json": "32c257c531090edb29b7af9c35619bc5a6533dbe247ce8bd1f84227ee980f5b5",
+    "contributions/authoring/mcp.chrome-bridge/review.json": "371d7261b2e5fb398ead28211773fe6ff519f730d12a894df830f50866efbd29",
+    "contributions/mcp-servers/mcp.chrome-bridge.json": "d594aee25228f0af7a7c43d24d305b9f4a244590dfb2f9b0d89887861d2f81d3"
+  },
+  "revisionDigest": "b26626ff943523335de5abcae0d9c637850caf2d2a84ada092d5e12e37a8ff65",
+  "schemaVersion": "guard.extension-authoring-install.v1"
+}

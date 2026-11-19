@@ -1,0 +1,221 @@
+{
+  "activation": "opt-in",
+  "description": "Conservative operation knowledge compiled from a contributor inventory.",
+  "homepage": "https://github.com/frsorrentino/chrome-bridge",
+  "icon": {
+    "kind": "none"
+  },
+  "id": "mcp.chrome-bridge",
+  "launch": {
+    "command": "npx",
+    "kind": "package-launcher",
+    "package": "chrome-bridge-mcp"
+  },
+  "name": "Chrome Bridge",
+  "publisher": {
+    "displayName": "frsorrentino",
+    "id": "io.github.frsorrentino"
+  },
+  "referenceUrls": [
+    "https://github.com/frsorrentino/chrome-bridge"
+  ],
+  "riskClasses": [
+    "execution"
+  ],
+  "saferAlternatives": [
+    "Inspect the exact target and required permissions before running this operation."
+  ],
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "tools": [
+    {
+      "name": "assert",
+      "state": "inherit"
+    },
+    {
+      "name": "audit",
+      "state": "inherit"
+    },
+    {
+      "name": "capture_downloads",
+      "state": "inherit"
+    },
+    {
+      "name": "click",
+      "state": "review"
+    },
+    {
+      "name": "clipboard",
+      "state": "review"
+    },
+    {
+      "name": "create_tab",
+      "state": "inherit"
+    },
+    {
+      "name": "dismiss_overlays",
+      "state": "inherit"
+    },
+    {
+      "name": "element_screenshot",
+      "state": "inherit"
+    },
+    {
+      "name": "execute_js",
+      "state": "review"
+    },
+    {
+      "name": "extract",
+      "state": "inherit"
+    },
+    {
+      "name": "extract_table",
+      "state": "inherit"
+    },
+    {
+      "name": "fill_form",
+      "state": "review"
+    },
+    {
+      "name": "find_setting",
+      "state": "inherit"
+    },
+    {
+      "name": "find_text",
+      "state": "inherit"
+    },
+    {
+      "name": "full_page_screenshot",
+      "state": "inherit"
+    },
+    {
+      "name": "get_css_styles",
+      "state": "inherit"
+    },
+    {
+      "name": "get_frames",
+      "state": "inherit"
+    },
+    {
+      "name": "get_interactives",
+      "state": "inherit"
+    },
+    {
+      "name": "get_page_info",
+      "state": "inherit"
+    },
+    {
+      "name": "get_status",
+      "state": "allow"
+    },
+    {
+      "name": "get_tabs",
+      "state": "inherit"
+    },
+    {
+      "name": "handle_dialogs",
+      "state": "review"
+    },
+    {
+      "name": "handoff",
+      "state": "inherit"
+    },
+    {
+      "name": "hover",
+      "state": "inherit"
+    },
+    {
+      "name": "http_request",
+      "state": "review"
+    },
+    {
+      "name": "monitor_network",
+      "state": "inherit"
+    },
+    {
+      "name": "move_tab",
+      "state": "inherit"
+    },
+    {
+      "name": "navigate",
+      "state": "inherit"
+    },
+    {
+      "name": "network_rules",
+      "state": "review"
+    },
+    {
+      "name": "press_key",
+      "state": "review"
+    },
+    {
+      "name": "query_dom",
+      "state": "inherit"
+    },
+    {
+      "name": "read_console",
+      "state": "inherit"
+    },
+    {
+      "name": "read_form",
+      "state": "inherit"
+    },
+    {
+      "name": "read_page",
+      "state": "inherit"
+    },
+    {
+      "name": "screenshot",
+      "state": "inherit"
+    },
+    {
+      "name": "screenshot_diff",
+      "state": "inherit"
+    },
+    {
+      "name": "scroll",
+      "state": "inherit"
+    },
+    {
+      "name": "tab_action",
+      "state": "review"
+    },
+    {
+      "name": "tile_windows",
+      "state": "inherit"
+    },
+    {
+      "name": "type_text",
+      "state": "review"
+    },
+    {
+      "name": "upload_file",
+      "state": "review"
+    },
+    {
+      "name": "wait_for",
+      "state": "inherit"
+    },
+    {
+      "name": "watch",
+      "state": "inherit"
+    },
+    {
+      "name": "webmcp_call",
+      "state": "review"
+    },
+    {
+      "name": "webmcp_tools",
+      "state": "inherit"
+    },
+    {
+      "name": "window_layout",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "trustClass": "external",
+  "version": "1.0.0"
+}

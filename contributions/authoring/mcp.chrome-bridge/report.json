@@ -1,0 +1,509 @@
+{
+  "activeProtectionChanged": false,
+  "binaryIdentityVerified": false,
+  "coverageMeaning": "Enumerated metadata only; not a security certification or proof of runtime completeness.",
+  "discoveredOperations": 46,
+  "discoveryDigest": "db241233ecf33592e077a59e1cb7d034ab5636f3e124822a86d808a2d068b5bf",
+  "limitations": [
+    "mcp-inventory-is-snapshot",
+    "mcp-schemas-fingerprinted-not-executed",
+    "mcp-tool-annotations-untrusted",
+    "metadata-is-not-semantics"
+  ],
+  "operations": [
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-a738fc23c077986e",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "assert",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-0ace702ad783e32a",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "audit",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-d85c949adaee62c6",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "capture_downloads",
+      "untrustedHints": [
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-2e6d11e8b88ee599",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "click",
+      "untrustedHints": [
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-ae82e53493d4c597",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "clipboard",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-ca96200121c1dd87",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "create_tab",
+      "untrustedHints": [
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-78690e7d9f0e42d3",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "dismiss_overlays",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-80c67e1578d7d8b7",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "element_screenshot",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-3e7726c8bf0bce46",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "execute_js",
+      "untrustedHints": [
+        "destructive-hint",
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-0ca3a8b3ac2debd1",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "extract",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-7a21d98402d16330",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "extract_table",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-7e95af1180ad7e9e",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "fill_form",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-a943fe5ac1bb8dab",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "find_setting",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-72fefb70839899b7",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "find_text",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-75640bed96fab73e",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "full_page_screenshot",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-a2e27c122355e44c",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "get_css_styles",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-1e3589c8d40d8e45",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "get_frames",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-7dc3894f1c3d0ed0",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "get_interactives",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-e52de3feba973af1",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "get_page_info",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-022db4abb1ca793f",
+      "path": [],
+      "reviewed": true,
+      "state": "allow",
+      "toolName": "get_status",
+      "untrustedHints": [
+        "read-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-5aeb9c58b0458ed4",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "get_tabs",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-4b7f0532da179eb0",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "handle_dialogs",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-50e80af1d8457338",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "handoff",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-91674019d7378633",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "hover",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-0395cbf6caf79c52",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "http_request",
+      "untrustedHints": [
+        "destructive-hint",
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-d126574e5cdcc99b",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "monitor_network",
+      "untrustedHints": [
+        "network-hint",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-7e8b6df774b8f2c6",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "move_tab",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-aedbdee47d723193",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "navigate",
+      "untrustedHints": [
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-52b7de18206131d7",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "network_rules",
+      "untrustedHints": [
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-c4ad7c064691d019",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "press_key",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-3a35a9db16c3f431",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "query_dom",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-d083dc1e2c2424e3",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "read_console",
+      "untrustedHints": [
+        "destructive-hint",
+        "read-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-cf0f59a585d4b3bd",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "read_form",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-ff8e6aff5a8926ed",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "read_page",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-38bff288d23b074f",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "screenshot",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-ab509eea427fc39d",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "screenshot_diff",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-fc96fa74a596761d",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "scroll",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-01c4db21a69400af",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "tab_action",
+      "untrustedHints": [
+        "destructive-hint",
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-c845f84b5401e190",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "tile_windows",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-e7f1d273322df34b",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "type_text",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-1dd8daa7a61dea7b",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "upload_file",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-acef6cd8d0f722f4",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "wait_for",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-61790fe6bf42db3a",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "watch",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-5e8f0fcec3f2987e",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "webmcp_call",
+      "untrustedHints": [
+        "destructive-hint",
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-098980c94e2143fc",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "webmcp_tools",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-19b396ff00bdcbc9",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "window_layout",
+      "untrustedHints": [
+        "destructive-hint"
+      ]
+    }
+  ],
+  "reviewedOperations": 46,
+  "revisionDigest": "b26626ff943523335de5abcae0d9c637850caf2d2a84ada092d5e12e37a8ff65",
+  "schemaVersion": "guard.extension-coverage-report.v1",
+  "unknownOperationBehavior": "inherit",
+  "upstreamVersion": "1.32.5"
+}

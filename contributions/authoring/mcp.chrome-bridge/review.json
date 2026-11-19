@@ -1,0 +1,512 @@
+{
+  "discoveryDigest": "db241233ecf33592e077a59e1cb7d034ab5636f3e124822a86d808a2d068b5bf",
+  "entries": {
+    "tool-01c4db21a69400af": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Closes, discards, reloads, or duplicates tabs; closing can lose unsaved work, and the server marks it destructive.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-022db4abb1ca793f": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Reports the bridge's own status, not page content; no effect on the browser.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "allow"
+    },
+    "tool-0395cbf6caf79c52": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Sends HTTP requests from the browser with the logged-in user's cookies; acts with the user's credentials, and the server marks it destructive.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-098980c94e2143fc": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Lists the tools a page declares for agents; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-0ace702ad783e32a": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Runs page audits (accessibility, SEO, and similar); a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-0ca3a8b3ac2debd1": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Reads repeated page structures as records; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-19b396ff00bdcbc9": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Saves or restores window arrangements; kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-1dd8daa7a61dea7b": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Places a file from the local filesystem into a page upload field; moves local data into a website.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-1e3589c8d40d8e45": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Lists frames and their URLs; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-2e6d11e8b88ee599": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Clicks elements in the signed-in browser; a click can submit, send, or buy.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-38bff288d23b074f": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Captures the visible viewport; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-3a35a9db16c3f431": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Queries DOM structure and attributes; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-3e7726c8bf0bce46": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Runs arbitrary JavaScript in the page's main world, with the user's session; the server marks it destructive.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-4b7f0532da179eb0": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Auto-accepts or dismisses JavaScript dialogs, suppressing prompts meant for the user.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-50e80af1d8457338": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Hands the browser back to the user for steps only a person should do; kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-52b7de18206131d7": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Sets browser-wide network interception: blocking, redirecting, or rewriting requests and headers, surviving reloads.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-5aeb9c58b0458ed4": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Lists open tabs with URLs and titles; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-5e8f0fcec3f2987e": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Runs a tool declared by the page itself; its effects are whatever the site implemented, and the server marks it destructive.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-61790fe6bf42db3a": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Watches a page in the background for a condition; kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-72fefb70839899b7": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Finds text on the page; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-75640bed96fab73e": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Captures the full page by scrolling; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-78690e7d9f0e42d3": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Dismisses cookie banners and modal overlays; kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-7a21d98402d16330": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Reads an HTML table as JSON; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-7dc3894f1c3d0ed0": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Lists actionable page elements; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-7e8b6df774b8f2c6": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Moves a tab between windows; kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-7e95af1180ad7e9e": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Batch-fills form fields in the signed-in browser; one step from submitting the form.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-80c67e1578d7d8b7": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Captures one element or region; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-91674019d7378633": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Hovers over an element; kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-a2e27c122355e44c": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Reads computed styles; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-a738fc23c077986e": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Asserts a page condition; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-a943fe5ac1bb8dab": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Follows an admin panel's own menu links to locate a setting; kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-ab509eea427fc39d": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Saves and compares screenshot baselines; kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-acef6cd8d0f722f4": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Waits for a page condition; no direct effect, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-ae82e53493d4c597": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Reads or writes the system clipboard; writing plants content for the user to paste, reading exposes what they copied.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-aedbdee47d723193": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Moves a tab to a URL; the transport for other actions, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-c4ad7c064691d019": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Sends real keystrokes to the page; Enter alone can submit a form or confirm a dialog.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-c845f84b5401e190": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Tiles Chrome windows on screen; kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-ca96200121c1dd87": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Opens a new tab; kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-cf0f59a585d4b3bd": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Reads a form's current values; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-d083dc1e2c2424e3": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Reads captured console messages; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-d126574e5cdcc99b": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Observes page and browser network requests; passive monitoring, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-d85c949adaee62c6": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Saves files the page itself builds; kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-e52de3feba973af1": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Reads page metadata; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-e7f1d273322df34b": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Enters text into page fields in the signed-in browser, replacing existing values.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "tool-fc96fa74a596761d": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Scrolls the page; kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-ff8e6aff5a8926ed": {
+      "evidenceUrl": "https://github.com/frsorrentino/chrome-bridge#tools",
+      "rationale": "Reads page content as text or markup; a read, kept on default handling.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    }
+  },
+  "schemaVersion": "guard.extension-review.v1"
+}
