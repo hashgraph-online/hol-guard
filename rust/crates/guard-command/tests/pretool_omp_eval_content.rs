@@ -51,13 +51,13 @@ fn pure_python_is_allowed_and_reaching_python_is_reviewed() {
 fn browser_driving_and_module_attribute_chains_are_reviewed() {
     let s = session("omp-eval-browser");
     let cwd = s.org.to_str().unwrap();
-    // A workspace file URL is trusted only after its target exists and canonicalizes.
+    // The pre-tool check cannot atomically bind a file URL to its eventual
+    // browser open; even an existing workspace HTML file must reach review.
     std::fs::write(s.org.join("index.html"), "<html>project</html>").unwrap();
-    // Opening and closing a workspace page is the modeled page check.
     let workspace_page = format!(
         "const tab = await browser.open({{name:'t', url:'file://{cwd}/index.html'}}); await tab.close();"
     );
-    assert!(allowed(&s, "js", &workspace_page), "{workspace_page}");
+    assert!(!allowed(&s, "js", &workspace_page), "{workspace_page}");
     for code in [
         String::from("const tab = await browser.open({name:'t', url:'https://example.com/'});"),
         String::from("const tab = browser.tab('t'); await tab.goto('https://example.com/');"),
