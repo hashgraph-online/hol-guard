@@ -605,6 +605,7 @@
       "src/pretool/redirect_projection.rs",
       "src/pretool/redirect_scratch_tests.rs",
       "src/pretool/redirect_stdin.rs",
+      "src/pretool/redirect_stdin_python_text.rs",
       "src/pretool/redirect_targets.rs",
       "src/pretool/redirect_tee.rs",
       "src/pretool/ref_name_words.rs",
