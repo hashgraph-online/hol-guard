@@ -42,6 +42,10 @@ def _plan(answer: object):
 
 
 def _respond(tmp_path: Path, native_result: dict[str, object] = REVIEW, *, workspace: Path | None = None):
+    return _outcome(tmp_path, native_result, workspace=workspace).response
+
+
+def _outcome(tmp_path: Path, native_result: dict[str, object] = REVIEW, *, workspace: Path | None = None):
     return package_review.native_package_review_response(
         object(),
         harness="omp",
@@ -76,9 +80,9 @@ def test_the_plan_is_told_which_review_it_settles(
 
     reasons: list[object] = []
 
-    def plan(*_args: object, **kwargs: object) -> tuple[None, bool]:
+    def plan(*_args: object, **kwargs: object) -> tuple[None, bool, Path]:
         reasons.append(kwargs["review_reason"])
-        return None, False
+        return None, False, tmp_path
 
     monkeypatch.setattr(package_review, "package_review_plan", plan)
 
@@ -88,7 +92,7 @@ def test_the_plan_is_told_which_review_it_settles(
 
 @pytest.mark.parametrize(
     "answer",
-    [(None, False), NativePackageReviewPlanError("unavailable")],
+    [(None, False, Path("/w")), NativePackageReviewPlanError("unavailable")],
 )
 def test_a_review_with_no_plan_stays_queued(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
     monkeypatch.setattr(package_review, "package_review_plan", _plan(answer))
@@ -100,7 +104,7 @@ def test_a_review_with_no_plan_stays_queued(tmp_path: Path, monkeypatch: pytest.
 def test_a_block_only_review_still_downloading_stays_queued(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Asking for a retry would only ever lead to a block or the same review."""
 
-    monkeypatch.setattr(package_review, "package_review_plan", _plan((ARTIFACT, False)))
+    monkeypatch.setattr(package_review, "package_review_plan", _plan((ARTIFACT, False, tmp_path)))
     monkeypatch.setattr(package_review, "_evaluate", _plan(RegistryDeadlineError()))
 
     assert _respond(tmp_path) is None
@@ -132,7 +136,7 @@ def test_the_resident_settlement_settles_the_review(
     """Which verdict settles a review is the resident's call; the Rust tests cover it."""
 
     evaluated: list[object] = []
-    monkeypatch.setattr(package_review, "package_review_plan", _plan((ARTIFACT, may_allow)))
+    monkeypatch.setattr(package_review, "package_review_plan", _plan((ARTIFACT, may_allow, tmp_path)))
     monkeypatch.setattr(
         package_review,
         "_evaluate",
@@ -155,6 +159,70 @@ def test_the_resident_settlement_settles_the_review(
     # Without the resident's npm proof only a block applies; stopping a
     # command runs nothing.
     assert response == (expected if may_allow or settlement[0] == "block" else None)
+
+
+KEY = {"harness": "omp", "artifact_id": "omp:project:package-request:abc", "artifact_hash": "token"}
+
+
+@pytest.mark.parametrize("may_allow", [True, False])
+@pytest.mark.parametrize("settlement", [("review", None), ("allow", None)])
+def test_a_saved_package_always_allow_lets_the_install_continue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, may_allow: bool, settlement: tuple[str, None]
+) -> None:
+    """An Always allow saved under the package key answers the same install in
+    another checkout, even where only a block verdict applies."""
+
+    linked = tmp_path / "linked"
+    looked_up: list[Path] = []
+    monkeypatch.setattr(package_review, "package_review_plan", _plan((ARTIFACT, may_allow, linked)))
+    monkeypatch.setattr(package_review, "_evaluate", _plan(SimpleNamespace(review_settlement=settlement)))
+    monkeypatch.setattr(
+        package_review,
+        "_saved_package_approval",
+        lambda _store, *, artifact, evaluation, install_dir: looked_up.append(install_dir) or (KEY, True),
+    )
+    monkeypatch.setattr(package_review, "render_pre_tool", lambda _harness, verdict, **_kwargs: verdict)
+
+    outcome = _outcome(tmp_path)
+
+    assert looked_up == [linked]
+    assert outcome.response is not None
+    assert outcome.response["decision"] == "allow"
+
+
+def test_a_queued_install_review_carries_its_package_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(package_review, "package_review_plan", _plan((ARTIFACT, False, tmp_path)))
+    monkeypatch.setattr(package_review, "_evaluate", _plan(SimpleNamespace(review_settlement=("review", None))))
+    monkeypatch.setattr(package_review, "_saved_package_approval", lambda *_a, **_k: (KEY, False))
+
+    assert _outcome(tmp_path) == package_review.PackageReviewOutcome(None, KEY)
+
+
+def test_a_block_is_never_overridden_by_a_saved_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(package_review, "package_review_plan", _plan((ARTIFACT, True, tmp_path)))
+    monkeypatch.setattr(package_review, "_evaluate", _plan(SimpleNamespace(review_settlement=("block", "bad"))))
+    monkeypatch.setattr(package_review, "_saved_package_approval", _plan(AssertionError("looked up")))
+    monkeypatch.setattr(package_review, "render_pre_tool", lambda _harness, verdict, **_kwargs: verdict)
+
+    assert _respond(tmp_path)["decision"] == "deny"
+
+
+def test_a_launch_review_never_reads_a_package_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(package_review, "package_review_plan", _plan((ARTIFACT, False, tmp_path)))
+    monkeypatch.setattr(package_review, "_evaluate", _plan(SimpleNamespace(review_settlement=("review", None))))
+    monkeypatch.setattr(package_review, "_saved_package_approval", _plan(AssertionError("looked up")))
+
+    outcome = _outcome(tmp_path, {"reason_code": "native_command_review_required", "minimum_action": "review"})
+
+    assert outcome == package_review.PackageReviewOutcome(None)
+
+
+def test_an_install_whose_key_cannot_be_derived_carries_none(tmp_path: Path) -> None:
+    artifact = SimpleNamespace(metadata={"redacted_command": ""}, harness="omp", artifact_id="x")
+
+    assert package_review._saved_package_approval(
+        object(), artifact=artifact, evaluation=object(), install_dir=tmp_path
+    ) == (None, False)
 
 
 class TestEvaluatorRule:

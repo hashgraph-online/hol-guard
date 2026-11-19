@@ -63,11 +63,12 @@ def _plan(tmp_path: Path, payload: object = PAYLOAD, **kwargs: Any) -> tuple[Any
 
 
 def test_a_plan_returns_the_artifact_and_whether_it_may_allow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    sent = _reply(monkeypatch, {"artifact": ARTIFACT_WIRE, "may_allow": True})
+    sent = _reply(monkeypatch, {"artifact": ARTIFACT_WIRE, "may_allow": True, "workspace": None})
 
-    artifact, may_allow = _plan(tmp_path, home_dir=tmp_path / "home")
+    artifact, may_allow, workspace = _plan(tmp_path, home_dir=tmp_path / "home")
 
     assert may_allow is True
+    assert workspace == tmp_path / "workspace"
     assert artifact.artifact_id == ARTIFACT_WIRE["artifact_id"]
     assert artifact.metadata == ARTIFACT_WIRE["metadata"]
     assert sent[0]["operation"] == "package_review_plan"
@@ -81,10 +82,19 @@ def test_a_plan_returns_the_artifact_and_whether_it_may_allow(monkeypatch: pytes
     assert request["review_reason"] == "native_package_review"
 
 
-def test_no_artifact_is_an_answer_not_a_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    sent = _reply(monkeypatch, {"artifact": None, "may_allow": False})
+def test_a_leading_cd_names_the_directory_the_install_runs_in(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    linked = tmp_path / "linked"
+    _reply(monkeypatch, {"artifact": ARTIFACT_WIRE, "may_allow": False, "workspace": str(linked)})
 
-    assert _plan(tmp_path) == (None, False)
+    assert _plan(tmp_path).workspace == linked
+
+
+def test_no_artifact_is_an_answer_not_a_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    sent = _reply(monkeypatch, {"artifact": None, "may_allow": False, "workspace": None})
+
+    assert _plan(tmp_path) == (None, False, tmp_path / "workspace")
     assert sent[0]["request"]["home_dir"] is None
 
 
@@ -94,11 +104,15 @@ def test_no_artifact_is_an_answer_not_a_failure(monkeypatch: pytest.MonkeyPatch,
         {},
         {"artifact": None},
         {"may_allow": False},
-        {"artifact": None, "may_allow": False, "extra": 1},
-        {"artifact": None, "may_allow": True},
-        {"artifact": ARTIFACT_WIRE, "may_allow": "yes"},
-        {"artifact": {**ARTIFACT_WIRE, "command": "npm"}, "may_allow": False},
-        {"artifact": "npm install zod", "may_allow": False},
+        {"artifact": None, "may_allow": False},
+        {"artifact": None, "may_allow": False, "workspace": None, "extra": 1},
+        {"artifact": None, "may_allow": True, "workspace": None},
+        {"artifact": None, "may_allow": False, "workspace": "/elsewhere"},
+        {"artifact": ARTIFACT_WIRE, "may_allow": "yes", "workspace": None},
+        {"artifact": ARTIFACT_WIRE, "may_allow": False, "workspace": "relative/linked"},
+        {"artifact": ARTIFACT_WIRE, "may_allow": False, "workspace": 3},
+        {"artifact": {**ARTIFACT_WIRE, "command": "npm"}, "may_allow": False, "workspace": None},
+        {"artifact": "npm install zod", "may_allow": False, "workspace": None},
         "npm install zod",
     ],
 )
@@ -124,7 +138,7 @@ def test_a_payload_that_is_not_the_contract_is_rejected(
 def test_a_reply_for_another_request_is_rejected(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, override: dict[str, object]
 ) -> None:
-    _reply(monkeypatch, {"artifact": None, "may_allow": False}, **override)
+    _reply(monkeypatch, {"artifact": None, "may_allow": False, "workspace": None}, **override)
 
     with pytest.raises(bridge.NativePackageReviewPlanError):
         _plan(tmp_path)
@@ -138,7 +152,7 @@ def test_a_resident_that_cannot_answer_plans_nothing(monkeypatch: pytest.MonkeyP
 
 
 def test_an_unserializable_payload_plans_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    _reply(monkeypatch, {"artifact": None, "may_allow": False})
+    _reply(monkeypatch, {"artifact": None, "may_allow": False, "workspace": None})
 
     with pytest.raises(bridge.NativePackageReviewPlanError):
         _plan(tmp_path, {"tool_input": object()})
@@ -160,7 +174,7 @@ def test_the_resident_plans_exec_flows_and_copilot_tool_args(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
-    artifact, may_allow = bridge.package_review_plan(
+    artifact, may_allow, _workspace = bridge.package_review_plan(
         payload,
         harness="copilot",
         workspace=workspace,
@@ -184,7 +198,7 @@ def test_the_resident_plans_a_command_review_only_for_npx_and_bunx(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
-    artifact, may_allow = bridge.package_review_plan(
+    artifact, may_allow, _workspace = bridge.package_review_plan(
         {"tool_input": {"command": command}},
         harness="codex",
         workspace=workspace,
