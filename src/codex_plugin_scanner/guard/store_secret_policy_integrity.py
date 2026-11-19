@@ -589,7 +589,13 @@ class StoreSecretPolicyIntegrityMixin:
             return False
         with self.hold_policy_integrity_generation_lock():
             current = self._read_policy_integrity_control_state_uncached()
-            if current is not None and normalized["generation"] < current["generation"]:
+            normalized_generation = normalized.get("generation")
+            current_generation = current.get("generation") if current is not None else None
+            if (
+                isinstance(normalized_generation, int)
+                and isinstance(current_generation, int)
+                and normalized_generation < current_generation
+            ):
                 return False
             return self._store_policy_integrity_control_state(normalized)
 

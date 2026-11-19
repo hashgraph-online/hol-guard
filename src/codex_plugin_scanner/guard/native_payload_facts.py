@@ -49,7 +49,7 @@ def native_hook_facts(
 ) -> NativePayloadFacts | None:
     """Return resident-normalized payload facts, or ``None`` on native absence."""
 
-    event_payload = {
+    event_payload: dict[str, object] = {
         key: payload[key]
         for key in (
             "event",
@@ -71,7 +71,7 @@ def native_hook_facts(
         )
         if key in payload
     }
-    wire = {
+    wire: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"hook-payload-facts-{uuid.uuid4().hex}",
         "payload": event_payload,
@@ -168,7 +168,7 @@ def native_connector_lookup(
         )
         if key in payload
     }
-    wire = {
+    wire: dict[str, object] = {
         "schema": _CONNECTOR_REQUEST_SCHEMA,
         "request_id": f"hook-connector-facts-{uuid.uuid4().hex}",
         "payload": event_payload,
@@ -213,16 +213,19 @@ def native_connector_lookup(
                 status.identity.sha256, guard_home, reason="native_hook_connector_facts_result"
             )
         return None
+    command = lookup.get("command")
+    cwd = lookup.get("cwd")
+    env = lookup.get("env")
     if (
         set(lookup) != {"command", "cwd", "home_dir", "user_home", "env"}
-        or not isinstance(lookup.get("command"), str)
-        or not lookup.get("command", "").strip()
-        or not isinstance(lookup.get("cwd"), str)
-        or not lookup.get("cwd", "").strip()
+        or not isinstance(command, str)
+        or not command.strip()
+        or not isinstance(cwd, str)
+        or not cwd.strip()
         or (lookup.get("home_dir") is not None and not isinstance(lookup.get("home_dir"), str))
         or not isinstance(lookup.get("user_home"), str)
-        or not isinstance(lookup.get("env"), Mapping)
-        or not all(isinstance(key, str) and isinstance(value, str) for key, value in lookup["env"].items())
+        or not isinstance(env, Mapping)
+        or not all(isinstance(key, str) and isinstance(value, str) for key, value in env.items())
     ):
         if status.identity is not None:
             native_record_resident_failure(

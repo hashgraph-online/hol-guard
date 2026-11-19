@@ -31,7 +31,7 @@ def native_policy_not_ready_reason(
     timeout_seconds = 0.5 if deadline is None else min(0.5, deadline - time.monotonic())
     if timeout_seconds <= 0:
         return None
-    request = {
+    request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"hook-policy-admission-{uuid.uuid4().hex}",
         "last_error": error.strip() if error and error.strip() else None,
