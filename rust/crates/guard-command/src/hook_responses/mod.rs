@@ -21,7 +21,7 @@ pub type Object = Map<String, Value>;
 const REVIEW_DEFAULT_REASON: &str = "HOL Guard requires native review before execution.";
 const REVIEW_PAUSE_REASON: &str = "HOL Guard requires review before this action can execute.";
 const WATCH_REASON: &str = "Watch recorded this action without stopping it.";
-const POST_BLOCK_REASON: &str =
+pub(super) const POST_BLOCK_REASON: &str =
     "HOL Guard blocked this tool output because it could not be proven safe.";
 const POST_WARN_REASON: &str =
     "HOL Guard raised a non-blocking warning under the installed native policy.";
