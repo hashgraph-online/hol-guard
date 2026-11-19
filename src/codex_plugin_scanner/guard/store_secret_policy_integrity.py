@@ -304,12 +304,16 @@ class StoreSecretPolicyIntegrityMixin:
 
         if store._test_keyring_module() is not None:
             return store.get_secret(secret_id)
+        if sys.platform == "darwin":
+            return store.get_secret_with_timeout(
+                secret_id,
+                timeout_seconds=_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS,
+            )
         worker = (
-            "import json,sys\n"
-            "from codex_plugin_scanner.guard.store_base import SystemKeyringSecretStore\n"
+            "import json,sys,keyring\n"
             "try:\n"
-            "    value=SystemKeyringSecretStore(service_name=sys.argv[1]).get_secret(sys.argv[2])\n"
-            "    print(json.dumps({'status':'found','value':value} if value is not None else "
+            "    value=keyring.get_password(sys.argv[1],sys.argv[2])\n"
+            "    print(json.dumps({'status':'found','value':value} if value else "
             "{'status':'missing'},separators=(',',':')))\n"
             "except Exception:\n"
             "    print(json.dumps({'status':'unavailable'},separators=(',',':')))\n"
@@ -318,7 +322,27 @@ class StoreSecretPolicyIntegrityMixin:
         environment = {
             key: value
             for key, value in os.environ.items()
-            if key in {"HOME", "LANG", "LC_ALL", "LOGNAME", "PATH", "TMPDIR", "USER"} or key.startswith("LC_")
+            if key
+            in {
+                "HOME",
+                "LANG",
+                "LC_ALL",
+                "LOGNAME",
+                "PATH",
+                "TMPDIR",
+                "USER",
+                "DBUS_SESSION_BUS_ADDRESS",
+                "XDG_RUNTIME_DIR",
+                "DISPLAY",
+                "PYTHON_KEYRING_BACKEND",
+                "XDG_CONFIG_HOME",
+                "XDG_DATA_HOME",
+                "SYSTEMROOT",
+                "USERPROFILE",
+                "APPDATA",
+                "LOCALAPPDATA",
+            }
+            or key.startswith("LC_")
         }
         try:
             completed = subprocess.run(

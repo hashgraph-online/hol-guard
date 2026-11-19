@@ -34,7 +34,7 @@ impl Env<'_> {
         let notice_key = notice_key(session_id, tool_name);
         let pending_key = claude_pending_key(session_id, artifact_id);
         let masked = mask_tool_call_command(payload);
-        let mut recorded = masked
+        let recorded = masked
             .as_ref()
             .and_then(Value::as_object)
             .cloned()
