@@ -75,7 +75,7 @@ def test_consumers_keep_the_checked_profile_and_main_only_compiler_cache_writes(
     profile = named(steps, "Configure the checked test profile")
     assert profile["if"] == "matrix.check != 'clippy'"
     for setting in (
-        "CARGO_PROFILE_TEST_OPT_LEVEL=1",
+        "CARGO_PROFILE_TEST_OPT_LEVEL=0",
         "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true",
         "CARGO_PROFILE_TEST_OVERFLOW_CHECKS=true",
         "CARGO_PROFILE_TEST_DEBUG=line-tables-only",
