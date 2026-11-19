@@ -364,4 +364,47 @@ mod cloud_workspace_tests {
         let config = ReadConfig::from_line(&serde_json::to_vec(&handshake).unwrap()).unwrap();
         assert_eq!(cloud_workspace(&config), None);
     }
+    #[test]
+    fn a_signed_in_device_names_its_workspace() {
+        let home = tempfile::tempdir().unwrap();
+        let guard_home = home.path().to_string_lossy().into_owned();
+        let store_path = home.path().join("guard.db");
+        rusqlite::Connection::open(&store_path)
+            .unwrap()
+            .execute_batch(
+                "create table sync_state (state_key text primary key, \
+                 payload_json text not null, updated_at text not null);",
+            )
+            .unwrap();
+        let store =
+            crate::package_authority_op::ResidentSupplyChainStore::new(&store_path, home.path());
+        let credentials = json!({
+            "issuer": "https://hol.org",
+            "client_id": "guard-cli",
+            "dpop_private_key_pem": "synthetic-pem",
+            "dpop_public_jwk": {"kty": "EC"},
+            "dpop_public_jwk_thumbprint": "synthetic-thumbprint",
+            "workspace_id": "workspace-1",
+        });
+        crate::oauth_refresh::persist_rotated_oauth_refresh_token(
+            &store,
+            &credentials,
+            None,
+            None,
+            "synthetic-refresh",
+            None,
+            None,
+        )
+        .unwrap();
+        let handshake = json!({
+            "schema": HANDSHAKE_SCHEMA,
+            "auth_token": "test",
+            "guard_home": guard_home,
+            "store_path": store_path.to_string_lossy(),
+            "source": "default",
+            "busy_timeout_ms": 2000,
+        });
+        let config = ReadConfig::from_line(&serde_json::to_vec(&handshake).unwrap()).unwrap();
+        assert_eq!(cloud_workspace(&config).as_deref(), Some("workspace-1"));
+    }
 }
