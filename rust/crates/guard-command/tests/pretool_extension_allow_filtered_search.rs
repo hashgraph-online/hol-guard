@@ -100,3 +100,29 @@ fn a_filter_that_reaches_a_credential_keeps_its_floor() {
         }
     }
 }
+
+// Even after `--`, Git accepts a filename that resembles an option.
+// With Git Allow, discarding the `--include=` prefix would quietly allow a
+// pathspec that can select a synthetic credential-named file.
+#[test]
+fn a_pathspec_after_double_dash_must_not_be_an_option() {
+    let (root, _cleanup) = checkout("pathspec");
+    let project = root.join("project");
+    let filename = "--include=private-key.tsx";
+    let path = project.join(filename);
+    std::fs::write(&path, "public test marker\n").unwrap();
+    fixture::git(&root, &project, &["add", "--", filename]);
+    fixture::git(&root, &project, &["commit", "--quiet", "-m", "pathspec fixture"]);
+    std::fs::write(&path, "changed public test marker\n").unwrap();
+
+    let controls = fixture::every_permission_enabled();
+    for command in [
+        "git diff --name-only -- '--include=*.tsx'",
+        "git worktree remove ../review --force && git diff --name-only -- '--include=*.tsx'",
+    ] {
+        for harness in HARNESSES {
+            let result = decide(&root, harness, command, &controls);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+        }
+    }
+}
