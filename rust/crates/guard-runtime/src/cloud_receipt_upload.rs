@@ -14,10 +14,11 @@ use serde_json::{json, Map, Value};
 use crate::cloud_bundle_fetch::{resolve_auth, unreachable_message, SyncError};
 use crate::cloud_event_sync::{
     answer_text, post, route_url, screen_supplied, synced_at, trusted_base, EventStore, Refusal,
-    EVENT_TIMEOUTS,
+    EVENTS_BODY_LIMIT, EVENT_TIMEOUTS,
 };
 use crate::cloud_receipt_upload_rows::{
-    advance_marker, cursor_backfill, plan, rowid, Plan, CURSOR_KEY, DETAIL_BACKFILL_MARKER,
+    advance_marker, cursor_backfill, plan, rowid, sized_batches, Plan, CURSOR_KEY,
+    DETAIL_BACKFILL_MARKER,
 };
 
 /// `fleet_posture_common.LAST_SENT_STATE_KEY` / `FORCE_FULL_STATE_KEY`.
@@ -116,6 +117,7 @@ pub(crate) fn upload_receipts(
             &request.redaction_level,
             &request.now,
         )?;
+        let plan = fit_to_broker(request, plan)?;
         state.marker = plan.marker.clone();
         state.workspace_pending = request.workspace_assessments.clone();
         state.plan = Some(plan);
@@ -123,8 +125,9 @@ pub(crate) fn upload_receipts(
     let plan = state.plan.clone().unwrap_or_default();
     while state.processed < plan.batches.len() {
         let index = state.processed;
-        let batch = &plan.rows[plan.batches[index].clone()];
-        let (body, workspace_sent) = batch_body(request, batch, index, state)?;
+        let range = plan.batches[index].clone();
+        let batch = &plan.rows[range.clone()];
+        let (body, workspace_sent) = batch_body(request, &plan.projected[range], index, state);
         let payload = send(store, request, state, index, &body)?;
         record_batch(
             store,
@@ -141,22 +144,57 @@ pub(crate) fn upload_receipts(
     finish(store, state, &plan)
 }
 
-/// The request body for one batch, and the summary it carries.
-fn batch_body(
-    request: &UploadRequest,
-    batch: &[Value],
-    index: usize,
-    state: &UploadState,
-) -> Result<(Value, Option<Value>), SyncError> {
+/// The receipts' upload payloads, and batches whose bodies fit through the
+/// egress broker. A receipt too large for a request of its own is left out
+/// of every body.
+pub(crate) fn fit_to_broker(request: &UploadRequest, mut plan: Plan) -> Result<Plan, SyncError> {
     let projected = crate::cloud_receipt_payload::cloud_sync_receipt_payloads(&json!({
-        "receipts": batch,
+        "receipts": plan.rows,
         "device_id": request.device_id,
         "device_name": request.device_name,
         "redaction_level": request.redaction_level,
         "now": request.now,
     }))
     .map_err(|error| SyncError::Failed(format!("Guard receipts could not be prepared: {error}")))?;
-    let receipts = projected.get("payloads").cloned().unwrap_or(json!([]));
+    let payloads = match projected.get("payloads") {
+        Some(Value::Array(payloads)) if payloads.len() == plan.rows.len() => payloads.clone(),
+        _ => {
+            return Err(SyncError::Failed(
+                "Guard receipts could not be prepared.".to_owned(),
+            ))
+        }
+    };
+    // The largest context any batch carries: the first adds the posture.
+    let mut context = request.sync_context.clone();
+    if let Some(posture) = &request.fleet_posture {
+        context.insert("fleetPosture".to_owned(), posture.payload.clone());
+    }
+    let overhead = json!({"receipts": [], "syncContext": context})
+        .to_string()
+        .len();
+    let projected: Vec<Option<Value>> = payloads
+        .into_iter()
+        .map(|payload| {
+            (overhead + payload.to_string().len() <= EVENTS_BODY_LIMIT).then_some(payload)
+        })
+        .collect();
+    let sizes: Vec<Option<usize>> = projected
+        .iter()
+        .map(|payload| payload.as_ref().map(|payload| payload.to_string().len()))
+        .collect();
+    plan.batches = sized_batches(&sizes, overhead, EVENTS_BODY_LIMIT);
+    plan.projected = projected;
+    Ok(plan)
+}
+
+/// The request body for one batch, and the summary it carries.
+fn batch_body(
+    request: &UploadRequest,
+    projected: &[Option<Value>],
+    index: usize,
+    state: &UploadState,
+) -> (Value, Option<Value>) {
+    let receipts = Value::Array(projected.iter().flatten().cloned().collect());
     let mut context = request.sync_context.clone();
     if index == 0 {
         if let Some(posture) = &request.fleet_posture {
@@ -175,10 +213,10 @@ fn batch_body(
             workspace_sent = Some(fitted);
         }
     }
-    Ok((
+    (
         json!({"receipts": receipts, "syncContext": context}),
         workspace_sent,
-    ))
+    )
 }
 
 /// `fit_workspace_assessment_to_request`: the summary is best-effort, so a

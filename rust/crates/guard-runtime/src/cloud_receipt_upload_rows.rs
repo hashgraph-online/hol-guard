@@ -38,6 +38,10 @@ pub(crate) struct Plan {
     /// The command-detail backfill marker, when a backfill runs.
     pub(crate) marker: Option<Value>,
     pub(crate) batches: Vec<Range<usize>>,
+    /// Each row's upload payload, or `None` for a receipt too large to send
+    /// in any request. Such a receipt rides in its batch unsent, so it still
+    /// moves the cursor and never blocks the receipts after it.
+    pub(crate) projected: Vec<Option<Value>>,
 }
 
 /// `_receipt_sync_cursor_rowid`.
@@ -213,6 +217,38 @@ pub(crate) fn batches(count: usize) -> Vec<Range<usize>> {
         .step_by(BATCH_SIZE)
         .map(|start| start..(start + BATCH_SIZE).min(count))
         .collect()
+}
+
+/// Split the rows so no request body goes over `limit` bytes. `sizes` holds
+/// each payload's serialized length, `None` for one that is not sent;
+/// `overhead` is the body without any receipts. A batch still holds at most
+/// [`BATCH_SIZE`] rows.
+pub(crate) fn sized_batches(
+    sizes: &[Option<usize>],
+    overhead: usize,
+    limit: usize,
+) -> Vec<Range<usize>> {
+    if sizes.is_empty() {
+        return vec![0..0];
+    }
+    let mut ranges = Vec::new();
+    let (mut start, mut bytes, mut sent) = (0, overhead, 0_usize);
+    for (index, size) in sizes.iter().enumerate() {
+        // Each payload after the first adds a separating comma.
+        let added = size.map(|size| size + usize::from(sent > 0));
+        let full = index - start == BATCH_SIZE
+            || added.is_some_and(|added| sent > 0 && bytes + added > limit);
+        if full {
+            ranges.push(start..index);
+            (start, bytes, sent) = (index, overhead, 0);
+        }
+        if let Some(size) = size {
+            bytes += size + usize::from(sent > 0);
+            sent += 1;
+        }
+    }
+    ranges.push(start..sizes.len());
+    ranges
 }
 
 /// The `receipt_cursor_backfill` summary flag: a sync that had a cursor

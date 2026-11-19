@@ -4,7 +4,8 @@ use serde_json::{json, Value};
 
 use super::*;
 use crate::cloud_receipt_upload_rows::{
-    batches, cursor_rowid, rows_for_upload, with_detail_backfill, DETAIL_BACKFILL_FLAG,
+    batches, cursor_rowid, rows_for_upload, sized_batches, with_detail_backfill,
+    DETAIL_BACKFILL_FLAG,
 };
 
 fn receipt(rowid: i64) -> Value {
@@ -254,8 +255,8 @@ fn request(posture: bool, workspace: Option<Value>) -> UploadRequest {
 fn the_posture_rides_on_the_first_request_only() {
     let request = request(true, None);
     let state = UploadState::default();
-    let (first, _) = batch_body(&request, &[], 0, &state).unwrap();
-    let (second, _) = batch_body(&request, &[], 1, &state).unwrap();
+    let (first, _) = batch_body(&request, &[], 0, &state);
+    let (second, _) = batch_body(&request, &[], 1, &state);
     assert_eq!(
         first["syncContext"]["fleetPosture"],
         json!({"mode": "delta"})
@@ -275,7 +276,7 @@ fn a_summary_that_does_not_fit_waits_for_a_later_request() {
         workspace_pending: Some(summary),
         ..UploadState::default()
     };
-    let (body, sent) = batch_body(&request, &[], 0, &state).unwrap();
+    let (body, sent) = batch_body(&request, &[], 0, &state);
     assert!(sent.is_none());
     assert!(body["syncContext"].get("workspaceAssessments").is_none());
 }
@@ -309,4 +310,56 @@ fn answers_accumulate_across_batches() {
     );
     tally.accumulate(&json!({"policyBundle": "not an object"}));
     assert!(tally.bundle_malformed);
+}
+
+#[test]
+fn batches_split_before_a_body_goes_over_the_limit() {
+    // Overhead 10, limit 40: 12 + 13 (with comma) fits, the third does not.
+    let sizes = [Some(12), Some(12), Some(12)];
+    assert_eq!(sized_batches(&sizes, 10, 40), vec![0..2, 2..3]);
+    assert_eq!(sized_batches(&[], 10, 40), vec![0..0]);
+}
+
+#[test]
+fn a_receipt_left_unsent_still_rides_in_its_batch() {
+    let sizes = [Some(12), None, Some(12)];
+    assert_eq!(sized_batches(&sizes, 10, 40), vec![0..3]);
+    let sizes = [None, None];
+    assert_eq!(sized_batches(&sizes, 10, 40), vec![0..2]);
+}
+
+#[test]
+fn sized_batches_still_hold_fifty_rows_at_most() {
+    let sizes = vec![Some(1); 120];
+    assert_eq!(
+        sized_batches(&sizes, 10, usize::MAX / 2),
+        vec![0..50, 50..100, 100..120]
+    );
+}
+
+#[test]
+fn a_receipt_too_large_for_any_request_is_planned_unsent() {
+    let mut request = request(true, None);
+    request.redaction_level = "full".to_owned();
+    let big = "x".repeat(crate::cloud_event_sync::EVENTS_BODY_LIMIT);
+    let rows = vec![
+        json!({"receipt_id": "small", "receipt_rowid": 1, "timestamp": "2026-11-19T00:00:00Z",
+               "harness": "codex", "artifact_id": "a", "artifact_hash": "h", "policy_decision": "allow"}),
+        json!({"receipt_id": "big", "receipt_rowid": 2, "timestamp": "2026-11-19T00:00:00Z",
+               "harness": "codex", "artifact_id": big, "artifact_hash": "h", "policy_decision": "allow"}),
+    ];
+    let plan = fit_to_broker(
+        &request,
+        Plan {
+            rows,
+            ..Plan::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(plan.batches, vec![0..2]);
+    assert!(plan.projected[0].is_some());
+    assert!(plan.projected[1].is_none());
+    let state = UploadState::default();
+    let (body, _) = batch_body(&request, &plan.projected, 0, &state);
+    assert_eq!(body["receipts"].as_array().map(Vec::len), Some(1));
 }
