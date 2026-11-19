@@ -51205,6 +51205,74 @@
       "expect": "allow"
     },
     {
+      "id": "find-name-group-exec-grep",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find . -type f \\( -name \"*.py\" -o -name \"*.rst\" \\) ! -path \"./.git/*\" -exec grep -l \"_reset\" {} \\;"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "find-name-group-print0-xargs-grep",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find src -type f \\( -name '*.ts' -o -name '*.tsx' \\) -print0 | xargs -0 grep -n retryLimit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-find-name-group-env-file-exec-cat",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find . -type f \\( -name '*.py' -o -name '.env' \\) -exec cat {} +"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-find-negated-name-group-exec-cat",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find . -type f ! \\( -name '*.py' -o -name '*.rs' \\) -exec cat {} +"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "find-prune-xargs-grep",
       "fix_area": "shell",
       "harnesses": [
