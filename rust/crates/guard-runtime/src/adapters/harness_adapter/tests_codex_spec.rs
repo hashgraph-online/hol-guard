@@ -50,7 +50,6 @@ fn a_source_caller_names_its_package_files_under_its_root() {
         roles,
         [
             "bridge",
-            "bridge_runtime",
             "hook_probe",
             "native_receipt",
             "fallback_entrypoint",
@@ -129,7 +128,8 @@ fn a_frozen_caller_is_every_role_and_its_own_interpreter() {
     for pair in spec["packaged_file_paths"].as_array().unwrap() {
         assert_eq!(pair[1], "/py", "role {}", pair[0]);
     }
-    assert_eq!(spec["packaged_file_paths"].as_array().unwrap().len(), 10);
+    // The bridge and the eight roles in `ROLES`.
+    assert_eq!(spec["packaged_file_paths"].as_array().unwrap().len(), 9);
 }
 
 #[test]

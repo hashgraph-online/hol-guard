@@ -1012,11 +1012,11 @@ if Path('/candidate-wheel').is_dir():
 
         relatives = ['codex_plugin_scanner/guard/mcp_server_client.py']
 
-        relatives += ['codex_plugin_scanner/guard/harness/' + name + '.py'
+        relatives += ['codex_plugin_scanner/guard/' + name + '.py'
 
-                      for name in ('native_harness',)]
+                      for name in ('native_harness_client', 'native_harness_ops')]
 
-        relatives += ['codex_plugin_scanner/guard/harness/cursor_client.py']
+        relatives += ['codex_plugin_scanner/guard/cursor_hook_ops.py']
 
         if os.environ.get('VERIFY_NATIVE_VALUES') == '1':
 

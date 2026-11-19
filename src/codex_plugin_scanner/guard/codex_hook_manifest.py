@@ -7,7 +7,6 @@ construction at the harness boundary and prevents a circular dependency.
 
 from __future__ import annotations
 
-import hashlib
 import os
 import uuid
 from collections.abc import Mapping
@@ -16,18 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
-from .codex_hook_file_integrity import (
-    CodexHookIntegrityError,
-    canonical_path,
-    check_hook_validation_deadline,
-)
-from .codex_hook_integrity import (
-    _MANIFEST_MESSAGES,
-    authenticate_hook_manifest_text,
-    hook_manifest_path,
-    load_authenticated_hook_manifest,
-)
-from .native_codex_hook_manifest_verify import native_codex_hook_manifest_verify
+from .codex_hook_file_integrity import CodexHookIntegrityError, check_hook_validation_deadline
 
 if TYPE_CHECKING:
     from .native_runtime import NativeRuntimeIdentity
@@ -53,24 +41,22 @@ class CodexHookManifestSpec:
     event_bindings: tuple[Mapping[str, object], ...]
     workspace_rebinding_allowed: bool = False
 
-
-def _spec_payload(spec: CodexHookManifestSpec) -> dict[str, object]:
-    def spelled(path: Path) -> str:
-        return str(path.expanduser())
-
-    return {
-        "guard_home": spelled(spec.guard_home),
-        "home_dir": spelled(spec.home_dir),
-        "runtime_guard_home": spelled(spec.runtime_guard_home),
-        "workspace_dir": spelled(spec.workspace_dir) if spec.workspace_dir is not None else None,
-        "config_path": spelled(spec.config_path),
-        "interpreter_path": str(spec.interpreter_path.expanduser().absolute()),
-        "package_version": spec.package_version,
-        "packaged_file_paths": [[role, spelled(path)] for role, path in spec.packaged_file_paths],
-        "fallback_argv": list(spec.fallback_argv),
-        "daemon_start_argv": list(spec.daemon_start_argv),
-        "event_bindings": [dict(binding) for binding in spec.event_bindings],
-    }
+    def payload(self) -> dict[str, object]:
+        """The installation as the runtime reads it: spellings only, never resolved here."""
+        return {
+            "guard_home": str(self.guard_home),
+            "home_dir": str(self.home_dir),
+            "runtime_guard_home": str(self.runtime_guard_home),
+            "workspace_dir": None if self.workspace_dir is None else str(self.workspace_dir),
+            "config_path": str(self.config_path),
+            "interpreter_path": str(self.interpreter_path),
+            "package_version": self.package_version,
+            "packaged_file_paths": [[role, str(path)] for role, path in self.packaged_file_paths],
+            "fallback_argv": list(self.fallback_argv),
+            "daemon_start_argv": list(self.daemon_start_argv),
+            "event_bindings": [dict(binding) for binding in self.event_bindings],
+            "workspace_rebinding_allowed": self.workspace_rebinding_allowed,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,62 +75,26 @@ class PreparedCodexHookPublication:
         return (self.authority_dependency, self.manifest_change, self.receipt_change, self.config_change)
 
 
-def generation_request(
-    spec: CodexHookManifestSpec,
-    *,
-    previous_manifest: Mapping[str, object] | None,
-    create_key: bool,
-) -> dict[str, object]:
-    """The ``publication_generation`` request for ``spec``, without its rendered config."""
-    import os
-
-    def spelled(path: Path) -> str:
-        return os.path.abspath(path.expanduser())
-
-    return {
-        "config": spelled(spec.config_path),
-        "guard_home": spelled(spec.guard_home),
-        "home_dir": spelled(spec.home_dir),
-        "runtime_guard_home": spelled(spec.runtime_guard_home),
-        "workspace_dir": spelled(spec.workspace_dir) if spec.workspace_dir is not None else None,
-        "workspace_rebinding_allowed": spec.workspace_rebinding_allowed,
-        "spec": _spec_payload(spec),
-        "previous_manifest": None if previous_manifest is None else dict(previous_manifest),
-        "create_key": create_key,
-    }
-
-
 def load_hook_manifest_baseline(spec: CodexHookManifestSpec) -> dict[str, object] | None:
     """The runtime loads a prior authenticated baseline or proves a clean install."""
-    import os
-
     from .native_transition_files import publication
 
-    def spelled(path: Path) -> str:
-        return os.path.abspath(path.expanduser())
-
-    check_hook_validation_deadline()
-    answer = publication(
-        "baseline",
-        spec.guard_home,
-        config=spelled(spec.config_path),
-        guard_home=spelled(spec.guard_home),
-        home_dir=spelled(spec.home_dir),
-        runtime_guard_home=spelled(spec.runtime_guard_home),
-        workspace_dir=spelled(spec.workspace_dir) if spec.workspace_dir is not None else None,
-        workspace_rebinding_allowed=spec.workspace_rebinding_allowed,
-    )
-    check_hook_validation_deadline()
+    answer = publication("baseline", spec.guard_home, spec=spec.payload())
+    malformed = CodexHookIntegrityError("native_transition_invalid", "Guard could not read the managed-hook baseline.")
     if not isinstance(answer, dict) or set(answer) not in ({"manifest"}, {"untrusted"}):
-        raise _untrusted_baseline_error()
+        raise malformed
+    untrusted = answer.get("untrusted")
     if "untrusted" in answer:
-        cause = answer["untrusted"]
+        if not isinstance(untrusted, dict):
+            raise malformed
+        error = CodexHookIntegrityError(str(untrusted["reason"]), str(untrusted["message"]))
+        cause = untrusted.get("cause")
         if isinstance(cause, str):
-            raise _untrusted_baseline_error() from CodexHookIntegrityError(cause, _MANIFEST_MESSAGES.get(cause, cause))
-        raise _untrusted_baseline_error()
+            raise error from CodexHookIntegrityError(cause, cause)
+        raise error
     manifest = answer["manifest"]
     if manifest is not None and not isinstance(manifest, dict):
-        raise _untrusted_baseline_error()
+        raise malformed
     return manifest
 
 
@@ -212,52 +162,40 @@ def transition_file(item: Mapping[str, object]) -> TransitionFile:
 def prepare_authenticated_hook_manifest_repair(spec: CodexHookManifestSpec) -> PreparedCodexHookRepair:
     """Prepare only restoration of a missing manifest from retained authority.
 
-    The runtime pins the key, receipt, config and every captured launch
-    artifact; this keeps the receipt checks and the manifest change.
+    The runtime does the whole preparation: it refuses a present manifest,
+    loads the receipt under its own key, parses the retained config, verifies
+    the retained manifest, pins the key, receipt, config and every captured
+    launch artifact, compares them and checks the plan. This sends the facts
+    of this process and settles the answer.
     """
-    from .codex_hook_recovery import _snapshot, load_hook_authority_receipt
-    from .codex_hook_sources import parse_toml_object
+    from .harness_context import HarnessContext
+    from .native_harness_client import wire_context
     from .native_transition_files import publication
-    from .runtime_transition import RuntimeTransition, TransitionError, TransitionFile
+    from .runtime_transition import TransitionError
 
-    check_hook_validation_deadline()
-    config = spec.config_path.parent.resolve(strict=False) / spec.config_path.name
-    manifest_path = hook_manifest_path(spec.guard_home, config)
-    if _snapshot(manifest_path) is not None:
-        raise TransitionError("authority_repair_manifest_present")
-    receipt = load_hook_authority_receipt(spec.guard_home, config)
-    payload = parse_toml_object(receipt.config_bytes, path=config, label="Codex config file")
-    check_hook_validation_deadline()
-    features = payload.get("features")
-    if isinstance(features, Mapping) and features.get("hooks") is False:
-        raise TransitionError("authority_repair_hooks_disabled")
-    state = _verify_hook_manifest(
-        spec,
-        hooks=payload.get("hooks"),
-        captured_text=receipt.manifest_bytes.decode("utf-8"),
-    )
-    if state.get("integrity_status") != "valid":
-        raise CodexHookIntegrityError(str(state["integrity_reason"]), str(state["integrity_message"]))
-    manifest = authenticate_hook_manifest_text(spec.guard_home, receipt.manifest_bytes.decode("utf-8"))
-    check_hook_validation_deadline()
+    context = HarnessContext(home_dir=spec.home_dir, workspace_dir=spec.workspace_dir, guard_home=spec.guard_home)
+    operation_id = str(uuid.uuid4())
     answer = publication(
-        "repair_files",
+        "repair_prepare",
         spec.guard_home,
-        config=str(config),
-        manifest=manifest,
-        receipt_sha256=hashlib.sha256(receipt.receipt_bytes).hexdigest(),
-        config_sha256=hashlib.sha256(receipt.config_bytes).hexdigest(),
+        config=os.path.abspath(spec.config_path),
+        operation_id=operation_id,
+        spec=spec.payload(),
+        context=wire_context(context),
     )
-    pinned = answer.get("files") if isinstance(answer, dict) else None
-    if not isinstance(pinned, list) or not all(isinstance(item, dict) for item in pinned):
+    prepared: dict[str, object] = answer if isinstance(answer, dict) else {}
+    change, pinned = prepared.get("change"), prepared.get("files")
+    guard_home, config = prepared.get("guard_home"), prepared.get("config")
+    if (
+        not isinstance(change, dict)
+        or not isinstance(pinned, list)
+        or not all(isinstance(item, dict) for item in pinned)
+        or not isinstance(guard_home, str)
+        or not isinstance(config, str)
+    ):
         raise TransitionError("native_transition_invalid")
-    change = TransitionFile(manifest_path, None, receipt.manifest_bytes, no_follow=True)
-    files = (change, *(transition_file(item) for item in pinned))
-    RuntimeTransition._compare({"files": [item.payload() for item in files]}, "before")
-    check_hook_validation_deadline()
-    prepared = PreparedCodexHookRepair(change, files, spec.guard_home.resolve(strict=False), config, str(uuid.uuid4()))
-    prepared.payload()
-    return prepared
+    files = tuple(transition_file(item) for item in pinned)
+    return PreparedCodexHookRepair(transition_file(change), files, Path(guard_home), Path(config), operation_id)
 
 
 def manifest_bindings(manifest: object) -> list[dict[str, object]]:
@@ -283,62 +221,13 @@ def _verify_hook_manifest(
     hooks: object,
     captured_text: str | None = None,
 ) -> dict[str, object]:
-    """Authenticate the manifest here and let the resident verify the rest."""
+    """The runtime authenticates the manifest with its own key and decides the state."""
+    from .codex_harness_client import verify_manifest_state
 
-    manifest: dict[str, object] | None = None
-    expected: dict[str, object] | None = None
-    failure: tuple[str, str] | None = None
-    try:
-        manifest = (
-            load_authenticated_hook_manifest(spec.guard_home, spec.config_path)
-            if captured_text is None
-            else authenticate_hook_manifest_text(spec.guard_home, captured_text)
-        )
-        expected = {
-            "config_path": str(spec.config_path),
-            "config_target": canonical_path(spec.config_path),
-            "context": _expected_context(spec),
-            "package_version": spec.package_version,
-            "interpreter_path": str(spec.interpreter_path),
-            "packaged_paths": {role: canonical_path(path) for role, path in spec.packaged_file_paths},
-            "fallback_argv": list(spec.fallback_argv),
-            "daemon_start_argv": list(spec.daemon_start_argv),
-            "event_bindings": [dict(binding) for binding in spec.event_bindings],
-        }
-    except CodexHookIntegrityError as exc:
-        failure = (exc.reason, exc.message)
-    except OSError:
-        failure = (
-            "codex_hook_integrity_io_error",
-            "Guard could not verify the Codex hook installation; run repair and inspect file permissions.",
-        )
-    state = native_codex_hook_manifest_verify(
-        guard_home=spec.guard_home,
-        hooks=hooks,
-        manifest=manifest,
-        expected=expected,
-        failure=failure,
-    )
-    state["manifest_path"] = str(hook_manifest_path(spec.guard_home, spec.config_path))
+    check_hook_validation_deadline()
+    state = verify_manifest_state(spec, hooks=hooks, captured_text=captured_text)
+    check_hook_validation_deadline()
     return state
-
-
-def _expected_context(spec: CodexHookManifestSpec) -> dict[str, object]:
-    return {
-        "guard_home": canonical_path(spec.guard_home),
-        "home_dir": canonical_path(spec.home_dir),
-        "runtime_guard_home": canonical_path(spec.runtime_guard_home),
-        "workspace_dir": canonical_path(spec.workspace_dir) if spec.workspace_dir is not None else None,
-    }
-
-
-def _untrusted_baseline_error() -> CodexHookIntegrityError:
-    return CodexHookIntegrityError(
-        "codex_hook_manifest_baseline_untrusted",
-        "Guard refused to authenticate hook package bytes because the existing managed-hook baseline is "
-        "missing, invalid, or belongs to another installation. Reinstall hol-guard from a trusted package, "
-        "then run `hol-guard install codex` again.",
-    )
 
 
 __all__ = [

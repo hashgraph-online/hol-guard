@@ -14,8 +14,7 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     build_harness_verification,
     cursor_local_action_payload,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.models import HarnessDetection
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -82,17 +81,12 @@ def test_cursor_install_all_reports_auto_detected_cursor_action(
     monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
+    config = context.workspace_dir / ".cursor" / "mcp.json"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text("{}")
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.install_targets.detect_all",
-        lambda _: [
-            HarnessDetection(
-                harness="cursor",
-                installed=False,
-                command_available=False,
-                config_paths=(str(context.workspace_dir / ".cursor" / "mcp.json"),),
-                artifacts=(),
-            )
-        ],
+        "codex_plugin_scanner.guard.cli.install_targets.detected_harnesses",
+        lambda _: ["cursor"],
     )
 
     payload = apply_managed_install(

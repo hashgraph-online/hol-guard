@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import install_commands as install_commands_module
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.opencode_test_support import (
     config_uses_guard_proxy,
     global_plugin_path,
@@ -542,7 +542,7 @@ def test_opencode_install_includes_pretool_plugin_paths(tmp_path: Path) -> None:
     config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
     config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text('{"mcp": {}}', encoding="utf-8")
-    result = get_adapter("opencode").install(ctx)
+    result = harness_support.install("opencode", ctx)
     assert Path(result["managed_plugin_path"]).is_file()
     assert Path(result["global_plugin_path"]).is_file()
 
@@ -743,30 +743,6 @@ def test_refresh_opencode_pretool_plugin_handles_runtime_error(
 
     assert note is not None
     assert "Could not inspect OpenCode pretool plugin during update" in note
-
-
-def test_refresh_opencode_pretool_plugin_handles_install_runtime_error(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from codex_plugin_scanner.guard.cli import update_opencode as update_commands
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    ctx = _ctx(tmp_path)
-    store = GuardStore(ctx.guard_home)
-    store.set_managed_install("opencode", True, None, {}, "2026-06-04T00:00:00+00:00")
-    install_pretool_plugin(ctx)
-    global_plugin_path(ctx).write_text("// stale plugin\n", encoding="utf-8")
-
-    def _raise_os_error(*_args: object, **_kwargs: object) -> int:
-        raise OSError("write failed")
-
-    monkeypatch.setattr(Path, "write_text", _raise_os_error)
-
-    note = update_commands._refresh_opencode_pretool_plugin(context=ctx, store=store)
-
-    assert note is not None
-    assert "Could not refresh OpenCode pretool plugin during update" in note
 
 
 def test_opencode_verification_reports_missing_plugin(tmp_path: Path) -> None:

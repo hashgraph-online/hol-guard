@@ -395,20 +395,12 @@ jobs:
           cargo test --manifest-path rust/Cargo.toml --locked --release \
             -p guard-command --lib contained_runner::real_backend_tests -- --nocapture \
             2>&1 | tee native-containment-proof.log
-      - name: Exercise real contained execution and failure paths
-        if: ${{ !cancelled() }}
-        env:
-          GUARD_VITEST_FIXTURE: ${{ runner.temp }}/guard-vitest-fixture
-        run: >-
-          uv run --no-sync pytest tests/test_guard_contained_vitest_handoff_fail_closed.py
-          --tb=short --junitxml=containment-results.xml
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: containment-execution-results
           path: |
             native-containment-proof.log
-            containment-results.xml
           if-no-files-found: error
 
   linux-protected-vitest:

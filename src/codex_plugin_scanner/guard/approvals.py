@@ -43,8 +43,7 @@ from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
 )
-from .harness.base import HarnessContext
-from .harness.registry import get_adapter
+from .harness_context import HarnessContext
 from .harness_posture import harness_posture_summary
 from .local_dashboard_session import (
     build_approval_browser_url as build_approval_browser_url,
@@ -53,7 +52,6 @@ from .local_dashboard_session import (
     build_local_dashboard_session_token,
 )
 from .local_supply_chain import build_local_supply_chain_posture
-from .managed_install_proof import verify_managed_install_proof
 from .memory_decision_outbox import enqueue_memory_decision_event
 from .models import (
     GuardArtifact,
@@ -68,6 +66,7 @@ from .native_approval_resolution import (
 from .native_approval_scope import UNAVAILABLE as APPROVAL_SCOPE_UNAVAILABLE
 from .native_approval_scope import ApprovalScopeUnavailableError
 from .native_daemon_manage import load_guard_daemon_auth_token
+from .native_harness_ops import approval_flow
 from .native_package_workspace_scope import NativePackageWorkspaceScopeError
 from .native_protection_health import NativeProtectionHealthError
 from .package_execution_context import package_execution_context_from_scanner_evidence
@@ -1056,61 +1055,60 @@ def _live_hook_verification(
     managed_installs: Sequence[Mapping[str, object]],
     store: GuardStore,
 ) -> dict[str, bool]:
+    """Whether each active install's live hooks still intercept Guard's boundary.
+
+    The runtime decides which proof settles each harness; this only names the
+    installs, and the Codex launch facts when one is active."""
+    from .codex_harness_client import live_hook_fields
+    from .native_harness_client import ask
+
     context = HarnessContext(
         home_dir=Path.home().resolve(),
         workspace_dir=None,
         guard_home=store.guard_home,
     )
-    verified: dict[str, bool] = {}
-    for install in managed_installs:
-        harness = install.get("harness")
-        if not isinstance(harness, str) or install.get("active") is not True:
-            continue
-        try:
-            if harness == "codex":
-                from .codex_hook_health import codex_runtime_hooks_verified
-
-                verified[harness] = codex_runtime_hooks_verified(context)
-                continue
-            if harness == "cursor":
-                from .harness.cursor_client import cursor_runtime_hooks_verified
-
-                proven = cursor_runtime_hooks_verified(context)
-                if proven is None:
-                    continue
-                verified[harness] = proven
-                continue
-            if harness == "grok":
-                from .cli.native_install_checks import grok_runtime_hooks_verified
-
-                verified[harness] = grok_runtime_hooks_verified(context)
-                continue
-            verified[harness] = verify_managed_install_proof(install.get("manifest"), context) is True
-        except (ImportError, OSError, RuntimeError, TypeError, ValueError):
-            continue
-    return verified
+    installs = [
+        {"harness": harness, "active": install.get("active") is True, "manifest": install.get("manifest")}
+        for install in managed_installs
+        if isinstance(harness := install.get("harness"), str)
+    ]
+    fields: dict[str, Any] = {"managed_installs": installs}
+    timeout = 20.0
+    try:
+        if any(install["harness"] == "codex" and install["active"] for install in installs):
+            fields["codex"], codex_timeout = live_hook_fields(context)
+            timeout += codex_timeout
+        answer = ask("live_hook_verification", context, harness=None, timeout_seconds=timeout, **fields)
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError):
+        return {}
+    verified = answer.get("verified")
+    if not isinstance(verified, Mapping):
+        return {}
+    return {harness: proven for harness, proven in verified.items() if isinstance(proven, bool)}
 
 
 def _canonical_managed_installs_for_health(
-    managed_installs: Sequence[Mapping[str, object]],
+    store: GuardStore, *, deadline_monotonic: float | None = None
 ) -> list[dict[str, object]]:
-    canonical: dict[str, tuple[tuple[bool, bool], dict[str, object]]] = {}
-    for install in managed_installs:
-        harness = install.get("harness")
-        if not isinstance(harness, str):
-            continue
-        try:
-            canonical_harness = get_adapter(harness).harness
-        except (ImportError, RuntimeError, TypeError, ValueError):
-            canonical_harness = harness
-        candidate = dict(install)
-        candidate["harness"] = canonical_harness
-        exact = harness == canonical_harness
-        priority = (install.get("active") is True, exact)
-        existing = canonical.get(canonical_harness)
-        if existing is None or priority > existing[0]:
-            canonical[canonical_harness] = (priority, candidate)
-    return [canonical[harness][1] for harness in sorted(canonical)]
+    """The store's install rows, one per canonical harness; the runtime reads and decides."""
+    from .native_harness_client import ask
+
+    context = HarnessContext(
+        home_dir=Path.home().resolve(),
+        workspace_dir=None,
+        guard_home=store.guard_home,
+    )
+    try:
+        installs = ask(
+            "canonical_managed_installs",
+            context,
+            resident_home=store.guard_home,
+            deadline_monotonic=deadline_monotonic,
+            store_home=str(store.guard_home),
+        )["installs"]
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
+        raise NativeProtectionHealthError("native_canonical_installs_unavailable") from error
+    return [install for install in installs if isinstance(install, dict)]
 
 
 def build_runtime_snapshot(
@@ -1174,8 +1172,6 @@ def _build_runtime_snapshot(
     proof_status = cloud_context.pop("proof_status")
     trust_status = store.get_cached_policy_trust_status()
     managed_installs = store.list_managed_installs()
-    health_managed_installs = _canonical_managed_installs_for_health(managed_installs)
-    hook_verification = _live_hook_verification(health_managed_installs, store)
     runtime_state = store.get_runtime_state()
     health_runtime_state = dict(runtime_state) if runtime_state is not None else None
     if health_runtime_state is None and serving_runtime is not None:
@@ -1189,6 +1185,8 @@ def _build_runtime_snapshot(
     if health_runtime_state is not None and containment_health is not None:
         health_runtime_state["containment_health"] = containment_health
     try:
+        health_managed_installs = _canonical_managed_installs_for_health(store)
+        hook_verification = _live_hook_verification(health_managed_installs, store)
         protection_health: dict[str, object] | None = build_runtime_protection_health(
             store=store,
             guard_home=store.guard_home,
@@ -1252,7 +1250,7 @@ def approval_prompt_flow(
     managed_install: dict[str, object] | None = None,
 ) -> dict[str, object]:
     try:
-        flow = get_adapter(harness).approval_flow(managed_install=managed_install)
+        flow = approval_flow(harness, managed_install=managed_install)
     except ValueError:
         flow = {}
     return {

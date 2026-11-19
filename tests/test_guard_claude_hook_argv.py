@@ -12,13 +12,14 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import claude_hook_entry
+from codex_plugin_scanner.guard import native_harness_client as harness_client
 from codex_plugin_scanner.guard.claude_hook_entry import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
     CLAUDE_GUARD_SESSION_START_HOOK_MARKER,
 )
-from codex_plugin_scanner.guard.harness import native_harness
-from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.native_runtime_stamp import stamp_native_runtime
 
 
@@ -94,7 +95,7 @@ def test_install_bakes_source_root_into_structured_session_start_argv(tmp_path: 
         guard_home=tmp_path / "guard-home",
     )
 
-    install_output = get_adapter("claude-code").install(context)
+    install_output = harness_support.install("claude-code", context)
 
     payload = json.loads((context.home_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))
     hook_argv = _handler_argv(payload["hooks"]["SessionStart"][0]["hooks"][0])
@@ -126,7 +127,7 @@ def test_session_start_argv_preserves_exact_paths(
     def fake_refresh(*, home_dir: Path, workspace_dir: Path | None, guard_home: Path) -> None:
         captured["refresh"] = (home_dir, workspace_dir, guard_home)
 
-    real_ask = native_harness.ask
+    real_ask = harness_client.ask
 
     def recording_ask(op: str, context: HarnessContext, **kwargs: Any) -> dict[str, Any]:
         from codex_plugin_scanner.guard.native_context import _BOUND_GUARD_HOME
@@ -136,7 +137,7 @@ def test_session_start_argv_preserves_exact_paths(
 
     monkeypatch.setattr(claude_hook_entry, "_daemon_module", lambda: FakeDaemonModule())
     monkeypatch.setattr(claude_hook_entry, "refresh_claude_hooks", fake_refresh)
-    monkeypatch.setattr(native_harness, "ask", recording_ask)
+    monkeypatch.setattr(harness_client, "ask", recording_ask)
 
     result = claude_hook_entry._run_session_start_from_argv((guard_home, home_dir, workspace_dir))
 
@@ -237,9 +238,8 @@ def test_install_uses_exec_argv_for_every_managed_hook_with_hostile_paths(tmp_pa
         workspace_dir=workspace_dir,
         guard_home=tmp_path / "guard home; $value ",
     )
-    adapter = get_adapter("claude-code")
 
-    adapter.install(context)
+    harness_support.install("claude-code", context)
 
     payload = json.loads((context.home_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))
     session_handlers = [entry["hooks"][0] for entry in payload["hooks"]["SessionStart"]]
@@ -261,9 +261,8 @@ def test_global_install_uses_exec_argv_without_workspace(tmp_path: Path) -> None
         workspace_dir=None,
         guard_home=tmp_path / "guard global 'quote",
     )
-    adapter = get_adapter("claude-code")
 
-    adapter.install(context)
+    harness_support.install("claude-code", context)
 
     payload = json.loads((context.home_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))
     session_handler = payload["hooks"]["SessionStart"][0]["hooks"][0]
@@ -296,7 +295,7 @@ def test_exec_hook_does_not_run_marker_embedded_in_workspace_path(tmp_path: Path
         workspace_dir=workspace_dir,
         guard_home=tmp_path / "guard home & state",
     )
-    get_adapter("claude-code").install(context)
+    harness_support.install("claude-code", context)
     payload = json.loads((context.home_dir / ".claude" / "settings.json").read_text(encoding="utf-8"))
     handler = payload["hooks"]["PreToolUse"][0]["hooks"][0]
 
@@ -349,3 +348,14 @@ def test_daemon_hook_without_the_native_feature_asks_for_repair(
 
     with pytest.raises(RuntimeError, match="hol-guard repair"):
         claude_hook_entry.claude_argv("daemon", context)
+
+
+def test_an_install_from_cursor_writes_no_cursor_attribution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Claude Code and Cursor share these hooks; only the bridge, at run time,
+    # can tell which one runs a hook. An install started from a Cursor
+    # terminal once wrote runtime-harness=cursor for both.
+    monkeypatch.setenv("CURSOR_TRACE_ID", "trace")
+    monkeypatch.setenv("CURSOR_PROJECT_DIR", str(tmp_path / "cursor-project"))
+    monkeypatch.setattr(claude_hook_entry, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:4781")
+    facts = json.loads(claude_hook_entry.claude_facts(tmp_path / "guard"))
+    assert facts == {"daemon_url": "http://127.0.0.1:4781"}

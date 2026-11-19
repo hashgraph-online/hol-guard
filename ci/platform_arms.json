@@ -1,6 +1,6 @@
 {
  "schema_version": 1,
- "comment": "Every non-Unix behaviour arm in rust/crates/*/src \u2014 `#[cfg(..)]` attribute or `cfg!(..)` expression \u2014 with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
+ "comment": "Every non-Unix behaviour arm in rust/crates/*/src — `#[cfg(..)]` attribute or `cfg!(..)` expression — with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
  "arms": [
   {
    "file": "rust/crates/guard-command/src/adapters/hook/hook_adapter_paths.rs",
@@ -771,6 +771,14 @@
    "body": "138b229d2cb2"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Only the Unix arm of `codex_remote_run::spawn` is ever asked to start a detached app-server: `codex_remote_prepare::direct` answers the ordinary launch on Windows before it names a `spawn` step, because Windows has no Unix control socket for the server. The arm therefore fails closed with `Unsupported`, which `spawn` turns into the ordinary launch. `codex_remote_prepare_tests` pins that Windows answer.",
+   "file": "rust/crates/guard-contained-process/src/detached.rs",
+   "item": "pub fn spawn_detached( _program: &Path, _args: &[OsString], _env: &[(OsString, OsString)], ) -> io::Result<u32>",
+   "cfg": "not(unix)",
+   "body": "80d6235dedfa"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows has a handle-bound process kernel in its own arm; elsewhere `Unsupported` fails closed rather than running a child unbounded.",
    "file": "rust/crates/guard-contained-process/src/lib.rs",
@@ -1028,11 +1036,11 @@
   },
   {
    "file": "rust/crates/guard-runtime/src/aibom_skills.rs",
-   "item": "mod native",
-   "verdict": "windows-unsupported",
-   "note": "Skill discovery returns `native_runner_authority_aibom_skills_unsupported` off Unix; directory identity walks natively on every platform.",
+   "item": "fn path_from_bytes -- non-Unix block",
+   "verdict": "windows-equivalent",
+   "note": "Discovery records a relative skill path as the UTF-8 spelling of the Windows name joined with `/`, so the Windows arm decodes those bytes into a `PathBuf` where Unix rebuilds the raw `OsString`; a document whose name is not valid UTF-8 is reported as an invalid-path-encoding issue before this arm runs, and an issue path with such a name only loses its unpaired surrogate to a replacement character in the reported path. `aibom_skills_tests.rs` runs the native walk on the Windows CI jobs.",
    "cfg": "not(unix)",
-   "body": "11a0b78bed08"
+   "body": "64bcd9c10c5c"
   },
   {
    "file": "rust/crates/guard-runtime/src/approval_enrollment.rs",
@@ -1107,12 +1115,60 @@
    "body": "46c45130b1ff"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "Reports what CPython's `os.stat` reported on Windows: `0o444` or `0o666` from the read-only attribute. The mode is only recorded in the backup record and given back to a restored file, where `set_mode` turns it into the same attribute, so a file Guard restores is as writable as it was.",
+   "file": "rust/crates/guard-runtime/src/cloud_actions_host_apply_files.rs",
+   "item": "pub(super) fn file_mode(path: &Path) -> io::Result<u32>",
+   "cfg": "not(unix)",
+   "body": "dc8c03491ee8"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "`os.chmod` on Windows only toggles the read-only attribute from the owner write bit, which this arm reproduces; the group and other bits mean nothing there.",
+   "file": "rust/crates/guard-runtime/src/cloud_actions_host_apply_files.rs",
+   "item": "fn set_mode(file: &File, mode: u32) -> io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "9d410d2bad33"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Windows metadata from the standard library carries no stable file ID, so the arm answers that sameness cannot be told. The caller reads that as an unknown move result: the temporary file is cleaned up and Guard's copy of the earlier file is kept for `restore`, never dropped, so the cost is one extra kept copy after a create-file write. CPython's `os.path.samefile` could tell; this is a deliberate loss of that precision, covered off Unix by the unknown-move-result tests.",
+   "file": "rust/crates/guard-runtime/src/cloud_actions_host_apply_files.rs",
+   "item": "fn same_file(_left: &fs::Metadata, _right: &fs::Metadata) -> io::Result<bool>",
+   "cfg": "not(unix)",
+   "body": "28fb2d4087b9"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "A folder's mode bits have no Windows reading (`os.chmod` on a directory does nothing there), so the owner-only mode Guard asks for on its backup folder is a no-op, the same as the Python it replaces.",
+   "file": "rust/crates/guard-runtime/src/cloud_actions_host_apply_files.rs",
+   "item": "fn set_directory_mode(_directory: &Path, _mode: u32) -> io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "150db436f6f6"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/codex_app_server_socket.rs",
    "item": "pub(crate) fn exchange( _socket: &Path, _trusted: impl Fn(&Path) -> bool, _messages: &[Value], _deadline: Instant, ) -> Result<Option<Map<String, Value>>, Failure>",
    "verdict": "windows-unsupported",
    "note": "The Codex app-server exchange runs over an AF_UNIX socket; off Unix the exchange is unavailable.",
    "cfg": "not(unix)",
    "body": "c00dd6d42c8e"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "No process group is signalled: a Windows host is ended with `Child::kill` only, so a process the host itself started can outlive it. Closing this needs a job object with kill-on-close, which `std` does not expose on stable. The Codex app-server over stdio starts no helper processes, and the session still bounds itself to its limit so `Drop` runs before the caller's SIGKILL deadline.",
+   "file": "rust/crates/guard-runtime/src/codex_config_rpc.rs",
+   "item": "fn kill_group(_child: &Child)",
+   "cfg": "not(unix)",
+   "body": "42851029dd12"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "CPython's `Popen.terminate` on Windows is `TerminateProcess`, which is what `Child::kill` calls, so asking the app-server host to end is the same hard stop there as the Python it replaces. The follow-up kill after the grace period is then a no-op. The close sequence and its timings are the same code on both platforms.",
+   "file": "rust/crates/guard-runtime/src/codex_config_rpc.rs",
+   "item": "fn terminate(child: &mut Child)",
+   "cfg": "not(unix)",
+   "body": "3e9fd5560c1c"
   },
   {
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
@@ -1315,6 +1371,22 @@
    "body": "342ca1d251b3"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The Codex control socket is an owner-only Unix socket; no Windows socket is trusted, so none is reachable (as the retired Python probe answered on nt).",
+   "file": "rust/crates/guard-runtime/src/codex_thread_continue_op.rs",
+   "item": "pub(crate) fn default_socket_available( _request: &ContinueRequest<'_>, _codex_home: Option<&str>, ) -> bool",
+   "cfg": "not(unix)",
+   "body": "75ab5bbc8652"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "The Codex control socket is an owner-only Unix socket; no Windows socket is trusted, so no recorded target is reachable (as the retired Python `codex_app_server_target_reachable` answered on nt, where `_is_trusted_local_socket` was always false).",
+   "file": "rust/crates/guard-runtime/src/codex_thread_continue_op.rs",
+   "item": "pub(crate) fn target_reachable( _request: &ContinueRequest<'_>, _metadata: &Map<String, Value>, ) -> bool",
+   "cfg": "not(unix)",
+   "body": "660240e4e9ef"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/codex_thread_continue_op.rs",
    "item": "fn is_trusted_socket(_path: &Path) -> bool",
    "verdict": "windows-unsupported",
@@ -1417,6 +1489,14 @@
    "item": "fn widen_backlog(_listener: &TcpListener)",
    "cfg": "not(unix)",
    "body": "8bbfd9931b65"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Windows has no SIGTERM to wait for: a daemon is ended there by `TerminateProcess`, which no process can observe. Guard's own retirements still record `retirement_requested` before terminating, and a daemon that ends without a record is named by the next daemon as `unclean_exit_detected`, so the exit is still accounted for.",
+   "file": "rust/crates/guard-runtime/src/daemon_edge_exit_records.rs",
+   "item": "pub(super) fn record_termination(_home: PathBuf)",
+   "cfg": "not(unix)",
+   "body": "65b14e7d9154"
   },
   {
    "verdict": "windows-permissive",
@@ -1868,11 +1948,11 @@
   },
   {
    "file": "rust/crates/guard-runtime/src/hook_process_spawn.rs",
-   "item": "fn kill_process_group(child: &mut Child) -> bool",
-   "verdict": "windows-unsupported",
-   "note": "There are no process groups, so only the direct child is killed. Its own children can outlive it; a Job Object is the Windows mechanism and is not used here.",
+   "item": "type Liveness",
+   "verdict": "windows-equivalent",
+   "note": "The parent-liveness pipe is a Unix descriptor. On Windows the child sits in a kill-on-close Job Object, and a caller that holds the launcher through its stdin pipe is contained by `hold_job`, so the type is unit there and the pipe is never made. Proven off Unix by the Windows job tests in guard-runtime-windows-process and the hold_job request tests.",
    "cfg": "not(unix)",
-   "body": "fc902ad11bdf"
+   "body": "4928f1f2006e"
   },
   {
    "file": "rust/crates/guard-runtime/src/isolation_provider_registry.rs",
@@ -2201,6 +2281,14 @@
    "item": "fn answer(_request: &Request) -> Value",
    "cfg": "not(unix)",
    "body": "4fbf180853ce"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "The daemon's maintenance tick reaps orphaned workers only on Unix, like the `daemon ensure` route: the selection reads POSIX `ps` output and signals by pid. The Windows arm answers `orphaned_worker_reap_unsupported` and signals nothing, so the tick is a no-op there.",
+   "file": "rust/crates/guard-runtime/src/orphaned_worker_reap.rs",
+   "item": "pub(crate) fn reap_from_daemon(_own_pid: u32, _budget: Duration) -> Value",
+   "cfg": "not(unix)",
+   "body": "890867b4ad15"
   },
   {
    "verdict": "windows-unsupported",
@@ -2541,7 +2629,7 @@
   {
    "verdict": "windows-equivalent",
    "note": "Windows has no POSIX mode bits, owner uid or `openat`, so this arm only refuses a cache path that is not a directory and then reads the file through `read_private_bytes`. That opens it via `open_private_read` with `FILE_FLAG_OPEN_REPARSE_POINT` and verifies the handle: its owner must be the current user, SYSTEM or Administrators, and its protected DACL may grant full access only to the current user and SYSTEM. `store` creates the directory through `ensure_private_directory_under`, which applies that private ACL. A cache file owned by or shared with any other user is therefore refused on Windows; a refused cache only costs the content hash.",
-   "file": "rust/crates/guard-runtime/src/runtime_fingerprint.rs",
+   "file": "rust/crates/guard-runtime/src/runtime_fingerprint_cache.rs",
    "item": "fn read_cache(directory: &Path, path: &Path, private_root: &Path) -> Option<Vec<u8>>",
    "cfg": "not(unix)",
    "body": "cc0cd9a26f33"
@@ -2641,6 +2729,14 @@
    "item": "fn open_without_following(path: &Path) -> std::io::Result<fs::File>",
    "cfg": "not(unix)",
    "body": "532a900bb473"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Owner uid does not exist on Windows, so any abandoned temp file counts as the user's own. The sweep reads only the Guard home, `native-runtime` and `native-runtime/direct-lane`, whose ACL the Guard home sets at creation, and it still removes only empty regular files named `.<name>.<suffix>.tmp` older than a day; links are never followed or removed. Reading the owner SID needs `GetSecurityInfo`, which is not ported.",
+   "file": "rust/crates/guard-runtime/src/storage_retention_temp.rs",
+   "item": "fn owned_by_this_user(_metadata: &fs::Metadata) -> bool",
+   "cfg": "not(unix)",
+   "body": "b26f34b2bd19"
   },
   {
    "verdict": "windows-equivalent",
@@ -2801,6 +2897,22 @@
    "item": "fn sync_directory(_directory: &Path) -> std::io::Result<()>",
    "cfg": "not(unix)",
    "body": "1fba077ff521"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Owner uid and mode bits do not exist on Windows, so the bundled runtime's manifest is trusted by where it was read from, as the Python check it replaced did off POSIX; the install directory's ACL is what keeps that manifest private to the user.",
+   "file": "rust/crates/guard-runtime/src/transition_files/publication_inspect_runtime.rs",
+   "item": "fn trusted(_metadata: &fs::Metadata, _path: &Path, _checker: Option<&Path>) -> bool",
+   "cfg": "not(unix)",
+   "body": "56c09a52a558"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no `O_NOFOLLOW` or `O_NONBLOCK` and no FIFOs, so this arm refuses a link at the leaf with `symlink_metadata` before it opens the file, as the Python read did, and then opens it normally. The manifest checks that follow run on the opened handle in both arms, so an entry swapped in after the link check is still the file whose type, size and ownership are checked and read.",
+   "file": "rust/crates/guard-runtime/src/transition_files/publication_inspect_runtime.rs",
+   "item": "fn open_manifest(path: &Path) -> std::io::Result<fs::File>",
+   "cfg": "not(unix)",
+   "body": "1ccec5e032fc"
   },
   {
    "verdict": "windows-permissive",

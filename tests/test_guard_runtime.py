@@ -35,10 +35,9 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import render as guard_render_module
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
-from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import (
     GuardAction,
     GuardApprovalRequest,
@@ -70,6 +69,7 @@ from codex_plugin_scanner.guard.store import (
 from codex_plugin_scanner.guard.synced_policy import synced_policy_payload
 from tests import codex_hook_publication_helpers as publication_helpers
 from tests.claude_notice_support import claude_guard_approval_question_text, record_claude_permission_notice
+from tests.codex_toml_support import read_toml_payload
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 from tests.live_hook_review_support import (
     LIVE_ALLOWS_RETIRED_REVIEW,
@@ -490,9 +490,9 @@ def _approve_native_request(monkeypatch, capsys, home_dir: Path, output: dict[st
 def _drain_hook_evidence(home_dir: Path) -> None:
     """Wait for the resident writer to persist what a one-shot hook handed it."""
 
-    from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
+    from codex_plugin_scanner.guard.resident_evidence_client import ResidentEvidenceClient
 
-    assert NativeHookEvidenceWriter(store=GuardStore(home_dir)).stop(timeout_seconds=5.0)
+    assert ResidentEvidenceClient(store=GuardStore(home_dir)).stop(timeout_seconds=5.0)
 
 
 def _native_receipts(guard_home: Path) -> list[tuple[str, str]]:

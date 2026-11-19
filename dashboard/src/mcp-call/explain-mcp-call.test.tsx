@@ -115,7 +115,7 @@ const SEARCH_INPUT = {
   assert(markup.includes("In the agent&#x27;s own words") || markup.includes("In the agent's own words"), "T-MCP-15: the quote is attributed to the agent");
   assert(markup.includes("See the exact input") && markup.includes("known_fields"), "T-MCP-16: the exact input stays one click away");
   assert(
-    markup.includes("Allow once and Always allow both match these exact inputs"),
+    markup.includes("Allow once and Always allow both cover only these exact inputs"),
     "T-MCP-17: the card says approvals match the exact inputs",
   );
   assert(!markup.includes("MCP SERVER / TOOL"), "T-MCP-18: the raw terminal label is gone from the default view");
@@ -134,10 +134,10 @@ const SEARCH_INPUT = {
   );
   const explained = explainMcpCall(item);
   assert(explained?.steps.length === 2, "T-MCP-19: each action in a batch is listed");
-  assert(explained?.steps[0].action === "Fetch emails" && explained?.steps[0].app === "Gmail", "T-MCP-20: a slug splits into app and action");
+  assert(explained?.steps[0].action === "Get emails" && explained?.steps[0].app === "Gmail", "T-MCP-20: a slug splits into app and action");
   assert(explained?.steps[0].effect === "read" && explained?.steps[1].effect === "send", "T-MCP-21: each action has its own effect");
   assert(explained?.effect === "send", "T-MCP-22: a batch takes its most serious effect");
-  assert(explained?.headline === "ZCode wants to run 2 actions in Gmail", "T-MCP-23: the batch title counts the actions and names the app");
+  assert(explained?.headline === "ZCode wants to take 2 actions in Gmail", "T-MCP-23: the batch title counts the actions and names the app");
   assert(
     explained?.steps[1].details.some((fact) => fact.label === "To" && fact.value === "a@example.com" && fact.kind === "email") === true,
     "T-MCP-24: a send action puts who it goes to first, under a plain label",
@@ -159,14 +159,14 @@ const SEARCH_INPUT = {
   const explained = explainMcpCall(item);
   assert(explained?.steps.length === 10 && explained?.hiddenSteps === 1, "T-MCP-50: the card lists ten rows and counts the rest");
   assert(explained?.effect === "delete", "T-MCP-51: an action past the tenth row still sets the effect");
-  assert(explained?.headline === "ZCode wants to run 11 actions in Gmail", "T-MCP-52: the title counts every action");
+  assert(explained?.headline === "ZCode wants to take 11 actions in Gmail", "T-MCP-52: the title counts every action");
   const markup = renderToStaticMarkup(PrimaryActionCard({ item }));
   assert(markup.includes("1 more action in the exact input"), "T-MCP-53: the card says an action is left in the exact input");
   const odd = explainMcpCall(
     request(envelope("mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", { tools: [{ tool_slug: "GMAIL_FETCH_EMAILS", arguments: {} }, "not an object", 7] })),
   );
   assert(odd?.effect === "unknown" && odd?.steps.length === 3, "T-MCP-54: an entry that is not an object reads as an action Guard cannot identify");
-  assert(odd?.headline === "ZCode wants to run 3 actions in Gmail", "T-MCP-55: the title counts entries that are not objects");
+  assert(odd?.headline === "ZCode wants to take 3 actions in Gmail", "T-MCP-55: the title counts entries that are not objects");
 }
 
 // The rows and the exact input come from the same value, chosen the way Core chooses it.
@@ -204,7 +204,7 @@ const SEARCH_INPUT = {
   assert(item.action_envelope_json?.mcp_server === "codex_apps", "T-MCP-64: the recorded server is the Codex wrapper");
   const explained = explainMcpCall(item);
   assert(explained?.connector === "Composio" && explained?.steps.length === 1, "T-MCP-65: the connector and its actions are read through the wrapper");
-  assert(explained?.headline === "ZCode wants to run an action in Gmail", "T-MCP-66: the title names the connector's app");
+  assert(explained?.headline === "ZCode wants to send email in Gmail", "T-MCP-66: the title names the connector's app");
 }
 
 // Running code is called what it is.
@@ -233,7 +233,7 @@ const SEARCH_INPUT = {
 {
   const explained = explainMcpCall(request(envelope("mcp__acme__frobnicate", { x: 1 })));
   assert(explained?.effect === "unknown", "T-MCP-34: an unreadable name stays unclear");
-  assert(explained?.effectBasis.includes("cannot tell") === true, "T-MCP-35: the card says Guard cannot tell");
+  assert(explained?.consequence.text.includes("cannot tell") === true && explained?.effectBasis === "", "T-MCP-35: the card says Guard cannot tell, once");
   const markup = renderToStaticMarkup(PrimaryActionCard({ item: request(envelope("mcp__acme__frobnicate", { x: 1 })) }));
   assert(!/\bsafe\b/i.test(markup), "T-MCP-36: the card never calls a tool safe");
 }

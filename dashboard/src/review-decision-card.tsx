@@ -10,7 +10,6 @@ import {
 } from "react-icons/hi2";
 import { ActionButton, Badge, EmptyState, SectionLabel } from "./approval-center-primitives";
 import {
-  buildRetryAfterApprovalCopy,
   harnessDisplayName,
   isWatchOnlyObservation,
   requestResolutionBlockReason,
@@ -43,7 +42,7 @@ import { buildEvidenceItems, buildTopAlertItems } from "./review-evidence";
 import { explainMcpCall } from "./mcp-call/explain-mcp-call";
 import { simpleMcpChoiceApplies } from "./mcp-call/mcp-decision-choice";
 import { ReviewDecisionControls } from "./review-decision-controls";
-import { decisionButtonLabels } from "./review-decision-labels";
+import { decisionButtonLabels, resolvedActionCopy } from "./review-decision-labels";
 import { buildWhatWouldHappen, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
@@ -54,16 +53,6 @@ import { ContextReviewPanel } from "./context-assistance/review-panel";
 import { ReviewLastTimeCard } from "./review-last-time-card";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
-
-function resolvedActionCopy(
-  item: GuardApprovalRequest | null,
-  action: "allow" | "block",
-  persistedExactAction: boolean,
-): string {
-  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
-  if (action === "allow") return "Approved: action can proceed";
-  return "Blocked: action stopped";
-}
 
 export function ReviewDecisionCard(props: {
   detail: ReviewViewModel | null;
@@ -282,7 +271,8 @@ export function ReviewDecisionCard(props: {
             {retryCannotReuseApprovalHint(item, harnessName)}
           </p>
         ) : null}
-        {item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (
+        {/* An MCP card says this itself, next to what the approval covers. */}
+        {mcpCall === null && item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
             Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable.
           </p>

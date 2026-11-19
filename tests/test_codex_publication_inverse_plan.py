@@ -12,10 +12,10 @@ from codex_plugin_scanner.guard import codex_hook_file_integrity as integrity
 from codex_plugin_scanner.guard import native_runner_authority
 from codex_plugin_scanner.guard.codex_harness_client import _hook_manifest_spec
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
-from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.codex_publication_inverse_plan import prepare_authenticated_hook_publication_inverse
+from codex_plugin_scanner.guard.native_owned import codex_install_transaction
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests.codex_hook_paths_support import hook_secret_path
 
 from .test_codex_hook_recovery import crash, installed  # noqa: F401 -- shared isolated fixture
 
@@ -39,8 +39,8 @@ import os, sys
 from pathlib import Path
 from codex_plugin_scanner.guard import native_transition_files
 from codex_plugin_scanner.guard import codex_harness_client as codex
-from codex_plugin_scanner.guard import codex_harness_lifecycle as codex_lifecycle
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 home = Path(sys.argv[1])
 context = HarnessContext(home, None, home / '.hol-guard', home_override_explicit=True)
 original = native_transition_files.publication
@@ -55,12 +55,13 @@ def exit_after_signed_conflict(op, *args, **kwargs):
         original(op, *args, **kwargs)
     finally:
         os._exit(17)
+from tests import codex_install_flow_support as flow
 from tests import codex_publication_steps
-codex._publish_hooks = codex_publication_steps.stepwise_publish_hooks
-codex_lifecycle.CodexHarnessAdapter._install_owned = codex_publication_steps.stepwise_install_owned
+flow.publish_hooks = codex_publication_steps.stepwise_publish_hooks
+codex_publication_steps.install_stepwise_codex()
 codex_publication_steps.readback = conflict_after_publication
 native_transition_files.publication = exit_after_signed_conflict
-codex_lifecycle.CodexHarnessAdapter().install(context)
+harness_support.install("codex", context)
 raise RuntimeError('signed conflict boundary was not reached')
 """
         child = subprocess.run(
@@ -208,13 +209,14 @@ def test_inverse_plan_forwards_original_deadline_to_artifact_comparison(installe
         ask = native_runner_authority.native_runner_authority
 
         def expires_in_the_resident(kind: str, request: dict[str, object], **kwargs: object) -> dict[str, object]:
-            if kind != "transition_files" or request.get("op") != "compare" or "budget" not in request:
+            asked = kind == "transition_files" and request.get("op") == "publication_inverse_verify"
+            if not asked or "budget" not in request:
                 return ask(kind, request, **kwargs)
             budget = request["budget"]
             assert isinstance(budget, dict)
             forwarded.append(min(value for value in budget.values() if isinstance(value, int)))
-            # The resident sees the original deadline already spent.
-            spent = {name: None if value is None else 0 for name, value in budget.items()}
+            # The resident sees the original inverse deadline already spent.
+            spent = {**budget, "inverse_ms": 0}
             return ask(kind, {**request, "budget": spent}, **kwargs)
 
         monkeypatch.setattr(native_runner_authority, "native_runner_authority", expires_in_the_resident)

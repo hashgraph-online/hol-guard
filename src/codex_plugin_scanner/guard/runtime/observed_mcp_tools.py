@@ -12,9 +12,9 @@ from dataclasses import dataclass
 from hashlib import sha256
 from typing import TYPE_CHECKING
 
-from ..harness.contracts import display_name_for
 from ..local_cli_errors import LocalCliCatalogLimitError
 from ..native_policy_snapshot_codec import _normalized_harness_selector_v3
+from ..setup_contracts import display_name_for
 from ..store_local_cli_retention import LocalCliReplaySkippedError
 from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, LocalCliCommand
 from .local_cli_identity import UnlistedCliIdentity

@@ -9,8 +9,8 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard import codex_hook_identity
 from codex_plugin_scanner.guard import native_codex_hook_identity as bridge
+from tests.python_oracles import codex_hook_identity
 
 
 def _resident(monkeypatch: pytest.MonkeyPatch, reply) -> list[dict[str, object]]:

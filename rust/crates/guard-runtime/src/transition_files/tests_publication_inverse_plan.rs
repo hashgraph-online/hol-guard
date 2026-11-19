@@ -134,3 +134,45 @@ fn the_plan_subject_binds_its_canonical_payload() {
     assert_eq!(first, ask(Value::Null));
     assert_ne!(first, ask(json!("/workspace")));
 }
+
+#[cfg(unix)]
+#[test]
+fn a_journal_that_changed_or_vanished_is_not_the_one_the_inverse_pinned() {
+    use super::publication_io::rollback_identity;
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::TempDir::new().unwrap();
+    let home = root.path().join("guard");
+    let codex = home.join("managed/codex");
+    std::fs::create_dir_all(&codex).unwrap();
+    for directory in [&home, &home.join("managed"), &codex] {
+        std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let journal = codex.join("pending-hook-publication.json");
+    let ask = |identity: Value, sha256: String| {
+        dispatch(&json!({
+            "op": "publication_inverse_journal",
+            "home": home.to_string_lossy(),
+            "journal_identity": identity,
+            "journal_sha256": sha256,
+            "record": {},
+        }))
+        .unwrap()["error"]
+            .to_string()
+    };
+    // No journal: its identity cannot be the captured one.
+    let missing = ask(json!([1, 2, 3, 4, 5]), "0".repeat(64));
+    assert!(
+        missing.contains("publication_inverse_journal_changed"),
+        "{missing}"
+    );
+    std::fs::write(&journal, b"journal").unwrap();
+    std::fs::set_permissions(&journal, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let identity = rollback_identity(&journal).unwrap().unwrap();
+    // The identity holds but the bytes are not the ones hashed.
+    let altered = ask(identity, "0".repeat(64));
+    assert!(
+        altered.contains("publication_inverse_journal_changed"),
+        "{altered}"
+    );
+}

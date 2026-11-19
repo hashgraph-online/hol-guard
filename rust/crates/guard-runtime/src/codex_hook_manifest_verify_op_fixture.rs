@@ -2,6 +2,7 @@
 //! for the manifest-verify op's tests to change one thing at a time.
 
 use super::*;
+use guard_contracts::CODEX_HOOK_MANIFEST_VERIFY_REQUEST_SCHEMA;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::PathBuf;

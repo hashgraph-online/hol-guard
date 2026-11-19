@@ -417,7 +417,18 @@ pub(super) fn review_command(
     request: &crate::CommandModelRequestV1,
     decision: super::PreToolDecisionV1,
 ) -> super::PreToolDecisionV1 {
-    if decision.minimum_action != "allow" || !holds_literal_secret(&request.command) {
+    if decision.minimum_action != "allow" {
+        return decision;
+    }
+    if super::literal_ssn_echo::echoes_ssn(&request.command) {
+        return super::pretool_decision(
+            decision.command_model,
+            "review",
+            "native_command_review_required",
+            "This command prints what looks like a real Social Security number. Once it runs, the number is in the transcript and the shell history.",
+        );
+    }
+    if !holds_literal_secret(&request.command) {
         return decision;
     }
     super::pretool_decision(

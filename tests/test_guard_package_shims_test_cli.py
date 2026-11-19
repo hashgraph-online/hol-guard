@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands as cli_commands
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.shims import install_package_shims
 from tests.test_guard_package_shims_cli import _seed_paid_oauth_entitlement
 

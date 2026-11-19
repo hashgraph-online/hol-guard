@@ -43,11 +43,17 @@ const SERVICE_NAMES = new Map<string, string>([
   ["perplexity", "Perplexity"],
   ["firecrawl", "Firecrawl"],
   ["context7", "Context7"],
-  ["playwright", "Playwright"],
-  ["filesystem", "Filesystem"],
+  ["playwright", "Playwright browser"],
+  ["puppeteer", "Puppeteer browser"],
+  ["claudebrowser", "Claude's browser"],
+  ["claudeinchrome", "Chrome"],
+  ["chromedevtools", "Chrome"],
+  ["computeruse", "Computer control"],
+  ["filesystem", "Files"],
   ["postgres", "Postgres"],
   ["sqlite", "SQLite"],
   ["brave", "Brave Search"],
+  ["bravesearch", "Brave Search"],
   ["exa", "Exa"],
   ["tavily", "Tavily"],
 ]);
@@ -83,10 +89,30 @@ export function splitToolSlug(slug: string): { app: string | null; action: strin
   if (split <= 0) {
     return { app: null, action: sentenceCase(slug) };
   }
+  const action = words.slice(split);
+  action[0] = PLAIN_VERBS.get(action[0]) ?? action[0];
   return {
     app: serviceDisplayName(words.slice(0, split).join("_")),
-    action: capitalize(words.slice(split).join(" ")),
+    action: capitalize(action.join(" ")),
   };
+}
+
+// API verbs people do not say. `GMAIL_FETCH_EMAILS` reads as "Get emails".
+const PLAIN_VERBS = new Map([
+  ["fetch", "get"],
+  ["retrieve", "get"],
+]);
+
+/**
+ * A tool's name as a short action, without the service's own name in front:
+ * `brave_web_search` on Brave Search is `Web search`, not `Brave web search`.
+ */
+export function toolTitle(service: string, tool: string): string {
+  const serviceWords = new Set(nameWords(service));
+  const words = nameWords(tool);
+  let start = 0;
+  while (start < words.length - 1 && serviceWords.has(words[start])) start += 1;
+  return start === 0 ? sentenceCase(tool) : capitalize(words.slice(start).join(" "));
 }
 
 export type McpServerRef = { server: string; tool: string };

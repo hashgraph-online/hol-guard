@@ -9,7 +9,7 @@ from functools import partial
 from typing import Any
 
 from ...version import __version__  # noqa: F401 - public compatibility export
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..review_verification_keyring import review_verification_keyring_ready
 from ..store import GuardStore
 from .auto_update import maybe_auto_update

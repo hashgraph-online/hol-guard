@@ -11,11 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.bounded_cli_hook_native import (
-    NATIVE_BOUNDED_HOOK_COMMAND,
-    NATIVE_BOUNDED_HOOK_FEATURE,
-)
+from codex_plugin_scanner.guard.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND, NATIVE_BOUNDED_HOOK_FEATURE
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.cline_test_support import install_plugin
 from tests.cline_test_support import plugin_source as _plugin_source
 from tests.native_runtime_stamp import stamp_native_runtime

@@ -9,7 +9,7 @@ import pytest
 from codex_plugin_scanner.guard import native_runner_authority as authority
 from codex_plugin_scanner.guard import store_extension_control_authority_reads as authority_reads
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.review_decision_memory import payload_hash_for_decision_memory_bundle
 from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_command_job
 from codex_plugin_scanner.guard.runtime.extension_control_authority import ExtensionControlAuthorityError

@@ -1,39 +1,57 @@
-"""Reachability proof for a recorded Codex app-server target."""
+"""Reachability proof for a recorded Codex app-server target.
+
+Guard's native runtime decides (`codex-app-server-target`): the recorded thread
+id must be safe, and the control socket, the recorded one or the default for the
+recorded Codex home, must be a trusted local socket that accepts a connection.
+This module sends it the recorded target and this process's own home, temporary
+and working directories, which bound where the socket may live.
+"""
 
 from __future__ import annotations
 
-import socket
+import json
+import os
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
-from .codex_app_server import (
-    _CODEX_HOME_KEYS,
-    _SOCKET_KEYS,
-    _THREAD_ID_KEYS,
-    _first_string,
-    _is_safe_codex_thread_id,
-    _is_safe_local_socket_path,
-    _is_trusted_local_socket,
-    default_codex_app_server_socket_path,
+_FEATURE = "native-codex-app-server-target-v1"
+_COMMAND = "codex-app-server-target"
+_OUTPUT_LIMIT = 4096
+_TIMEOUT_SECONDS = 5.0
+_TARGET_KEYS = (
+    "codex_thread_id",
+    "thread_id",
+    "threadId",
+    "conversation_id",
+    "conversationId",
+    "session_id",
+    "sessionId",
+    "codex_app_server_socket",
+    "app_server_socket",
+    "appServerSocket",
+    "codex_home",
+    "codexHome",
 )
 
 
 def codex_app_server_target_reachable(metadata: Mapping[str, object]) -> bool:
-    """Prove a recorded Codex target is safe and accepting local connections."""
+    """Prove a recorded Codex target is safe and accepting local connections.
 
-    thread_id = _first_string(metadata, _THREAD_ID_KEYS)
-    if thread_id is None or not _is_safe_codex_thread_id(thread_id):
-        return False
-    codex_home = _first_string(metadata, _CODEX_HOME_KEYS)
-    socket_path = _first_string(metadata, _SOCKET_KEYS) or str(
-        default_codex_app_server_socket_path(environ={"CODEX_HOME": codex_home or ""})
-    )
-    if not _is_safe_local_socket_path(socket_path) or not _is_trusted_local_socket(Path(socket_path).expanduser()):
-        return False
+    False when the native runtime cannot be asked: nothing is proven then.
+    """
+
+    from .mdm.runtime_request import runtime_answer
+
+    request = {
+        "metadata": {key: metadata[key] for key in _TARGET_KEYS if key in metadata},
+        "home_dir": str(Path.home()),
+        "temp_dir": tempfile.gettempdir(),
+        "cwd": os.getcwd(),
+    }
     try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(0.2)
-            client.connect(str(Path(socket_path).expanduser()))
-    except OSError:
+        encoded = json.dumps(request, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError):
         return False
-    return True
+    answer = runtime_answer(_FEATURE, _COMMAND, encoded, output_limit=_OUTPUT_LIMIT, timeout_seconds=_TIMEOUT_SECONDS)
+    return answer is not None and answer.get("reachable") is True

@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use super::artifacts::{
-    artifact_digest, is_same_directory, managed_manifest_paths, resolve_lenient, Evidence,
-};
+#[cfg(unix)]
+use super::artifacts::is_same_directory;
+use super::artifacts::{artifact_digest, managed_manifest_paths, resolve_lenient, Evidence};
 use super::{register, unregister, verify, Coverage, ErrorClass, REGISTRY_NAME};
 
 struct Fixture {

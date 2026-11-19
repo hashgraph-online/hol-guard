@@ -123,6 +123,77 @@ fn no_daemon_state_is_no_reply() {
 }
 
 #[test]
+fn a_signed_watch_harness_continues_when_its_daemon_is_down() {
+    let home = GuardHome::new("pi-bridge-watch-no-daemon");
+    crate::hook_watch_posture::tests::sign_postures(&home.home, "observe", &[("pi", "watch")]);
+
+    let Some((status, body)) = reply(&home_config(&home, "pi"), PRE_TOOL, soon()) else {
+        panic!("signed Watch should continue when the observer is unavailable");
+    };
+    let response: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(status, 200);
+    assert_eq!(response["decision"], "allow");
+    assert_eq!(response["observe_mode"], true);
+    assert_eq!(response["reason_code"], "watch_monitor_unavailable");
+}
+
+#[test]
+fn a_protected_harness_still_denies_when_its_daemon_is_down() {
+    let home = GuardHome::new("pi-bridge-protected-no-daemon");
+    crate::hook_watch_posture::tests::sign_postures(&home.home, "enforce", &[("pi", "protected")]);
+    assert_eq!(reply(&home_config(&home, "pi"), PRE_TOOL, soon()), None);
+}
+
+#[test]
+fn watch_releases_infrastructure_denials_but_not_real_security_denials() {
+    let infrastructure = r#"{"decision":"deny","reason_code":"native_policy_not_ready"}"#;
+    let security = r#"{"decision":"deny","reason_code":"command_denied"}"#;
+    let containment = r#"{"decision":"deny","policy_action":"sandbox-required","reason_code":"native_workspace_containment_required"}"#;
+    for (label, answer, continues) in [
+        ("infra", infrastructure, true),
+        ("security", security, false),
+        ("containment", containment, false),
+    ] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let daemon = serve_once(listener, 200, answer.to_owned());
+        let home = home_with_daemon(&format!("pi-bridge-watch-{label}"), port);
+        crate::hook_watch_posture::tests::sign_postures(&home.home, "observe", &[("pi", "watch")]);
+        let response = reply(&home_config(&home, "pi"), PRE_TOOL, soon());
+        if continues {
+            let (status, body) = response.expect("Watch infrastructure response");
+            let body: Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(status, 200);
+            assert_eq!(body["decision"], "allow");
+            assert_eq!(body["observe_mode"], true);
+            assert_eq!(body["reason_code"], "watch_monitor_unavailable");
+        } else {
+            assert_eq!(response, Some((200, answer.to_owned())));
+        }
+        assert!(daemon.join().unwrap().is_some());
+    }
+}
+
+#[test]
+fn watch_marks_an_allowed_answer_when_workspace_readiness_failed() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let daemon = serve_once(
+        listener,
+        200,
+        r#"{"decision":"allow","reason_code":"output_scan_allow"}"#.to_owned(),
+    );
+    let home = home_with_daemon("pi-bridge-watch-readiness", port);
+    crate::hook_watch_posture::tests::sign_postures(&home.home, "observe", &[("pi", "watch")]);
+    let data = r#"{"hook_event_name":"PreToolUse","tool_name":"bash","guard_workspace_readiness_failed":true}"#;
+    let response = reply(&home_config(&home, "pi"), data, soon()).unwrap();
+    let body: Value = serde_json::from_str(&response.1).unwrap();
+    assert_eq!(body["observe_mode"], true);
+    assert_eq!(body["reason_code"], "watch_workspace_readiness_unavailable");
+    assert!(daemon.join().unwrap().is_some());
+}
+
+#[test]
 fn a_hook_no_resident_answers_goes_to_the_daemon_as_the_extension_sent_it() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();

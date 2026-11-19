@@ -4,8 +4,12 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use super::paths::{is_python_name, normpath};
-use super::{pure, run_command, Host};
+use super::paths::is_python_name;
+#[cfg(unix)]
+use super::paths::normpath;
+#[cfg(unix)]
+use super::pure;
+use super::{run_command, Host};
 
 const RUNTIME: &str = if cfg!(windows) {
     "hol-guard-runtime.exe"

@@ -19,18 +19,33 @@ mod cline_family;
 mod cline_opencode_apply_family;
 #[path = "tests_codex.rs"]
 mod codex_family;
+#[path = "tests_contract_config_paths.rs"]
+mod contract_config_paths_family;
 #[path = "tests_copilot.rs"]
 mod copilot_family;
 #[path = "tests_cursor.rs"]
 mod cursor_family;
+#[path = "tests_cursor_surfaces.rs"]
+mod cursor_surfaces_family;
+#[path = "tests_detect_merged.rs"]
+mod detect_merged_family;
+#[path = "tests_firewall.rs"]
+mod firewall_family;
 #[path = "tests_grok_zcode.rs"]
 mod grok_zcode;
+#[cfg(unix)]
+#[path = "guard_home_redirect_tests.rs"]
+mod guard_home_redirect_family;
 #[path = "tests_hermes.rs"]
 mod hermes_family;
 #[path = "tests_hook_config.rs"]
 mod hook_config_family;
 #[path = "tests_install_apply.rs"]
 mod install_apply_family;
+#[path = "tests_live_hook_verification.rs"]
+mod live_hook_verification_family;
+#[path = "managed_install_tests.rs"]
+mod managed_install_family;
 #[path = "tests_mcp_servers.rs"]
 mod mcp_servers_family;
 #[path = "tests_opencode.rs"]
@@ -41,10 +56,19 @@ mod pi_family;
 mod probe_run_family;
 #[path = "tests_round_trip.rs"]
 mod round_trip;
+#[path = "tests_setup_detection.rs"]
+mod setup_detection_family;
 #[path = "tests_shims.rs"]
 mod shim_family;
 #[path = "tests_shims_apply.rs"]
 mod shims_apply_family;
+#[cfg(unix)]
+#[path = "standalone_install_tests.rs"]
+mod standalone_install_family;
+#[path = "update_tests.rs"]
+mod update_family;
+#[path = "update_store_tests.rs"]
+mod update_store_family;
 
 struct Home {
     _dir: TempDir,
@@ -223,7 +247,7 @@ fn describe_names_the_hermes_and_copilot_preparation_and_hook_ownership() {
         .starts_with("Guard could not read which Copilot hooks"));
     assert_eq!(
         copilot["hook_ownership"]["ops"].as_array().unwrap().len(),
-        4
+        7
     );
     assert_eq!(find("cursor")["hook_ownership"], Value::Null);
 }

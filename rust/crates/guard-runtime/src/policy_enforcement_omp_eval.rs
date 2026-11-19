@@ -12,10 +12,25 @@
 //! reads one of the tool's read-only operations as a request to GitHub, so
 //! after the call its result is a network read's output and takes the
 //! installed network floor, not the floor for a tool nothing recognizes.
-use guard_contracts::{NativeHookRequestV1, PreToolActionTypeV1};
+//!
+//! The recheck is judged as the call's `PreToolUse` was: with the installed
+//! command controls and the execution environment the hook stamped. A commit
+//! draft is settled by the local Git write proof, which reads the agent's
+//! own Git setup from that environment and cannot answer without it.
+use guard_command::native_command_controls::CompiledNativeCommandControls;
+use guard_contracts::{GuardExecutionEnvironmentV1, NativeHookRequestV1, PreToolActionTypeV1};
 use serde_json::Value;
 
+#[cfg(test)]
 pub(super) fn bounded_output_action(request: &NativeHookRequestV1) -> Option<PreToolActionTypeV1> {
+    bounded_output_action_in(request, None, None)
+}
+
+pub(super) fn bounded_output_action_in(
+    request: &NativeHookRequestV1,
+    controls: Option<&CompiledNativeCommandControls>,
+    execution_environment: Option<&GuardExecutionEnvironmentV1>,
+) -> Option<PreToolActionTypeV1> {
     let root = request.payload.as_object()?;
     let tool = root.get("tool_name").and_then(Value::as_str)?;
     // Pi ships the same `find` and `ls` built-ins and gets the same listing proof.
@@ -38,15 +53,37 @@ pub(super) fn bounded_output_action(request: &NativeHookRequestV1) -> Option<Pre
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect(),
     );
-    let proof = guard_command::pretool::evaluate_pre_tool_envelope_with_context(
-        &request.harness,
-        "PreToolUse",
-        &input,
-        None,
-        Some(std::time::Instant::now() + std::time::Duration::from_millis(100)),
-        Some(&request.home_dir),
-        request.cwd.as_deref(),
-    );
+    // The same budget the call's `PreToolUse` had: the Git write proof runs
+    // Git to read the repository's setup and needs more than a listing does.
+    let deadline = std::time::Instant::now()
+        + std::time::Duration::from_millis(request.deadline_budget_ms.unwrap_or(9_000).min(9_000));
+    let proof = match execution_environment {
+        Some(environment) => {
+            guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+                &request.harness,
+                "PreToolUse",
+                &input,
+                controls,
+                Some(deadline),
+                guard_command::pretool::PathContext {
+                    home_dir: Some(&request.home_dir),
+                    guard_home: Some(&request.guard_home),
+                    cwd: request.cwd.as_deref(),
+                    ..Default::default()
+                },
+                Some(environment),
+            )
+        }
+        None => guard_command::pretool::evaluate_pre_tool_envelope_with_context(
+            &request.harness,
+            "PreToolUse",
+            &input,
+            controls,
+            Some(deadline),
+            Some(&request.home_dir),
+            request.cwd.as_deref(),
+        ),
+    };
     let proof =
         crate::omp_yield_input_scan::scan(&input, request.deadline_budget_ms, proof).ok()?;
     if proof.minimum_action != "allow" || proof.action.sensitive_target {

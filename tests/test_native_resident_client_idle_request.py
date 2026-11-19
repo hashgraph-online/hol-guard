@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +14,8 @@ from codex_plugin_scanner.guard import native_resident_client_pool as pool_modul
 from codex_plugin_scanner.guard import native_resident_revival as revival
 from codex_plugin_scanner.guard import native_resident_stream as streams
 from tests.test_native_policy_snapshot_direct_lane import _publisher
+
+_REAL_POPEN = subprocess.Popen
 
 
 def _unexpected(*_args: object, **_kwargs: object) -> None:
@@ -31,6 +34,21 @@ def _setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(streams.subprocess, "Popen", _unexpected)
     kwargs = dict(executable=executable, guard_home=tmp_path, environment={}, payload=b"{}", timeout_seconds=1)
     return pool, kwargs
+
+
+def _idle_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, executable: Path):
+    """A client that has not started its stream.
+
+    Building one asks the native launcher for its isolated environment, a short
+    process of its own, so that call runs with the real ``Popen``; what the
+    tests forbid is the client's own start.
+    """
+
+    with monkeypatch.context() as scope:
+        scope.setattr(streams.subprocess, "Popen", _REAL_POPEN)
+        return streams._PersistentNativeClient(
+            executable=executable, state_dir=tmp_path / "native-runtime", environment={}
+        )
 
 
 class _WarmClient:
@@ -99,9 +117,7 @@ def test_client_dying_after_lease_is_retired_without_respawn(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contained: bool
 ):
     pool, kwargs = _setup(tmp_path, monkeypatch)
-    client = streams._PersistentNativeClient(
-        executable=kwargs["executable"], state_dir=tmp_path / "native-runtime", environment={}
-    )
+    client = _idle_client(tmp_path, monkeypatch, kwargs["executable"])
     polls = iter([None, 1])
     client._process = SimpleNamespace(poll=lambda: next(polls))
     closes = []
@@ -121,7 +137,5 @@ def test_client_dying_after_lease_is_retired_without_respawn(
 
 def test_absent_process_cannot_start_through_idle_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     _pool, kwargs = _setup(tmp_path, monkeypatch)
-    client = streams._PersistentNativeClient(
-        executable=kwargs["executable"], state_dir=tmp_path / "native-runtime", environment={}
-    )
+    client = _idle_client(tmp_path, monkeypatch, kwargs["executable"])
     assert client.request(b"{}", deadline_monotonic=time.monotonic() + 1, allow_start=False) is None

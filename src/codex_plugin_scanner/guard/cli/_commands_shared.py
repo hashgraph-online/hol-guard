@@ -100,8 +100,7 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
-from ..harness.base import HarnessContext
-from ..harness.registry import get_adapter
+from ..harness_context import HarnessContext
 from ..local_dashboard_session import build_local_dashboard_session_token
 from ..local_supply_chain import (
     _resolve_guard_sync_auth_context,
@@ -133,6 +132,9 @@ from ..native_daemon_manage import (
     load_guard_daemon_url,
     schedule_guard_daemon_ensure,
 )
+from ..native_harness_client import canonical_harness as resolve_harness
+from ..native_harness_ops import detect as harness_detect
+from ..native_harness_ops import diagnostics as harness_diagnostics
 from ..native_hook_artifact_compose import NativeHookComposeError
 from ..native_prompt import extract_prompt_requests
 from ..package_firewall_entitlement import (

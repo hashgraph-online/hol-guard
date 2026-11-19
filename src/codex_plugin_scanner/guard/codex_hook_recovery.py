@@ -10,22 +10,19 @@ diagnostic/export material.
 from __future__ import annotations
 
 import base64
-import hashlib
-import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .codex_hook_file_integrity import CodexHookIntegrityError, check_hook_validation_deadline
-from .codex_install_transaction import require_codex_install_owner
+from .native_owned import require_codex_install_owner
 
 if TYPE_CHECKING:
     from .codex_hook_repair import PendingCodexHookRepair
 
 _PURPOSE = "codex-hook-publication-inverse"
 _MAX_SNAPSHOT = 4 * 1024 * 1024
-_MAX_RECORD = 24 * 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -37,15 +34,26 @@ class AuthenticatedHookAuthorityReceipt:
     config_bytes: bytes
 
 
-def load_hook_authority_receipt(home: Path, config: Path) -> AuthenticatedHookAuthorityReceipt:
+def load_hook_authority_receipt(
+    home: Path,
+    config: Path,
+    *,
+    require_manifest: tuple[bytes | None, str] | None = None,
+) -> AuthenticatedHookAuthorityReceipt:
     """Read exact retained authority under the caller's validation deadline.
+
+    `require_manifest` names the manifest bytes the receipt must retain and the
+    refusal the runtime raises when it retains others.
 
     Authentication alone cannot authorize restoration. A repair planner must
     additionally pin these files/key, validate package and registration, and
     obtain fresh exact lifecycle approval before publishing anything.
     """
     check_hook_validation_deadline()
-    answer = _publication("receipt_load", home, config=_path_text(config))
+    fields: dict[str, object] = {}
+    if require_manifest is not None:
+        fields = {"expect_manifest": _encode(require_manifest[0]), "mismatch": require_manifest[1]}
+    answer = _publication("receipt_load", home, config=_path_text(config), **fields)
     if not isinstance(answer, dict):
         raise _error("receipt_invalid")
     manifest, receipt, config_bytes = (_decode(answer.get(key)) for key in ("manifest", "receipt", "config"))
@@ -69,12 +77,7 @@ def build_hook_authority_receipt(home: Path, config: Path, *, config_bytes: byte
     return text.encode("ascii")
 
 
-def _record_path(home: Path) -> Path:
-    # One pending publication per home, including installations of other targets.
-    return home / "managed" / "codex" / "pending-hook-publication.json"
-
-
-def _publication(op: str, home: Path, **fields: object) -> object:
+def _publication(op: str, home: Path, **fields: Any) -> object:
     from .native_transition_files import publication
 
     return publication(op, home, **fields)
@@ -194,13 +197,6 @@ def _load_record(home: Path, *, live_config_conflict: bool = False) -> dict[str,
     return payload
 
 
-def _record_authentication_targets(home: Path, payload: dict[str, object]) -> tuple[Path, Path]:
-    # Hash the authenticated original target, never a substituted live symlink.
-    target_hash = hashlib.sha256(str(payload["config_path"]).encode("utf-8")).hexdigest()[:24]
-    manifest = home / "managed" / "codex" / f"hooks-{target_hash}.manifest.json"
-    return manifest, manifest.with_name(f"hooks-{target_hash}.authority-receipt.json")
-
-
 def mark_owned_hook_publication_conflict(home: Path, config: Path) -> None:
     """Durably refuse an inverse after this live owner sees a competing config.
 
@@ -249,18 +245,16 @@ def _commit_verified_hook_repair_publication(
     pending.compare("after")
     plan = pending.authorization.plan
     observation = verified_admission_payload(proof)
-    observed = observation.get("observed_monotonic")
-    if (
-        type(started_monotonic) not in (float, int)
-        or not math.isfinite(started_monotonic)
-        or not isinstance(observed, (float, int))
-        or isinstance(observed, bool)
-        or not math.isfinite(observed)
-        or not pending.publication_monotonic <= started_monotonic <= observed <= time.monotonic()
-    ):
-        raise _error("repair_native_verification_invalid")
     pending.compare("after")
-    _publication("commit_repair", plan.guard_home, observation=observation)
+    # The runtime checks the proof's timing and that it is this publication's.
+    _publication(
+        "commit_repair",
+        plan.guard_home,
+        observation=observation,
+        publication=pending.publication_monotonic,
+        started=started_monotonic,
+        now=time.monotonic(),
+    )
     _remove_record(plan.guard_home)
 
 

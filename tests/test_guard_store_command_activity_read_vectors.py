@@ -69,7 +69,7 @@ def recorded_diagnostic_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
         "BUILT_IN_COMMAND_EXTENSION_REGISTRY",
         SimpleNamespace(extensions=extensions),
     )
-    monkeypatch.setattr(store_command_activity_privacy, "COMMAND_ACTIVITY_HARNESSES", catalog["harnesses"])
+    monkeypatch.setattr(store_command_activity_privacy, "command_activity_harnesses", lambda: catalog["harnesses"])
 
 
 def test_diagnostics_allowlists_include_new_catalog_entries(monkeypatch: pytest.MonkeyPatch) -> None:

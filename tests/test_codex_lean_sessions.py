@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import io
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -153,16 +155,20 @@ def test_guards_value_in_one_codex_home_is_not_claimed_in_another(tmp_path: Path
 
 
 def test_an_interrupted_hook_install_stops_the_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import codex_hook_recovery
+    from codex_plugin_scanner.guard import native_owned
     from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 
     home, guard = homes(tmp_path)
     path = write_config(home, USER_CONFIG)
 
-    def blocked(_home: Path) -> bool:
+    @contextlib.contextmanager
+    def blocked(*_args: object, **fields: object) -> Iterator[None]:
+        # The runtime recovers while it takes the lock, so a refusal arrives as the lock is taken.
+        assert fields["recover"] is True
         raise CodexHookIntegrityError("codex_hook_recovery_config_conflict", "needs recovery")
+        yield
 
-    monkeypatch.setattr(codex_hook_recovery, "recover_hook_publication", blocked)
+    monkeypatch.setattr(native_owned, "codex_install_transaction", blocked)
     with pytest.raises(lean.LeanSessionsError) as raised:
         lean.enable(home, guard, limit=SIZE)
 

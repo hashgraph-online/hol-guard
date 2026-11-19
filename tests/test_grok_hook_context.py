@@ -1,22 +1,21 @@
-"""Grok hook readiness binds every generated launch form to its actual owner."""
+"""Installed Grok hook readiness binds the on-disk hook to its actual owner.
+
+The launch forms and their owner binding are covered by the native runtime's Rust tests."""
 
 from __future__ import annotations
 
 import json
-import os
-import sys
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_command
 from codex_plugin_scanner.guard.cli.native_install_checks import (
     grok_hooks_protection_ready,
     grok_runtime_hooks_verified,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.native_bounded_runtime import use_bounded_runtime
 
 from .grok_test_support import grok_hook_command_parts, grok_paths
@@ -47,72 +46,6 @@ def _runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     use_bounded_runtime(monkeypatch, runtime, tmp_path / "guard")
 
 
-def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPatch) -> tuple[str, ...]:
-    """Generate the native hook, its frozen form, or the signed desktop proxy envelope."""
-    monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
-    if mode == "frozen":
-        monkeypatch.setattr(sys, "frozen", True, raising=False)
-    command = grok_hook_command_parts(context)
-    if mode != "desktop":
-        return command
-    from .desktop_proxy_test_support import launch_script, sign_every_path
-
-    bundle = context.home_dir / "Guard.app"
-    candidate = bundle / "Contents/MacOS/proxy"
-    core = candidate.with_name("core")
-    config = json.loads(command[-1])
-    config.update(frozen_launcher=True, python_executable=str(core))
-    monkeypatch.setattr(sys, "platform", "darwin")
-    sign_every_path(monkeypatch, "TEAM123")
-    return (
-        "/bin/sh",
-        "-c",
-        *launch_script(),
-        str(candidate),
-        "TEAM123",
-        str(bundle),
-        json.dumps(config),
-        str(core),
-        "1",
-    )
-
-
-@pytest.mark.security_critical
-@pytest.mark.parametrize("mode", ["native", "frozen", "desktop"])
-@pytest.mark.parametrize("option", ["--guard-home", "--home", "--workspace"])
-def test_all_generated_forms_reject_paired_path_redirects(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, option: str
-) -> None:
-    """Valid signatures and internally consistent arguments cannot authorize another context."""
-    if mode == "desktop" and os.name == "nt":
-        pytest.skip("The signed macOS proxy uses POSIX command serialization.")
-    context = _context(tmp_path)
-    command = _generated(context, mode, monkeypatch)
-    assert is_grok_hook_command(_shell_command(command), context)
-    changed = _redirect(command, tmp_path / "redirected", option)
-    assert is_grok_hook_command(_shell_command(changed)) is True
-    assert not is_grok_hook_command(_shell_command(changed), context)
-
-
-@pytest.mark.security_critical
-@pytest.mark.parametrize("pinned", [False, True])
-def test_workspace_boundaries_are_not_interchangeable(tmp_path: Path, pinned: bool) -> None:
-    """A workspace-specific hook cannot claim machine-wide coverage, or vice versa."""
-    context = _context(tmp_path, workspace=pinned)
-    command = _shell_command(grok_hook_command_parts(context))
-    assert is_grok_hook_command(command, context)
-    assert not is_grok_hook_command(command, _context(tmp_path, workspace=not pinned))
-
-
-def test_implicit_native_home_must_match_current_user(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The generator may omit --home only when the process's home is the intended one."""
-    context = _context(tmp_path, workspace=False)
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: context.home_dir))
-    command = _shell_command(grok_hook_command_parts(context))
-    assert is_grok_hook_command(command, context)
-    assert not is_grok_hook_command(command, replace(context, home_dir=tmp_path / "other-home"))
-
-
 @pytest.mark.security_critical
 @pytest.mark.parametrize("option", ["--guard-home", "--home", "--workspace"])
 def test_installed_readiness_rejects_consistent_path_redirects(
@@ -121,8 +54,7 @@ def test_installed_readiness_rejects_consistent_path_redirects(
     """Both public readiness paths bind on-disk hook configuration to the supplied owner."""
     context = _context(tmp_path)
     monkeypatch.delenv("GROK_HOME", raising=False)
-    adapter = get_adapter("grok")
-    adapter.install(context)
+    harness_support.install("grok", context)
     assert grok_runtime_hooks_verified(context)
     assert grok_hooks_protection_ready(context)
     hook = grok_paths(context)["pretool"]

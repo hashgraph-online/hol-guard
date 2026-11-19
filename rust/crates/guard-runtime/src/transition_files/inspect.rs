@@ -3,6 +3,7 @@
 //! `_validate_digest_dependency`, and the artifact and invocation checks from
 //! `_artifact_digest` and `_invocation_generation`.
 
+use std::ffi::OsStr;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -64,20 +65,28 @@ pub(crate) fn plain(path: PathBuf) -> PathBuf {
 }
 
 /// `Path.resolve(strict=False)`: the existing prefix canonicalized, the rest
-/// appended as written.
+/// appended as written, with a `..` in the rest popping what precedes it.
 pub(crate) fn resolve_lenient(path: &Path) -> PathBuf {
     let mut rest = Vec::new();
     let mut current = path;
     loop {
         if let Ok(canonical) = fs::canonicalize(current) {
             let mut resolved = plain(canonical);
-            resolved.extend(rest.iter().rev());
+            for component in rest.iter().rev() {
+                if *component == OsStr::new("..") {
+                    resolved.pop();
+                } else {
+                    resolved.push(*component);
+                }
+            }
             return resolved;
         }
-        let (Some(parent), Some(name)) = (current.parent(), current.file_name()) else {
+        // `file_name()` is `None` for a trailing `..`, so walk the components.
+        let (Some(parent), Some(last)) = (current.parent(), current.components().next_back())
+        else {
             return path.to_path_buf();
         };
-        rest.push(name);
+        rest.push(last.as_os_str());
         current = parent;
     }
 }

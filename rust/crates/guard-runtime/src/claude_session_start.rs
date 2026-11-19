@@ -1,7 +1,7 @@
 //! Native Claude Code SessionStart hook (`claude-session-start-v1`).
 //!
 //! The Python SessionStart hook (`_run_session_start_from_argv` in
-//! `adapters/claude_code.py`) starts the Guard daemon when it is down,
+//! `claude_hook_entry.py`) starts the Guard daemon when it is down,
 //! rewrites the managed hook entries in `~/.claude/settings.json` inside the
 //! owned installation transaction, and prints the SessionStart context. On
 //! most session starts the daemon is already live and the entries are
@@ -12,7 +12,7 @@
 //! a reboot or a crash. It requires every one of these, in process:
 //! - the installer's config parses, it was written for this runtime build,
 //!   and the session environment matches the one the installer described
-//!   (same home, not running inside Cursor);
+//!   (same home; the bridge, not the settings, says whether Cursor runs it);
 //! - the Guard entries of the settings file already equal what the Python
 //!   refresh would write, per `claude_session_start_contract`;
 //! - the daemon is verified live by `claude_session_start_live`: the

@@ -12,15 +12,17 @@
   "dead_duplicate"
  ],
  "scope_globs": [
-  "src/codex_plugin_scanner/guard/harness/*hook*.py",
+  "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
+  "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
+  "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
+  "src/codex_plugin_scanner/guard/muse_hook_render.py",
+  "src/codex_plugin_scanner/guard/native_hook_bridge.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
   "src/codex_plugin_scanner/guard/hook_review/hook_*.py",
   "src/codex_plugin_scanner/guard/evidence_drains/hook_*.py",
   "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
   "src/codex_plugin_scanner/guard/native_hook_edge.py",
-  "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py",
-  "src/codex_plugin_scanner/guard/native_response_decoder.py",
   "src/codex_plugin_scanner/guard/native_route_receipt.py",
   "src/codex_plugin_scanner/guard/native_resident_client.py",
   "src/codex_plugin_scanner/guard/native_runtime*.py",
@@ -32,7 +34,11 @@
    "id": "hook_control_and_transport",
    "class": "required_control_plane",
    "patterns": [
-    "src/codex_plugin_scanner/guard/harness/*hook*.py",
+    "src/codex_plugin_scanner/guard/bounded_cli_hook_bridge.py",
+    "src/codex_plugin_scanner/guard/bounded_cli_hook_native.py",
+    "src/codex_plugin_scanner/guard/hook_failure_bridge.py",
+    "src/codex_plugin_scanner/guard/muse_hook_render.py",
+    "src/codex_plugin_scanner/guard/native_hook_bridge.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_*.py",
     "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
@@ -40,7 +46,6 @@
     "src/codex_plugin_scanner/guard/evidence_drains/hook_*.py",
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
     "src/codex_plugin_scanner/guard/native_hook_edge.py",
-    "src/codex_plugin_scanner/guard/native_response_decoder.py",
     "src/codex_plugin_scanner/guard/native_route_receipt.py",
     "src/codex_plugin_scanner/guard/native_resident_client.py",
     "src/codex_plugin_scanner/guard/native_runtime.py",
@@ -53,22 +58,8 @@
     "src/codex_plugin_scanner/guard/native_runtime_detectors.py",
     "src/codex_plugin_scanner/guard/native_mode.py"
    ],
-   "exclude_patterns": [
-    "src/codex_plugin_scanner/guard/hook_review/hook_metrics.py",
-    "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py"
-   ],
    "production_role": "authentication, transport, adapter projection, supervision, and non-authoritative evidence plumbing",
    "owner": "python-control-and-transport"
-  },
-  {
-   "id": "hook_evidence_persistence",
-   "class": "required_control_plane",
-   "patterns": [
-    "src/codex_plugin_scanner/guard/hook_review/hook_metrics.py",
-    "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py"
-   ],
-   "production_role": "non-blocking receipts, metrics, and enrichment only; no decision authority",
-   "owner": "evidence-persistence"
   }
  ],
  "parity_fixture": "tests/fixtures/native-hook-parity/cases.v1.json",

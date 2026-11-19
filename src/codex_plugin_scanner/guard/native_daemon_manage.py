@@ -913,6 +913,28 @@ def load_daemon_lifecycle_events(guard_home: Path, *, limit: int = 20) -> list[d
     return _lifecycle_events(guard_home, limit=limit, incident=False)[0]
 
 
+def daemon_reliability_report(
+    guard_home: Path,
+    *,
+    days: int = 30,
+    crash_reports_dir: Path | None = None,
+    processes: bool = False,
+) -> dict[str, object]:
+    """The native reliability report for ``guard_home``; raises without the native runtime."""
+
+    args: dict[str, object] = {"days": days, "processes": processes}
+    if crash_reports_dir is not None:
+        args["crash_reports_dir"] = str(crash_reports_dir)
+    return _ask("reliability", guard_home, **args)
+
+
+def record_daemon_repair(guard_home: Path) -> None:
+    """Notes in the lifecycle journal that a daemon repair ran; best effort."""
+
+    with suppress(RuntimeError, ValueError, OSError):
+        _ask("record_repair", guard_home)
+
+
 def _guard_daemon_start_in_progress(guard_home: Path) -> bool:
     return _ask("start_in_progress", guard_home, current=_current_state()).get("in_progress") is True
 

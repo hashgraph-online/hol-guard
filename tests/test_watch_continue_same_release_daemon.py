@@ -253,6 +253,11 @@ def test_watch_unavailable_pretool_records_command_activity(
     writer = MagicMock()
     worker = HookWorker(store=GuardStore(guard_home), activity_writer=writer)
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace, **_kwargs: {"mode": "observe"})
+    # The resident reads a Watch snapshot as recording only; no resident runs here.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.hook_review.hook_worker_native_review.native_recording_only_for_binding",
+        lambda *_args, **_kwargs: True,
+    )
     result = worker.review_http_payload(
         payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "git status"}},
         params={},

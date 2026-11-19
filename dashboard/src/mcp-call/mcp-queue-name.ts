@@ -3,11 +3,13 @@ import type { GuardApprovalRequest } from "../guard-types";
 import { explainMcpCall } from "./explain-mcp-call";
 import { composioToolTitle } from "./composio-calls";
 import { hostAppTool } from "./host-app-tools";
+import { mcpMarkName } from "./mcp-brand";
 import {
   parseNamespacedMcpName,
   sentenceCase,
   serviceDisplayName,
   shortToolName,
+  toolTitle,
   type McpServerRef,
 } from "./mcp-services";
 
@@ -50,6 +52,17 @@ export function listedMcpPreview(item: GuardApprovalRequest): string | null {
   const short = shortToolName(ref.server, ref.tool);
   const host = hostAppTool(ref.server, short, { harness: item.harness });
   if (host !== null) return `${host.requester} · ${host.title}`;
-  const title = ref.server.toLowerCase() === "composio" ? (composioToolTitle(short) ?? sentenceCase(short)) : sentenceCase(short);
-  return `${serviceDisplayName(ref.server)} · ${title}`;
+  const service = serviceDisplayName(ref.server);
+  const title = ref.server.toLowerCase() === "composio" ? (composioToolTitle(short) ?? sentenceCase(short)) : toolTitle(service, short);
+  return `${service} · ${title}`;
+}
+
+/** The app whose mark a list row shows for an MCP call, or null when the row is not one. */
+export function queueMcpMarkName(item: GuardApprovalRequest): string | null {
+  const explanation = explainMcpCall(item);
+  if (explanation !== null) return mcpMarkName(explanation);
+  const ref = listedMcpRef(item);
+  if (ref === null) return null;
+  const host = hostAppTool(ref.server, shortToolName(ref.server, ref.tool), { harness: item.harness });
+  return host?.requester ?? serviceDisplayName(ref.server);
 }

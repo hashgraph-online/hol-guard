@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import _build_parser
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.cli.commands_router import _COMMON_HANDLERS, _resolve_guard_handler
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.native_harness import ask
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 from tests.cline_test_support import uninstall
 
 
@@ -42,7 +42,7 @@ def test_cline_mcp_proxy_install_preserves_remote_and_restores_exact_text(tmp_pa
 
     servers = [
         artifact
-        for artifact in get_adapter("cline").detect(context).artifacts
+        for artifact in harness_ops.detect("cline", context).artifacts
         if artifact.artifact_type == "mcp_server"
     ]
     assert {artifact.name for artifact in servers} == {"local", "remote"}

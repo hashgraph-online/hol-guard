@@ -187,7 +187,10 @@ fn commit_repair(call: &mut Call<'_>) -> Step<Value> {
     let home = call.home()?;
     let mut payload = call.load(&home, false)?;
     let observation = field(call.args, "observation").clone();
-    if !observation.is_object() || !Call::proof_matches(&home, &payload, &observation)? {
+    if !observation.is_object()
+        || !super::publication_proof::ordered(call, &observation)
+        || !Call::proof_matches(&home, &payload, &observation)?
+    {
         return Err(recovery("repair_native_verification_invalid"));
     }
     payload.insert("native_verification".to_owned(), observation);
@@ -267,18 +270,37 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_target" => super::publication_target::target(call),
         "publication_abort" => super::publication_abort::abort(call),
         "publication_repair_plan" => super::publication_repair_plan::plan(call),
+        "publication_repair_prepare" => super::publication_repair_prepare::prepare(call),
         "publication_repair_request_plan" => super::publication_repair_request::plan(call),
         "publication_merge_dependency" => super::merge_dependency::merge(call),
-        "publication_observer_binding" => super::publication_observer::binding(call),
+        "publication_observe" => super::publication_observe::observe(call),
         "publication_repair_files" => super::publication_repair_files::files(call),
         "publication_inverse_dependencies" => super::publication_repair_files::inverse(call),
         "publication_inverse_prior" => super::publication_inverse_plan::prior_op(call),
         "publication_inverse_plan" => super::publication_inverse_plan::plan_op(call),
+        "publication_inverse_journal" => super::publication_inverse_plan::journal_op(call),
         "publication_inverse_check" => super::publication_inverse_plan::check_op(call),
+        "publication_inverse_prepare" => super::publication_inverse_prepare::prepare(call),
+        "publication_inverse_verify" => super::publication_inverse_pinned::verify(call),
+        "publication_inverse_pinned" => super::publication_inverse_pinned::pinned(call),
+        "publication_inverse_bind" => super::publication_inverse_pinned::bind(call),
         "publication_inverse_record" => super::publication_inverse_publish::record_op(call),
         "publication_inverse_restore" => super::publication_inverse_publish::restore_op(call),
         "publication_request_create" => super::publication_request::create_op(call),
         "publication_request_read" => super::publication_request::read_op(call),
+        "publication_prepare_request" => super::publication_prepare_request::prepare_op(call),
+        "publication_request_policy" => super::publication_request_policy::policy_op(call),
+        "publication_inspect_runtime" => super::publication_inspect_runtime::inspect_op(call),
+        "publication_pin_executable" => super::publication_pin_executable::pin_op(call),
+        "publication_runtime_compare" => super::publication_runtime_compare::compare_op(call),
+        "publication_inverse_proof" => super::publication_proof::inverse(call),
+        "publication_coordinate" => super::publication_coordinate::coordinate(call),
+        "publication_deadline" => super::publication_authorize::deadline(call),
+        "publication_artifact_generation" => {
+            super::publication_artifact_generation::generation_op(call)
+        }
+        "publication_inverse_register" => super::publication_inverse_registry::register_op(call),
+        "publication_authorize" => super::publication_authorize::plan(call),
         "publication_repair_claim" => super::repair_claims::claim(call),
         "publication_repair_claim_check" => super::repair_claims::check(call),
         "publication_repair_publish" => super::repair_claims::publish(call),

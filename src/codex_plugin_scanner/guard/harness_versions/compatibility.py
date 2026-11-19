@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Final
 
-from ..harness.contracts import HARNESS_CONTRACTS
+from ..setup_contract_registry import harness_contracts
 from .discovery import VersionObservation
 
 OBSERVATION_MAX_AGE_SECONDS = 15 * 60
@@ -42,7 +42,7 @@ def _contracts() -> dict[str, list[dict[str, object]]]:
             }
             for row in contract.capability_events
         ]
-        for contract in HARNESS_CONTRACTS
+        for contract in harness_contracts()
     }
 
 

@@ -23,7 +23,7 @@ from .action_lattice import most_restrictive_guard_action, normalize_guard_actio
 from .approval_scope_support import package_request_runtime_workspace_scope
 from .cloud_audit_request import build_cloud_workspace_audit_request
 from .config import GuardConfig
-from .harness.base import HarnessContext
+from .harness_context import HarnessContext
 from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact
 from .native_mcp_proxy_decision import (

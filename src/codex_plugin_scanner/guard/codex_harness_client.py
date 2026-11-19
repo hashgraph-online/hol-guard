@@ -13,32 +13,22 @@ from __future__ import annotations
 
 import base64
 import json
-import sys
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from .codex_hook_compatibility import python_bridge_argv
-from .codex_hook_integrity import hook_manifest_path
+from .codex_hook_file_integrity import CodexHookIntegrityError
+from .codex_hook_integrity import hook_manifest_file
 from .codex_hook_manifest import CodexHookManifestSpec
-from .codex_hook_registration import legacy_binding_fields
-from .codex_hook_self_binding import short_path_fields
 from .config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
-from .harness.base import HarnessContext
-from .harness.native_harness import ask
+from .harness_context import HarnessContext
+from .native_harness_client import ask
 
 if TYPE_CHECKING:
     from .runtime_transition import TransitionFile
 
-_LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
-    "HOL Guard checking Bash command",
-    "HOL Guard checking tool action",
-    "HOL Guard checking prompt",
-    "HOL Guard checking Codex approval request",
-    "HOL Guard checking tool result",
-}
 _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 _LIVE_STATE_TIMEOUT_SECONDS = 10.0
 # A spent budget still needs the runtime to read the files and decide.
@@ -112,26 +102,6 @@ def guard_proxy_server_names(servers: Mapping[str, object]) -> frozenset[str]:
     return frozenset(names)
 
 
-def _publish_hooks(
-    context: HarnessContext, request: Mapping[str, Any], files: Sequence[TransitionFile]
-) -> dict[str, Any]:
-    """One ``publish_hooks`` request, its journal records replayed."""
-    from .native_transition_files import _replay
-
-    answer = dict(ask("publish_hooks", context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request))
-    _replay(answer.get("events"), files, None)
-    return answer
-
-
-def _publication_fault(fault: object) -> BaseException:
-    """The exception a ``publish_hooks`` fault names."""
-    from .native_transition_files import _exception
-
-    if isinstance(fault, Mapping) and isinstance(fault.get("runtime"), str):
-        return RuntimeError(fault["runtime"])
-    return _exception(fault)
-
-
 def _hook_workspace_dir(context: HarnessContext) -> Path | None:
     return context.workspace_dir if context.workspace_override_explicit else None
 
@@ -161,20 +131,58 @@ def _post_tool_hook_timeout_seconds(context: HarnessContext) -> int:
     )
 
 
-def _launch_fields(context: HarnessContext, *, home_is_current: bool | None = None) -> dict[str, object]:
-    """What the runtime cannot see of this launch: the home mode and Guard home,
-    and the hook's manifest path and timeout. It derives the argv, the native
-    runtime, the interpreter, the package paths and the manifest spec from
-    these and the caller stamp."""
+def _launch_facts(context: HarnessContext, *, home_is_current: bool | None = None) -> dict[str, object]:
+    """The facts about this launch only this process knows: the home mode and Guard home, the workspace
+    mode and the hook timeout. The runtime derives the argv, the native runtime, the interpreter, the package
+    paths, the manifest path and the manifest spec from these and the caller stamp."""
 
     current = _home_is_current(context) if home_is_current is None else home_is_current
-    guard_home = _runtime_guard_home(context, home_is_current=current)
     return {
         "home_is_current": current,
-        "runtime_guard_home": str(guard_home),
+        "runtime_guard_home": str(_runtime_guard_home(context, home_is_current=current)),
         "workspace_explicit": context.workspace_override_explicit,
-        "manifest_path": str(hook_manifest_path(guard_home, codex_paths(context).config)),
         "long_timeout": _post_tool_hook_timeout_seconds(context),
+    }
+
+
+def _launch_fields(context: HarnessContext, *, home_is_current: bool | None = None) -> dict[str, object]:
+    """What the runtime cannot see of this launch, with the manifest path the hook reads."""
+
+    fields = _launch_facts(context, home_is_current=home_is_current)
+    guard_home = Path(str(fields["runtime_guard_home"]))
+    return {**fields, "manifest_path": str(hook_manifest_file(guard_home, codex_paths(context).config))}
+
+
+def codex_native_request(context: HarnessContext) -> dict[str, object]:
+    """What a native Codex read or plan asks of this process: its facts and the transition budget."""
+    from .native_transition_files import _budget, _package_roots
+
+    return {
+        "facts": {"codex": codex_install_facts(context)},
+        "transition": {"package_roots": _package_roots(), "budget": _budget()},
+    }
+
+
+def raise_untrusted(untrusted: object) -> None:
+    """Raise the integrity error for a baseline the runtime refused to trust."""
+    from .codex_hook_file_integrity import CodexHookIntegrityError
+
+    if not isinstance(untrusted, Mapping):
+        raise CodexHookIntegrityError("native_transition_invalid", "Guard could not read the managed-hook baseline.")
+    error = CodexHookIntegrityError(str(untrusted["reason"]), str(untrusted["message"]))
+    cause = untrusted.get("cause")
+    if isinstance(cause, str):
+        raise error from CodexHookIntegrityError(cause, cause)
+    raise error
+
+
+def codex_install_facts(context: HarnessContext) -> dict[str, object]:
+    """What the runtime's Codex install and uninstall cannot read: this launch and the installed package's root."""
+    from . import codex_hook_self_binding
+
+    return {
+        "launch": _launch_facts(context),
+        "package_root": str(codex_hook_self_binding.install_package_root()),
     }
 
 
@@ -187,10 +195,6 @@ def _launch(context: HarnessContext, *, home_is_current: bool) -> dict[str, Any]
 def _hook_command_parts_for_home_mode(context: HarnessContext, *, home_is_current: bool) -> tuple[str, ...]:
     answer = _launch(context, home_is_current=home_is_current)
     return tuple(str(part) for part in answer["argv"])
-
-
-def _current_launch(context: HarnessContext) -> dict[str, Any]:
-    return _launch(context, home_is_current=_home_is_current(context))
 
 
 def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
@@ -241,39 +245,6 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
     )
 
 
-def _legacy_fields(context: HarnessContext, registration: _HookRegistration | None = None) -> dict[str, Any]:
-    """What an exact current bridge entry is matched against for legacy re-adoption."""
-
-    registration = registration or _hook_registration(context)
-    current_argv = list(registration.argv)
-    # python_bridge_argv keeps the object sequence it was given. This argv is
-    # a string command, so only those strings identify the legacy registration.
-    legacy_tail = [part for part in python_bridge_argv(current_argv)[1:] if isinstance(part, str)]
-    return legacy_binding_fields(
-        expected_bindings=json.loads(registration.bindings),
-        current_argv=current_argv,
-        legacy_argv=[sys.executable, *legacy_tail],
-        legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES,
-    )
-
-
-def _check_sources(
-    context: HarnessContext,
-    pairs: Sequence[tuple[Path, Path]],
-    captured: Mapping[Path, bytes | None] | None = None,
-) -> None:
-    """Refuse a config or hooks source that is not a readable regular file or
-    does not parse strictly; captured bytes are checked as they were captured."""
-    sources: list[dict[str, object]] = []
-    for config, hooks in pairs:
-        for path, label, kind in ((config, "Codex config file", "toml"), (hooks, "Codex hooks file", "json")):
-            source: dict[str, object] = {"path": str(path), "label": label, "kind": kind}
-            if captured is not None:
-                source["data"] = _b64(captured[path])
-            sources.append(source)
-    _codex("check_sources", context, sources=sources)
-
-
 def _plan_file(item: Mapping[str, Any]) -> TransitionFile:
     """One file an ``install_plan`` answer plans."""
     from .runtime_transition import TransitionFile
@@ -291,90 +262,113 @@ def _plan_file(item: Mapping[str, Any]) -> TransitionFile:
     )
 
 
-def _ask_install_plan(
-    context: HarnessContext, request: dict[str, Any], enroll_home: Path | None, op: str = "install_plan"
-) -> dict[str, Any]:
-    """One ``install_plan`` (or whole ``install``) answer, asked again with
-    each reply it needs.
+def _live_budget() -> tuple[float, bool]:
+    """Verification gets ten seconds, or what is left of a hook's budget; a
+    spent budget leaves the installation unverified."""
+    from .codex_hook_file_integrity import active_hook_validation_deadline
 
-    An enrolling plan may create the hook key, so it runs under the key's
-    ordinary writer, as the generation always has."""
-    from .codex_hook_file_integrity import check_hook_validation_deadline
-    from .codex_hook_integrity import _ordinary_hook_writer, hook_secret_path
-    from .native_transition_files import _budget, _exception, _package_roots, _replay
-    from .runtime_transition import TransitionError
-
-    request["package_roots"] = _package_roots()
-    request["budget"] = _budget()
-    for _ in range(4):
-        check_hook_validation_deadline()
-        if enroll_home is None:
-            answer = ask(op, context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
-        else:
-            with _ordinary_hook_writer(enroll_home, hook_secret_path(enroll_home), actor="codex.authority-key"):
-                answer = ask(op, context, harness="codex", timeout_seconds=_PUBLISH_TIMEOUT_SECONDS, **request)
-        reply = answer.get("reply")
-        if not isinstance(reply, Mapping):
-            break
-    else:
-        raise RuntimeError(f"{op} did not settle its replies")
-    check_hook_validation_deadline()
-    _replay(answer.get("events"), None, None)
-    if answer.get("conflict") is True:
-        raise TransitionError("adapter_preparation_generation_conflict")
-    if "fault" in answer:
-        raise _exception(answer["fault"])
-    _raise_publication_error(answer)
-    if "retire_error" in answer:
-        failure = _exception(answer["retire_error"])
-        if answer.get("withdrawn") is not True:
-            raise RuntimeError(
-                "codex_hook_migration_rollback_failed: Guard could not fully restore Codex hook sources after "
-                "legacy JSON removal failed. Run `hol-guard install codex` to repair the installation."
-            ) from failure
-        raise failure
-    return answer
+    timeout = _LIVE_STATE_TIMEOUT_SECONDS
+    deadline = active_hook_validation_deadline()
+    if deadline is not None:
+        timeout = min(timeout, deadline - time.monotonic())
+    return max(timeout, _LIVE_STATE_MIN_SECONDS), timeout <= 0
 
 
-def _raise_publication_error(answer: Mapping[str, object]) -> None:
-    """Raise a ``publish_hooks`` error, chained to its rollback's when that failed too."""
-    error, rollback = answer.get("error"), answer.get("rollback_error")
-    if error is None:
-        return
-    failure = _publication_fault(error)
-    if rollback is not None:
-        rollback_error = _publication_fault(rollback)
-        raised = RuntimeError(
-            "Codex hook transaction failed and rollback could not be completed: "
-            f"{type(rollback_error).__name__}: {rollback_error}"
-        )
-        add_note = getattr(raised, "add_note", None)
-        if callable(add_note):
-            add_note(f"rollback error: {rollback_error!r}")
-        raise raised from failure
-    raise failure
+def live_hook_fields(context: HarnessContext) -> tuple[dict[str, Any], float]:
+    """The facts a live hook state op needs, and the time it may take."""
+    from .codex_hook_file_integrity import _python_package_roots
+
+    timeout, spent = _live_budget()
+    request: dict[str, Any] = {
+        "launch": _launch_fields(context),
+        "package_roots": [str(root) for root in _python_package_roots()],
+        "budget_spent": spent,
+    }
+    return request, timeout
 
 
 def live_hook_ask(op: str, context: HarnessContext) -> dict[str, Any]:
     """Ask a live hook state op: the runtime reads the config and hooks files,
     authenticates and verifies the hook manifest, and decides which managed
     events Guard owns."""
-    from .codex_hook_file_integrity import _python_package_roots, active_hook_validation_deadline
-
-    # Verification gets ten seconds, or what is left of a hook's budget; a
-    # spent budget leaves the installation unverified.
-    timeout = _LIVE_STATE_TIMEOUT_SECONDS
-    deadline = active_hook_validation_deadline()
-    if deadline is not None:
-        timeout = min(timeout, deadline - time.monotonic())
-    request: dict[str, Any] = {
-        "launch": _launch_fields(context),
-        "package_roots": [str(root) for root in _python_package_roots()],
-        "budget_spent": timeout <= 0,
-        **short_path_fields(),
-    }
-    timeout = max(timeout, _LIVE_STATE_MIN_SECONDS)
+    request, timeout = live_hook_fields(context)
     return dict(ask(op, context, harness="codex", timeout_seconds=timeout, **request))
+
+
+def _group_text(group: object) -> str | None:
+    """One hook group as JSON text; the runtime reads what JSON can carry."""
+    try:
+        return json.dumps(group, allow_nan=False)
+    except (TypeError, ValueError, RecursionError):
+        return None
+
+
+def verify_manifest_state(
+    spec: CodexHookManifestSpec, *, hooks: object, captured_text: str | None = None
+) -> dict[str, object]:
+    """The integrity state of the manifest on disk, or of ``captured_text``,
+    against ``spec``. The runtime authenticates it under its own key."""
+    from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
+    from .codex_hook_file_integrity import _python_package_roots
+
+    context = HarnessContext(home_dir=spec.home_dir, workspace_dir=spec.workspace_dir, guard_home=spec.guard_home)
+    wire_hooks: dict[str, list[str | None]] | None = None
+    if isinstance(hooks, dict):
+        wire_hooks = {
+            event: [_group_text(group) for group in hooks[event]]
+            for event in MANAGED_CODEX_HOOK_EVENTS
+            if isinstance(hooks.get(event), list)
+        }
+    timeout, spent = _live_budget()
+    try:
+        answer = ask(
+            "verify_manifest",
+            context,
+            harness="codex",
+            timeout_seconds=timeout,
+            spec=spec.payload(),
+            hooks=wire_hooks,
+            manifest_text=captured_text,
+            package_roots=[str(root) for root in _python_package_roots()],
+            budget_spent=spent,
+        )
+    except (TypeError, ValueError, OSError, RuntimeError):
+        answer = {}
+    state = answer.get("state")
+    if not isinstance(state, dict):
+        # A runtime that does not answer leaves the installation unverified,
+        # never valid; status and doctor report it rather than fail.
+        try:
+            manifest_text_path = str(hook_manifest_file(spec.guard_home, spec.config_path))
+        except CodexHookIntegrityError:
+            # The runtime that names the path did not answer either.
+            manifest_text_path = ""
+        return _unavailable_state(manifest_text_path)
+    return dict(state)
+
+
+_UNAVAILABLE_REASON = "codex_hook_manifest_verification_unavailable"
+_UNAVAILABLE_MESSAGE = "Guard could not verify the Codex hook installation; run repair and retry."
+
+
+def _unavailable_state(manifest_path: str) -> dict[str, object]:
+    """The integrity state of an installation the runtime could not verify."""
+    from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
+
+    return {
+        "event_matches": dict.fromkeys(MANAGED_CODEX_HOOK_EVENTS, False),
+        "foreign_hook_entries_present": False,
+        "foreign_hook_group_count": 0,
+        "integrity_message": _UNAVAILABLE_MESSAGE,
+        "integrity_reason": _UNAVAILABLE_REASON,
+        "integrity_status": "tampered",
+        "manifest_schema_version": None,
+        "manifest_package_version": None,
+        "manifest_generated_at": None,
+        "bridge_sha256": None,
+        "interpreter_sha256": None,
+        "manifest_path": manifest_path,
+    }
 
 
 def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
@@ -383,21 +377,3 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     if not isinstance(state, dict):
         raise ValueError("Harness adapter answer is malformed")
     return state
-
-
-def _install_manifest(
-    context: HarnessContext, kind: str, shim_manifest: Mapping[str, object], **fields: object
-) -> dict[str, object]:
-    paths = codex_paths(context)
-    fields.setdefault("hooks_path", str(paths.hooks))
-    answer = _codex(
-        "manifest",
-        context,
-        kind=kind,
-        shim=json.dumps(shim_manifest),
-        config_path=str(paths.config),
-        hook_config_path=str(paths.config),
-        workspace_explicit=context.workspace_override_explicit,
-        **fields,
-    )
-    return json.loads(_reply_text(answer, "manifest"))

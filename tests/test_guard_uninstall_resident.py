@@ -11,10 +11,9 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from codex_plugin_scanner.guard import native_transition_files
 from codex_plugin_scanner.guard.cli import uninstall_commands
 from codex_plugin_scanner.guard.cli.render import _render_managed_install
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_resident_update_lock import (
     RESIDENT_UPDATE_LOCK_NAME,
     NativeResidentUpdateLockError,
@@ -205,24 +204,20 @@ def test_removing_the_last_harness_never_asks_the_resident_for_a_lease_under_the
 ) -> None:
     """`hol-guard uninstall zcode` as the last harness exited 2 with native_resident_update_in_progress.
 
-    The install transaction's lease is a resident request, and resident requests
-    take the update barrier's shared side, so asking for it while this process
-    held the exclusive side contended with itself.
+    Resident requests take the update barrier's shared side, so any request made
+    while this process held the exclusive side contended with itself. The install
+    transaction's lease is now held inside the native runtime, so retiring the
+    resident under the installation lock makes no resident request of its own.
     """
 
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     events: list[str] = []
 
-    def lease_request(request: dict[str, object]) -> dict[str, object]:
-        _resident_request(context.guard_home)
-        return {"ok": True, "lease": "lease-1"} if request.get("op") == "lease_acquire" else {"ok": True}
-
     def retire(_guard_home: Path, *, hold_install_lock: bool = False, **_kwargs: object) -> bool:
         events.append("retire under install lock" if hold_install_lock else "retire")
         return True
 
-    monkeypatch.setattr(native_transition_files, "_lease_request", lease_request)
     monkeypatch.setattr(uninstall_commands, "_active_managed_installs", lambda _store: ([], None))
     monkeypatch.setattr(uninstall_commands, "resident_stop_executable", lambda: tmp_path / "runtime")
     monkeypatch.setattr(uninstall_commands, "retire_native_resident_for_home", retire)

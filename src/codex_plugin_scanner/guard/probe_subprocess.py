@@ -68,6 +68,7 @@ def run_probe(
         environment=env,
         timeout_seconds=float(timeout),
         output_limit=output_limit,
+        raw_output=True,
     )
     capture_incomplete = result.containment_failed or result.capture_incomplete
     if result.returncode is None and not (result.timed_out or result.output_limit_exceeded or capture_incomplete):

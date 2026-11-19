@@ -13,7 +13,7 @@ from ..action_lattice import is_guard_action
 from ..approval_hook_copy import authenticated_approval_review_url
 from ..approvals import approval_center_hint, attach_primary_approval_link, queue_blocked_approvals
 from ..config import load_guard_config
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..package_execution_context import (
     changed_package_execution_context_components,

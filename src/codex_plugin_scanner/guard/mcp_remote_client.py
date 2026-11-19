@@ -45,7 +45,7 @@ def _native(request: dict[str, object], key: str, guard_home: Path | None) -> li
 
 
 def _parsed(artifact: GuardArtifact, item: object) -> DiscoveredRemoteMcpServer | None:
-    from .harness.contracts import display_name_for
+    from .setup_contracts import display_name_for
 
     if item is None:
         return None

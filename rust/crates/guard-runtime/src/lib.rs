@@ -135,6 +135,7 @@ mod claude_hook_bridge_auth;
 mod claude_hook_bridge_auth_windows;
 #[cfg(all(test, unix))]
 mod claude_hook_bridge_fixture;
+mod claude_hook_bridge_harness;
 mod claude_hook_bridge_http;
 mod claude_hook_bridge_http_text;
 mod claude_hook_bridge_recovery;
@@ -182,6 +183,7 @@ mod cloud_action_envelope_fields;
 mod cloud_actions_access;
 mod cloud_actions_connect;
 mod cloud_actions_health;
+mod cloud_actions_host_apply;
 mod cloud_actions_host_config;
 mod cloud_actions_status;
 mod cloud_exception_lift;
@@ -198,6 +200,8 @@ mod cloud_review_batch;
 mod cloud_review_event;
 mod cloud_sync_privacy;
 mod codex_app_server_socket;
+mod codex_app_server_target_op;
+mod codex_config_rpc;
 #[path = "adapters/detection/codex_detect.rs"]
 mod codex_detect;
 mod codex_hook_artifacts;
@@ -211,11 +215,14 @@ mod codex_hook_file_identity_op;
 mod codex_hook_file_integrity_op;
 mod codex_hook_identity;
 mod codex_hook_key;
+mod codex_hook_launch_result;
 mod codex_hook_launch_trust;
 mod codex_hook_manifest_auth;
 mod codex_hook_manifest_build;
 mod codex_hook_manifest_iso_time;
+mod codex_hook_manifest_refusal;
 mod codex_hook_manifest_verify_op;
+mod codex_hook_paths_op;
 #[cfg(unix)]
 mod codex_hook_private_group;
 mod codex_hook_response;
@@ -224,17 +231,26 @@ mod codex_hooks;
 #[cfg(test)]
 mod codex_hooks_parity_tests;
 mod codex_host_inventory;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod codex_host_probe;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod codex_host_read;
 mod codex_identity;
 #[path = "adapters/codex_install_plan.rs"]
 mod codex_install_plan;
 mod codex_live_operation;
 mod codex_live_wait_build;
+mod codex_mcp_setup;
 mod codex_proxy;
 #[path = "adapters/codex_remote_launch.rs"]
 mod codex_remote_launch;
 #[path = "adapters/codex_remote_prepare.rs"]
 mod codex_remote_prepare;
+#[path = "adapters/codex_remote_run.rs"]
+mod codex_remote_run;
 mod codex_request_resume_busy;
+mod codex_request_resume_capabilities;
+mod codex_request_resume_live;
 mod codex_request_resume_op;
 mod codex_request_resume_store;
 mod codex_sandbox_check;
@@ -446,8 +462,10 @@ mod edge_exact_command_allow;
 mod edge_exact_command_review;
 mod edge_exact_command_spelling;
 mod edge_git_push;
+mod edge_post_tool_delivery;
 mod edge_receipt;
 mod edge_review_evidence;
+mod edge_session_cascade;
 mod edge_structured;
 mod encrypted_secret_store;
 mod evaluation_contract;
@@ -504,6 +522,8 @@ mod grok_user_config_op;
 #[cfg(all(test, unix))]
 #[path = "adapters/detection/grok_user_config_tests.rs"]
 mod grok_user_config_tests;
+#[cfg(unix)]
+mod group_write_trust;
 mod guard_config_coerce;
 mod guard_config_harness;
 mod guard_config_iso;
@@ -689,15 +709,19 @@ mod guard_store_write_cache;
 mod hardening;
 #[path = "adapters/harness_adapter/mod.rs"]
 mod harness_adapter;
+#[path = "adapters/harness_attribution.rs"]
+mod harness_attribution;
 #[path = "adapters/harness_backup_restore.rs"]
 mod harness_backup_restore;
 #[cfg(test)]
 #[path = "adapters/harness_backup_restore_tests.rs"]
 mod harness_backup_restore_tests;
+mod harness_contract_registry;
 mod harness_coverage;
 mod harness_coverage_command;
 mod harness_diagnostics;
 mod harness_diagnostics_readiness;
+mod harness_diagnostics_report;
 #[path = "adapters/harness_hook_settings.rs"]
 mod harness_hook_settings;
 #[cfg(test)]
@@ -713,6 +737,7 @@ mod harness_protection_contract;
 #[path = "adapters/harness_settings_file.rs"]
 mod harness_settings_file;
 mod harness_setup_contract;
+mod harness_shell_command;
 #[path = "adapters/harness_shim_refresh.rs"]
 mod harness_shim_refresh;
 mod harness_version_compat;
@@ -788,11 +813,14 @@ mod hook_direct;
 mod hook_direct_counters;
 mod hook_direct_evidence;
 mod hook_env_stamp;
+mod hook_exit_code_op;
+mod hook_failure_op;
 mod hook_launch_scan;
 #[path = "adapters/hook_python_identity.rs"]
 mod hook_python_identity;
 mod hook_removal_prune;
 mod hook_removal_sweep;
+mod hook_watch_posture;
 mod html_unescape;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;
@@ -823,10 +851,12 @@ mod hook_evidence_store_timeout;
 #[allow(dead_code)]
 mod hook_evidence_store_wire;
 mod hook_evidence_writer_op;
+mod hook_launch_cli;
 mod hook_path_rules;
 mod hook_policy_config;
 mod hook_process_spawn;
 mod hook_render_op;
+mod hook_render_posture;
 mod insights_share_payload;
 mod installation_continuity;
 mod inventory_export_redaction;
@@ -954,6 +984,7 @@ mod native_bash_reply_validation;
 mod native_bash_review_descriptor;
 mod native_bash_review_scope;
 mod native_decision_receipt;
+mod native_error_code;
 mod native_exact_action_op;
 mod native_hook_receipt;
 mod native_install_verdict;
@@ -1057,6 +1088,7 @@ use guard_policy_bundle::{
     families as policy_bundle_families, json as policy_bundle_json, keys as policy_bundle_keys,
     python as policy_bundle_py, time as policy_bundle_time,
 };
+mod background_loop_gate;
 mod policy_bundle_cloud_exceptions;
 mod policy_bundle_op;
 mod policy_bundle_payload_hash;
@@ -1094,6 +1126,7 @@ mod protect_guidance;
 mod protect_request_op;
 mod protection_health_report_op;
 mod proxy_credentials;
+mod publication_inverse_claims;
 mod supply_chain_bundle_cache_op;
 use guard_runtime_pyjson as pyjson;
 mod receipt_embedded_scripts;
@@ -1213,6 +1246,7 @@ mod temporary_mcp_grant;
 mod tool_action_identity_op;
 mod totp;
 mod transition_files;
+mod transition_hook_observation;
 mod trust_attestation_key;
 mod trust_attestation_shape;
 mod trust_attestation_verify_op;
@@ -1254,6 +1288,7 @@ mod workspace_package_findings;
 mod workspace_rule_findings;
 mod workspace_runtime_findings;
 mod workspace_scan_targets;
+mod workspace_skills_scan_op;
 mod workspace_snapshot;
 mod workspace_snapshot_file;
 mod workspace_snapshot_git;

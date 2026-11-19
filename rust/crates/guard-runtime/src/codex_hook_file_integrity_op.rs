@@ -39,9 +39,13 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
                 args, &roots,
             )))
         }
+        "launch_failure_kind" => {
+            return crate::codex_hook_launch_result::failure_kind(args).map(answered)
+        }
+        "launch_result" => return crate::codex_hook_launch_result::succeeded(args).map(answered),
         "validate" => {
             let (path, role, executable_required) = target(args)?;
-            admit(&path, role, executable_required, &roots).map(|_| Value::Null)
+            validate(&path, role, executable_required, &roots).map(|_| Value::Null)
         }
         "describe_regular" => {
             let (path, role, executable_required) = target(args)?;
@@ -64,6 +68,10 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         Ok(identity) => json!({ "ok": true, "identity": identity }),
         Err(reason) => json!({ "error": { "message": message(&reason), "reason": reason } }),
     })
+}
+
+fn answered(identity: Value) -> Value {
+    json!({ "ok": true, "identity": identity })
 }
 
 /// A launch answer: `{"ok": true}` with any facts it carries, or the
@@ -111,6 +119,60 @@ fn package_roots(args: &Map<String, Value>) -> Result<Vec<PathBuf>, &'static str
 
 fn refused(role: &str, kind: &str) -> String {
     format!("codex_hook_{role}_{kind}")
+}
+
+/// What a path's `lstat` says about the file it names, for telling a file that
+/// was replaced while it was judged from one that was not. `None` when it
+/// cannot be read.
+#[cfg(unix)]
+fn fingerprint(path: &Path) -> Option<Vec<u64>> {
+    use std::os::unix::fs::MetadataExt;
+    let metadata = fs::symlink_metadata(path).ok()?;
+    Some(vec![
+        metadata.dev(),
+        metadata.ino(),
+        metadata.size(),
+        (metadata.mtime() as u64).wrapping_mul(1_000_000_000) + metadata.mtime_nsec() as u64,
+        u64::from(metadata.mode()),
+        u64::from(metadata.uid()),
+    ])
+}
+
+/// `os.lstat` as Python reads it: the volume serial and file index are
+/// `st_dev` and `st_ino`, with the size, times and attributes beside them.
+#[cfg(windows)]
+fn fingerprint(path: &Path) -> Option<Vec<u64>> {
+    use std::os::windows::fs::MetadataExt;
+    let stat = guard_runtime_windows_process::link_stat(path).ok()?;
+    let attributes = fs::symlink_metadata(path).ok()?.file_attributes();
+    Some(vec![
+        stat.volume_serial,
+        (stat.file_index >> 64) as u64,
+        stat.file_index as u64,
+        stat.size,
+        stat.last_write_time,
+        stat.creation_time,
+        u64::from(attributes),
+    ])
+}
+
+/// `validate_regular_file`, bracketed: the name's `lstat` before the checks
+/// must still describe it after them, so a file replaced while it was judged
+/// is `codex_hook_{role}_hash_mismatch`, and one that vanished
+/// `codex_hook_{role}_missing`.
+pub(crate) fn validate(
+    path: &Path,
+    role: &str,
+    executable_required: bool,
+    package_roots: &[PathBuf],
+) -> Result<(), String> {
+    let before = fingerprint(path);
+    admit(path, role, executable_required, package_roots)?;
+    let after = fingerprint(path).ok_or_else(|| refused(role, "missing"))?;
+    if before.as_ref() != Some(&after) {
+        return Err(refused(role, "hash_mismatch"));
+    }
+    Ok(())
 }
 
 /// `validate_regular_file`: `path` names a regular file, not a symlink, that

@@ -10,7 +10,9 @@ fn store() -> Connection {
         .execute_batch(
             "create table managed_installs (
                harness text primary key, active integer not null, workspace text,
-               manifest_json text not null, updated_at text not null);",
+               manifest_json text not null, updated_at text not null);
+             create table sync_state (
+               state_key text primary key, payload_json text not null, updated_at text);",
         )
         .unwrap();
     connection
@@ -84,4 +86,24 @@ fn a_harness_with_no_row_reads_as_null() {
         call(&store(), get, json!({"harness": "codex"})),
         Value::Null
     );
+}
+
+#[test]
+fn every_write_moves_the_revision_and_a_bump_moves_it_too() {
+    let connection = store();
+    assert_eq!(call(&connection, revision, json!({})), json!(0));
+    call(
+        &connection,
+        set,
+        json!({"harness": "codex", "active": true, "workspace": null,
+               "manifest_json": "{}", "now": "2026-01-01T00:00:00+00:00"}),
+    );
+    assert_eq!(call(&connection, revision, json!({})), json!(1));
+    let bumped = call(
+        &connection,
+        bump,
+        json!({"now": "2026-01-01T00:00:01+00:00"}),
+    );
+    assert_eq!(bumped, json!(2));
+    assert_eq!(call(&connection, revision, json!({})), json!(2));
 }

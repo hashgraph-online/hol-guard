@@ -23,8 +23,8 @@ from typing import Any, Protocol, cast
 
 from .approval_gate import ApprovalGateGrant, public_config, validate_grant
 from .codex_hook_recovery import _decode, _encode, _snapshot
-from .codex_install_transaction import require_codex_install_owner
 from .live_process_identity import current_process_identity
+from .native_owned import require_codex_install_owner
 from .runtime_transition_modes import normalized_after_mode, publishes_user_file
 from .runtime_transition_record import TransitionRecordRefusedError, record_request
 from .sqlite_tuning import sqlite_operation_deadline

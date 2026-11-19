@@ -12,6 +12,7 @@ pub(crate) use tokens::{shell_tokens, shell_tokens_preserving_redirects};
 mod shapes;
 
 use shapes::{blank_top_level_groups, sole_command_group};
+#[cfg(unix)]
 pub(crate) use shapes::{blanked_top_level_group_list, command_has_top_level_group_list};
 
 pub(super) use shapes::{

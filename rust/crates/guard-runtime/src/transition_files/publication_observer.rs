@@ -30,15 +30,15 @@ type Object = Map<String, Value>;
 
 /// `_CODEX_GUARD_TOOL_MATCHER`.
 const TOOL_MATCHER: &str = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*";
-const MISSING: &str = "admission_hook_authority_missing";
-const INVALID: &str = "admission_hook_binding_invalid";
+pub(super) const MISSING: &str = "admission_hook_authority_missing";
+pub(super) const INVALID: &str = "admission_hook_binding_invalid";
 const CHANNEL: [&str; 2] = ["hook_probe", "native_receipt"];
 
-fn invalid() -> Fault {
+pub(super) fn invalid() -> Fault {
     Fault::Transition(INVALID)
 }
 
-fn sha256(bytes: &[u8]) -> String {
+pub(super) fn sha256(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
@@ -50,10 +50,19 @@ struct Bridge {
     start_command: Vec<String>,
 }
 
-/// Request: `home`, `config`, `windows`, `long_paths`, `runtime_path` or
-/// `frozen`, and `package_roots`. Answer: the launch the observer may run. A
-/// short name `long_paths` does not name is expanded by this host.
-pub(super) fn binding(call: &mut Call<'_>) -> Step<Value> {
+/// The launch the observer may run, and the digests it rechecks around it.
+pub(super) struct Launch {
+    pub(super) argv: Vec<String>,
+    pub(super) environment: Object,
+    pub(super) modern: bool,
+    pub(super) manifest_path: String,
+    pub(super) config_sha256: String,
+    pub(super) manifest_sha256: String,
+}
+
+/// The command syntax the request names: this host's, with the long spelling
+/// of every short path the caller already resolved.
+pub(super) fn syntax_of(call: &Call<'_>) -> Step<Syntax> {
     let windows = call.args.get("windows").and_then(Value::as_bool);
     let long_paths = call.args.get("long_paths").and_then(Value::as_object);
     let (Some(windows), Some(long_paths)) = (windows, long_paths) else {
@@ -64,11 +73,10 @@ pub(super) fn binding(call: &mut Call<'_>) -> Step<Value> {
         .map(|(short, long)| long.as_str().map(|long| (short.clone(), long.to_owned())))
         .collect::<Option<_>>()
         .ok_or(Fault::Transition("files_invalid"))?;
-    let mut syntax = Syntax::new(windows, long_paths);
-    observed(call, &mut syntax)
+    Ok(Syntax::new(windows, long_paths))
 }
 
-fn observed(call: &mut Call<'_>, syntax: &mut Syntax) -> Step<Value> {
+pub(super) fn observed(call: &mut Call<'_>, syntax: &mut Syntax) -> Step<Launch> {
     let home = call.home()?;
     let config_path = call.path("config")?;
     let (manifest_path, _) = Call::targets(&home, &call.canonical(&config_path)?);
@@ -118,14 +126,14 @@ fn observed(call: &mut Call<'_>, syntax: &mut Syntax) -> Step<Value> {
             Fault::Integrity(reason, message)
         }
     })?;
-    Ok(json!({
-        "argv": argv,
-        "environment": environment,
-        "modern_channel": modern,
-        "manifest_path": bridge.manifest_path,
-        "config_sha256": sha256(&config_bytes),
-        "manifest_sha256": sha256(&manifest_bytes),
-    }))
+    Ok(Launch {
+        argv,
+        environment,
+        modern,
+        manifest_path: bridge.manifest_path,
+        config_sha256: sha256(&config_bytes),
+        manifest_sha256: sha256(&manifest_bytes),
+    })
 }
 
 /// The one Guard pre-tool binding, as the manifest and the live config
