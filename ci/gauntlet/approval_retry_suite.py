@@ -43,7 +43,9 @@ def lane_scenarios(catalog: tuple[Scenario, ...], harness: str) -> tuple[Scenari
 
     The Bash lifecycle cases need the native Bash owner, and a case that names a tool
     needs a harness with that tool: Codex has a shell but no file-read tool, so a case
-    pinning a read through the read tool can never bind there.
+    pinning a read through the read tool can never bind there. Only the harness's own
+    tools are compared; an MCP tool (``mcp__server__tool``) comes from the server the
+    case configures, which every lane can host.
     """
     lane = ADAPTERS.get(harness)
     tools = lane.native_tools if lane is not None else None
@@ -51,7 +53,7 @@ def lane_scenarios(catalog: tuple[Scenario, ...], harness: str) -> tuple[Scenari
         s
         for s in catalog
         if (harness in BASH_OWNER_HARNESSES or s.id not in BASH_LIFECYCLE_CASES)
-        and (tools is None or set(s.required_tools) <= tools)
+        and (tools is None or {t for t in s.required_tools if not t.startswith("mcp__")} <= tools)
     )
 
 
@@ -88,7 +90,7 @@ def run_approval_retry_suite(
     catalog = lane_scenarios(full_catalog, harness)
     not_driven = [s.id for s in full_catalog if s not in catalog]
     if selected_ids and set(selected_ids) & set(not_driven):
-        raise ValueError(f"{harness} has no native Bash owner to drive a Bash lifecycle case")
+        raise ValueError(f"the {harness} lane cannot drive {', '.join(sorted(set(selected_ids) & set(not_driven)))}")
     if selected_ids and (set(selected_ids) - {scenario.id for scenario in catalog}):
         raise ValueError("unknown scenario selection")
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)
