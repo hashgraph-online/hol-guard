@@ -15,17 +15,17 @@ from pathlib import Path
 from typing import Any
 
 from ...version import __version__
-from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..cli.install_commands import (
     apply_managed_install,
     build_harness_verification,
     uninstall_confirmation_token,
 )
+from ..harness_context import HarnessContext
 from ..harness_disconnect_gate import require_harness_disconnect_gate
 from ..headless_receipts import record_headless_receipt
-from ..native_hook_evidence_writer import unreachable_writer_stats
+from ..native_harness_client import canonical_harness
+from ..resident_evidence_client import unreachable_writer_stats
 from ..store import GuardStore
 from .control_host import control_server
 
@@ -113,25 +113,25 @@ def run_app_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
     operation = str(args.get("operation") or "")
     harness_action = str(args.get("harness_action") or "")
     try:
-        adapter = get_adapter(str(args.get("harness") or ""))
+        harness = canonical_harness(str(args.get("harness") or ""))
     except ValueError:
         return {"error": "unknown_harness"}
     try:
-        surface = _cursor_surface(payload) if adapter.harness == "cursor" else None
+        surface = _cursor_surface(payload) if harness == "cursor" else None
     except ValueError:
         return {"error": "invalid_cursor_surface"}
     context = HarnessContext(home_dir=Path.home().resolve(), workspace_dir=None, guard_home=store.guard_home)
     try:
         if harness_action == "verify":
             result = build_harness_verification(
-                adapter.harness,
+                harness,
                 context,
                 store,
                 surface=surface,
                 action="status" if args.get("action_path") == "status" else "test",
             )
         else:
-            result = _managed_action(store, adapter.harness, harness_action, payload, context, surface)
+            result = _managed_action(store, harness, harness_action, payload, context, surface)
     except ApprovalGateError as error:
         return {"reply": [error.status, error.to_payload()]}
     except ValueError as error:
@@ -139,7 +139,7 @@ def run_app_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
     location_id = _text(payload.get("location_id")) or _text(payload.get("locationId"))
     receipt = record_headless_receipt(
         store,
-        harness=adapter.harness,
+        harness=harness,
         operation=operation,
         payload=payload,
         result=result,
@@ -153,7 +153,7 @@ def run_app_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
         )
     receipt["cloud_sync"] = cloud_sync
     return {
-        "harness": adapter.harness,
+        "harness": harness,
         "result": result,
         "receipt": receipt,
         "cloud_sync": cloud_sync,

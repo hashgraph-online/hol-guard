@@ -394,6 +394,7 @@ pub(super) fn safe_stat_arguments(arguments: &[String], context: super::PathCont
             .all(|operand| {
                 inert_format(operand)
                     || safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, true)
+                    || super::home_program_metadata::home_program_metadata(operand, context)
                     || super::chain_temporary::absent_temporary_read_target(
                         operand,
                         context.home_dir,
@@ -461,6 +462,7 @@ pub(super) fn safe_file_arguments(arguments: &[String], context: super::PathCont
         && operands.iter().all(|operand| {
             *operand != "-"
                 && (safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, true)
+                    || super::home_program_metadata::home_program_metadata(operand, context)
                     || super::listing_reads::absent_listing_operand(operand, context))
         })
 }

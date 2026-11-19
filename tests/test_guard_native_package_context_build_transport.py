@@ -11,6 +11,7 @@ import pytest
 from codex_plugin_scanner.guard import native_execution
 from codex_plugin_scanner.guard import native_package_context_build as transport
 from codex_plugin_scanner.guard.models import GuardArtifact
+from codex_plugin_scanner.guard.native_resident_client import record_native_resident_client_failure_code
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 
 
@@ -39,6 +40,9 @@ def _stub_guard_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[tu
     """Stub the home and runtime status; return the recorded health events."""
 
     events: list[tuple[str, str]] = []
+    # The failure code is a context variable, so a code an earlier test left
+    # behind would otherwise answer for a stubbed resident that said nothing.
+    record_native_resident_client_failure_code(None)
     monkeypatch.setattr(transport, "_resolve_digest_home", lambda _home: tmp_path)
     monkeypatch.setattr(transport, "ensure_resident_prerequisite", lambda _home: True)
     monkeypatch.setattr(transport, "native_runtime_status", lambda: _status())

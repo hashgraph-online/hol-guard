@@ -78,9 +78,9 @@ def _path_parts(path: str) -> list[str]:
 def handler_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Runs the handler the daemon dispatches ``POST path`` to."""
 
-    from ..adapters.base import HarnessContext
     from ..daemon.swarm_http import WRITE_PATHS as SWARM_WRITE_PATHS
     from ..daemon.swarm_http import respond as respond_swarm
+    from ..harness_context import HarnessContext
     from ..harness_version_api import WRITE_PATHS as HARNESS_VERSION_WRITE_PATHS
     from ..harness_version_api import handle_harness_version_write
     from ..library_calls import LibraryCallError

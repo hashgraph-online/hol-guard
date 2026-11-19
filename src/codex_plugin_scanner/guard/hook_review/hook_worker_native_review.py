@@ -8,8 +8,8 @@ from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..native_hook_render import native_recording_only_for_binding
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
-from ..native_policy_snapshot_harness_postures import recording_only_for_binding
 from ..native_resident_client import native_resident_client_failure_code
 from .hook_native_review_fence import native_review_fence, published_binding_token
 from .hook_policy_fence_window import (
@@ -209,7 +209,9 @@ def _review_native_edge_once(
     # posture. A local Watch edit cannot weaken an enforcing snapshot
     # before its replacement is accepted. A missing binding takes the
     # unavailable route and cannot establish recording-only authority.
-    recording_only = recording_only_for_binding(policy_snapshot, harness)
+    recording_only = native_recording_only_for_binding(
+        policy_snapshot, harness, guard_home=guard_home, deadline=deadline
+    )
     fenced: bool | None = None
     unleased_binding: tuple[object, ...] | None = None
     capture_receipts: list[Mapping[str, object]] = []

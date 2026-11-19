@@ -88,7 +88,7 @@ pub(super) fn since_start(
     let changed = changes(&git, since, about_others(prompt), until, |paths| {
         screened_texts(guard_home, root, app, paths, paths.len(), until)
     })?;
-    Some(fix::led(changed, parent.is_some(), prompt, root))
+    Some(fix::led(changed, parent.is_some(), prompt, root, app))
 }
 
 /// A trusted Git, run in one project with a bare environment.

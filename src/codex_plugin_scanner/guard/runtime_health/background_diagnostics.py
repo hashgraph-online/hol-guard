@@ -19,6 +19,7 @@ import re
 import threading
 from collections.abc import Callable
 from contextlib import suppress
+from urllib.error import HTTPError
 
 from ..secret_redaction import sanitize_secret
 
@@ -57,7 +58,11 @@ def release_sink(sink: BackgroundSink) -> None:
 
 
 def record_background_event(event: str, detail: str) -> bool:
-    """Record one background diagnostic. Returns whether a sink took it."""
+    """Record one background diagnostic.
+
+    Returns whether a sink took it: a sink that answers ``False``, as a full or
+    closed daemon log queue does, did not take it.
+    """
 
     with _lock:
         sink = _sink
@@ -65,8 +70,7 @@ def record_background_event(event: str, detail: str) -> bool:
         return False
     # A background worker must never die because diagnostics are closing.
     with suppress(Exception):
-        sink(event, detail)
-        return True
+        return sink(event, detail) is not False
     return False
 
 
@@ -89,7 +93,12 @@ def record_background_notice(event: str, detail: str) -> bool:
 def failure_detail(error: BaseException) -> str:
     """One bounded, path-free line naming a failure and its type."""
 
-    if isinstance(error, OSError) and (error.filename is not None or error.filename2 is not None):
+    if isinstance(error, HTTPError):
+        # An HTTP error is an OS error whose file name is the URL, so the
+        # branch below would reduce it to "[Errno None] None" and lose the one
+        # thing worth reading: the status the server answered.
+        text = f"HTTP {error.code} {error.reason}"
+    elif isinstance(error, OSError) and (error.filename is not None or error.filename2 is not None):
         # The file names are the only part of an OS error that could leak.
         text = f"[Errno {error.errno}] {error.strerror}"
     else:

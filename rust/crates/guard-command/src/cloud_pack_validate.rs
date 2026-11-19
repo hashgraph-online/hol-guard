@@ -74,7 +74,10 @@ fn validate_form(pack: &CloudActionPack, source: bool) -> Check {
     if pack.hosts.is_empty()
         || pack.hosts.len() > MAX_HOSTS
         || hosts.len() != pack.hosts.len()
-        || !pack.hosts.iter().all(|host| valid_host(host))
+        || !pack
+            .hosts
+            .iter()
+            .all(|host| crate::cloud_pack_connection::valid_pack_host(pack, host))
     {
         return fail("cloud_pack_hosts_invalid", "/hosts");
     }
@@ -87,6 +90,8 @@ fn validate_form(pack: &CloudActionPack, source: bool) -> Check {
     {
         return fail("cloud_pack_auth_invalid", "/auth");
     }
+    crate::cloud_pack_transport::validate_transports(pack)?;
+    crate::cloud_pack_connection::validate_connection(pack)?;
     if pack.actions.is_empty() || pack.actions.len() > MAX_ACTIONS {
         return fail("cloud_pack_actions_invalid", "/actions");
     }
@@ -160,9 +165,13 @@ fn validate_action(
     }
     match &action.executor {
         Executor::DeclarativeHttp { request } => {
-            crate::cloud_pack_validate_request::validate_request(action, request, hosts).map_err(
-                |(code, rest)| PackError::new(code, format!("{at}/executor/request{rest}")),
-            )?;
+            crate::cloud_pack_validate_request::validate_request(
+                action,
+                request,
+                hosts,
+                pack.connection.as_ref(),
+            )
+            .map_err(|(code, rest)| PackError::new(code, format!("{at}/executor/request{rest}")))?;
         }
         Executor::RemoteMcp { tool } => {
             if !valid_label(tool) || tool.len() > 128 {
@@ -386,6 +395,7 @@ fn validate_fixtures(action: &PackAction) -> Result<(), &'static str> {
             || !fixture.arguments.is_object()
             || (expect.request.is_some() && !http)
             || expect.response.is_some() != expect.projection.is_some()
+            || fixture.connection.values().any(|value| !value.is_string())
             || (expect.error.is_some()
                 && (expect.facts.is_some()
                     || expect.request.is_some()
@@ -424,7 +434,7 @@ pub(crate) fn snake_name(value: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
-fn display_text(value: &str, max: usize) -> bool {
+pub(crate) fn display_text(value: &str, max: usize) -> bool {
     !value.trim().is_empty() && value.chars().count() <= max && !value.chars().any(char::is_control)
 }
 

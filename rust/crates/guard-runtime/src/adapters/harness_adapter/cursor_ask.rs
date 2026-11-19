@@ -1,24 +1,15 @@
-//! What Python answers between Cursor ops: the facts about the attested
-//! Guard CLI and the native hook bridge, the long form of 8.3 names, Windows
-//! hook command lines, Guard's proxy relaunches and the managed servers.
+//! What a Cursor op reads about the Guard process: the attested Guard CLI and
+//! the native hook bridge, the long form of 8.3 names, the 8.3 names of hook
+//! command paths, and Guard's proxy relaunches.
 
 use serde_json::{json, Map, Value};
 
-use super::cursor::{get, malformed, runtime, BRIDGE_UNAVAILABLE};
-use super::{Ctx, Failure, Step};
-use crate::pyjson::{self, PyVal};
-/// The Python interpreter the attested Guard CLI runs on.
-pub(super) struct HookPython {
-    pub(super) executable: String,
-    pub(super) target: String,
-    pub(super) import_roots: Vec<String>,
-}
+use super::cursor::{malformed, runtime, BRIDGE_UNAVAILABLE};
+use super::{attested_cli, caller, hook_render, isolated_python, proxy_launch, Ctx, Failure, Step};
+use crate::claude_hook_bridge_recovery::frozen_recovery_command;
+const BRIDGE_FEATURE: &str = "cursor-hook-bridge-v1";
 
-pub(super) struct Attestation {
-    pub(super) command: Vec<String>,
-    pub(super) identity: PyVal,
-    pub(super) python: Option<HookPython>,
-}
+pub(super) use super::attested_cli::Attested as Attestation;
 
 /// What the Guard process answered for `facts`.
 pub(super) struct Facts {
@@ -50,89 +41,49 @@ impl Facts {
     }
 }
 
-fn strings(value: Option<&PyVal>) -> Step<Vec<String>> {
-    value
-        .and_then(PyVal::as_list)
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|item| item.as_str().map(str::to_owned).ok_or(Failure::Invalid))
-        .collect()
-}
-
-fn optional_text(value: Option<&PyVal>) -> Step<Option<String>> {
-    match value {
-        None | Some(PyVal::Null) => Ok(None),
-        Some(PyVal::Str(text)) => Ok(Some(text.clone())),
-        Some(_) => Err(Failure::Invalid),
-    }
-}
-
-fn attestation(value: Option<&PyVal>) -> Step<Result<Attestation, String>> {
-    let entries = value.and_then(PyVal::as_dict).ok_or(Failure::Invalid)?;
-    if let Some(error) = get(entries, "error") {
-        return Ok(Err(error.as_str().ok_or(Failure::Invalid)?.to_owned()));
-    }
-    let python = match get(entries, "python") {
-        None | Some(PyVal::Null) => None,
-        Some(PyVal::Dict(python)) => Some(HookPython {
-            executable: optional_text(get(python, "executable"))?.ok_or(Failure::Invalid)?,
-            target: optional_text(get(python, "target"))?.ok_or(Failure::Invalid)?,
-            import_roots: strings(get(python, "import_roots"))?,
-        }),
-        Some(_) => return Err(Failure::Invalid),
-    };
-    Ok(Ok(Attestation {
-        command: strings(get(entries, "command"))?,
-        identity: get(entries, "identity").cloned().ok_or(Failure::Invalid)?,
-        python,
-    }))
-}
-
-/// One op's request and the facts Python merged into it.
+/// One op's request.
 pub(super) struct Ask<'a> {
     pub(super) ctx: &'a Ctx,
     pub(super) fields: &'a Map<String, Value>,
+    /// Whether the op only prepares an install, so an attestation probe runs
+    /// in a directory the op owns (`disposable_guard_hook_probe`).
+    pub(super) preparing: bool,
 }
 
 impl Ask<'_> {
-    pub(super) fn reply(key: &str, value: Value) -> Failure {
-        Failure::Reply(json!({ key: value }))
-    }
-
+    /// The attested Guard CLI, the isolated hook interpreter and the frozen
+    /// recovery command (`_facts`), with the native hook bridge.
     pub(super) fn facts(&self) -> Step<Facts> {
-        let Some(raw) = self.fields.get("facts") else {
-            return Err(Self::reply("facts", Value::Null));
-        };
-        let raw = raw.as_str().ok_or(Failure::Invalid)?;
-        let Ok(PyVal::Dict(facts)) = pyjson::parse(raw) else {
-            return Err(Failure::Invalid);
-        };
-        let flag = |key: &str| match get(&facts, key) {
-            None => Ok(false),
-            Some(PyVal::Bool(value)) => Ok(*value),
-            Some(_) => Err(Failure::Invalid),
-        };
-        let pinned = self.ctx.env("HOL_GUARD_CURSOR_HOOK_BRIDGE") == Some("python")
-            && self.ctx.env("HOL_GUARD_TEST_MODE") == Some("1");
-        let bridge = optional_text(get(&facts, "bridge"))?.filter(|_| !pinned);
-        let frozen_recovery = match get(&facts, "frozen_recovery") {
-            None | Some(PyVal::Null) => None,
-            value => Some(strings(value)?),
+        let ctx = self.ctx;
+        let pinned = ctx.env("HOL_GUARD_CURSOR_HOOK_BRIDGE") == Some("python")
+            && ctx.env("HOL_GUARD_TEST_MODE") == Some("1");
+        let bridge =
+            proxy_launch::bridge(ctx, BRIDGE_FEATURE, Some(&ctx.guard_home))?.filter(|_| !pinned);
+        let attestation = attested_cli::attested(ctx, self.preparing)?;
+        let frozen_recovery = match &attestation {
+            Ok(attested) if attested.python.is_none() => {
+                let launcher = caller::frozen_launcher(ctx)?;
+                Some(
+                    frozen_recovery_command(launcher, &ctx.guard_home, &ctx.home)
+                        .ok_or(Failure::Invalid)?,
+                )
+            }
+            _ => None,
         };
         Ok(Facts {
             bridge,
             pinned,
-            attestation: attestation(get(&facts, "attestation"))?,
-            interpreter: optional_text(get(&facts, "interpreter"))?,
-            frozen: flag("frozen")?,
-            frozen_launcher: optional_text(get(&facts, "frozen_launcher"))?,
-            executable: optional_text(get(&facts, "executable"))?.ok_or(Failure::Invalid)?,
+            attestation,
+            interpreter: isolated_python::for_root(ctx.env("SYSTEMROOT")),
+            frozen: caller::frozen(ctx)?,
+            frozen_launcher: caller::optional_frozen_launcher(ctx)?.map(str::to_owned),
+            executable: caller::executable(ctx)?.to_owned(),
             frozen_recovery,
-            can_rebind: flag("can_rebind")?,
+            can_rebind: caller::can_rebind(ctx)?,
         })
     }
 
-    /// The long path Python resolved for each 8.3 name it was asked about.
+    /// The long path the caller named for an 8.3 name; the rest this host expands.
     fn long_paths(&self) -> Step<Map<String, Value>> {
         match self.fields.get("long_paths") {
             None => Ok(Map::new()),
@@ -141,7 +92,7 @@ impl Ask<'_> {
         }
     }
 
-    /// One `cursor_hook_config` request; an unseen short name is asked about.
+    /// One `cursor_hook_config` request.
     pub(super) fn hook_config(&self, op: &str, mut request: Map<String, Value>) -> Step<Value> {
         let asked = self.long_paths()?;
         let known: Map<String, Value> = asked
@@ -157,120 +108,39 @@ impl Ask<'_> {
         request.insert("long_paths".into(), Value::Object(known));
         let mut answer = crate::cursor_hook_config::dispatch(&Value::Object(request))
             .map_err(|error| runtime(format!("Cursor hook config request failed: {error}")))?;
-        let tokens = answer
+        // The runtime expanded every short name itself.
+        answer
             .as_object_mut()
             .and_then(|answer| answer.remove("short_tokens"))
             .ok_or_else(malformed)?;
-        let unseen: Vec<Value> = tokens
-            .as_array()
-            .ok_or_else(malformed)?
-            .iter()
-            .filter(|token| {
-                token
-                    .as_str()
-                    .is_some_and(|token| !asked.contains_key(token))
-            })
-            .cloned()
-            .collect();
-        if !unseen.is_empty() {
-            return Err(Self::reply("expand", json!(unseen)));
-        }
         Ok(answer)
     }
 
-    /// `render_hook_command` of each argv: POSIX quoting here, Windows by
-    /// Python. A line Windows cannot carry fails only its own command.
+    /// `render_hook_command` of each argv. A Windows path's 8.3 name is looked
+    /// up first; a line Windows cannot carry fails only its own
+    /// command.
     pub(super) fn render(&self, argvs: &[Vec<String>]) -> Step<Vec<Step<String>>> {
-        if !self.ctx.windows {
-            return Ok(argvs
-                .iter()
-                .map(|argv| Ok(crate::mcp_proxy_shlex::join(argv)))
-                .collect());
-        }
-        let known = self
-            .fields
-            .get("rendered")
-            .and_then(Value::as_array)
-            .map_or(&[][..], Vec::as_slice);
-        let lookup = |argv: &Vec<String>| {
-            known
-                .iter()
-                .find(|pair| pair.get(0) == Some(&json!(argv)))
-                .and_then(|pair| pair.get(1))
-        };
-        let missing: Vec<&Vec<String>> =
-            argvs.iter().filter(|argv| lookup(argv).is_none()).collect();
-        if !missing.is_empty() {
-            return Err(Self::reply("render", json!(missing)));
-        }
-        argvs
+        let names = hook_render::names_for(
+            self.fields,
+            argvs.iter().map(Vec::as_slice),
+            self.ctx.windows,
+        )?;
+        Ok(argvs
             .iter()
-            .map(|argv| {
-                match lookup(argv) {
-                Some(Value::String(line)) => Ok(Ok(line.clone())),
-                Some(Value::Null) => Ok(Err(Failure::Refusal(
-                    "Codex hook arguments cannot be empty or contain line breaks or NUL on Windows."
-                        .into(),
-                ))),
-                _ => Err(Failure::Invalid),
-            }
-            })
-            .collect()
+            .map(|argv| hook_render::render(argv, self.ctx.windows, &names))
+            .collect())
     }
 
-    /// Guard's MCP proxy launch `(command, args)` for each set of proxy args.
+    /// Guard's MCP proxy launch `(command, args)` for each set of proxy args:
+    /// a relay launch unwrapped to its Python proxy argv, then launched again
+    /// through Guard's launcher and the relay this runtime can serve.
     pub(super) fn relaunch(&self, sets: &[Vec<String>]) -> Step<Vec<(String, Vec<String>)>> {
-        if sets.is_empty() {
-            return Ok(Vec::new());
-        }
-        let known = self
-            .fields
-            .get("relaunch")
-            .and_then(Value::as_array)
-            .map_or(&[][..], Vec::as_slice);
-        let lookup = |args: &Vec<String>| {
-            known
-                .iter()
-                .find(|pair| pair.get(0) == Some(&json!(args)))
-                .and_then(|pair| pair.get(1))
-        };
-        let missing: Vec<&Vec<String>> =
-            sets.iter().filter(|args| lookup(args).is_none()).collect();
-        if !missing.is_empty() {
-            return Err(Self::reply("relaunch", json!(missing)));
-        }
+        let launcher = caller::launcher(self.ctx)?;
         sets.iter()
             .map(|args| {
-                let launch = lookup(args).ok_or(Failure::Invalid)?;
-                let command = launch
-                    .get(0)
-                    .and_then(Value::as_str)
-                    .ok_or(Failure::Invalid)?
-                    .to_owned();
-                let args = launch
-                    .get(1)
-                    .and_then(Value::as_array)
-                    .ok_or(Failure::Invalid)?
-                    .iter()
-                    .map(|arg| arg.as_str().map(str::to_owned).ok_or(Failure::Invalid))
-                    .collect::<Step<_>>()?;
-                Ok((command, args))
+                let (_, python_args) = proxy_launch::python_launch(None, args);
+                proxy_launch::relay_launch(self.ctx, launcher, &python_args)
             })
             .collect()
-    }
-
-    /// The detected servers Guard manages, as Python derived them from `detect`.
-    pub(super) fn servers(&self, detected: &Value) -> Step<Value> {
-        let answered = match self.fields.get("servers") {
-            Some(Value::String(raw)) => {
-                serde_json::from_str::<Value>(raw).map_err(|_| Failure::Invalid)?
-            }
-            Some(_) => return Err(Failure::Invalid),
-            None => Value::Null,
-        };
-        if answered.get("detect") != Some(detected) {
-            return Err(Self::reply("servers", detected.clone()));
-        }
-        Ok(answered)
     }
 }

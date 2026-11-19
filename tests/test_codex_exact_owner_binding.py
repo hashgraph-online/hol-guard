@@ -4,8 +4,7 @@ from copy import deepcopy
 
 import pytest
 
-from codex_plugin_scanner.guard.codex_hook_inventory import enumerate_codex_hooks
-from codex_plugin_scanner.guard.codex_hook_registration import remove_manifest_bound_hook_events
+from tests.python_oracles.codex_hook_inventory import enumerate_codex_hooks
 
 
 @pytest.mark.parametrize(
@@ -18,7 +17,7 @@ from codex_plugin_scanner.guard.codex_hook_registration import remove_manifest_b
         {"env": {"GUARD_TEST_FIELD": "changed"}},
     ),
 )
-def test_inventory_and_replacement_require_exact_authenticated_handler(tmp_path, changes):
+def test_inventory_requires_exact_authenticated_handler(tmp_path, changes):
     expected_handler = {"type": "command", "command": "python bridge.py", "statusMessage": "original"}
     expected_group = {"matcher": "Bash", "hooks": [expected_handler]}
     binding = {"event": "PreToolUse", "group": expected_group, "handler": expected_handler}
@@ -35,6 +34,3 @@ def test_inventory_and_replacement_require_exact_authenticated_handler(tmp_path,
     )
     assert len(inventory.records) == 1
     assert inventory.records[0].ownership == ("unmanaged" if changes else "authenticated_manifest")
-    remaining, removed = remove_manifest_bound_hook_events(hooks, (binding,))
-    assert removed is (not bool(changes))
-    assert remaining == (hooks if changes else {})

@@ -114,7 +114,7 @@ fn parse_aware(text: &str) -> Option<()> {
 }
 
 /// Instant in microseconds plus CPython's `isoformat()` spelling of its UTC form.
-fn instant(value: Option<&str>) -> Option<(i64, String)> {
+pub(crate) fn instant(value: Option<&str>) -> Option<(i64, String)> {
     let text = value?;
     parse_aware(text)?;
     let micros = utc_timestamp_micros(text)?;

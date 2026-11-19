@@ -119,9 +119,7 @@ def test_scope_contract_is_action_aware(policy_action: GuardAction, expected_all
     assert contract.allow_scopes == expected_allow
     assert contract.block_scopes == ("artifact", "workspace", "publisher", "harness", "global")
     assert contract.task_capability_eligible is False
-    if "workspace" in expected_allow:
-        assert contract.recommended_allow_scope == "workspace"
-    elif "artifact" in expected_allow:
+    if "artifact" in expected_allow:
         assert contract.recommended_allow_scope == "artifact"
     else:
         assert contract.recommended_allow_scope is None
@@ -162,11 +160,11 @@ def test_artifact_family_text_cannot_spoof_canonical_broad_deny() -> None:
     assert request_scope_contract(request).block_scopes == ("artifact",)
 
 
-def test_recommended_allow_scope_prefers_workspace_when_reusable() -> None:
+def test_recommended_allow_scope_defaults_to_exact_action_when_reusable() -> None:
     contract = request_scope_contract(_request("remember-project").to_dict())
 
     assert "workspace" in contract.allow_scopes
-    assert contract.recommended_allow_scope == "workspace"
+    assert contract.recommended_allow_scope == "artifact"
 
 
 def test_recommended_allow_scope_falls_back_to_artifact() -> None:

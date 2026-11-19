@@ -127,13 +127,11 @@ def test_concurrent_first_loads_share_one_native_process(tmp_path: Path, monkeyp
     real_spawn = native_guard_config._spawn
 
     def slow_spawn(request_text: str, *args: object) -> dict[str, object]:
-        # Other background tests can also load Guard config while this
-        # process-wide function is patched. Count only this fixture's
-        # requests; the assertion below still requires exactly one native
-        # load for all eight concurrent calls for the same guard_home.
-        if json.loads(request_text).get("guard_home") == str(tmp_path):
+        # A background thread left by an earlier test on this worker can load its
+        # own Guard home through the same patched spawn; count only this test's.
+        if json.loads(request_text)["guard_home"] == str(tmp_path):
             calls.append(request_text)
-        time.sleep(0.2)
+            time.sleep(0.2)
         return real_spawn(request_text, *args)
 
     monkeypatch.setattr(native_guard_config, "_spawn", slow_spawn)
@@ -214,7 +212,7 @@ def test_directory_permission_change_invalidates_memo(tmp_path: Path, monkeypatc
 
 
 def test_every_harness_id_and_alias_keeps_its_posture_override(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS, contract_for
+    from codex_plugin_scanner.guard.setup_contracts import HARNESS_CONTRACTS, contract_for
 
     names = {contract.harness for contract in HARNESS_CONTRACTS}
     for contract in HARNESS_CONTRACTS:

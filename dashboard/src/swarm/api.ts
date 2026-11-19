@@ -15,6 +15,7 @@ export function parseAgent(value: unknown): Agent {
     || !(value.pid === null || count(value.pid)) || !timestamp(value.started_at_ms) || !timestamp(value.updated_at_ms)
     || !text(value.detail) || !object(value.controls) || ![value.revision, value.queued, value.context_calls, value.input_tokens, value.output_tokens].every(count)
     || !["message", "steer", "interrupt", "stop"].every((key) => typeof (value.controls as Record<string, unknown>)[key] === "boolean")) throw failure();
+  if (value.blocked !== undefined && !(Array.isArray(value.blocked) && value.blocked.length <= 32 && value.blocked.every((p) => text(p, 256)))) throw failure();
   if (value.origin === "observed" && Object.values(value.controls).some(Boolean)) throw failure();
   return value as Agent;
 }
@@ -46,7 +47,7 @@ async function request(path: string, init: RequestInit, signal?: AbortSignal): P
       swarm_request_limit: "This Swarm service has reached its action limit. Finish active work before restarting Guard.",
       swarm_unknown_run: "This managed session is no longer available. Refresh Swarm.",
       swarm_action_unavailable: "This action is no longer available for the agent. Refresh its status.",
-      swarm_launch_invalid: "Check the project, task, and model. One of the launch fields is invalid.",
+      swarm_launch_invalid: "Check the project, work, model, and blocked paths. Only Claude Code can be kept out of folders.",
       swarm_action_invalid: "The instruction is invalid or too large. Shorten it and try again.",
     };
     if (response.status === 400 && object(body) && typeof body.error === "string" && known[body.error]) throw new RejectedAction(known[body.error]);

@@ -85,7 +85,7 @@ class LegacyUpdateContext:
     ) -> _Result:
         del output_limit_bytes, allow_windows_job_breakaway
         if update_commands._HARNESS_REPAIR_SCRIPT in command:
-            from codex_plugin_scanner.guard.adapters.base import HarnessContext
+            from codex_plugin_scanner.guard.harness_context import HarnessContext
             from codex_plugin_scanner.guard.store import GuardStore
 
             assert input_text is not None

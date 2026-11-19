@@ -5,9 +5,8 @@
 //! Python keeps the TOML reads and renders, the authenticated hook manifest,
 //! the ownership strips over existing hooks and every publication. A payload
 //! read from TOML crosses as order-preserving JSON whose exotic scalars are
-//! tokens (`codex_merge`). Two replies come back: `launch` asks for the
-//! isolated fallback and daemon start commands of a guard argv, and
-//! `relaunch` (in `codex_merge`) for the proxy launch of each Guard server.
+//! tokens (`codex_merge`). One reply comes back: `relaunch` (in
+//! `codex_merge`) asks for the proxy launch of each Guard server.
 
 use std::path::{Path, PathBuf};
 
@@ -16,23 +15,28 @@ use sha2::{Digest, Sha256};
 
 use super::files::{self, Doc};
 use super::{
-    codex_files, codex_merge, codex_servers, common, path_answer, path_text, Ctx, Failure, Spec,
-    Step,
+    codex_alternate_plan, codex_config_hooks, codex_failure, codex_files, codex_install_request,
+    codex_live_read, codex_live_state, codex_main_plan, codex_manifest_verify, codex_merge,
+    codex_migration, codex_publish, codex_servers, codex_sources, codex_spec, codex_uninstall,
+    codex_uninstall_config, codex_uninstall_plan, common, hook_render, path_answer, path_text, Ctx,
+    Failure, Spec, Step,
 };
+use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 use crate::harness_diagnostics::setup_failures_besides_missing_command;
 use crate::hook_env_stamp::dumps;
+use crate::hook_process_spawn::{isolated_daemon_start_command, isolated_guard_cli_command};
 use crate::pyjson::{self, PyVal};
 use crate::runner_sync_url::urlencode;
 
 const HOOK_TIMEOUT_SECONDS: i64 = 30;
-const TOOL_MATCHER: &str = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*";
+pub(super) const TOOL_MATCHER: &str = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*";
 const POST_TOOL_MATCHER: &str = "Bash|Read|mcp__.*";
 pub(super) const ENFORCEMENT_BOUNDARY: &str = "codex-native-hooks";
-const HOOK_UNAVAILABLE: &str = "codex_authoritative_hook_unavailable";
-const NATIVE_HOOK_COMMAND: &str = "codex-hook-bridge";
+pub(super) const HOOK_UNAVAILABLE: &str = "codex_authoritative_hook_unavailable";
+pub(super) const NATIVE_HOOK_COMMAND: &str = "codex-hook-bridge";
 
 /// `(event, matcher, status message, long timeout)` in registration order.
-const EVENTS: [(&str, Option<&str>, &str, bool); 4] = [
+pub(super) const EVENTS: [(&str, Option<&str>, &str, bool); 4] = [
     (
         "PreToolUse",
         Some(TOOL_MATCHER),
@@ -60,20 +64,62 @@ pub(super) fn dispatch(
     ctx: &Ctx,
     fields: &Map<String, Value>,
 ) -> Step<Value> {
+    let hosted = codex_install_request::host_syntax(ctx, fields);
+    let fields = &*hosted;
     match op {
         "policy_path" => path_answer(&config_path(ctx)),
+        "backup_path" => path_answer(&backup_path(ctx)),
         "paths" => Ok(paths(ctx)),
         "argv" => argv(ctx, fields),
-        "groups" => groups(fields),
-        "hook_state" => hook_state(fields),
+        "launch_env" => Ok(json!({ "env": { "CODEX_HOME": path_text(&ctx.home.join(".codex")) } })),
+        "groups" => groups(ctx, fields),
         "doctor_status" => doctor_status(fields),
         "migration_backup" => codex_files::migration_backup(ctx, fields),
+        "hook_migration" => codex_migration::migration(ctx, fields),
+        "config_hooks" => codex_config_hooks::config_hooks(ctx, fields),
         "main_backup" => codex_files::main_backup(ctx, fields),
         "shell_cleanup" => codex_files::shell_cleanup(ctx),
         "manifest" => codex_files::manifest(spec, ctx, fields),
         "migrate" | "readback" | "subset" => codex_merge::dispatch(op, fields),
         "alternate_cleanup" => codex_servers::alternate_cleanup(fields),
-        "managed_mcp" => codex_servers::managed_mcp(fields),
+        "alternate_plan" => codex_alternate_plan::alternate_plan(ctx, fields),
+        "alternate_change" => codex_alternate_plan::alternate_change(ctx, fields),
+        "main_plan" => codex_main_plan::main_plan(ctx, fields),
+        "managed_mcp" => codex_servers::managed_mcp(ctx, fields),
+        "check_sources" => codex_sources::check_sources(fields),
+        "uninstall_restore" => codex_uninstall::uninstall_restore(fields),
+        "uninstall_config" => codex_uninstall_config::uninstall_config(ctx, fields),
+        "uninstall_plan" => codex_uninstall_plan::uninstall_plan(ctx, fields),
+        "uninstall" => {
+            let request = codex_install_request::complete_uninstall(ctx, fields)?;
+            super::codex_uninstall_op::uninstall(ctx, &request).map(codex_failure::with_raise)
+        }
+        "detect_legacy" => codex_install_request::detect_legacy(ctx, fields),
+        "detect" => codex_detect_op::detect(spec, ctx, fields),
+        "prepare_install" => codex_prepare::prepare_install(spec, ctx, fields),
+        "manifest_spec" => codex_spec::manifest_spec(ctx, fields),
+        "live_hook_state" => {
+            let spec_fields = codex_spec::with_spec(ctx, fields)?;
+            codex_live_state::live_hook_state(ctx, &spec_fields)
+        }
+        "verify_manifest" => codex_manifest_verify::verify_manifest(ctx, fields),
+        "incident_report" => super::codex_incident::incident_report(ctx, fields),
+        "runtime_hooks_verified" => {
+            let spec_fields = codex_spec::with_spec(ctx, fields)?;
+            codex_live_read::runtime_hooks_verified(ctx, &spec_fields)
+        }
+        "publish_hooks" => codex_publish::publish_hooks(ctx, fields).map(codex_failure::with_raise),
+        "install" => {
+            let request = codex_install_request::complete(ctx, fields, true)?;
+            let spec_fields = codex_spec::with_spec(ctx, &request)?;
+            super::codex_install::install(ctx, &spec_fields).map(codex_failure::with_raise)
+        }
+        "install_plan" => {
+            let request = codex_install_request::complete(ctx, fields, false)?;
+            let spec_fields = codex_spec::with_spec(ctx, &request)?;
+            super::codex_install_plan::install_plan(ctx, &spec_fields)
+                .map(codex_failure::with_raise)
+        }
         _ => common(spec, op, ctx),
     }
 }
@@ -82,7 +128,7 @@ pub(super) fn config_path(ctx: &Ctx) -> PathBuf {
     ctx.home.join(".codex").join("config.toml")
 }
 
-fn hooks_path(ctx: &Ctx) -> PathBuf {
+pub(super) fn hooks_path(ctx: &Ctx) -> PathBuf {
     ctx.home.join(".codex").join("hooks.json")
 }
 
@@ -105,7 +151,7 @@ pub(super) fn backup_path(ctx: &Ctx) -> PathBuf {
 }
 
 /// The config and hooks files Guard reads, the global pair first.
-fn paths(ctx: &Ctx) -> Value {
+pub(super) fn paths(ctx: &Ctx) -> Value {
     let mut pairs = vec![(config_path(ctx), hooks_path(ctx))];
     if let Some(workspace) = &ctx.workspace {
         let root = workspace.join(".codex");
@@ -175,11 +221,16 @@ fn int(value: i64) -> PyVal {
     PyVal::Int(value.to_string())
 }
 
-/// `_hook_command_parts_for_home_mode`: the bridge argv every handler runs.
+/// `_hook_command_parts_for_home_mode`: the bridge argv every handler runs,
+/// with the isolated fallback and daemon start commands it launches through.
 ///
-/// The first ask replies `launch` with the guard argv; Python answers the
-/// isolated fallback and daemon start commands it launches through.
-fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+/// A frozen Guard (`frozen`) is its own interpreter: the fallback drops the
+/// `-c` bootstrap and the start command is its private recovery argument.
+/// The handler itself is always the native runtime's `codex-hook-bridge`.
+/// `NATIVE_CODEX_HOOK_FEATURE`: a runtime that can answer Codex hooks.
+const NATIVE_HOOK_FEATURE: &str = "codex-hook-bridge-v1";
+
+pub(super) fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let home_is_current = flag(fields, "home_is_current")?;
     let runtime_home = PathBuf::from(text(fields, "runtime_guard_home")?);
     let home = ctx.resolved(&ctx.home);
@@ -199,11 +250,30 @@ fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     if let Some(workspace) = workspace {
         guard_args.extend(["--workspace".to_owned(), path_text(workspace)]);
     }
-    let Some(launch) = fields.get("launch").and_then(Value::as_object) else {
-        return Err(Failure::Reply(json!({ "launch": guard_args })));
+    // Every hook runs in the native runtime. Without one there is nothing
+    // to review hooks with, so the install asks for a repair instead.
+    let Some(native) =
+        super::proxy_launch::bridge(ctx, NATIVE_HOOK_FEATURE, Some(runtime_home.as_path()))?
+    else {
+        return Err(Failure::Runtime(
+            super::claude_argv::RUNTIME_MISSING.to_owned(),
+        ));
     };
-    let fallback = strings(launch.get("fallback"))?;
-    let start = strings(launch.get("start"))?;
+    let python = super::caller::hook_python(ctx)?;
+    let frozen = super::caller::frozen(ctx)?;
+    let (fallback, start) = if frozen {
+        let mut fallback = vec![python.to_owned()];
+        fallback.extend(guard_args[1..].iter().cloned());
+        let start =
+            frozen_recovery_command(python, &runtime_home, &home).ok_or(Failure::Invalid)?;
+        (fallback, start)
+    } else {
+        let root = Path::new(super::caller::package_root(ctx)?);
+        (
+            isolated_guard_cli_command(python, root, &guard_args),
+            isolated_daemon_start_command(python, root, &runtime_home, Some(&home)),
+        )
+    };
     let mut query = vec![
         ("guard-home".to_owned(), path_text(&runtime_home)),
         ("home".to_owned(), path_text(&home)),
@@ -239,24 +309,30 @@ fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     } else {
         config
     };
-    let python = text(fields, "python")?;
-    let mut argv = vec![
-        python.to_owned(),
-        "-I".to_owned(),
-        text(fields, "bridge")?.to_owned(),
-        argument,
-    ];
-    if let Some(native) = fields.get("native_bridge").and_then(Value::as_str) {
-        argv.splice(0..0, [native.to_owned(), NATIVE_HOOK_COMMAND.to_owned()]);
-    }
+    let argv = [native.to_owned(), NATIVE_HOOK_COMMAND.to_owned(), argument];
     Ok(json!({ "argv": argv, "fallback": fallback, "start": start }))
 }
 
+/// The environment each handler runs with: the launcher's pinned package
+/// and native bindings, then the Codex home it reviews.
+fn hook_env(ctx: &Ctx) -> Step<Vec<(String, PyVal)>> {
+    let mut env: Vec<(String, PyVal)> = super::caller::launcher_env(ctx)?
+        .into_iter()
+        .map(|(name, value)| (name, files::text(value)))
+        .collect();
+    env.push((
+        "CODEX_HOME".to_owned(),
+        files::text(path_text(&ctx.home.join(".codex"))),
+    ));
+    Ok(env)
+}
+
 /// `_managed_hook_groups` and `_manifest_event_bindings`, as ordered JSON.
-fn groups(fields: &Map<String, Value>) -> Step<Value> {
+pub(super) fn groups(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let argv = strings(fields.get("argv"))?;
-    let command = text(fields, "command")?;
-    let env = PyVal::Dict(dict(fields, "env")?);
+    let names = hook_render::names_for(fields, [&argv[..]], ctx.windows)?;
+    let command = &hook_render::render(&argv, ctx.windows, &names)?;
+    let env = PyVal::Dict(hook_env(ctx)?);
     let long = fields
         .get("long_timeout")
         .and_then(Value::as_i64)
@@ -313,93 +389,8 @@ pub(super) fn registered(hooks: Option<&PyVal>) -> bool {
     })
 }
 
-/// `codex_native_hook_state` over what Python read and verified.
-fn hook_state(fields: &Map<String, Value>) -> Step<Value> {
-    let read = dict(fields, "read")?;
-    let read = PyVal::Dict(read);
-    let features = read.get("features").and_then(PyVal::as_dict);
-    let integrity = dict(fields, "integrity")?;
-    let matches = fields
-        .get("event_matches")
-        .and_then(Value::as_object)
-        .ok_or(Failure::Invalid)?;
-    let matched = |event: &str| matches.get(event).and_then(Value::as_bool) == Some(true);
-    let [pre, permission, prompt, post] = EVENTS.map(|(event, ..)| matched(event));
-    let managed = pre && permission && prompt && post;
-    let shell = pre && permission;
-    let valid = integrity
-        .iter()
-        .any(|(key, value)| key == "integrity_status" && value.as_str() == Some("valid"));
-    let enabled = features.is_none_or(|features| {
-        !features
-            .iter()
-            .any(|(key, value)| key == "hooks" && matches!(value, PyVal::Bool(false)))
-    });
-    let legacy = features.is_some_and(|features| {
-        features
-            .iter()
-            .any(|(key, value)| key == "codex_hooks" && matches!(value, PyVal::Bool(true)))
-    });
-    let config = text(fields, "config_path")?;
-    let hooks = text(fields, "hooks_path")?;
-    let shell_active = enabled && shell && valid;
-    let mut state = Doc::default();
-    state
-        .set("config_path", files::text(config))
-        .set("config_present", PyVal::Bool(Path::new(config).is_file()))
-        .set("hooks_path", files::text(hooks))
-        .set("hooks_present", PyVal::Bool(Path::new(hooks).is_file()))
-        .set(
-            "toml_hooks_present",
-            PyVal::Bool(registered(read.get("toml_hooks"))),
-        )
-        .set(
-            "json_hooks_present",
-            PyVal::Bool(registered(read.get("json_hooks"))),
-        )
-        .set("hooks_enabled", PyVal::Bool(enabled))
-        .set("codex_hooks_enabled", PyVal::Bool(enabled))
-        .set("legacy_codex_hooks_enabled", PyVal::Bool(legacy))
-        .set("managed_pre_tool_hook_installed", PyVal::Bool(pre))
-        .set(
-            "managed_permission_request_hook_installed",
-            PyVal::Bool(permission),
-        )
-        .set("managed_prompt_hook_installed", PyVal::Bool(prompt))
-        .set("managed_post_tool_hook_installed", PyVal::Bool(post))
-        .set("managed_hook_installed", PyVal::Bool(managed))
-        .set(
-            "shell_enforcement_boundary",
-            files::text(ENFORCEMENT_BOUNDARY),
-        )
-        .set("shell_hook_installed", PyVal::Bool(shell))
-        .set("shell_protection_active", PyVal::Bool(shell_active))
-        .set(
-            "shell_reason_code",
-            if shell_active {
-                PyVal::Null
-            } else {
-                files::text(HOOK_UNAVAILABLE)
-            },
-        )
-        .set(
-            "protection_active",
-            PyVal::Bool(enabled && managed && valid),
-        )
-        .set(
-            "hook_trust_stale",
-            PyVal::Bool(flag(fields, "trust_stale")?),
-        );
-    for (key, value) in integrity {
-        if key != "event_matches" {
-            state.set(&key, value);
-        }
-    }
-    Ok(json!({ "state": compact(&state.value(), false) }))
-}
-
 /// The doctor's final setup status once the hook warnings are in.
-fn doctor_status(fields: &Map<String, Value>) -> Step<Value> {
+pub(super) fn doctor_status(fields: &Map<String, Value>) -> Step<Value> {
     let warnings = strings(fields.get("warnings"))?;
     let warnings: Vec<&str> = warnings.iter().map(String::as_str).collect();
     let status = fields.get("status").cloned().unwrap_or(Value::Null);
@@ -416,3 +407,12 @@ fn doctor_status(fields: &Map<String, Value>) -> Step<Value> {
     };
     Ok(json!({ "status": status }))
 }
+
+#[path = "codex_detect_op.rs"]
+mod codex_detect_op;
+#[path = "codex_detection.rs"]
+pub(super) mod codex_detection;
+#[path = "codex_managed.rs"]
+pub(super) mod codex_managed;
+#[path = "codex_prepare.rs"]
+mod codex_prepare;

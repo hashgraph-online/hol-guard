@@ -8,8 +8,11 @@ pub(crate) use super::stderr_merge::without_stderr_merge;
 
 #[path = "segment_proof_cwd.rs"]
 mod cwd;
+pub(in crate::pretool) use cwd::verified_leading_cd_target;
 #[path = "github_metadata_text.rs"]
 mod github_metadata_text;
+#[path = "jq_filter_text.rs"]
+mod jq_filter_text;
 pub(super) use cwd::{
     after_read_prefix, cwd_read_executable, exact_safe_absolute_cd_chain, exact_safe_cwd_compound,
     git_read_cwd_compound_context, verified_cwd_compound_context, verified_cwd_list_context,
@@ -92,6 +95,7 @@ fn segment_proofs(
     }
     let proof_context = crate::pretool::PathContext {
         literal_words: &[],
+        guard_home: context.guard_home,
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
@@ -395,10 +399,8 @@ pub(super) fn exact_safe_segment_with_context(
     let output_templates = super::kubectl_reads::output_template_positions(segment);
     let sensitive_text = secret_namespace
         .map(|index| github_metadata_text::without_namespace(segment, index))
-        .or_else(|| {
-            (!output_templates.is_empty())
-                .then(|| super::kubectl_reads::without_output_templates(segment, &output_templates))
-        });
+        .or_else(|| super::kubectl_reads::without_templates(segment, &output_templates))
+        .or_else(|| jq_filter.and_then(|index| jq_filter_text::without_jq_filter(segment, index)));
     if (!inert_search
         && !super::source_file_read_segment(segment)
         && super::git_search_text::segment_sensitive(model, segment, sensitive_text, context.cwd))
@@ -555,6 +557,8 @@ pub(super) fn exact_safe_segment_with_context(
                 || (matches!(basename, "mkdir" | "touch")
                     && super::chain_temporary::creation_chain(model))
                 || (basename == "mkdir" && super::chain_temporary::mkdir_chain(model))
+                || (matches!(basename, "mkdir" | "touch" | "rm")
+                    && super::chain_temporary::removal_chain(model, context))
                 || (basename == "ln" && super::symlink_writes::link_chain(model, context)))
                 && (basename != "ln" && basename != "rm"
                     || super::directory_targets::home_targets_unquoted(segment))
@@ -596,7 +600,7 @@ pub(super) fn exact_safe_segment_with_context(
         "doctl" => super::doctl_reads::safe_doctl_arguments(&segment.arguments),
         "docker" => super::docker_reads::safe_docker_segment(model, segment),
         "helm" => super::helm_usage::safe_helm_segment(model, segment),
-        "nc" | "netcat" => super::port_probes::safe_nc_segment(model, segment),
+        n if super::port_probes::proves(n) => super::port_probes::safe(n, model, segment, context),
         "brew" => super::brew_reads::safe_brew_segment(model, segment),
         "gem" => super::gem_reads::safe_gem_segment(model, segment, context),
         "pg_ctl" => super::postgres_reads::safe_pg_ctl_arguments(&segment.arguments),

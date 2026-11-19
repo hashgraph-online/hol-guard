@@ -9,10 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from codex_plugin_scanner.guard.adapters import cline_runtime
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_runtime import ClineHarnessAdapter
-from codex_plugin_scanner.guard.adapters.native_harness import ask
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.native_harness_client import ask
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
 
@@ -31,7 +30,7 @@ def plugin_source(context: HarnessContext, guard_cli: list[str], hook_argv: list
 
 
 def runtime_probe(context: HarnessContext) -> dict[str, Any]:
-    probe = ClineHarnessAdapter().runtime_probe(context)
+    probe = harness_ops.runtime_probe("cline", context)
     assert probe is not None
     return probe
 
@@ -46,8 +45,7 @@ def hook_state(context: HarnessContext) -> dict[str, Any]:
 
 def install_plugin(context: HarnessContext) -> dict[str, Any]:
     """Write the managed plugin the way an install does, without confirming it."""
-    facts = cline_runtime._facts(context, "plugin")
-    answer = ask("install_transport", context, harness="cline", transport="plugin", frozen=False, facts=facts)
+    answer = ask("install_transport", context, harness="cline", transport="plugin", frozen=False)
     return answer["manifest"]
 
 

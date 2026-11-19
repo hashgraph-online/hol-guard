@@ -10,7 +10,7 @@
 //! | `test`     | `pack`                             | fixture report             |
 //! | `compile`  | `pack`                             | artifact                   |
 //! | `diff`     | `old`, `new` (pack or artifact)    | pack diff                  |
-//! | `render`   | pack, `actionId`, `arguments`      | exact request              |
+//! | `render`   | pack, `actionId`, `arguments`, `connection` values | exact request |
 //! | `extract`  | pack, `actionId`, `arguments`      | action facts v2            |
 //! | `project`  | pack, `actionId`, `response` text  | projection and labels      |
 //! | `explain`  | `actionId`, `arguments`, optional pack | facts and preset decisions |
@@ -30,7 +30,7 @@ use crate::cloud_pack_diff::diff;
 use crate::cloud_pack_explain::{explain, shipped_pack_for};
 use crate::cloud_pack_facts::extract;
 use crate::cloud_pack_fixtures::run;
-use crate::cloud_pack_request::{check_arguments, render, ArgumentError};
+use crate::cloud_pack_request::{check_arguments, render_connected, ArgumentError};
 use crate::cloud_pack_response::project;
 use crate::cloud_pack_simulate::simulate;
 use crate::cloud_policy_pack::{policy_pack_from_value, shipped, PolicyPack, Preset};
@@ -190,7 +190,15 @@ fn answer_action(op: &str, mut request: Map<String, Value>) -> Result<Value, Val
             if op == "explain" {
                 Value::Object(explain(&pack, action, &arguments).map_err(argument_error)?)
             } else if op == "render" {
-                json!({ "request": render(action, &arguments).map_err(argument_error)? })
+                let values = match request.remove("connection") {
+                    None => Map::new(),
+                    Some(Value::Object(values)) => values,
+                    Some(_) => return Err(refuse("request_invalid", Some("/connection"))),
+                };
+                let rendered =
+                    render_connected(pack.connection.as_ref(), action, &arguments, &values)
+                        .map_err(argument_error)?;
+                json!({ "request": rendered })
             } else {
                 let record = check_arguments(action, &arguments).map_err(argument_error)?;
                 json!({ "facts": extract(action, record) })

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { AppVersionCompatibilityCard } from "./apps/app-version-compatibility-card";
 import {
+  eventProtectionName,
   normalizeEventStates,
   normalizeProtectionState,
   PROTECTION_STATE_COPY,
@@ -45,6 +46,19 @@ const events = normalizeEventStates([
   "PreToolUse",
 ]);
 assert(events.length === 1 && events[0].event === "PreToolUse", "malformed event entries are dropped");
+assert(events[0].tools.length === 0 && eventProtectionName(events[0]) === "PreToolUse", "an unsplit event keeps its name");
+const split = normalizeEventStates([
+  { event: "PreToolUse", tools: ["apply_patch", 3, ""], transport: "native_hook", state: "configured" },
+]);
+assert(eventProtectionName(split[0]) === "PreToolUse [apply_patch]", "a split event is named by its tools");
+const bySurface = normalizeEventStates([
+  { event: "*", surface: "cli", transport: "none", state: "unsupported" },
+  { event: "*", surface: "cloud_agent", transport: "none", state: "unsupported" },
+]);
+assert(
+  eventProtectionName(bySurface[0]) === "* · cli" && eventProtectionName(bySurface[1]) === "* · cloud_agent",
+  "a surface split keeps each surface in its name",
+);
 
 const compatibility = normalizeVersionCompatibility("claude-code", {
   schema: "hol-guard-harness-version-compatibility.v1",

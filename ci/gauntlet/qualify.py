@@ -173,6 +173,7 @@ def summarize_attempt(
             and interruptions["benign_cases"] > 0,
             "interruptions": interruptions,
             "known_gaps": summary.get("known_gaps", []),
+            "release_budgets": summary.get("release_budgets"),
             "merge_qualified": summary.get("merge_qualified") is True,
             "stopped_early": summary.get("stopped_early") is True,
             "outcomes": dict(Counter(case.get("outcome") for case in cases)),
@@ -557,6 +558,13 @@ def main(args: Any) -> int:
             "known_gaps": verify_result.get("known_gaps") if verify_result else None,
             "unverified_interruptions": None if verify_result or not attempts else attempts[-1].get("interruptions"),
             "unverified_known_gaps": None if verify_result or not attempts else attempts[-1].get("known_gaps"),
+            # Safety and usability regressions graded against explicit budgets. A latency
+            # overrun does not change `qualified`, because a loaded host can cause one, but
+            # it is published here so a release report has to name it.
+            "release_budgets": verify_result.get("release_budgets") if verify_result else None,
+            "unverified_release_budgets": (
+                None if verify_result or not attempts else attempts[-1].get("release_budgets")
+            ),
             "verify": verify_result,
             "elapsed_seconds": round(time.monotonic() - started, 3),
             "phase_seconds": timings.report(),

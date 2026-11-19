@@ -24,6 +24,12 @@ class StoreApprovalsMixin:
     def settle_native_review_reuse(self, **identity: object) -> object:
         return self._native_store_call("settle_native_review_reuse", identity)
 
+    def record_native_admitted_call(self, *, harness: str, payload: object, now: str) -> object:
+        # The resident derives the call's witness key; see native_admitted_call.rs.
+        return self._native_store_call(
+            "record_native_admitted_call", {"harness": harness, "payload": payload, "now": now}
+        )
+
     def consume_native_review_approval(
         self,
         *,

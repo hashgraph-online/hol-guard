@@ -129,15 +129,20 @@ pub(super) fn recover(
     );
     let _lock = match recovery_lock(home, deadline) {
         Ok(lock) => lock,
-        Err(failure) => return failure.reply(),
+        Err(failure) => return failed_recovery(caller, failure.reply()),
     };
     if let Some(url) = ensure::running_current_url(caller, request) {
+        record_recovery(caller, "kept_running");
         return json!({"url": url});
     }
+    // Protection may have been turned off while this recovery waited for the
+    // lock; the request it journaled still gets its ending.
     if posture(home) == "off" {
+        record_recovery(caller, "protection_off");
         return disabled_url(caller, request);
     }
     if deadline.passed() {
+        record_recovery(caller, "deadline_passed");
         return json!({
             "error": "Guard daemon recovery exceeded its bounded worker lifetime.",
             "kind": "runtime",
@@ -145,8 +150,9 @@ pub(super) fn recover(
     }
     let url = match ensure::ensure(caller, request, deadline) {
         Ok(url) => url,
-        Err(failure) => return failure.reply(),
+        Err(failure) => return failed_recovery(caller, failure.reply()),
     };
+    record_recovery(caller, "started");
     if publish_locator(caller, &url).is_err() {
         record_for_pid(
             home,
@@ -157,6 +163,29 @@ pub(super) fn recover(
         );
     }
     json!({"url": url})
+}
+
+/// Journals how a recovery this caller asked for ended: `kept_running` when a
+/// current daemon was already serving, `started` when one was brought up, or
+/// the failure's code.
+fn record_recovery(caller: &Caller, outcome: &str) {
+    record_for_pid(
+        caller.guard_home.as_path(),
+        u32::try_from(caller.own_pid).unwrap_or(0),
+        "recovery_completed",
+        Some(outcome),
+        None,
+    );
+}
+
+fn failed_recovery(caller: &Caller, reply: Value) -> Value {
+    let code = reply
+        .get("code")
+        .and_then(Value::as_str)
+        .filter(|code| !code.is_empty())
+        .unwrap_or("failed");
+    record_recovery(caller, code);
+    reply
 }
 
 /// `publish_approval_center_locator`: browser discovery for the

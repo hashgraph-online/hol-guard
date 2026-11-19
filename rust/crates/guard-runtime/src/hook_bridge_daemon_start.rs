@@ -104,7 +104,7 @@ pub(crate) fn start_daemon(
 /// `isolated_hook_environment()`: the allowlisted keys plus, for a Desktop
 /// hook, the signed proxy selectors (`desktop_hook_proxy_context`), so a
 /// Desktop daemon start runs as Python's did.
-fn start_environment(source: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+pub(crate) fn start_environment(source: &BTreeMap<String, String>) -> BTreeMap<String, String> {
     let mut environment = isolated_hook_environment(source);
     let proxy = source.get(DESKTOP_PROXY_ENV).filter(|proxy| {
         !proxy.is_empty() && !proxy.contains('\0') && Path::new(proxy.as_str()).is_absolute()

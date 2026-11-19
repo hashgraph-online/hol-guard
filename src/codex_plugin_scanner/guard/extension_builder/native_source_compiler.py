@@ -18,7 +18,7 @@ import subprocess
 import tempfile
 import threading
 from collections.abc import Callable, Mapping
-from contextlib import contextmanager, suppress
+from contextlib import ExitStack, contextmanager, suppress
 from importlib import metadata
 from pathlib import Path
 from typing import BinaryIO
@@ -187,6 +187,15 @@ def _packaged_program_digest() -> str:
     return _hex(value.get("program_digest"), length=_SHA64, field="base program digest")
 
 
+def _matches_installed_version(package_version: object) -> bool:
+    """Whether the installed distribution, when there is one, carries this version."""
+    try:
+        installed_version = metadata.version("hol-guard")
+    except metadata.PackageNotFoundError:
+        return True
+    return installed_version == package_version
+
+
 def _verify_manifest(path: Path) -> dict[str, object]:
     manifest = _manifest(path)
     if manifest.get("schema") != "hol-guard-native-source-compiler.v2":
@@ -198,11 +207,7 @@ def _verify_manifest(path: Path) -> dict[str, object]:
     package_version = manifest.get("package_version")
     if not isinstance(package_version, str) or not package_version.strip():
         raise NativeSourceCompilerError("source compiler manifest package version is invalid")
-    try:
-        installed_version = metadata.version("hol-guard")
-    except metadata.PackageNotFoundError:
-        installed_version = None
-    if installed_version is not None and installed_version != package_version:
+    if not _matches_installed_version(package_version):
         raise NativeSourceCompilerError("source compiler package version does not match the installed package")
     target = manifest.get("target")
     platform_tag = manifest.get("platform_tag")
@@ -294,10 +299,10 @@ def _decode_output(
 
 
 @contextmanager
-def _verified_executable(raw: bytes):  # type: ignore[no-untyped-def]
+def _verified_executable(raw: bytes, sha256: str | None = None):  # type: ignore[no-untyped-def]
     """Materialize exactly the verified bytes in a private execution directory."""
     try:
-        with verified_executable(raw) as path:
+        with verified_executable(raw, sha256) as path:
             yield path
     except ExecutableMaterializationError as exc:
         raise NativeSourceCompilerError("source compiler could not be started") from exc
@@ -435,24 +440,26 @@ def run_source_compiler(
             raise NativeSourceCompilerError("compiler override is not permitted alongside a packaged compiler")
         compiler = Path(configured_compiler)
     manifest: Mapping[str, object] | None = None
-    if compiler is None:
-        manifest = _verify_manifest(_NATIVE_PACKAGE / _MANIFEST_NAME)
-        compiler_bytes = _verify_compiler(_NATIVE_PACKAGE / _COMPILER_NAME, manifest)
-    else:
-        compiler_path = Path(compiler)
-        first_read = _read_regular(compiler_path, limit=_MAX_COMPILER_BYTES, label="source compiler")
-        expected = {
-            "compiler_size": len(first_read),
-            "compiler_sha256": hashlib.sha256(first_read).hexdigest(),
-        }
-        # Release the first copy before verification reads the file again.
-        del first_read
-        compiler_bytes = _verify_compiler(compiler_path, expected)
     payload = b""
-    with (
-        _verified_executable(compiler_bytes) as executable,
-        tempfile.TemporaryDirectory(prefix="hol-guard-authoring-") as authoring_directory,
-    ):
+    with ExitStack() as stack:
+        if compiler is None:
+            # The packaged runtime is verified once per process while its files
+            # stay unchanged; later calls reuse the kept copy after checking its
+            # digest, instead of hashing and copying 120 MB on every call.
+            from ..catalog_delivery.lifecycle import verified_packaged_runtime
+
+            manifest, executable = stack.enter_context(verified_packaged_runtime())
+        else:
+            compiler_path = Path(compiler)
+            first_read = _read_regular(compiler_path, limit=_MAX_COMPILER_BYTES, label="source compiler")
+            expected = {
+                "compiler_size": len(first_read),
+                "compiler_sha256": hashlib.sha256(first_read).hexdigest(),
+            }
+            # Release the first copy before verification reads the file again.
+            del first_read
+            executable = stack.enter_context(_verified_executable(_verify_compiler(compiler_path, expected)))
+        authoring_directory = stack.enter_context(tempfile.TemporaryDirectory(prefix="hol-guard-authoring-"))
         from .bundle_baseline import admission_request, authoring_request
 
         if subcommand == "bundle-compatibility":

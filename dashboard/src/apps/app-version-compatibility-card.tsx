@@ -12,6 +12,7 @@ import {
 } from "../harness-version-compatibility";
 import {
   eventReasonCopy,
+  eventProtectionName,
   protectionStateLabel,
   protectionStateTone,
   type ProtectionTone,
@@ -85,11 +86,12 @@ function ProtectionProof({ compatibility }: { compatibility: HarnessVersionCompa
         <ul className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-100 text-sm">
           {compatibility.eventStates.map((item) => {
             const why = eventReasonCopy(item.reason);
-            const repeated = compatibility.eventStates.filter((other) => other.event === item.event).length > 1;
-            const name = repeated && item.transport ? `${item.event} (${item.transport})` : item.event;
+            const base = eventProtectionName(item);
+            const repeated = compatibility.eventStates.filter((other) => eventProtectionName(other) === base).length > 1;
+            const name = repeated && item.transport ? `${base} (${item.transport})` : base;
             return (
               <li
-                key={`${item.event}:${item.transport ?? ""}`}
+                key={`${base}:${item.surface ?? ""}:${item.transport ?? ""}`}
                 className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2"
               >
                 <span className="font-mono text-xs text-brand-dark">{name}</span>

@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from typing import Protocol
 
-from ..adapters.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..store import GuardStore
 from .command_queue_activation import command_queue_long_poll_enabled, nonnegative_env_float
 from .command_queue_protocol import retry_wait_seconds

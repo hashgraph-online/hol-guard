@@ -19,7 +19,7 @@ def native(monkeypatch, tmp_path):
         return b"runtime"
 
     @contextmanager
-    def verified_executable(raw):
+    def verified_executable(raw, sha256=None):
         calls["copies"] += 1
         yield Path(tmp_path / "runtime")
 

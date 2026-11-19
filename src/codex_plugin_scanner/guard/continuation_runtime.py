@@ -9,7 +9,6 @@ from datetime import datetime
 from hashlib import sha256
 from typing import Final, NamedTuple, cast
 
-from .adapters.contracts import contract_for
 from .codex_app_server_target import codex_app_server_target_reachable
 from .codex_live_hook_target import codex_live_hook_process_is_unavailable, codex_live_hook_wait_deadline
 from .continuation_contract import (
@@ -48,6 +47,7 @@ from .continuation_worker import (
 )
 from .desktop_notifications import DesktopApprovalNotification, notify_pending_approval_once
 from .native_continuation_authority import offer_wire, result_wire
+from .setup_contracts import contract_for
 from .store import GuardStore
 from .store_continuation import continuation_store_call
 

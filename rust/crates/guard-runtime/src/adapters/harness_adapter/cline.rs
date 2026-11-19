@@ -1,10 +1,8 @@
 //! Cline: the CLI, VS Code and JetBrains hosts, two enforcement transports
 //! (native hooks and a managed AgentPlugin) and the MCP proxy rewrite.
 //!
-//! Python runs the processes: the CLI's `--version`, the hook canary, the
-//! plugin's `node --check` and the shim. An op that needs the canary answers
-//! `{"canary": {"argv", "input"}}` before it changes anything, and Python asks
-//! again with the run.
+//! Python runs the CLI's `--version` and the shim. The hook canary and the
+//! plugin's `node --check` run here (`cline_run.rs`).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,7 +10,9 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Map, Value};
 
 use super::kimi::expand_user;
-use super::{common, path_answer, path_text, resolved_executable, Ctx, Failure, Spec, Step};
+use super::{
+    common, hook_config, path_answer, path_text, resolved_executable, Ctx, Failure, Spec, Step,
+};
 use crate::context_digest::python_strip;
 use crate::zcode_artifacts::{Fields, Scope};
 
@@ -25,27 +25,8 @@ const DUPLICATE: &str =
 const PENDING: &str = "Cline protection is installed but live runtime proof is pending or stale. Run a safe Cline tool action, then `hol-guard apps test cline`.";
 const JETBRAINS: &str =
     "Cline JetBrains remains unverified until a live pre-tool proof is recorded.";
-
-/// What stopped an op that reads hook state: a canary run to ask for, or a
-/// failure.
-pub(super) enum Need {
-    Canary(Value),
-    Fail(Failure),
-}
-
-pub(super) type Read<T> = Result<T, Need>;
-
-impl From<Failure> for Need {
-    fn from(failure: Failure) -> Self {
-        Self::Fail(failure)
-    }
-}
-
-impl From<&'static str> for Need {
-    fn from(_: &'static str) -> Self {
-        Self::Fail(Failure::Invalid)
-    }
-}
+/// The seconds the bounded bridge gives one Cline hook.
+const HOOK_TIMEOUT_SECONDS: u64 = 8;
 
 /// The `RuntimeError` the Cline adapter raised.
 pub(super) fn runtime(message: impl Into<String>) -> Failure {
@@ -228,10 +209,7 @@ fn cli_artifact(hosts: &Hosts) -> Option<Value> {
 
 /// Hook state for reads that never use `ready`, so no canary runs.
 fn hook_inventory(ctx: &Ctx) -> Step<Value> {
-    cline_hooks::state(ctx, false, None).map_err(|need| match need {
-        Need::Fail(failure) => failure,
-        Need::Canary(_) => Failure::Invalid,
-    })
+    cline_hooks::state(ctx, false, None)
 }
 
 fn installed(state: &Value) -> bool {
@@ -255,14 +233,13 @@ fn detect(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         .as_array()
         .is_some_and(|paths| !paths.is_empty());
     let present = !hosts.names().is_empty() || has_paths || installed(&hooks) || installed(&plugin);
-    Ok(json!({
+    super::firewall::enrich(json!({
         "artifacts": artifacts,
         "config_paths": config_paths,
         "warnings": warnings,
         "installed": present,
         "command_available": hosts.cli.is_some(),
         "workspace_aibom": spec.workspace_aibom,
-        "firewall": true,
     }))
 }
 
@@ -274,12 +251,12 @@ pub(super) fn adapter_state(ctx: &Ctx) -> Map<String, Value> {
     }
 }
 
-/// The `canary` run Python sent, if any.
+/// The canary run an earlier answer of this install carried, if any.
 pub(super) fn canary_run(fields: &Map<String, Value>) -> Option<&Value> {
     fields.get("canary").filter(|run| !run.is_null())
 }
 
-fn runtime_probe(ctx: &Ctx, fields: &Map<String, Value>) -> Read<Value> {
+fn runtime_probe(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let hosts = hosts(ctx, fields)?;
     let hooks = cline_hooks::state(ctx, true, canary_run(fields))?;
     let plugin = cline_plugin::state(ctx);
@@ -327,13 +304,31 @@ fn diagnostic_warnings(fields: &Map<String, Value>) -> Step<Value> {
     Ok(json!({ "warnings": warnings }))
 }
 
-/// A hook-state read: the canary request Python must run, or the failure.
-pub(super) fn settle(read: Read<Value>) -> Step<Value> {
-    match read {
-        Ok(value) => Ok(value),
-        Err(Need::Canary(request)) => Ok(json!({ "canary": request })),
-        Err(Need::Fail(failure)) => Err(failure),
+/// The `guard hook` arguments the bounded bridge runs for a Cline hook.
+/// `--home` names a home other than the user's.
+fn hook_args(ctx: &Ctx) -> Vec<String> {
+    let mut cli_args = vec![
+        "guard".to_owned(),
+        "hook".to_owned(),
+        "--guard-home".to_owned(),
+        path_text(&ctx.guard_home),
+        "--harness".to_owned(),
+        "cline".to_owned(),
+    ];
+    if !ctx.default_home() {
+        cli_args.extend(["--home".to_owned(), path_text(&ctx.home)]);
     }
+    cli_args
+}
+
+/// The `hook_spec` answer: those arguments and the bridge's budget for them.
+fn hook_spec(ctx: &Ctx) -> Value {
+    json!({ "cli_args": hook_args(ctx), "timeout_seconds": HOOK_TIMEOUT_SECONDS })
+}
+
+/// The command Cline's native hooks and plugin run to reach the bounded bridge.
+pub(super) fn hook_argv(ctx: &Ctx) -> Step<Vec<String>> {
+    hook_config::hook_argv(ctx, "cline", &hook_args(ctx), HOOK_TIMEOUT_SECONDS as i64)
 }
 
 pub(crate) fn dispatch(
@@ -354,11 +349,16 @@ pub(crate) fn dispatch(
                 .map(|base| ctx.home.join(base).join("bin").join("cline"));
             resolved_executable(spec, ctx, &candidates)
         }
-        "detect" => detect(spec, ctx, fields),
-        "runtime_probe" => settle(runtime_probe(ctx, fields)),
+        "detect" => detect(
+            spec,
+            ctx,
+            &super::probe_run::with_cline_cli(spec, ctx, fields)?,
+        ),
+        "runtime_probe" => runtime_probe(ctx, fields),
+        "hook_spec" => Ok(hook_spec(ctx)),
         "diagnostic_warnings" => diagnostic_warnings(fields),
         "mcp_scan" => cline_mcp::scan(ctx),
-        "mcp_apply" => cline_mcp::apply(ctx, fields),
+        "mcp_install" => cline_mcp::install(ctx),
         "install_plan" | "install_transport" | "confirm_transport" | "finish_install"
         | "uninstall" => cline_install::dispatch(op, ctx, fields),
         _ => common(spec, op, ctx),

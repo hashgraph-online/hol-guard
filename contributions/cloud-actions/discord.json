@@ -17,6 +17,14 @@
       "bot"
     ]
   },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "discordbot"
+      }
+    ]
+  },
   "actions": [
     {
       "actionId": "discord.messages.create",

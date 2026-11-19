@@ -101,6 +101,7 @@ fn action(session: &Session, command: &str) -> String {
         Some(&controls),
         None,
         guard_command::pretool::PathContext {
+            guard_home: None,
             home_dir: Some(&home),
             cwd: Some(&cwd),
             literal_words: &[],

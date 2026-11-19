@@ -18,7 +18,7 @@ from html import escape as html_escape
 
 from jsonschema import Draft202012Validator
 
-from codex_plugin_scanner.guard.adapters.contract_models import CAPABILITY_DECLARED_ACTIONS, HarnessEventCapability
+from codex_plugin_scanner.guard.setup_contract_models import CAPABILITY_DECLARED_ACTIONS, HarnessEventCapability
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +123,12 @@ CAPABILITY_REPORT_SCHEMA: dict[str, object] = {
                     "items": {"type": "string", "minLength": 1, "maxLength": 2_000},
                 },
                 "source_reference": {"type": "string", "minLength": 1, "maxLength": 512},
+                "tools": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": True,
+                    "items": {"type": "string", "minLength": 1, "maxLength": 128},
+                },
                 "deployment_health": {"enum": ["unverified", "healthy", "degraded", "unavailable", "unknown"]},
                 "evidence_level": {
                     "enum": [
@@ -319,7 +325,7 @@ def _unsupported_capability(host: str) -> HarnessEventCapability:
         known_blind_spots=(
             f"Requested host {requested_input!r} has no registered Guard adapter or declared event surface.",
         ),
-        source_reference="src/codex_plugin_scanner/guard/adapters/__init__.py:_ADAPTER_SPECS",
+        source_reference="src/codex_plugin_scanner/guard/native_harness_client.py:NATIVE_HARNESSES",
     )
 
 
@@ -362,7 +368,7 @@ def build_capability_report(
         raise ValueError("build_id must be a non-empty string")
     if not isinstance(commit, str) or not commit.strip():
         raise ValueError("commit must be a non-empty string")
-    from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS, contract_for
+    from codex_plugin_scanner.guard.setup_contracts import HARNESS_CONTRACTS, contract_for
 
     requested_label = _bounded_host_label(requested_host) if requested_host is not None else None
     if requested_label is None or requested_label.lower() in {"", "all", "*"}:

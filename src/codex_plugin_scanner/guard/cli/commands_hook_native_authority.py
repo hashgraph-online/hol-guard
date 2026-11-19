@@ -11,10 +11,10 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any, TextIO
 
-from ..adapters.base import HarnessContext
-from ..adapters.bounded_cli_hook_failure import failure_payload
+from ..harness_context import HarnessContext
 from ..hook_deadline import RuntimeHookDeadline
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
+from ..hook_failure_bridge import RUNTIME_MISSING, native_hook_failure
 from ..hook_review.hook_availability_policy import (
     availability_harness_response,
     hook_event_pauses_when_unavailable,
@@ -23,8 +23,8 @@ from ..hook_review.hook_fail_closed import fail_closed_response
 from ..hook_review.hook_request_parsing import runtime_hook_event_name
 from ..hook_review.hook_worker import HookWorker
 from ..hook_review.hook_worker_structured import withhold_structured_destination, withholds_structured_destination
-from ..native_hook_evidence_writer import NativeHookEvidenceWriter
 from ..native_hook_render import native_cli_hook_emit, native_hermes_bridge
+from ..resident_evidence_client import ResidentEvidenceClient
 from ..runtime_health.diagnostics import DaemonDiagnostics
 from ..store import GuardStore
 from .commands_support_runtime_resolution import _canonical_harness_name
@@ -39,8 +39,7 @@ _BRIDGE_RENDERED_HARNESSES = frozenset(
     {"cline", "copilot", "devin", "grok", "hermes", "kimi", "muse", "openclaw", "zcode"}
 )
 _RENDER_FAILURE_REASON = "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
-# What Hermes reads when the resident cannot render its reply.
-_HERMES_UNAVAILABLE_BLOCK: dict[str, object] = {"decision": "block", "reason": "HOL Guard blocked this action."}
+_HERMES_UNAVAILABLE_REASON = "HOL Guard blocked this action."
 # What writing a finished answer is allowed to take when the review itself has
 # already used the hook's whole budget.
 _DELIVERY_BUDGET_SECONDS = 1.0
@@ -61,6 +60,15 @@ def _delivery_deadline(deadline: float | None) -> float | None:
     return max(deadline, time.monotonic() + _DELIVERY_BUDGET_SECONDS)
 
 
+def _failure_output(harness: str, event_name: str, reason: str) -> tuple[str, str, int]:
+    """The runtime's fixed fail-closed answer, or a block that names the repair."""
+
+    failure = native_hook_failure(harness, event_name, reason)
+    if failure is None:
+        return "", RUNTIME_MISSING, 2
+    return failure[0], "", failure[1]
+
+
 def _bridge_hook_output(
     canonical: str,
     response: dict[str, Any],
@@ -77,14 +85,16 @@ def _bridge_hook_output(
     """
 
     if canonical == "muse":
-        from ..adapters.muse_hook_render import muse_bridge_response
+        from ..muse_hook_render import muse_bridge_response
 
         return muse_bridge_response(response, event_name=event_name, guard_home=guard_home, deadline=deadline)
     if canonical == "hermes":
         # The Hermes bridge renders its daemon reply natively; so does the CLI.
         # When the resident cannot answer, Hermes reads the fixed block document.
         rendered_hermes = native_hermes_bridge(response, guard_home=guard_home, deadline=deadline)
-        payload, exit_code = rendered_hermes if rendered_hermes is not None else (_HERMES_UNAVAILABLE_BLOCK, 2)
+        if rendered_hermes is None:
+            return _failure_output("hermes", event_name, _HERMES_UNAVAILABLE_REASON)
+        payload, exit_code = rendered_hermes
         return json.dumps(payload, ensure_ascii=True, separators=(",", ":")), "", exit_code
     rendered = native_cli_hook_emit(
         canonical, response, event_name=event_name, guard_home=guard_home, deadline=deadline
@@ -98,10 +108,7 @@ def _bridge_hook_output(
             and not isinstance(exit_code, bool)
         ):
             return stdout, stderr, exit_code
-    payload, exit_code = failure_payload(
-        harness=canonical, event_name=event_name, reason=_RENDER_FAILURE_REASON, recording_only=False
-    )
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":")), "", exit_code
+    return _failure_output(canonical, event_name, _RENDER_FAILURE_REASON)
 
 
 def _record_native_hook_exception(guard_home: Path, *, harness: str, event_name: str) -> None:
@@ -147,7 +154,7 @@ def try_native_hook_authority(
         # not silently downgrade a hook to a fail-safe allow.
         worker = HookWorker(
             store=store,
-            activity_writer=NativeHookEvidenceWriter(store=store),
+            activity_writer=ResidentEvidenceClient(store=store),
         )
         return worker.review_http_payload(
             payload=payload,

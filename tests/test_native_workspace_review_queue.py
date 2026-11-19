@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime import command_queue
 from codex_plugin_scanner.guard.runtime.command_capability import (
     CommandCapabilityError,

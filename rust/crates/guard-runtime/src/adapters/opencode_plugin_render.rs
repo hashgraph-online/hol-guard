@@ -184,23 +184,22 @@ fn identity(value: &Value) -> Result<PyVal, &'static str> {
     ]))
 }
 
-/// `_native_bridge_payload`: the bounded native hook argv the plugin starts
-/// first, or `None` to keep the Python launcher.
+/// The bounded native hook argv `[runtime, "bounded-hook-bridge", config]`
+/// the plugin starts, or `None` when Guard has no native bridge to name.
 fn native_bridge(value: &Value) -> Result<PyVal, &'static str> {
     if value.is_null() {
         return Ok(PyVal::Null);
     }
     let argv = texts(value)?;
-    if argv.len() != 7 || argv[1] != BRIDGE_COMMAND {
+    if argv.len() != 3 || argv[1] != BRIDGE_COMMAND {
         return Ok(PyVal::Null);
     }
-    let config = parse_marking_lone_surrogates(&argv[6]).map_err(|_| ERR_INVALID)?;
+    let config = parse_marking_lone_surrogates(&argv[2]).map_err(|_| ERR_INVALID)?;
     if carries_mark(&config) {
         return Err(ERR_INVALID);
     }
     Ok(PyVal::Dict(vec![
         ("runtimePath".to_owned(), str_val(&argv[0])),
-        ("bootstrap".to_owned(), str_val(&argv[5])),
         ("config".to_owned(), config),
     ]))
 }
@@ -241,9 +240,7 @@ fn hook_launcher_code(import_roots: &[String]) -> String {
         "sys.stderr.flush() if _windows_job is not None else None;".to_owned(),
         "from pathlib import Path;".to_owned(),
         "import codex_plugin_scanner;".to_owned(),
-        "from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text;"
-            .to_owned(),
-        "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import run_bounded_cli_hook;"
+        "from codex_plugin_scanner.guard.bounded_cli_hook_bridge import main_from_argv;"
             .to_owned(),
         format!("argv=json.loads(os.environ['{HOOK_ARGV_ENV}']);"),
         "guard_index=argv.index('--guard-home');".to_owned(),
@@ -253,8 +250,7 @@ fn hook_launcher_code(import_roots: &[String]) -> String {
         format!(
             "'guard_home':guard_home,'cli_args':argv,'harness':'opencode','timeout_seconds':{HOOK_TIMEOUT_SECONDS}}};"
         ),
-        "raise SystemExit(run_bounded_cli_hook(config,input_text=stamp_hook_input_text(sys.stdin.read(1000001))))"
-            .to_owned(),
+        "raise SystemExit(main_from_argv([json.dumps(config)]))".to_owned(),
     ]
     .concat()
 }

@@ -75,3 +75,30 @@ def test_one_event_on_two_transports_names_each_transport() -> None:
 def test_a_missing_payload_reports_unknown_protection() -> None:
     rows = protection_proof_rows(None)
     assert [(label, text.plain) for label, text in rows] == [("Protection proof", "Protection unknown")]
+
+
+def test_an_event_split_by_tool_names_each_row_by_its_tools() -> None:
+    rows = protection_proof_rows(
+        {
+            "protection_state": "configured",
+            "event_states": [
+                {"event": "PreToolUse", "tools": ["Bash", "Read"], "transport": "native_hook", "state": "configured"},
+                {"event": "PreToolUse", "tools": ["apply_patch"], "transport": "native_hook", "state": "configured"},
+                {"event": "PreToolUse", "tools": [], "transport": "native_hook", "state": "configured"},
+            ],
+        }
+    )
+    assert [label for label, _text in rows] == [
+        "Protection proof",
+        "  PreToolUse [Bash, Read]",
+        "  PreToolUse [apply_patch]",
+        "  PreToolUse",
+    ]
+
+
+def test_codex_compatibility_rows_carry_the_file_write_tools() -> None:
+    from codex_plugin_scanner.guard.harness_versions.compatibility import _contracts
+
+    tools = [row.get("tools") for row in _contracts()["codex"] if row["event"] == "PreToolUse"]
+    assert ["apply_patch"] in tools
+    assert ["Write", "Edit", "MultiEdit"] in tools

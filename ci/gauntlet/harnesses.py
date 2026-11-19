@@ -511,8 +511,11 @@ def _codex_event(event: dict, kind: Any, calls: dict, order: list, terminal: boo
                 _finish(calls, item.get("id"), *codex_result(item))
     elif kind == "turn.completed":
         return True, failed
-    elif kind in {"turn.failed", "error"}:
+    elif kind == "turn.failed":
         return True, True
+    # A bare "error" event also reports recoverable stream retries
+    # ("Reconnecting... 1/5"). The turn's own completed/failed event decides
+    # the outcome; a run that ends after an error alone has no terminal event.
     return terminal, failed
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -33,11 +34,17 @@ def _load_guard_command_hub() -> None:
 
 
 def _supported_harness_values() -> tuple[str, ...]:
-    # Deferred: product_model transitively imports the whole Guard command
+    # Deferred: the harness registry transitively imports the whole Guard command
     # surface, which short-lived invocations must not pay for.
-    from .guard.product_model import SUPPORTED_HARNESS_VALUES
+    from .guard.native_runner_authority import NativeRunnerAuthorityError
+    from .guard.setup_contract_registry import harness_names
 
-    return SUPPORTED_HARNESS_VALUES
+    try:
+        return harness_names()
+    except NativeRunnerAuthorityError:
+        # Without a runtime no argument names a harness; the scanner's
+        # doctor still runs.
+        return ()
 
 
 def _run_scan(args: argparse.Namespace) -> int:
@@ -283,7 +290,12 @@ def _resolve_legacy_args(
         is_hol_guard_default_doctor = _is_hol_guard_program(program_name) and (
             len(argv) == 1 or "-h" in argv[1:] or "--help" in argv[1:]
         )
-        has_harness_arg = len(argv) >= 2 and not argv[1].startswith("-") and argv[1] in _supported_harness_values()
+        # Only a bare name can be a harness; a path never asks the runtime.
+        has_harness_arg = (
+            len(argv) >= 2
+            and re.fullmatch(r"[a-z][a-z0-9-]*", argv[1]) is not None
+            and argv[1] in _supported_harness_values()
+        )
         if has_guard_doctor_flag or is_hol_guard_default_doctor or has_harness_arg:
             return ["guard", *argv]
     known_commands = {
@@ -371,15 +383,15 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
     if not bool(getattr(sys, "frozen", False)):
         return None
     if requested_argv[:1] == ["__guard-bounded-hook"]:
-        from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
+        from .guard.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(requested_argv[1:])
     if requested_argv[:1] == ["__guard-cursor-hook"]:
-        from .guard.adapters.cursor import run_frozen_cursor_hook
+        from .guard.cursor_hook_ops import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(requested_argv[1:])
     if requested_argv[:1] == ["__guard-claude-hook"]:
-        from .guard.adapters.claude_code import run_frozen_claude_hook
+        from .guard.claude_hook_entry import run_frozen_claude_hook
 
         return run_frozen_claude_hook(requested_argv[1:])
     from .guard.shims import resolve_frozen_package_shim_path, run_frozen_package_shim
@@ -415,11 +427,11 @@ def main(argv: list[str] | None = None) -> int:
     argv = _frozen_module_argv(sys.argv[1:] if argv is None else argv)
     effective_argv = argv
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-bounded-hook"]:
-        from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
+        from .guard.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(effective_argv[1:])
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-cursor-hook"]:
-        from .guard.adapters.cursor import run_frozen_cursor_hook
+        from .guard.cursor_hook_ops import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(effective_argv[1:])
     program_name = _program_name(sys.argv[0])
@@ -479,6 +491,16 @@ def main(argv: list[str] | None = None) -> int:
             except ValueError as exc:
                 print(str(exc), file=sys.stderr)
                 return 2
+            except Exception as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+        from .guard.cli.desktop_daemon_workers import is_daemon_workers_fast_path_argv, run_daemon_workers_cli
+
+        if is_daemon_workers_fast_path_argv(requested_argv):
+            # Fast path: the native daemon starts its worker host on every cold
+            # start and is not ready until the host publishes policy.
+            try:
+                return run_daemon_workers_cli(requested_argv)
             except Exception as exc:
                 print(str(exc), file=sys.stderr)
                 return 1

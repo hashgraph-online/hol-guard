@@ -52,7 +52,10 @@ jobs:
     # Pull requests reach this job only as a labeled same-repository canary call from
     # publish.yml. Their caches stay read-only (see save-if and SCCACHE_GHA_RW_MODE).
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    # A cold release build of hol-guard-runtime with no warm binaries runs past
+    # 45 minutes on the macOS and Windows ARM64 runners. A stable publish whose
+    # warm run was cancelled compiles cold, and a timeout there blocks the release.
+    timeout-minutes: 90
     concurrency:
       # Stable publish calls and main preparation share work for one source and
       # target. Alpha/canary versions keep separate groups and cache identities.

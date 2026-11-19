@@ -23,13 +23,14 @@ from .task_brief_cases import TASK_BRIEF_ORACLE
 from .output_cases import OUTPUT_ORACLE
 from .fixtures import digest_file
 from .remote_code import REMOTE_CODE_CASES
+from .repeat_cases import REPEAT_ORACLE, valid_repeat_commands
 from .supply_chain import PACKAGE_BLOCK_REASONS
 
 CATALOG = Path(__file__).with_name("scenarios.json")
 # The catalog's own bound. A run writes one case file per scenario, so `bundle`
 # derives the evidence inventory's bound from this one: raising it here raises
 # what an export and an import will carry.
-MAX_SCENARIOS = 384
+MAX_SCENARIOS = 448
 # Connector setup cases: an additive catalog, like the approve-then-retry lane's, so the omp
 # runner and the installed lane never meet an oracle they cannot judge.
 CONNECTOR_CATALOG = Path(__file__).with_name("connector_setup.json")
@@ -181,6 +182,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             FILE_WRITE_ORACLE,
             OUTPUT_ORACLE,
             TASK_BRIEF_ORACLE,
+            REPEAT_ORACLE,
             "native-tools",
             "full-task",
             "approved-retry",
@@ -214,6 +216,13 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             scenario.expectation != "block" or scenario.commands or scenario.required_tools != ("task",)
         ):
             raise ValueError("task-brief protection cases drive one blocked task call alone")
+        if scenario.oracle == REPEAT_ORACLE and (
+            scenario.expectation != "block"
+            or not valid_repeat_commands(scenario.commands)
+            or scenario.required_tools
+            or scenario.path
+        ):
+            raise ValueError("repeat protection cases list one command six times and nothing else")
         if scenario.oracle == FILE_WRITE_ORACLE and (
             scenario.commands or scenario.required_tools not in {("write",), ("edit",)} or not scenario.path
         ):

@@ -682,10 +682,7 @@ def _run_guard_dashboard_command(
         "dashboard",
         {
             "generated_at": _now(),
-            "approval_center_url": result.approval_center_url,
-            "browser_url": result.browser_url,
-            "opened": result.opened,
-            "reason": result.reason,
+            **{key: value for key, value in result.to_payload().items() if key != "error"},
             **({"error": result.error} if result.error else {}),
         },
         getattr(args, "json", False),
@@ -809,7 +806,7 @@ def _run_guard_install_command(
     if native_repair is not None:
         payload["native_runtime_repair"] = native_repair
     if not bool(getattr(args, "dry_run", False)):
-        from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers
+        from ..mcp_discovery_client import observe_configured_mcp_servers
 
         observe_configured_mcp_servers(store, context=context, seen_at=_now())
         from .install_daemon_prewarm import prewarm_after_install

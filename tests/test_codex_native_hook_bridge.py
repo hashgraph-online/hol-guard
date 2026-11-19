@@ -1,26 +1,21 @@
-"""The Python side of the native Codex hook bridge: install argv and trust hashes."""
+"""The Python side of the native Codex hook bridge: install argv and owner recognition."""
 
 from __future__ import annotations
 
-import os
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.codex_hook_compatibility import (
-    NATIVE_CODEX_HOOK_COMMAND,
-    NATIVE_CODEX_HOOK_FEATURE,
-    bridge_argv_sha256,
-    python_bridge_argv,
-)
+from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
 from codex_plugin_scanner.guard.codex_hook_registration import (
-    _is_live_guard_codex_hook_command,
+    is_live_guard_codex_hook_command,
     missing_guard_hook_program,
 )
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+
+NATIVE_CODEX_HOOK_COMMAND = "codex-hook-bridge"
+NATIVE_CODEX_HOOK_FEATURE = "codex-hook-bridge-v1"
 
 
 def _native_status(features: tuple[str, ...], path: Path) -> object:
@@ -47,19 +42,21 @@ def _native_status(features: tuple[str, ...], path: Path) -> object:
     )
 
 
-def _hook_argv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, features: tuple[str, ...]) -> tuple[str, ...]:
+def _hook_argv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, features: tuple[str, ...] | None) -> tuple[str, ...]:
+    """The hook argv; ``features=None`` asks the real native runtime, which derives it."""
     from dataclasses import fields
 
     from codex_plugin_scanner.guard import native_runtime
     from codex_plugin_scanner.guard.config import GuardConfig
 
-    runtime = tmp_path / "hol-guard-runtime"
     timeout = next(field.default for field in fields(GuardConfig) if field.name == "approval_wait_timeout_seconds")
-    monkeypatch.setattr(
-        native_runtime,
-        "native_runtime_status",
-        lambda *, deadline_monotonic=None: _native_status(features, runtime),
-    )
+    if features is not None:
+        runtime = tmp_path / "hol-guard-runtime"
+        monkeypatch.setattr(
+            native_runtime,
+            "native_runtime_status",
+            lambda *, deadline_monotonic=None: _native_status(features, runtime),
+        )
     # The timeout read goes through the native config loader. This test checks
     # the hook argv, so it supplies the shipped default instead of a runtime.
     monkeypatch.setattr(
@@ -71,105 +68,28 @@ def _hook_argv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, features: tuple[
     return codex_adapter._hook_command_parts_for_home_mode(
         context,
         home_is_current=False,
-        python_executable=sys.executable,
     )
 
 
-@pytest.mark.native_codex_hook_bridge
-def test_hook_uses_the_native_bridge_when_the_runtime_offers_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    argv = _hook_argv(tmp_path, monkeypatch, (NATIVE_CODEX_HOOK_FEATURE,))
+def test_hook_runs_the_native_bridge_with_only_its_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runtime
 
-    assert argv[:2] == (str(tmp_path / "hol-guard-runtime"), NATIVE_CODEX_HOOK_COMMAND)
-    assert argv[2:4] == (sys.executable, "-I")
-    assert Path(argv[4]).name == "codex_daemon_hook_bridge.py"
-    assert python_bridge_argv(list(argv)) == list(argv[2:])
-    # The trust hash names the Python bridge either way.
-    assert bridge_argv_sha256(list(argv)) == bridge_argv_sha256(list(argv[2:]))
+    status = native_runtime.native_runtime_status()
+    if (
+        not status.available
+        or status.identity is None
+        or NATIVE_CODEX_HOOK_FEATURE not in (status.capabilities.features if status.capabilities else ())
+    ):
+        pytest.skip("the hook argv is derived by the native runtime")
+    argv = _hook_argv(tmp_path, monkeypatch, None)
 
-
-@pytest.mark.native_codex_hook_bridge
-def test_python_bridge_pin_keeps_the_python_argv_when_native_is_offered(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("HOL_GUARD_CODEX_HOOK_BRIDGE", "python")
-    argv = _hook_argv(tmp_path, monkeypatch, (NATIVE_CODEX_HOOK_FEATURE,))
-
-    assert argv[:2] == (sys.executable, "-I")
-    assert python_bridge_argv(list(argv)) == list(argv)
+    assert argv[:2] == (str(status.identity.path), NATIVE_CODEX_HOOK_COMMAND)
+    assert len(argv) == 3
 
 
-def test_python_bridge_pin_skips_native_selection_in_a_fresh_process() -> None:
-    """A subprocess installer must see the same Python bridge pin as the parent."""
-
-    child = r"""
-import sys
-from pathlib import Path
-from codex_plugin_scanner.guard import native_runtime
-from codex_plugin_scanner.guard.adapters.codex import _native_bridge_executable
-
-def boom(*, deadline_monotonic=None):
-    raise RuntimeError("native status consulted")
-
-native_runtime.native_runtime_status = boom
-try:
-    result = _native_bridge_executable(Path("/nonexistent-guard-home"))
-except RuntimeError as error:
-    if str(error) != "native status consulted":
-        raise
-    sys.exit(2)
-sys.exit(0 if result is None else 3)
-"""
-    src = Path(__file__).resolve().parents[1] / "src"
-    base = os.environ.copy()
-    base["PYTHONPATH"] = str(src)
-    pinned = {**base, "HOL_GUARD_CODEX_HOOK_BRIDGE": "python"}
-    pinned_child = subprocess.run(
-        [sys.executable, "-c", child],
-        check=False,
-        capture_output=True,
-        text=True,
-        env=pinned,
-        timeout=30,
-    )
-    assert pinned_child.returncode == 0, pinned_child.stderr
-    unpinned = base.copy()
-    unpinned.pop("HOL_GUARD_CODEX_HOOK_BRIDGE", None)
-    unpinned_child = subprocess.run(
-        [sys.executable, "-c", child],
-        check=False,
-        capture_output=True,
-        text=True,
-        env=unpinned,
-        timeout=30,
-    )
-    assert unpinned_child.returncode == 2, unpinned_child.stderr
-
-
-@pytest.mark.native_codex_hook_bridge
-def test_hook_keeps_the_python_bridge_without_the_native_feature(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    argv = _hook_argv(tmp_path, monkeypatch, ("resident-protocol-v2",))
-
-    assert argv[:2] == (sys.executable, "-I")
-    assert python_bridge_argv(list(argv)) == list(argv)
-
-
-@pytest.mark.parametrize(
-    "argv",
-    [
-        [],
-        ["/opt/runtime", NATIVE_CODEX_HOOK_COMMAND],
-        ["", NATIVE_CODEX_HOOK_COMMAND, "python3", "bridge.py"],
-        [None, NATIVE_CODEX_HOOK_COMMAND, "python3", "bridge.py"],
-        ["/opt/runtime", "claude-hook-bridge", "python3", "bridge.py"],
-        ["python3", "-I", "bridge.py", "{}"],
-    ],
-)
-def test_only_a_native_prefix_is_stripped(argv: list[object]) -> None:
-    assert python_bridge_argv(argv) == argv
+def test_hook_without_the_native_feature_asks_for_repair(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(RuntimeError, match="hol-guard repair"):
+        _hook_argv(tmp_path, monkeypatch, ("resident-protocol-v2",))
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX hook command syntax")
@@ -179,10 +99,21 @@ def test_native_hook_command_is_a_live_guard_hook(tmp_path: Path) -> None:
     runtime = tmp_path / "hol-guard-runtime"
     command = f"{runtime} {NATIVE_CODEX_HOOK_COMMAND} {sys.executable} -I {bridge_path} cfg"
 
-    assert _is_live_guard_codex_hook_command(command, windows=False)
+    assert is_live_guard_codex_hook_command(command, windows=False)
     assert missing_guard_hook_program(command, windows=False) == str(runtime)
     runtime.write_text("", encoding="utf-8")
     assert missing_guard_hook_program(command, windows=False) is None
     bridge_path.unlink()
     assert missing_guard_hook_program(command, windows=False) == str(bridge_path)
-    assert not _is_live_guard_codex_hook_command(f"{runtime} {NATIVE_CODEX_HOOK_COMMAND}", windows=False)
+    assert not is_live_guard_codex_hook_command(f"{runtime} {NATIVE_CODEX_HOOK_COMMAND}", windows=False)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX hook command syntax")
+def test_native_only_hook_command_is_a_live_guard_hook(tmp_path: Path) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    command = f"{runtime} {NATIVE_CODEX_HOOK_COMMAND} cfg"
+
+    assert is_live_guard_codex_hook_command(command, windows=False)
+    assert missing_guard_hook_program(command, windows=False) == str(runtime)
+    runtime.write_text("", encoding="utf-8")
+    assert missing_guard_hook_program(command, windows=False) is None

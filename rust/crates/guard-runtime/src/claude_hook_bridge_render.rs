@@ -17,10 +17,9 @@ const DEGRADED_DAEMON_MESSAGE_PREFIX: &str = "HOL Guard could not complete nativ
 const DEGRADED_DAEMON_MESSAGE_SUFFIX: &str = ") and denied this action.";
 const RISKY_PROMPT_SYSTEM_MESSAGE: &str = "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt.";
 const RISKY_PROMPT_ADDITIONAL_CONTEXT: &str = "HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.";
-const RISKY_PROMPT_TOKENS: [&str; 4] = [".env", "secret", "api key", "token"];
 const PERMISSION_PASSTHROUGH_KEY: &str = "guard_permission_passthrough";
 const UNMANAGED_REASON_CODE: &str = "harness_not_managed";
-const DEFAULT_EVENT: &str = "PreToolUse";
+pub(crate) const DEFAULT_EVENT: &str = "PreToolUse";
 const EVENT_PREFIX_CHARS: usize = 4096;
 /// Stands in for `str()` of a truthy non-string event value. Only exact
 /// event names and the `Permission` prefix change a response, and no
@@ -134,7 +133,7 @@ fn find(haystack: &[char], needle: &[char], start: usize, end: usize) -> Option<
 }
 
 /// `str(prompt or "")` for `_prompt_text`; nested strings follow `repr()`
-/// closely enough for the secret-token check.
+/// closely enough for the secret check.
 fn prompt_text(data: &str) -> String {
     let Some((entries, _)) = parse_object(data) else {
         return String::new();
@@ -208,12 +207,11 @@ pub(crate) fn py_repr_str(text: &str) -> String {
     out
 }
 
+/// The notice for a prompt the daemon could not review. It reads the prompt
+/// with the same native check a reviewed prompt gets, so a question that
+/// only mentions a word such as "tokens" gets no secrets warning.
 fn degraded_prompt(data: &str) -> String {
-    let prompt = prompt_text(data).to_lowercase();
-    if RISKY_PROMPT_TOKENS
-        .iter()
-        .any(|token| prompt.contains(token))
-    {
+    if guard_command::pretool::prompt_asks_for_local_secrets(&prompt_text(data)) {
         return format!(
             "{{\"systemMessage\":{},\"hookSpecificOutput\":{{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":{}}}}}",
             json_string(RISKY_PROMPT_SYSTEM_MESSAGE, true, false),
@@ -284,6 +282,9 @@ pub(crate) fn should_suppress_output(data: &str, response_body: &str) -> bool {
 
 /// `_valid_hook_json_or_degraded`. `Err` carries the failure CPython's
 /// `json.loads` would raise on the response instead of `JSONDecodeError`.
+/// The bridge itself uses `hook_decision`, so a reply that is not a decision
+/// can still pass the Watch check.
+#[cfg(test)]
 pub(crate) fn valid_hook_json_or_degraded(
     output: &str,
     reason: &str,
@@ -302,7 +303,13 @@ fn is_unmanaged_passthrough(entries: &[(String, PyVal)]) -> bool {
 }
 
 /// The response trimmed when it is a decision Claude Code will honor for the
-/// hook event, or `None` when it is not one.
+/// hook event, or `None` when it is not one: empty, not JSON, or no decision
+/// for this event. `Err` carries the failure CPython's `json.loads` would
+/// raise instead of `JSONDecodeError`.
+pub(crate) fn hook_decision(output: &str, data: &str) -> Result<Option<String>, JsonFailure> {
+    checked_hook_json(output, data)
+}
+
 fn checked_hook_json(output: &str, data: &str) -> Result<Option<String>, JsonFailure> {
     let trimmed = py_strip(output);
     if trimmed.is_empty() {

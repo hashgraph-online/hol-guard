@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use super::{is_managed, py_string_literal, run_command};
 
 const BRIDGE_CODE: &str =
-    "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import main_from_argv";
+    "from codex_plugin_scanner.guard.bounded_cli_hook_bridge import main_from_argv";
 
 /// `shlex.join`.
 fn join(tokens: &[&str]) -> String {
@@ -191,4 +191,18 @@ fn command_refuses_malformed_requests() {
             "{request}"
         );
     }
+}
+
+#[test]
+fn recognizes_the_native_runtime_command() {
+    let runtime = "/opt/guard/hol-guard-runtime";
+    assert!(is_managed(
+        &join(&[runtime, "bounded-hook-bridge", &copilot_config()]),
+        None
+    ));
+    let other = config("cursor", json!(["guard", "hook", "--harness", "cursor"]));
+    assert!(!is_managed(
+        &join(&[runtime, "bounded-hook-bridge", &other]),
+        None
+    ));
 }

@@ -39,7 +39,7 @@ use serde_json::Value;
 
 use super::auth::{authorize, authorize_origin, authorize_token, session_allows};
 use super::http::{parse_request, take_request, Request};
-#[cfg(test)]
+#[cfg(all(test, unix))]
 use super::http::{HEAD_PEEK_WINDOW, MAX_BODY_BYTES};
 
 pub(super) const HANDSHAKE_SCHEMA: &str = "guard-daemon-edge-handshake.v1";
@@ -127,7 +127,7 @@ pub(super) struct ReadConfig {
 }
 
 impl ReadConfig {
-    fn from_line(line: &[u8]) -> Option<Self> {
+    pub(in crate::daemon_edge) fn from_line(line: &[u8]) -> Option<Self> {
         let handshake: Handshake = serde_json::from_slice(line).ok()?;
         if handshake.schema != HANDSHAKE_SCHEMA
             || handshake.auth_token.is_empty()
@@ -252,7 +252,8 @@ impl NativeReads {
             .elapsed()
     }
 
-    fn touch(&self) {
+    /// Restarts the idle clock, as a connection beginning or ending does.
+    pub(super) fn touch(&self) {
         *self
             .touched
             .lock()
@@ -1115,6 +1116,7 @@ mod health_details;
 mod streams;
 #[path = "daemon_edge_writes.rs"]
 mod writes;
+pub(super) use writes::record_diagnostic;
 
 #[cfg(all(test, unix))]
 #[path = "daemon_edge_reads_tests.rs"]

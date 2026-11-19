@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import uninstall_commands, update_retirement
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.native_resident_update_lock import NativeResidentUpdateLockError
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -461,3 +461,76 @@ def test_a_forced_override_is_the_runtime_that_gets_stopped(
 
     assert update_retirement.retire_native_resident_for_home(tmp_path / "home") is True
     assert seen == [override]
+
+
+def test_each_stop_attempt_takes_and_drops_the_update_barrier(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """An install holding its lease could never finish while uninstall held the barrier.
+
+    Releasing the lease is a resident request, which the barrier's exclusive
+    side refuses. With the barrier held across every retry, each attempt met
+    the same held installation lock and the resident was reported as running.
+    """
+
+    runtime = tmp_path / "runtime"
+    runtime.write_bytes(b"runtime")
+    events: list[str] = []
+    lease_held = True
+
+    @contextmanager
+    def barrier() -> Iterator[None]:
+        events.append("acquire")
+        yield
+        events.append("release")
+
+    def stop(**kwargs: object) -> bool:
+        nonlocal lease_held
+        assert kwargs["hold_install_lock"] is True
+        assert events[-1] == "acquire"
+        events.append("stop")
+        return not lease_held
+
+    def sleep(_seconds: float) -> None:
+        nonlocal lease_held
+        # The install reaches the resident between rounds and releases its lease.
+        assert events[-1] == "release"
+        lease_held = False
+
+    monkeypatch.setattr(update_retirement, "_runtime_candidates", lambda: (runtime,))
+    monkeypatch.setattr(update_retirement, "retire_native_resident_for_update", stop)
+    monkeypatch.setattr(update_retirement.time, "sleep", sleep)
+
+    assert (
+        update_retirement.retire_native_resident_for_home(
+            tmp_path / "home", hold_install_lock=True, attempt_barrier=barrier
+        )
+        is True
+    )
+    assert events == ["acquire", "stop", "release", "acquire", "stop", "release"]
+
+
+def test_a_busy_barrier_on_one_attempt_is_retried(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = tmp_path / "runtime"
+    runtime.write_bytes(b"runtime")
+    attempts: list[str] = []
+
+    @contextmanager
+    def barrier() -> Iterator[None]:
+        if not attempts:
+            attempts.append("busy")
+            raise NativeResidentUpdateLockError("update_native_resident_lock_busy")
+        yield
+
+    monkeypatch.setattr(update_retirement, "_runtime_candidates", lambda: (runtime,))
+    monkeypatch.setattr(
+        update_retirement, "retire_native_resident_for_update", lambda **_kwargs: attempts.append("stop") or True
+    )
+    monkeypatch.setattr(update_retirement.time, "sleep", lambda _seconds: None)
+
+    assert update_retirement.retire_native_resident_for_home(tmp_path / "home", attempt_barrier=barrier) is True
+    assert attempts == ["busy", "stop"]

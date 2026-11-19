@@ -7,8 +7,6 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
 from ..cli.install_commands import (
     apply_managed_install,
     build_harness_verification,
@@ -21,11 +19,13 @@ from ..cli.update_commands import (
 )
 from ..config import load_guard_config
 from ..continuation_runtime import continue_request_after_application
+from ..harness_context import HarnessContext
 from ..harness_resume import resume_harness_operation, safe_resume_metadata
 from ..local_supply_chain import (
     managed_install_audit_workspace_dirs,
     sync_supply_chain_cloud_state,
 )
+from ..native_harness_client import canonical_harness
 from ..package_shim_status import record_package_shim_audit_result
 from ..shims import (
     activate_package_shims,
@@ -216,7 +216,7 @@ def _execute_app_operation(
     if operation == "guard.app.status":
         if harness is None:
             return _result({"items": list_harness_setup_items(context, store)}, generated_at=generated_at)
-        get_adapter(harness)
+        canonical_harness(harness)
         return _result(build_harness_verification(harness, context, store, surface=surface), generated_at=generated_at)
     if operation == "guard.app.update":
         return _result(
@@ -230,7 +230,7 @@ def _execute_app_operation(
         )
     if harness is None:
         return {"failureCode": "harness_required", "failureMessage": "App command requires a harness."}
-    get_adapter(harness)
+    canonical_harness(harness)
     if operation == "guard.app.connect":
         return _result(
             apply_managed_install("install", harness, False, context, store, workspace, generated_at, surface=surface),

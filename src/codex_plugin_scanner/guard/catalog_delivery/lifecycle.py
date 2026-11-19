@@ -42,7 +42,7 @@ class _Session:
 
 # What the last full verification admitted: the identities of the packaged
 # files it read, and the size and SHA-256 of the runtime they hold.
-_verified: tuple[tuple[tuple[int, ...], ...], int, str] | None = None
+_verified: tuple[tuple[tuple[int, ...], ...], int, str, dict[str, object]] | None = None
 
 
 def _packaged_identity() -> tuple[tuple[int, ...], ...] | None:
@@ -63,29 +63,45 @@ def _packaged_identity() -> tuple[tuple[int, ...], ...] | None:
 
 
 @contextmanager
-def _verified_runtime():
-    """Yield a private copy of the packaged runtime holding exactly verified bytes.
+def verified_packaged_runtime():
+    """Yield the verified compiler manifest and a private copy of the packaged runtime.
 
     A full verification reads, checks and hashes four packaged files, which
     takes about a second on a slow host. While none of them has been replaced
     or modified since the last one, the kept copy is hashed against the digest
-    that verification admitted instead. Only verified bytes run either way: a
-    changed file, or a copy that differs, falls back to a full verification.
+    that verification admitted instead, and the manifest that verification
+    returned is reused. Only verified bytes run either way: a changed file, or
+    a copy that differs, falls back to a full verification.
     """
     global _verified
     identity = _packaged_identity()
     known = _verified
-    if identity is not None and known is not None and known[0] == identity:
+    # The package version lives outside the four files, so a hit rechecks it
+    # as a full verification would.
+    if (
+        identity is not None
+        and known is not None
+        and known[0] == identity
+        and transport._matches_installed_version(known[3].get("package_version"))
+    ):
         with native_executable_root.reused_executable(known[1], known[2]) as kept:
             if kept is not None:
-                yield kept
+                yield dict(known[3]), kept
                 return
     manifest = transport._verify_manifest(transport._NATIVE_PACKAGE / transport._MANIFEST_NAME)
     raw = transport._verify_compiler(transport._NATIVE_PACKAGE / transport._COMPILER_NAME, manifest)
     digest = manifest.get("compiler_sha256")
     if identity is not None and isinstance(digest, str) and identity == _packaged_identity():
-        _verified = (identity, len(raw), digest)
-    with transport._verified_executable(raw) as executable:
+        _verified = (identity, len(raw), digest, dict(manifest))
+    # Verification checked these bytes against this digest, which names the kept copy.
+    with transport._verified_executable(raw, digest if isinstance(digest, str) else None) as executable:
+        yield manifest, executable
+
+
+@contextmanager
+def _verified_runtime():
+    """Yield a private copy of the packaged runtime holding exactly verified bytes."""
+    with verified_packaged_runtime() as (_manifest, executable):
         yield executable
 
 

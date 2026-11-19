@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING, TextIO
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..adapters.base import HarnessContext
     from ..config import GuardConfig
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
 
 from ..dashboard_launcher import (
@@ -521,8 +521,8 @@ def desktop_bootstrap_document_for_running_daemon(
     """Build or reuse the bootstrap document for the daemon that is already up."""
 
     def build() -> dict[str, object]:
-        from ..adapters.base import HarnessContext
         from ..config import load_guard_config, overlay_synced_guard_policy
+        from ..harness_context import HarnessContext
         from ..synced_policy import synced_policy_payload
 
         context = HarnessContext(

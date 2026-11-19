@@ -194,13 +194,13 @@ def test_failed_enqueue_leaves_no_admission_behind(tmp_path: Path, monkeypatch) 
     def broken(*_: object, **__: object) -> str:
         raise sqlite3.OperationalError("disk I/O error")
 
-    monkeypatch.setattr(admissions, "_enqueue_locked", broken)
-    with pytest.raises(sqlite3.OperationalError):
-        worker.admit_registered_workspaces(store, clock=lambda: T0)
+    # Scoped, so the native store wiring the session fixtures patch in stays put.
+    with monkeypatch.context() as scoped:
+        scoped.setattr(admissions, "_enqueue_locked", broken)
+        with pytest.raises(sqlite3.OperationalError):
+            worker.admit_registered_workspaces(store, clock=lambda: T0)
     assert assessments.list_worktrees(store) == []
 
-    monkeypatch.undo()
-    snapshots(monkeypatch, worker, STAT)
     assert worker.admit_registered_workspaces(store, clock=lambda: T0) == 1
     assert len(assessments.recent_runs(store)) == 1
 

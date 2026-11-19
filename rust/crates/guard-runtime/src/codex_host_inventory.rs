@@ -1,9 +1,10 @@
-//! `runner_authority` kind `codex_host_inventory`: reads the replies an
-//! existing Codex host gave to `app/installed` and `app/read` into the public
-//! app rows Guard shows.
+//! `runner_authority` kind `codex_host_inventory`: reads the public app rows an
+//! existing Codex host holds.
 //!
-//! Python keeps the private socket, the peer authentication and the JSON-RPC
-//! exchange, and sends each decoded `result` here. Two requests:
+//! Python sends only paths and renders the answer. Two requests read the
+//! private control socket and say whether a snapshot is still current: see
+//! `codex_host_read`. The reply validation they run is also reachable on its
+//! own, which is how the recorded Python replies are replayed:
 //!
 //! - `{"installed": result}` answers `{"apps": [row, ...]}`, one row per
 //!   installed app, with no tools yet.
@@ -12,9 +13,8 @@
 //!   `{"apps": [row, ...], "complete": bool}`: the same rows in the same order,
 //!   with each covered app's name and tool summaries filled in.
 //!
-//! The resident request parser refuses any list wider than 4096 entries, so
-//! Python sends a longer tool list as a list of chunks and names the
-//! position of each such app in `read.apps` under `"wide"`.
+//! A tool list wider than the resident request parser allows travels as a list
+//! of chunks, named by position in `read.apps` under `"wide"`.
 //!
 //! A reply the host should not have sent answers `{"error": code}` with the
 //! code Python raised for it: `codex_host_limit` for a list that is missing or
@@ -38,11 +38,33 @@ const MAX_NAME: usize = 256;
 const MAX_TITLE: usize = 512;
 const MAX_DESCRIPTION: usize = 4000;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use crate::codex_host_read::{check_op, read_op};
+
+/// Without Unix peer credentials there is no host to read.
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn read_op(_: &Map<String, Value>) -> Value {
+    json!({ "absent": true })
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn check_op(_: &Map<String, Value>) -> Value {
+    json!({ "valid": false })
+}
+
 type HostResult<T> = Result<T, &'static str>;
-type Rows = Vec<Map<String, Value>>;
+pub(crate) type Rows = Vec<Map<String, Value>>;
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {
     let map = args_object(args)?;
+    if map.len() == 1 {
+        if let Some(Value::Object(request)) = map.get("read") {
+            return Ok(read_op(request));
+        }
+        if let Some(Value::Object(request)) = map.get("check") {
+            return Ok(check_op(request));
+        }
+    }
     let answer = match (
         map.len(),
         map.get("installed"),
@@ -120,7 +142,7 @@ fn chunked(value: &Value) -> HostResult<Vec<&Value>> {
 }
 
 /// `_installed_apps`.
-fn installed_apps(result: &Map<String, Value>) -> HostResult<Vec<Value>> {
+pub(crate) fn installed_apps(result: &Map<String, Value>) -> HostResult<Vec<Value>> {
     let mut apps = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     for value in array(result.get("apps"), MAX_APPS)? {
@@ -149,7 +171,7 @@ fn installed_apps(result: &Map<String, Value>) -> HostResult<Vec<Value>> {
 
 /// `_merge_metadata`: the page with each covered app's metadata, and whether
 /// every app on it came back with tool summaries.
-fn merge_metadata(
+pub(crate) fn merge_metadata(
     mut page: Rows,
     result: &Map<String, Value>,
     wide: &[usize],

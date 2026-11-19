@@ -372,3 +372,17 @@ fn an_app_with_cigar_off_gets_no_project_context() {
         "claude-code"
     ));
 }
+
+/// A docstring mark opens a docstring only outside a one-line string: the
+/// line `"'''",` holds a string, and a docstring that opens and closes on
+/// one line, or a string after it, leaves nothing open.
+#[test]
+fn a_docstring_mark_inside_a_string_opens_nothing() {
+    assert_eq!(opened("    \"'''\","), None);
+    assert_eq!(opened("    delim = '\"'"), None);
+    assert_eq!(opened("    x = \"a\\\"'''\""), None);
+    assert_eq!(opened("    \"\"\"Doc.\"\"\""), None);
+    assert_eq!(opened("    \"\"\"Don't"), Some("\"\"\""));
+    assert_eq!(opened("    x = '''"), Some("'''"));
+    assert_eq!(opened("/* start"), Some("*/"));
+}

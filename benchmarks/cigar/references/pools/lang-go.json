@@ -1,0 +1,255 @@
+{
+ "repo": "mux",
+ "mutations": [
+  {
+   "path": "route.go",
+   "line": 208,
+   "qual": "addRegexpMatcher",
+   "orig": "\tif typ == regexpTypeHost {\n",
+   "new": "\tif typ != regexpTypeHost {\n",
+   "failing": [
+    "TestBuildVarsFunc",
+    "TestCORSMethodMiddlewareSubrouter",
+    "TestHost",
+    "TestMiddlewareSubrouter",
+    "TestPath",
+    "TestPathPrefix"
+   ]
+  },
+  {
+   "path": "regexp.go",
+   "line": 326,
+   "qual": "setMatch",
+   "orig": "\tif v.host != nil {\n",
+   "new": "\tif v.host == nil {\n",
+   "failing": [
+    "TestMiddleware"
+   ]
+  },
+  {
+   "path": "regexp.go",
+   "line": 294,
+   "qual": "braceIndices",
+   "orig": "\t\t\tif level--; level == 0 {\n",
+   "new": "\t\t\tif level--; level != 0 {\n",
+   "failing": [
+    "TestCORSMethodMiddlewareSubrouter",
+    "TestHost",
+    "TestPath"
+   ]
+  },
+  {
+   "path": "regexp.go",
+   "line": 344,
+   "qual": "setMatch",
+   "orig": "\tif v.path != nil {\n",
+   "new": "\tif v.path == nil {\n",
+   "failing": [
+    "TestHost"
+   ]
+  },
+  {
+   "path": "route.go",
+   "line": 569,
+   "qual": "URL",
+   "orig": "\t\tif query, err = q.url(values); err != nil {\n",
+   "new": "\t\tif query, err = q.url(values); err == nil {\n",
+   "failing": [
+    "TestQueries"
+   ]
+  },
+  {
+   "path": "regexp.go",
+   "line": 175,
+   "qual": "Match",
+   "orig": "\tif r.regexpType == regexpTypeHost {\n",
+   "new": "\tif r.regexpType != regexpTypeHost {\n",
+   "failing": [
+    "TestBuildVarsFunc",
+    "TestCORSMethodMiddleware",
+    "TestCORSMethodMiddlewareSubrouter",
+    "TestHost",
+    "TestMiddleware",
+    "TestMiddlewareExecution"
+   ]
+  },
+  {
+   "path": "regexp.go",
+   "line": 53,
+   "qual": "newRouteRegexp",
+   "orig": "\t} else if typ == regexpTypeHost {\n",
+   "new": "\t} else if typ != regexpTypeHost {\n",
+   "failing": [
+    "TestPath"
+   ]
+  },
+  {
+   "path": "middleware.go",
+   "line": 65,
+   "qual": "getAllMethodsForRoute",
+   "orig": "\t\t\tif err != nil {\n",
+   "new": "\t\t\tif err == nil {\n",
+   "failing": [
+    "ExampleCORSMethodMiddleware",
+    "TestCORSMethodMiddleware",
+    "TestCORSMethodMiddlewareSubrouter"
+   ]
+  },
+  {
+   "path": "mux.go",
+   "line": 143,
+   "qual": "Match",
+   "orig": "\t\t\t\tfor i := len(r.middlewares) - 1; i >= 0; i-- {\n",
+   "new": "\t\t\t\tfor i := len(r.middlewares) - 1; i > 0; i-- {\n",
+   "failing": [
+    "ExampleCORSMethodMiddleware",
+    "TestCORSMethodMiddleware",
+    "TestCORSMethodMiddlewareSubrouter",
+    "TestMiddleware",
+    "TestMiddlewareExecution",
+    "TestMiddlewareOnMultiSubrouter"
+   ]
+  },
+  {
+   "path": "mux.go",
+   "line": 560,
+   "qual": "matchMapWithString",
+   "orig": "\t\t\t\tif v == value {\n",
+   "new": "\t\t\t\tif v != value {\n",
+   "failing": [
+    "TestHeaderMatcher",
+    "TestHeaders",
+    "TestRouteMatchers",
+    "TestSubRouter",
+    "TestSubrouterMatching"
+   ]
+  },
+  {
+   "path": "middleware.go",
+   "line": 63,
+   "qual": "getAllMethodsForRoute",
+   "orig": "\t\tif route.Match(req, &match) || match.MatchErr == ErrMethodMismatch {\n",
+   "new": "\t\tif route.Match(req, &match) && match.MatchErr == ErrMethodMismatch {\n",
+   "failing": [
+    "ExampleCORSMethodMiddleware",
+    "TestCORSMethodMiddleware",
+    "TestCORSMethodMiddlewareSubrouter"
+   ]
+  },
+  {
+   "path": "route.go",
+   "line": 563,
+   "qual": "URL",
+   "orig": "\t\tif path, err = r.regexp.path.url(values); err != nil {\n",
+   "new": "\t\tif path, err = r.regexp.path.url(values); err == nil {\n",
+   "failing": [
+    "TestSchemeHostPath"
+   ]
+  },
+  {
+   "path": "regexp.go",
+   "line": 57,
+   "qual": "newRouteRegexp",
+   "orig": "\tif typ != regexpTypePath {\n",
+   "new": "\tif typ == regexpTypePath {\n",
+   "failing": [
+    "TestRedirectSlash",
+    "TestStrictSlash"
+   ]
+  },
+  {
+   "path": "route.go",
+   "line": 405,
+   "qual": "Queries",
+   "orig": "\tif length%2 != 0 {\n",
+   "new": "\tif length%2 == 0 {\n",
+   "failing": [
+    "TestQueries"
+   ]
+  },
+  {
+   "path": "route.go",
+   "line": 82,
+   "qual": "Match",
+   "orig": "\tif matchErr != nil {\n",
+   "new": "\tif matchErr == nil {\n",
+   "failing": [
+    "TestBuildVarsFunc",
+    "TestCORSMethodMiddleware",
+    "TestCORSMethodMiddlewareSubrouter",
+    "TestHeaders",
+    "TestHost",
+    "TestMatcherFunc"
+   ]
+  },
+  {
+   "path": "mux.go",
+   "line": 161,
+   "qual": "Match",
+   "orig": "\tif r.NotFoundHandler != nil {\n",
+   "new": "\tif r.NotFoundHandler == nil {\n",
+   "failing": [
+    "TestErrMatchNotFound",
+    "TestMiddlewareOnMultiSubrouter",
+    "TestMultipleDefinitionOfSamePathWithDifferentMethods",
+    "TestRouteMatchers",
+    "TestSubrouterErrorHandling",
+    "TestSubrouterMatching"
+   ]
+  },
+  {
+   "path": "route.go",
+   "line": 42,
+   "qual": "Match",
+   "orig": "\tif r.buildOnly || r.err != nil {\n",
+   "new": "\tif r.buildOnly || r.err == nil {\n",
+   "failing": [
+    "TestBuildVarsFunc",
+    "TestCORSMethodMiddleware",
+    "TestCORSMethodMiddlewareSubrouter",
+    "TestHeaders",
+    "TestHost",
+    "TestMatcherFunc"
+   ]
+  },
+  {
+   "path": "route.go",
+   "line": 189,
+   "qual": "addRegexpMatcher",
+   "orig": "\t\tif len(tpl) > 0 && tpl[0] != '/' {\n",
+   "new": "\t\tif len(tpl) > 0 || tpl[0] != '/' {\n",
+   "failing": [
+    "TestBuildVarsFunc",
+    "TestCORSMethodMiddleware",
+    "TestCORSMethodMiddlewareSubrouter",
+    "TestMiddleware",
+    "TestMiddlewareExecution",
+    "TestMiddlewareOnMultiSubrouter"
+   ]
+  },
+  {
+   "path": "middleware.go",
+   "line": 43,
+   "qual": "CORSMethodMiddleware",
+   "orig": "\t\t\tif err == nil {\n",
+   "new": "\t\t\tif err != nil {\n",
+   "failing": [
+    "ExampleCORSMethodMiddleware",
+    "TestCORSMethodMiddleware",
+    "TestCORSMethodMiddlewareSubrouter"
+   ]
+  },
+  {
+   "path": "regexp.go",
+   "line": 204,
+   "qual": "url",
+   "orig": "\t\tif r.regexpType == regexpTypeQuery {\n",
+   "new": "\t\tif r.regexpType != regexpTypeQuery {\n",
+   "failing": [
+    "TestPath",
+    "TestQueries",
+    "TestUseEncodedPath"
+   ]
+  }
+ ]
+}

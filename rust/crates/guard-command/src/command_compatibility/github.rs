@@ -116,6 +116,10 @@ fn bare_jq_format(original: &[String], index: usize) -> bool {
 /// every `$` names a variable it binds itself, written where the shell passes
 /// each `$` through. Such a variable holds a value the filter computed from
 /// the response, never the environment or an outside argument.
+///
+/// The filter may span lines: jq reads a newline as a space, and the one
+/// construct a line break changes, a `#` comment, already fails the binding
+/// check. A carriage return stays out, since it can redraw the review text.
 fn self_bound_jq_filter(original: &[String], index: usize, text: &str) -> bool {
     let value = original[index].as_str();
     let filter = value
@@ -125,7 +129,7 @@ fn self_bound_jq_filter(original: &[String], index: usize, text: &str) -> bool {
             (index > 0 && matches!(original[index - 1].as_str(), "--jq" | "-q")).then_some(value)
         });
     filter.is_some_and(|filter| {
-        !filter.contains(['\n', '\r'])
+        !filter.contains('\r')
             && literal_everywhere(text, '$')
             && crate::pretool::safe_reads::jq_variables_bound(filter)
     })

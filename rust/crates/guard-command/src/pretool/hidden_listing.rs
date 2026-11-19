@@ -63,6 +63,44 @@ pub(in crate::pretool) fn repository_hidden_directory(
     repository_hidden_below(&canonical, home_dir, cwd, false)
 }
 
+/// Whether a missing name may be probed below `parent`, an existing hidden
+/// directory of a repository such as `.next`, `.github` or
+/// `.git/worktrees/<name>`. A listing of `parent` is already allowed, and the
+/// probe says no more than that listing: whether one name is there. A
+/// package store under `node_modules` keeps its review, also when a `.git`
+/// symlink spells it, unless the directory is the repository's Git directory.
+pub(in crate::pretool) fn absent_probe_hidden_ancestor(
+    parent: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    std::fs::canonicalize(parent).is_ok_and(|target| {
+        let named = |name: &str| target.components().any(|part| part.as_os_str() == name);
+        named(".git") || !named("node_modules")
+    }) && repository_hidden_directory(parent, home_dir, cwd)
+}
+
+/// A path that is not there below a repository's build output, as
+/// `ls ~/work/app/.next/tsconfig.tsbuildinfo` before the first build. It
+/// prints only `No such file or directory`. Each missing hidden name must be
+/// regenerated output (`.next`, `.turbo`): a missing login name such as
+/// `.aws-session` would answer whether a tool is set up. The names join the
+/// resolved ancestor, so a link in the existing prefix is screened where it
+/// leads, under the screens a listing of the path would get.
+pub(in crate::pretool) fn absent_repository_hidden_path(
+    expanded: &Path,
+    ancestor: &Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let resolved = std::fs::canonicalize(ancestor);
+    let (Ok(resolved), Ok(missing)) = (resolved, expanded.strip_prefix(ancestor)) else {
+        return false;
+    };
+    crate::pretool::safe_writes::screens::regenerated_hidden_names(resolved.file_name(), missing)
+        && repository_hidden_below(&resolved.join(missing), home_dir, cwd, false)
+}
+
 /// Whether `canonical` names an existing document of the repository's own
 /// content that happens to sit below a hidden directory.
 ///

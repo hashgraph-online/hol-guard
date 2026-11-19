@@ -8,15 +8,14 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters, muse_hook_render
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.muse_hook_render import (
-    apply_muse_pretool_approval_wait,
-    muse_bridge_response,
-)
-from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter, ask
+from codex_plugin_scanner.guard import hook_failure_bridge, muse_hook_render
+from codex_plugin_scanner.guard import native_harness_ops as harness_ops
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
+from codex_plugin_scanner.guard.muse_hook_render import muse_bridge_response
+from codex_plugin_scanner.guard.native_harness_client import ask
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
+from tests import harness_ops_support as harness_support
 
 FIXTURES = Path(__file__).parent / "fixtures" / "muse"
 MUSE_GUARD_EVENT_COUNT = 6
@@ -71,20 +70,20 @@ def _managed_commands(payload: dict[str, object]) -> list[str]:
 
 class TestMuseAdapterIdentity:
     def test_harness_identifier_is_muse(self) -> None:
-        assert get_adapter("muse").harness == "muse"
+        assert harness_ops.canonical_harness("muse") == "muse"
 
     def test_aliases_resolve(self) -> None:
         for alias in ("muse", "muse-code"):
-            assert get_adapter(alias).harness == "muse"
+            assert harness_ops.canonical_harness(alias) == "muse"
 
     def test_get_adapter_returns_muse_instance(self) -> None:
-        assert isinstance(get_adapter("muse"), NativeHarnessAdapter)
+        assert harness_ops.canonical_harness("muse") == "muse"
 
     def test_muse_is_registered_in_adapter_list(self) -> None:
-        assert "muse" in {item.harness for item in list_adapters()}
+        assert "muse" in set(harness_ops.list_harnesses())
 
     def test_contract_resolve(self) -> None:
-        from codex_plugin_scanner.guard.adapters.contracts import contract_for, setup_contract_for
+        from codex_plugin_scanner.guard.setup_contracts import contract_for, setup_contract_for
 
         contract = contract_for("muse")
         assert contract is not None
@@ -100,25 +99,19 @@ class TestMuseAdapterIdentity:
         assert _agent_type("muse") == "muse"
 
     def test_capability_rows_cover_muse_events(self) -> None:
-        from codex_plugin_scanner.guard.adapters.contracts import contract_for
+        from codex_plugin_scanner.guard.setup_contracts import contract_for
 
         contract = contract_for("muse")
         assert contract is not None
         events = {row.event for row in contract.capability_events}
         assert {"PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse", "SessionStart", "Stop"} <= events
 
-    def test_environment_attribution(self) -> None:
-        from codex_plugin_scanner.guard.runtime.harness_attribution import resolve_environment_harness
-
-        assert resolve_environment_harness({"MUSE_SESSION_ID": "session-1"}) == "muse"
-        assert resolve_environment_harness({"MUSE_THREAD_ID": "thread-1"}) == "muse"
-
 
 class TestMuseDetect:
     def test_detects_settings_hooks_and_mcp(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         _write(_settings_path(ctx), _fixture_payload("settings.json"))
-        result = get_adapter("muse").detect(ctx)
+        result = harness_ops.detect("muse", ctx)
         assert result.installed is True
         assert any(".config/muse/settings.json" in path for path in result.config_paths)
         hooks = [a for a in result.artifacts if a.artifact_type == "hook"]
@@ -135,7 +128,7 @@ class TestMuseDetect:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
         _write(ctx.workspace_dir / ".muse-plugin" / "plugin.json", _fixture_payload("plugin.json"))
-        result = get_adapter("muse").detect(ctx)
+        result = harness_ops.detect("muse", ctx)
         hooks = [a for a in result.artifacts if a.artifact_type == "hook"]
         assert any(a.metadata.get("event") == "PreToolUse" for a in hooks)
         mcp = [a for a in result.artifacts if a.artifact_type == "mcp_server"]
@@ -152,7 +145,7 @@ class TestMuseDetect:
             {"hooks": [{"type": "command", "command": "python3 guard hook --harness muse # HOL_GUARD_MANAGED_MUSE"}]}
         )
         _write(_settings_path(ctx), payload)
-        result = get_adapter("muse").detect(ctx)
+        result = harness_ops.detect("muse", ctx)
         commands = [a.command for a in result.artifacts if a.artifact_type == "hook"]
         assert "echo user-pretool" in commands
         assert not any(command and "HOL_GUARD_MANAGED_MUSE" in command for command in commands)
@@ -163,7 +156,7 @@ class TestMuseDetect:
         skill = ctx.workspace_dir / ".agents" / "skills" / "release-notes" / "SKILL.md"
         skill.parent.mkdir(parents=True, exist_ok=True)
         skill.write_text("# Release notes\n", encoding="utf-8")
-        result = get_adapter("muse").detect(ctx)
+        result = harness_ops.detect("muse", ctx)
         skills = [a for a in result.artifacts if a.artifact_type == "skill"]
         assert len(skills) == 1
         assert skills[0].artifact_id == "muse:project:skill:.agents/skills:release-notes"
@@ -174,7 +167,7 @@ class TestMuseDetect:
         skill = ctx.workspace_dir / ".muse" / "skills" / "changelog" / "SKILL.md"
         skill.parent.mkdir(parents=True, exist_ok=True)
         skill.write_text("# Changelog\n", encoding="utf-8")
-        result = get_adapter("muse").detect(ctx)
+        result = harness_ops.detect("muse", ctx)
         names = {a.name for a in result.artifacts if a.artifact_type == "skill"}
         assert names == {"changelog"}
 
@@ -183,7 +176,7 @@ class TestMuseDetect:
         path = _settings_path(ctx)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("{not json", encoding="utf-8")
-        result = get_adapter("muse").detect(ctx)
+        result = harness_ops.detect("muse", ctx)
         assert any(".config/muse/settings.json" in found for found in result.config_paths)
         assert any("could not be parsed" in warning for warning in result.warnings)
 
@@ -198,7 +191,7 @@ class TestMuseInstallUninstall:
     def test_install_writes_six_managed_event_groups(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         ctx = _ctx(tmp_path)
         self._patch_shims(monkeypatch, ctx)
-        manifest = get_adapter("muse").install(ctx)
+        manifest = harness_support.install("muse", ctx)
         assert manifest["active"] is True
         payload = json.loads(_settings_path(ctx).read_text(encoding="utf-8"))
         assert payload["schema_version"] == 1
@@ -232,39 +225,6 @@ class TestMuseInstallUninstall:
         # the approval is still open and the call falls through unjudged.
         assert _managed_timeout("PreToolUse") > ask("hook_spec", ctx, harness="muse")["timeout_seconds"]
 
-    def test_update_refresh_keeps_the_installed_bridge_timeout(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import (
-            _render_bounded_hook_script,
-            bounded_hook_script_path,
-        )
-        from codex_plugin_scanner.guard.cli.update_bounded_hook_refresh import refresh_bounded_hook_clients
-        from codex_plugin_scanner.guard.store import GuardStore
-
-        ctx = _ctx(tmp_path)
-        self._patch_shims(monkeypatch, ctx)
-        get_adapter("muse").install(ctx)
-        script_path = bounded_hook_script_path(ctx.guard_home, "muse")
-        assert script_path is not None
-        # A packaged install points the hook at this stable client; write the
-        # body install rendered so the refresh has a current client to keep.
-        installed = _render_bounded_hook_script(
-            guard_home=ctx.guard_home,
-            harness="muse",
-            timeout_seconds=ask("hook_spec", ctx, harness="muse")["timeout_seconds"],
-        )
-        script_path.parent.mkdir(parents=True, exist_ok=True)
-        script_path.write_text(installed, encoding="utf-8")
-        store = GuardStore(ctx.guard_home)
-        store.set_managed_install("muse", True, None, {"harness": "muse"}, "2026-10-08T00:00:00+00:00")
-
-        refreshed, warnings = refresh_bounded_hook_clients(context=ctx, store=store)
-
-        assert warnings == []
-        assert refreshed == []
-        assert script_path.read_text(encoding="utf-8") == installed
-
     def test_install_refuses_a_non_list_hooks_event_value(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -273,7 +233,7 @@ class TestMuseInstallUninstall:
         self._patch_shims(monkeypatch, ctx)
 
         with pytest.raises(ValueError, match=r"non-list hooks\.PreToolUse"):
-            get_adapter("muse").install(ctx)
+            harness_support.install("muse", ctx)
 
         # Guard refuses rather than replacing a value it cannot merge.
         payload = json.loads(_settings_path(ctx).read_text(encoding="utf-8"))
@@ -283,7 +243,7 @@ class TestMuseInstallUninstall:
         ctx = _ctx(tmp_path)
         _write(_settings_path(ctx), _fixture_payload("settings.json"))
         self._patch_shims(monkeypatch, ctx)
-        get_adapter("muse").install(ctx)
+        harness_support.install("muse", ctx)
         payload = json.loads(_settings_path(ctx).read_text(encoding="utf-8"))
         assert payload["provider"] == "meta"
         assert payload["model"] == "muse-wonder-1.0"
@@ -299,10 +259,9 @@ class TestMuseInstallUninstall:
     def test_install_is_idempotent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         ctx = _ctx(tmp_path)
         self._patch_shims(monkeypatch, ctx)
-        adapter = get_adapter("muse")
-        adapter.install(ctx)
+        harness_support.install("muse", ctx)
         first = _settings_path(ctx).read_text(encoding="utf-8")
-        adapter.install(ctx)
+        harness_support.install("muse", ctx)
         second = _settings_path(ctx).read_text(encoding="utf-8")
         assert json.loads(first) == json.loads(second)
         assert len(_managed_commands(json.loads(second))) == MUSE_GUARD_EVENT_COUNT
@@ -311,7 +270,7 @@ class TestMuseInstallUninstall:
         ctx = _ctx(tmp_path)
         _write(_settings_path(ctx), _fixture_payload("settings.json"))
         self._patch_shims(monkeypatch, ctx)
-        get_adapter("muse").install(ctx)
+        harness_support.install("muse", ctx)
         state_dir = ctx.guard_home / "managed" / "muse"
         assert (state_dir / "settings.json.backup").is_file()
         assert (state_dir / "install.state.json").is_file()
@@ -323,14 +282,14 @@ class TestMuseInstallUninstall:
         path.write_text("{not json", encoding="utf-8")
         self._patch_shims(monkeypatch, ctx)
         with pytest.raises(ValueError, match="could not be parsed"):
-            get_adapter("muse").install(ctx)
+            harness_support.install("muse", ctx)
 
     def test_install_refuses_non_object_hooks_value(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         ctx = _ctx(tmp_path)
         _write(_settings_path(ctx), {"schema_version": 1, "hooks": []})
         self._patch_shims(monkeypatch, ctx)
         with pytest.raises(ValueError, match="non-object hooks"):
-            get_adapter("muse").install(ctx)
+            harness_support.install("muse", ctx)
 
     def test_uninstall_removes_managed_hooks_and_keeps_user_ones(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -338,9 +297,8 @@ class TestMuseInstallUninstall:
         ctx = _ctx(tmp_path)
         _write(_settings_path(ctx), _fixture_payload("settings.json"))
         self._patch_shims(monkeypatch, ctx)
-        adapter = get_adapter("muse")
-        adapter.install(ctx)
-        manifest = adapter.uninstall(ctx)
+        harness_support.install("muse", ctx)
+        manifest = harness_support.uninstall("muse", ctx)
         assert manifest["active"] is False
         payload = json.loads(_settings_path(ctx).read_text(encoding="utf-8"))
         assert _managed_commands(payload) == []
@@ -414,80 +372,38 @@ class TestMuseHookRender:
             guard_home=tmp_path / "guard-home",
         ) == ("", "HOL Guard blocked this action.", 2)
 
+    @pytest.mark.parametrize(
+        ("event_name", "expected"),
+        [
+            ("PreToolUse", ("", hook_failure_bridge.RUNTIME_MISSING, 2)),
+            ("PermissionRequest", ("", hook_failure_bridge.RUNTIME_MISSING, 2)),
+            ("UserPromptSubmit", ("", hook_failure_bridge.RUNTIME_MISSING, 2)),
+            ("PostToolUse", ("", "", 0)),
+            ("SessionStart", ("", "", 0)),
+            ("Stop", ("", "", 0)),
+        ],
+    )
+    def test_the_outage_table_applies_with_both_native_calls_unavailable(
+        self,
+        event_name: str,
+        expected: tuple[str, str, int],
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """No render and no ``hook_failure`` answer: the same table runs in this process."""
 
-class TestMuseApprovalResume:
-    def test_approval_wait_allows_the_identical_call(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.approvals.wait_for_approval_requests",
-            lambda **kwargs: {
-                "resolved": True,
-                "items": [{"status": "resolved", "resolution_action": "allow"}],
-            },
-        )
-        response: dict[str, object] = {
-            "policy_action": "review",
-            "decision": "deny",
-            "primary_approval_request_id": "req-1",
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": "review",
-            },
-        }
-        updated = apply_muse_pretool_approval_wait(
-            response,
-            event_name="PreToolUse",
-            store=object(),
-            timeout_seconds=5,  # type: ignore[arg-type]
-        )
-        assert updated["policy_action"] == "allow"
-        # The resumed answer carries no verdict of its own: the resident
-        # renders it as silence, which is how Muse runs the original call.
-        assert updated["decision"] == "allow"
-        assert "permissionDecision" not in updated["hookSpecificOutput"]
+        from codex_plugin_scanner.guard import native_runner_authority as authority
 
-    def test_approval_wait_denial_keeps_the_call_blocked(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.approvals.wait_for_approval_requests",
-            lambda **kwargs: {
-                "resolved": True,
-                "items": [{"status": "resolved", "resolution_action": "block"}],
-            },
-        )
-        response: dict[str, object] = {
-            "policy_action": "review",
-            "primary_approval_request_id": "req-1",
-        }
-        updated = apply_muse_pretool_approval_wait(
-            response,
-            event_name="PreToolUse",
-            store=object(),
-            timeout_seconds=5,  # type: ignore[arg-type]
-        )
-        assert updated["policy_action"] == "block"
-        assert updated["decision"] == "deny"
+        def unavailable(*_args: object, **_kwargs: object) -> None:
+            raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
-    def test_approval_wait_pending_keeps_review(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.approvals.wait_for_approval_requests",
-            lambda **kwargs: {"resolved": False, "items": []},
+        monkeypatch.setattr(muse_hook_render, "native_muse_bridge", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+        assert (
+            muse_bridge_response(
+                {"policy_action": "allow", "reason": "ok"},
+                event_name=event_name,
+                guard_home=tmp_path / "guard-home",
+            )
+            == expected
         )
-        response: dict[str, object] = {
-            "policy_action": "review",
-            "primary_approval_request_id": "req-1",
-        }
-        updated = apply_muse_pretool_approval_wait(
-            response,
-            event_name="PreToolUse",
-            store=object(),
-            timeout_seconds=5,  # type: ignore[arg-type]
-        )
-        assert updated["policy_action"] == "review"
-
-    def test_exit_code_uses_zero_envelope_for_pretool(self) -> None:
-        from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
-
-        assert native_hook_verdict_exit_code("muse", "block", "PreToolUse") == 0
-        assert native_hook_verdict_exit_code("muse", "block", "UserPromptSubmit") == 0
-        assert native_hook_verdict_exit_code("muse", "block", "PostToolUse") == 1
-        assert native_hook_verdict_exit_code("muse", "allow", "PreToolUse") == 0

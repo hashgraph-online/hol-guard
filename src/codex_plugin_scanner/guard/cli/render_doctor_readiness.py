@@ -36,6 +36,14 @@ def protection_state_text(state: object) -> Text:
     return Text(label, style=style)
 
 
+def _event_name(entry: Mapping[str, object]) -> str:
+    """The event name, with its tools when the contract splits the event by tool."""
+
+    tools = entry.get("tools")
+    named = [tool for tool in tools if isinstance(tool, str) and tool] if isinstance(tools, list) else []
+    return f"{entry['event']} [{', '.join(named)}]" if named else str(entry["event"])
+
+
 def protection_proof_rows(compatibility: object) -> list[tuple[str, Text]]:
     """Summary rows for one harness: the overall proof state, then each event."""
 
@@ -47,9 +55,9 @@ def protection_proof_rows(compatibility: object) -> list[tuple[str, Text]]:
         for entry in (events if isinstance(events, list) else [])
         if isinstance(entry, Mapping) and isinstance(entry.get("event"), str)
     ]
-    repeated = {entry["event"] for entry in entries if sum(other["event"] == entry["event"] for other in entries) > 1}
-    for entry in entries:
-        name = entry["event"]
+    names = [_event_name(entry) for entry in entries]
+    repeated = {name for name in names if names.count(name) > 1}
+    for entry, name in zip(entries, names, strict=True):
         transport = entry.get("transport")
         if name in repeated and isinstance(transport, str) and transport:
             name = f"{name} ({transport})"

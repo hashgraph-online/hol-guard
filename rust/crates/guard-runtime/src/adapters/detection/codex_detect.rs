@@ -1,11 +1,15 @@
 //! `runner_authority` kind `codex_detect`: the filesystem half of
 //! `CodexHarnessAdapter.detect`. Python resolves the source paths and scopes
-//! and computes everything that needs the hook manifest, its HMAC and the
-//! Windows-aware command splitter (the authenticated and legacy ownership
-//! bindings); this reads the `config.toml` and `hooks.json` sources, walks
-//! the MCP servers and the hook inventory, and returns the artifacts, the
-//! config paths that were found, and the warnings. Text CPython would raise on
-//! instead of returning is a stable refusal, never a partial inventory.
+//! and the authenticated bindings, which need the hook manifest and its HMAC;
+//! this reads the `config.toml` and `hooks.json` sources, selects the legacy
+//! bindings of the current package in each (`legacy`, see
+//! `codex_detect_legacy`), walks the MCP servers and the hook inventory, and
+//! returns the artifacts, the config paths that were found, and the warnings.
+//! A source may instead carry its legacy bindings as `config_legacy` and
+//! `hooks_legacy`, as the recorded vectors do. A Windows command naming an
+//! 8.3 short path is expanded by this host, as `codex_hook_owners` does. Text CPython would
+//! raise on instead of returning is a stable refusal, never a partial
+//! inventory.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -22,9 +26,15 @@ use super::codex_sources::{
 };
 use super::codex_value::HookVal;
 use super::context_digest::python_strip;
+use super::harness_adapter::DetectLegacy;
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 use super::zcode_artifacts::{pair_value, Fields, Scope};
+
+#[path = "codex_detect_restore.rs"]
+mod restore;
+
+use restore::{expand, restorations, restore_paths};
 
 const HARNESS: &str = "codex";
 
@@ -34,8 +44,8 @@ struct SourcePair<'a> {
     config_scope: &'a str,
     hooks_scope: &'a str,
     authenticated: bool,
-    config_legacy: &'a [Value],
-    hooks_legacy: &'a [Value],
+    config_legacy: Option<&'a [Value]>,
+    hooks_legacy: Option<&'a [Value]>,
 }
 
 fn string_args(server: &HookVal) -> Option<Vec<String>> {
@@ -327,7 +337,36 @@ fn bindings_field<'a>(
     }
 }
 
-fn source_pairs(args: &Map<String, Value>) -> Result<Vec<SourcePair<'_>>, &'static str> {
+/// The legacy bindings a source carries, or none when they are selected here.
+fn given_bindings<'a>(
+    entry: &'a Map<String, Value>,
+    key: &str,
+    selected: bool,
+) -> Result<Option<&'a [Value]>, &'static str> {
+    match (selected, entry.contains_key(key)) {
+        (true, false) => Ok(None),
+        (false, true) => bindings_field(entry, key).map(Some),
+        _ => Err(ERR_INVALID),
+    }
+}
+
+/// The legacy bindings one parsed source claims.
+fn claimed(
+    given: Option<&[Value]>,
+    legacy: Option<&mut DetectLegacy>,
+    payload: &HookVal,
+) -> Vec<Value> {
+    match (given, legacy) {
+        (Some(given), _) => given.to_vec(),
+        (None, Some(legacy)) => legacy.bindings(payload),
+        (None, None) => Vec::new(),
+    }
+}
+
+fn source_pairs(
+    args: &Map<String, Value>,
+    selected: bool,
+) -> Result<Vec<SourcePair<'_>>, &'static str> {
     args.get("sources")
         .and_then(Value::as_array)
         .ok_or(ERR_INVALID)?
@@ -343,19 +382,25 @@ fn source_pairs(args: &Map<String, Value>) -> Result<Vec<SourcePair<'_>>, &'stat
                     .get("authenticated")
                     .and_then(Value::as_bool)
                     .ok_or(ERR_INVALID)?,
-                config_legacy: bindings_field(entry, "config_legacy")?,
-                hooks_legacy: bindings_field(entry, "hooks_legacy")?,
+                config_legacy: given_bindings(entry, "config_legacy", selected)?,
+                hooks_legacy: given_bindings(entry, "hooks_legacy", selected)?,
             })
         })
         .collect()
 }
 
 pub(crate) fn detect(args: &Value) -> KindResult {
-    let args = args_object(args)?;
+    let args = expand(args_object(args)?)?;
+    let args = &*args;
     if args.get("harness").and_then(Value::as_str) != Some(HARNESS) {
         return Err(ERR_INVALID);
     }
-    let sources = source_pairs(args)?;
+    let mut legacy = match args.get("legacy") {
+        None => None,
+        Some(Value::Object(fields)) => Some(DetectLegacy::parse(fields).ok_or(ERR_INVALID)?),
+        Some(_) => return Err(ERR_INVALID),
+    };
+    let sources = source_pairs(args, legacy.is_some())?;
     let authenticated: &[Value] = bindings_field(args, "authenticated_bindings")?;
     let contents = match args.get("contents") {
         None | Some(Value::Null) => None,
@@ -373,6 +418,7 @@ pub(crate) fn detect(args: &Value) -> KindResult {
         let payload = toml_payload(raw.bytes.as_deref())?;
         if !is_empty(&payload) {
             found.push(source.config_path.to_owned());
+            let config_legacy = claimed(source.config_legacy, legacy.as_mut(), &payload);
             let inventory = enumerate(
                 &payload,
                 Source {
@@ -386,7 +432,7 @@ pub(crate) fn detect(args: &Value) -> KindResult {
                 } else {
                     &[]
                 },
-                source.config_legacy,
+                &config_legacy,
             );
             records.extend(inventory.records);
             warnings.extend(inventory.warnings);
@@ -406,6 +452,7 @@ pub(crate) fn detect(args: &Value) -> KindResult {
             continue;
         }
         found.push(source.hooks_path.to_owned());
+        let hooks_legacy = claimed(source.hooks_legacy, legacy.as_mut(), &payload);
         let inventory = enumerate(
             &payload,
             Source {
@@ -415,7 +462,7 @@ pub(crate) fn detect(args: &Value) -> KindResult {
                 hooks_enabled: hooks_feature_enabled(config),
             },
             &[],
-            source.hooks_legacy,
+            &hooks_legacy,
         );
         records.extend(inventory.records);
         warnings.extend(inventory.warnings);
@@ -424,6 +471,10 @@ pub(crate) fn detect(args: &Value) -> KindResult {
         return Err(ERR_VALUE);
     }
     artifacts.extend(hook_artifacts(&records)?);
+    let restore = restorations(args)?;
+    if !restore.is_empty() {
+        restore_paths(&restore, &mut artifacts, &mut found, &mut warnings);
+    }
     Ok(json!({
         "artifacts": artifacts,
         "found_paths": found,

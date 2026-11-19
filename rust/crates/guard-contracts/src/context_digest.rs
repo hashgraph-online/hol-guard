@@ -262,6 +262,26 @@ pub enum ContextDigestKindV1 {
         #[serde(default)]
         edge: Value,
     },
+    /// Correlate one real installed-hook invocation with its transition
+    /// probe: the payload names the probe, the receipt must answer it.
+    TransitionHookObservation {
+        payload: Value,
+        #[serde(default)]
+        receipt: Value,
+    },
+    /// Spend (`action = "claim"`) or confirm (`"check"`) the one-use claim on
+    /// a publication-inverse approval grant. The registry is resident state.
+    PublicationInverseClaim {
+        action: String,
+        grant_id: String,
+        subject: String,
+        operation_id: String,
+        owner_pid: u64,
+        /// The caller's deadline as an opaque string, compared exactly.
+        deadline: String,
+        #[serde(default)]
+        retirement_seconds: f64,
+    },
     McpLaunchEnvironment {
         inherited: BTreeMap<String, String>,
         configured: BTreeMap<String, String>,
@@ -590,6 +610,14 @@ pub struct ContextDigestResultV1 {
     /// package-runner launch of a plain bin.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_runner_target: Option<String>,
+    /// `transition_hook_observation` answer: the probe the payload names and
+    /// the observation the receipt makes of it; absent when the payload names
+    /// no valid probe.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition_hook_observation: Option<Value>,
+    /// `publication_inverse_claim` answer: `ok`, or the refusal code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publication_inverse_claim: Option<String>,
 }
 
 /// A remembered decision's behavior fingerprint and lookup candidates.

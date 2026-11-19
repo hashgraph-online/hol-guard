@@ -1,12 +1,13 @@
 //! Skill artifacts for AIBOM inventory. The native walk composes discovery and
-//! directory identity in-process; a caller that cannot use it (no native skill
-//! walk on this platform, or a root that cannot be carried as UTF-8) supplies
-//! the finished artifacts instead.
+//! directory identity in-process on every platform; a caller whose root cannot be
+//! carried as UTF-8 may still supply the finished artifacts instead.
 
 use std::path::Path;
 
 use guard_contracts::{SkillDirectoryIdentityV1, SkillDirectoryLimitsV1};
 use serde_json::{json, Map, Value};
+
+use crate::skill_identity_inspect::inspect_skill_directory;
 
 pub(crate) const ERR_IDENTITY: &str = "native_runner_authority_aibom_skill_identity_invalid";
 
@@ -53,14 +54,24 @@ pub(crate) struct DirectoryIdentity {
 }
 
 /// `inspect_skill_directory` plus `skill_directory_identity_metadata`, walked
-/// natively. Platforms without a native walk refuse; the caller supplies the
-/// finished identity instead.
+/// natively on every platform.
 pub(crate) fn directory_identity(
     skill_md: &Path,
     scope_root: &Path,
     version_label: &str,
 ) -> Result<DirectoryIdentity, &'static str> {
-    native::directory_identity(skill_md, scope_root, version_label)
+    let identity = inspect_skill_directory(skill_md, scope_root, &LIMITS);
+    let failure_reason = match identity.failure_reason {
+        Some(reason) => serde_json::to_value(reason)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_owned)),
+        None => None,
+    };
+    Ok(DirectoryIdentity {
+        metadata: identity_metadata(&identity, version_label)?,
+        complete: identity.status == "complete",
+        failure_reason,
+    })
 }
 
 pub(crate) const LIMITS: SkillDirectoryLimitsV1 = SkillDirectoryLimitsV1 {
@@ -117,11 +128,9 @@ pub(crate) fn identity_metadata(
     Ok(metadata)
 }
 
-#[cfg(unix)]
 mod native {
-    use std::ffi::OsStr;
-    use std::os::unix::ffi::OsStrExt;
-    use std::path::Path;
+    use std::ffi::OsString;
+    use std::path::{Path, PathBuf};
 
     use guard_contracts::SkillDirectoryIdentityV1;
     use serde_json::{json, Map, Value};
@@ -133,26 +142,6 @@ mod native {
     use crate::skill_identity_discovery::{discover_skill_documents, issue_id};
     use crate::skill_identity_inspect::{incomplete_identity, inspect_skill_directory};
 
-    /// The identity of one skill directory: its metadata and completeness.
-    pub(super) fn directory_identity(
-        skill_md: &Path,
-        scope_root: &Path,
-        version_label: &str,
-    ) -> Result<super::DirectoryIdentity, &'static str> {
-        let identity = inspect_skill_directory(skill_md, scope_root, &LIMITS);
-        let failure_reason = match identity.failure_reason {
-            Some(reason) => serde_json::to_value(reason)
-                .ok()
-                .and_then(|value| value.as_str().map(str::to_owned)),
-            None => None,
-        };
-        Ok(super::DirectoryIdentity {
-            metadata: identity_metadata(&identity, version_label)?,
-            complete: identity.status == "complete",
-            failure_reason,
-        })
-    }
-
     fn skill_metadata(
         relative_root: &str,
         identity: &SkillDirectoryIdentityV1,
@@ -163,6 +152,20 @@ mod native {
         metadata.insert("skill_root".to_owned(), json!(relative_root));
         metadata.extend(identity_metadata(identity, label)?);
         Ok(metadata)
+    }
+
+    /// The path a discovery record names: raw bytes on unix, the UTF-8
+    /// spelling the walk records on Windows.
+    fn path_from_bytes(bytes: &[u8]) -> PathBuf {
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStringExt;
+            PathBuf::from(OsString::from_vec(bytes.to_vec()))
+        }
+        #[cfg(not(unix))]
+        {
+            PathBuf::from(OsString::from(String::from_utf8_lossy(bytes).into_owned()))
+        }
     }
 
     fn issue_artifact(
@@ -197,7 +200,7 @@ mod native {
             let discovery = discover_skill_documents(&skill_root, &LIMITS);
             for encoded in &discovery.documents_hex {
                 let relative = hex::decode(encoded).map_err(|_| ERR_IDENTITY)?;
-                let skill_md = skill_root.join(OsStr::from_bytes(&relative));
+                let skill_md = skill_root.join(path_from_bytes(&relative));
                 let Ok(text) = std::str::from_utf8(&relative) else {
                     let reason = Failure::InvalidPathEncoding;
                     artifacts.push(issue_artifact(
@@ -227,7 +230,7 @@ mod native {
                 let path = if relative == b"." {
                     skill_root.clone()
                 } else {
-                    skill_root.join(OsStr::from_bytes(&relative))
+                    skill_root.join(path_from_bytes(&relative))
                 };
                 artifacts.push(issue_artifact(
                     harness,
@@ -243,26 +246,6 @@ mod native {
     }
 }
 
-#[cfg(not(unix))]
-mod native {
-    use std::path::Path;
-
-    use serde_json::Value;
-
-    pub(super) fn directory_identity(
-        _skill_md: &Path,
-        _scope_root: &Path,
-        _version_label: &str,
-    ) -> Result<super::DirectoryIdentity, &'static str> {
-        Err("native_runner_authority_aibom_skills_unsupported")
-    }
-
-    pub(super) fn skills(
-        _harness: &str,
-        _scope_dir: &Path,
-        _roots: &[&str],
-        _scope: &str,
-    ) -> Result<Vec<Value>, &'static str> {
-        Err("native_runner_authority_aibom_skills_unsupported")
-    }
-}
+#[cfg(test)]
+#[path = "aibom_skills_tests.rs"]
+mod tests;

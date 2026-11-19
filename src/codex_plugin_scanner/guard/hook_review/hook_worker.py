@@ -124,17 +124,17 @@ class HookWorker(HookWorkerNativeMixin):
         self.capture_writer = capture_writer
         self._publish_native_policy = publish_native_policy
         self._last_native_decision_receipt: dict[str, object] | None = None
-        from .hook_metrics import HookMetricsRecorder
+        from ..route_metrics import RouteMetricsRecorder
 
-        self.metrics = HookMetricsRecorder()
+        self.metrics = RouteMetricsRecorder()
         self.hook_counters = HookCounterLog()
         self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
-        # Resolve adapter modules before a managed hook request starts
+        # Resolve harness modules before a managed hook request starts
         # its deadline. This lookup grants no authority; native policy
         # readiness remains the enforcement barrier.
-        from ..adapters import list_adapters
+        from ..native_harness_ops import list_harnesses
 
-        _ = list_adapters()
+        _ = list_harnesses()
         self._owns_policy_snapshot_publisher = publish_native_policy
         self._direct_evidence_drain: DirectHookEvidenceDrain | None = None
         if self._owns_policy_snapshot_publisher and start_native_policy:

@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from . import native_aibom_summaries
-from .adapters.base import HarnessContext
+from .harness_context import HarnessContext
 from .inventory_contract import (
     GuardAgentInventorySnapshot,
 )
