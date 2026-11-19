@@ -247,7 +247,7 @@ def _raise_fallback_connector_setup_notice(store: object, notice: object) -> Non
     notify_connector_setup(store, queued, connector_name=connector_name)
 
 
-def _record_mcp_with_one_retry(record: object, write: Callable[[], bool]) -> FallbackResult:
+def _record_mcp_with_one_retry(record: object, write: Callable[[], object]) -> FallbackResult:
     """Retry one failed MCP write before dropping the bounded record."""
 
     try:
@@ -261,11 +261,14 @@ def _record_mcp_with_one_retry(record: object, write: Callable[[], bool]) -> Fal
         except Exception:
             return "drop"
     try:
-        written = write()
+        result = write()
     except Exception:
-        written = False
-    if written:
+        result = False
+    committed = getattr(result, "committed", False) is True
+    if bool(result):
         return "handled"
+    if committed:
+        return "drop"
     if len(_MCP_RETRY_KEYS) >= 1024:
         _MCP_RETRY_KEYS.clear()
     _MCP_RETRY_KEYS.add(key)

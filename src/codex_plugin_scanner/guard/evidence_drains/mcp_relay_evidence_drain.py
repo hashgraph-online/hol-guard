@@ -43,6 +43,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .mcp_write_result import McpEvidenceWriteResult
+
 MCP_TOOL_CALL_EVIDENCE_KIND = "mcp_tool_call"
 # The harnesses whose MCP proxy the relay replaces.
 _RELAY_HARNESSES = frozenset({"cline", "codex", "copilot", "cursor", "hermes", "opencode"})
@@ -109,7 +111,7 @@ def is_mcp_relay_evidence(record: object) -> bool:
     return isinstance(record, Mapping) and record.get("kind") == MCP_TOOL_CALL_EVIDENCE_KIND
 
 
-def record_mcp_relay_evidence(store: object, guard_home: Path, record: object) -> bool:
+def record_mcp_relay_evidence(store: object, guard_home: Path, record: object) -> bool | McpEvidenceWriteResult:
     """Record one relayed call as the proxy records it; ``False`` drops it."""
 
     from ..mcp_tool_calls import allow_tool_call, block_tool_call
@@ -155,6 +157,7 @@ def record_mcp_relay_evidence(store: object, guard_home: Path, record: object) -
             return False
     elif outcome != "block" or policy_action in _FORWARD_ACTIONS or not _block_source_fits(reviewed, queued, source):
         return False
+    committed = False
     try:
         identity = _decode(record["identity"], expect_hash=True, token=True)
         decision = _decision(record["decision"])
@@ -192,8 +195,10 @@ def record_mcp_relay_evidence(store: object, guard_home: Path, record: object) -
                 with contextlib.suppress(Exception):
                     allow_tool_call(remember=True, emit_runtime_evidence=False, **recorded)
             allow_tool_call(remember=False, **recorded)
+            committed = True
         else:
             block_tool_call(**recorded)
+            committed = True
         if projection is not None and redaction_level is not None:
             # After the receipt, as the proxy writes them.
             _record_unprompted_review(
@@ -212,8 +217,8 @@ def record_mcp_relay_evidence(store: object, guard_home: Path, record: object) -
             _raise_approval_surface(store, guard_home, harness, queued)
     except Exception:
         # A record the proxy could not have written is dropped, never guessed.
-        return False
-    return True
+        return McpEvidenceWriteResult(False, committed)
+    return McpEvidenceWriteResult(True, True)
 
 
 def _redaction_level(review: object) -> str | None:

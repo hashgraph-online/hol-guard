@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+from codex_plugin_scanner.guard.evidence_drains.mcp_write_result import McpEvidenceWriteResult
 from codex_plugin_scanner.guard.resident_evidence_drain import ResidentEvidenceDrain, _decode_page
 from codex_plugin_scanner.guard.resident_evidence_fallback import _record_mcp_with_one_retry
 
@@ -123,6 +124,18 @@ def test_mcp_fallback_retries_a_failed_write_once() -> None:
     assert _record_mcp_with_one_retry(record, failed_write) == "retry"
     assert _record_mcp_with_one_retry(record, failed_write) == "drop"
     assert calls == ["write", "write"]
+
+
+def test_mcp_fallback_drops_after_a_committed_followup_failure() -> None:
+    calls: list[object] = []
+
+    def committed_failure() -> McpEvidenceWriteResult:
+        calls.append("write")
+        return McpEvidenceWriteResult(False, True)
+
+    record = {"kind": "mcp_tool_call", "identity": "committed"}
+    assert _record_mcp_with_one_retry(record, committed_failure) == "drop"
+    assert calls == ["write"]
 
 
 def test_resident_drain_keeps_completion_keys_while_a_page_retries(tmp_path: Path) -> None:
