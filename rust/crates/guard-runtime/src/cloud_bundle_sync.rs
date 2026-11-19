@@ -36,6 +36,9 @@ pub(crate) struct BundleStore {
     path: std::path::PathBuf,
     /// The sign-in a caller already resolved; the store's own otherwise.
     pub(crate) auth: Option<Map<String, Value>>,
+    /// The sign-in a 401 refresh produced, kept across broker rounds so one
+    /// sync refreshes at most once.
+    pub(crate) refreshed_auth: std::cell::RefCell<Option<Map<String, Value>>>,
 }
 
 impl BundleStore {
@@ -48,6 +51,7 @@ impl BundleStore {
             resident: ResidentSupplyChainStore::new(store_path, guard_home),
             path: store_path.to_path_buf(),
             auth,
+            refreshed_auth: std::cell::RefCell::new(None),
         }
     }
 

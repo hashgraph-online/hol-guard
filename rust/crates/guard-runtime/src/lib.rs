@@ -1064,6 +1064,7 @@ mod orphaned_worker_reap;
 mod ownership_acl_verdict;
 mod package_approval_action;
 mod package_approval_hash_op;
+mod package_approval_key;
 mod package_audit_projection_op;
 mod package_authority_config;
 mod package_authority_op;
@@ -1102,6 +1103,8 @@ use guard_policy_bundle::{
     python as policy_bundle_py, time as policy_bundle_time,
 };
 mod background_loop_gate;
+mod plugin_telemetry_host;
+mod plugin_telemetry_weekly;
 mod policy_bundle_cloud_exceptions;
 mod policy_bundle_op;
 mod policy_bundle_payload_hash;

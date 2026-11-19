@@ -44,12 +44,24 @@ pub(crate) fn sync_network(store: &BundleStore) -> Result<Value, SyncError> {
             // The access token may have lapsed since it was resolved. Refresh
             // once; a second refusal stands, and a refresh that finds the
             // device signed out reports that rather than "never connected".
-            let auth = resolve_auth(&store.resident, true, None).map_err(|error| match error {
-                SyncError::NotConfigured(message) | SyncError::AuthExpired(message) => {
-                    SyncError::Failed(message)
+            // Each broker round replays the first refusal, so the refreshed
+            // sign-in is kept for later rounds instead of refreshing again with
+            // the rotated grant.
+            let refreshed = store.refreshed_auth.borrow().clone();
+            let auth = match refreshed {
+                Some(auth) => auth,
+                None => {
+                    let auth =
+                        resolve_auth(&store.resident, true, None).map_err(|error| match error {
+                            SyncError::NotConfigured(message) | SyncError::AuthExpired(message) => {
+                                SyncError::Failed(message)
+                            }
+                            other => other,
+                        })?;
+                    *store.refreshed_auth.borrow_mut() = Some(auth.clone());
+                    auth
                 }
-                other => other,
-            })?;
+            };
             let url = workspace_url(
                 "network_protection_bundle",
                 &base_url(&auth)?,

@@ -239,6 +239,7 @@ def test_failed_sync_keeps_the_saved_bundle(
     forged["signature"] = base64.b64encode(b"x" * 256).decode("ascii")
     with _network_cloud(forged) as sync_url:
         store = _connected_store(tmp_path, monkeypatch, sync_url)
+        _trust(store, signing_key)
         kept = {"bundle": {"kept": True, "workspaceId": WORKSPACE_ID}}
         store.set_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY, kept, "2026-10-21T00:00:00Z")
         with pytest.raises(RuntimeError, match="network protection bundle sync failed"):

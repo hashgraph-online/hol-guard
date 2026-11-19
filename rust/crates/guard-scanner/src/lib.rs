@@ -552,6 +552,47 @@ pub fn scan_chunks<'a>(
 mod tests {
     use super::*;
 
+    /// A pytest traceback has no file path of its own, so the only evidence
+    /// that its credential-shaped values are fixtures is the surrounding text.
+    #[test]
+    fn keeps_a_test_runner_traceback_with_fixture_credentials_readable() {
+        let text = concat!(
+            "tests/test_guard_approval_gate.py:742: AssertionError\n",
+            "kwargs = {'params': {'enabled': True, 'new_",
+            "password': 'correct-",
+            "password', 'confirm_",
+            "password': 'correct-",
+            "password'}}\n",
+            "    assert payload.get(\"resolved\") is not True\n",
+        );
+        let result = scan_text(text, true, true, MAX_SCAN_BYTES, None);
+        assert!(
+            result.matches.is_empty(),
+            "fixture traceback was treated as a secret: {:?}",
+            result
+                .matches
+                .iter()
+                .map(|matched| matched.classifier)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// The pathless fixture allowance must not cover a real credential that
+    /// happens to sit next to test wording.
+    #[test]
+    fn still_blocks_a_real_looking_credential_beside_test_wording() {
+        let value = ["Zq7Z4vK9rT", "2mXb8LpW3sNh"].concat();
+        let text = format!(
+            "tests/test_login.py:12: AssertionError\n    assert client.api_{} == 200\n    api_{}: '{value}'\n",
+            "status", "password"
+        );
+        let result = scan_text(&text, true, true, MAX_SCAN_BYTES, None);
+        assert!(
+            !result.matches.is_empty(),
+            "a high-entropy credential in a traceback was allowed through"
+        );
+    }
+
     fn github_like_token() -> String {
         let prefix = ["gh", "p_"].concat();
         format!("{prefix}{}", "a".repeat(30))

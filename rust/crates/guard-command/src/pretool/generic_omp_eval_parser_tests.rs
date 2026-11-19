@@ -1,4 +1,4 @@
-use super::{parse_program, parse_python};
+use super::{parse_program, parse_python, uses_earlier_cell_draft};
 
 #[test]
 fn python_read_lines_are_parsed_as_reads() {
@@ -180,5 +180,31 @@ fn a_commit_draft_is_one_commit_call_in_its_repository() {
         "const commit = 1;",
     ] {
         assert!(parse_program(code).is_none(), "{code}");
+    }
+}
+
+#[test]
+fn draft_methods_on_an_unbound_name_are_an_earlier_cell_draft() {
+    for code in [
+        "await d.show();",
+        "await d.take('docs/a.md'); print(d);",
+        "await draft.commit('docs: x', ['- y']);",
+        "return typeof d.commit;",
+    ] {
+        assert!(parse_program(code).is_none(), "{code}");
+        assert!(uses_earlier_cell_draft(code), "{code}");
+    }
+    for code in [
+        "const d = await commit.draft(); await d.show();",
+        "const d = {show() {}}; await d.show();",
+        "let d = 1; await d.show();",
+        "await d.push('x');",
+        "await d.commit('x', {amend: true});",
+        "await d.show(); sh(`rm -rf ${x}`);",
+        "await commit.show();",
+        "await a.b.show();",
+        "",
+    ] {
+        assert!(!uses_earlier_cell_draft(code), "{code}");
     }
 }

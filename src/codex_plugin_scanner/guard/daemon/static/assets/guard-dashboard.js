@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-DOpgXP-w.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-CmqdRvvS.js","assets/chunks/home-protection-module-DPMDKD16.js","assets/chunks/supply-chain-protection-stats-XiD1X6oR.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-BPzpVovI.js","assets/chunks/harness-version-label-BTjqj8Ip.js","assets/chunks/settings-save-proof-modal-DdKoGp14.js","assets/chunks/connect-guard-cloud-button-04d3wLni.js","assets/chunks/guard-repair-control-sTMvCuK1.js","assets/chunks/settings-workspace-Dp6_T1_0.js","assets/chunks/confirm-dialog-BRFnoEG3.js","assets/chunks/extensions-workspace-C6DMg8OL.js","assets/chunks/app-detail-workspace-CrdBDw6F.js","assets/chunks/harness-action-errors-BMFGvfEG.js","assets/chunks/supply-chain-hub-workspace-CsUOrp8Y.js","assets/chunks/policy-workspace-page-DVW5txUL.js","assets/chunks/about-workspace-MVcBq84r.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-agIHYZF9.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-CesXE34g.js","assets/chunks/home-protection-module-DhHiwTs6.js","assets/chunks/supply-chain-protection-stats-DZVL58wK.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-CO7DaU8J.js","assets/chunks/harness-version-label-DpAtB9h1.js","assets/chunks/connect-guard-cloud-button-DtlA45p8.js","assets/chunks/guard-repair-control-91tBByHP.js","assets/chunks/settings-workspace-Dn5mAE_9.js","assets/chunks/confirm-dialog-C1Asj0OK.js","assets/chunks/extensions-workspace-DHYA5vR8.js","assets/chunks/app-detail-workspace-Qi0mR_JY.js","assets/chunks/harness-action-errors-PgLjgif9.js","assets/chunks/supply-chain-hub-workspace-CXh-c9D0.js","assets/chunks/policy-workspace-page-Dsr4CEyy.js","assets/chunks/about-workspace-C4WLPFxP.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -40987,84 +40987,843 @@ function GuardUpdateBanner(props) {
     }
   );
 }
-const DEFAULT_CONFIRM = "Guard will start stopping dangerous actions.";
-function WatchProtectionBanner(props) {
-  const [confirming, setConfirming] = reactExports.useState(false);
-  const { onTurnProtectionOn } = props;
-  const handleAsk = reactExports.useCallback(() => setConfirming(true), []);
-  const handleCancel = reactExports.useCallback(() => setConfirming(false), []);
-  const handleConfirm = reactExports.useCallback(() => {
-    setConfirming(false);
-    onTurnProtectionOn?.();
-  }, [onTurnProtectionOn]);
-  const message = props.model?.message ?? WATCH_BANNER_COPY;
-  const confirmMessage = props.model?.confirmMessage ?? DEFAULT_CONFIRM;
-  const actionLabel = props.model !== void 0 && props.model !== null && !props.model.globalWatch ? "Turn protection on for these apps" : "Turn protection on";
-  let action2 = null;
-  if (onTurnProtectionOn !== void 0 && confirming) {
-    action2 = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: handleConfirm,
-          className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
-          children: "Turn on"
+function resolveSettingsSaveProofKind(input) {
+  if (input.draftGateEnabled && !input.savedGateEnabled) {
+    return "setup-gate";
+  }
+  if (input.savedGateEnabled) {
+    return "verify-save";
+  }
+  return null;
+}
+function requiresSettingsSaveProof(kind) {
+  return kind !== null;
+}
+function resolveSettingsSaveProofModalCopy(input) {
+  if (input.mode === "setup-gate") {
+    return {
+      title: "Set your approval password",
+      detail: "Choose a password Guard will ask for before allow or trust changes stick.",
+      confirmLabel: "Save settings"
+    };
+  }
+  if (input.mode === "change-password") {
+    return {
+      title: "Change approval password",
+      detail: "Confirm your approval proof, then choose a new password.",
+      confirmLabel: "Update password"
+    };
+  }
+  if (input.mode === "maintenance") {
+    if (input.maintenanceAction === "clear-approvals") {
+      return {
+        title: "Clear saved approvals",
+        detail: "Guard needs fresh proof before it removes saved allow decisions.",
+        confirmLabel: "Clear approvals"
+      };
+    }
+    if (input.maintenanceAction === "clear-queue") {
+      return {
+        title: "Clear review queue",
+        detail: "Guard needs fresh proof before it removes pending review items.",
+        confirmLabel: "Clear queue"
+      };
+    }
+    if (input.maintenanceAction === "revoke-cooldown") {
+      return {
+        title: "Revoke cooldown",
+        detail: "Confirm your identity before Guard ends the active cooldown.",
+        confirmLabel: "Revoke cooldown"
+      };
+    }
+    if (input.maintenanceAction === "disable-totp") {
+      return {
+        title: "Disconnect authenticator",
+        detail: "Confirm a current app code to remove this second factor.",
+        confirmLabel: "Disconnect"
+      };
+    }
+    if (input.maintenanceAction === "import-settings") {
+      return {
+        title: "Import settings",
+        detail: "Guard needs fresh proof before it replaces your local settings from a file.",
+        confirmLabel: "Import settings"
+      };
+    }
+    if (input.maintenanceAction === "reset-settings") {
+      return {
+        title: "Reset settings",
+        detail: "Guard needs fresh proof before it restores every local setting to defaults.",
+        confirmLabel: "Reset settings"
+      };
+    }
+    return {
+      title: "Confirm your identity",
+      detail: "Guard needs fresh proof before this cleanup can continue.",
+      confirmLabel: "Continue"
+    };
+  }
+  if (input.gateSettingsChanged) {
+    return {
+      title: "Confirm before saving gate changes",
+      detail: "Enter your approval proof so Guard can apply the gate updates you chose.",
+      confirmLabel: "Save settings"
+    };
+  }
+  return {
+    title: "Confirm before saving",
+    detail: "Enter your approval proof so Guard can save these settings.",
+    confirmLabel: "Save settings"
+  };
+}
+function settingsSaveProofUsesPulse(gate, mode) {
+  return gate?.pulse_enabled === true && (mode === "verify-save" || mode === "maintenance");
+}
+function isSettingsSaveProofSubmitDisabled(mode, credentials, totpRequired, pulseRequired = false) {
+  if (pulseRequired) {
+    return false;
+  }
+  const current = credentials.currentPassword?.trim() ?? "";
+  const next = credentials.newPassword?.trim() ?? "";
+  const confirm = credentials.confirmPassword?.trim() ?? "";
+  const totp = credentials.totpCode?.trim() ?? "";
+  if (mode === "setup-gate") {
+    return next.length === 0 || confirm.length === 0 || next !== confirm;
+  }
+  if (mode === "change-password") {
+    if (next.length === 0 || confirm.length === 0 || next !== confirm) {
+      return true;
+    }
+    return totpRequired ? totp.length === 0 : current.length === 0;
+  }
+  if (totpRequired) {
+    return totp.length === 0;
+  }
+  return current.length === 0;
+}
+function SettingsSaveProofModal(props) {
+  const dialogRef = reactExports.useRef(null);
+  const passwordRef = reactExports.useRef(null);
+  const totpRef = reactExports.useRef(null);
+  const [currentPassword, setCurrentPassword] = reactExports.useState("");
+  const [newPassword, setNewPassword] = reactExports.useState("");
+  const [confirmPassword, setConfirmPassword] = reactExports.useState("");
+  const [totpCode, setTotpCode] = reactExports.useState("");
+  useFocusTrap(props.open, dialogRef);
+  reactExports.useEffect(() => {
+    if (!props.open) {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTotpCode("");
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (props.gate?.totp_enabled === true && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance")) {
+        totpRef.current?.focus();
+      } else {
+        passwordRef.current?.focus();
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [props.gate?.totp_enabled, props.open, props.mode]);
+  reactExports.useEffect(() => {
+    if (props.open) {
+      document.documentElement.dataset.guardModalOpen = String(
+        Number(document.documentElement.dataset.guardModalOpen ?? 0) + 1
+      );
+      return () => {
+        const count2 = Number(document.documentElement.dataset.guardModalOpen ?? 1) - 1;
+        if (count2 <= 0) {
+          delete document.documentElement.dataset.guardModalOpen;
+        } else {
+          document.documentElement.dataset.guardModalOpen = String(count2);
         }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
+      };
+    }
+    return void 0;
+  }, [props.open]);
+  const pulseRequired = settingsSaveProofUsesPulse(props.gate, props.mode);
+  const totpRequired = !pulseRequired && props.gate?.totp_enabled === true && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance");
+  const needsCurrentPassword = props.mode !== "setup-gate" && !totpRequired && !pulseRequired;
+  const handleCurrentPasswordChange = reactExports.useCallback((event) => {
+    setCurrentPassword(event.target.value);
+  }, []);
+  const handleNewPasswordChange = reactExports.useCallback((event) => {
+    setNewPassword(event.target.value);
+  }, []);
+  const handleConfirmPasswordChange = reactExports.useCallback((event) => {
+    setConfirmPassword(event.target.value);
+  }, []);
+  const handleTotpChange = reactExports.useCallback((event) => {
+    setTotpCode(event.target.value);
+  }, []);
+  const handleBackdropClick = reactExports.useCallback(
+    (event) => {
+      if (event.target === event.currentTarget && !props.pending) {
+        props.onCancel();
+      }
+    },
+    [props.onCancel, props.pending]
+  );
+  const handleConfirm = reactExports.useCallback((event) => {
+    event.preventDefault();
+    if (props.pending || isSettingsSaveProofSubmitDisabled(
+      props.mode,
+      { currentPassword, newPassword, confirmPassword, totpCode },
+      totpRequired,
+      pulseRequired
+    )) {
+      return;
+    }
+    if (pulseRequired) {
+      props.onConfirm({});
+      return;
+    }
+    props.onConfirm({
+      ...currentPassword.trim().length > 0 ? { currentPassword } : {},
+      ...newPassword.trim().length > 0 ? { newPassword } : {},
+      ...confirmPassword.trim().length > 0 ? { confirmPassword } : {},
+      ...totpCode.trim().length > 0 ? { totpCode } : {}
+    });
+  }, [confirmPassword, currentPassword, newPassword, props, pulseRequired, totpCode, totpRequired]);
+  const credentials = {
+    currentPassword,
+    newPassword,
+    confirmPassword,
+    totpCode
+  };
+  const confirmDisabled = isSettingsSaveProofSubmitDisabled(props.mode, credentials, totpRequired, pulseRequired);
+  if (!props.open) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm",
+      onClick: handleBackdropClick,
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "settings-save-proof-title",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "form",
         {
-          type: "button",
-          onClick: handleCancel,
-          className: "inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark",
-          children: "Not now"
+          ref: dialogRef,
+          className: "w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl",
+          onSubmit: handleConfirm,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval required" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "settings-save-proof-title", className: "text-lg font-semibold tracking-tight text-brand-dark", children: props.title }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: props.detail })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
+              pulseRequired ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-lg border border-brand-blue/20 bg-brand-blue/5 px-3 py-2 text-sm text-brand-dark", children: "You will approve this in the YID app with a face scan." }) : null,
+              needsCurrentPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    ref: passwordRef,
+                    type: "password",
+                    autoComplete: "current-password",
+                    value: currentPassword,
+                    onChange: handleCurrentPasswordChange,
+                    className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  }
+                )
+              ] }) : null,
+              props.mode === "setup-gate" || props.mode === "change-password" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: props.mode === "setup-gate" ? "Password" : "New password" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      ref: props.mode === "setup-gate" ? passwordRef : void 0,
+                      type: "password",
+                      autoComplete: "new-password",
+                      value: newPassword,
+                      onChange: handleNewPasswordChange,
+                      className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Confirm password" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      type: "password",
+                      autoComplete: "new-password",
+                      value: confirmPassword,
+                      onChange: handleConfirmPasswordChange,
+                      className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                    }
+                  )
+                ] })
+              ] }) : null,
+              totpRequired ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "text",
+                    inputMode: "numeric",
+                    pattern: "[0-9]*",
+                    maxLength: 6,
+                    ref: totpRef,
+                    autoComplete: "one-time-code",
+                    value: totpCode,
+                    onChange: handleTotpChange,
+                    placeholder: "123456",
+                    className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  }
+                )
+              ] }) : null
+            ] }),
+            props.error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark", children: props.error }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  onClick: props.onCancel,
+                  disabled: props.pending,
+                  className: "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
+                  children: "Go back"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "submit", disabled: props.pending || confirmDisabled, children: props.pending ? "Working…" : props.confirmLabel })
+            ] })
+          ]
         }
       )
-    ] });
-  } else if (onTurnProtectionOn !== void 0) {
-    action2 = /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
+    }
+  );
+}
+function trackClass(checked, attentionWhenOff) {
+  if (checked) return "bg-brand-blue";
+  if (attentionWhenOff) return "bg-brand-attention/40";
+  return "bg-slate-200";
+}
+function FleetAppModeSwitch(props) {
+  const reasonId = reactExports.useId();
+  const { checked, disabled } = props;
+  const track = trackClass(checked, props.attentionWhenOff === true);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "label",
+    {
+      className: `inline-flex min-h-11 items-center gap-2 rounded-lg px-1 ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`,
+      title: props.unavailableReason,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-xs font-semibold ${disabled ? "text-slate-400" : "text-brand-dark"}`, children: props.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            role: "switch",
+            "aria-checked": checked,
+            "aria-label": props.accessibleName,
+            "aria-describedby": props.unavailableReason ? reasonId : void 0,
+            disabled,
+            onClick: props.onToggle,
+            "data-testid": props.testId,
+            className: `relative h-6 w-10 shrink-0 rounded-full transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/60 focus-visible:ring-offset-2 disabled:opacity-50 ${track}`,
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "span",
+              {
+                "aria-hidden": "true",
+                className: `absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-[0_1px_2px_rgba(15,23,42,0.2)] transition-transform duration-200 ease-out ${checked ? "translate-x-4" : "translate-x-0"}`
+              }
+            )
+          }
+        ),
+        props.unavailableReason ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: reasonId, className: "sr-only", children: props.unavailableReason }) : null
+      ]
+    }
+  );
+}
+function fleetMachinePosture(settings) {
+  return globalPosture(settings);
+}
+function fleetMachinePostureLabel(settings) {
+  return PROTECTION_POSTURE_COPY[fleetMachinePosture(settings)].label;
+}
+function fleetManagedCapabilities(capabilities, apps) {
+  const managed = new Set(apps.filter((app) => app.active).map((app) => app.harness));
+  const kept = capabilities.filter((capability) => managed.has(capability.harness));
+  const known = new Set(kept.map((capability) => capability.harness));
+  const synthesized = [...managed].filter((harness) => !known.has(harness)).map((harness) => ({
+    harness,
+    display_name: harnessDisplayName(harness),
+    can_pre_block: false,
+    can_ask_inline: false,
+    has_native_remember: false,
+    fail_open_on_hook_failure: true,
+    can_pre_block_limited: false,
+    honesty_sentence: "",
+    limited: false
+  }));
+  return [...kept, ...synthesized];
+}
+function fleetManagedRows(rows, apps) {
+  const managed = new Set(apps.filter((app) => app.active).map((app) => app.harness));
+  const byName = (a, b) => a.displayName.localeCompare(b.displayName);
+  const watching = rows.filter((row) => managed.has(row.harness) && row.effective === "watch").sort(byName);
+  const rest = rows.filter((row) => managed.has(row.harness) && row.effective !== "watch").sort(byName);
+  return [...watching, ...rest];
+}
+function gateProofUpdate(gate, proof) {
+  return {
+    enabled: gate?.enabled ?? false,
+    configured: gate?.configured ?? false,
+    cooldown_seconds: gate?.cooldown_seconds ?? 0,
+    cooldown_active: gate?.cooldown_active ?? false,
+    cooldown_expires_at: gate?.cooldown_expires_at ?? null,
+    locked_until: gate?.locked_until ?? null,
+    fail_closed: gate?.fail_closed ?? false,
+    strict_all_decisions: gate?.strict_all_decisions ?? false,
+    totp_enabled: gate?.totp_enabled ?? false,
+    totp_pending: gate?.totp_pending ?? false,
+    ...proof?.currentPassword ? { current_password: proof.currentPassword } : {},
+    ...proof?.totpCode ? { totp_code: proof.totpCode } : {}
+  };
+}
+function useFleetAppPosture(props) {
+  const { onChanged } = props;
+  const [state, setState] = reactExports.useState({ kind: "loading" });
+  const [pendingWatch, setPendingWatch] = reactExports.useState(null);
+  const [savingHarness, setSavingHarness] = reactExports.useState(null);
+  const [proofRequest, setProofRequest] = reactExports.useState(null);
+  const [proofPending, setProofPending] = reactExports.useState(false);
+  const [proofError, setProofError] = reactExports.useState(null);
+  const [statusMessage, setStatusMessage] = reactExports.useState(null);
+  const [error, setError] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    fetchSettings().then((payload) => {
+      if (cancelled) return;
+      setState({
+        kind: "ready",
+        settings: payload.settings,
+        capabilities: payload.protection_capabilities ?? []
+      });
+    }).catch((cause) => {
+      if (cancelled) return;
+      setState({ kind: "error", message: cause instanceof Error ? cause.message : "Unable to load app protection." });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const gate = state.kind === "ready" ? state.settings.approval_gate ?? null : null;
+  const gateEnabled = gate?.enabled === true;
+  const rows = reactExports.useMemo(() => {
+    if (state.kind !== "ready") return [];
+    return fleetManagedRows(
+      harnessPostureRows(state.settings, fleetManagedCapabilities(state.capabilities, props.apps)),
+      props.apps
+    );
+  }, [state, props.apps]);
+  const commit = reactExports.useCallback(async (harness, next, proof) => {
+    if (state.kind !== "ready") return "App protection is still loading.";
+    const saved = state.settings;
+    const update = appModesUpdate(saved, harness, next);
+    if (update === null) {
+      setPendingWatch(null);
+      return null;
+    }
+    if (gateEnabled) {
+      update.approval_gate = gateProofUpdate(saved.approval_gate, proof);
+    }
+    setSavingHarness(harness);
+    setError(null);
+    try {
+      const payload = await updateSettings(update);
+      setState((current) => current.kind === "ready" ? { ...current, settings: payload.settings } : current);
+      const name = rows.find((row) => row.harness === harness)?.displayName ?? harness;
+      setStatusMessage(appModesStatusMessage(next, name));
+      setPendingWatch(null);
+      onChanged?.();
+      return null;
+    } catch (cause) {
+      return cause instanceof Error ? cause.message : "Unable to change Guard or CIGAR for this app.";
+    } finally {
+      setSavingHarness(null);
+    }
+  }, [state, gateEnabled, rows, onChanged]);
+  const save = reactExports.useCallback((change) => {
+    if (gateEnabled) {
+      const displayName = rows.find((row) => row.harness === change.harness)?.displayName ?? change.harness;
+      setProofError(null);
+      setProofRequest({ ...change, displayName });
+      return;
+    }
+    void commit(change.harness, change.next).then((failure2) => {
+      if (failure2 !== null) setError(failure2);
+    });
+  }, [gateEnabled, rows, commit]);
+  const handleToggle = reactExports.useCallback((harness, part) => {
+    if (state.kind !== "ready") return;
+    const current = appModes(state.settings, harness);
+    const next = { ...current, [part]: !current[part] };
+    if (part === "guard" && state.settings.harness_postures_locked === true) return;
+    setError(null);
+    setStatusMessage(null);
+    if (needsConfirm(current, next, state.settings.harness_postures_locked === true)) {
+      setPendingWatch({ harness, next });
+      return;
+    }
+    setPendingWatch(null);
+    save({ harness, next });
+  }, [state, save]);
+  const handleConfirmWatch = reactExports.useCallback((change) => {
+    setPendingWatch(null);
+    save(change);
+  }, [save]);
+  const handleProofConfirm = reactExports.useCallback(async (proof) => {
+    if (proofRequest === null) return;
+    setProofPending(true);
+    setProofError(null);
+    const failure2 = await commit(proofRequest.harness, proofRequest.next, proof);
+    setProofPending(false);
+    if (failure2 === null) {
+      setProofRequest(null);
+    } else {
+      setProofError(failure2);
+    }
+  }, [proofRequest, commit]);
+  const handleCancelWatch = reactExports.useCallback(() => setPendingWatch(null), []);
+  const rowFor = reactExports.useCallback((harness) => rows.find((row) => row.harness === harness), [rows]);
+  if (state.kind !== "ready") {
+    return {
+      kind: state.kind,
+      rowFor,
+      control: () => null,
+      watchConfirm: () => null,
+      summary: null,
+      settings: null,
+      footer: state.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: "Per-app protection settings are unavailable right now." }) : null
+    };
+  }
+  const settings = state.settings;
+  const locked = settings.harness_postures_locked === true;
+  const watchingCount = rows.filter((row) => harnessRowTone(row) === "watch").length;
+  const control = (harness) => {
+    const row = rowFor(harness);
+    if (!row) return null;
+    const saving = savingHarness === harness;
+    const modes = appModes(settings, harness);
+    const cigarReason = cigarUnavailableReason(settings, harness, row.displayName);
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
       {
-        type: "button",
-        onClick: handleAsk,
-        className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
-        children: actionLabel
+        role: "group",
+        "aria-label": `Guard and CIGAR in ${row.displayName}`,
+        className: "flex shrink-0 items-center gap-3",
+        "data-testid": "fleet-app-modes",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            FleetAppModeSwitch,
+            {
+              label: "Guard",
+              accessibleName: `Guard in ${row.displayName}`,
+              checked: modes.guard,
+              disabled: saving || locked,
+              unavailableReason: locked ? "Your organization manages protection for this app." : void 0,
+              attentionWhenOff: true,
+              onToggle: () => handleToggle(harness, "guard"),
+              testId: `fleet-app-guard-${harness}`
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            FleetAppModeSwitch,
+            {
+              label: "CIGAR",
+              accessibleName: `CIGAR in ${row.displayName}`,
+              checked: modes.cigar,
+              disabled: saving || cigarReason !== void 0,
+              unavailableReason: cigarReason,
+              onToggle: () => handleToggle(harness, "cigar"),
+              testId: `fleet-app-cigar-${harness}`
+            }
+          ),
+          saving ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Saving…" }) : null
+        ]
       }
     );
+  };
+  const watchConfirm = (harness) => {
+    if (pendingWatch?.harness !== harness) return null;
+    const row = rowFor(harness);
+    if (!row) return null;
+    const change = pendingWatch;
+    const guardWasOn = appModes(settings, harness).guard;
+    const confirmLabel = guardWasOn ? "Turn Guard off" : "Turn CIGAR on";
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "mt-2 flex flex-col gap-2 rounded-xl bg-brand-attention/[0.06] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between",
+        role: "alertdialog",
+        "aria-label": guardWasOn ? `Turn Guard off in ${row.displayName}` : `Turn CIGAR on in ${row.displayName}`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: guardOffPrompt(settings, harness, change.next, row.displayName) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: () => handleConfirmWatch(change),
+                className: "inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
+                children: confirmLabel
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: handleCancelWatch,
+                className: "inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark",
+                children: guardWasOn ? "Keep Guard on" : "Cancel"
+              }
+            )
+          ] })
+        ]
+      }
+    );
+  };
+  const summary = rows.length === 0 ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", "data-testid": "fleet-machine-posture", children: [
+    "Machine:",
+    " ",
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-brand-dark", children: fleetMachinePostureLabel(settings) }),
+    watchingCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-brand-attention", children: [
+      " · Guard off in ",
+      watchingCount
+    ] }) : null
+  ] });
+  const footer = /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-lg bg-brand-attention/[0.05] px-3 py-2 text-xs text-brand-dark", children: error }) : null,
+    !cigarReady(settings) && rows.some((row) => cigarSupported(row.harness)) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-xs text-slate-500", "data-testid": "fleet-cigar-setup", children: [
+      "CIGAR is off on this machine, so it can't add project context or save tokens in any app yet.",
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "font-medium text-brand-blue underline underline-offset-2", href: guardAwareHref("/cigar"), children: "Set up CIGAR" })
+    ] }) : null,
+    locked && rows.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-400", children: "Your organization manages Guard for each app, so Guard can't be turned on or off here. CIGAR can still be changed." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: statusMessage ?? "" }),
+    proofRequest !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SettingsSaveProofModal,
+      {
+        open: true,
+        mode: "verify-save",
+        gate,
+        title: "Confirm before changing Guard or CIGAR",
+        detail: `Enter your approval proof to change ${proofRequest.displayName}.`,
+        confirmLabel: "Save change",
+        error: proofError,
+        pending: proofPending,
+        onCancel: () => {
+          if (proofPending) return;
+          setProofRequest(null);
+          setProofError(null);
+        },
+        onConfirm: handleProofConfirm
+      }
+    ) : null
+  ] });
+  return { kind: "ready", rowFor, control, watchConfirm, summary, settings, footer };
+}
+function turnProtectionOnLocked(settings, update) {
+  const managed = settings.managed_locked_settings ?? [];
+  if (update.harness_postures !== void 0 && settings.harness_postures_locked === true) return true;
+  if (update.protection_posture !== void 0 && managed.includes("protection_posture")) return true;
+  return false;
+}
+function isEmptyUpdate(update) {
+  return Object.keys(update).length === 0;
+}
+async function startTurnProtectionOn(deps) {
+  const current = await deps.fetchSettings();
+  const settings = current.settings;
+  const update = turnProtectionOnUpdate(settings);
+  if (isEmptyUpdate(update)) return { kind: "saved", payload: null };
+  if (turnProtectionOnLocked(settings, update)) return { kind: "locked" };
+  const gate = settings.approval_gate;
+  if (gate?.enabled === true) return { kind: "needs-proof", settings, gate };
+  return { kind: "saved", payload: await deps.updateSettings(update) };
+}
+async function finishTurnProtectionOn(deps, settings, proof) {
+  const update = turnProtectionOnUpdate(settings);
+  update.approval_gate = gateProofUpdate(settings.approval_gate, proof);
+  return deps.updateSettings(update);
+}
+function turnProtectionOnErrorMessage(cause) {
+  const detail = cause instanceof Error ? cause.message.trim() : "";
+  return detail.length > 0 ? detail : "Guard couldn't turn protection on. Try again.";
+}
+const DEFAULT_CONFIRM = "Guard will start stopping dangerous actions.";
+const DEFAULT_DEPS = { fetchSettings, updateSettings };
+const LOCKED_COPY = "Your organization manages protection for these apps, so it can't be turned on here.";
+const DONE_COPY = "Protection is on. Guard will stop dangerous actions again.";
+const FOCUS_RING = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-attention";
+const PRIMARY_BUTTON = `inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70 ${FOCUS_RING}`;
+const SECONDARY_BUTTON = `inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark ${FOCUS_RING}`;
+function WatchProtectionBanner(props) {
+  const { onTurnedOn, onOpenSettings, onBusyChange } = props;
+  const disabled = props.disabled === true;
+  const deps = props.deps ?? DEFAULT_DEPS;
+  const [state, setState] = reactExports.useState(props.initialState ?? { kind: "idle" });
+  const mounted = reactExports.useRef(true);
+  reactExports.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const busy = state.kind === "working" || state.kind === "proof";
+  reactExports.useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
+  reactExports.useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
+  const settle = reactExports.useCallback(async (payload) => {
+    if (mounted.current) setState({ kind: "done" });
+    await onTurnedOn?.(payload);
+  }, [onTurnedOn]);
+  const handleAsk = reactExports.useCallback(() => setState({ kind: "confirming" }), []);
+  const handleCancel = reactExports.useCallback(() => setState({ kind: "idle" }), []);
+  const handleConfirm = reactExports.useCallback(async () => {
+    if (disabled) return;
+    setState({ kind: "working" });
+    try {
+      const step = await startTurnProtectionOn(deps);
+      if (!mounted.current) return;
+      if (step.kind === "locked") {
+        setState({ kind: "locked" });
+      } else if (step.kind === "needs-proof") {
+        setState({ kind: "proof", settings: step.settings, gate: step.gate, pending: false, error: null });
+      } else {
+        await settle(step.payload);
+      }
+    } catch (cause) {
+      if (mounted.current) setState({ kind: "error", message: turnProtectionOnErrorMessage(cause) });
+    }
+  }, [deps, disabled, settle]);
+  const handleProofCancel = reactExports.useCallback(() => {
+    setState((current) => current.kind === "proof" && current.pending ? current : { kind: "idle" });
+  }, []);
+  const handleProofConfirm = reactExports.useCallback(async (proof) => {
+    if (state.kind !== "proof" || state.pending) return;
+    const { settings, gate } = state;
+    setState({ kind: "proof", settings, gate, pending: true, error: null });
+    try {
+      const payload = await finishTurnProtectionOn(deps, settings, proof);
+      await settle(payload);
+    } catch (cause) {
+      if (mounted.current) {
+        setState({ kind: "proof", settings, gate, pending: false, error: turnProtectionOnErrorMessage(cause) });
+      }
+    }
+  }, [deps, settle, state]);
+  if (state.kind === "done") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "flex items-center gap-3 rounded-xl border border-brand-green/25 bg-brand-green/[0.04] px-4 py-3",
+        role: "status",
+        "data-testid": "watch-protection-banner",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-5 w-5 shrink-0 text-brand-green-text", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: DONE_COPY })
+        ]
+      }
+    );
+  }
+  const message = props.model?.message ?? WATCH_BANNER_COPY;
+  const confirmMessage = props.model?.confirmMessage ?? DEFAULT_CONFIRM;
+  const perApp = props.model !== void 0 && props.model !== null && !props.model.globalWatch;
+  const actionLabel = perApp ? "Turn protection on for these apps" : "Turn protection on";
+  let detail = null;
+  let action2;
+  switch (state.kind) {
+    case "confirming":
+      detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: confirmMessage });
+      action2 = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void handleConfirm(), disabled, className: PRIMARY_BUTTON, children: "Turn on" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleCancel, className: SECONDARY_BUTTON, children: "Not now" })
+      ] });
+      break;
+    case "working":
+    case "proof":
+      detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: confirmMessage });
+      action2 = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: true, "aria-busy": "true", className: PRIMARY_BUTTON, children: state.kind === "proof" ? "Waiting for approval…" : "Turning on…" });
+      break;
+    case "error":
+      detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-1 text-sm text-slate-600", children: state.message });
+      action2 = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void handleConfirm(), disabled, className: PRIMARY_BUTTON, children: "Try again" }),
+        onOpenSettings !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onOpenSettings, className: SECONDARY_BUTTON, children: "Open settings" }) : null
+      ] });
+      break;
+    case "locked":
+      detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: LOCKED_COPY });
+      action2 = null;
+      break;
+    default:
+      action2 = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleAsk, disabled, className: PRIMARY_BUTTON, children: actionLabel });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
       className: "flex flex-col gap-3 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
       role: "status",
+      "data-testid": "watch-protection-banner",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: message }),
-            confirming ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: confirmMessage }) : null
+            detail
           ] })
         ] }),
-        action2
+        action2,
+        state.kind === "proof" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SettingsSaveProofModal,
+          {
+            open: true,
+            mode: "verify-save",
+            gate: state.gate,
+            title: "Confirm turning protection on",
+            detail: confirmMessage,
+            confirmLabel: "Turn protection on",
+            error: state.error,
+            pending: state.pending,
+            onCancel: handleProofCancel,
+            onConfirm: (proof) => void handleProofConfirm(proof)
+          }
+        ) : null
       ]
     }
   );
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-UHe4wCGV.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-DAc3-viF.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
-  const { snapshot } = props;
-  const handleTurnOn = reactExports.useCallback(() => {
-    void updateSettings(turnProtectionOnUpdate(snapshot)).then(() => {
-      props.onRestored?.();
-    }).catch(() => {
-      props.onOpenSettings();
-    });
-  }, [props.onOpenSettings, props.onRestored, snapshot]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { model: watchBannerModel(snapshot), onTurnProtectionOn: handleTurnOn });
+  const { snapshot, onRestored } = props;
+  const handleTurnedOn = reactExports.useCallback(() => {
+    onRestored?.();
+  }, [onRestored]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    WatchProtectionBanner,
+    {
+      model: watchBannerModel(snapshot),
+      onTurnedOn: handleTurnedOn,
+      onOpenSettings: props.onOpenSettings
+    }
+  );
 }
 function renderInboxContent(props) {
   if (props.requests.kind === "loading") {
@@ -41789,35 +42548,35 @@ function PulseApprovalOverlay() {
   )) });
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-DOpgXP-w.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-CmqdRvvS.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BPzpVovI.js"), true ? __vite__mapDeps([10,11,12,13,9,14]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-Dp6_T1_0.js"), true ? __vite__mapDeps([15,14,9,16,12,13,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-agIHYZF9.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-CesXE34g.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CO7DaU8J.js"), true ? __vite__mapDeps([10,11,12,9,13]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-Dn5mAE_9.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-C6DMg8OL.js"), true ? __vite__mapDeps([17,16]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-DHYA5vR8.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-CrdBDw6F.js"), true ? __vite__mapDeps([18,19,11,12]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-DavIenbm.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-Qi0mR_JY.js"), true ? __vite__mapDeps([17,18,11]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-CtJlE48x.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CsUOrp8Y.js").then((n) => n.d), true ? __vite__mapDeps([20,19]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CXh-c9D0.js").then((n) => n.d), true ? __vite__mapDeps([19,18]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-DVW5txUL.js"), true ? __vite__mapDeps([21,13]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-Dsr4CEyy.js"), true ? __vite__mapDeps([20,12]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-MVcBq84r.js"), true ? __vite__mapDeps([22,7,8,23]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-C4WLPFxP.js"), true ? __vite__mapDeps([21,7,8,22]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-D8usC0IR.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-CLZ3Q8oI.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-BgmJmHZx.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-C4cjm79L.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -42787,83 +43546,83 @@ export {
   HiMiniShieldExclamation as Z,
   __vitePreload as _,
   fetchContextAssistance as a,
-  POSTURE_OUTCOME_COLUMNS as a$,
+  harnessPostureRows as a$,
   HiMiniClipboardDocument as a0,
   openRecoveryView as a1,
   useReceiptAnalytics as a2,
-  updateSettings as a3,
-  turnProtectionOnUpdate as a4,
-  approvalProofUsesPulse as a5,
-  useProtectionPresentationState as a6,
-  protectionHealthFor as a7,
-  unavailableProtectionHealth as a8,
-  buildHomeRuntimeErrorCopy as a9,
-  HiMiniExclamationCircle as aA,
-  hasRepairableProtectionGap as aB,
-  remainingProtectionRepairParts as aC,
-  protectionGapSignature as aD,
-  repairOutcomeIsStalled as aE,
-  ProtectionRepairFlowError as aF,
-  nextProtectionRepairOutcome as aG,
-  waitForAuthorizeUrl as aH,
-  startOrRecoverCloudConnect as aI,
-  safeCloudConnectUrl as aJ,
-  openPackageFirewallAuthorizeFallback as aK,
-  waitForCloudConnection as aL,
-  activeFailedHarnesses as aM,
-  resetRepairOutcomeTracker as aN,
-  HiMiniWrenchScrewdriver as aO,
-  harnessRowTone as aP,
-  appModesNote as aQ,
-  harnessRowStatus as aR,
-  HiMiniEye as aS,
-  HiMiniXCircle as aT,
-  GuardHero as aU,
-  ProofStrip as aV,
-  HiMiniClipboardDocumentCheck as aW,
-  HiMiniClipboard as aX,
-  fetchResolvedApprovalGate as aY,
-  ApprovalProofModal as aZ,
-  PROTECTION_POSTURE_COPY as a_,
-  RuntimeErrorState as aa,
-  watchBannerModel as ab,
-  WatchProtectionBanner as ac,
-  EvidenceInsightsShareModal as ad,
-  OperatorHealthCard as ae,
-  HiMiniShieldCheck as af,
-  DeviceProofCard as ag,
-  guardActionDisposition as ah,
-  approvalLeftActionStopped as ai,
-  guardActionActivityCopy as aj,
-  approvalProofRequiresPassword as ak,
-  HiMiniSparkles as al,
-  HiMiniXMark as am,
-  EmptyState as an,
-  resolveCloudIntelCopy as ao,
-  HiMiniCloud as ap,
-  HiMiniQuestionMarkCircle as aq,
-  useFocusTrap as ar,
-  HiMiniExclamationTriangle as as,
-  HiMiniBolt as at,
-  Badge as au,
-  HiMiniMinusCircle as av,
-  buildDaemonErrorCopy as aw,
-  isUnsupportedPlatformCheck as ax,
-  RECHECK_UNAVAILABLE_SIGNATURE as ay,
-  protectionReasonText as az,
+  approvalProofUsesPulse as a3,
+  useProtectionPresentationState as a4,
+  protectionHealthFor as a5,
+  unavailableProtectionHealth as a6,
+  buildHomeRuntimeErrorCopy as a7,
+  RuntimeErrorState as a8,
+  watchBannerModel as a9,
+  remainingProtectionRepairParts as aA,
+  protectionGapSignature as aB,
+  repairOutcomeIsStalled as aC,
+  ProtectionRepairFlowError as aD,
+  nextProtectionRepairOutcome as aE,
+  waitForAuthorizeUrl as aF,
+  startOrRecoverCloudConnect as aG,
+  safeCloudConnectUrl as aH,
+  openPackageFirewallAuthorizeFallback as aI,
+  waitForCloudConnection as aJ,
+  activeFailedHarnesses as aK,
+  resetRepairOutcomeTracker as aL,
+  HiMiniWrenchScrewdriver as aM,
+  useFleetAppPosture as aN,
+  harnessRowTone as aO,
+  appModesNote as aP,
+  harnessRowStatus as aQ,
+  HiMiniEye as aR,
+  HiMiniXCircle as aS,
+  GuardHero as aT,
+  ProofStrip as aU,
+  HiMiniClipboardDocumentCheck as aV,
+  HiMiniClipboard as aW,
+  fetchResolvedApprovalGate as aX,
+  ApprovalProofModal as aY,
+  PROTECTION_POSTURE_COPY as aZ,
+  POSTURE_OUTCOME_COLUMNS as a_,
+  WatchProtectionBanner as aa,
+  EvidenceInsightsShareModal as ab,
+  OperatorHealthCard as ac,
+  HiMiniShieldCheck as ad,
+  DeviceProofCard as ae,
+  guardActionDisposition as af,
+  approvalLeftActionStopped as ag,
+  guardActionActivityCopy as ah,
+  approvalProofRequiresPassword as ai,
+  HiMiniSparkles as aj,
+  HiMiniXMark as ak,
+  EmptyState as al,
+  resolveCloudIntelCopy as am,
+  HiMiniCloud as an,
+  HiMiniQuestionMarkCircle as ao,
+  useFocusTrap as ap,
+  HiMiniExclamationTriangle as aq,
+  HiMiniBolt as ar,
+  Badge as as,
+  HiMiniMinusCircle as at,
+  buildDaemonErrorCopy as au,
+  isUnsupportedPlatformCheck as av,
+  RECHECK_UNAVAILABLE_SIGNATURE as aw,
+  protectionReasonText as ax,
+  HiMiniExclamationCircle as ay,
+  hasRepairableProtectionGap as az,
   HiMiniCommandLine as b,
   subscribeDashboardLocation as b$,
-  harnessPostureRows as b0,
-  overrideRows as b1,
-  harnessPostureSummary as b2,
-  joinNames as b3,
-  sortHarnessRows as b4,
-  globalPosture as b5,
-  selectHarnessPosture as b6,
-  restartHarnessWatch as b7,
-  harnessWatchPrompt as b8,
-  harnessPostureOptions as b9,
-  HiMiniLink as bA,
+  overrideRows as b0,
+  harnessPostureSummary as b1,
+  joinNames as b2,
+  sortHarnessRows as b3,
+  globalPosture as b4,
+  selectHarnessPosture as b5,
+  restartHarnessWatch as b6,
+  harnessWatchPrompt as b7,
+  harnessPostureOptions as b8,
+  canRestartHarnessWatch as b9,
+  SettingsSaveProofModal as bA,
   revokeContextAgentSession as bB,
   grantContextWorkspace as bC,
   authorizeContextAgentSession as bD,
@@ -42890,34 +43649,34 @@ export {
   HiMiniArrowLeft as bY,
   isCigarProducerVersion as bZ,
   isCigarCoreLabel as b_,
-  canRestartHarnessWatch as ba,
-  getDefaultExportFromCjs as bb,
-  React as bc,
-  PULSE_FACE_SCAN_OPTIONS as bd,
-  authorizeApprovalGatePulseSetup as be,
-  confirmApprovalGatePulseEnrollment as bf,
-  waitForPulseApproval as bg,
-  beginApprovalGatePulseEnrollment as bh,
-  GuardModalLayer as bi,
-  SelectMenu as bj,
-  disableApprovalGatePulse as bk,
-  setApprovalGatePulseShowCommand as bl,
-  recoverApprovalGatePulse as bm,
-  HiMiniBellAlert as bn,
-  HiMiniAdjustmentsHorizontal as bo,
-  TabBar as bp,
-  fetchCloudReviewSettings as bq,
-  ApprovalProofFieldInputs as br,
-  isApprovalProofSubmitDisabled as bs,
-  buildApprovalProofCredentials as bt,
-  changeCloudReviewSettings as bu,
-  isRecord$5 as bv,
-  HiMiniArrowTopRightOnSquare as bw,
-  shellHref as bx,
-  HiMiniPauseCircle as by,
-  listContextAgentSessions as bz,
+  getDefaultExportFromCjs as ba,
+  React as bb,
+  PULSE_FACE_SCAN_OPTIONS as bc,
+  authorizeApprovalGatePulseSetup as bd,
+  confirmApprovalGatePulseEnrollment as be,
+  waitForPulseApproval as bf,
+  beginApprovalGatePulseEnrollment as bg,
+  GuardModalLayer as bh,
+  SelectMenu as bi,
+  disableApprovalGatePulse as bj,
+  setApprovalGatePulseShowCommand as bk,
+  recoverApprovalGatePulse as bl,
+  HiMiniBellAlert as bm,
+  HiMiniAdjustmentsHorizontal as bn,
+  TabBar as bo,
+  fetchCloudReviewSettings as bp,
+  ApprovalProofFieldInputs as bq,
+  isApprovalProofSubmitDisabled as br,
+  buildApprovalProofCredentials as bs,
+  changeCloudReviewSettings as bt,
+  isRecord$5 as bu,
+  HiMiniArrowTopRightOnSquare as bv,
+  shellHref as bw,
+  HiMiniPauseCircle as bx,
+  listContextAgentSessions as by,
+  HiMiniLink as bz,
   HiMiniFolder as c,
-  isCurrentExtensionPolicyDraft as c$,
+  setLocalPermissionDraftStates as c$,
   HiMiniChatBubbleLeftRight as c0,
   HiMiniArrowUpCircle as c1,
   parseContextAssistanceStatus as c2,
@@ -42928,33 +43687,33 @@ export {
   shouldResumeTurnOn as c7,
   turnOnRequestedAt as c8,
   forgetTurnOn as c9,
-  exportSettings as cA,
-  setupDesktopNotifications as cB,
-  settingsWatchBannerModel as cC,
-  WorkspacePageHeader as cD,
-  navigateFromAnchor as cE,
-  humanizeList as cF,
-  isProtectionPosture as cG,
-  deriveProtectionPosture as cH,
-  normalizeHarnessPostures as cI,
-  approvalGateCooldownLabel as cJ,
-  fetchExtensionCatalog as cK,
-  ExtensionControlApiError as cL,
-  normalizeExtensionCatalogSummary as cM,
-  normalizeExtensionPermission as cN,
-  ExtensionControlProtocolError as cO,
-  normalizeExtensionCatalogItem as cP,
-  guardApiCacheScope as cQ,
-  fetchExtensionCatalogV2Api as cR,
-  localPermissionDraftState as cS,
-  setLocalPermissionDraftState as cT,
-  extensionPolicyAuthorityUnchanged as cU,
-  newExtensionPolicyDraftIdentity as cV,
-  extensionPolicyDraftIsDirty as cW,
-  setLocalPermissionDraftStates as cX,
-  buildExtensionPolicyDraftMutation as cY,
-  fetchEffectiveExtensionControls as cZ,
-  previewExtensionMutation as c_,
+  clearEvidence as cA,
+  exportDiagnostics as cB,
+  repairApprovalCenter as cC,
+  exportSettings as cD,
+  setupDesktopNotifications as cE,
+  settingsWatchBannerModel as cF,
+  WorkspacePageHeader as cG,
+  navigateFromAnchor as cH,
+  resolveSettingsSaveProofModalCopy as cI,
+  humanizeList as cJ,
+  isProtectionPosture as cK,
+  deriveProtectionPosture as cL,
+  normalizeHarnessPostures as cM,
+  approvalGateCooldownLabel as cN,
+  fetchExtensionCatalog as cO,
+  ExtensionControlApiError as cP,
+  normalizeExtensionCatalogSummary as cQ,
+  normalizeExtensionPermission as cR,
+  ExtensionControlProtocolError as cS,
+  normalizeExtensionCatalogItem as cT,
+  guardApiCacheScope as cU,
+  fetchExtensionCatalogV2Api as cV,
+  localPermissionDraftState as cW,
+  setLocalPermissionDraftState as cX,
+  extensionPolicyAuthorityUnchanged as cY,
+  newExtensionPolicyDraftIdentity as cZ,
+  extensionPolicyDraftIsDirty as c_,
   rememberTurnOn as ca,
   forgetTurnOnClick as cb,
   rememberTurnOnJob as cc,
@@ -42970,196 +43729,193 @@ export {
   fetchRuntimeSnapshot as cm,
   clearHarnessWatchOverrides as cn,
   withHarnessPosturePatch as co,
-  clearPolicy as cp,
-  clearReviewQueue as cq,
-  revokeApprovalGateCooldown as cr,
-  disableApprovalGateTotp as cs,
-  importSettings as ct,
-  resetSettings as cu,
-  enrollApprovalGateTotp as cv,
-  verifyApprovalGateTotp as cw,
-  clearEvidence as cx,
-  exportDiagnostics as cy,
-  repairApprovalCenter as cz,
+  updateSettings as cp,
+  clearPolicy as cq,
+  clearReviewQueue as cr,
+  revokeApprovalGateCooldown as cs,
+  disableApprovalGateTotp as ct,
+  importSettings as cu,
+  resetSettings as cv,
+  resolveSettingsSaveProofKind as cw,
+  requiresSettingsSaveProof as cx,
+  enrollApprovalGateTotp as cy,
+  verifyApprovalGateTotp as cz,
   HiMiniCircleStack as d,
-  customExtensionNeedsReview as d$,
-  applyExtensionMutation as d0,
-  fetchExtensionControlHistory as d1,
-  managedPermissionState as d2,
-  controlProvenance as d3,
-  treatmentLabel as d4,
-  useResolvedApprovalGate as d5,
-  groupPermissionsByFamily as d6,
-  HiMiniInformationCircle as d7,
-  LocalCliApiError as d8,
-  hasSuggestedRules as d9,
-  prefillSuggestedStates as dA,
-  recognizeLocalCli as dB,
-  preferredPackageScriptExtension as dC,
-  looksLikePackageScriptPaste as dD,
-  enrollmentCommandStates as dE,
-  isBulkApproveGateReady as dF,
-  fetchLocalCliList as dG,
-  normalizeLocalCliList as dH,
-  unreviewedToolChangeCount as dI,
-  connectorSetupMatch as dJ,
-  refreshMcpInventory as dK,
-  connectorGroupOutcome as dL,
-  allowedEarlierVersion as dM,
-  startGuardCloudConnect as dN,
-  extensionEffectiveState as dO,
-  permissionEffectiveState as dP,
-  fetchExtensionControlApi as dQ,
-  permissionForRule as dR,
-  refreshEffectiveExtensionControls as dS,
-  fetchExtensionDiscoveryApi as dT,
-  startCancelableDiscoveryJob as dU,
-  waitForMcpDiscoveryJob as dV,
-  isLocalCliId as dW,
-  localCliHref as dX,
-  fetchPluginUpdatesApi as dY,
-  filterCodexHostApps as dZ,
-  connectorWorkspaceItems as d_,
-  approvalProofRecentlySatisfied as da,
-  StyledSelect as db,
-  bulkCommandState as dc,
-  fetchLocalCliApi as dd,
-  ExtensionBrandMark as de,
-  fetchMcpProviderActions as df,
-  connectorSetupReady as dg,
-  shortIdentity as dh,
-  customExtensionDisplayName as di,
-  previewLocalCliMutation as dj,
-  applyLocalCliMutation as dk,
-  LOCAL_CLI_CAPABILITIES as dl,
-  loadLocalCliCommands as dm,
-  DiscoveryFailure as dn,
-  readJson as dp,
-  enrollablePackageScriptCommands as dq,
-  seenSuggestionMeta as dr,
-  looksLikeProjectRelocatePaste as ds,
-  packageScriptFilterNeedle as dt,
-  initialAddCommand as du,
-  suggestedPackageScriptExtensions as dv,
-  filterExtensionSuggestions as dw,
-  suggestedHarnessExtensions as dx,
-  suggestedSeenExtensions as dy,
-  keepsPackageScriptCatalog as dz,
+  localCliHref as d$,
+  buildExtensionPolicyDraftMutation as d0,
+  fetchEffectiveExtensionControls as d1,
+  previewExtensionMutation as d2,
+  isCurrentExtensionPolicyDraft as d3,
+  applyExtensionMutation as d4,
+  fetchExtensionControlHistory as d5,
+  managedPermissionState as d6,
+  controlProvenance as d7,
+  treatmentLabel as d8,
+  useResolvedApprovalGate as d9,
+  filterExtensionSuggestions as dA,
+  suggestedHarnessExtensions as dB,
+  suggestedSeenExtensions as dC,
+  keepsPackageScriptCatalog as dD,
+  prefillSuggestedStates as dE,
+  recognizeLocalCli as dF,
+  preferredPackageScriptExtension as dG,
+  looksLikePackageScriptPaste as dH,
+  enrollmentCommandStates as dI,
+  isBulkApproveGateReady as dJ,
+  fetchLocalCliList as dK,
+  normalizeLocalCliList as dL,
+  unreviewedToolChangeCount as dM,
+  connectorSetupMatch as dN,
+  refreshMcpInventory as dO,
+  connectorGroupOutcome as dP,
+  allowedEarlierVersion as dQ,
+  startGuardCloudConnect as dR,
+  extensionEffectiveState as dS,
+  permissionEffectiveState as dT,
+  fetchExtensionControlApi as dU,
+  permissionForRule as dV,
+  refreshEffectiveExtensionControls as dW,
+  fetchExtensionDiscoveryApi as dX,
+  startCancelableDiscoveryJob as dY,
+  waitForMcpDiscoveryJob as dZ,
+  isLocalCliId as d_,
+  groupPermissionsByFamily as da,
+  HiMiniInformationCircle as db,
+  LocalCliApiError as dc,
+  hasSuggestedRules as dd,
+  approvalProofRecentlySatisfied as de,
+  StyledSelect as df,
+  bulkCommandState as dg,
+  fetchLocalCliApi as dh,
+  ExtensionBrandMark as di,
+  fetchMcpProviderActions as dj,
+  connectorSetupReady as dk,
+  shortIdentity as dl,
+  customExtensionDisplayName as dm,
+  previewLocalCliMutation as dn,
+  applyLocalCliMutation as dp,
+  LOCAL_CLI_CAPABILITIES as dq,
+  loadLocalCliCommands as dr,
+  DiscoveryFailure as ds,
+  readJson as dt,
+  enrollablePackageScriptCommands as du,
+  seenSuggestionMeta as dv,
+  looksLikeProjectRelocatePaste as dw,
+  packageScriptFilterNeedle as dx,
+  initialAddCommand as dy,
+  suggestedPackageScriptExtensions as dz,
   HiMiniSquares2X2 as e,
-  closeOnEscape as e$,
-  profileSetupCommand as e0,
-  customExtensionBadge as e1,
-  extensionDisplayName as e2,
-  catalogRowSecondLine as e3,
-  extensionStateLabel as e4,
-  HiMiniGlobeAlt as e5,
-  HiMiniFunnel as e6,
-  discoveryFailureMessage as e7,
-  refreshCodexHostInventory as e8,
-  CODEX_HOST_FALLBACK as e9,
-  computeMetrics as eA,
-  CommandActivityWorkspace as eB,
-  EvidenceFilterBar as eC,
-  EvidenceInsightStrip as eD,
-  EvidenceActionList as eE,
-  EvidenceActionDetail as eF,
-  policyIdentityKey as eG,
-  clearLabelForScope as eH,
-  HiMiniChartBar as eI,
-  appModesUpdate as eJ,
-  appModesStatusMessage as eK,
-  needsConfirm as eL,
-  cigarReady as eM,
-  cigarSupported as eN,
-  guardOffPrompt as eO,
-  cigarUnavailableReason as eP,
-  HiMiniCheckBadge as eQ,
-  HiMiniKey as eR,
-  isSupplyChainAuditIncomplete as eS,
-  isSupplyChainAuditEvidence as eT,
-  readString$1 as eU,
-  IconActionButton as eV,
-  HiMiniBeaker as eW,
-  HiMiniBugAnt as eX,
-  ActivationSummary as eY,
-  ActionResultPanel as eZ,
-  fetchSupplyChainBundle as e_,
-  CONFIGURED_CONNECTIONS_FALLBACK as ea,
-  loadCurrentDashboardBuild as eb,
-  canonicalExtensionId as ec,
-  extensionDetailHref as ed,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as ee,
-  addCustomExtensionPrefillHref as ef,
-  acknowledgeDegradedExtensionControlAuthority as eg,
-  recoverExtensionControlAuthority as eh,
-  connectorSetupLinkFromSearch as ei,
-  readExtensionDetailUrlState as ej,
-  parseProtectionRoute as ek,
-  addCustomExtensionHref as el,
-  runHarnessAction as em,
-  GuardHarnessActionError as en,
-  HiMiniRocketLaunch as eo,
-  HiMiniTrash as ep,
-  fetchGuardApi as eq,
-  formatHarnessCommand as er,
-  appModes as es,
-  fetchApprovalPage as et,
-  fetchPolicy as eu,
-  appSetupTarget as ev,
-  guardActionPresentation as ew,
-  DEFAULT_FILTER_STATE as ex,
-  filterEvidence as ey,
-  sortEvidence as ez,
+  fetchPackageFirewallStatus as e$,
+  fetchPluginUpdatesApi as e0,
+  filterCodexHostApps as e1,
+  connectorWorkspaceItems as e2,
+  customExtensionNeedsReview as e3,
+  profileSetupCommand as e4,
+  customExtensionBadge as e5,
+  extensionDisplayName as e6,
+  catalogRowSecondLine as e7,
+  extensionStateLabel as e8,
+  HiMiniGlobeAlt as e9,
+  guardActionPresentation as eA,
+  DEFAULT_FILTER_STATE as eB,
+  filterEvidence as eC,
+  sortEvidence as eD,
+  computeMetrics as eE,
+  CommandActivityWorkspace as eF,
+  EvidenceFilterBar as eG,
+  EvidenceInsightStrip as eH,
+  EvidenceActionList as eI,
+  EvidenceActionDetail as eJ,
+  policyIdentityKey as eK,
+  clearLabelForScope as eL,
+  HiMiniChartBar as eM,
+  HiMiniCheckBadge as eN,
+  isSupplyChainAuditIncomplete as eO,
+  isSupplyChainAuditEvidence as eP,
+  readString$1 as eQ,
+  IconActionButton as eR,
+  HiMiniBeaker as eS,
+  HiMiniBugAnt as eT,
+  ActivationSummary as eU,
+  ActionResultPanel as eV,
+  fetchSupplyChainBundle as eW,
+  closeOnEscape as eX,
+  ConnectFlowCard as eY,
+  ApprovalProofInline as eZ,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as e_,
+  HiMiniFunnel as ea,
+  discoveryFailureMessage as eb,
+  refreshCodexHostInventory as ec,
+  CODEX_HOST_FALLBACK as ed,
+  CONFIGURED_CONNECTIONS_FALLBACK as ee,
+  loadCurrentDashboardBuild as ef,
+  canonicalExtensionId as eg,
+  extensionDetailHref as eh,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as ei,
+  addCustomExtensionPrefillHref as ej,
+  acknowledgeDegradedExtensionControlAuthority as ek,
+  recoverExtensionControlAuthority as el,
+  connectorSetupLinkFromSearch as em,
+  readExtensionDetailUrlState as en,
+  parseProtectionRoute as eo,
+  addCustomExtensionHref as ep,
+  runHarnessAction as eq,
+  GuardHarnessActionError as er,
+  HiMiniRocketLaunch as es,
+  HiMiniTrash as et,
+  fetchGuardApi as eu,
+  formatHarnessCommand as ev,
+  appModes as ew,
+  fetchApprovalPage as ex,
+  fetchPolicy as ey,
+  appSetupTarget as ez,
   fetchWithGuardAuth as f,
-  ConnectFlowCard as f0,
-  ApprovalProofInline as f1,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as f2,
-  fetchPackageFirewallStatus as f3,
-  runPackageAudit as f4,
-  resolveSupplyChainAuditFailure as f5,
-  runPackageSync as f6,
-  GuardOperationTimeoutError as f7,
-  startPackageFirewallConnect as f8,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f9,
-  HiMiniArrowLongRight as fA,
-  fetchReleaseFeedApi as fB,
-  fetchMcpPolicyRequest as fC,
-  resolveMcpPolicyRequest as fD,
-  HiMiniDocumentPlus as fE,
-  HiMiniArrowUpRight as fF,
-  HiMiniArrowUp as fG,
-  HiMiniChevronLeft as fH,
-  HiMiniArrowDown as fI,
-  runAuditRemediation as fJ,
-  isBlockedGuardAction as fK,
-  isSupplyChainScannerEvidence as fL,
-  HiMiniSignal as fM,
-  repairSupplyChainProtection as fa,
-  runPackageFirewallAction as fb,
-  parseInterceptProofSnapshot as fc,
-  activatePackageFirewallRuntime as fd,
-  EntitlementNotice as fe,
-  chooseSupplyChainAuditFolder as ff,
-  fetchReceipts as fg,
-  lazyWorkspace as fh,
-  scopeLabel as fi,
-  HiMiniCloudArrowUp as fj,
-  HiMiniCodeBracket as fk,
-  HiMiniUsers as fl,
-  HiMiniIdentification as fm,
-  policyActionLabel as fn,
-  createCloudExceptionRequest as fo,
-  HiMiniPuzzlePiece as fp,
-  fetchCloudExceptions as fq,
-  fetchCloudExceptionRequests as fr,
-  PaginationControls as fs,
-  PolicyStatField as ft,
-  HiMiniInbox as fu,
-  HiMiniQueueList as fv,
-  Surface as fw,
-  HiMiniEllipsisHorizontal as fx,
-  HiMiniMinus as fy,
-  HiMiniWrench as fz,
+  runPackageAudit as f0,
+  resolveSupplyChainAuditFailure as f1,
+  runPackageSync as f2,
+  GuardOperationTimeoutError as f3,
+  startPackageFirewallConnect as f4,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f5,
+  repairSupplyChainProtection as f6,
+  runPackageFirewallAction as f7,
+  parseInterceptProofSnapshot as f8,
+  activatePackageFirewallRuntime as f9,
+  HiMiniDocumentPlus as fA,
+  HiMiniKey as fB,
+  HiMiniArrowUpRight as fC,
+  HiMiniArrowUp as fD,
+  HiMiniChevronLeft as fE,
+  HiMiniArrowDown as fF,
+  runAuditRemediation as fG,
+  isBlockedGuardAction as fH,
+  isSupplyChainScannerEvidence as fI,
+  HiMiniSignal as fJ,
+  EntitlementNotice as fa,
+  chooseSupplyChainAuditFolder as fb,
+  fetchReceipts as fc,
+  lazyWorkspace as fd,
+  scopeLabel as fe,
+  HiMiniCloudArrowUp as ff,
+  HiMiniCodeBracket as fg,
+  HiMiniUsers as fh,
+  HiMiniIdentification as fi,
+  policyActionLabel as fj,
+  createCloudExceptionRequest as fk,
+  HiMiniPuzzlePiece as fl,
+  fetchCloudExceptions as fm,
+  fetchCloudExceptionRequests as fn,
+  PaginationControls as fo,
+  PolicyStatField as fp,
+  HiMiniInbox as fq,
+  HiMiniQueueList as fr,
+  Surface as fs,
+  HiMiniEllipsisHorizontal as ft,
+  HiMiniMinus as fu,
+  HiMiniWrench as fv,
+  HiMiniArrowLongRight as fw,
+  fetchReleaseFeedApi as fx,
+  fetchMcpPolicyRequest as fy,
+  resolveMcpPolicyRequest as fz,
   HiMiniComputerDesktop as g,
   HiMiniMagnifyingGlass as h,
   HiMiniListBullet as i,

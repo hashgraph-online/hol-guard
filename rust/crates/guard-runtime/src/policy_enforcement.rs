@@ -346,6 +346,7 @@ pub(crate) fn apply_pre_tool_policy_with_inspection(
             package_scripts_disabled: package_scripts_disabled(payload, &result),
             operator_allowed_mcp_tool,
         },
+        false,
         guard_inspection && !facts.sensitive_target,
     )?;
     let effective = join_action(&result.minimum_action, &policy_floor)?;

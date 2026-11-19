@@ -23,12 +23,11 @@ import type {
   DecisionScope,
 } from "./guard-types";
 import { useGuardUpdate } from "./guard-update-panel";
-import { updateSettings } from "./guard-api";
 import { dashboardEmbedsInDesktop } from "./desktop-embed";
 import { GuardUpdateBanner, readDismissedDesktopUpdateVersion } from "./guard-update-banner";
 import { desktopUpdateBannerModel } from "./guard-update-copy";
 import { WatchProtectionBanner } from "./watch-protection-banner";
-import { turnProtectionOnUpdate, watchBannerModel } from "./harness-posture-ui";
+import { watchBannerModel } from "./harness-posture-ui";
 
 const McpPolicyRequestPanel = lazyWorkspace("mcp-policy-request-panel", () =>
   import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel })),
@@ -117,17 +116,17 @@ function InboxWatchBanner(props: {
   onRestored?: () => void;
   onOpenSettings: () => void;
 }) {
-  const { snapshot } = props;
-  const handleTurnOn = useCallback(() => {
-    void updateSettings(turnProtectionOnUpdate(snapshot))
-      .then(() => {
-        props.onRestored?.();
-      })
-      .catch(() => {
-        props.onOpenSettings();
-      });
-  }, [props.onOpenSettings, props.onRestored, snapshot]);
-  return <WatchProtectionBanner model={watchBannerModel(snapshot)} onTurnProtectionOn={handleTurnOn} />;
+  const { snapshot, onRestored } = props;
+  const handleTurnedOn = useCallback(() => {
+    onRestored?.();
+  }, [onRestored]);
+  return (
+    <WatchProtectionBanner
+      model={watchBannerModel(snapshot)}
+      onTurnedOn={handleTurnedOn}
+      onOpenSettings={props.onOpenSettings}
+    />
+  );
 }
 
 function renderInboxContent(props: LayoutProps): ReactNode {
