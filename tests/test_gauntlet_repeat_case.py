@@ -81,7 +81,7 @@ def _timed(by_id, calls, *, span_ms):
 
 def test_a_run_slower_than_the_loop_window_is_not_exercised_not_a_miss() -> None:
     calls = _calls(last_error=False)
-    slow = _timed(_guards(calls, last="allow"), calls, span_ms=31_000)
+    slow = _timed(_guards(calls, last="allow"), calls, span_ms=121_000)
     assert assess_repeat((COMMAND,) * 6, calls, slow)[0] == "not-exercised"
     quick = _timed(_guards(calls, last="allow"), calls, span_ms=12_000)
     assert assess_repeat((COMMAND,) * 6, calls, quick)[0] == "false-negative"
@@ -89,7 +89,7 @@ def test_a_run_slower_than_the_loop_window_is_not_exercised_not_a_miss() -> None
 
 def test_a_stop_still_passes_however_long_the_run_took() -> None:
     calls = _calls()
-    assert assess_repeat((COMMAND,) * 6, calls, _timed(_guards(calls), calls, span_ms=45_000))[0] == "pass"
+    assert assess_repeat((COMMAND,) * 6, calls, _timed(_guards(calls), calls, span_ms=150_000))[0] == "pass"
 
 
 def test_the_repeat_control_must_run_every_listed_line_in_order() -> None:

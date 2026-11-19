@@ -42,7 +42,9 @@ const RECEIPT_ONLY_FIELD: &str = "guard_containment_receipt_only";
 pub(crate) const LOOP_PRIORS: usize = 5;
 /// Subagents started before the next one is stopped.
 pub(crate) const FANOUT_PRIORS: usize = 8;
-pub(crate) const LOOP_WINDOW: Duration = Duration::from_secs(30);
+/// A model takes several seconds to choose each call, so six calls in a row
+/// from a stuck agent span about a minute. The window must hold that pace.
+pub(crate) const LOOP_WINDOW: Duration = Duration::from_secs(120);
 pub(crate) const FANOUT_WINDOW: Duration = Duration::from_secs(60);
 
 /// Harnesses whose `PreToolUse` hook sees every tool the agent calls.
@@ -402,3 +404,7 @@ mod store;
 #[cfg(test)]
 #[path = "edge_session_cascade_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "edge_session_cascade_pace_tests.rs"]
+mod pace_tests;
