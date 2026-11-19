@@ -409,6 +409,7 @@
       "src/pretool/generic_omp_eval_parser_vocabulary.rs",
       "src/pretool/generic_omp_eval_pure.rs",
       "src/pretool/generic_omp_eval_tokens.rs",
+      "src/pretool/generic_omp_goal.rs",
       "src/pretool/generic_omp_grep_glob.rs",
       "src/pretool/generic_omp_host_refs.rs",
       "src/pretool/generic_omp_learn.rs",

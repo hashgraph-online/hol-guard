@@ -362,7 +362,7 @@ fn adjust_grok(envelope: &mut Envelope) {
 
 /// Oh My Pi tools that would otherwise fall back to the generic
 /// `config_change` label: `task` launches a delegated prompt, `eval` runs
-/// code, and `ls`/`find` list names.
+/// code, `goal` keeps the session objective, and `ls`/`find` list names.
 fn adjust_omp(envelope: &mut Envelope) {
     if envelope.mcp_server.is_some() || envelope.command.is_some() {
         return;
@@ -374,7 +374,7 @@ fn adjust_omp(envelope: &mut Envelope) {
     let action = match tool.as_str() {
         "task" => "prompt",
         "eval" => "shell_command",
-        "wait" | "todo" | "todo_write" => "harness_start",
+        "goal" | "wait" | "todo" | "todo_write" => "harness_start",
         "ls" | "find" => "file_read",
         _ => return,
     };

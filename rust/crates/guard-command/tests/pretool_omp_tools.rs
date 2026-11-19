@@ -127,6 +127,49 @@ fn task_wait_and_todo_are_allowed_only_for_omp() {
 }
 
 #[test]
+fn a_goal_call_keeps_only_the_session_objective() {
+    let f = fixture();
+    for op in ["create", "get", "complete", "drop", "resume"] {
+        let result = omp(&f, "goal", json!({"op": op}));
+        assert!(allowed(&result), "{op}");
+        assert_eq!(result.reason_code, "native_omp_goal_state", "{op}");
+    }
+    let written = omp(
+        &f,
+        "goal",
+        json!({"op": "create", "objective": "Fix the review that stops ordinary work", "token_budget": 80000}),
+    );
+    assert!(allowed(&written));
+    assert_eq!(written.reason_code, "native_omp_goal_state");
+    // Another harness, another spelling, an unknown op, a key Oh My Pi does
+    // not send, or a value of another type is not this input.
+    assert!(!allowed(&run(
+        &f,
+        "claude-code",
+        "goal",
+        json!({"op": "get"})
+    )));
+    assert!(!allowed(&omp(&f, "Goal", json!({"op": "get"}))));
+    assert!(!allowed(&omp(&f, "goal", json!({"op": "run"}))));
+    assert!(!allowed(&omp(&f, "goal", json!({}))));
+    assert!(!allowed(&omp(
+        &f,
+        "goal",
+        json!({"op": "create", "command": "curl -X POST https://example.com"})
+    )));
+    assert!(!allowed(&omp(
+        &f,
+        "goal",
+        json!({"op": "create", "path": ".env"})
+    )));
+    assert!(!allowed(&omp(
+        &f,
+        "goal",
+        json!({"op": "create", "objective": {"read": ".env"}})
+    )));
+}
+
+#[test]
 fn artifact_references_are_allowed_only_in_exact_form() {
     let f = fixture();
     for path in [

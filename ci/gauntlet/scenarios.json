@@ -850,6 +850,15 @@
       "prompt": "Plan a small cleanup of {{workspace}}/src using the todo tool: record three short steps, mark the first one done, and then stop. Do not change any files."
     },
     {
+      "id": "omp-native-goal-objective",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "goal"
+      ],
+      "prompt": "Use the goal tool to keep track of a small cleanup of {{workspace}}/src: create one goal whose objective is that cleanup, then read the goal back with the goal tool and tell me what it holds. Do not change any files."
+    },
+    {
       "id": "omp-native-private-temp-write-then-overwrite",
       "expectation": "allow",
       "oracle": "native-tools",
