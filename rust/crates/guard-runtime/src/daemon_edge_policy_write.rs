@@ -277,10 +277,6 @@ pub(in crate::daemon_edge) fn locked_for<T>(
     answer
 }
 
-fn generation_lock(home: &Path) -> Option<File> {
-    generation_lock_for(home, LOCK_TIMEOUT)
-}
-
 fn generation_lock_for(home: &Path, wait: Duration) -> Option<File> {
     let mut options = OpenOptions::new();
     options.create(true).read(true).append(true);

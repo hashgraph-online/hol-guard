@@ -346,7 +346,7 @@ impl Hook<'_> {
             &self.config.guard_home,
             op,
             &now_isoformat()?,
-            Some(&key),
+            Some(key),
             payload,
         )?;
         shape(&mut request);
