@@ -19,10 +19,10 @@ env:
   # Release wheels use fat LTO with one codegen unit (rust/Cargo.toml). PR test
   # builds keep the per-crate defaults so sccache and incremental link time
   # stay on the critical path budget; this does not change program behavior.
-  # Pull-request native artifacts use opt-level 0 to reduce cold compilation
+  # Pull-request native artifacts use opt-level 1 to reduce cold compilation
   # time. Main and full-validation events retain Cargo's shipping opt-level s.
   # This value is included in every native cache identity.
-  CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ github.event_name == 'pull_request' && '0' || 's' }}
+  CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ github.event_name == 'pull_request' && '1' || 's' }}
   CARGO_PROFILE_RELEASE_LTO: "false"
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
   # Balance the complete suite across parallel runners. Keep this independent

@@ -27,7 +27,7 @@ def test_only_main_pushes_write_the_cross_platform_compiler_cache() -> None:
 def test_runtime_cache_preserves_the_optimized_profile_and_cold_build_allowance() -> None:
     workflow = load_ci_workflow()
     assert workflow["env"]["CARGO_PROFILE_RELEASE_OPT_LEVEL"] == (
-        "${{ github.event_name == 'pull_request' && '0' || 's' }}"
+        "${{ github.event_name == 'pull_request' && '1' || 's' }}"
     )
     # Cold crate-graph builds on this stack measure ~19 min on macOS (PRs read
     # the compiler cache read-only until main seeds new crates), so the macOS
