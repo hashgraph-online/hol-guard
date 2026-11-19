@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import cast
 from uuid import uuid4
 
 from .native_execution import _resident_request
@@ -32,6 +33,9 @@ class ApprovalResolutionPlanUnavailableError(ValueError):
 
     def __init__(self, code: str = UNAVAILABLE) -> None:
         super().__init__(code)
+
+
+_PACKAGE_APPROVAL_FIELDS = frozenset({"harness", "artifact_id", "artifact_hash"})
 
 
 def _text(value: object) -> str | None:
@@ -65,7 +69,21 @@ def _envelope(value: object) -> dict[str, object] | None:
     }
     if "native_bash" in value:
         result["native_bash"] = value["native_bash"]
+    package_approval = _package_approval(value.get("package_approval"))
+    if package_approval is not None:
+        result["package_approval"] = package_approval
     return result
+
+
+def _package_approval(value: object) -> dict[str, str] | None:
+    """The package key a package install review carries, when it is well formed."""
+
+    if not isinstance(value, Mapping) or set(value) != _PACKAGE_APPROVAL_FIELDS:
+        return None
+    key = {field: value[field] for field in _PACKAGE_APPROVAL_FIELDS}
+    if not all(isinstance(item, str) and item for item in key.values()):
+        return None
+    return cast("dict[str, str]", key)
 
 
 def _native_bash_refusal(request: Mapping[str, object], action: str, scope: str, persist: bool | None) -> bool:
