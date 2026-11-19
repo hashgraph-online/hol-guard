@@ -195,7 +195,7 @@ def test_rust_shards_preserve_full_target_selection(
         timeout=5,
     )
     invocation = json.loads(capture.read_text())
-    assert invocation["opt"] == "1"
+    assert invocation["opt"] == "0"
     assert (workspace / "rust/target").is_dir() is archive_hit
     if archive_hit:
         build_args = [
