@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -186,6 +187,17 @@ def test_saved_exact_action_block_wins_over_custom_extension_allow(
     )
     monkeypatch.setattr(hook_native_review_approval, "native_saved_decision_response", lambda *_a, **_k: saved_block)
     monkeypatch.setattr(hook_native_review_approval, "native_exact_command_block_response", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        hook_native_review_approval,
+        "native_hook_facts",
+        lambda *_a, **_k: SimpleNamespace(
+            event_name="PreToolUse",
+            command_only=True,
+            command="npx wrangler deploy",
+            tool_name="Bash",
+            launch_target="npx wrangler deploy",
+        ),
+    )
 
     response = hook_native_review_approval.pause_native_pre_tool_for_approval(
         object(),

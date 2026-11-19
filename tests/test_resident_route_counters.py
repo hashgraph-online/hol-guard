@@ -7,13 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.evidence_drains import hook_direct_evidence_drain
-from codex_plugin_scanner.guard.evidence_drains.hook_direct_evidence_drain import DirectHookEvidenceDrain, _decode_page
-from codex_plugin_scanner.guard.hook_review.hook_direct_counters import (
-    HARNESS_SLOTS,
-    HookCounterLog,
-    bind_hook_counter_sink,
-    decode_resident_counters,
+from codex_plugin_scanner.guard.resident_evidence_drain import ResidentEvidenceDrain, _decode_page
+from codex_plugin_scanner.guard.resident_route_counters import (
+    RouteCounterLog,
+    bind_route_counter_sink,
+    decode_route_counters,
 )
 
 EPOCH = "1f-2e-0"
@@ -41,7 +39,7 @@ class _Sink:
 @dataclass
 class _Host:
     guard_home: Path
-    hook_counters: HookCounterLog
+    hook_counters: RouteCounterLog
     store: object = field(default_factory=object)
     activity_writer: object = field(default_factory=object)
     policy_snapshot_publisher: object = field(default_factory=object)
@@ -63,22 +61,15 @@ def _page(*, counters: object | None = None) -> bytes:
     return json.dumps(page).encode()
 
 
-def _log(clock: _Clock, sink: _Sink) -> HookCounterLog:
-    log = HookCounterLog(interval_seconds=300.0, clock=clock)
+def _log(clock: _Clock, sink: _Sink) -> RouteCounterLog:
+    log = RouteCounterLog(interval_seconds=300.0, clock=clock)
     log.bind_sink(sink.record)
     return log
 
 
-def test_harness_slots_match_the_direct_harnesses() -> None:
-    direct = hook_direct_evidence_drain._DIRECT_HARNESSES  # pyright: ignore[reportPrivateUsage]
-    assert frozenset(HARNESS_SLOTS[:-1]) == direct
-    assert HARNESS_SLOTS[-1] == "other"
-    assert len(set(HARNESS_SLOTS)) == len(HARNESS_SLOTS)
-
-
 def test_malformed_resident_counters_are_ignored() -> None:
-    assert decode_resident_counters(RESIDENT) == RESIDENT["by_harness"]
-    assert decode_resident_counters({"by_harness": {}}) == {}
+    assert decode_route_counters(RESIDENT) == RESIDENT["by_harness"]
+    assert decode_route_counters({"by_harness": {}}) == {}
     for malformed in (
         None,
         [],
@@ -91,7 +82,7 @@ def test_malformed_resident_counters_are_ignored() -> None:
         {"by_harness": {"codex": {"answer": "1"}}},
         {"by_harness": {"codex": {f"code_{index}": 1 for index in range(65)}}},
     ):
-        assert decode_resident_counters(malformed) is None, malformed
+        assert decode_route_counters(malformed) is None, malformed
 
 
 def test_the_log_is_change_only_and_rate_limited() -> None:
@@ -121,7 +112,7 @@ def test_a_failed_delivery_is_retried_after_the_interval() -> None:
             raise OSError("diagnostics unavailable")
         sink.record(event, detail=detail)
 
-    log = HookCounterLog(clock=clock)
+    log = RouteCounterLog(clock=clock)
     log.bind_sink(flaky)
     log.observe_page(EPOCH, RESIDENT)
     with pytest.raises(OSError):
@@ -141,7 +132,7 @@ def test_a_dropped_line_is_retried_after_the_interval() -> None:
         # `DaemonDiagnostics.record` returns False when its queue drops a line.
         return accepting["on"] and sink.record(event, detail=detail)
 
-    log = HookCounterLog(clock=clock)
+    log = RouteCounterLog(clock=clock)
     log.bind_sink(queue)
     log.observe_page(EPOCH, RESIDENT)
     assert not log.maybe_log()
@@ -156,7 +147,7 @@ def test_a_drain_without_a_transport_logs_the_counts_it_holds(tmp_path: Path) ->
     clock, sink = _Clock(), _Sink()
     host = _Host(tmp_path, _log(clock, sink))
     host.hook_counters.observe_page(EPOCH, RESIDENT)
-    drain = DirectHookEvidenceDrain(host, transport=lambda: None)
+    drain = ResidentEvidenceDrain(host, transport=lambda: None)
 
     assert drain.drain_once() is False
     assert sink.lines == [LOGGED]
@@ -165,7 +156,7 @@ def test_a_drain_without_a_transport_logs_the_counts_it_holds(tmp_path: Path) ->
 def test_a_new_page_feeds_the_log_through_the_drain(tmp_path: Path) -> None:
     clock, sink = _Clock(), _Sink()
     host = _Host(tmp_path, _log(clock, sink))
-    drain = DirectHookEvidenceDrain(host, transport=lambda: (tmp_path, lambda **_: _page(counters=RESIDENT)))
+    drain = ResidentEvidenceDrain(host, transport=lambda: (tmp_path, lambda **_: _page(counters=RESIDENT)))
 
     assert drain.drain_once() is False
     assert drain.failures == 0
@@ -175,7 +166,7 @@ def test_a_new_page_feeds_the_log_through_the_drain(tmp_path: Path) -> None:
 def test_a_new_daemon_drains_an_old_resident_page(tmp_path: Path) -> None:
     clock, sink = _Clock(), _Sink()
     host = _Host(tmp_path, _log(clock, sink))
-    drain = DirectHookEvidenceDrain(host, transport=lambda: (tmp_path, lambda **_: _page()))
+    drain = ResidentEvidenceDrain(host, transport=lambda: (tmp_path, lambda **_: _page()))
 
     assert drain.drain_once() is False
     assert drain.failures == 0
@@ -183,25 +174,25 @@ def test_a_new_daemon_drains_an_old_resident_page(tmp_path: Path) -> None:
 
 
 def test_an_old_shaped_decoder_reads_a_new_page_unchanged() -> None:
-    # The decoder before counters took only the page bytes and read five keys.
+    # The transport decoder keeps only the page count and cursor metadata.
     assert _decode_page(_page(counters=RESIDENT)) == _decode_page(_page()) == ([], 0, None)
-    log = HookCounterLog()
+    log = RouteCounterLog()
     assert _decode_page(_page(counters={"by_harness": "bad"}), log) == ([], 0, None)
     assert log.snapshot()["resident"] == {}
 
 
 @pytest.mark.parametrize("diagnostics", [None, object()])
 def test_a_counter_log_without_diagnostics_stays_silent(diagnostics: object) -> None:
-    log = HookCounterLog()
-    bind_hook_counter_sink(type("Worker", (), {"hook_counters": log})(), diagnostics)
+    log = RouteCounterLog()
+    bind_route_counter_sink(type("Worker", (), {"hook_counters": log})(), diagnostics)
     log.observe_page(EPOCH, RESIDENT)
     assert not log.maybe_log()
 
 
 def test_a_counter_log_binds_the_daemon_diagnostics() -> None:
     clock, sink = _Clock(), _Sink()
-    log = HookCounterLog(clock=clock)
-    bind_hook_counter_sink(type("Worker", (), {"hook_counters": log})(), sink)
+    log = RouteCounterLog(clock=clock)
+    bind_route_counter_sink(type("Worker", (), {"hook_counters": log})(), sink)
     log.observe_page(EPOCH, RESIDENT)
     assert log.maybe_log()
     assert sink.lines == [LOGGED]

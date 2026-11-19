@@ -24,6 +24,7 @@ pub(crate) fn claude_record_notice_direct(
     let foreign_key = std::cell::Cell::new(false);
     let env = Env {
         connection,
+        guard_home: None,
         key: Some(zeroize::Zeroizing::new(key.to_vec())),
         key_id: Some(key_id),
         now,
@@ -51,6 +52,7 @@ pub(crate) fn claude_record_notice_current_key(
 ) {
     let env = Env {
         connection,
+        guard_home: None,
         key: Some(zeroize::Zeroizing::new(key.to_vec())),
         key_id: Some(key_id),
         now,

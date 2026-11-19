@@ -5,14 +5,14 @@ from __future__ import annotations
 import threading
 from types import SimpleNamespace
 
-from codex_plugin_scanner.guard.evidence_drains.hook_evidence_dispatch import (
-    HookEvidenceDispatch,
-    run_hook_evidence,
+from codex_plugin_scanner.guard.resident_evidence_dispatch import (
+    ResidentEvidenceDispatch,
+    run_resident_evidence,
 )
 
 
 def test_evidence_is_submitted_in_the_order_the_hooks_left_it() -> None:
-    dispatch = HookEvidenceDispatch()
+    dispatch = ResidentEvidenceDispatch()
     recorded: list[int] = []
     try:
         for index in range(50):
@@ -24,7 +24,7 @@ def test_evidence_is_submitted_in_the_order_the_hooks_left_it() -> None:
 
 
 def test_work_runs_off_the_calling_thread() -> None:
-    dispatch = HookEvidenceDispatch()
+    dispatch = ResidentEvidenceDispatch()
     threads: list[int] = []
     try:
         dispatch.run(lambda: threads.append(threading.get_ident()))
@@ -35,7 +35,7 @@ def test_work_runs_off_the_calling_thread() -> None:
 
 
 def test_a_full_dispatch_drops_the_record_rather_than_overtaking_the_queue() -> None:
-    dispatch = HookEvidenceDispatch(max_pending=1)
+    dispatch = ResidentEvidenceDispatch(max_pending=1)
     held = threading.Event()
     released = threading.Event()
     recorded: list[str] = []
@@ -55,7 +55,7 @@ def test_a_full_dispatch_drops_the_record_rather_than_overtaking_the_queue() -> 
 
 
 def test_a_stopped_dispatch_still_records_what_it_is_given() -> None:
-    dispatch = HookEvidenceDispatch()
+    dispatch = ResidentEvidenceDispatch()
     assert dispatch.stop(timeout_seconds=5.0)
     recorded: list[str] = []
     dispatch.run(lambda: recorded.append("late"))
@@ -63,7 +63,7 @@ def test_a_stopped_dispatch_still_records_what_it_is_given() -> None:
 
 
 def test_evidence_that_raises_never_reaches_the_caller() -> None:
-    dispatch = HookEvidenceDispatch()
+    dispatch = ResidentEvidenceDispatch()
     reached: list[str] = []
 
     def explode() -> None:
@@ -80,16 +80,16 @@ def test_evidence_that_raises_never_reaches_the_caller() -> None:
 
 def test_a_host_without_a_dispatch_runs_the_work_inline() -> None:
     recorded: list[str] = []
-    run_hook_evidence(SimpleNamespace(), lambda: recorded.append("inline"))
-    run_hook_evidence(SimpleNamespace(evidence_dispatch=None), lambda: recorded.append("none"))
+    run_resident_evidence(SimpleNamespace(), lambda: recorded.append("inline"))
+    run_resident_evidence(SimpleNamespace(evidence_dispatch=None), lambda: recorded.append("none"))
     assert recorded == ["inline", "none"]
 
 
 def test_a_host_with_a_dispatch_hands_the_work_to_it() -> None:
-    dispatch = HookEvidenceDispatch()
+    dispatch = ResidentEvidenceDispatch()
     threads: list[int] = []
     try:
-        run_hook_evidence(
+        run_resident_evidence(
             SimpleNamespace(evidence_dispatch=dispatch),
             lambda: threads.append(threading.get_ident()),
         )

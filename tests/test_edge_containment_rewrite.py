@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -115,6 +116,7 @@ def _status(tmp_path: Path) -> NativeRuntimeStatus:
             "native-resident-client-v1",
             "pre-tool-generic-authority-v1",
             "git-execution-context-v1",
+            "hook-payload-facts-v1",
         ),
     )
     return NativeRuntimeStatus(
@@ -214,6 +216,17 @@ def test_only_a_cursor_envelope_offers_the_runtime_sink(
 def _no_saved_command_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
     # The fixture daemon has no store; saved command blocks are tested elsewhere.
     monkeypatch.setattr(hook_worker_native, "native_exact_command_block_response", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        hook_worker_native,
+        "native_hook_facts",
+        lambda *_a, **_k: SimpleNamespace(
+            event_name="PreToolUse",
+            command_only=True,
+            command="make build",
+            tool_name="Bash",
+            launch_target="make build",
+        ),
+    )
 
 
 class _Metrics:

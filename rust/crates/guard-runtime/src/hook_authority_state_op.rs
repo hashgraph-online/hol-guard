@@ -17,6 +17,7 @@
 //! resident issued earlier — out of a pending index, or out of an op's own
 //! reply — and that key is acted on as given.
 
+use std::path::Path;
 use std::time::Duration;
 
 use base64ct::{Base64UrlUnpadded, Encoding};
@@ -156,6 +157,7 @@ pub(crate) fn evaluate_within(
         .map_err(|_| ERROR_STORE)?;
     let env = Env {
         connection: &connection,
+        guard_home: Some(Path::new(&request.guard_home)),
         key: request
             .integrity_key_b64
             .as_deref()
@@ -282,6 +284,7 @@ fn dedupe(keys: impl IntoIterator<Item = String>) -> Vec<String> {
 
 struct Env<'a> {
     connection: &'a Connection,
+    guard_home: Option<&'a Path>,
     key: Option<zeroize::Zeroizing<Vec<u8>>>,
     key_id: Option<&'a str>,
     now: &'a str,
@@ -399,6 +402,7 @@ fn direct_notice_transaction(
     let foreign_key = std::cell::Cell::new(false);
     let env = Env {
         connection: &connection,
+        guard_home: None,
         key: key.map(|(bytes, _)| zeroize::Zeroizing::new(bytes.to_vec())),
         key_id: key.map(|(_, id)| id),
         now,

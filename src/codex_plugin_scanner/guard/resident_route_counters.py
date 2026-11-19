@@ -20,7 +20,7 @@ import time
 from collections.abc import Callable, Mapping
 from typing import Final
 
-HARNESS_SLOTS: Final = (
+ROUTE_HARNESS_SLOTS: Final = (
     "codex",
     "claude-code",
     "cursor",
@@ -44,7 +44,7 @@ _MAX_OUTCOMES: Final = 64
 _OUTCOME_CODE: Final = re.compile(r"[a-z_]{1,64}")
 
 
-def decode_resident_counters(value: object) -> dict[str, dict[str, int]] | None:
+def decode_route_counters(value: object) -> dict[str, dict[str, int]] | None:
     """The resident's counts from a drain page, or ``None`` when malformed."""
 
     if not isinstance(value, Mapping):
@@ -54,7 +54,7 @@ def decode_resident_counters(value: object) -> dict[str, dict[str, int]] | None:
         return None
     decoded: dict[str, dict[str, int]] = {}
     for harness, outcomes in by_harness.items():
-        if harness not in HARNESS_SLOTS or not isinstance(outcomes, Mapping) or len(outcomes) > _MAX_OUTCOMES:
+        if harness not in ROUTE_HARNESS_SLOTS or not isinstance(outcomes, Mapping) or len(outcomes) > _MAX_OUTCOMES:
             return None
         counts: dict[str, int] = {}
         for code, count in outcomes.items():
@@ -67,7 +67,7 @@ def decode_resident_counters(value: object) -> dict[str, dict[str, int]] | None:
     return decoded
 
 
-class HookCounterLog:
+class RouteCounterLog:
     """Hold the latest counts and log them when they change."""
 
     def __init__(
@@ -92,7 +92,7 @@ class HookCounterLog:
     def observe_page(self, epoch: object, counters: object) -> None:
         """Keep the resident counts a drain page carried, when it has them."""
 
-        decoded = decode_resident_counters(counters)
+        decoded = decode_route_counters(counters)
         if decoded is None or not isinstance(epoch, str) or not epoch:
             return
         with self._lock:
@@ -126,18 +126,18 @@ class HookCounterLog:
         return True
 
 
-def bind_hook_counter_sink(worker: object, diagnostics: object) -> None:
+def bind_route_counter_sink(worker: object, diagnostics: object) -> None:
     """Log the worker's counts through the daemon diagnostics, when both exist."""
 
     counters = getattr(worker, "hook_counters", None)
     record = getattr(diagnostics, "record", None)
-    if isinstance(counters, HookCounterLog) and callable(record):
+    if isinstance(counters, RouteCounterLog) and callable(record):
         counters.bind_sink(record)
 
 
 __all__ = [
-    "HARNESS_SLOTS",
-    "HookCounterLog",
-    "bind_hook_counter_sink",
-    "decode_resident_counters",
+    "ROUTE_HARNESS_SLOTS",
+    "RouteCounterLog",
+    "bind_route_counter_sink",
+    "decode_route_counters",
 ]

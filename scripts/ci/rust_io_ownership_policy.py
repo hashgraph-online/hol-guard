@@ -45,7 +45,7 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         # runtime decides what the program found from it may reach.
         "src/codex_plugin_scanner/guard/hook_review/hook_native_exact_action.py",
         # Payload-reference metadata validation; the native edge reads bytes.
-        "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
+        "src/codex_plugin_scanner/guard/native_payload_facts.py",
         # Archive-inspection transport: lease, request binding, and the
         # bounded native worker invocation; all archive semantics are Rust.
         "src/codex_plugin_scanner/guard/native_archive_inspection.py",

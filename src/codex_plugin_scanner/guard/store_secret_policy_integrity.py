@@ -4,6 +4,10 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 import threading
 from collections.abc import Callable
 
@@ -286,10 +290,101 @@ class StoreSecretPolicyIntegrityMixin:
             )
         return self._get_secret_from_store(store, secret_id)
 
-    def _get_policy_integrity_secret_from_store(self, secret_id: str) -> str | None:
+    @staticmethod
+    def _get_secret_from_system_keyring_strict(store: SystemKeyringSecretStore, secret_id: str) -> str | None:
+        """Read the primary keyring behind a process timeout for strict state reads.
+
+        A strict read runs while the integrity generation lock is held. The
+        normal keyring helper is intentionally compatible with test backends,
+        but can call a platform keyring synchronously outside macOS. The
+        disposable process gives every production backend the same bounded
+        outcome. A timeout or crashed child raises so callers never interpret
+        an unavailable keyring as an absent control state.
+        """
+
+        if store._test_keyring_module() is not None:
+            return store.get_secret(secret_id)
+        if sys.platform == "darwin":
+            return store.get_secret_with_timeout(
+                secret_id,
+                timeout_seconds=_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS,
+            )
+        worker = (
+            "import json,sys,keyring\n"
+            "try:\n"
+            "    value=keyring.get_password(sys.argv[1],sys.argv[2])\n"
+            "    print(json.dumps({'status':'found','value':value} if value else "
+            "{'status':'missing'},separators=(',',':')))\n"
+            "except Exception:\n"
+            "    print(json.dumps({'status':'unavailable'},separators=(',',':')))\n"
+            "    sys.exit(2)"
+        )
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key
+            in {
+                "HOME",
+                "LANG",
+                "LC_ALL",
+                "LOGNAME",
+                "PATH",
+                "TMPDIR",
+                "USER",
+                "DBUS_SESSION_BUS_ADDRESS",
+                "XDG_RUNTIME_DIR",
+                "DISPLAY",
+                "PYTHON_KEYRING_BACKEND",
+                "XDG_CONFIG_HOME",
+                "XDG_DATA_HOME",
+                "SYSTEMROOT",
+                "USERPROFILE",
+                "APPDATA",
+                "LOCALAPPDATA",
+            }
+            or key.startswith("LC_")
+        }
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-I", "-c", worker, store.service_name, secret_id],
+                check=False,
+                capture_output=True,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                timeout=max(_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS, 0.1),
+            )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("policy_integrity_secret_read_timeout") from error
+        except OSError as error:
+            raise RuntimeError("policy_integrity_secret_read_unavailable") from error
+        try:
+            payload = json.loads(completed.stdout.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise RuntimeError("policy_integrity_secret_read_unavailable") from error
+        if not isinstance(payload, dict):
+            raise RuntimeError("policy_integrity_secret_read_unavailable")
+        status = payload.get("status")
+        if status == "missing":
+            return None
+        if status == "found" and isinstance(payload.get("value"), str) and payload["value"]:
+            return payload["value"]
+        raise RuntimeError("policy_integrity_secret_read_unavailable")
+
+    def _get_policy_integrity_secret_from_store(self, secret_id: str, *, strict: bool = False) -> str | None:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None
+        if strict:
+            if isinstance(secret_store, FallbackSecretStore):
+                fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
+                if fallback_value is not None:
+                    return fallback_value
+                if isinstance(secret_store.primary, SystemKeyringSecretStore):
+                    return self._get_secret_from_system_keyring_strict(secret_store.primary, secret_id)
+                return secret_store.primary.get_secret(secret_id)
+            if isinstance(secret_store, SystemKeyringSecretStore):
+                return self._get_secret_from_system_keyring_strict(secret_store, secret_id)
+            return secret_store.get_secret(secret_id)
         if isinstance(secret_store, MirroredPolicyIntegritySecretStore):
             return secret_store.get_secret(secret_id)
         if isinstance(secret_store, WindowsPolicyIntegritySecretStore):
@@ -534,18 +629,7 @@ class StoreSecretPolicyIntegrityMixin:
         now = time.monotonic()
         if cached is not None and cached[0] == marker and (now - cached[1]) < _POLICY_INTEGRITY_CACHE_TTL_SECONDS:
             return dict(cached[2])
-        secret_store = self._policy_integrity_secret_store
-        if secret_store is None:
-            return None
-        if self._should_skip_policy_integrity_keychain_access(secret_store):
-            return None
-        payload_json = self._get_policy_integrity_secret_from_store(self._policy_integrity_control_ref)
-        payload: dict[str, object] | None = None
-        if payload_json is not None:
-            try:
-                payload = self._normalize_policy_integrity_control_state(json.loads(payload_json))
-            except json.JSONDecodeError:
-                payload = None
+        payload = self._read_policy_integrity_control_state_uncached()
         if payload is not None:
             self._cached_policy_integrity_control_state = (marker, now, dict(payload))
         if payload is not None or not create:
@@ -554,6 +638,31 @@ class StoreSecretPolicyIntegrityMixin:
         if not self._store_policy_integrity_control_state(payload):
             return None
         return self._load_policy_integrity_control_state(create=False)
+
+    def _read_policy_integrity_control_state_uncached(self, *, strict: bool = False) -> dict[str, object] | None:
+        """Read the secret-backed generation without consulting the cache."""
+
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is None:
+            if strict:
+                raise RuntimeError("policy_integrity_secret_store_unavailable")
+            return None
+        if self._should_skip_policy_integrity_keychain_access(secret_store):
+            if strict:
+                raise RuntimeError("policy_integrity_secret_store_unavailable")
+            return None
+        payload_json = StoreSecretPolicyIntegrityMixin._get_policy_integrity_secret_from_store(
+            self,
+            self._policy_integrity_control_ref,
+            strict=strict,
+        )
+        payload: dict[str, object] | None = None
+        if payload_json is not None:
+            try:
+                payload = self._normalize_policy_integrity_control_state(json.loads(payload_json))
+            except json.JSONDecodeError:
+                payload = None
+        return payload
 
     def _store_policy_integrity_control_state(self, payload: Mapping[str, object]) -> bool:
         secret_store = self._policy_integrity_secret_store
@@ -577,8 +686,40 @@ class StoreSecretPolicyIntegrityMixin:
         )
         return True
 
-    def _finalize_policy_integrity_control_state(self, payload: Mapping[str, object]) -> None:
-        self._store_policy_integrity_control_state(payload)
+    def _finalize_policy_integrity_control_state(self, payload: Mapping[str, object]) -> bool:
+        """Adopt a native generation, or leave its pending marker for recovery.
+
+        Callers must stop reporting success when this returns ``False``. The
+        next store refresh reconciles a still-pending generation against the
+        committed rows before allowing another protected write.
+        """
+
+        normalized = self._normalize_policy_integrity_control_state(payload)
+        if normalized is None:
+            return False
+        with self.hold_policy_integrity_generation_lock():
+            try:
+                current = self._read_policy_integrity_control_state_uncached(strict=True)
+            except Exception:
+                return False
+            normalized_generation = normalized.get("generation")
+            current_generation = current.get("generation") if current is not None else None
+            normalized_pending = normalized.get("pending_generation")
+            current_pending = current.get("pending_generation") if current is not None else None
+            if isinstance(normalized_generation, int) and isinstance(current_generation, int):
+                if normalized_generation < current_generation:
+                    return False
+                if normalized_generation == current_generation and normalized_pending != current_pending:
+                    return False
+                if (
+                    isinstance(normalized_pending, int)
+                    and isinstance(current_pending, int)
+                    and normalized_pending < current_pending
+                ):
+                    return False
+            elif current is not None:
+                return False
+            return self._store_policy_integrity_control_state(normalized)
 
     def _policy_integrity_path_warnings(self) -> list[str]:
         warnings: list[str] = []

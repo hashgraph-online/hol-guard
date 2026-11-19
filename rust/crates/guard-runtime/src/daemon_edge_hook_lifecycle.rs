@@ -8,9 +8,10 @@
 //! step for every op that signs or verifies state.
 //!
 //! A Claude `PostToolUse` that answers the HOL Guard approval question is
-//! settled here too. Saving the answer is a policy write, which holds the
-//! integrity lock in Python, so the daemon hands the plan the op returned to
-//! the `hook.claude_question_save` library step.
+//! settled here too. Saving the answer holds the policy-integrity generation
+//! lock through the signed row write. Finalization reacquires that lock in its
+//! own library operation, so a timed-out daemon call cannot write after the
+//! coordinator releases the first lock.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -42,11 +43,20 @@ const PERMISSION_PROMPT: &str = "claude_permission_prompt";
 const PERMISSION_REQUEST: &str = "claude_permission_request";
 const TURN_STOP: &str = "claude_turn_stop";
 const QUESTION_SETTLE: &str = "claude_question_settle";
+const QUESTION_SAVE: &str = "claude_question_save";
+const QUESTION_CONSUME: &str = "claude_question_consume";
 /// `native_hook_authority_state._MAX_REQUEST_BYTES`: a larger request was
 /// refused before it reached the op.
 const MAX_REQUEST_BYTES: usize = 512 * 1024;
 /// The fields a `save` reply carries, and nothing else.
-const SAVE_FIELDS: [&str; 5] = ["outcome", "artifact_id", "reason", "source", "plan"];
+const SAVE_FIELDS: [&str; 6] = [
+    "outcome",
+    "artifact_id",
+    "pending_artifact_hash",
+    "reason",
+    "source",
+    "plan",
+];
 
 /// The Claude lifecycle op an event runs, if any.
 fn claude_op(event: &str, payload: &Map<String, Value>) -> Option<&'static str> {
@@ -182,13 +192,15 @@ pub(super) fn settled(reply: &Value) -> Option<Settled> {
     if matches!(outcome, "none" | "unseen" | "unanswered") && fields.len() == 1 {
         return (outcome != "none").then_some(Settled::Answered);
     }
+    let has_pending_id = fields.contains_key("pending_id");
     if outcome != "save"
-        || fields.len() != SAVE_FIELDS.len()
+        || fields.len() != SAVE_FIELDS.len() + usize::from(has_pending_id)
         || !SAVE_FIELDS.iter().all(|name| fields.contains_key(*name))
+        || (has_pending_id && fields["pending_id"].as_str().is_none_or(str::is_empty))
     {
         return None;
     }
-    let texts = ["artifact_id", "reason", "source"];
+    let texts = ["artifact_id", "pending_artifact_hash", "reason", "source"];
     if !texts
         .iter()
         .all(|name| fields[*name].as_str().is_some_and(|text| !text.is_empty()))
@@ -253,16 +265,48 @@ impl Hook<'_> {
         match settled(&reply)? {
             Settled::Answered => Some(json!({})),
             Settled::Save(mut save) => {
-                save.insert("session_id".to_owned(), session_id.into());
-                // A plan the library refuses leaves the hook to the review,
-                // as the refused plan did in Python.
-                // The save shares the grace the op above may have used.
-                let wait = super::budget_left(expires);
-                self.call_within("hook.claude_question_save", Value::Object(save), wait)?
-                    .get("valid")
-                    .and_then(Value::as_bool)
-                    .filter(|valid| *valid)
-                    .map(|_| json!({}))
+                let (saved, save) = crate::daemon_edge::reads::writes::policy_write::locked_for(
+                    self.config,
+                    super::budget_left(expires),
+                    || {
+                        save.insert("session_id".to_owned(), session_id.into());
+                        let integrity = self.call_by(
+                            "hook.integrity_begin",
+                            json!({"now": now_isoformat()?, "sign": true}),
+                            expires,
+                        )?;
+                        if let Some(generation) = integrity.get("current_generation") {
+                            save.insert("current_generation".to_owned(), generation.clone());
+                        }
+                        let saved = self.authority_op_with_key(
+                            QUESTION_SAVE,
+                            &save,
+                            expires,
+                            &integrity,
+                            |request| {
+                                request.payload = Some(Value::Object(save.clone()));
+                            },
+                        )?;
+                        if saved.get("saved") != Some(&Value::Bool(true)) {
+                            return None;
+                        }
+                        Some((saved, save))
+                    },
+                )?;
+                let finalized = self.call_by(
+                    "hook.integrity_finalize",
+                    json!({
+                        "next_control_state": saved.get("next_control_state").cloned().unwrap_or(Value::Null),
+                    }),
+                    expires,
+                )?;
+                if finalized.get("finalized") != Some(&Value::Bool(true)) {
+                    return None;
+                }
+                let consumed = self.authority_op(QUESTION_CONSUME, &save, expires, |request| {
+                    request.payload = Some(Value::Object(save.clone()));
+                })?;
+                (consumed.get("consumed") == Some(&Value::Bool(true))).then(|| json!({}))
             }
         }
     }
@@ -286,12 +330,23 @@ impl Hook<'_> {
         shape: impl FnOnce(&mut HookAuthorityStateRequestV1),
     ) -> Option<Value> {
         let key = self.call_by("hook.integrity_key", json!({}), expires)?;
+        self.authority_op_with_key(op, payload, expires, &key, shape)
+    }
+
+    fn authority_op_with_key(
+        &self,
+        op: &str,
+        payload: &Map<String, Value>,
+        expires: f64,
+        key: &Map<String, Value>,
+        shape: impl FnOnce(&mut HookAuthorityStateRequestV1),
+    ) -> Option<Value> {
         let mut request = request(
             &self.config.store_path,
             &self.config.guard_home,
             op,
             &now_isoformat()?,
-            Some(&key),
+            Some(key),
             payload,
         )?;
         shape(&mut request);

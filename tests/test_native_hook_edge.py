@@ -11,7 +11,7 @@ from codex_plugin_scanner.guard.hook_execution_environment import (
     LIBRARY_SEARCH_PATH_NAMES,
     collect_hook_execution_environment,
 )
-from codex_plugin_scanner.guard.hook_review.hook_request_parsing import runtime_hook_event_name
+from codex_plugin_scanner.guard.hook_review.hook_availability_policy import canonical_hook_event_name
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge, review_raw_hook_native
 from codex_plugin_scanner.guard.native_route_receipt import native_hook_route
 from codex_plugin_scanner.guard.native_runtime import (
@@ -160,7 +160,7 @@ def _edge_result() -> dict[str, object]:
 
 @pytest.mark.parametrize("alias", ("UserPromptSubmit", "userPromptSubmitted", "user_prompt_submit", "prompt"))
 def test_prompt_event_aliases_enter_one_native_authority_route(alias: str) -> None:
-    assert runtime_hook_event_name({"hook_event_name": alias}) == "UserPromptSubmit"
+    assert canonical_hook_event_name({"hook_event_name": alias}) == "UserPromptSubmit"
 
 
 def test_edge_decoder_accepts_omitted_optional_request_id() -> None:
