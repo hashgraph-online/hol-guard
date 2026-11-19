@@ -486,11 +486,8 @@ fn evaluate(request: &ApprovalResolutionPlanRequestV1) -> Result<Value, String> 
     } else {
         Value::Null
     };
-    let package_decision = if allow && persistence == "persisted" && scope == "artifact" {
-        package_decision(approval)
-    } else {
-        Value::Null
-    };
+    let saved = allow && persistence == "persisted" && scope == "artifact";
+    let package_decision = crate::package_approval_key::decision(approval, saved);
     Ok(json!({
         "decision": decision,
         "persistence": persistence,
@@ -500,43 +497,6 @@ fn evaluate(request: &ApprovalResolutionPlanRequestV1) -> Result<Value, String> 
         "exact_context_allow": exact_context_allow,
         "package_decision": package_decision,
     }))
-}
-
-/// The package Always allow a package install review also saves.
-///
-/// The hook route reviews an install by its exact command, so an Always allow
-/// saved only under that command never answers the identical install run from
-/// another checkout of the repository. The review carries the install's package
-/// key, which is bound to the repository, dependency graph and launch instead;
-/// the allow is saved under it as well. Only this harness's own package request
-/// key is accepted.
-fn package_decision(approval: &ApprovalResolutionPlanApprovalV1) -> Value {
-    let Some(key) = approval
-        .envelope
-        .as_ref()
-        .and_then(|envelope| envelope.package_approval.as_ref())
-    else {
-        return Value::Null;
-    };
-    let fits = approval.harness.as_deref() == Some(key.harness.as_str())
-        && key
-            .artifact_id
-            .strip_prefix(key.harness.as_str())
-            .and_then(|rest| rest.strip_prefix(":project:package-request:"))
-            .is_some_and(|fingerprint| !fingerprint.is_empty())
-        && parse_context_token(&Value::String(key.artifact_hash.clone())).is_some();
-    if !fits {
-        return Value::Null;
-    }
-    json!({
-        "harness": key.harness,
-        "scope": "artifact",
-        "action": "allow",
-        "artifact_id": key.artifact_id,
-        "artifact_hash": key.artifact_hash,
-        "workspace": Value::Null,
-        "publisher": Value::Null,
-    })
 }
 
 #[cfg(test)]

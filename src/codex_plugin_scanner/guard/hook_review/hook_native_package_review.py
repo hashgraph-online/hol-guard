@@ -15,8 +15,9 @@ evaluator's guidance when only lifecycle scripts kept it in review.
 
 An install is also keyed the way the package firewall keys a package request:
 by the repository, dependency graph and launch, not the checkout path or the
-command text. A saved package Always allow under that key lets the install
-continue, and a review that stays queued carries the key, so an Always allow on
+command text. When every program the output is piped through runs from
+outside the workspace, a saved package Always allow under that key lets the
+install continue, and a review that stays queued carries the key, so an Always allow on
 it is saved under the key as well. The identical install in a linked worktree
 of the same repository then reuses it; one that runs lifecycle scripts has
 another key.
@@ -83,7 +84,7 @@ def native_package_review_response(
     ):
         return _UNSETTLED
     try:
-        artifact, may_allow, install_dir = package_review_plan(
+        artifact, may_allow, install_dir, keyed = package_review_plan(
             payload,
             harness=harness,
             workspace=workspace,
@@ -117,9 +118,15 @@ def native_package_review_response(
     if action == "block" and reason:
         return PackageReviewOutcome(_blocked(native_result, reason, harness, guard_home, deadline))
     package_approval: dict[str, str] | None = None
-    if native_result.get("reason_code") == PACKAGE_REVIEW_REASON:
+    # A key stands for the command only when nothing it pipes into could be a
+    # program the workspace planted.
+    if keyed and native_result.get("reason_code") == PACKAGE_REVIEW_REASON:
         package_approval, reused = _saved_package_approval(
-            store, artifact=artifact, evaluation=evaluation, install_dir=install_dir
+            store,
+            artifact=artifact,
+            evaluation=evaluation,
+            install_dir=install_dir,
+            environment=_stamped_environment(payload),
         )
         if reused:
             allowed = dict(native_result)
@@ -137,14 +144,38 @@ def native_package_review_response(
     return PackageReviewOutcome(None, package_approval)
 
 
+def _stamped_environment(payload: Mapping[str, object]) -> dict[str, str]:
+    """The ``PATH`` and ``HOME`` the hook stamped, which locate the npm the install runs.
+
+    The resident keys an install only when no other exported variable can
+    change what npm runs, so these two are the whole environment the key needs.
+    """
+
+    from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
+
+    stamp = payload.get(HOOK_EXECUTION_ENVIRONMENT_KEY)
+    if not isinstance(stamp, Mapping):
+        return {}
+    return {
+        name: value
+        for name, value in (("PATH", stamp.get("path")), ("HOME", stamp.get("home")))
+        if isinstance(value, str) and value
+    }
+
+
 def _saved_package_approval(
-    store: object, *, artifact: GuardArtifact, evaluation: PackageRequestEvaluation, install_dir: Path
+    store: object,
+    *,
+    artifact: GuardArtifact,
+    evaluation: PackageRequestEvaluation,
+    install_dir: Path,
+    environment: Mapping[str, str],
 ) -> tuple[dict[str, str] | None, bool]:
     """The install's package key, and whether a saved package Always allow covers it.
 
     The key is derived as the package firewall derives a package request's key,
-    for this harness's request. An install whose key cannot be derived is
-    reviewed by its exact command alone.
+    for this harness's request, with the npm the agent's ``PATH`` resolves. An
+    install whose key cannot be derived is reviewed by its exact command alone.
     """
 
     from ..local_supply_chain import _resolve_stored_package_policy_override, package_current_action_and_hash
@@ -156,7 +187,11 @@ def _saved_package_approval(
         if not tokens:
             return None, False
         execution_context = build_package_execution_context(
-            workspace_dir=install_dir, artifact=artifact, executable=tokens[0], executable_args=tokens[1:]
+            workspace_dir=install_dir,
+            artifact=artifact,
+            executable=tokens[0],
+            executable_args=tokens[1:],
+            environment=environment,
         )
         _action, artifact_hash = package_current_action_and_hash(
             artifact,

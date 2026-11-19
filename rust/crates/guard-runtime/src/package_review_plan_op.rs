@@ -179,10 +179,15 @@ fn moved_workspace(
     workspace: &Path,
     directory: &str,
 ) -> Option<PathBuf> {
+    // A shell's default `cd` drops a `..` with the name before it, while the
+    // plan resolves symlinks first; through a symlink the two land apart.
+    if directory.split('/').any(|part| part == "..") {
+        return None;
+    }
     // A shell searches `CDPATH` unless the operand is absolute or starts with
-    // a `.` or `..` component; `.cache` is searched like any other name.
+    // a `.` component; `.cache` is searched like any other name.
     let first = directory.split('/').next().unwrap_or_default();
-    let searched = !directory.starts_with('/') && first != "." && first != "..";
+    let searched = !directory.starts_with('/') && first != ".";
     if searched {
         let environment = verified_npm::ExecutionEnvironment::from_value(
             payload.get(EXECUTION_ENVIRONMENT_FIELD),
@@ -201,15 +206,26 @@ fn moved_workspace(
     (moved.is_dir() && moved.starts_with(&root)).then_some(moved)
 }
 
-/// The request artifact for the review's command, whether the evaluator's
-/// verdict may let it continue, and the directory the command runs in.
+/// What the plan read from a review's command.
+struct Planned {
+    artifact: Value,
+    /// Whether the evaluator's verdict may let the command continue.
+    may_allow: bool,
+    /// The directory a leading `cd` moved the command into.
+    moved: Option<PathBuf>,
+    /// Whether the install's package key stands for the whole command: every
+    /// program the output is piped through resolves outside the workspace.
+    keyed: bool,
+}
+
+/// The request artifact for the review's command and how it may settle.
 fn plan(
     payload: &Map<String, Value>,
     harness: &str,
     workspace: &Path,
     home_dir: Option<&Path>,
     review_reason: Option<&str>,
-) -> Option<(Value, bool, Option<PathBuf>)> {
+) -> Option<Planned> {
     let shape = planned_shape(payload, review_reason)?;
     let moved = match &shape.directory {
         Some(directory) => Some(moved_workspace(payload, workspace, directory)?),
@@ -251,7 +267,22 @@ fn plan(
             Value::String(version.clone()),
         );
     }
-    Some((artifact.to_wire(), version.is_some(), moved))
+    let environment =
+        verified_npm::ExecutionEnvironment::from_value(payload.get(EXECUTION_ENVIRONMENT_FIELD));
+    // The key is derived from the stamped PATH and HOME only, so it stands for
+    // the command only when no exported variable can change what npm runs.
+    let keyed = environment.well_formed
+        && !environment
+            .names
+            .iter()
+            .any(|name| verified_npm::changes_npm(name))
+        && verified_npm::filters_outside_workspace(&shape.filter_programs, &environment, workspace);
+    Some(Planned {
+        artifact: artifact.to_wire(),
+        may_allow: version.is_some(),
+        moved,
+        keyed,
+    })
 }
 
 /// The npm version the install runs, when its `PATH` and config files prove
@@ -296,13 +327,16 @@ pub(crate) fn evaluate_package_review_plan(
         )
     });
     // The workspace is named only when a leading `cd` moved the command.
-    let (artifact, may_allow, moved) = match planned {
-        Some((artifact, may_allow, moved)) => (
-            artifact,
-            may_allow,
-            moved.map(|directory| directory.to_string_lossy().into_owned()),
+    let (artifact, may_allow, moved, keyed) = match planned {
+        Some(planned) => (
+            planned.artifact,
+            planned.may_allow,
+            planned
+                .moved
+                .map(|directory| directory.to_string_lossy().into_owned()),
+            planned.keyed,
         ),
-        None => (Value::Null, false, None),
+        None => (Value::Null, false, None, false),
     };
     crate::encode_response(&SupplyChainEvalResultV1 {
         schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
@@ -310,7 +344,12 @@ pub(crate) fn evaluate_package_review_plan(
         request_sha256,
         status: "ok".to_owned(),
         code: "ok".to_owned(),
-        payload: Some(json!({"artifact": artifact, "may_allow": may_allow, "workspace": moved})),
+        payload: Some(json!({
+            "artifact": artifact,
+            "may_allow": may_allow,
+            "workspace": moved,
+            "keyed": keyed,
+        })),
     })
 }
 

@@ -105,7 +105,7 @@ fn a_command_review_plans_only_npx_and_bunx_launches() {
     ] {
         assert_eq!(
             answer(command),
-            json!({"artifact": null, "may_allow": false, "workspace": null}),
+            json!({"artifact": null, "may_allow": false, "workspace": null, "keyed": false}),
             "{command}"
         );
     }
@@ -136,7 +136,7 @@ fn commands_the_evaluator_does_not_read_plan_nothing() {
         let answer = plan(payload.clone());
         assert_eq!(
             answer,
-            json!({"artifact": null, "may_allow": false, "workspace": null}),
+            json!({"artifact": null, "may_allow": false, "workspace": null, "keyed": false}),
             "{payload}"
         );
     }
@@ -233,6 +233,39 @@ fn a_proven_npm_install_may_continue() {
         .get("verified_npm_version")
         .is_none());
     assert_eq!(piped["may_allow"], false);
+    // A saved package approval stands for the whole command only when every
+    // filter runs from outside the workspace.
+    assert_eq!(proven["keyed"], true);
+    assert_eq!(piped["keyed"], false);
+    executable(&bin.join("tail"));
+    assert_eq!(answer("npm ci --ignore-scripts | tail -3")["keyed"], true);
+    let owned = workspace.join("bin");
+    fs::create_dir_all(&owned).expect("workspace bin");
+    executable(&owned.join("tail"));
+    let mut payload = shell("npm ci --ignore-scripts | tail -3");
+    payload["guard_execution_environment"] = json!({
+        "environment_names": ["PATH", "HOME"],
+        "path": format!("{}:{}", owned.to_string_lossy(), bin.to_string_lossy()),
+        "home": root.path().to_string_lossy(),
+    });
+    let input = request(&workspace.to_string_lossy(), payload);
+    let bytes = evaluate_package_review_plan(&input).expect("request must encode a result");
+    let shadowed = serde_json::from_slice::<Value>(&bytes).expect("result")["payload"].clone();
+    assert!(shadowed["artifact"].is_object());
+    assert_eq!(shadowed["keyed"], false);
+    // The key is derived from the stamped PATH and HOME alone, so an exported
+    // npm setting, whose value the stamp withholds, leaves the install unkeyed.
+    let mut payload = shell("npm ci --ignore-scripts");
+    payload["guard_execution_environment"] = json!({
+        "environment_names": ["PATH", "HOME", "npm_config_registry"],
+        "path": bin.to_string_lossy(),
+        "home": root.path().to_string_lossy(),
+    });
+    let input = request(&workspace.to_string_lossy(), payload);
+    let bytes = evaluate_package_review_plan(&input).expect("request must encode a result");
+    let configured = serde_json::from_slice::<Value>(&bytes).expect("result")["payload"].clone();
+    assert!(configured["artifact"].is_object());
+    assert_eq!(configured["keyed"], false);
 }
 
 const SAFE_FLAGS: &str = "--ignore-scripts --allow-git=none";
@@ -348,6 +381,8 @@ fn a_leading_cd_into_the_workspace_moves_the_plan() {
         .join("linked")
         .canonicalize()
         .expect("canonical linked");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(workspace.join("linked"), workspace.join("alias")).expect("alias");
     let declared = json!({"environment_names": ["PATH", "HOME"], "path": "/usr/bin"});
     let with_cdpath = json!({"environment_names": ["PATH", "CDPATH"], "path": "/usr/bin"});
 
@@ -407,6 +442,10 @@ fn a_leading_cd_into_the_workspace_moves_the_plan() {
         "cd -P ./linked && npm ci --ignore-scripts",
         "cd ./linked; npm ci --ignore-scripts",
         "cd ./linked && cd .. && npm ci --ignore-scripts",
+        // A shell's `cd` drops `..` as text; through a symlink that lands
+        // somewhere other than the resolved path, so `..` is never read.
+        "cd ./linked/../linked && npm ci --ignore-scripts",
+        "cd ./alias/.. && npm ci --ignore-scripts",
     ] {
         assert_eq!(
             planned_in(workspace, command, Some(declared.clone()))["artifact"],

@@ -49,6 +49,9 @@ class PackageReviewPlan(NamedTuple):
     may_allow: bool
     # The directory a leading ``cd`` moved the command into, or the workspace.
     workspace: Path
+    # Whether the install's package key stands for the whole command: every
+    # program its output is piped through runs from outside the workspace.
+    keyed: bool
 
 
 def package_review_plan(
@@ -67,7 +70,8 @@ def package_review_plan(
     is an answer, not a failure: the caller keeps the review queued. ``False``
     means only a block verdict applies. A command that starts with ``cd`` runs
     in the directory the resident resolved, which is always inside
-    ``workspace``.
+    ``workspace``. ``keyed`` says whether a saved package approval may stand
+    for the command.
     """
 
     request: dict[str, object] = {
@@ -105,20 +109,22 @@ def package_review_plan(
     ):
         raise NativePackageReviewPlanError("Native package review plan unavailable or invalid")
     answer = response.get("payload")
-    if not isinstance(answer, dict) or set(answer) != {"artifact", "may_allow", "workspace"}:
+    if not isinstance(answer, dict) or set(answer) != {"artifact", "may_allow", "workspace", "keyed"}:
         raise NativePackageReviewPlanError("Native package review plan invalid")
     may_allow = answer["may_allow"]
     moved = answer["workspace"]
+    keyed = answer["keyed"]
     if (
         not isinstance(may_allow, bool)
-        or (answer["artifact"] is None and (may_allow or moved is not None))
+        or not isinstance(keyed, bool)
+        or (answer["artifact"] is None and (may_allow or keyed or moved is not None))
         or (moved is not None and (not isinstance(moved, str) or not Path(moved).is_absolute()))
     ):
         raise NativePackageReviewPlanError("Native package review plan invalid")
     if answer["artifact"] is None:
-        return PackageReviewPlan(None, False, workspace)
+        return PackageReviewPlan(None, False, workspace, False)
     try:
         artifact = _artifact_from_wire(answer["artifact"])
     except NativePackageArtifactUnavailableError as error:
         raise NativePackageReviewPlanError("Native package review plan invalid") from error
-    return PackageReviewPlan(artifact, may_allow, workspace if moved is None else Path(moved))
+    return PackageReviewPlan(artifact, may_allow, workspace if moved is None else Path(moved), keyed)

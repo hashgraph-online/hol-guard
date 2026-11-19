@@ -15,8 +15,8 @@ use crate::hook_direct::saved_decision::review_request::{
 use crate::{native_decision_receipt, pyjson};
 use guard_command::hook_adapter_value::{OMap, OValue};
 use guard_contracts::{
-    PackageApprovalKeyV1, ReviewRequestQueryV1, NATIVE_BASH_ARTIFACT_ID,
-    NATIVE_BASH_REVIEW_ARTIFACT_TYPE, NATIVE_BASH_REVIEW_DESCRIPTOR_SCHEMA,
+    ReviewRequestQueryV1, NATIVE_BASH_ARTIFACT_ID, NATIVE_BASH_REVIEW_ARTIFACT_TYPE,
+    NATIVE_BASH_REVIEW_DESCRIPTOR_SCHEMA,
 };
 use serde_json::{json, Map, Value};
 
@@ -91,11 +91,9 @@ pub(crate) fn build(query: &ReviewRequestQueryV1) -> Result<Built, Failure> {
     let harness = &query.envelope.harness;
     // Only an exact-action review offers Always allow, and only a key for this
     // harness's own package request may ride along with it.
-    if let Some(key) = query
-        .package_approval
-        .as_ref()
-        .filter(|key| query.exact_token.is_some() && package_key_fits(key, harness))
-    {
+    if let Some(key) = query.package_approval.as_ref().filter(|key| {
+        query.exact_token.is_some() && crate::package_approval_key::fits(key, harness)
+    }) {
         envelope.insert(
             PACKAGE_APPROVAL_KEY.to_owned(),
             json!({
@@ -178,17 +176,6 @@ pub(crate) fn build(query: &ReviewRequestQueryV1) -> Result<Built, Failure> {
 /// The envelope field naming the package key a package install review's Always
 /// allow is also saved under (`approval_resolution_plan_op`).
 pub(crate) const PACKAGE_APPROVAL_KEY: &str = "package_approval";
-
-/// Whether `key` names this harness's own package request.
-fn package_key_fits(key: &PackageApprovalKeyV1, harness: &str) -> bool {
-    key.harness == harness
-        && key
-            .artifact_id
-            .strip_prefix(harness)
-            .and_then(|rest| rest.strip_prefix(":project:package-request:"))
-            .is_some_and(|fingerprint| !fingerprint.is_empty())
-        && crate::context_digest::parse_context_token(&json!(key.artifact_hash)).is_some()
-}
 
 /// A valid receipt that authenticates its origin; the envelope keeps only that.
 fn origin_receipt(receipt: &Value) -> bool {
