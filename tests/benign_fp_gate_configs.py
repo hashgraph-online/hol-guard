@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import zlib
 from pathlib import Path
 
 from ci.gauntlet.extension_catalog_fixtures import CATALOG_PATH, CATALOG_SOURCE
@@ -56,6 +57,39 @@ PARENT_IMAGES = {
 }
 
 
+def _capture(pixel_bytes: int) -> bytes:
+    """A PNG the size a real screen capture is, built rather than embedded.
+
+    A full-window retina capture is several megabytes. Checking in that many
+    bytes of base64 to prove one walk budget would be absurd, and the pixel
+    data itself carries no meaning for the walk: it reads the chunk layout and
+    scans for text. So the capture is assembled here from an ordinary header
+    and one run of pixel data.
+    """
+    chunks = [
+        (b"IHDR", bytes([0, 0, 11, 72, 0, 0, 7, 128, 8, 6, 0, 0, 0])),
+        (b"pHYs", bytes([0, 0, 22, 37, 0, 0, 22, 37, 1])),
+        (b"IDAT", bytes(pixel_bytes)),
+        (b"IEND", b""),
+    ]
+    out = bytearray(b"\x89PNG\r\n\x1a\x0a")
+    for kind, data in chunks:
+        out += len(data).to_bytes(4, "big")
+        out += kind
+        out += data
+        out += zlib.crc32(kind + data).to_bytes(4, "big")
+    return bytes(out)
+
+
+# The same thing at the size captures actually are. Guard proves a committed
+# image by reading all of it, and the walk's budget for that was once shared
+# with the documents it reads, so one ordinary screenshot exhausted it and the
+# whole `docs` tree stopped being provable. Three megabytes is an unremarkable
+# full-window capture and larger than the entire document budget.
+PARENT_CAPTURES = {
+    "docs/screens/auth-desktop-policy-review.png": _capture(3 * 1024 * 1024),
+}
+
 # A source directory holding more modules than Guard lists when it expands a
 # glob, as a large frontend's `src/` does. `rg pattern <dir>/*.ts` from a
 # sibling checkout reads no more than a recursive search of the directory.
@@ -70,7 +104,7 @@ def write_parent_documents(parent: Path) -> None:
         target = parent / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
-    for relative, data in PARENT_IMAGES.items():
+    for relative, data in {**PARENT_IMAGES, **PARENT_CAPTURES}.items():
         target = parent / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)

@@ -110,7 +110,13 @@ _CONFIG_METHODS = frozenset(
     }
 )
 _GRANT_METHODS = frozenset(
-    {"require_approval_decision", "require_high_risk", "require_extension_control", "require_local_cli_trust"}
+    {
+        "require_approval_decision",
+        "require_high_risk",
+        "require_extension_control",
+        "require_local_cli_trust",
+        "verify",
+    }
 )
 
 

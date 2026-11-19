@@ -70,7 +70,7 @@ pub(crate) fn evaluate_supply_chain_bundle_verify_request(
 /// What the caller records about a verified bundle, read off the bundle this
 /// operation parsed, so the caller never parses the wire form a second time.
 /// Counts are taken after parsing, which merges identical package records.
-fn summary(response: &SupplyChainBundleResponse) -> Value {
+pub(crate) fn summary(response: &SupplyChainBundleResponse) -> Value {
     let bundle = &response.bundle;
     json!({
         "bundle_version": bundle.bundle_version,

@@ -145,6 +145,7 @@ fn daemon_handlers_run_behind_one_call() {
     for path in [
         "/v1/context-assistance/workspace-grant",
         "/v1/context-assistance/codex-lean",
+        "/v1/context-assistance/codex-short-replies",
         "/v1/harness-versions/acknowledge",
         "/v1/supply-chain/workspace-assessments",
         "/v1/supply-chain/workspace-assessments/pause",

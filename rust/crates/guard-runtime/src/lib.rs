@@ -497,6 +497,11 @@ mod git_execution_safety_probe;
 mod git_execution_safety_repo_tests;
 #[cfg(test)]
 mod git_execution_safety_tests;
+mod git_rules;
+mod git_rules_git;
+mod git_rules_inline;
+mod git_rules_match;
+mod git_rules_state;
 mod github_cli_classify_op;
 mod github_workflow_context_io;
 mod github_workflow_prepare_op;
@@ -834,6 +839,17 @@ mod runtime_output_directory;
 mod swarm_op;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
+mod cloud_bundle_command;
+mod cloud_bundle_fetch;
+mod cloud_bundle_network;
+mod cloud_bundle_sync;
+mod cloud_event_command;
+mod cloud_event_sync;
+mod cloud_json_request;
+mod cloud_pain_signal_sync;
+mod cloud_receipt_upload;
+mod cloud_receipt_upload_rows;
+mod cloud_runtime_session_sync;
 mod codex_hook_identity_op;
 mod command_pack_record_op;
 #[allow(dead_code)]
@@ -879,8 +895,10 @@ mod kimi_hook_config;
 mod kimi_hook_config_tests;
 mod local_authority_integrity_op;
 mod local_cli_change_request;
+mod local_cli_discover;
 mod local_cli_grant_op;
 mod local_cli_help;
+mod local_cli_help_probe;
 mod local_cli_hook_contained;
 mod local_cli_hook_op;
 mod local_cli_identify;
@@ -1051,6 +1069,7 @@ mod orphaned_worker_reap;
 mod ownership_acl_verdict;
 mod package_approval_action;
 mod package_approval_hash_op;
+mod package_approval_key;
 mod package_audit_projection_op;
 mod package_authority_config;
 mod package_authority_op;
@@ -1089,6 +1108,8 @@ use guard_policy_bundle::{
     python as policy_bundle_py, time as policy_bundle_time,
 };
 mod background_loop_gate;
+mod plugin_telemetry_host;
+mod plugin_telemetry_weekly;
 mod policy_bundle_cloud_exceptions;
 mod policy_bundle_op;
 mod policy_bundle_payload_hash;

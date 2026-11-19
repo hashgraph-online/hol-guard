@@ -3,8 +3,8 @@
 The native daemon owns the schedule: it calls ``worker.<job>`` once per tick
 and waits ``interval`` after a pass that succeeded or ``backoff`` after one
 that did not. Each call answers ``{"ok": bool}`` plus what the pass reports.
-The runtime heartbeat, the idle-shutdown hold and storage maintenance run in
-the native daemon itself.
+The runtime heartbeat, the idle-shutdown hold, storage maintenance and the
+one-file extraction sweep run in the native daemon itself.
 """
 
 from __future__ import annotations
@@ -30,46 +30,6 @@ def cloud_sync(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     summary = _run_headless_cloud_sync(store=store)
     status = str(summary.get("status") or "")
     return {"ok": status == "synced", "status": status}
-
-
-def bundle_refresh(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Refreshes the supply-chain bundle, then the network-protection bundle."""
-
-    del args
-    from ..runtime.runner import (
-        GuardSyncAuthorizationExpiredError,
-        GuardSyncNotConfiguredError,
-        sync_network_protection_bundle_best_effort,
-        sync_supply_chain_bundle,
-    )
-
-    refreshed_at = _now()
-    payload: dict[str, object]
-    try:
-        payload = {**sync_supply_chain_bundle(store), "status": "synced"}
-    except GuardSyncAuthorizationExpiredError as error:
-        payload = {"status": "auth_expired", "refreshed_at": refreshed_at, "message": str(error)}
-    except GuardSyncNotConfiguredError:
-        payload = {"status": "not_configured", "refreshed_at": refreshed_at}
-    except Exception as error:
-        payload = {"error": str(error), "refreshed_at": refreshed_at, "status": "error"}
-    store.set_sync_payload("supply_chain_bundle_daemon", payload, refreshed_at)
-    # Separate endpoint: refresh it whether or not the supply-chain bundle synced.
-    sync_network_protection_bundle_best_effort(store)
-    return {"ok": payload["status"] == "synced", "status": payload["status"]}
-
-
-def plugin_telemetry(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Sends the opted-in weekly plugin install report; a no-op until opt-in."""
-
-    del args
-    from ..plugin_telemetry.report import PluginTelemetryError, send_if_due
-
-    try:
-        send_if_due(store.guard_home)
-    except PluginTelemetryError:
-        return {"ok": False}
-    return {"ok": True}
 
 
 def extension_catalog(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
@@ -223,47 +183,9 @@ def aibom_inventory(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
     return {"ok": False, "status": record["status"]}
 
 
-def onefile_reclaim(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Reclaims orphaned one-file extraction directories left by earlier frozen runs."""
-
-    del store, args
-    import sys
-    import tempfile
-
-    from ..onefile_extraction import reclaim_orphaned_extraction_dirs
-
-    if not getattr(sys, "frozen", False):
-        return {"ok": True, "skipped": True}
-    # Directories still open, this call's own among them, are left in place.
-    reclaim_orphaned_extraction_dirs(
-        temp_root=Path(tempfile.gettempdir()),
-        current_meipass=getattr(sys, "_MEIPASS", None),
-        now=datetime.now(timezone.utc),
-        scan_open_paths=True,
-    )
-    return {"ok": True}
-
-
-def cloud_workspace(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """The Guard Cloud workspace queued review events sync to, or ``None`` without a usable profile."""
-
-    del args
-    try:
-        profile = store.get_cloud_sync_profile()
-    except Exception:
-        # Queued events stay durable in guard.db; do not pin the daemon alive.
-        profile = None
-    workspace_id = profile.get("workspace_id") if isinstance(profile, dict) else None
-    return {"ok": True, "workspace_id": workspace_id if isinstance(workspace_id, str) else None}
-
-
 WORKER_CALLS = {
     "worker.cloud_sync": cloud_sync,
-    "worker.cloud_workspace": cloud_workspace,
-    "worker.bundle_refresh": bundle_refresh,
-    "worker.plugin_telemetry": plugin_telemetry,
     "worker.extension_catalog": extension_catalog,
     "worker.reconcile_artifacts": reconcile_artifacts,
     "worker.aibom_inventory": aibom_inventory,
-    "worker.onefile_reclaim": onefile_reclaim,
 }

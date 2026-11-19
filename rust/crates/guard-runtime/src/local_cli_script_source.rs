@@ -177,13 +177,13 @@ fn probe_target(path_text: &str) -> Option<PathBuf> {
     (!kernel).then_some(resolved)
 }
 
-fn safe_probe_path(path_text: &str) -> bool {
+pub(crate) fn safe_probe_path(path_text: &str) -> bool {
     probe_target(path_text).is_some()
 }
 
 /// A script's text, read only from the regular file its path resolved to
 /// when it was checked: a link swapped in after the check is not followed.
-fn read_script_source(path: &str, shebang_only: bool) -> Option<String> {
+pub(crate) fn read_script_source(path: &str, shebang_only: bool) -> Option<String> {
     let resolved = probe_target(path)?;
     let opened = open_no_follow(&resolved).ok()?;
     let regular = opened.metadata().is_ok_and(|metadata| metadata.is_file());
@@ -246,7 +246,7 @@ fn same_file(_opened: &File, _resolved: &Path) -> bool {
 /// before it is opened. The final link is never followed, and the open file
 /// must be the same regular file that its path resolves to now, inside the
 /// folder that holds the script.
-fn read_local_module(module: &str, script: &str) -> Option<String> {
+pub(crate) fn read_local_module(module: &str, script: &str) -> Option<String> {
     let script = resolve_strict(Path::new(script))?;
     let folder = script.parent()?;
     let opened = open_no_follow(Path::new(module)).ok()?;
@@ -265,7 +265,7 @@ fn read_local_module(module: &str, script: &str) -> Option<String> {
 /// so they are text the script chose. Each is resolved through symlinks and
 /// kept only when it still lands inside the folder that holds the script
 /// itself, which keeps the read away from the rest of the disk.
-fn local_import_paths(script: &str, imports: &[&str]) -> Vec<String> {
+pub(crate) fn local_import_paths(script: &str, imports: &[&str]) -> Vec<String> {
     let Some(script_path) = resolve_strict(Path::new(script)) else {
         return Vec::new();
     };

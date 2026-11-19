@@ -159,7 +159,10 @@ def test_freshly_written_config_is_never_memoized(tmp_path: Path, monkeypatch: p
     load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
     load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
 
-    assert len(calls) == 2
+    # A daemon thread left by an earlier test on this worker may load its own
+    # home meanwhile; count only this test's loads.
+    own = [text for text in calls if json.loads(text).get("guard_home") == str(tmp_path)]
+    assert len(own) == 2
 
 
 def test_unreadable_config_metadata_is_never_memoized(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

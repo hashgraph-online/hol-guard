@@ -1,7 +1,9 @@
 //! Cleaning up a linked worktree in one `&&` chain: `rm <link>` for the
 //! links an agent placed in it (Git refuses to remove a worktree that holds
-//! untracked entries), the non-forced `git worktree remove`, then reads of
-//! what is left, such as `git worktree list` and `git branch -v`.
+//! untracked entries), the maintenance step itself -- a non-forced
+//! `git worktree remove`, or the `git worktree prune` that drops the records
+//! of worktrees already gone -- then reads of what is left, such as
+//! `git worktree list` and `git branch -v`.
 //!
 //! Each step keeps its own proof. A removed link sits at the root of a
 //! linked worktree of the session's repository, and removing it leaves its
@@ -34,12 +36,15 @@ pub(in crate::pretool) fn proven(
     {
         return false;
     }
-    let Some(removal) = model.segments.iter().position(|segment| {
-        matches!(
-            super::parse(segment, context),
-            Some((_, super::Maintenance::Remove(_)))
-        )
-    }) else {
+    // Either maintenance step stands here: a removal, or the prune that drops
+    // the records of worktrees already gone. Both pass the single-command
+    // proof below, and a prune-led chain -- prune, then read what is left --
+    // is the shape an agent reaches for after it finishes with a worktree.
+    let Some(removal) = model
+        .segments
+        .iter()
+        .position(|segment| super::parse(segment, context).is_some())
+    else {
         return false;
     };
     let mut alone = model.clone();

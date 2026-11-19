@@ -3,6 +3,15 @@
 //! review.
 
 use super::*;
+use crate::policy_enforcement::post::PostAdmission;
+
+/// The user's approval on this exact call, with no inspection proof.
+fn approved(approved: bool) -> PostAdmission {
+    PostAdmission {
+        approved,
+        inspection: false,
+    }
+}
 
 fn subprocess_review() -> PolicySnapshotV3 {
     let mut reviewed = policy("allow");
@@ -41,7 +50,7 @@ fn post(
         GuardHookPayloadKindV2::Inline,
         response,
         None,
-        || admitted,
+        || approved(admitted),
         false,
     )
     .unwrap()
@@ -70,7 +79,7 @@ fn approval_witness_is_only_read_when_a_floor_would_hold_the_output() {
         None,
         || {
             read.set(true);
-            true
+            approved(true)
         },
         false,
     )
@@ -181,35 +190,40 @@ fn guard_home_must_match_for_the_inspection_witness() {
     ));
 }
 
-fn post_for(
+fn post_with(
+    snapshot: &PolicySnapshotV3,
     request: &NativeHookRequestV1,
-    admitted: impl FnOnce() -> bool,
+    admitted: PostAdmission,
 ) -> HookReviewResponseV1 {
     let mut response = HookReviewResponseV1::allow("output_scan_allow");
     response.model_output_action = "allow_original".into();
     response.reviewed_output_sha256 =
         guard_hook_core::canonical_observed_output_sha256(&request.payload);
     crate::policy_enforcement::apply_post_tool_policy_with_witness(
-        &AdmittedPolicySnapshot::new(subprocess_review()).unwrap(),
+        &AdmittedPolicySnapshot::new(snapshot.clone()).unwrap(),
         request,
         GuardHookPayloadKindV2::Inline,
         response,
         None,
-        admitted,
+        || admitted,
         false,
     )
     .unwrap()
+}
+
+fn post_for(request: &NativeHookRequestV1, admitted: PostAdmission) -> HookReviewResponseV1 {
+    post_with(&subprocess_review(), request, admitted)
 }
 
 #[test]
 fn approved_call_shell_result_object_is_released_but_an_excerpt_is_not() {
     let mut request = approved_ls_output();
     request.payload["tool_response"] = json!({"stdout": "total 0", "exit_code": 0});
-    assert_eq!(post_for(&request, || false).decision, "deny");
-    assert_eq!(post_for(&request, || true).decision, "allow");
+    assert_eq!(post_for(&request, approved(false)).decision, "deny");
+    assert_eq!(post_for(&request, approved(true)).decision, "allow");
 
     request.payload["tool_response_summary"] = json!({"output_sha256": "ab".repeat(32)});
-    assert_eq!(post_for(&request, || true).decision, "deny");
+    assert_eq!(post_for(&request, approved(true)).decision, "deny");
 }
 
 #[test]
@@ -226,9 +240,13 @@ fn own_approval_wait_result_is_not_held_by_the_subprocess_floor() {
     request.guard_home = "/home/test/fixture/guard-home".into();
     request.cwd = Some("/home/test/fixture".into());
     assert!(crate::policy_enforcement::post::own_approval_wait(&request));
-    let passed = post_for(&request, || {
-        crate::policy_enforcement::post::own_approval_wait(&request)
-    });
+    let passed = post_for(
+        &request,
+        PostAdmission {
+            approved: false,
+            inspection: crate::policy_enforcement::post::own_approval_wait(&request),
+        },
+    );
     assert_eq!(passed.decision, "allow");
 
     request.guard_home = "/home/test/other".into();
@@ -259,7 +277,7 @@ fn approved_file_read_is_released_only_on_guards_own_full_source_scan() {
             GuardHookPayloadKindV2::SourceFileRef,
             response,
             None,
-            || admitted_call,
+            || approved(admitted_call),
             false,
         )
         .unwrap()
@@ -267,6 +285,52 @@ fn approved_file_read_is_released_only_on_guards_own_full_source_scan() {
     assert_eq!(read("source_full_scan_allow", false).decision, "deny");
     assert_eq!(read("source_full_scan_allow", true).decision, "allow");
     assert_eq!(read("output_scan_allow", true).decision, "deny");
+}
+
+/// Guard's own approval wait is still a command, so a configured execution
+/// review applies to it. The inspection proof alone does not clear that
+/// review, and the user's approval on the same call does.
+#[test]
+fn an_approved_inspection_call_clears_the_execution_review_floor() {
+    let mut reviewed = policy("allow");
+    reviewed
+        .risk_actions
+        .insert("execution".into(), "review".into());
+    let execution_review = snapshot(reviewed);
+
+    let mut request = post_request(json!({
+        "tool_call_id": "call-wait",
+        "tool_name": "bash",
+        "tool_input": {
+            "command": "hol-guard approvals wait abc123 --json --home /home/test/fixture/guard-home"
+        },
+        "tool_response": "{\"resolved\": true}"
+    }));
+    request.harness = "omp".into();
+    request.guard_home = "/home/test/fixture/guard-home".into();
+    request.cwd = Some("/home/test/fixture".into());
+    assert!(crate::policy_enforcement::post::own_approval_wait(&request));
+
+    let inspection_only = post_with(
+        &execution_review,
+        &request,
+        PostAdmission {
+            approved: false,
+            inspection: true,
+        },
+    );
+    assert_eq!(inspection_only.decision, "deny");
+    assert_eq!(inspection_only.reason_code, "native_policy_review_required");
+
+    let user_approved = post_with(
+        &execution_review,
+        &request,
+        PostAdmission {
+            approved: true,
+            inspection: true,
+        },
+    );
+    assert_eq!(user_approved.decision, "allow");
 }
 
 fn guide_home(label: &str) -> std::path::PathBuf {
@@ -360,9 +424,13 @@ fn guards_own_safety_guide_output_is_not_held_by_the_subprocess_floor() {
     request.harness = "codex".into();
     request.home_dir = home.to_string_lossy().into_owned();
     assert!(crate::policy_enforcement::post::own_approval_wait(&request));
-    let passed = post_for(&request, || {
-        crate::policy_enforcement::post::own_approval_wait(&request)
-    });
+    let passed = post_for(
+        &request,
+        PostAdmission {
+            approved: false,
+            inspection: crate::policy_enforcement::post::own_approval_wait(&request),
+        },
+    );
     assert_eq!(passed.decision, "allow");
 
     request.payload["tool_input"]["command"] = json!("cat ~/notes.md");

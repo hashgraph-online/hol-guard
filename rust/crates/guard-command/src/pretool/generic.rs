@@ -1041,18 +1041,28 @@ fn evaluate_envelope(
             result.reason = reason;
         }
     }
-    // A header Oh My Pi reads as a tagged file that does not exist cannot
-    // apply. Blocking it at once, with how to write the header, keeps the
-    // agent from waiting on an approval for an edit that would fail.
+    if result.reason_code == "native_pre_tool_unknown_review"
+        && matches!(harness, "omp" | "pi")
+        && signals.tool_name.as_deref() == Some("eval")
+    {
+        // Same review; the reason names the one-cell draft form Guard checks.
+        if let Some(reason) = omp::earlier_cell_draft_reason(payload) {
+            result.reason = reason.into();
+        }
+    }
+    // A header Oh My Pi reads as a tagged file that does not exist, or a
+    // first header it cannot read at all, cannot apply. Blocking it at once,
+    // with how to write the header, keeps the agent from waiting on an
+    // approval for an edit that would fail.
     if harness == "omp"
         && event == "PreToolUse"
         && signals.tool_name.as_deref() == Some("edit")
         && result.minimum_action == "review"
     {
-        let header = omp::strict_tool_input(payload)
+        let blocked = omp::strict_tool_input(payload)
             .and_then(|input| input.get("input")?.as_str())
-            .and_then(|input| super::omp_hashline_recovery::missing_tagged_header(input, cwd));
-        if let Some(header) = header {
+            .and_then(|input| super::omp_hashline_recovery::unappliable_edit(input, cwd));
+        if let Some((reason_code, reason)) = blocked {
             result = generic_result(
                 generic_action(
                     harness,
@@ -1063,8 +1073,8 @@ fn evaluate_envelope(
                     false,
                 ),
                 "block",
-                read_decisions::MISSING_PATH,
-                &super::omp_hashline_recovery::missing_header_reason(&header),
+                reason_code,
+                &reason,
             );
         }
     }

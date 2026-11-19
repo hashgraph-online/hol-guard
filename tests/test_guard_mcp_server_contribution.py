@@ -24,6 +24,7 @@ _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
 _AGENTIC_LINKEDIN = _FILESYSTEM.with_name("mcp.agentic-linkedin.json")
 _DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
 _REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
+_KRUSCH_SKYLIGHT = _FILESYSTEM.with_name("mcp.krusch-skylight.json")
 _NJC_CHAIN_READS = _FILESYSTEM.with_name("mcp.njc-chain-reads.json")
 _NJC_CHAIN_READS_URL = "https://njc-tx-explain.departmentofjazz.workers.dev/mcp"
 
@@ -55,6 +56,12 @@ def _dev_mcp_payload() -> dict[str, object]:
 
 def _njc_chain_reads_payload() -> dict[str, object]:
     payload = json.loads(_NJC_CHAIN_READS.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _krusch_skylight_payload() -> dict[str, object]:
+    payload = json.loads(_KRUSCH_SKYLIGHT.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
 
@@ -252,6 +259,17 @@ def test_njc_chain_reads_contribution_is_external_opt_in_remote() -> None:
         "url": "https://njc-tx-explain.departmentofjazz.workers.dev/mcp",
         "serverNames": ["njc-chain-reads", "rh-tx-explain"],
     }
+
+
+def test_krusch_skylight_local_writes_require_review() -> None:
+    """Keep tools that can write local state review-gated even when they look like reads."""
+    payload = _krusch_skylight_payload()
+    validate_mcp_contribution(payload, filename=_KRUSCH_SKYLIGHT.name)
+    declared = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    assert payload["launch"] == {"kind": "direct-command", "command": "krusch-skylight-mcp"}
+    for tool_name in ("skylight_status", "skylight_list_events", "skylight_pull_chores", "skylight_list_meals"):
+        assert declared[tool_name] == "review"
+        assert mcp_tool_state(payload, tool_name) == "review"
 
 
 def test_njc_chain_reads_paid_tools_require_review() -> None:

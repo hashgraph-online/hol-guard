@@ -79,17 +79,23 @@ fn segment_proofs(
     alone: bool,
 ) -> Vec<usize> {
     let cwd = verified_cwd_compound_context(model, context);
+    // A cwd transition changes the meaning of subsequent relative operands.
+    // When the transition is not proven -- a `;` after the `cd` leaves the
+    // rest running in the starting directory if the `cd` failed -- no later
+    // operand can be read against either directory. A step that names no path
+    // at all reads the same in both, so judged alone it keeps its proof while
+    // everything beside it loses one.
+    let unproven_cd_transition = cwd.is_none()
+        && model
+            .segments
+            .iter()
+            .any(|segment| segment.executable.as_deref() == Some("cd"));
     if model.confidence != "exact"
         || model.path_overridden
         || !model.wrapper_chain.is_empty()
         // Per-segment sleep proofs must not add up past the whole-command bound.
         || !super::safe_scalar::bounded_total_sleep(model)
-        // A cwd transition changes the meaning of subsequent relative operands.
-        || (cwd.is_none()
-            && model
-                .segments
-                .iter()
-                .any(|segment| segment.executable.as_deref() == Some("cd")))
+        || (unproven_cd_transition && !alone)
     {
         return Vec::new();
     }
@@ -110,7 +116,11 @@ fn segment_proofs(
         openssl_config_absent: context.openssl_config_absent,
         psql_environment: context.psql_environment,
         creates_nothing: super::search::command_creates_nothing(model),
-        cwd: cwd.as_deref().or(context.cwd),
+        cwd: if unproven_cd_transition {
+            None
+        } else {
+            cwd.as_deref().or(context.cwd)
+        },
     };
     let segment_benign: Vec<bool> = model
         .segments
@@ -271,7 +281,28 @@ fn segment_proofs(
             // which is proven only when that directory is verified.
             let path_context_verified =
                 || safe_reads::verified_path_context(proof_context.home_dir, proof_context.cwd);
+            // Reads nothing the working directory decides, so an unproven
+            // `cd` before it leaves its answer unchanged. An empty argument
+            // list is not enough: a build tool with no arguments still acts
+            // on whichever directory it runs in.
+            let cwd_independent = stdin_filter
+                || matches!(
+                    basename,
+                    "pwd"
+                        | "true"
+                        | "exit"
+                        | "break"
+                        | "continue"
+                        | "echo"
+                        | "printf"
+                        | "whoami"
+                        | "uname"
+                        | "date"
+                        | "sleep"
+                        | "uptime"
+                );
             let covered = benign
+                && (!unproven_cd_transition || cwd_independent)
                 && (ls_has_explicit_target || (alone && path_context_verified()))
                 && (!requires_path_context || path_context_verified())
                 // Judged alone, a file step needs no proven predecessor unless

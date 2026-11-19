@@ -24,6 +24,11 @@ const SENTINELS: [&str; 2] = ["Begin Patch", "End Patch"];
 const TAG_LENGTH: usize = 4;
 const SHOWN_CHARS: usize = 120;
 
+/// Reason code for a header that names a missing file, as for any write.
+const MISSING_PATH: &str = "native_missing_path";
+/// Reason code for an edit whose first header Oh My Pi cannot read.
+const UNPARSEABLE_HEADER: &str = "native_omp_edit_header_unreadable";
+
 /// Oh My Pi's `APPLY_PATCH_PATH_NOISE_RE`.
 static PATH_NOISE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
@@ -49,7 +54,7 @@ pub(super) struct MissingHeader {
 /// session folder is unknown, when any header line is one Oh My Pi refuses
 /// outright, or when every unproven header names a file that exists, is
 /// sensitive or is protected.
-pub(super) fn missing_tagged_header(input: &str, cwd: Option<&str>) -> Option<MissingHeader> {
+fn missing_tagged_header(input: &str, cwd: Option<&str>) -> Option<MissingHeader> {
     if input.len() > crate::MAX_COMMAND_BYTES || input.contains('\0') {
         return None;
     }
@@ -78,7 +83,7 @@ pub(super) fn missing_tagged_header(input: &str, cwd: Option<&str>) -> Option<Mi
 }
 
 /// The block reason for a header Oh My Pi reads as a missing file.
-pub(super) fn missing_header_reason(header: &MissingHeader) -> String {
+fn missing_header_reason(header: &MissingHeader) -> String {
     let named = if header.path.chars().count() <= SHOWN_CHARS
         && !header.path.contains(|c: char| c.is_control() || c == '`')
     {
@@ -90,6 +95,78 @@ pub(super) fn missing_header_reason(header: &MissingHeader) -> String {
         "HOL Guard did not run this edit because Oh My Pi reads its header `{}`{named}. Write each header as just the path and the tag the read tool showed, for example `[src/app.py#1A2B]`, with nothing else inside the brackets, and try again.",
         header.line
     )
+}
+
+/// The first header of an edit Oh My Pi cannot read at all, shortened for a
+/// message.
+///
+/// Oh My Pi takes the first non-blank line after `*** Begin Patch` as the
+/// first file header. When that line opens with `[` but its bracket closes
+/// before the end of the line, as in `[tool_error] ...` or reasoning that
+/// quotes a header, or the line does not end with `]`, Oh My Pi rejects the
+/// whole edit with a parse error and writes nothing. A bracketed `*** ...`
+/// marker at the start is one Oh My Pi unwraps, so such a line is left
+/// unproven, as is one with control characters.
+fn unparseable_first_header(input: &str) -> Option<String> {
+    if input.len() > crate::MAX_COMMAND_BYTES || input.contains('\0') {
+        return None;
+    }
+    let mut lines = input
+        .split('\n')
+        .map(|line| line.trim_end_matches([' ', '\t', '\r']))
+        .filter(|line| !line.is_empty());
+    let mut line = lines.next()?;
+    if line == BEGIN_PATCH {
+        line = lines.next()?;
+    }
+    closes_early(line).then(|| shown(line))
+}
+
+/// The reason code and message for an edit Oh My Pi cannot apply: one whose
+/// first header it cannot read, or whose tagged header names a missing file.
+pub(super) fn unappliable_edit(input: &str, cwd: Option<&str>) -> Option<(&'static str, String)> {
+    if let Some(header) = missing_tagged_header(input, cwd) {
+        return Some((MISSING_PATH, missing_header_reason(&header)));
+    }
+    let line = unparseable_first_header(input)?;
+    Some((UNPARSEABLE_HEADER, unparseable_header_reason(&line)))
+}
+
+/// The block reason for an edit whose first header Oh My Pi cannot read.
+fn unparseable_header_reason(line: &str) -> String {
+    format!(
+        "HOL Guard did not run this edit because Oh My Pi cannot read its first header `{line}` and would reject the whole edit. Write each header on its own line as just the path and the tag the read tool showed, for example `[src/app.py#1A2B]`, with nothing before or after it, and try again."
+    )
+}
+
+/// Whether `line` opens a header Oh My Pi cannot parse: its opening `[`
+/// closes before the end of the line, it holds nothing, or the line does
+/// not end with `]`.
+fn closes_early(line: &str) -> bool {
+    let Some(body) = line.strip_prefix('[') else {
+        return false;
+    };
+    if body.chars().any(|c| c.is_control() || c == '\u{feff}')
+        || body.trim_start_matches([' ', '\t']).starts_with('*')
+    {
+        return false;
+    }
+    let mut depth = 1usize;
+    for (index, c) in body.char_indices() {
+        match c {
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    // An empty header such as `[]` or `[ ]` names nothing.
+                    return index + 1 != body.len()
+                        || body[..index].trim_matches([' ', '\t']).is_empty();
+                }
+            }
+            _ => {}
+        }
+    }
+    !body.ends_with(']')
 }
 
 /// The path and whether it carries a tag, the way Oh My Pi's

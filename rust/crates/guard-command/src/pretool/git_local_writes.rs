@@ -461,9 +461,14 @@ pub(in crate::pretool) fn configured_read(
 /// words after `git`; the steps `git_init_chain` runs in a new repository.
 pub(in crate::pretool) fn index_or_commit(words: &[&str]) -> bool {
     match words.split_first() {
-        Some((&"add", rest)) => forms::add(rest),
-        Some((&"commit", rest)) => forms::commit_form(rest) == Some(false),
-        _ => false,
+        Some((first, rest)) => {
+            match crate::command_compatibility::canonical_git_subcommand(first) {
+                "add" => forms::add(rest),
+                "commit" => forms::commit_form(rest) == Some(false),
+                _ => false,
+            }
+        }
+        None => false,
     }
 }
 

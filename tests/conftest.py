@@ -31,6 +31,7 @@ pytest_plugins = [
     "tests.native_resident_teardown",
     "tests.optional_command_catalog_fixtures",
     "tests.network_trust_fixtures",
+    "tests.cloud_json_request_fixtures",
 ]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
@@ -174,6 +175,52 @@ def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
     for module in (installed_bundle, object_native):
         monkeypatch.setattr(module, "_ANSWERS", type(module._ANSWERS)())
+
+
+@pytest.fixture(autouse=True)
+def _runtime_session_over_urllib(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Send the runtime session upload through the urllib a test fakes.
+
+    Mark a test ``native_runtime_session`` to post it with the native command.
+    Guard events and pain signals answer as an empty queue unless the test is
+    marked ``native_guard_events``.
+    """
+
+    native_session = request.node.get_closest_marker("native_runtime_session") is not None
+    native_events = request.node.get_closest_marker("native_guard_events") is not None
+    if native_session and native_events:
+        return
+    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
+    from tests.support.runtime_session_transport import runtime_session_over_urllib
+
+    monkeypatch.setattr(
+        cloud_bundle_sync,
+        "cloud_event_sync",
+        runtime_session_over_urllib(
+            cloud_bundle_sync.cloud_event_sync,
+            native_session=native_session,
+            native_events=native_events,
+        ),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _receipt_upload_over_urllib(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Send the receipt upload through the urllib a test fakes.
+
+    Mark a test ``native_receipt_upload`` to upload with the native command.
+    """
+
+    if request.node.get_closest_marker("native_receipt_upload") is not None:
+        return
+    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
+    from tests.support.receipt_upload_transport import receipt_upload_over_urllib
+
+    monkeypatch.setattr(
+        cloud_bundle_sync,
+        "cloud_receipt_upload",
+        receipt_upload_over_urllib(cloud_bundle_sync.cloud_receipt_upload),
+    )
 
 
 @pytest.fixture(autouse=True)

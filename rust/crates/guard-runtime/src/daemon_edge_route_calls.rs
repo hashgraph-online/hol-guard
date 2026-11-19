@@ -137,7 +137,7 @@ pub(in crate::daemon_edge) fn extension_control_args(
 }
 
 /// `/v1/context-assistance/...` writes, run before the daemon's route classes.
-const CONTEXT_ASSISTANCE_WRITES: [&str; 9] = [
+const CONTEXT_ASSISTANCE_WRITES: [&str; 10] = [
     "/v1/context-assistance/versions",
     "/v1/context-assistance/recheck",
     "/v1/context-assistance/activate",
@@ -147,6 +147,7 @@ const CONTEXT_ASSISTANCE_WRITES: [&str; 9] = [
     "/v1/context-assistance/workspace-grant",
     "/v1/context-assistance/folders",
     "/v1/context-assistance/codex-lean",
+    "/v1/context-assistance/codex-short-replies",
 ];
 const HARNESS_VERSION_WRITES: [&str; 3] = [
     "/v1/harness-versions/refresh",

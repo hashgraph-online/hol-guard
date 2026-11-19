@@ -1,5 +1,4 @@
 import contextlib
-import errno
 import io
 import json
 import socket
@@ -19,7 +18,6 @@ from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncNotAvailableError,
     _check_plan_restriction_403,
     _cloud_edge_block_from_http_error,
-    _fetch_supply_chain_bundle_payload,
     _guard_cloud_http_error_details,
     _refresh_guard_oauth_access_token_once,
     _sync_http_error_message,
@@ -137,46 +135,6 @@ def test_sync_http_error_message_falls_back_to_http_reason() -> None:
     assert _sync_http_error_message(_http_error("", code=502, reason="Bad Gateway")) == "HTTP Error 502: Bad Gateway"
 
 
-def test_urlopen_json_retries_cloudflare_502_with_default_retry_after(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    attempts = 0
-    cloudflare_body = json.dumps(
-        {
-            "status": 502,
-            "cloudflare_error": True,
-            "retryable": True,
-            "retry_after": 60,
-        }
-    )
-
-    def _urlopen(_request: urllib.request.Request, timeout: int, *, context=None) -> _JsonResponse:
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise urllib.error.HTTPError(
-                url="https://hol.org/api/guard/receipts/sync",
-                code=502,
-                msg="Bad Gateway",
-                hdrs={},
-                fp=io.BytesIO(cloudflare_body.encode("utf-8")),
-            )
-        return _JsonResponse({"syncedAt": "2026-06-30T21:02:46Z"})
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.urllib.request.urlopen", _urlopen)
-    slept = _record_sleeps(monkeypatch)
-
-    payload = _urlopen_json_with_timeout_retry(
-        request=urllib.request.Request("https://hol.org/api/guard/receipts/sync", data=b"{}"),
-        timeout_seconds=20,
-        retry_timeout_seconds=120,
-    )
-
-    assert payload == {"syncedAt": "2026-06-30T21:02:46Z"}
-    assert attempts == 2
-    assert slept == [60]
-
-
 def test_urlopen_retries_cloudflare_524_with_retry_after_header(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -206,72 +164,6 @@ def test_urlopen_retries_cloudflare_524_with_retry_after_header(
 
     assert attempts == 2
     assert slept == [5]
-
-
-def test_fetch_supply_chain_bundle_payload_raises_retryable_unavailable_on_guard_cloud_outage(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    body = json.dumps(
-        {
-            "ok": False,
-            "error": "Guard Cloud is unavailable. Local Guard keeps protecting this machine.",
-            "guardError": {
-                "code": "guard_unavailable",
-                "message": "Guard Cloud is unavailable. Local Guard keeps protecting this machine.",
-                "retryable": True,
-                "status": 503,
-            },
-        }
-    )
-
-    def _raise_service_unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise urllib.error.HTTPError(
-            url="https://hol.org/api/guard/supply-chain/bundle?workspaceId=test",
-            code=503,
-            msg="Service Unavailable",
-            hdrs={},
-            fp=io.BytesIO(body.encode("utf-8")),
-        )
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.runner._urlopen_json_with_timeout_retry",
-        _raise_service_unavailable,
-    )
-    request = urllib.request.Request("https://hol.org/api/guard/supply-chain/bundle?workspaceId=test")
-    with pytest.raises(GuardSyncNotAvailableError) as exc_info:
-        _fetch_supply_chain_bundle_payload(request)
-    assert exc_info.value.retryable is True
-    assert "Guard Cloud is unavailable" in str(exc_info.value)
-
-
-@pytest.mark.parametrize(
-    "reason",
-    [
-        ConnectionRefusedError(61, "Connection refused"),
-        ConnectionResetError(54, "Connection reset by peer"),
-        socket.gaierror(8, "nodename nor servname provided, or not known"),
-        OSError(errno.EHOSTUNREACH, "No route to host"),
-        OSError(errno.ENETUNREACH, "Network is unreachable"),
-        TimeoutError("timed out"),
-    ],
-)
-def test_fetch_supply_chain_bundle_payload_reports_unreachable_guard_cloud_as_retryable(
-    monkeypatch: pytest.MonkeyPatch,
-    reason: OSError,
-) -> None:
-    def _raise_unreachable(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise urllib.error.URLError(reason)
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.runner._urlopen_json_with_timeout_retry",
-        _raise_unreachable,
-    )
-    request = urllib.request.Request("https://hol.org/api/guard/supply-chain/bundle?workspaceId=test")
-    with pytest.raises(GuardSyncNotAvailableError) as exc_info:
-        _fetch_supply_chain_bundle_payload(request)
-    assert exc_info.value.retryable is True
-    assert str(exc_info.value) == "Guard Cloud could not be reached. Local Guard keeps protecting this machine."
-    assert "Errno" not in str(exc_info.value)
 
 
 def _serve_proxy_once(reply: bytes | None, *, close: bool, reset: bool = False) -> tuple[str, threading.Thread]:
@@ -387,50 +279,10 @@ def test_oauth_refresh_keeps_tls_failures_non_retryable(monkeypatch: pytest.Monk
     assert "certificate verify failed" in str(exc_info.value)
 
 
-@pytest.mark.parametrize("kind", ["refused", "closed", "reset", "tunnel-reset", "read-timeout"])
-def test_unreachable_guard_cloud_behind_a_managed_proxy_is_retryable(
-    monkeypatch: pytest.MonkeyPatch,
-    kind: str,
-) -> None:
-    failure = _proxy_failure(kind)
-    with pytest.raises(GuardSyncNotAvailableError) as refresh_info:
-        _refresh_with_urlopen_failure(monkeypatch, failure)
-    assert refresh_info.value.retryable is True
-
-    def _raise_proxy_failure(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise failure
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.runner._urlopen_json_with_timeout_retry",
-        _raise_proxy_failure,
-    )
-    request = urllib.request.Request("https://hol.org/api/guard/supply-chain/bundle?workspaceId=test")
-    with pytest.raises(GuardSyncNotAvailableError) as fetch_info:
-        _fetch_supply_chain_bundle_payload(request)
-    assert fetch_info.value.retryable is True
-
-
 def test_managed_proxy_failure_without_a_network_cause_stays_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(RuntimeError) as exc_info:
         _refresh_with_urlopen_failure(monkeypatch, _proxy_failure("garbage"))
     assert not isinstance(exc_info.value, GuardSyncNotAvailableError)
-
-
-def test_fetch_supply_chain_bundle_payload_keeps_tls_failures_non_retryable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def _raise_tls_failure(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise urllib.error.URLError(ssl.SSLCertVerificationError(1, "certificate verify failed"))
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.runner._urlopen_json_with_timeout_retry",
-        _raise_tls_failure,
-    )
-    request = urllib.request.Request("https://hol.org/api/guard/supply-chain/bundle?workspaceId=test")
-    with pytest.raises(RuntimeError) as exc_info:
-        _fetch_supply_chain_bundle_payload(request)
-    assert not isinstance(exc_info.value, GuardSyncNotAvailableError)
-    assert "certificate verify failed" in str(exc_info.value)
 
 
 def _cloudflare_error(body: str, headers: dict[str, str], *, code: int = 403) -> urllib.error.HTTPError:
@@ -536,3 +388,43 @@ def test_an_unread_http_error_claims_no_verdict_the_runtime_never_gave(monkeypat
         False,
         "HTTP Error 403: Forbidden",
     )
+
+
+def test_urlopen_json_retries_cloudflare_502_with_default_retry_after(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+    cloudflare_body = json.dumps(
+        {
+            "status": 502,
+            "cloudflare_error": True,
+            "retryable": True,
+            "retry_after": 60,
+        }
+    )
+
+    def _urlopen(_request: urllib.request.Request, timeout: int, *, context=None) -> _JsonResponse:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise urllib.error.HTTPError(
+                url="https://hol.org/api/guard/receipts/sync",
+                code=502,
+                msg="Bad Gateway",
+                hdrs={},
+                fp=io.BytesIO(cloudflare_body.encode("utf-8")),
+            )
+        return _JsonResponse({"syncedAt": "2026-06-30T21:02:46Z"})
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.urllib.request.urlopen", _urlopen)
+    slept = _record_sleeps(monkeypatch)
+
+    payload = _urlopen_json_with_timeout_retry(
+        request=urllib.request.Request("https://hol.org/api/guard/receipts/sync", data=b"{}"),
+        timeout_seconds=20,
+        retry_timeout_seconds=120,
+    )
+
+    assert payload == {"syncedAt": "2026-06-30T21:02:46Z"}
+    assert attempts == 2
+    assert slept == [60]
