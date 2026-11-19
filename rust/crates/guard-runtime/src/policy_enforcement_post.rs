@@ -77,8 +77,7 @@ pub(crate) fn apply_post_tool_policy_for_hook(
     // Guard's own approval wait on this hook's Guard home passed `PreToolUse`
     // on the same proof, so its result is not held either.
     let admitted_call = || {
-        if !origin_store.is_some_and(|store| store.require_guard_home(&request.guard_home).is_ok())
-        {
+        if origin_store.is_none_or(|store| store.require_guard_home(&request.guard_home).is_err()) {
             return PostAdmission::default();
         }
         PostAdmission {
