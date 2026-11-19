@@ -129,6 +129,36 @@ def test_a_permission_prompt_without_the_resident_still_tells_claude_to_wait(
     assert "HOL Guard" in str(response["systemMessage"])
 
 
+@pytest.mark.parametrize(
+    ("harness", "expected"),
+    [
+        (
+            "claude-code",
+            {"guard_permission_passthrough": True, "hookSpecificOutput": {"hookEventName": "PermissionRequest"}},
+        ),
+        ("copilot", {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}),
+    ],
+)
+def test_permission_request_passthrough_survives_event_lookup_outage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str, expected: dict[str, object]
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    worker = HookWorker(store=store, wait_for_native_policy=False)
+    monkeypatch.setattr(worker, "_hook_event_name", lambda *_args, **_kwargs: None)
+    try:
+        response = worker.review_http_payload(
+            payload={"hook_event_name": "PermissionRequest"},
+            params={},
+            default_harness=harness,
+            home_dir=tmp_path,
+            guard_home=worker.store.guard_home,
+            workspace=None,
+        )
+    finally:
+        worker.close()
+    assert response == expected
+
+
 def test_stop_is_answered_by_the_call_that_drops_the_sessions_prompts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

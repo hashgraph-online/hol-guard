@@ -327,6 +327,15 @@ class HookWorker(HookWorkerNativeMixin):
                     payload=payload,
                     succeeded=hook_post_succeeded(fallback_event, payload),
                 )
+            normalized_harness = harness.strip().lower().replace("_", "-")
+            if fallback_event == "PermissionRequest":
+                if normalized_harness == "claude-code":
+                    return {
+                        "guard_permission_passthrough": True,
+                        "hookSpecificOutput": {"hookEventName": "PermissionRequest"},
+                    }
+                if normalized_harness in _PERMISSION_PASSTHROUGH_HARNESSES:
+                    return {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
             response = availability_harness_response(
                 harness=harness,
                 event_name=fallback_event,
@@ -492,7 +501,7 @@ class HookWorker(HookWorkerNativeMixin):
             return values[-1].strip()
         return None
 
-    def _hook_event_name(self, payload: Mapping[str, object], deadline: float | None = None) -> str:
+    def _hook_event_name(self, payload: Mapping[str, object], deadline: float | None = None) -> str | None:
         # Event identity is a resident-owned fact. A missing fact stays
         # unavailable so callers can shape an outage response separately.
         return native_hook_event(payload, self.store.guard_home, deadline=deadline)
