@@ -22,6 +22,13 @@ type WatchProtectionBannerProps = {
   onTurnedOn?: (payload: GuardSettingsPayload | null) => void | Promise<void>;
   /** Offered only after a failure, as a way to finish the change by hand. */
   onOpenSettings?: () => void;
+  /**
+   * True while the host page is saving its own changes. The banner will not
+   * start a save then, so two writes never race.
+   */
+  disabled?: boolean;
+  /** Reports when the banner is saving or waiting for approval, so the host can hold its own save. */
+  onBusyChange?: (busy: boolean) => void;
   /** Test seam; defaults to the Guard API. */
   deps?: TurnProtectionOnDeps;
   /** Test seam for rendering a given step; defaults to idle. */
@@ -43,7 +50,7 @@ const LOCKED_COPY = "Your organization manages protection for these apps, so it 
 const DONE_COPY = "Protection is on. Guard will stop dangerous actions again.";
 
 const FOCUS_RING = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-attention";
-const PRIMARY_BUTTON = `inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70 ${FOCUS_RING}`;
+const PRIMARY_BUTTON = `inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70 ${FOCUS_RING}`;
 const SECONDARY_BUTTON = `inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark ${FOCUS_RING}`;
 
 /**
@@ -52,7 +59,8 @@ const SECONDARY_BUTTON = `inline-flex min-h-11 items-center justify-center round
  * on, then a saved change. It never sends the user to Settings to finish.
  */
 export function WatchProtectionBanner(props: WatchProtectionBannerProps) {
-  const { onTurnedOn, onOpenSettings } = props;
+  const { onTurnedOn, onOpenSettings, onBusyChange } = props;
+  const disabled = props.disabled === true;
   const deps = props.deps ?? DEFAULT_DEPS;
   const [state, setState] = useState<WatchBannerState>(props.initialState ?? { kind: "idle" });
   const mounted = useRef(true);
@@ -63,6 +71,12 @@ export function WatchProtectionBanner(props: WatchProtectionBannerProps) {
     };
   }, []);
 
+  const busy = state.kind === "working" || state.kind === "proof";
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
+  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
+
   const settle = useCallback(async (payload: GuardSettingsPayload | null) => {
     if (mounted.current) setState({ kind: "done" });
     await onTurnedOn?.(payload);
@@ -72,6 +86,7 @@ export function WatchProtectionBanner(props: WatchProtectionBannerProps) {
   const handleCancel = useCallback(() => setState({ kind: "idle" }), []);
 
   const handleConfirm = useCallback(async () => {
+    if (disabled) return;
     setState({ kind: "working" });
     try {
       const step = await startTurnProtectionOn(deps);
@@ -86,7 +101,7 @@ export function WatchProtectionBanner(props: WatchProtectionBannerProps) {
     } catch (cause) {
       if (mounted.current) setState({ kind: "error", message: turnProtectionOnErrorMessage(cause) });
     }
-  }, [deps, settle]);
+  }, [deps, disabled, settle]);
 
   const handleProofCancel = useCallback(() => {
     setState((current) => (current.kind === "proof" && current.pending ? current : { kind: "idle" }));
@@ -131,7 +146,7 @@ export function WatchProtectionBanner(props: WatchProtectionBannerProps) {
       detail = <p className="mt-1 text-sm text-slate-600">{confirmMessage}</p>;
       action = (
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => void handleConfirm()} className={PRIMARY_BUTTON}>
+          <button type="button" onClick={() => void handleConfirm()} disabled={disabled} className={PRIMARY_BUTTON}>
             Turn on
           </button>
           <button type="button" onClick={handleCancel} className={SECONDARY_BUTTON}>
@@ -157,7 +172,7 @@ export function WatchProtectionBanner(props: WatchProtectionBannerProps) {
       );
       action = (
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => void handleConfirm()} className={PRIMARY_BUTTON}>
+          <button type="button" onClick={() => void handleConfirm()} disabled={disabled} className={PRIMARY_BUTTON}>
             Try again
           </button>
           {onOpenSettings !== undefined ? (
@@ -174,7 +189,7 @@ export function WatchProtectionBanner(props: WatchProtectionBannerProps) {
       break;
     default:
       action = (
-        <button type="button" onClick={handleAsk} className={PRIMARY_BUTTON}>
+        <button type="button" onClick={handleAsk} disabled={disabled} className={PRIMARY_BUTTON}>
           {actionLabel}
         </button>
       );

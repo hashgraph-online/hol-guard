@@ -1,9 +1,8 @@
-import { r as reactExports, aY as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aZ as ApprovalProofModal, T as Tag, a_ as PROTECTION_POSTURE_COPY, a$ as POSTURE_OUTCOME_COLUMNS, b0 as harnessPostureRows, b1 as overrideRows, aP as harnessRowTone, b2 as harnessPostureSummary, b3 as joinNames, b4 as sortHarnessRows, b5 as globalPosture, b6 as selectHarnessPosture, b7 as restartHarnessWatch, h as HiMiniMagnifyingGlass, b8 as harnessWatchPrompt, b9 as harnessPostureOptions, ba as canRestartHarnessWatch, aS as HiMiniEye, af as HiMiniShieldCheck, aR as harnessRowStatus, bb as getDefaultExportFromCjs, bc as React, bd as PULSE_FACE_SCAN_OPTIONS, be as authorizeApprovalGatePulseSetup, bf as confirmApprovalGatePulseEnrollment, bg as waitForPulseApproval, f as fetchWithGuardAuth, bh as beginApprovalGatePulseEnrollment, bi as GuardModalLayer, S as SectionLabel, am as HiMiniXMark, bj as SelectMenu, bk as disableApprovalGatePulse, bl as setApprovalGatePulseShowCommand, bm as recoverApprovalGatePulse, e as HiMiniSquares2X2, K as HiMiniLockClosed, bn as HiMiniBellAlert, bo as HiMiniAdjustmentsHorizontal, d as HiMiniCircleStack, ap as HiMiniCloud, bp as TabBar, q as HiMiniChevronRight, ar as useFocusTrap, bq as fetchCloudReviewSettings, k as HiMiniArrowPath, br as ApprovalProofFieldInputs, bs as isApprovalProofSubmitDisabled, bt as buildApprovalProofCredentials, bu as changeCloudReviewSettings, bv as isRecord$1, bw as HiMiniArrowTopRightOnSquare, bx as shellHref, p as contextStatusCopy, G as HiMiniCheckCircle, as as HiMiniExclamationTriangle, by as HiMiniPauseCircle, t as harnessDisplayName, bz as listContextAgentSessions, bA as HiMiniLink, bB as revokeContextAgentSession, bC as grantContextWorkspace, bD as authorizeContextAgentSession, bE as ContextAssistanceApiError, bF as ask, bG as parseContextScope, bH as validContextBrokerRevision, bI as isGuardDemoMode, bJ as commitDashboardLocation, bK as HiMiniArrowUturnLeft, E as HiMiniPencilSquare, bL as HiMiniCodeBracketSquare, c as HiMiniFolder, F as HiMiniDocumentText, g as HiMiniComputerDesktop, bM as HiMiniHome, y as HiMiniCheck, bN as HiMiniFolderPlus, bO as HiMiniClock, l as listContextWorkspaces, bP as HiMiniFolderOpen, bQ as manageContextWorkspace, bR as compileWorkspaceContext, I as HiMiniArrowRight, bS as HiMiniChatBubbleLeftEllipsis, bT as HiMiniDocumentMagnifyingGlass, bU as HiMiniPower, bV as HiMiniEyeSlash, bW as HiMiniCpuChip, bX as HiMiniAcademicCap, aq as HiMiniQuestionMarkCircle, a0 as HiMiniClipboardDocument, bY as HiMiniArrowLeft, bZ as isCigarProducerVersion, b_ as isCigarCoreLabel, al as HiMiniSparkles, b$ as subscribeDashboardLocation, c0 as HiMiniChatBubbleLeftRight, c1 as HiMiniArrowUpCircle, c2 as parseContextAssistanceStatus, c3 as isCigarBuildIdentity, c4 as fetchContextInstallations, c5 as HiMiniCloudArrowDown, c6 as turnOnJob, c7 as shouldResumeTurnOn, c8 as turnOnRequestedAt, c9 as forgetTurnOn, ca as rememberTurnOn, cb as forgetTurnOnClick, cc as rememberTurnOnJob, a as fetchContextAssistance, o as controlContextAssistance, cd as HiMiniArrowDownTray, ce as downloadBlob, cf as savedEvidenceCopy, cg as guardAwareHref, ch as fetchContextData, ci as forgetContextHistory, cj as forgetSavedEvidence, ck as resolveProtectionLevelCopy, cl as fetchSettings, cm as fetchRuntimeSnapshot, cn as clearHarnessWatchOverrides, co as withHarnessPosturePatch, a3 as updateSettings, cp as clearPolicy, cq as clearReviewQueue, cr as revokeApprovalGateCooldown, cs as disableApprovalGateTotp, ct as importSettings, cu as resetSettings, cv as enrollApprovalGateTotp, cw as verifyApprovalGateTotp, cx as clearEvidence, cy as exportDiagnostics, cz as repairApprovalCenter, cA as exportSettings, cB as setupDesktopNotifications, an as EmptyState, cC as settingsWatchBannerModel, cD as WorkspacePageHeader, ac as WatchProtectionBanner, cE as navigateFromAnchor, x as HiMiniChevronDown, cF as humanizeList, cG as isProtectionPosture, cH as deriveProtectionPosture, cI as normalizeHarnessPostures, cJ as approvalGateCooldownLabel } from "../guard-dashboard.js";
-import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, G as GuardRepairControl } from "./guard-repair-control-sTMvCuK1.js";
+import { r as reactExports, aX as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aY as ApprovalProofModal, T as Tag, aZ as PROTECTION_POSTURE_COPY, a_ as POSTURE_OUTCOME_COLUMNS, a$ as harnessPostureRows, b0 as overrideRows, aO as harnessRowTone, b1 as harnessPostureSummary, b2 as joinNames, b3 as sortHarnessRows, b4 as globalPosture, b5 as selectHarnessPosture, b6 as restartHarnessWatch, h as HiMiniMagnifyingGlass, b7 as harnessWatchPrompt, b8 as harnessPostureOptions, b9 as canRestartHarnessWatch, aR as HiMiniEye, ad as HiMiniShieldCheck, aQ as harnessRowStatus, ba as getDefaultExportFromCjs, bb as React, bc as PULSE_FACE_SCAN_OPTIONS, bd as authorizeApprovalGatePulseSetup, be as confirmApprovalGatePulseEnrollment, bf as waitForPulseApproval, f as fetchWithGuardAuth, bg as beginApprovalGatePulseEnrollment, bh as GuardModalLayer, S as SectionLabel, ak as HiMiniXMark, bi as SelectMenu, bj as disableApprovalGatePulse, bk as setApprovalGatePulseShowCommand, bl as recoverApprovalGatePulse, e as HiMiniSquares2X2, K as HiMiniLockClosed, bm as HiMiniBellAlert, bn as HiMiniAdjustmentsHorizontal, d as HiMiniCircleStack, an as HiMiniCloud, bo as TabBar, q as HiMiniChevronRight, ap as useFocusTrap, bp as fetchCloudReviewSettings, k as HiMiniArrowPath, bq as ApprovalProofFieldInputs, br as isApprovalProofSubmitDisabled, bs as buildApprovalProofCredentials, bt as changeCloudReviewSettings, bu as isRecord$1, bv as HiMiniArrowTopRightOnSquare, bw as shellHref, p as contextStatusCopy, G as HiMiniCheckCircle, aq as HiMiniExclamationTriangle, bx as HiMiniPauseCircle, t as harnessDisplayName, by as listContextAgentSessions, bz as HiMiniLink, bA as SettingsSaveProofModal, bB as revokeContextAgentSession, bC as grantContextWorkspace, bD as authorizeContextAgentSession, bE as ContextAssistanceApiError, bF as ask, bG as parseContextScope, bH as validContextBrokerRevision, bI as isGuardDemoMode, bJ as commitDashboardLocation, bK as HiMiniArrowUturnLeft, E as HiMiniPencilSquare, bL as HiMiniCodeBracketSquare, c as HiMiniFolder, F as HiMiniDocumentText, g as HiMiniComputerDesktop, bM as HiMiniHome, y as HiMiniCheck, bN as HiMiniFolderPlus, bO as HiMiniClock, l as listContextWorkspaces, bP as HiMiniFolderOpen, bQ as manageContextWorkspace, bR as compileWorkspaceContext, I as HiMiniArrowRight, bS as HiMiniChatBubbleLeftEllipsis, bT as HiMiniDocumentMagnifyingGlass, bU as HiMiniPower, bV as HiMiniEyeSlash, bW as HiMiniCpuChip, bX as HiMiniAcademicCap, ao as HiMiniQuestionMarkCircle, a0 as HiMiniClipboardDocument, bY as HiMiniArrowLeft, bZ as isCigarProducerVersion, b_ as isCigarCoreLabel, aj as HiMiniSparkles, b$ as subscribeDashboardLocation, c0 as HiMiniChatBubbleLeftRight, c1 as HiMiniArrowUpCircle, c2 as parseContextAssistanceStatus, c3 as isCigarBuildIdentity, c4 as fetchContextInstallations, c5 as HiMiniCloudArrowDown, c6 as turnOnJob, c7 as shouldResumeTurnOn, c8 as turnOnRequestedAt, c9 as forgetTurnOn, ca as rememberTurnOn, cb as forgetTurnOnClick, cc as rememberTurnOnJob, a as fetchContextAssistance, o as controlContextAssistance, cd as HiMiniArrowDownTray, ce as downloadBlob, cf as savedEvidenceCopy, cg as guardAwareHref, ch as fetchContextData, ci as forgetContextHistory, cj as forgetSavedEvidence, ck as resolveProtectionLevelCopy, cl as fetchSettings, cm as fetchRuntimeSnapshot, cn as clearHarnessWatchOverrides, co as withHarnessPosturePatch, cp as updateSettings, cq as clearPolicy, cr as clearReviewQueue, cs as revokeApprovalGateCooldown, ct as disableApprovalGateTotp, cu as importSettings, cv as resetSettings, cw as resolveSettingsSaveProofKind, cx as requiresSettingsSaveProof, cy as enrollApprovalGateTotp, cz as verifyApprovalGateTotp, cA as clearEvidence, cB as exportDiagnostics, cC as repairApprovalCenter, cD as exportSettings, cE as setupDesktopNotifications, al as EmptyState, cF as settingsWatchBannerModel, cG as WorkspacePageHeader, aa as WatchProtectionBanner, cH as navigateFromAnchor, x as HiMiniChevronDown, cI as resolveSettingsSaveProofModalCopy, cJ as humanizeList, cK as isProtectionPosture, cL as deriveProtectionPosture, cM as normalizeHarnessPostures, cN as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, G as GuardRepairControl } from "./guard-repair-control-91tBByHP.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
-import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-BRFnoEG3.js";
-import { S as SettingsSaveProofModal, r as resolveSettingsSaveProofKind, a as requiresSettingsSaveProof, b as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-DdKoGp14.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-04d3wLni.js";
+import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-C1Asj0OK.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-DtlA45p8.js";
 import { u as usesPromptContext, s as setSwarmContextTarget, a as useSwarmContextTarget } from "./swarm-handoff-BIqKreGh.js";
 import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-hR3eI7UO.js";
 function describeAffectedHarness(item) {
@@ -10282,6 +10281,7 @@ function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, onNaviga
   const [draft, setDraft] = reactExports.useState(null);
   const [saving, setSaving] = reactExports.useState(false);
   const [contextAssistanceBusy, setContextAssistanceBusy] = reactExports.useState(false);
+  const [watchBannerBusy, setWatchBannerBusy] = reactExports.useState(false);
   const [saveSuccess, setSaveSuccess] = reactExports.useState(false);
   const [saveError, setSaveError] = reactExports.useState(null);
   const [clearingApprovals, setClearingApprovals] = reactExports.useState(false);
@@ -10484,7 +10484,12 @@ function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, onNaviga
     }
     applyDraftPosture(posture);
   }, [applyDraftPosture]);
-  const handleTurnProtectionOn = reactExports.useCallback(() => {
+  const handleProtectionTurnedOn = reactExports.useCallback((payload) => {
+    if (payload !== null) {
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      setState({ kind: "ready", payload: normalizedPayload });
+      savedSettingsRef.current = normalizedPayload.settings;
+    }
     setDraft((value) => {
       if (value === null) return value;
       const cleared = clearHarnessWatchOverrides(value);
@@ -10881,7 +10886,7 @@ function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, onNaviga
     }
   }, [pendingProofAction, executeSave, executeImportSettings, executeResetSettings, executeMaintenanceWithProof]);
   const handleSave = reactExports.useCallback(() => {
-    if (draft === null) {
+    if (draft === null || watchBannerBusy) {
       return;
     }
     const savedGateConfig = savedSettingsRef.current?.approval_gate ?? null;
@@ -10895,7 +10900,7 @@ function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, onNaviga
       return;
     }
     void executeSave();
-  }, [approvalGateEnabled, draft, executeSave, openProofModal]);
+  }, [approvalGateEnabled, draft, executeSave, openProofModal, watchBannerBusy]);
   const handleOpenPasswordChangeModal = reactExports.useCallback((mode2 = "change-password") => {
     if (mode2 === "setup-gate") {
       setupGateRevertRef.current = { enabled: approvalGateEnabled, gate: draft?.approval_gate };
@@ -11258,7 +11263,15 @@ function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, onNaviga
           description: "Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate."
         }
       ),
-      watchBanner !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { model: watchBanner, onTurnProtectionOn: handleTurnProtectionOn }) : null,
+      watchBanner !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        WatchProtectionBanner,
+        {
+          model: watchBanner,
+          onTurnedOn: handleProtectionTurnedOn,
+          onBusyChange: setWatchBannerBusy,
+          disabled: saving || proofModalOpen
+        }
+      ) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -11761,7 +11774,7 @@ function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, onNaviga
         "aria-label": contextOnly ? "Save CIGAR preferences" : "Save settings",
         children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleSave, disabled: saving || saveSuccess || contextAssistanceBusy, children: saveSuccess ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleSave, disabled: saving || saveSuccess || contextAssistanceBusy || watchBannerBusy, children: saveSuccess ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4", "aria-hidden": "true" }),
               "Saved"
             ] }) : saving ? "Saving…" : contextOnly ? "Save CIGAR preferences" : "Save settings" }),

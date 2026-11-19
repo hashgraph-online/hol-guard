@@ -1,11 +1,11 @@
-import { j as jsxRuntimeExports, r as reactExports, A as ActionButton, G as HiMiniCheckCircle, x as HiMiniChevronDown, aA as HiMiniExclamationCircle } from "../guard-dashboard.js";
-import { r as resolveSupplyChainIssues } from "./supply-chain-issues-BOUejY-Q.js";
-import { r as resolveHomeProtectionStatus } from "./home-protection-module-DPMDKD16.js";
-import { b as buildSupplyChainStats } from "./supply-chain-protection-stats-XiD1X6oR.js";
+import { j as jsxRuntimeExports, r as reactExports, A as ActionButton, G as HiMiniCheckCircle, x as HiMiniChevronDown, ay as HiMiniExclamationCircle } from "../guard-dashboard.js";
+import { r as resolveSupplyChainIssues } from "./supply-chain-issues-hoTFBPsJ.js";
+import { r as resolveHomeProtectionStatus } from "./home-protection-module-DhHiwTs6.js";
+import { b as buildSupplyChainStats } from "./supply-chain-protection-stats-DZVL58wK.js";
 import { B as BrandHero, b as BrandHeroBadge, a as BrandHeroFacts } from "./brand-hero-COty1p6U.js";
-import { s as supplyChainFixAllIsPending, a as supplyChainFixAllNeedsCloudConnect, b as supplyChainFixAllButtonLabel } from "./supply-chain-hub-workspace-CsUOrp8Y.js";
-import "./feed-health-workspace-BZ5-eSVE.js";
-import "./harness-action-errors-BMFGvfEG.js";
+import { s as supplyChainFixAllIsPending, a as supplyChainFixAllNeedsCloudConnect, b as supplyChainFixAllButtonLabel } from "./supply-chain-hub-workspace-CXh-c9D0.js";
+import "./feed-health-workspace-D_oiYOq6.js";
+import "./harness-action-errors-PgLjgif9.js";
 const PROTECTION_BADGE = {
   protected: "Protected",
   partial: "Partly protected",

@@ -161,6 +161,22 @@ async function main(): Promise<void> {
   assert(error.includes("Open settings"), "error step offers Settings only as a fallback");
   const locked = renderToStaticMarkup(createElement(WatchProtectionBanner, { model, initialState: { kind: "locked" } }));
   assert(locked.includes("organization manages") && !locked.includes("<button"), "locked step has no dead button");
+  const heldIdle = renderToStaticMarkup(createElement(WatchProtectionBanner, { model, disabled: true }));
+  assert(/<button[^>]*disabled=""[^>]*>Turn protection on for these apps/.test(heldIdle), "banner cannot start while the page saves");
+  const heldConfirm = renderToStaticMarkup(createElement(WatchProtectionBanner, {
+    model,
+    disabled: true,
+    initialState: { kind: "confirming" },
+  }));
+  assert(/<button[^>]*disabled=""[^>]*>Turn on</.test(heldConfirm), "banner confirm is held while the page saves");
+  const settingsSource = readFileSync(new URL("./settings-workspace.tsx", import.meta.url), "utf8");
+  assert(
+    settingsSource.includes("onBusyChange={setWatchBannerBusy}")
+      && settingsSource.includes("disabled={saving || proofModalOpen}\n        />")
+      && settingsSource.includes("if (draft === null || watchBannerBusy)")
+      && settingsSource.includes("contextAssistanceBusy || watchBannerBusy}"),
+    "Settings and the banner never save at the same time",
+  );
   const done = renderToStaticMarkup(createElement(WatchProtectionBanner, { model, initialState: { kind: "done" } }));
   assert(done.includes("Protection is on."), "done step confirms the change");
 
