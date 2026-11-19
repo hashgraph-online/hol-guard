@@ -123,6 +123,10 @@ fn a_pathspec_after_double_dash_must_not_be_an_option() {
     for command in [
         "git diff --name-only -- '--include=*.tsx'",
         "git diff -m --name-only -- '--include=*.tsx'",
+        "git diff-tree -m --name-only HEAD^ HEAD -- '--include=*.tsx'",
+        "git diff-index -m --name-only HEAD -- '--include=*.tsx'",
+        "git diff-files -m --name-only -- '--include=*.tsx'",
+        "git whatchanged -m --name-only -1 -- '--include=*.tsx'",
         "git checkout -m -- '--include=*.tsx'",
         "git restore -m -- '--include=*.tsx'",
         "git worktree remove ../review --force && git diff --name-only -- '--include=*.tsx'",
