@@ -712,6 +712,22 @@
       "expect": "allow_or_review"
     },
     {
+      "id": "quoted-cd-then-heredoc-python-edit",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd '.' && python3 <<'EOF'\np='README.md'\ns=open(p).read()\nprint(len(s))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
       "id": "background-bash-workspace-script",
       "fix_area": "shell",
       "harnesses": [
