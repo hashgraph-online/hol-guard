@@ -242,20 +242,21 @@ async function fetchHarnessSetupItems() {
 }
 function useHarnessDetection() {
   const [state, setState] = reactExports.useState({ kind: "loading" });
-  reactExports.useEffect(() => {
-    let cancelled = false;
-    void fetchHarnessSetupItems().then((items) => {
-      if (!cancelled) setState({ kind: "ready", items });
-    }).catch((error) => {
-      if (!cancelled) {
-        setState({ kind: "error", message: error instanceof Error ? error.message : "Unable to detect local AI apps." });
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
+  const refresh = reactExports.useCallback(async () => {
+    setState({ kind: "loading" });
+    try {
+      const items = await fetchHarnessSetupItems();
+      setState({ kind: "ready", items });
+      return true;
+    } catch (error) {
+      setState({ kind: "error", message: error instanceof Error ? error.message : "Unable to detect local AI apps." });
+      return false;
+    }
   }, []);
-  return state;
+  reactExports.useEffect(() => {
+    void refresh();
+  }, [refresh]);
+  return { ...state, refresh };
 }
 function detectedHarnesses(state) {
   if (state.kind !== "ready") return [];

@@ -1197,6 +1197,40 @@
       "expect": "allow"
     },
     {
+      "id": "ls-escaped-slug-dir-by-full-path",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${PARENT}/app/registry/\\[slug\\]/ 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "ls-quoted-slug-dir-by-full-path",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la '${PARENT}/app/registry/[slug]'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "ls-long-src",
       "fix_area": "shell",
       "harnesses": [
@@ -7516,6 +7550,21 @@
         "code": "const d = await commit.draft(); return { keys: Object.keys(d), proto: Object.getOwnPropertyNames(Object.getPrototypeOf(d)), commit: typeof d.commit, details: d.details };",
         "language": "js",
         "title": "Inspect the commit draft"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-eval-commit-draft-string-body",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); await d.take('README.md'); return await d.commit('docs: record the lane', 'Add the lane note.');",
+        "language": "js",
+        "title": "Commit the lane note"
       },
       "cwd": "org_app",
       "expect": "allow"

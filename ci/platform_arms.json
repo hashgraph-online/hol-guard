@@ -1699,6 +1699,14 @@
    "body": "0a75f43e436a"
   },
   {
+   "file": "rust/crates/guard-runtime/src/git_rules_git.rs",
+   "item": "fn runnable -- non-Unix block",
+   "verdict": "posix-primitive",
+   "note": "Windows has no execute mode bit, and Git for Windows runs any hook file that exists. An existing regular file is therefore the Windows answer for a hook git would run, the same reading as `package_intent_parser::local_files::is_executable`. Counting more hooks as runnable only keeps the opt-in `--no-verify` rule asking, never lets one through.",
+   "cfg": "not(unix)",
+   "body": "4244f2d41d96"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/github_workflow_context_io.rs",
    "item": "fn is_executable_file -- non-Unix block",
    "verdict": "posix-primitive",

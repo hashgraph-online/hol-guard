@@ -129,6 +129,9 @@ def list_harness_setup_items(context: HarnessContext, store: GuardStore | None =
         else:
             status = "not_found"
         observed_copy = _HARNESS_OBSERVED_COPY[status]
+        warnings = []
+        if status == "needs_repair" and not detection.get("managed_active", False):
+            warnings.append("Guard-managed configuration remains, but this app is not connected to Guard.")
         items.append(
             {
                 "harness": harness,
@@ -138,6 +141,7 @@ def list_harness_setup_items(context: HarnessContext, store: GuardStore | None =
                 "command_available": detection["command_available"],
                 "config_paths": detection["config_paths"],
                 "artifact_count": 0,
+                "warnings": warnings,
                 **setup_contract(harness).to_dict(),
             }
         )

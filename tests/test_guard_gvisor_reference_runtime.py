@@ -13,8 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import framed_digest
-from codex_plugin_scanner.guard.runtime.isolation_provider import ProviderPlanError
-from tests.gvisor_reference_runtime import GVisorReferenceRuntime
+from tests.gvisor_reference_runtime import GVisorReferenceRuntime, ProviderPlanError
 
 _RUNSC = Path("/tmp/hol-guard-test/runsc")
 _BUNDLES = Path("/tmp/hol-guard-test/bundles")

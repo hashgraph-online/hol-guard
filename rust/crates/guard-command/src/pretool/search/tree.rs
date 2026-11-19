@@ -32,7 +32,8 @@ mod operand;
 pub(super) use descendant::{descendant_allowed, hidden_allowed};
 pub(in crate::pretool) use descendant::{key_file_name, SECRET_EXTENSIONS};
 pub(in crate::pretool) use literal_bracket::{
-    inert_bracket_class, safe_literal_bracket_read_target, safe_literal_bracket_search_target,
+    inert_bracket_class, listable_spelling, safe_literal_bracket_listing_target,
+    safe_literal_bracket_read_target, safe_literal_bracket_search_target,
     safe_literal_bracket_tree,
 };
 use operand::checked_directory;

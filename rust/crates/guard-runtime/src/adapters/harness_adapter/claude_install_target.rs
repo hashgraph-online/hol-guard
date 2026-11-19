@@ -235,7 +235,9 @@ pub(super) fn target(ctx: &Ctx, settings: &Path) -> Value {
         "hook_overrides": overrides,
         "background": "Headless `claude -p` runs and Remote Control sessions continue on this \
             machine and read the same user settings. Cloud sessions (Claude Code on the web) run \
-            elsewhere, do not read this file, and Guard does not cover them.",
+            elsewhere, do not read this file, and Guard does not cover them. Sessions started \
+            with `--bare`, or with setting sources that leave out `user`, skip Guard's hooks. \
+            Background sessions (`claude --bg`) run them but are not qualified with Guard.",
         "rollback": {
             "command": command,
             // The command for the shell that will run it, so the caller shows
