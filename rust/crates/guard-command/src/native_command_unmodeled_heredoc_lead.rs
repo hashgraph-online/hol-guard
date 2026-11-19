@@ -35,9 +35,13 @@ pub(super) fn command_start(earlier: &str, before: &str) -> Option<usize> {
         return None;
     }
     let (mut quote, mut escaped, mut start) = (None, false, 0usize);
+    let mut previous = None;
     for (at, character) in before.char_indices() {
+        let word_start = previous.is_none_or(starts_word);
+        previous = Some(character);
         if escaped {
-            escaped = false;
+            // An escaped space joins words, so a `#` after it is no comment.
+            (escaped, previous) = (false, Some('\\'));
             continue;
         }
         match quote {
@@ -48,6 +52,8 @@ pub(super) fn command_start(earlier: &str, before: &str) -> Option<usize> {
                 '\'' | '"' => quote = Some(character),
                 '\\' => escaped = true,
                 ';' | '&' | '|' | '(' => start = at + 1,
+                // The `<<` would sit inside a comment the reader does not model.
+                '#' if word_start => return None,
                 _ => {}
             },
         }
@@ -64,12 +70,26 @@ fn split_at(before: &str) -> usize {
     before.rfind([';', '&', '|', '(']).map_or(0, |at| at + 1)
 }
 
-/// Whether `text` ends inside a quote or after a lone backslash.
+/// Whether `character` ends a word, so a `#` after it starts a comment.
+fn starts_word(character: char) -> bool {
+    character.is_whitespace() || ";&|()".contains(character)
+}
+
+/// Whether `text` ends inside a quote or after a lone backslash. A quote in a
+/// comment, such as `# don't`, opens nothing.
 fn open_quote(text: &str) -> bool {
-    let (mut quote, mut escaped) = (None, false);
+    let (mut quote, mut escaped, mut comment) = (None, false, false);
+    let mut previous = None;
     for character in text.chars() {
+        let word_start = previous.is_none_or(starts_word);
+        previous = Some(character);
+        if comment {
+            comment = character != '\n';
+            continue;
+        }
         if escaped {
-            escaped = false;
+            // An escaped space joins words, so a `#` after it is no comment.
+            (escaped, previous) = (false, Some('\\'));
             continue;
         }
         match quote {
@@ -79,6 +99,7 @@ fn open_quote(text: &str) -> bool {
             None => match character {
                 '\'' | '"' => quote = Some(character),
                 '\\' => escaped = true,
+                '#' if word_start => comment = true,
                 _ => {}
             },
         }
@@ -103,6 +124,22 @@ mod tests {
             let start = command_start("", before).unwrap_or_else(|| panic!("{before}"));
             assert_eq!(before[start..].trim_start(), command, "{before}");
         }
+    }
+
+    #[test]
+    fn a_quote_in_an_earlier_comment_opens_nothing() {
+        for earlier in [
+            "# don't change imports",
+            "ls # it's fine\ncd src",
+            "echo a#'b'",
+        ] {
+            assert_eq!(command_start(earlier, "python3 "), Some(0), "{earlier:?}");
+        }
+        // A `#` inside a word or a quote is not a comment.
+        assert_eq!(command_start("echo a#'b", "python3 "), None);
+        assert_eq!(command_start("echo '# a' 'b", "python3 "), None);
+        // `<<` after a comment start on its own line is not read.
+        assert_eq!(command_start("", "echo 'a' # python3 "), None);
     }
 
     #[test]
