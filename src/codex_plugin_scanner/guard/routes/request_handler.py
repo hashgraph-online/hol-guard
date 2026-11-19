@@ -23,7 +23,6 @@ from ..native_daemon_manage import (
 )
 from ..resident_evidence_client import ResidentEvidenceClient
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
-from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime_health.diagnostics import DaemonDiagnostics
 from ..store import GuardStore
@@ -97,7 +96,6 @@ class _GuardDaemonHTTPServer:
     daemon_discovery_challenges_lock: threading.Lock
     dashboard_reconnect_lock: threading.Lock
     dashboard_reconnect_consumed_challenges: dict[str, int]
-    network_supervisor: NetworkSupervisor
     runtime_hook_evidence_writer: ResidentEvidenceClient
     runtime_hook_evidence_dispatch: HookEvidenceDispatch
     request_capacity: threading.BoundedSemaphore
