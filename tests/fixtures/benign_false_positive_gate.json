@@ -33698,6 +33698,28 @@
       "expect": "allow"
     },
     {
+      "id": "post-tool-test-runner-traceback-stand-in-password",
+      "fix_area": "secrets",
+      "harnesses": ["claude-code", "codex", "omp", "zcode"],
+      "tool": "shell",
+      "event": "PostToolUse",
+      "tool_input": { "command": "python -m pytest tests/test_login.py -q" },
+      "tool_response": { "stdout": "tests/test_login.py:742: AssertionError\nkwargs = {'params': {'new_password': 'correct-password', 'confirm_password': 'correct-password'}}\n", "stderr": "" },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-post-tool-test-runner-traceback-real-password",
+      "fix_area": "secrets",
+      "harnesses": ["claude-code", "codex", "omp", "zcode"],
+      "tool": "shell",
+      "event": "PostToolUse",
+      "tool_input": { "command": "python -m pytest tests/test_login.py -q" },
+      "tool_response": { "stdout": "tests/test_login.py:742: AssertionError\nkwargs = {'params': {'new_password': 'MyPassword1'}}\n", "stderr": "" },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-shell-curl-query-recovery-phrase",
       "fix_area": "network",
       "harnesses": ["claude-code", "codex", "omp", "zcode"],
