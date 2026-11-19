@@ -112,7 +112,11 @@ fn a_pathspec_after_double_dash_must_not_be_an_option() {
     let path = project.join(filename);
     std::fs::write(&path, "public test marker\n").unwrap();
     fixture::git(&root, &project, &["add", "--", filename]);
-    fixture::git(&root, &project, &["commit", "--quiet", "-m", "pathspec fixture"]);
+    fixture::git(
+        &root,
+        &project,
+        &["commit", "--quiet", "-m", "pathspec fixture"],
+    );
     std::fs::write(&path, "changed public test marker\n").unwrap();
 
     let controls = fixture::every_permission_enabled();
