@@ -31,6 +31,11 @@ fn an_awk_that_could_run_or_write_anything_stays_refused_in_a_substitution() {
         r#"echo $(awk '-f' payload.awk)"#,
         r#"echo $(awk "-f" payload.awk)"#,
         r#"echo $(awk \-f payload.awk)"#,
+        // Bash joins split-quoted words before awk sees its program:
+        // sys""tem and get''line remain executable awk primitives.
+        r#"echo $(awk 'BEGIN{'sys""tem'("printf awk_probe_ok")}' )"#,
+        r#"echo $(awk 'BEGIN{'sys''tem'("printf awk_probe_ok")}' )"#,
+        r#"echo $(awk 'BEGIN{'get""line' x}' )"#,
         r#"x=$(awk '{print > "out.txt"}' f)"#,
         r#"x=$(awk '{print | "sh"}' f)"#,
         r#"echo "$(awk '{system("id")}' f)""#,
