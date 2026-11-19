@@ -297,12 +297,8 @@ pub(super) fn contained(
         && !runs_directly
         && names_files
         && stays_offline(&projected_text, single);
-    // macOS claims package, Node tool and pytest commands with narrower
-    // profiles before the workspace route runs. The redirect disqualifies
-    // those, so the workspace sandbox takes the command once it passes that
-    // route's gate.
-    // A trailing `2>&1` before bounded output filters is not such a redirect:
-    // the narrower sink peels it itself, so that command keeps its profile.
+    // The workspace route handles redirects that disqualify narrower profiles.
+    // Bounded output filters peel `2>&1` themselves and retain their profile.
     let home = context.home_dir.map(Path::new);
     let narrower = super::redirect_projection::redirected_profile(&projected.reason_code)
         && projected.minimum_action == "sandbox-required"
