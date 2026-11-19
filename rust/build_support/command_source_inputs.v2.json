@@ -597,6 +597,7 @@
       "src/pretool/recoverable_removal.rs",
       "src/pretool/recursive_copy.rs",
       "src/pretool/redirect_git_chain.rs",
+      "src/pretool/redirect_input.rs",
       "src/pretool/redirect_leading_chain.rs",
       "src/pretool/redirect_projection.rs",
       "src/pretool/redirect_scratch_tests.rs",
