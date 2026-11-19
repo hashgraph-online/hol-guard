@@ -294,7 +294,7 @@ class StorePolicyMixin:
             return
         if not isinstance(next_control_state, dict):
             raise RuntimeError("Guard policy integrity control state is invalid.")
-        if not self._finalize_policy_integrity_control_state(next_control_state):
+        if self._finalize_policy_integrity_control_state(next_control_state) is False:
             raise RuntimeError("Guard policy integrity control state could not be finalized.")
 
     def apply_policy_bundle_authority(self, *args: Any, **kwargs: Any) -> dict[str, object] | None:
