@@ -50,3 +50,19 @@ def test_native_policy_not_ready_reason_preserves_resident_repair_advice(monkeyp
         "Guard's installed files disagree, so retrying will not clear it. Ask the user to run `hol-guard doctor`."
     )
     assert "Retry this action" not in reason
+
+
+def test_native_policy_not_ready_reason_keeps_repair_advice_when_resident_is_down(monkeypatch) -> None:
+    publisher = SimpleNamespace(
+        last_error="native_client_timed_out",
+        resident_failure_streak=lambda: 4,
+    )
+    daemon = SimpleNamespace(
+        hook_worker=SimpleNamespace(policy_snapshot_publisher=publisher, guard_home=Path("guard-home"))
+    )
+    monkeypatch.setattr(admission, "native_policy_not_ready_reason", lambda *args, **kwargs: None)
+
+    reason = admission._native_policy_not_ready_reason(daemon)
+
+    assert "hol-guard repair" in reason
+    assert "Retry once more" in reason
