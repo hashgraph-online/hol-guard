@@ -1,7 +1,7 @@
 """Carry native Guard Cloud requests over urllib in unit tests.
 
-The native ``cloud-event-sync`` command sends the command queue, Cloud Review,
-enrollment and catalog requests itself, so a test that fakes
+The native ``cloud-event-sync`` command sends the command queue, Cloud Review
+and enrollment requests itself, so a test that fakes
 ``runner._guard_sync_request`` or ``runner._urlopen_json_with_timeout_retry``
 would otherwise never see them. This double sends each request through those
 runner functions, which the tests already fake.
@@ -23,7 +23,6 @@ def cloud_json_request_over_urllib(
     body: bytes,
     timeout_seconds: float,
     retry_timeout_seconds: float,
-    max_response_bytes: int | None = None,
 ) -> dict[str, object]:
     """Send one request the way the Python runner did before the native command."""
 
@@ -36,12 +35,8 @@ def cloud_json_request_over_urllib(
         data=body,
         extra_headers=None,
     )
-    options: dict[str, object] = {}
-    if max_response_bytes is not None:
-        options["max_response_bytes"] = max_response_bytes
     return runner._urlopen_json_with_timeout_retry(
         request=request,
         timeout_seconds=timeout_seconds,
         retry_timeout_seconds=retry_timeout_seconds,
-        **options,
     )

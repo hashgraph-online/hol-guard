@@ -31,6 +31,7 @@ pytest_plugins = [
     "tests.native_resident_teardown",
     "tests.optional_command_catalog_fixtures",
     "tests.network_trust_fixtures",
+    "tests.cloud_json_request_fixtures",
 ]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
@@ -220,21 +221,6 @@ def _receipt_upload_over_urllib(request: pytest.FixtureRequest, monkeypatch: pyt
         "cloud_receipt_upload",
         receipt_upload_over_urllib(cloud_bundle_sync.cloud_receipt_upload),
     )
-
-
-@pytest.fixture(autouse=True)
-def _cloud_json_request_over_urllib(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Send native Guard Cloud requests through the urllib a test fakes.
-
-    Mark a test ``native_cloud_json_request`` to send them with the native command.
-    """
-
-    if request.node.get_closest_marker("native_cloud_json_request") is not None:
-        return
-    from codex_plugin_scanner.guard.runtime import cloud_bundle_sync
-    from tests.support.cloud_json_request_transport import cloud_json_request_over_urllib
-
-    monkeypatch.setattr(cloud_bundle_sync, "cloud_json_request", cloud_json_request_over_urllib)
 
 
 @pytest.fixture(autouse=True)

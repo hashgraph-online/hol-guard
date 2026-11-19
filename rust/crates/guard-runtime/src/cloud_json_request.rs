@@ -1,7 +1,7 @@
 //! The `request` action of `cloud-event-sync`: one authenticated JSON POST to
 //! Guard Cloud for a caller that already resolved the sign-in and built the
-//! endpoint and body (the command queue, the Cloud Review event batches, the
-//! workspace-review enrollment and the extension catalog upload).
+//! endpoint and body (the command queue, the Cloud Review event batches and
+//! the workspace-review enrollment).
 //!
 //! The runtime signs the request (DPoP included), runs the shared retry
 //! machine under the machine's managed network policy and reports what came
@@ -26,13 +26,10 @@ const INVALID_RESPONSE: &str = "Guard Cloud sync returned an invalid response pa
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct JsonRequest {
     url: String,
-    /// The exact body, sent byte for byte: a catalog page is bound to its digest.
+    /// The exact body, sent byte for byte.
     body: String,
     timeout_seconds: f64,
     retry_timeout_seconds: f64,
-    /// Refuse an answer larger than this many bytes.
-    #[serde(default)]
-    max_response_bytes: Option<usize>,
 }
 
 /// `_urlopen_json_with_timeout_retry(_guard_sync_request(...))`, one round.
@@ -68,7 +65,7 @@ pub(crate) fn send(
         return Err(SyncError::Pending);
     }
     match answer {
-        Ok(answer) => accepted(answer, request.max_response_bytes),
+        Ok(answer) => accepted(answer),
         Err(SyncFetchError::Http(failure)) => Ok(json!({"refusal": {
             "status": failure.status,
             "headers": failure.headers,
@@ -109,18 +106,10 @@ fn origin(url: &str) -> Option<String> {
         .then(|| format!("{scheme}://{authority}").to_ascii_lowercase())
 }
 
-/// An object answer within the caller's byte budget. The budget is checked on
-/// the compact encoding, which is never longer than what Guard Cloud sent.
-fn accepted(answer: Value, max_response_bytes: Option<usize>) -> Result<Value, SyncError> {
+/// Guard Cloud's answer, which must be an object.
+fn accepted(answer: Value) -> Result<Value, SyncError> {
     if !answer.is_object() {
         return Err(SyncError::Failed(INVALID_RESPONSE.to_owned()));
-    }
-    if let Some(limit) = max_response_bytes {
-        if answer.to_string().len() > limit {
-            return Err(SyncError::Failed(
-                "Guard Cloud sync response exceeds its byte budget.".to_owned(),
-            ));
-        }
     }
     Ok(json!({"response": answer}))
 }

@@ -96,7 +96,6 @@ def cloud_json_request(
     body: bytes,
     timeout_seconds: float,
     retry_timeout_seconds: float,
-    max_response_bytes: int | None = None,
 ) -> dict[str, object]:
     """POST ``body`` to ``url`` with the resolved sign-in and return Guard Cloud's object answer.
 
@@ -113,8 +112,6 @@ def cloud_json_request(
         "timeoutSeconds": float(timeout_seconds),
         "retryTimeoutSeconds": float(retry_timeout_seconds),
     }
-    if max_response_bytes is not None:
-        request["maxResponseBytes"] = max_response_bytes
     answer = run_native_cloud_sync(
         CLOUD_EVENT_SYNC_COMMAND,
         CLOUD_JSON_REQUEST_FEATURE,

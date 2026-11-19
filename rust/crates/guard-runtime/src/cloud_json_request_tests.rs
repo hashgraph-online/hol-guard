@@ -77,23 +77,15 @@ fn origin_is_scheme_and_authority() {
 }
 
 #[test]
-fn an_answer_must_be_an_object_within_its_budget() {
+fn an_answer_must_be_an_object() {
     assert_eq!(
-        accepted(json!({"ok": true}), None),
+        accepted(json!({"ok": true})),
         Ok(json!({"response": {"ok": true}}))
     );
     assert_eq!(
-        accepted(json!([1]), None),
+        accepted(json!([1])),
         Err(SyncError::Failed(INVALID_RESPONSE.to_owned()))
     );
-    assert_eq!(
-        accepted(json!({"ok": true}), Some(11)),
-        Ok(json!({"response": {"ok": true}}))
-    );
-    assert!(matches!(
-        accepted(json!({"ok": true}), Some(10)),
-        Err(SyncError::Failed(message)) if message.contains("byte budget")
-    ));
 }
 
 #[test]
