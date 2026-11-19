@@ -265,7 +265,7 @@ fn turning_cigar_on_is_saved_by_the_edge() {
     let edge = edge("cigar-on", "");
     let answer = post(
         &edge,
-        json!({"settings": {"context_assistance": {"enabled": true}}}),
+        json!({"settings": {"context_assistance": {"enabled": true, "runtime_id": "cigar-test"}}}),
         "invalid_settings",
     );
     let (status, body) = answer.expect("the edge answers the save itself");
