@@ -16,6 +16,11 @@ each way of starting Claude Code and whether Guard's hooks run in it.
 | `--setting-sources` without `user` | Skipped | Not protected |
 | Agent SDK with `settingSources` that leaves out `"user"` | Skipped | Not protected |
 
+"Protected" holds only while Claude Code runs Guard's hooks from user settings.
+`disableAllHooks: true` in effective settings, or `allowManagedHooksOnly: true` in
+managed settings, stops them even though user settings load. See
+[Settings that turn Guard's hooks off](claude-code-settings.md#settings-that-turn-guards-hooks-off).
+
 ### Headless
 
 The Gauntlet Claude Code lane runs Claude Code with `-p`,
