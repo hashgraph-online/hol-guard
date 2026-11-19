@@ -1609,6 +1609,8 @@ mod tests_benign_probes;
 #[cfg(test)]
 mod tests_fanout_reads;
 #[cfg(test)]
+mod fixed_glob_option_boundary_tests;
+#[cfg(test)]
 mod tests_filter_file_reads;
 #[cfg(test)]
 mod tests_listing_find_probes;
