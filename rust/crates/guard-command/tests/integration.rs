@@ -96,6 +96,7 @@ pub mod pretool_du_hidden_home;
 pub mod pretool_du_sibling_reads;
 pub mod pretool_empty_read_request;
 pub mod pretool_env_prefix_controls;
+pub mod pretool_extension_allow_cd_sequence;
 pub mod pretool_extension_allow_filtered_search;
 pub mod pretool_extension_allow_git_config_pattern;
 pub mod pretool_extension_allow_git_order;
