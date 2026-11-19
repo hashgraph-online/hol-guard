@@ -24,8 +24,9 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 
 from .approval_retry import CATALOG as APPROVAL_RETRY_CATALOG
+from .approval_retry_bash import BASH_LIFECYCLE_CASES, BASH_OWNER_HARNESSES
 from .approval_rows import connector_classes
-from .catalog import catalog_digest, load_catalog
+from .catalog import Scenario, catalog_digest, load_catalog
 from .fixtures import create_run_root, digest_file
 from .harness_case import run_harness_case
 from .harnesses import adapter
@@ -35,6 +36,11 @@ from .source_identity import source_identity
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+
+
+def lane_scenarios(catalog: tuple[Scenario, ...], harness: str) -> tuple[Scenario, ...]:
+    """The cases this harness can drive: the Bash lifecycle cases need the native Bash owner."""
+    return tuple(s for s in catalog if harness in BASH_OWNER_HARNESSES or s.id not in BASH_LIFECYCLE_CASES)
 
 
 def run_approval_retry_suite(
@@ -66,7 +72,11 @@ def run_approval_retry_suite(
     _, identity, capabilities = probe._probe_native_identity()
     if capabilities.build_sha != expected_source_sha:
         raise RuntimeError("installed Guard source SHA does not match the expected build")
-    catalog = load_catalog(catalog_path)
+    full_catalog = load_catalog(catalog_path)
+    catalog = lane_scenarios(full_catalog, harness)
+    not_driven = [s.id for s in full_catalog if s not in catalog]
+    if selected_ids and set(selected_ids) & set(not_driven):
+        raise ValueError(f"{harness} has no native Bash owner to drive a Bash lifecycle case")
     if selected_ids and (set(selected_ids) - {scenario.id for scenario in catalog}):
         raise ValueError("unknown scenario selection")
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)
@@ -88,6 +98,8 @@ def run_approval_retry_suite(
         "platform": platform.system().lower(),
         "catalog_sha256": catalog_digest(catalog_path),
         "expected_scenarios": [s.id for s in catalog],
+        # Cases this harness cannot drive at all, named so a green lane never reads as covering them.
+        "not_driven": not_driven,
         "full_profile": selected == catalog,
         "cases": [],
         "jobs": 1,

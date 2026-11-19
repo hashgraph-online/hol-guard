@@ -26,6 +26,7 @@ from ci.gauntlet.approval_retry_bash import (
     MUTATION_CASE,
     ONCE_CASE,
 )
+from ci.gauntlet.approval_retry_suite import lane_scenarios
 from ci.gauntlet.catalog import Scenario, load_catalog, load_catalog_data
 from ci.gauntlet.harness_judge import assess_harness_case
 
@@ -106,6 +107,22 @@ def test_lane_catalog_carries_retry_and_bash_lifecycle_cases():
     # scan may not read it; the row it queues is what the lane proves can be
     # approved and retried.
     assert by_id["approved-retry-sourced-toolchain-init"].commands == ("source ~/.nvm/nvm.sh && nvm_latest_version",)
+
+
+@pytest.mark.parametrize("harness", ["omp", "pi"])
+def test_a_native_bash_owner_lane_drives_every_case(harness: str):
+    catalog = load_catalog(APPROVAL_RETRY_CATALOG)
+    assert lane_scenarios(catalog, harness) == catalog
+
+
+@pytest.mark.parametrize("harness", ["codex", "claude-code", "cursor"])
+def test_a_lane_without_the_native_bash_owner_skips_only_the_lifecycle_cases(harness: str):
+    # Guard contains an approved script on these harnesses instead of binding its
+    # content to the run, so the grant-and-journal oracle can never hold there.
+    catalog = load_catalog(APPROVAL_RETRY_CATALOG)
+    lane = lane_scenarios(catalog, harness)
+    assert {scenario.id for scenario in catalog} - {scenario.id for scenario in lane} == BASH_LIFECYCLE_CASES
+    assert [scenario for scenario in catalog if scenario.id not in BASH_LIFECYCLE_CASES] == list(lane)
 
 
 def test_core_catalog_never_carries_the_lane_oracle():
