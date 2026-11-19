@@ -50,3 +50,30 @@ fn actual_option_filters_still_have_their_original_distinction() {
         assert!(fixed_command_floor(&model(command)), "{command}");
     }
 }
+
+#[test]
+fn grep_and_rg_pattern_file_values_do_not_hide_a_delimiter() {
+    // -f/--file consumes the next word. A following -e is then a filename,
+    // not an option, and a subsequent -- really does start positional mode.
+    for command in [
+        "grep -f -e -- '--include=*.tsx'",
+        "grep --file -e -- '--private-key=*.tsx'",
+        "rg -f -e -- '--include=*.tsx'",
+        "rg --file -e -- '--private-key=*.tsx'",
+        "grep -f patterns -- '--api-key=*.ts'",
+        "rg --file patterns -- '--private-key=*.tsx'",
+    ] {
+        assert!(fixed_command_floor(&model(command)), "{command}");
+    }
+
+    // When -e or -f takes -- as its value, the following token is still
+    // a genuine option; its filter value alone must face the secret floor.
+    for command in [
+        "grep -e -- --include=*.tsx",
+        "rg --regexp -- --glob=*.rs",
+        "grep -f -- --include=*.tsx",
+        "rg --file -- --glob=*.rs",
+    ] {
+        assert!(!fixed_command_floor(&model(command)), "{command}");
+    }
+}
