@@ -270,12 +270,14 @@ fn plan(
     let environment =
         verified_npm::ExecutionEnvironment::from_value(payload.get(EXECUTION_ENVIRONMENT_FIELD));
     // The key is derived from the stamped PATH and HOME only, so it stands for
-    // the command only when no exported variable can change what npm runs.
+    // the command only when no exported variable can change what npm runs. A
+    // `NODE_OPTIONS` the hook saw holding only heap and diagnostic flags, as
+    // agent wrappers export, changes nothing npm fetches or runs.
     let keyed = environment.well_formed
-        && !environment
-            .names
-            .iter()
-            .any(|name| verified_npm::changes_npm(name))
+        && !environment.names.iter().any(|name| {
+            verified_npm::changes_npm(name)
+                && !(name.eq_ignore_ascii_case("NODE_OPTIONS") && environment.node_options_inert)
+        })
         && verified_npm::filters_outside_workspace(&shape.filter_programs, &environment, workspace);
     Some(Planned {
         artifact: artifact.to_wire(),

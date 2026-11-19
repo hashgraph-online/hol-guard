@@ -75,6 +75,9 @@ pub struct ExecutionEnvironment {
     pub library_search_paths: BTreeMap<String, String>,
     /// Whether the stamped environment was a well-formed object at all.
     pub well_formed: bool,
+    /// `node_options_inert`: the hook saw `NODE_OPTIONS` holding only heap
+    /// and diagnostic flags.
+    pub node_options_inert: bool,
 }
 
 impl ExecutionEnvironment {
@@ -111,6 +114,8 @@ impl ExecutionEnvironment {
         if let Some(Value::String(home)) = object.get("home") {
             environment.home = Some(home.clone());
         }
+        environment.node_options_inert =
+            object.get("node_options_inert") == Some(&Value::Bool(true));
         if let Some(Value::Object(stamped)) = object.get("library_search_paths") {
             for (name, item) in stamped {
                 match item {

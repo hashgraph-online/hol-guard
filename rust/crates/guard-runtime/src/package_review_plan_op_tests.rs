@@ -266,6 +266,24 @@ fn a_proven_npm_install_may_continue() {
     let configured = serde_json::from_slice::<Value>(&bytes).expect("result")["payload"].clone();
     assert!(configured["artifact"].is_object());
     assert_eq!(configured["keyed"], false);
+    // An inert `NODE_OPTIONS`, such as an agent wrapper's heap size, and an
+    // inert npm setting keep the key; a `NODE_OPTIONS` the hook did not see
+    // as inert does not.
+    let keyed_with = |names: Value, inert: bool| {
+        let mut payload = shell("npm ci --ignore-scripts");
+        payload["guard_execution_environment"] = json!({
+            "environment_names": names,
+            "path": bin.to_string_lossy(),
+            "home": root.path().to_string_lossy(),
+            "node_options_inert": inert,
+        });
+        let input = request(&workspace.to_string_lossy(), payload);
+        let bytes = evaluate_package_review_plan(&input).expect("request must encode a result");
+        serde_json::from_slice::<Value>(&bytes).expect("result")["payload"]["keyed"].clone()
+    };
+    let wrapped = json!(["PATH", "HOME", "NODE_OPTIONS", "npm_config_cache"]);
+    assert_eq!(keyed_with(wrapped.clone(), true), true);
+    assert_eq!(keyed_with(wrapped, false), false);
 }
 
 const SAFE_FLAGS: &str = "--ignore-scripts --allow-git=none";
