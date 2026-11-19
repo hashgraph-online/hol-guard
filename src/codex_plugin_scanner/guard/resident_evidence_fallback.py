@@ -259,7 +259,7 @@ def _record_mcp_with_one_retry(record: object, write: Callable[[], object]) -> F
     except (TypeError, ValueError):
         return "drop"
     attempt = _MCP_RETRY_ATTEMPTS.get(key, 0) + 1
-    if attempt > 3:
+    if attempt > 4:
         _MCP_RETRY_ATTEMPTS.pop(key, None)
         return "drop"
     try:

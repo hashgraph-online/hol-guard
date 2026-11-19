@@ -124,6 +124,7 @@ def test_mcp_fallback_retries_a_failed_write_once() -> None:
     assert _record_mcp_with_one_retry(record, failed_write) == "retry"
     assert _record_mcp_with_one_retry(record, failed_write) == "retry"
     assert _record_mcp_with_one_retry(record, failed_write) == "retry"
+    assert _record_mcp_with_one_retry(record, failed_write) == "retry"
     assert _record_mcp_with_one_retry(record, failed_write) == "drop"
     assert calls == ["write", "write", "write", "write"]
 
