@@ -535,6 +535,9 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
   const [draft, setDraft] = useState<GuardSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [contextAssistanceBusy, setContextAssistanceBusy] = useState(false);
+  // The Watch banner saves on its own; hold the page Save while it runs so an
+  // older draft cannot land after it and turn Watch back on.
+  const [watchBannerBusy, setWatchBannerBusy] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [clearingApprovals, setClearingApprovals] = useState(false);
@@ -763,7 +766,15 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
     applyDraftPosture(posture);
   }, [applyDraftPosture]);
 
-  const handleTurnProtectionOn = useCallback(() => {
+  // The banner has already saved the change (with approval proof when the gate
+  // is on). Record the saved settings and end Watch in the draft too, keeping
+  // any other unsaved edits on the page.
+  const handleProtectionTurnedOn = useCallback((payload: GuardSettingsPayload | null) => {
+    if (payload !== null) {
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      setState({ kind: "ready", payload: normalizedPayload });
+      savedSettingsRef.current = normalizedPayload.settings;
+    }
     setDraft((value) => {
       if (value === null) return value;
       const cleared = clearHarnessWatchOverrides(value);
@@ -1203,7 +1214,7 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
   }, [pendingProofAction, executeSave, executeImportSettings, executeResetSettings, executeMaintenanceWithProof]);
 
   const handleSave = useCallback(() => {
-    if (draft === null) {
+    if (draft === null || watchBannerBusy) {
       return;
     }
     const savedGateConfig = savedSettingsRef.current?.approval_gate ?? null;
@@ -1220,7 +1231,7 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
       return;
     }
     void executeSave();
-  }, [approvalGateEnabled, draft, executeSave, openProofModal]);
+  }, [approvalGateEnabled, draft, executeSave, openProofModal, watchBannerBusy]);
 
   const handleOpenPasswordChangeModal = useCallback((mode: "change-password" | "setup-gate" = "change-password") => {
     if (mode === "setup-gate") {
@@ -1611,7 +1622,12 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
         description="Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate."
       />
       {watchBanner !== null ? (
-        <WatchProtectionBanner model={watchBanner} onTurnProtectionOn={handleTurnProtectionOn} />
+        <WatchProtectionBanner
+          model={watchBanner}
+          onTurnedOn={handleProtectionTurnedOn}
+          onBusyChange={setWatchBannerBusy}
+          disabled={saving || proofModalOpen}
+        />
       ) : null}
 
       <div className="relative">
@@ -2140,7 +2156,7 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <ActionButton onClick={handleSave} disabled={saving || saveSuccess || contextAssistanceBusy}>
+            <ActionButton onClick={handleSave} disabled={saving || saveSuccess || contextAssistanceBusy || watchBannerBusy}>
               {saveSuccess ? (
                 <span className="flex items-center gap-2">
                   <HiMiniCheckCircle className="h-4 w-4" aria-hidden="true" />
