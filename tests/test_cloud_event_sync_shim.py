@@ -96,3 +96,46 @@ def test_a_plan_restriction_is_not_retryable(tmp_path: Path, monkeypatch: pytest
     with pytest.raises(runner.GuardSyncNotAvailableError) as error:
         runner.sync_guard_events(GuardStore(tmp_path / "guard-home"))
     assert error.value.retryable is False
+
+
+_SESSION = {"session_id": "session-live", "created_at": "2026-11-19T00:00:00.000Z"}
+_AUTH = {"sync_url": "https://hol.org/api/guard/receipts/sync", "token": "demo"}
+
+
+@pytest.mark.native_runtime_session
+def test_runtime_session_posts_through_the_native_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    response = {"syncedAt": "2026-11-19T00:00:05+00:00", "items": [{"sessionId": "session-live"}]}
+    sent = _answer(monkeypatch, tmp_path, {"ok": True, "result": {"status": "synced", "response": response}})
+    store = GuardStore(tmp_path / "guard-home")
+
+    summary = runner.sync_runtime_session(store, session=dict(_SESSION), auth_context=dict(_AUTH))
+
+    assert sent[0]["action"] == "runtime_session"
+    assert sent[0]["session"]["sessionId"] == "session-live"
+    assert summary["runtime_session_id"] == "session-live"
+    assert summary["runtime_session_synced_at"] == "2026-11-19T00:00:05+00:00"
+
+
+@pytest.mark.native_runtime_session
+def test_a_skipped_runtime_session_returns_the_native_summary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    skipped = {
+        "runtime_session_id": "session-live",
+        "runtime_session_sync_skipped": True,
+        "runtime_session_sync_reason": "runtime_session_endpoint_unavailable",
+    }
+    _answer(monkeypatch, tmp_path, {"ok": True, "result": {"status": "skipped", "summary": skipped}})
+
+    summary = runner.sync_runtime_session(
+        GuardStore(tmp_path / "guard-home"), session=dict(_SESSION), auth_context=dict(_AUTH)
+    )
+
+    assert summary == skipped
+
+
+@pytest.mark.native_runtime_session
+def test_runtime_session_answer_needs_a_response(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _answer(monkeypatch, tmp_path, {"ok": True, "result": {"status": "synced"}})
+    with pytest.raises(RuntimeError, match="Invalid sync response"):
+        runner.sync_runtime_session(
+            GuardStore(tmp_path / "guard-home"), session=dict(_SESSION), auth_context=dict(_AUTH)
+        )
