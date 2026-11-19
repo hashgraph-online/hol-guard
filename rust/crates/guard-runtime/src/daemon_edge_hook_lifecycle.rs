@@ -43,6 +43,7 @@ const PERMISSION_REQUEST: &str = "claude_permission_request";
 const TURN_STOP: &str = "claude_turn_stop";
 const QUESTION_SETTLE: &str = "claude_question_settle";
 const QUESTION_SAVE: &str = "claude_question_save";
+const QUESTION_CONSUME: &str = "claude_question_consume";
 /// `native_hook_authority_state._MAX_REQUEST_BYTES`: a larger request was
 /// refused before it reached the op.
 const MAX_REQUEST_BYTES: usize = 512 * 1024;
@@ -277,7 +278,13 @@ impl Hook<'_> {
                     }),
                     super::budget_left(expires),
                 )?;
-                (finalized.get("finalized") == Some(&Value::Bool(true))).then(|| json!({}))
+                if finalized.get("finalized") != Some(&Value::Bool(true)) {
+                    return None;
+                }
+                let consumed = self.authority_op(QUESTION_CONSUME, &save, expires, |request| {
+                    request.payload = Some(Value::Object(save.clone()));
+                })?;
+                (consumed.get("consumed") == Some(&Value::Bool(true))).then(|| json!({}))
             }
         }
     }

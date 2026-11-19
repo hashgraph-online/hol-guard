@@ -112,12 +112,10 @@ impl Env<'_> {
     /// permission in the same authority-state transaction.
     pub(super) fn claude_question_save(
         &self,
-        session_id: &str,
+        _session_id: &str,
         payload: &Object,
     ) -> Result<Value, &'static str> {
         let artifact_id = opt_str(payload, "artifact_id").ok_or(ERROR_INVALID)?;
-        let pending_artifact_hash =
-            opt_str(payload, "pending_artifact_hash").ok_or(ERROR_INVALID)?;
         let reason = opt_str(payload, "reason").ok_or(ERROR_INVALID)?;
         let source = opt_str(payload, "source").ok_or(ERROR_INVALID)?;
         if guard_policy_snapshot::policy_integrity::is_remote_policy_source(Some(&source)) {
@@ -184,6 +182,23 @@ impl Env<'_> {
                 return Err(ERROR_STORE);
             }
         }
+        Ok(json!({
+            "valid": true,
+            "saved": true,
+            "next_control_state": policy_result.get("next_control_state").cloned().unwrap_or(Value::Null),
+        }))
+    }
+
+    /// Consumes the pending permission after the policy-integrity control
+    /// state has been finalized by the host secret store.
+    pub(super) fn claude_question_consume(
+        &self,
+        session_id: &str,
+        payload: &Object,
+    ) -> Result<Value, &'static str> {
+        let artifact_id = opt_str(payload, "artifact_id").ok_or(ERROR_INVALID)?;
+        let pending_artifact_hash =
+            opt_str(payload, "pending_artifact_hash").ok_or(ERROR_INVALID)?;
         let pending_key = claude_pending_key(session_id, &artifact_id);
         let same_pending = match self.read(&pending_key) {
             Stored::Object(pending) => {
@@ -195,11 +210,7 @@ impl Env<'_> {
         if same_pending && !self.claude_remove_pending(session_id, &pending_key) {
             return Err(ERROR_STORE);
         }
-        Ok(json!({
-            "valid": true,
-            "saved": true,
-            "next_control_state": policy_result.get("next_control_state").cloned().unwrap_or(Value::Null),
-        }))
+        Ok(json!({ "consumed": true }))
     }
 
     /// `question` is the hook's projection (`event`, `tool_name`,

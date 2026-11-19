@@ -223,6 +223,16 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
     finalized = hook_integrity_finalize(store, {"next_control_state": reply.get("next_control_state")})
     if finalized.get("finalized") is not True:
         return {"valid": False}
+    consumed = hook_authority_state(
+        store,
+        "claude_question_consume",
+        now=_now(),
+        required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
+        session_id=session_id,
+        payload={"artifact_id": artifact_id, "pending_artifact_hash": pending_artifact_hash},
+    )
+    if not isinstance(consumed, dict) or consumed.get("consumed") is not True:
+        return {"valid": False}
     return reply
 
 

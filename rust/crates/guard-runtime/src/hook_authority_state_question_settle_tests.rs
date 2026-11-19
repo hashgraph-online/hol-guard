@@ -243,6 +243,12 @@ fn question_save_persists_the_plan_and_consumes_pending_state() {
     assert!(saved["next_control_state"].is_object());
     assert!(env(&connection)
         .claude_load_single_pending(SESSION)
+        .is_some());
+    env(&connection)
+        .claude_question_consume(SESSION, &save)
+        .expect("consume");
+    assert!(env(&connection)
+        .claude_load_single_pending(SESSION)
         .is_none());
     let action: String = connection
         .query_row(

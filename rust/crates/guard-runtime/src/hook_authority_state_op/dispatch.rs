@@ -100,6 +100,9 @@ impl Env<'_> {
             "claude_question_save" => {
                 self.claude_question_save(required(&request.session_id)?, hook_payload(request)?)
             }
+            "claude_question_consume" => {
+                self.claude_question_consume(required(&request.session_id)?, hook_payload(request)?)
+            }
             "claude_lifecycle" => {
                 self.claude_lifecycle(request.session_id.as_deref(), hook_payload(request)?)
             }
