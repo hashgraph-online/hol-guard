@@ -164,7 +164,8 @@ def _run_exact(case: dict, root: Path) -> dict:
     if raw_cwd is not None:
         payload["cwd"] = raw_cwd
     tool_input = payload.get("tool_input")
-    expected_command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    raw_command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    expected_command = raw_command if isinstance(raw_command, str) and raw_command.strip() else None
     assert expected_command == query["command"], case["name"]
     workspace = Path(query["workspace"]) if query["workspace"] is not None else None
     home = Path(query["home_dir"]) if query["home_dir"] is not None else None

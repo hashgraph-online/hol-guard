@@ -331,9 +331,7 @@ def route_native_hook(
     deadline: float | None = None
     try:
         deadline = _cli_review_deadline(payload)
-        event_name = native_hook_event(
-            payload, context.guard_home, deadline=deadline
-        ) or canonical_hook_event_name(payload)
+        event_name = native_hook_event(payload, context.guard_home, deadline=deadline)
         payload = dict(payload)
         # This process runs in the shell the command is about to run in, so its
         # environment is the caller context the daemon would get from a bridge.
@@ -350,12 +348,14 @@ def route_native_hook(
             event_name=event_name,
         )
         if not isinstance(response, dict):
+            event_name = event_name or canonical_hook_event_name(payload)
             response = availability_harness_response(
                 harness=args.harness,
                 event_name=event_name,
                 reason_code="native_hook_worker_unavailable",
                 reason="HOL Guard could not complete the native hook decision safely.",
             )
+        event_name = event_name or canonical_hook_event_name(payload)
         return emit_hook_review(
             args.harness,
             response,
@@ -365,6 +365,7 @@ def route_native_hook(
             deadline=deadline,
         )
     except Exception as error:
+        event_name = event_name or canonical_hook_event_name(payload)
         _record_native_hook_exception(context.guard_home, harness=args.harness, event_name=event_name)
         _log_worker_exception(error, harness=args.harness)
         response = availability_harness_response(
