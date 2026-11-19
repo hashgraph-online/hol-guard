@@ -875,6 +875,13 @@ fn secret_selecting_globs_are_a_fixed_floor() {
         "dd if={x\\\"y,.env} of=copy",
         // An unterminated quote leaves no proven segment to screen.
         "dd if='{x,.env} of=copy",
+        // An option's value is screened the way a bare operand is.
+        "grep -rn needle src --include=.env* -l",
+        "grep -rn needle src --include=*.env -l",
+        "rg needle src --glob=.env*",
+        // `*.log` is not a code extension, so the value still reaches a
+        // credential name the way a bare operand would.
+        "grep -rn needle src --exclude=*.log -l",
         // A `/` makes the word a path, whatever its first component holds.
         "git log -p -1 -- 'x=y/../.en*'",
         "git diff --no-index a=b/{.env,x} README.md",
@@ -894,6 +901,11 @@ fn secret_selecting_globs_are_a_fixed_floor() {
         "gh api repos/o/r/issues -f 'labels[]=bug'",
         "dd if=out/*.ts of=copy",
         "git log -p -1 -- '[[:digit:]].ts'",
+        // An option's name is not a path, so the glob after it is read as the
+        // file filter it is instead of as one long name that could expand
+        // onto a credential.
+        "grep -rn needle src --include=*.tsx -l",
+        "rg needle src --glob=*.rs",
     ] {
         assert!(!fixed_command_floor(&model(command)), "{command}");
     }

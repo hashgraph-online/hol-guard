@@ -42,11 +42,6 @@ from ..native_policy_bundle import (
 )
 from ..native_prompt import request_from_dict as _prompt_request_from_dict  # noqa: F401
 from ..native_runner_authority import NativeRunnerAuthorityError
-from ..native_supply_chain_bundle import (
-    MAX_SUPPLY_CHAIN_BUNDLE_RESPONSE_BYTES,
-    VerifiedSupplyChainBundle,
-    native_verify_supply_chain_bundle_response,
-)
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
 from ..oauth_token_claims import oauth_binding_from_credentials, oauth_binding_metadata, oauth_refresh_binding
 from ..package_firewall_defaults import extract_cloud_user_profile
@@ -135,12 +130,6 @@ from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
 from .policy_bundle_failure_ack import cached_bundle_failure_acknowledgement, failed_acknowledgement
-from .supply_chain_bundle import (
-    SupplyChainBundleError,
-    SupplyChainVerificationKey,
-    load_supply_chain_verification_keys,
-)
-from .supply_chain_support import ecosystem_support_matrix
 from .sync_retry_delay import (
     parse_retry_after_header as _parse_retry_after_header,
 )
@@ -1264,162 +1253,6 @@ def _guard_cloud_http_error_details(error: urllib.error.HTTPError) -> tuple[str,
     return answer.message, answer.retryable
 
 
-class _GuardBundleUnauthorizedError(RuntimeError):
-    """Guard Cloud refused the bundle fetch's access token."""
-
-
-def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[str, object]:
-    try:
-        # Stop at what the verifier can be asked about. A larger response could
-        # only be carried to a verifier that would refuse the request, so
-        # failing the fetch keeps the reason where the caller can report it.
-        return _urlopen_json_with_timeout_retry(
-            request=request,
-            timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
-            retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
-            max_response_bytes=MAX_SUPPLY_CHAIN_BUNDLE_RESPONSE_BYTES,
-        )
-    except urllib.error.HTTPError as error:
-        if error.code == 403:
-            is_plan_restricted, message = _check_plan_restriction_403(error)
-            if is_plan_restricted:
-                raise GuardSyncNotAvailableError(message) from error
-            raise RuntimeError(message) from error
-        answer = _cloud_http_error(error)
-        if answer.retryable:
-            raise GuardSyncNotAvailableError(answer.message, retryable=True) from error
-        if error.code == 401 and answer.edge_block is None:
-            raise _GuardBundleUnauthorizedError(answer.message) from error
-        raise RuntimeError(answer.message) from error
-    except OSError as error:
-        if _is_guard_cloud_unreachable_error(error):
-            raise GuardSyncNotAvailableError(_GUARD_CLOUD_UNREACHABLE_MESSAGE, retryable=True) from error
-        raise RuntimeError(_sync_url_error_message(error)) from error
-
-
-def _verified_supply_chain_bundle_response(
-    payload: dict[str, object],
-    *,
-    trusted_keys: tuple[SupplyChainVerificationKey, ...],
-    cached_bundle_version: str | None,
-    store: GuardStore,
-) -> VerifiedSupplyChainBundle:
-    """Have the resident verify one bundle response.
-
-    The resident reads the response and recomputes the canonical payload over
-    ``payload`` itself and owns every verdict about it: the payload hash, the
-    keyring the signing key anchors to, that key's rotation state, freshness,
-    rollback and the signature. A resident that cannot answer raises, so an
-    unverified bundle is never treated as verified.
-    """
-
-    return native_verify_supply_chain_bundle_response(
-        payload,
-        trusted_keys=[key.to_dict() for key in trusted_keys] or None,
-        cached_bundle_version=cached_bundle_version,
-        guard_home=store.guard_home,
-        store=store,
-    )
-
-
-def _sync_supply_chain_bundle_incremental(
-    *,
-    bundle_url: str,
-    cached_bundle_version: str | None,
-    auth_context: dict[str, object],
-    store: GuardStore,
-    trusted_keys: tuple[SupplyChainVerificationKey, ...],
-    workspace_id: str,
-) -> dict[str, object] | None:
-    index_request = _guard_sync_request(
-        auth_context,
-        request_url=_sync.normalized_supply_chain_bundle_index_url(bundle_url),
-        method="GET",
-        data=None,
-        extra_headers={"Accept-Encoding": "identity"},
-    )
-    try:
-        index_payload = _fetch_supply_chain_bundle_payload(index_request)
-    except RuntimeError:
-        return None
-    if not isinstance(index_payload, dict):
-        return None
-    raw_partitions = index_payload.get("partitions")
-    if not isinstance(raw_partitions, list) or len(raw_partitions) == 0:
-        return None
-    cached_partition_payload = store.get_sync_payload("supply_chain_bundle_partition_cache")
-    cached_partitions = {}
-    if isinstance(cached_partition_payload, dict):
-        raw_cached_partitions = cached_partition_payload.get("partitions")
-        if isinstance(raw_cached_partitions, dict):
-            cached_partitions = raw_cached_partitions
-    next_partition_cache: dict[str, object] = {}
-    refreshed_partitions = 0
-    for descriptor in raw_partitions:
-        if not isinstance(descriptor, dict):
-            continue
-        ecosystem = descriptor.get("ecosystem")
-        partition = descriptor.get("partition")
-        payload_hash = descriptor.get("payloadHash")
-        if not isinstance(ecosystem, str) or not isinstance(partition, int) or not isinstance(payload_hash, str):
-            continue
-        cache_key = f"{ecosystem}:{partition}"
-        cached_partition = cached_partitions.get(cache_key)
-        response = None
-        if isinstance(cached_partition, dict) and cached_partition.get("payload_hash") == payload_hash:
-            raw_cached_response = cached_partition.get("response")
-            if isinstance(raw_cached_response, dict):
-                try:
-                    response = _verified_supply_chain_bundle_response(
-                        raw_cached_response,
-                        trusted_keys=trusted_keys,
-                        cached_bundle_version=cached_bundle_version,
-                        store=store,
-                    )
-                except SupplyChainBundleError:
-                    response = None
-        if response is None:
-            try:
-                partition_request = _guard_sync_request(
-                    auth_context,
-                    request_url=_sync.supply_chain_partition_bundle_url(
-                        bundle_url, ecosystem=ecosystem, partition=partition
-                    ),
-                    method="GET",
-                    data=None,
-                    extra_headers={"Accept-Encoding": "identity"},
-                )
-                partition_payload = _fetch_supply_chain_bundle_payload(partition_request)
-                response = _verified_supply_chain_bundle_response(
-                    partition_payload,
-                    trusted_keys=trusted_keys,
-                    cached_bundle_version=cached_bundle_version,
-                    store=store,
-                )
-            except (RuntimeError, SupplyChainBundleError):
-                return None
-            refreshed_partitions += 1
-        next_partition_cache[cache_key] = {
-            "payload_hash": payload_hash,
-            "response": response.response,
-        }
-    if not next_partition_cache:
-        return None
-    bundle_version = index_payload.get("bundleVersion")
-    resolved_bundle_version = bundle_version if isinstance(bundle_version, str) and bundle_version else None
-    if resolved_bundle_version is None:
-        resolved_bundle_version = cached_bundle_version or ""
-    return {
-        "cache_payload": {
-            "bundle_version": resolved_bundle_version,
-            "partitions": next_partition_cache,
-            "workspace_id": workspace_id,
-        },
-        "refreshed_partitions": refreshed_partitions,
-        "total_partitions": len(next_partition_cache),
-    }
-
-
 def sync_supply_chain_bundle(
     store: GuardStore,
     *,
@@ -1427,131 +1260,10 @@ def sync_supply_chain_bundle(
 ) -> dict[str, object]:
     """Fetch, verify, and persist the active supply-chain bundle for the cloud workspace."""
 
-    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    workspace_id = store.get_cloud_workspace_id()
-    if workspace_id is None:
-        raise GuardSyncNotConfiguredError("Guard Cloud workspace is not connected.")
-    bundle_url = _sync.normalized_supply_chain_bundle_url(str(resolved_auth_context["sync_url"]), workspace_id)
-    cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
-    cached_bundle_version = None
-    if isinstance(cached_bundle, dict):
-        cached_payload = cached_bundle.get("bundle")
-        if isinstance(cached_payload, dict):
-            existing_version = cached_payload.get("bundleVersion")
-            if isinstance(existing_version, str) and existing_version:
-                cached_bundle_version = existing_version
-    trusted_keys = load_supply_chain_verification_keys(store.get_sync_payload("supply_chain_bundle_keyring"))
-    try:
-        partition_sync: dict[str, object] | None = _sync_supply_chain_bundle_incremental(
-            bundle_url=bundle_url,
-            cached_bundle_version=cached_bundle_version,
-            auth_context=resolved_auth_context,
-            store=store,
-            trusted_keys=trusted_keys,
-            workspace_id=workspace_id,
-        )
-    except (RuntimeError, SupplyChainBundleError):
-        partition_sync = None
-    if (
-        partition_sync is not None
-        and partition_sync.get("refreshed_partitions") == 0
-        and isinstance(cached_bundle, dict)
-    ):
-        try:
-            response = _verified_supply_chain_bundle_response(
-                cached_bundle,
-                trusted_keys=trusted_keys,
-                cached_bundle_version=cached_bundle_version,
-                store=store,
-            )
-        except SupplyChainBundleError:
-            try:
-                request = _guard_sync_request(
-                    resolved_auth_context,
-                    request_url=bundle_url,
-                    method="GET",
-                    data=None,
-                    extra_headers={"Accept-Encoding": "identity"},
-                )
-                payload = _fetch_supply_chain_bundle_payload(request)
-                response = _verified_supply_chain_bundle_response(
-                    payload,
-                    trusted_keys=trusted_keys,
-                    cached_bundle_version=cached_bundle_version,
-                    store=store,
-                )
-            except GuardSyncNotAvailableError:
-                raise
-            except (RuntimeError, SupplyChainBundleError) as error:
-                raise RuntimeError(f"Guard supply-chain bundle sync failed: {error}") from error
-    else:
-        request = _guard_sync_request(
-            resolved_auth_context,
-            request_url=bundle_url,
-            method="GET",
-            data=None,
-            extra_headers={"Accept-Encoding": "identity"},
-        )
-        payload = _fetch_supply_chain_bundle_payload(request)
-        try:
-            response = _verified_supply_chain_bundle_response(
-                payload,
-                trusted_keys=trusted_keys,
-                cached_bundle_version=cached_bundle_version,
-                store=store,
-            )
-        except SupplyChainBundleError as error:
-            raise RuntimeError(f"Guard supply-chain bundle sync failed: {error}") from error
-    synced_at = _now()
-    store.cache_supply_chain_bundle(workspace_id, response.response, synced_at)
-    verified = response.summary
-    store.set_sync_payload(
-        "supply_chain_bundle_keyring",
-        {
-            "workspace_id": workspace_id,
-            "keys": [item.to_dict() for item in response.verification_keys],
-        },
-        synced_at,
-    )
-    store.set_sync_payload(
-        "supply_chain_bundle_entitlement",
-        {
-            "bundle_version": verified.get("bundle_version"),
-            "key_id": verified.get("key_id"),
-            "policy_hash": verified.get("policy_hash"),
-            "tier": verified.get("tier"),
-            "workspace_id": workspace_id,
-        },
-        synced_at,
-    )
-    if partition_sync is not None:
-        cache_payload = partition_sync.get("cache_payload")
-        if isinstance(cache_payload, dict):
-            store.set_sync_payload(
-                "supply_chain_bundle_partition_cache",
-                cache_payload,
-                synced_at,
-            )
-    summary: dict[str, object] = {
-        "advisory_count": verified.get("advisory_count"),
-        "bundle_version": verified.get("bundle_version"),
-        "ecosystem_support": list(ecosystem_support_matrix()),
-        "feed_snapshot_hash": verified.get("feed_snapshot_hash"),
-        "package_count": verified.get("package_count"),
-        "policy_hash": verified.get("policy_hash"),
-        "status": "synced",
-        "synced_at": synced_at,
-        "tier": verified.get("tier"),
-        "workspace_id": workspace_id,
-    }
-    if partition_sync is not None:
-        summary["partition_sync"] = {
-            "enabled": True,
-            "refreshed": _int_value(partition_sync.get("refreshed_partitions")) or 0,
-            "total": _int_value(partition_sync.get("total_partitions")) or 0,
-        }
-    store.set_sync_payload("supply_chain_bundle_summary", summary, synced_at)
-    return summary
+    from .cloud_bundle_sync import cloud_bundle_sync
+
+    result = cloud_bundle_sync(Path(store.guard_home), "supply_chain", auth_context=auth_context)
+    return result if isinstance(result, dict) else {}
 
 
 def sync_network_protection_bundle(
@@ -1561,80 +1273,10 @@ def sync_network_protection_bundle(
 ) -> dict[str, object]:
     """Fetch, verify, and save the workspace's signed network protection bundle."""
 
-    from ..native_network_protection_bundle import native_verify_network_protection_response
-    from .network_protection_bundle import (
-        NETWORK_PROTECTION_SYNC_STATE_KEY,
-        NetworkProtectionBundleError,
-        network_protection_status,
-    )
+    from .cloud_bundle_sync import cloud_bundle_sync
 
-    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    workspace_id = store.get_cloud_workspace_id()
-    if workspace_id is None:
-        raise GuardSyncNotConfiguredError("Guard Cloud workspace is not connected.")
-    bundle_url = _sync.sync_url(
-        "network_protection_bundle",
-        str(resolved_auth_context["sync_url"]),
-        workspace_id=workspace_id,
-    )
-    saved = store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
-    cached_bundle_version = None
-    saved_bundle = saved.get("bundle") if isinstance(saved, dict) else None
-    if isinstance(saved_bundle, dict) and saved_bundle.get("workspaceId") != workspace_id:
-        # Another workspace's rules must not stay in force, or anchor its
-        # rollback check, once this device is connected elsewhere.
-        store.delete_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
-        saved_bundle = None
-    if isinstance(saved_bundle, dict):
-        existing_version = saved_bundle.get("bundleVersion")
-        if isinstance(existing_version, str) and existing_version:
-            cached_bundle_version = existing_version
-    try:
-        payload = _fetch_network_protection_bundle_payload(resolved_auth_context, bundle_url)
-    except _GuardBundleUnauthorizedError:
-        # Access tokens live five minutes, and a full sync reaches this step
-        # minutes after its auth context was resolved, so the token it was
-        # handed may have lapsed on the way. Refresh once; a second refusal
-        # stands. A refresh that finds the device signed out reports that here
-        # rather than reading as a workspace that was never connected.
-        try:
-            resolved_auth_context = _resolve_guard_sync_auth_context(store, force_refresh=True)
-        except GuardSyncNotConfiguredError as error:
-            raise RuntimeError(str(error)) from error
-        bundle_url = _sync.sync_url(
-            "network_protection_bundle",
-            str(resolved_auth_context["sync_url"]),
-            workspace_id=workspace_id,
-        )
-        payload = _fetch_network_protection_bundle_payload(resolved_auth_context, bundle_url)
-    try:
-        verified = native_verify_network_protection_response(
-            payload,
-            workspace_id=workspace_id,
-            # The saved keyring goes over as it was stored; the resident parses
-            # and anchors it, so Python never decides which key is trusted.
-            trusted_keys=store.get_sync_payload("supply_chain_bundle_keyring"),
-            cached_bundle_version=cached_bundle_version,
-        )
-    except NetworkProtectionBundleError as error:
-        raise RuntimeError(f"Guard network protection bundle sync failed: {error}") from error
-    synced_at = _now()
-    store.set_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY, verified, synced_at)
-    return {**network_protection_status(verified), "status": "synced", "synced_at": synced_at}
-
-
-def _fetch_network_protection_bundle_payload(
-    auth_context: dict[str, object],
-    bundle_url: str,
-) -> dict[str, object]:
-    request = _guard_sync_request(
-        auth_context,
-        request_url=bundle_url,
-        method="GET",
-        data=None,
-        extra_headers={"Accept-Encoding": "identity"},
-    )
-    return _fetch_supply_chain_bundle_payload(request)
+    result = cloud_bundle_sync(Path(store.guard_home), "network", auth_context=auth_context)
+    return result if isinstance(result, dict) else {}
 
 
 def sync_network_protection_bundle_best_effort(
@@ -1648,13 +1290,13 @@ def sync_network_protection_bundle_best_effort(
     with the error when the fetch or verification fails.
     """
 
+    from .cloud_bundle_sync import cloud_bundle_sync
+
     try:
-        return sync_network_protection_bundle(store, auth_context=auth_context)
-    except GuardSyncNotConfiguredError:
-        return None
-    except (RuntimeError, OSError, ValueError) as error:
-        _LOGGER.warning("Guard network protection bundle sync failed: %s", error)
+        result = cloud_bundle_sync(Path(store.guard_home), "network_best_effort", auth_context=auth_context)
+    except RuntimeError as error:
         return {"status": "failed", "error": str(error)}
+    return result if isinstance(result, dict) else None
 
 
 def sync_guard_events(
