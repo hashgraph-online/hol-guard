@@ -1391,6 +1391,38 @@
       },
       "cwd": "worktree",
       "expect": "always"
+    },
+    {
+      "id": "awk-glob-option-expands-to-executable-program-file",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo $(awk ?f payload.awk)"
+      },
+      "cwd": "worktree",
+      "expect": "block"
+    },
+    {
+      "id": "awk-unquoted-glob-file-operand-keeps-evaluation-fail-closed",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo $(awk '{print $1}' *.awk)"
+      },
+      "cwd": "worktree",
+      "expect": "block"
     }
   ]
 }
