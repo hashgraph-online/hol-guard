@@ -16169,6 +16169,39 @@
       "contained_ok": true
     },
     {
+      "id": "sibling-find-exec-stat-file-times",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${ORG}/service-api/src -type f -exec stat -f \"%m %N\" {} \\;"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-sibling-find-exec-wc-reads-contents",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${ORG}/service-api/src -type f -exec wc -l {} +"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
       "id": "neg-sibling-ls-missing-env-below-github",
       "fix_area": "negative",
       "harnesses": [
