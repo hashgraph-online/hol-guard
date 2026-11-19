@@ -462,6 +462,7 @@ mod edge_exact_command_allow;
 mod edge_exact_command_review;
 mod edge_exact_command_spelling;
 mod edge_git_push;
+mod edge_post_tool_delivery;
 mod edge_receipt;
 mod edge_review_evidence;
 mod edge_session_cascade;

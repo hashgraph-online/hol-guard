@@ -395,9 +395,9 @@ fn evaluate_validated_envelope<Lease>(
             } else {
                 native
             };
-            // The policy join may rewrite the verdict or output action, so
-            // "may the model read this" is settled once, after all of it ran.
+            // Settle "may the model read this" once, after the policy join ran.
             evaluated.seal_output_mask();
+            crate::edge_post_tool_delivery::settle(&harness, &mut evaluated);
             let receipt = receipt_from_post_tool(
                 &envelope,
                 policy_snapshot.map(AdmittedPolicySnapshot::snapshot),

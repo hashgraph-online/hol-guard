@@ -164,6 +164,7 @@
       "src/harness_identity.rs",
       "src/home_path_text.rs",
       "src/homebrew_intent.rs",
+      "src/hook_responses/claude.rs",
       "src/hook_responses/cli_documents.rs",
       "src/hook_responses/containment.rs",
       "src/hook_responses/hermes.rs",

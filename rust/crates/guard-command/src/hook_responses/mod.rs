@@ -6,6 +6,7 @@
 
 use serde_json::{json, Map, Value};
 
+mod claude;
 pub mod cli_documents;
 mod containment;
 pub mod hermes;
@@ -405,6 +406,9 @@ pub fn post_tool(harness: &str, response: &Object) -> Object {
             ("policy_action", json!(action)),
             ("hookSpecificOutput", specific),
         ]);
+    }
+    if canonical == "claude-code" {
+        return claude::post_tool_flagged(response);
     }
     post_tool_block(
         &text_or(response, "reason", POST_BLOCK_REASON),
