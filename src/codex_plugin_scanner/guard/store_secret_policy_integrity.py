@@ -561,8 +561,12 @@ class StoreSecretPolicyIntegrityMixin:
 
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
+            if strict:
+                raise RuntimeError("policy_integrity_secret_store_unavailable")
             return None
         if self._should_skip_policy_integrity_keychain_access(secret_store):
+            if strict:
+                raise RuntimeError("policy_integrity_secret_store_unavailable")
             return None
         payload_json = self._get_policy_integrity_secret_from_store(
             self._policy_integrity_control_ref,

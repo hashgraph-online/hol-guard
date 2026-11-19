@@ -395,7 +395,12 @@ class HookWorkerNativeMixin:
         raw_receipt = edge.get("receipt")
         accepted_receipt = self._record_native_decision_receipt(raw_receipt)
         submit = getattr(self.activity_writer, "submit_native_decision_receipt", None)
-        if accepted_receipt is not None and callable(submit) and edge.get("receipt_recorded") is not True:
+        if (
+            accepted_receipt is not None
+            and not defer_accepted_recording
+            and callable(submit)
+            and edge.get("receipt_recorded") is not True
+        ):
             # Ordered in front of this hook's activity row, which links to the
             # receipt by its decision id. An edge that queued it says so.
             run_resident_evidence(self, lambda receipt=accepted_receipt: submit(receipt=receipt))
