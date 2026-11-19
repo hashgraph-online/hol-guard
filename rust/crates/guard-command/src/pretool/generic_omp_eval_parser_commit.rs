@@ -255,11 +255,12 @@ fn subject_in_options(options: &Map<String, Value>) -> bool {
 }
 
 /// `commit(subject, options)`: a body as a string or lines, `fixes`,
-/// `noVerify` (which only skips hooks) and `silent`. An array in the options
-/// place carries no option at all. `amend` rewrites an earlier commit and
-/// keeps its review.
+/// `noVerify` (which only skips hooks) and `silent`. A string or an array in
+/// the options place carries no option at all: the prelude throws on it
+/// before Git runs. `amend` rewrites an earlier commit and keeps its review.
 fn commit_options(value: &Value) -> bool {
     match value {
+        Value::String(_) => true,
         Value::Array(lines) => lines.iter().all(Value::is_string),
         Value::Object(options) => options.iter().all(|(key, value)| match key.as_str() {
             "body" => strings(value),
