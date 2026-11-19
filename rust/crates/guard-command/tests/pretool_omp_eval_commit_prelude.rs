@@ -128,6 +128,56 @@ fn a_commit_program_outside_the_grammar_stays_reviewed() {
     }
 }
 
+/// Each eval cell is judged on its own, so a cell cannot prove a name bound
+/// by an earlier cell still holds a draft. Those cells stay reviewed, and the
+/// review tells the agent to make and use the draft in one cell, which is
+/// allowed.
+#[test]
+fn a_draft_from_an_earlier_cell_stays_reviewed_with_one_cell_advice() {
+    let session = session("omp-eval-commit-earlier-cell");
+    std::fs::write(session.primary.join("notes.md"), "draft\n").unwrap();
+    let first = eval(&session, "const d = await commit.draft(); print(d);");
+    assert_eq!(first.minimum_action, "allow");
+    for code in [
+        "await d.show();",
+        "await d.take('docs/branch-audit.md'); print(d);",
+        "await d.commit('docs: record audit logs summary', ['- Summarize the audit.']);",
+        "print(await d.diff()); return d.details;",
+    ] {
+        let result = eval(&session, code);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("review", "native_pre_tool_unknown_review"),
+            "{code}"
+        );
+        assert!(
+            result.reason.contains("in the same cell"),
+            "{code}: {}",
+            result.reason
+        );
+    }
+    let one_cell = eval(
+        &session,
+        "const d = await commit.draft(); await d.take('notes.md'); await d.commit('docs: add notes', ['- Add notes.']);",
+    );
+    assert_eq!(one_cell.minimum_action, "allow");
+    // A carried name used outside the draft grammar keeps the plain eval review.
+    for code in [
+        "await d.commit('x', {amend: true});",
+        "const d = {show() {}}; await d.show();",
+        "await d.push('x');",
+        "globalThis.d = 1; await d.show();",
+    ] {
+        let result = eval(&session, code);
+        assert_eq!(result.minimum_action, "review", "{code}");
+        assert!(
+            !result.reason.contains("in the same cell"),
+            "{code}: {}",
+            result.reason
+        );
+    }
+}
+
 /// Reading the prelude's own documentation is a device-docs read.
 #[test]
 fn reading_the_commit_prelude_docs_is_allowed() {
