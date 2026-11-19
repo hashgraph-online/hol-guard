@@ -98,9 +98,10 @@ pub(super) fn data_heredocs(text: &str) -> Option<(String, bool)> {
             out.push(line.to_owned());
             continue;
         };
-        if after.starts_with('<') || before.contains(['\'', '"']) {
+        if after.starts_with('<') {
             return None;
         }
+        let split = super::heredoc_lead::command_start(&out.join("\n"), before)?;
         let strip_tabs = after.starts_with('-');
         let after = after.strip_prefix('-').unwrap_or(after).trim_start();
         let quoted = after.starts_with(['\'', '"']);
@@ -133,7 +134,6 @@ pub(super) fn data_heredocs(text: &str) -> Option<(String, bool)> {
         if !quoted && body.iter().any(|row| row.contains(['$', '`', '\\'])) {
             return None;
         }
-        let split = before.rfind([';', '&', '|', '(']).map_or(0, |at| at + 1);
         let (lead, command) = before.split_at(split);
         let command = command.trim();
         let inert = HEREDOC_PYTHON.contains(&command) && python_is_builtin_only(&body);
@@ -198,29 +198,31 @@ fn shell_pieces(text: &str) -> Option<Vec<(String, bool)>> {
     Some(pieces)
 }
 
-/// An awk program may mention a field as '$1', but a dollar sign in
-/// unquoted or double-quoted text expands shell data into executable awk
-/// program text. Never replace such a program with an inert filter.
-fn awk_program_is_literal(word: &str) -> bool {
-    let (mut single, mut double, mut escaped) = (false, false, false);
+/// Whether the shell expands something in `word`: a `$` outside single
+/// quotes, or a brace or glob character outside any quotes, that no
+/// backslash escapes.
+fn expands(word: &str) -> bool {
+    let mut single = false;
+    let mut double = false;
+    let mut escaped = false;
     for character in word.chars() {
         if escaped {
             escaped = false;
             continue;
         }
         match character {
-            '\\' if !single => escaped = true,
             '\'' if !double => single = !single,
             '"' if !single => double = !double,
-            '$' if !single => return false,
-            // An unquoted glob can expand to "-f" (or a program-file
-            // argument), causing awk to load and execute uninspected code.
-            // Quoted or shell-escaped globs remain literal.
-            '*' | '?' | '[' if !single && !double => return false,
+            '\\' if !single => escaped = true,
+            '$' if !single => return true,
+            // Brace expansion and globbing rewrite unquoted words, so
+            // `{-f,prog.awk}` or a file named `-f` matched by `*` reach awk
+            // as an option.
+            '{' | '*' | '?' | '[' if !single && !double => return true,
             _ => {}
         }
     }
-    !single && !double && !escaped
+    false
 }
 
 /// An `awk` whose program only filters and prints cannot start a program:
@@ -255,7 +257,15 @@ pub(super) fn without_plain_awk(shell: &str) -> String {
             continue;
         }
         at_command = false;
-        let base = piece.rsplit('/').next().unwrap_or_default();
+        // The shell removes quotes and backslashes before awk sees a word, so
+        // `"awk"`, `'-f'` and `\-f` are read the way awk receives them.
+        let decoded = |word: &str| -> String {
+            word.chars()
+                .filter(|character| !matches!(character, '\'' | '"' | '\\'))
+                .collect()
+        };
+        let program = decoded(piece);
+        let base = program.rsplit('/').next().unwrap_or_default();
         if !matches!(base, "awk" | "gawk" | "mawk" | "nawk") {
             out.push(piece.clone());
             index += 1;
@@ -278,21 +288,18 @@ pub(super) fn without_plain_awk(shell: &str) -> String {
             if *operator {
                 return true;
             }
-            if !awk_program_is_literal(word) {
+            // `$'\x2df'`, `$"-f"`, `$opt` and `"$prog"` all hand awk text
+            // the command does not show, so a word that expands is refused.
+            if expands(word) {
                 return false;
             }
-            // The shell removes quoting before awk reads its options, so
-            // `'-f' prog.awk` is the program-file flag too.
-            let bare: String = word
-                .chars()
-                .filter(|character| !matches!(character, '\'' | '"' | '\\'))
-                .collect();
-            if bare.starts_with('-') {
-                return bare.starts_with("-F") || bare.starts_with("-v");
+            let option = decoded(word);
+            if option.starts_with('-') {
+                return option.starts_with("-F") || option.starts_with("-v");
             }
-            // Awk receives shell-dequoted program text; split quoting must not
-            // conceal executable primitives such as sys""tem or get''line.
-            let lowered = bare.to_ascii_lowercase();
+            // Quotes that split a name (`'sys'"tem"`) are gone by the time awk
+            // reads the program, so the names are looked for in that text.
+            let lowered = option.to_ascii_lowercase();
             !["system", "getline", "popen", "|", "`", "$(", "@", "${"]
                 .iter()
                 .any(|bad| lowered.contains(bad))

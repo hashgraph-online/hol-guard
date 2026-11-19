@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.inventory_cisco as inventory_cisco
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.inventory_cisco import run_cisco_inventory_scans
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_inventory_scan_targets import (

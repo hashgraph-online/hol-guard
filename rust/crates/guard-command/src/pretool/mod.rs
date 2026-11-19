@@ -85,6 +85,7 @@ pub fn contained_matcher_stage(program: &str, arguments: &[String]) -> bool {
 }
 pub(crate) mod curl_reads;
 mod cursor_session_outputs;
+mod in_process_scope;
 pub use curl_reads::bound_curl_read_destinations;
 
 /// Whether this host runs Guard's contained execution sink for a read-only
@@ -183,7 +184,7 @@ pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
 mod guard_home_option;
-pub use guard_home_option::guard_approval_inspection_command;
+pub use guard_home_option::{guard_approval_inspection_command, guard_safety_guide_read_command};
 mod guard_names;
 mod helm_usage;
 pub(crate) mod help_probes;
@@ -213,6 +214,7 @@ mod tool_bin_listing;
 mod trailing_group;
 mod trusted_location;
 mod venv_program_path;
+mod windows_pytest_base;
 pub(crate) use git_routes::{
     git_dir_route_within_scope, git_route_within_workspace, git_route_without_repository,
     reads_without_repository,
@@ -225,6 +227,7 @@ mod literal_secrets;
 mod literal_ssn_echo;
 mod lockfile_install;
 mod omp_file_url;
+mod omp_hashline_recovery;
 mod omp_hashline_writes;
 pub(crate) mod pipe_attacks;
 mod planted_instructions;
@@ -920,14 +923,17 @@ fn exact_safe_command_with_context(
         creates_nothing: search::command_creates_nothing(model),
         ..context
     };
-    if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
-        || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
-        || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
-    {
+    let cd_proof = |model: &CanonicalCommandV1| {
+        segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
+            || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
+            || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
+    };
+    if cd_proof(model) {
         return true;
     }
+    // The rest runs once, from its `cd`, whatever the proven prefix returned.
     if let Some(rest) = segment_proof::after_read_prefix(model, context) {
-        return segment_proof::exact_safe_cwd_compound(&rest, allow_git_helper_context, context);
+        return cd_proof(&rest);
     }
     if let Some(rest) =
         git_read_floor::after_safe_git_read_prefix(model, allow_git_helper_context, context)
@@ -1583,5 +1589,7 @@ mod tests_fanout_reads;
 mod tests_filter_file_reads;
 #[cfg(test)]
 mod tests_listing_find_probes;
+#[cfg(test)]
+mod tests_listing_find_toolchain;
 #[cfg(test)]
 mod tests_path_word_reads;

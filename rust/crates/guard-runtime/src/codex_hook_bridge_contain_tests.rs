@@ -484,3 +484,141 @@ fn a_contained_denial_that_names_an_approval_still_waits() {
     );
     assert!(matches!(route, Route::AwaitApproval(..)), "{route:?}");
 }
+
+/// A Guard home whose store can hold the call witness.
+fn witness_home() -> std::path::PathBuf {
+    let home = crate::guard_store_cmd_vectors_tests::temp_home("contained-witness");
+    std::fs::write(home.join("storage-access.lock"), b"").unwrap();
+    rusqlite::Connection::open(home.join("guard.db"))
+        .unwrap()
+        .execute_batch(
+            "create table guard_review_outbox_events (
+                stream_sequence integer primary key,
+                payload_hash text not null default ''
+            );
+            create table guard_continuation_effects (
+                effect_key text primary key,
+                request_id text not null,
+                evidence_id text not null,
+                event_name text not null,
+                created_at text not null
+            )",
+        )
+        .unwrap();
+    home
+}
+
+fn codex_call(event: &str, cwd: &Path, call_id: &str) -> String {
+    format!(
+        r#"{{"hook_event_name":"{event}","tool_name":"Bash","tool_input":{{"command":"make test","timeout":5}},"cwd":"{}","session_id":"s1","tool_use_id":"{call_id}"}}"#,
+        cwd.display()
+    )
+}
+
+fn admitted(home: &Path, data: &str) -> bool {
+    let serde_json::Value::Object(payload) = serde_json::from_str(data).unwrap() else {
+        unreachable!()
+    };
+    crate::native_admitted_call::admitted_for_post(home.to_str().unwrap(), "codex", &payload)
+}
+
+#[test]
+fn a_contained_call_keeps_its_output_through_post_tool_use() {
+    let home = witness_home();
+    let workspace = tempfile::tempdir().unwrap();
+    let config = BridgeConfig {
+        state_path: home
+            .join("daemon-state.json")
+            .to_string_lossy()
+            .into_owned(),
+        ..bridge("harness=codex&home=%2Fh")
+    };
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(Some(true)));
+    let route = settle(
+        &config,
+        &prepared(&codex_call("PreToolUse", workspace.path(), "t1")),
+        parsed(WORKSPACE_DENY),
+        false,
+        Instant::now() + Duration::from_secs(5),
+    );
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(None));
+    let Route::Respond(rendered) = route else {
+        panic!("{route:?}")
+    };
+    let rendered: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+    let output = &rendered["hookSpecificOutput"];
+    assert_eq!(output["permissionDecision"], "allow");
+    take_request(output["updatedInput"]["command"].as_str().unwrap());
+
+    assert!(admitted(
+        &home,
+        &codex_call("PostToolUse", workspace.path(), "t1")
+    ));
+    assert!(!admitted(
+        &home,
+        &codex_call("PostToolUse", workspace.path(), "t2")
+    ));
+}
+
+#[test]
+fn a_lone_surrogate_elsewhere_still_leaves_the_witness() {
+    let home = witness_home();
+    let workspace = tempfile::tempdir().unwrap();
+    let config = BridgeConfig {
+        state_path: home
+            .join("daemon-state.json")
+            .to_string_lossy()
+            .into_owned(),
+        ..bridge("harness=codex&home=%2Fh")
+    };
+    let pre =
+        codex_call("PreToolUse", workspace.path(), "t1").replacen('{', r#"{"extra":"\ud800","#, 1);
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(Some(true)));
+    let route = settle(
+        &config,
+        &prepared(&pre),
+        parsed(WORKSPACE_DENY),
+        false,
+        Instant::now() + Duration::from_secs(5),
+    );
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(None));
+    let Route::Respond(rendered) = route else {
+        panic!("{route:?}")
+    };
+    let rendered: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+    let output = &rendered["hookSpecificOutput"];
+    assert_eq!(output["permissionDecision"], "allow");
+    take_request(output["updatedInput"]["command"].as_str().unwrap());
+    assert!(admitted(
+        &home,
+        &codex_call("PostToolUse", workspace.path(), "t1")
+    ));
+}
+
+#[test]
+fn a_denial_that_stands_leaves_no_witness() {
+    let home = witness_home();
+    let workspace = tempfile::tempdir().unwrap();
+    let config = BridgeConfig {
+        state_path: home
+            .join("daemon-state.json")
+            .to_string_lossy()
+            .into_owned(),
+        ..bridge("harness=codex&home=%2Fh")
+    };
+    // No launching Codex applies the rewrite, so the denial stands.
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(Some(false)));
+    let route = settle(
+        &config,
+        &prepared(&codex_call("PreToolUse", workspace.path(), "t1")),
+        parsed(WORKSPACE_DENY),
+        false,
+        Instant::now() + Duration::from_secs(5),
+    );
+    FIXED_CODEX_APPLIES.with(|applies| applies.set(None));
+    assert!(matches!(route, Route::Respond(_)), "{route:?}");
+    assert!(!admitted(
+        &home,
+        &codex_call("PostToolUse", workspace.path(), "t1")
+    ));
+}

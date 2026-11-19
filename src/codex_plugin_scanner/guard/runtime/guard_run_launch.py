@@ -8,16 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from ..harness.base import HarnessAdapter, HarnessContext
+from ..harness_context import HarnessContext
+from ..native_harness_ops import (
+    launch_command_from_authorized_plan,
+    prepare_launch_environment,
+    preview_launch_commands,
+)
 from ..store import GuardStore
 from .local_runtime_fallbacks import best_effort_access_token
-
-
-def get_adapter(harness: str) -> HarnessAdapter:
-    from ..harness.registry import get_adapter as _get_adapter
-
-    return _get_adapter(harness)
-
 
 # Every prepared launch-environment entry is authority-hashed except this
 # explicit execution-boundary credential. Inherited values are removed before
@@ -40,14 +38,14 @@ class _GuardRunLaunchPlan:
 
 
 def _guard_run_launch_environment(
-    adapter: HarnessAdapter,
+    harness: str,
     context: HarnessContext,
 ) -> tuple[dict[str, str], Path]:
     environment = os.environ.copy()
     environment["HOME"] = str(context.home_dir)
     if os.name == "nt":
         environment["USERPROFILE"] = str(context.home_dir)
-    environment = adapter.prepare_launch_environment(context, environment)
+    environment = prepare_launch_environment(harness, context, environment)
     for credential_key in _GUARD_RUN_LATE_CREDENTIAL_ENV_KEYS:
         environment.pop(credential_key, None)
     if any(not isinstance(key, str) or not isinstance(value, str) for key, value in environment.items()):
@@ -89,9 +87,8 @@ def _guard_run_launch_previews(
     from ..native_context import bound_context_digest_home, context_guard_run_launch_plans
 
     with bound_context_digest_home(context.guard_home):
-        adapter = get_adapter(harness)
-        raw_commands: Sequence[Sequence[str]] = adapter.preview_launch_commands(context, passthrough_args)
-        environment, launch_cwd = _guard_run_launch_environment(adapter, context)
+        raw_commands: Sequence[Sequence[str]] = preview_launch_commands(harness, context, passthrough_args)
+        environment, launch_cwd = _guard_run_launch_environment(harness, context)
         native_plans = context_guard_run_launch_plans(
             [list(raw_command) for raw_command in raw_commands],
             environment=environment,
@@ -129,8 +126,8 @@ def _guard_run_finalize_authorized_launch_plan(
         )
     if prefixes is None:
         return None
-    adapter = get_adapter(harness)
-    actual_command = adapter.launch_command_from_authorized_plan(
+    actual_command = launch_command_from_authorized_plan(
+        harness,
         context,
         passthrough_args,
         authorized_executable_prefixes=prefixes,

@@ -9,7 +9,7 @@ import pytest
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
 from codex_plugin_scanner.guard.cli.update_bounded_hook_refresh import refresh_bounded_hook_clients
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_bounded_runtime import use_bounded_runtime
@@ -61,13 +61,13 @@ def test_refresh_moves_an_old_client_to_the_native_runtime(tmp_path: Path, runti
 
 
 def test_an_unavailable_resident_is_a_note_not_an_abort(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.cli import update_bounded_hook_refresh
+    from codex_plugin_scanner.guard.cli import native_managed_update
     from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 
     def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
         raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
-    monkeypatch.setattr(update_bounded_hook_refresh, "ask", unavailable)
+    monkeypatch.setattr(native_managed_update, "ask_managed", unavailable)
     context = _context(tmp_path)
 
     refreshed, warnings = _refresh(context, GuardStore(context.guard_home))

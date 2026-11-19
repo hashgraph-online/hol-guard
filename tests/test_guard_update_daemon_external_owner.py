@@ -177,7 +177,7 @@ def test_refresh_prefers_live_desktop_daemon_without_running_the_refresh_script(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from codex_plugin_scanner.guard.cli.update_commands import refresh_guard_daemon_after_update
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
 
     home_dir = tmp_path / "home"
     guard_home = home_dir / ".hol-guard"

@@ -40,6 +40,16 @@ pub(super) fn text_in_command_positions(shell: &str) -> String {
             pieces.push(words.join(" "));
             continue;
         };
+        // A test reads its operands as paths and strings and runs nothing:
+        // `[ -d "$HOME/.nvm/versions/node" ]` checks a directory, it does not
+        // start `node`.
+        if matches!(
+            command_basename(words[command]).as_str(),
+            "[" | "[[" | "test"
+        ) {
+            pieces.push(words[..=command].join(" "));
+            continue;
+        }
         if runs_its_operands(words[command]) {
             // The piece runs what it is handed, so its operands are command
             // text: `sh -c 'fd -x rm'`, `xargs rm` and `pkexec bash -c x` keep
@@ -74,6 +84,14 @@ pub(super) fn text_in_command_positions(shell: &str) -> String {
 /// dropping the option word would hide the nested executor the `-exec` reader
 /// is there to bound.
 fn is_bare_operand(word: &str) -> bool {
+    // A double-quoted literal path is the same word without its quotes: the
+    // shell expands nothing inside `"/home/.nvm/versions/node"`, and `foo
+    // ./node` already reads the unquoted path as an operand.
+    let word = word
+        .strip_prefix('"')
+        .and_then(|inner| inner.strip_suffix('"'))
+        .filter(|inner| inner.contains('/'))
+        .unwrap_or(word);
     !word.is_empty()
         && !word.starts_with('-')
         && word.chars().all(|character| {

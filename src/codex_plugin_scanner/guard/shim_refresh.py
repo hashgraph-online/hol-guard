@@ -78,15 +78,15 @@ def _adapter_launchers() -> list[list[object]]:
     the claude-code harness, guard-cursor-agent is cursor.
     """
 
-    from .harness.registry import list_adapters
+    from .native_harness_ops import launcher_name_of, legacy_launcher_names, list_harnesses
 
     return [
         [
-            adapter.harness,
-            getattr(adapter, "launcher_name", "") or adapter.harness,
-            list(getattr(adapter, "legacy_launcher_names", ())),
+            harness,
+            launcher_name_of(harness) or harness,
+            list(legacy_launcher_names(harness)),
         ]
-        for adapter in list_adapters()
+        for harness in list_harnesses()
     ]
 
 

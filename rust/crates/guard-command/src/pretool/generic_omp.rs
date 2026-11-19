@@ -7,6 +7,7 @@
 
 #[path = "generic_omp_eval.rs"]
 mod eval;
+pub use eval::omp_eval_commit_drafts;
 #[path = "generic_omp_grep_glob.rs"]
 mod grep_glob;
 #[path = "generic_omp_host_refs.rs"]

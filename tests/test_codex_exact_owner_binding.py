@@ -4,7 +4,7 @@ from copy import deepcopy
 
 import pytest
 
-from codex_plugin_scanner.guard.codex_hook_inventory import enumerate_codex_hooks
+from tests.python_oracles.codex_hook_inventory import enumerate_codex_hooks
 
 
 @pytest.mark.parametrize(

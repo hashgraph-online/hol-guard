@@ -70,12 +70,18 @@ fn roots_contained<R: AsRef<str>>(roots: &[R], context: PathContext<'_>) -> bool
 }
 
 fn producer_allowed(shape: &FindShape<'_>, child: &[String], context: PathContext<'_>) -> bool {
+    // A file passes a group of names by matching any one of them, so a group
+    // bounds what the child reads only when each of its names does.
     shape.regular_files_only
         && (!fanout::child_reads_contents(child)
             || shape
                 .patterns
                 .iter()
-                .any(|pattern| plain_extension_pattern(pattern)))
+                .any(|pattern| plain_extension_pattern(pattern))
+            || shape
+                .name_groups
+                .iter()
+                .any(|names| names.iter().all(|pattern| plain_extension_pattern(pattern))))
         && contained_roots(shape, context)
 }
 

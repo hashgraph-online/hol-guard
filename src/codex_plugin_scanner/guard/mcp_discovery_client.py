@@ -37,7 +37,7 @@ from .runtime.mcp_connection_identity import McpConnectionIdentity
 from .runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 
 if TYPE_CHECKING:
-    from .harness.base import HarnessContext
+    from .harness_context import HarnessContext
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ def _stdio_servers(loaded: Sequence[HarnessDetection]) -> tuple[DiscoveredHarnes
 
 
 def _group_entry(server: ManagedMcpServer, identity: McpServerIdentity) -> dict[str, object]:
-    from .harness.contracts import display_name_for
+    from .setup_contracts import display_name_for
 
     return {
         "harness": server.harness,
@@ -447,14 +447,14 @@ def apply_source_labels(items: list[dict[str, object]], labels: dict[str, str]) 
 def _safe_detections(
     home_dir: Path, guard_home: Path, workspace_dir: Path | None, skipped: list[str] | None = None
 ) -> list[HarnessDetection]:
-    from .harness.base import HarnessContext
-    from .harness.registry import list_adapters
+    from .harness_context import HarnessContext
+    from .native_harness_ops import detect, list_harnesses
 
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
     detections: list[HarnessDetection] = []
-    for adapter in list_adapters():
+    for harness in list_harnesses():
         contexts = (context,)
-        if adapter.harness == "codex" and workspace_dir is not None:
+        if harness == "codex" and workspace_dir is not None:
             # A managed Codex hook manifest binds the installation workspace
             # and whether home was explicit. Both contexts still authenticate
             # that manifest before their inventory can be used.
@@ -464,19 +464,19 @@ def _safe_detections(
             )
         for adapter_context in contexts:
             try:
-                detections.append(adapter.detect(adapter_context))
+                detections.append(detect(harness, adapter_context))
                 break
             except (OSError, RuntimeError, UnicodeError) as exc:
-                logger.debug("MCP inventory skipped %s adapter after %s", adapter.harness, type(exc).__name__)
+                logger.debug("MCP inventory skipped %s adapter after %s", harness, type(exc).__name__)
                 continue
             except (TypeError, ValueError, KeyError, sqlite3.Error) as exc:
                 logger.warning(
                     "MCP inventory skipped %s adapter after invalid data (%s)",
-                    adapter.harness,
+                    harness,
                     type(exc).__name__,
                 )
                 continue
         else:
             if skipped is not None:
-                skipped.append(adapter.harness)
+                skipped.append(harness)
     return detections

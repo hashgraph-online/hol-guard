@@ -20,8 +20,8 @@ from codex_plugin_scanner.guard.cli.native_install_checks import grok_runtime_ho
 from codex_plugin_scanner.guard.cloud_control.server_control_connect_flow import (
     _repair_command_activity_persistence_health,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.managed_install_proof import (
     bind_managed_install_proof,
     verify_managed_install_proof,
@@ -30,6 +30,7 @@ from codex_plugin_scanner.guard.runtime_artifact_reconciliation import (
     repair_failing_managed_harness_hooks,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import harness_ops_support as harness_support
 
 from .grok_test_support import grok_hook_command_parts, grok_paths
 
@@ -251,7 +252,7 @@ def test_grok_hook_command_rejects_placeholder_invocations(tmp_path: Path) -> No
 def test_grok_managed_config_is_active_only_for_the_installed_permission_floor(tmp_path: Path) -> None:
     """The native check accepts the installed config; its rejections are Rust unit tests."""
     context = _ctx(tmp_path)
-    get_adapter("grok").install(context)
+    harness_support.install("grok", context)
     config = grok_paths(context)["config"]
     assert _grok_protection_checks(context)["managed_config_installed"] is True
     config.write_text(

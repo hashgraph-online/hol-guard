@@ -10,7 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard import mcp_discovery_client as harness_mcp_discovery
 from codex_plugin_scanner.guard import mcp_remote_client as harness_mcp_remote
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.local_clis import local_cli_api
 from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.mcp_discovery_client import (

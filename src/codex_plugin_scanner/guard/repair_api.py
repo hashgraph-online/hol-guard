@@ -29,7 +29,7 @@ from .approval_gate import (
     public_config,
     require_high_risk,
 )
-from .harness.base import HarnessContext
+from .harness_context import HarnessContext
 from .hook_removal import HarnessPlan, plan_hook_removal, remove_all_guard_hooks
 from .repair_engine import run_repair
 

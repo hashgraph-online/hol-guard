@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import codex_harness_client as adapter
-from codex_plugin_scanner.guard import codex_harness_lifecycle as adapter_lifecycle
+from codex_plugin_scanner.guard import native_harness_install_ops as harness_install_ops
+from codex_plugin_scanner.guard.codex_harness_client import codex_paths
 from codex_plugin_scanner.guard.codex_hook_integrity import CodexHookIntegrityError
-from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from tests import harness_ops_support as harness_support
 from tests.codex_toml_support import parse_toml_object
 
 from .test_codex_publication_preparation import _context, _tree
@@ -23,9 +23,8 @@ SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
 
 def _sources(tmp_path, monkeypatch):
     context = replace(_context(tmp_path, monkeypatch), workspace_dir=tmp_path / "workspace")
-    harness = adapter_lifecycle.CodexHarnessAdapter()
-    harness.install(context)
-    global_config = harness._target_config_path(context)
+    harness_support.install("codex", context)
+    global_config = codex_paths(context).config
     global_config.write_text(
         global_config.read_text() + '\n[mcp_servers.fixture]\ncommand="node"\nargs=["fixture.js"]\n'
     )
@@ -51,13 +50,13 @@ def _sources(tmp_path, monkeypatch):
     guard = context.guard_home / "managed/codex/codex-zshenv-guard.zsh"
     guard.write_bytes(b"legacy guard script")
     guard.chmod(0o700)
-    return harness, context, global_config, workspace_config
+    return context, global_config, workspace_config
 
 
 def test_composed_preparation_is_read_only_and_captures_complete_native_files(tmp_path, monkeypatch):
-    harness, context, global_config, workspace_config = _sources(tmp_path, monkeypatch)
+    context, global_config, workspace_config = _sources(tmp_path, monkeypatch)
     before = _tree(tmp_path)
-    prepared = harness.prepare_install(context)
+    prepared = harness_install_ops.prepare_install("codex", context)
     assert _tree(tmp_path) == before
     changes = {change.path: change for change in prepared.files}
     assert len(changes) == len(prepared.files)
@@ -95,8 +94,8 @@ def test_composed_signed_inverse_restores_all_files_and_modes(
     monkeypatch,
 ):
     runtime, plan, _bindings, _pointer = transition
-    harness, context, _global_config, _workspace_config = _sources(tmp_path, monkeypatch)
-    prepared = harness.prepare_install(context)
+    context, _global_config, _workspace_config = _sources(tmp_path, monkeypatch)
+    prepared = harness_install_ops.prepare_install("codex", context)
     plan = replace(plan, files=(*plan.files, *prepared.files))
     begin(runtime, plan)
     runtime.publish(plan.operation_id, "AuthorizedForExactTransition")
@@ -116,7 +115,7 @@ def test_preparation_refuses_missing_authority_without_enrollment(tmp_path, monk
     context = _context(tmp_path, monkeypatch)
     before = _tree(tmp_path)
     with pytest.raises(CodexHookIntegrityError):
-        adapter_lifecycle.CodexHarnessAdapter().prepare_install(context)
+        harness_install_ops.prepare_install("codex", context)
     assert _tree(tmp_path) == before
 
 
@@ -127,10 +126,9 @@ def test_frozen_preparation_pins_shared_executable_once_with_invocation(tmp_path
     executable.chmod(0o700)
     monkeypatch.setattr(sys, "executable", str(executable))
     context = _context(tmp_path, monkeypatch)
-    harness = adapter_lifecycle.CodexHarnessAdapter()
-    harness.install(context)
+    harness_support.install("codex", context)
     before = _tree(tmp_path)
-    prepared = harness.prepare_install(context)
+    prepared = harness_install_ops.prepare_install("codex", context)
     assert _tree(tmp_path) == before
     dependencies = [change for change in prepared.files if change.path == executable]
     assert len(dependencies) == 1
@@ -139,9 +137,9 @@ def test_frozen_preparation_pins_shared_executable_once_with_invocation(tmp_path
 
 
 def test_prepared_file_generations_match_ordinary_install(tmp_path, monkeypatch):
-    harness, context, _global_config, _workspace_config = _sources(tmp_path, monkeypatch)
-    prepared = harness.prepare_install(context)
-    installed = harness.install(context)
+    context, _global_config, _workspace_config = _sources(tmp_path, monkeypatch)
+    prepared = harness_install_ops.prepare_install("codex", context)
+    installed = harness_support.install("codex", context)
     for change in prepared.files:
         if change.expected_digest is not None:
             continue
@@ -185,25 +183,16 @@ def test_prepared_file_generations_match_ordinary_install(tmp_path, monkeypatch)
             assert change.path.stat().st_mode & 0o777 == change.after_mode
     assert installed["managed_servers"] == prepared.manifest["managed_servers"]
     before = _tree(tmp_path)
-    repeated = harness.prepare_install(context)
+    repeated = harness_install_ops.prepare_install("codex", context)
     assert _tree(tmp_path) == before
     assert len({change.path for change in repeated.files}) == len(repeated.files)
 
 
-def test_foreign_source_during_migration_prevents_plan_without_overwriting(tmp_path, monkeypatch):
-    harness, context, _global_config, workspace_config = _sources(tmp_path, monkeypatch)
-    ask = adapter.ask
-
-    def foreign_write(op, *args, **kwargs):
-        # The sources were captured before the plan; a write while it runs
-        # must fail the plan's own comparison against disk.
-        if op == "install_plan":
-            workspace_config.write_text('model="foreign"\n')
-        return ask(op, *args, **kwargs)
-
-    monkeypatch.setattr(adapter, "ask", foreign_write)
-    with pytest.raises(TransitionError):
-        harness.prepare_install(context)
+def test_foreign_source_before_the_plan_is_never_overwritten(tmp_path, monkeypatch):
+    context, _global_config, workspace_config = _sources(tmp_path, monkeypatch)
+    # The runtime reads the sources itself as it plans, and a plan publishes nothing.
+    workspace_config.write_text('model="foreign"\n')
+    harness_install_ops.prepare_install("codex", context)
     assert workspace_config.read_text() == 'model="foreign"\n'
     assert workspace_config.with_name("hooks.json").exists()
     assert context.home_dir.joinpath(".zshenv").read_bytes().startswith(b"\xffKEEP")

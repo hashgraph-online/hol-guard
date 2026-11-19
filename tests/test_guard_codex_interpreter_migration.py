@@ -15,8 +15,8 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     tomllib = importlib.import_module("tomli")
 
 from codex_plugin_scanner.guard import codex_harness_client as codex_adapter
-from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX executable fixtures are required")
@@ -36,18 +36,17 @@ def test_guard_install_codex_adopts_equivalent_package_with_relocated_interprete
         interpreter.chmod(0o755)
 
     monkeypatch.setattr(sys, "executable", str(first_interpreter))
-    adapter = CodexHarnessAdapter()
     config_path = context.home_dir / ".codex" / "config.toml"
     config_path.parent.mkdir(parents=True)
     config_path.write_text(
         '[mcp_servers.browser]\ncommand = "/usr/bin/printf"\nargs = ["%s", "ready"]\n',
         encoding="utf-8",
     )
-    adapter.install(context)
+    harness_support.install("codex", context)
     first_proxy = tomllib.loads(config_path.read_text(encoding="utf-8"))["mcp_servers"]["browser"]
 
     monkeypatch.setattr(sys, "executable", str(second_interpreter))
-    installed = adapter.install(context)
+    installed = harness_support.install("codex", context)
     state = codex_adapter.codex_native_hook_state(context)
     second_proxy = tomllib.loads(config_path.read_text(encoding="utf-8"))["mcp_servers"]["browser"]
 
@@ -59,7 +58,7 @@ def test_guard_install_codex_adopts_equivalent_package_with_relocated_interprete
     assert installed["runtime_restart_required"] is True
     assert state["protection_active"] is True
 
-    reinstalled = adapter.install(context)
+    reinstalled = harness_support.install("codex", context)
 
     assert reinstalled["migrated_proxy_servers"] == []
     assert reinstalled["runtime_restart_required"] is False
@@ -80,7 +79,7 @@ def test_guard_install_codex_ignores_proxy_with_scalar_args(
         encoding="utf-8",
     )
 
-    installed = CodexHarnessAdapter().install(context)
+    installed = harness_support.install("codex", context)
 
     assert installed["migrated_proxy_servers"] == []
     assert installed["runtime_restart_required"] is False

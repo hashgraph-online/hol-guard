@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.harness.contract_registry import harness_contracts
 from codex_plugin_scanner.guard.protection_capabilities import capability_for
+from codex_plugin_scanner.guard.setup_contract_registry import harness_contracts
 
 INDEX = Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/data/harness_contract_index.v1.json"
 

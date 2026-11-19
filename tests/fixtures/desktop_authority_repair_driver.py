@@ -17,6 +17,7 @@ from pathlib import Path
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.cloud_control import server_control_cloud_sync as _ctl_cloud_sync
+from tests import harness_ops_support as harness_support
 
 
 def fixture_home() -> Path:
@@ -33,8 +34,7 @@ def fixture_home() -> Path:
 
 def seed(home: Path, *, inverse: bool = False) -> int:
     from codex_plugin_scanner.guard.approval_gate import update_settings
-    from codex_plugin_scanner.guard.codex_harness_lifecycle import CodexHarnessAdapter
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
     from codex_plugin_scanner.guard.store import GuardStore
     from tests.codex_hook_paths_support import hook_manifest_path
@@ -43,7 +43,7 @@ def seed(home: Path, *, inverse: bool = False) -> int:
     config.parent.mkdir(mode=0o700)
     config.write_text("[features]\nhooks = true\n", encoding="utf-8")
     context = HarnessContext(home_dir=home, guard_home=home / ".hol-guard", workspace_dir=None)
-    CodexHarnessAdapter().install(context)
+    harness_support.install("codex", context)
     if inverse:
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
         from tests.test_codex_hook_recovery import crash
@@ -93,7 +93,7 @@ def main() -> int:
     if (home / "isolated-publication-inverse").is_file():
         from codex_plugin_scanner.guard.cli import codex_authority_repair
         from codex_plugin_scanner.guard.codex_harness_client import codex_native_hook_state
-        from codex_plugin_scanner.guard.harness.base import HarnessContext
+        from codex_plugin_scanner.guard.harness_context import HarnessContext
         from codex_plugin_scanner.guard.store import GuardStore
 
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

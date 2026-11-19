@@ -11,7 +11,7 @@ from codex_plugin_scanner.guard.aibom_detection import (
     extend_codex_runtime_inventory,
 )
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from codex_plugin_scanner.guard.runtime.guard_run_evaluation import _detection_with_prompt_artifacts

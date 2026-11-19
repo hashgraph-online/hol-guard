@@ -21,12 +21,12 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, NamedTuple, TypeGuard, cast
 
 from .config_file_io import ConfigFileTrustError
-from .harness.contracts import contract_for, harness_names
 from .native_guard_config import resolve_native_guard_config
 from .protection_posture import (
     VALID_PROTECTION_POSTURES,
     coerce_protection_posture,
 )
+from .setup_contracts import contract_for, harness_names
 
 if TYPE_CHECKING:
     from .config import GuardConfig

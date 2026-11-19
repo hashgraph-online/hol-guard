@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_verification, list_harness_setup_items
-from codex_plugin_scanner.guard.harness.base import HarnessContext
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.runtime.fleet_posture_common import DIAGNOSTICS_STATE_KEY, iso
 from codex_plugin_scanner.guard.store import GuardStore
 

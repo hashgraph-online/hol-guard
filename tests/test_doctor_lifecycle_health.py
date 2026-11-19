@@ -15,7 +15,7 @@ from rich.console import Console
 from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.cli import doctor_native_runtime
 from codex_plugin_scanner.guard.cli.render import _render_doctor
-from codex_plugin_scanner.guard.harness.diagnostic_probes import without_command_probes
+from codex_plugin_scanner.guard.command_probes import without_command_probes
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity, NativeRuntimeStatus
 
 JOURNAL_SCHEMA = "hol-guard-resident-lifecycle-journal.v1"

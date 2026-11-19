@@ -34,12 +34,31 @@ use crate::pyjson::{self, PyVal};
 
 const GUIDANCE_SCHEMA: &str = "agent-safety-guidance.v1";
 
+/// The Guard home, private to its owner, as the Python store creates it before
+/// its first write: a home no store has opened yet has no directory.
+fn ensure_guard_home(guard_home: &Path) -> Step<()> {
+    if guard_home.is_dir() {
+        return Ok(());
+    }
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder
+        .create(guard_home)
+        .map_err(|error| Failure::Os(error.to_string()))
+}
+
 /// One store call under the shared storage gate, as `_native_store_call`
 /// makes it.
-fn store_call(ctx: &Ctx, source: &str, method: &str, args: Value) -> Step<Value> {
+pub(super) fn store_call(ctx: &Ctx, source: &str, method: &str, args: Value) -> Step<Value> {
     let Value::Object(args) = args else {
         return Err(Failure::Invalid);
     };
+    ensure_guard_home(&ctx.guard_home)?;
     let timeout_ms = sqlite_timeout_ms();
     let _gate = hold_storage_gate(&ctx.guard_home, Duration::from_millis(timeout_ms.into()))
         .map_err(|error| Failure::Os(error.to_string()))?;
@@ -63,7 +82,7 @@ fn store_call(ctx: &Ctx, source: &str, method: &str, args: Value) -> Step<Value>
 
 /// `assert_transition_mutation_allowed`: no install writes while a runtime
 /// transition is pending.
-fn transition_pending(guard_home: &Path) -> bool {
+pub(super) fn transition_pending(guard_home: &Path) -> bool {
     let home = std::fs::canonicalize(guard_home).unwrap_or_else(|_| guard_home.to_path_buf());
     let path = home.join("managed").join("runtime-transition.json");
     path.symlink_metadata().is_ok()

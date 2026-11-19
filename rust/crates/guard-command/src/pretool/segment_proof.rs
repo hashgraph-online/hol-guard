@@ -8,6 +8,7 @@ pub(crate) use super::stderr_merge::without_stderr_merge;
 
 #[path = "segment_proof_cwd.rs"]
 mod cwd;
+pub(in crate::pretool) use cwd::verified_leading_cd_target;
 #[path = "github_metadata_text.rs"]
 mod github_metadata_text;
 #[path = "jq_filter_text.rs"]

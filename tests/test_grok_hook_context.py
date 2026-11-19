@@ -13,8 +13,9 @@ from codex_plugin_scanner.guard.cli.native_install_checks import (
     grok_hooks_protection_ready,
     grok_runtime_hooks_verified,
 )
-from codex_plugin_scanner.guard.harness.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.harness.registry import get_adapter
+from codex_plugin_scanner.guard.diagnostics_bridge import shell_command as _shell_command
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
 from tests.native_bounded_runtime import use_bounded_runtime
 
 from .grok_test_support import grok_hook_command_parts, grok_paths
@@ -53,8 +54,7 @@ def test_installed_readiness_rejects_consistent_path_redirects(
     """Both public readiness paths bind on-disk hook configuration to the supplied owner."""
     context = _context(tmp_path)
     monkeypatch.delenv("GROK_HOME", raising=False)
-    adapter = get_adapter("grok")
-    adapter.install(context)
+    harness_support.install("grok", context)
     assert grok_runtime_hooks_verified(context)
     assert grok_hooks_protection_ready(context)
     hook = grok_paths(context)["pretool"]

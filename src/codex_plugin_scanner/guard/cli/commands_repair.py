@@ -13,7 +13,7 @@ from .commands_parser_helpers import _add_guard_common_args
 
 if TYPE_CHECKING:
     from ..config import GuardConfig
-    from ..harness.base import HarnessContext
+    from ..harness_context import HarnessContext
     from ..store import GuardStore
 
 

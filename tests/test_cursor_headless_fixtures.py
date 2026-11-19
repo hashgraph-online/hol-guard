@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.cursor_client import install_cursor_hooks
+from codex_plugin_scanner.guard.cursor_hook_ops import install_cursor_hooks
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from tests.conftest import guard_commands_module
 from tests.cursor_bridge_support import live_cursor_daemon, run_cursor_hook
 

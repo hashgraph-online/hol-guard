@@ -33,8 +33,8 @@ from ..codex_publication_inverse_plan import (
     bind_codex_publication_inverse_verification,
     prepare_authenticated_hook_publication_inverse,
 )
-from ..harness.base import HarnessContext
-from ..harness.registry import get_adapter
+from ..harness_context import HarnessContext
+from ..native_harness_client import canonical_harness as resolve_harness
 from ..native_owned import codex_install_transaction
 from ..runtime_transition import TransitionError, assert_transition_mutation_allowed, inverse_recovery_budget
 from ..sqlite_tuning import sqlite_operation_deadline
@@ -137,7 +137,7 @@ def run_codex_authority_repair(
             raise TransitionError("authority_repair_request_arguments_invalid")
         if request_path is not None and not dry_run and not request_digest:
             raise TransitionError("authority_repair_request_digest_invalid")
-        if get_adapter(str(args.harness)).harness != "codex":
+        if resolve_harness(str(args.harness)) != "codex":
             raise TransitionError("authority_repair_codex_only")
         if getattr(args, "surface", None) not in (None, "auto", "hooks"):
             raise TransitionError("authority_repair_hooks_only")

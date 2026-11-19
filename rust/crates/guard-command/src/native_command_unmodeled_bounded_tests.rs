@@ -47,6 +47,99 @@ fn a_named_xargs_pipeline_that_discards_output_is_reviewable() {
     }
 }
 
+/// A double-quoted home directory is a fixed path, so a listing under it
+/// that pipes into a named program reaches review instead of failing.
+#[test]
+fn a_quoted_home_root_does_not_fail_a_named_xargs_pipeline() {
+    let controls = controls(github("enabled", None), false);
+    for command in [
+        "find \"$HOME/.github/workflows\" -maxdepth 1 -type f -print 2>/dev/null | sort | xargs -r grep -nE 'runs-on|runner'",
+        "find \"${HOME}/notes\" -type f | xargs grep -l todo",
+        "printf '%s\\n' 'NVM:'; if [ -d \"$HOME/.nvm/versions/node\" ]; then find \"$HOME/.nvm/versions/node\" -mindepth 1 -maxdepth 1 -type d -print | sort; else echo '(missing)'; fi; printf '%s\\n' 'Workflow:'; if [ -f \"$HOME/.github/workflows\" ]; then :; fi; find \"$HOME/.github/workflows\" -maxdepth 1 -type f -print 2>/dev/null | sort | xargs -r grep -nE 'runs-on|runner' || true",
+    ] {
+        let (action, code) = decision(&controls, command);
+        assert_ne!(code, FAILED, "{command}\n{}", diagnose(command));
+        assert_ne!(action, "block", "{command}: {code}");
+    }
+    for command in [
+        "find \"$HOME/$DIR\" -type f | xargs grep -l todo",
+        // Bash binds HOME without writing `HOME=`.
+        "printf -v HOME -- -delete; find \"$HOME\" | xargs echo",
+        "read HOME; find \"$HOME/notes\" -type f | xargs grep -l todo",
+        "for HOME in /etc; do find \"$HOME\" -type f | xargs grep -l x; done",
+        "HOME+=/x; find \"$HOME/notes\" -type f | xargs grep -l todo",
+        // Quoting or escaping splits the name the shell still binds.
+        "printf -v HO''ME -- -delete; find \"$HOME\" | xargs echo",
+        "read HO\\ME; find \"$HOME/notes\" -type f | xargs grep -l todo",
+        "for H\"\"OME in /etc; do find \"$HOME\" -type f | xargs grep -l x; done",
+        "find $HOME/notes -type f | xargs grep -l todo",
+    ] {
+        assert_ne!(decision(&controls, command).0, "allow", "{command}");
+    }
+}
+
+/// Subshells that only discard errors or join them to output move no data,
+/// so a test run behind a manifest read reaches review instead of failing.
+#[test]
+fn a_subshell_chain_that_only_joins_errors_is_reviewable() {
+    let controls = controls(github("enabled", None), false);
+    let command = "ls -la && (cat package.json 2>/dev/null || true) && (npm test -- --runInBand 2>&1 || npm test 2>&1)";
+    let (action, code) = decision(&controls, command);
+    assert_ne!(code, FAILED, "{command}\n{}", diagnose(command));
+    assert_ne!(action, "block", "{command}: {code}");
+}
+
+/// What each step of the xargs floor answered, for a failure message.
+fn diagnose(command: &str) -> String {
+    let request = crate::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: crate::default_dialect(),
+        transport: crate::default_transport(),
+        extraction_provenance: crate::default_provenance(),
+    };
+    let parsed = crate::parse_command(&request);
+    let (reason, confidence, normalized) = match &parsed {
+        Ok(parsed) => (
+            parsed.uncertainty_reason.clone(),
+            parsed.confidence.clone(),
+            parsed.normalized_text.clone(),
+        ),
+        Err(error) => (Some(error.clone()), String::new(), String::new()),
+    };
+    let fixed = super::xargs::with_fixed_home(&normalized);
+    let looked = super::without_lookups(&normalized);
+    let shell = match super::data_heredocs(&looked) {
+        Some((shell, _)) => shell,
+        None => super::shell_text(&looked),
+    };
+    let bare = super::without_plain_awk(&super::without_redirections(&shell));
+    let shell = super::without_plain_awk(&shell);
+    let interpreted = super::named_words(&super::joined_quotes(&bare));
+    let commanded = super::named_words(&super::joined_quotes(&super::text_in_command_positions(
+        &bare,
+    )));
+    let hits: Vec<&str> = super::INTERPRETERS
+        .iter()
+        .copied()
+        .filter(|name| interpreted.contains(*name) && commanded.contains(*name))
+        .collect();
+    format!(
+        "reason={reason:?} confidence={confidence} names={} input={} fixed_rejects={} named_pipeline={} moves={} brace={} ansi={} synth={} hits={hits:?} xargs={:?} xinput={} exec={:?} fd={:?} shell={shell:?} normalized={normalized:?}",
+        xargs_names_its_program(&normalized),
+        xargs_input_is_named(&normalized),
+        fixed.contains(['<', '`', '$', '\n']),
+        super::named_xargs_pipeline(&normalized),
+        super::moves_data(&super::unquoted_literal(&normalized)),
+        crate::parser_brace_command::brace_runs_a_command_unquoted(&looked),
+        shell.contains("$'") || shell.contains("$\""),
+        super::synthesizes_program(&super::unquoted_literal(&shell), false),
+        super::xargs_programs(&shell),
+        xargs_input_is_named(&shell),
+        super::find_exec_programs(&shell),
+        super::fd_exec_programs(&shell),
+    )
+}
+
 /// Reading the program out of an `xargs` leaves the operands standard input
 /// supplies unread. An extension that owns that program judges arguments this
 /// text does not hold, so the read-through does not stand in for its rules.

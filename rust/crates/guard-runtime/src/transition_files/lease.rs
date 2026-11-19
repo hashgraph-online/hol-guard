@@ -229,6 +229,16 @@ pub(super) fn held(lease: &str) -> bool {
     leases.get(lease).is_some_and(check)
 }
 
+/// Whether the lease is live and holds the lock file at `path`, not another lock's.
+pub(super) fn held_at(lease: &str, path: &Path) -> bool {
+    let mut guard = LEASES.lock().unwrap_or_else(PoisonError::into_inner);
+    let leases = guard.get_or_insert_with(HashMap::new);
+    reap(leases);
+    leases
+        .get(lease)
+        .is_some_and(|lease| lease.path == path && check(lease))
+}
+
 /// `check`: the lease is live and its lock file is still the one at the path.
 fn check(lease: &Lease) -> bool {
     let (Ok(opened), Ok(current)) = (lease.file.metadata(), fs::symlink_metadata(&lease.path))

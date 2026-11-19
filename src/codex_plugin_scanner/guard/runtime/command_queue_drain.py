@@ -42,7 +42,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Final
 
-from ..harness.base import HarnessContext
+from ..harness_context import HarnessContext
 from ..store import GuardStore
 from .command_queue_http import format_redacted_error
 from .command_queue_state import (

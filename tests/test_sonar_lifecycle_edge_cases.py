@@ -12,15 +12,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.registry import get_adapter
-from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
+from codex_plugin_scanner.guard.harness_context import HarnessContext
+from tests import harness_ops_support as harness_support
+from tests.python_oracles.native_adapter_state_integrity import native_adapter_state_integrity
 
 
 def _servers_left_after_uninstall(context: HarnessContext, config_path: Path) -> list[str]:
     """The servers a Hermes uninstall without a manifest leaves in ``config.yaml``."""
 
-    get_adapter("hermes").uninstall(context)
+    harness_support.uninstall("hermes", context)
     return list(yaml.safe_load(config_path.read_text(encoding="utf-8"))["mcp_servers"])
 
 
@@ -31,7 +31,6 @@ def _write_json(path: Path, payload: Mapping[str, object]) -> None:
 
 def test_unsigned_global_copilot_state_cannot_authorize_cleanup(tmp_path: Path) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = get_adapter("copilot")
     target = context.home_dir / ".copilot" / "mcp-config.json"
     digest = hashlib.sha256(str(target.resolve()).encode("utf-8")).hexdigest()[:12]
     backup = context.guard_home / "managed" / "copilot" / f"{digest}.backup.json"
@@ -48,7 +47,7 @@ def test_unsigned_global_copilot_state_cannot_authorize_cleanup(tmp_path: Path) 
         },
     )
 
-    adapter.uninstall(context)
+    harness_support.uninstall("copilot", context)
 
     assert json.loads(target.read_text(encoding="utf-8")) == {"owned": "user"}
     assert backup.exists()

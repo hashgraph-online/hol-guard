@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 
-from .harness.base import HarnessContext
+from .harness_context import HarnessContext
 
 MANAGED_INSTALL_PROOF_SCHEMA = "guard.managed-install-proof.v1"
 
@@ -22,7 +22,7 @@ def bind_managed_install_proof(
     manifest: Mapping[str, object],
     context: HarnessContext,
 ) -> dict[str, object]:
-    from .harness.native_harness import ask
+    from .native_harness_client import ask
 
     proof = ask("proof_bind", context, manifest=_wire(manifest)).get("proof")
     if not isinstance(proof, str):
@@ -36,7 +36,7 @@ def verify_managed_install_proof(
 ) -> bool | None:
     if not isinstance(manifest, Mapping):
         return None
-    from .harness.native_harness import ask
+    from .native_harness_client import ask
 
     verified = ask("proof_verify", context, manifest=_wire(manifest)).get("verified")
     return verified if isinstance(verified, bool) else None

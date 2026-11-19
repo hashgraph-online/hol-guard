@@ -11,13 +11,13 @@ import pytest
 
 from codex_plugin_scanner.guard import mcp_discovery_client as discovery
 from codex_plugin_scanner.guard import native_runner_authority as authority
-from codex_plugin_scanner.guard.harness.base import HarnessContext
-from codex_plugin_scanner.guard.harness.contracts import display_name_for
+from codex_plugin_scanner.guard.harness_context import HarnessContext
 from codex_plugin_scanner.guard.mcp_server_client import ManagedMcpServer, proxy_process_env
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.mcp_protection import McpServerIdentity
+from codex_plugin_scanner.guard.setup_contracts import display_name_for
 
 _FAKE_SECRET = "fake-secret-value"
 

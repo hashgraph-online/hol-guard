@@ -495,8 +495,8 @@ def _generate_extension(
     home: Path,
     settings_path: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.harness.base import HarnessContext
-    from codex_plugin_scanner.guard.harness.native_extension import extension_source
+    from codex_plugin_scanner.guard.harness_context import HarnessContext
+    from codex_plugin_scanner.guard.native_extension import extension_source
 
     context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home)
     path.write_text(extension_source("omp", context, config_path=settings_path), encoding="utf-8")
